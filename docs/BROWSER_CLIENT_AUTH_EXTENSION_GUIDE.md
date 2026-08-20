@@ -216,14 +216,14 @@ unlisted headers. `IncomingRequests.decode()` decodes gateway input for policy;
 a `TypeRegistryLookup` can decode a command payload; unknown
 or malformed `Any` remains a safe type-URL-only fact.
 
-| Gateway operation | Required gate                                     | Context rule                                                 | Forwarding rule                                    |
-| ----------------- | ------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------- |
-| `resolve-context` | Valid session; no authorization-policy invocation | `resolveContext()` returns informational actor/tenant/expiry | No backend forward                                 |
-| `command`         | Authorize every Post                              | Replace matching actor/tenant hint with resolver output      | Forward once, without credential                   |
-| `query`           | Authorize every Read                              | Replace matching actor/tenant hint                           | Forward once, without credential                   |
-| `subscribe`       | Authorize every Subscribe                         | Reject stale hint before binding                             | Return the public Subscription                     |
-| `activate`        | Authorize every Activate                          | Re-resolve request context                                   | Require stored owner and unexpired session         |
-| `cancel`          | Authorize every Cancel                            | Re-resolve request context                                   | Require stored owner; retryable cleanup is private |
+| Gateway operation | Required gate                                     | Context rule                                                 | Forwarding rule                                                       |
+| ----------------- | ------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `resolve-context` | Valid session; no authorization-policy invocation | `resolveContext()` returns informational actor/tenant/expiry | No backend forward                                                    |
+| `command`         | Authorize every Post                              | Replace matching actor/tenant hint with resolver output      | Forward once, without credential                                      |
+| `query`           | Authorize every Read                              | Replace matching actor/tenant hint                           | Forward once, without credential                                      |
+| `subscribe`       | Authorize every Subscribe                         | Reject stale hint before binding                             | Return the public Subscription                                        |
+| `activate`        | Authorize every Activate                          | Re-resolve request context                                   | Require stored owner; session mode also requires an unexpired session |
+| `cancel`          | Authorize every Cancel                            | Re-resolve request context                                   | Require stored owner; retryable cleanup is private                    |
 
 `UnaryGateway` covers `ResolveContext`, Post, and Read. `SubscriptionGateway`
 covers Subscribe, Activate, and Cancel. `createNativeGatewayServices()` adapts

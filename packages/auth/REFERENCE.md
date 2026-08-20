@@ -27,7 +27,14 @@ membership is empty.
 
 ## Unary requests
 
-`UnaryGateway` accepts `CommandService.Post`, `QueryService.Read`, and `AuthenticationService.ResolveContext`. Construct it with a finite `maxRequestBytes`, `SessionResolver`, authorization function, `ContextResolver`, clock, and `UnaryForwarder`.
+`UnaryGateway` accepts `CommandService.Post`, `QueryService.Read`, and
+`AuthenticationService.ResolveContext`. Construct both `UnaryGateway` and
+`SubscriptionGateway` with exactly one admission mode: a `SessionResolver`, or
+`publicAccess: true`. Public access creates no login session and no synthetic
+expiry. It is appropriate only when the application deliberately exposes the
+Gateway and its authorization policy reconstructs trusted context from request
+facts. Both modes also require finite request limits, an authorization function,
+`ContextResolver`, clock, and the corresponding forwarding collaborator.
 
 For Post and Read, it bounds and decodes bytes, resolves a session, authorizes the decoded request, resolves trusted context, checks requested actor/tenant, and forwards exactly once. The forwarder receives only service, method, bytes, and optional cancellation signal. It does not receive credentials or extra transport facts. It returns `forwarded`, `resolved`, or a rejection reason: `request-too-large`, `unknown-operation`, `malformed-request`, `unauthenticated`, `forbidden`, or `context-stale`. Mapping a rejection to HTTP or gRPC status is the native transport adapter's job.
 
@@ -50,6 +57,22 @@ ResolveContext validates the current session and returns informational actor, te
 includes the trusted Actor and Tenant, so Activate and Cancel compare that pair
 with the newly resolved request context. It is single-Gateway persistence, not
 cross-process quota, reservation, lease, fence, or fingerprint coordination.
+
+Subscription creation has two stages. `Subscribe` stores a definition and
+returns its ID; `Activate` must arrive within the framework's bounded activation
+handshake. If activation never arrives, the incomplete definition is cancelled.
+Once activated, a healthy stream has no framework time-to-live. It ends only
+when the caller cancels or disconnects, the backend ends the stream, or the
+Gateway shuts down.
+
+Authenticated durable definitions use the real session expiry stored with the
+definition. Expiry maintenance first stops an active binding, waits for its
+serialized work, cancels the backend subscription once, and then deletes the
+stored record. Concurrent maintenance callers join the same purge operation.
+Public mode has no session expiry and does not use that durable authenticated
+record; its process-local definitions disappear when the Gateway process ends.
+Neither mode stores a replayable history of emitted updates, so a reconnecting
+browser queries authoritative state before subscribing again.
 
 ## Errors, lifecycle, and extension
 

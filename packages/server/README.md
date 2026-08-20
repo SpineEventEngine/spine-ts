@@ -332,16 +332,27 @@ snapshot every 10 seconds. Active streams and queues are process-local.
 
 Add `browser` configuration to expose Connect and gRPC-Web without writing a
 listener, router, CORS middleware, or shutdown coordinator. The application
-still supplies its session resolver, authorization policy, and trusted actor
-context resolver.
+still supplies its authorization policy and trusted actor context resolver.
+Choose exactly one admission mode:
+
+- supply `sessions` when browser callers must authenticate; or
+- set `publicAccess: true` for an intentionally public endpoint with no login
+  session.
+
+Never supply both. Public access does not manufacture a session or an expiry.
+The application policy must still authorize every operation and rebuild trusted
+actor and tenant context from request facts.
 
 For a separately hosted TS or JVM backend, set `browser.backend.baseUrl` to its
 canonical HTTP(S) origin. The gateway keeps `ResolveContext` local and forwards
-the five application RPCs only after the same authentication, authorization,
-and trusted-context rewrite. Every standalone mode requires explicit
+the five application RPCs only after the configured admission, authorization,
+and trusted-context rewrite. An authenticated standalone mode requires explicit
 subscription bindings: local development and tests may explicitly supply an
 in-memory binding, while production also needs a type registry and named
-`DurableSubscriptionBindings`. The external backend remains under caller control.
+`DurableSubscriptionBindings`. A public standalone mode instead owns
+process-local bindings. A Gateway restart drops those definitions, so browsers
+reconnect, query authoritative state, and subscribe again. The external backend
+remains under caller control.
 
 Use `browser.backend.baseUrls` for non-empty unique origins. Unary calls use
 round-robin without retry; native streams fan out best-effort, so clients
@@ -394,13 +405,18 @@ const running = await new Server({
 void running;
 ```
 
-In production, browser access requires `DurableSubscriptionBindings`. Startup
-rejects missing or in-memory bindings before opening a listener. The registry
-uses the storage factory that your application supplies and closes only the
-handle, so you can use a separate factory from application-data storage or
-intentionally share one. Its namespace separates applications sharing a
-provider. Combined browser mode may omit bindings to use an in-memory registry;
-standalone mode must always supply them explicitly.
+For an intentionally public browser application, replace `sessions` and
+`bindings` in the example with `publicAccess: true`. Do not supply both modes.
+Public mode uses process-local bindings and has no synthetic session expiry.
+
+In production, authenticated browser access requires
+`DurableSubscriptionBindings`. Startup rejects missing or in-memory bindings
+before opening a listener. The registry uses the storage factory that your
+application supplies and closes only the handle, so you can use a separate
+factory from application-data storage or intentionally share one. Its namespace
+separates applications sharing a provider. Combined authenticated browser mode
+may omit bindings to use an in-memory registry; authenticated standalone mode
+must always supply them explicitly.
 
 Each durable binding stores one approved `GatewayAuthenticatedSubscription`:
 its public ID, complete subscription, and expiry. The stored Topic retains the

@@ -79,10 +79,14 @@ test("keeps two stock browser tabs live through alternating posts after the form
     testInfo.project.name !== "chromium",
     "This timed acceptance is required only in Chromium.",
   );
-  test.setTimeout(120_000);
+  const stabilityObservationMilliseconds = Number(
+    process.env.MESSAGE_BOARD_STABILITY_OBSERVATION_MS ?? 36_000,
+  );
+  test.setTimeout(stabilityObservationMilliseconds + 90_000);
 
   const sender = await page.context().newPage();
   const failures: string[] = [];
+  const cancellationResponses: string[] = [];
   for (const browserPage of [page, sender]) {
     browserPage.on("console", (message) => {
       if (message.type() === "error") failures.push(`console: ${message.text()}`);
@@ -90,6 +94,11 @@ test("keeps two stock browser tabs live through alternating posts after the form
     browserPage.on("response", (response) => {
       if (response.status() === 404) failures.push(`404: ${response.url()}`);
       if (response.status() === 401) failures.push(`401: ${response.url()}`);
+      if (response.status() >= 500)
+        failures.push(`${String(response.status())}: ${response.url()}`);
+      if (response.url().endsWith("/spine.client.SubscriptionService/Cancel")) {
+        cancellationResponses.push(`${String(response.status())}: ${response.url()}`);
+      }
     });
   }
   try {
@@ -97,6 +106,7 @@ test("keeps two stock browser tabs live through alternating posts after the form
     await sender.goto("/");
     await expect(page.getByRole("status")).toHaveText("Updating live");
     await expect(sender.getByRole("status")).toHaveText("Updating live");
+    cancellationResponses.length = 0;
 
     for (let sequence = 1; sequence <= 8; sequence += 1) {
       const writer = sequence % 2 === 0 ? sender : page;
@@ -112,7 +122,7 @@ test("keeps two stock browser tabs live through alternating posts after the form
       });
     }
 
-    await page.waitForTimeout(36_000);
+    await page.waitForTimeout(stabilityObservationMilliseconds);
     const message = `after former timeout ${String(Date.now())}`;
     await sender.getByRole("textbox", { name: "Username" }).fill("post-timeout-writer");
     await sender.getByRole("textbox", { name: "Message" }).fill(message);
@@ -125,6 +135,7 @@ test("keeps two stock browser tabs live through alternating posts after the form
     });
     await expect(page.getByRole("status")).toHaveText("Updating live");
     await expect(sender.getByRole("status")).toHaveText("Updating live");
+    expect(cancellationResponses).toEqual([]);
     expect(failures).toEqual([]);
   } finally {
     await sender.close();
