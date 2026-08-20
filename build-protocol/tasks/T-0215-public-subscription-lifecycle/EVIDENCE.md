@@ -125,6 +125,22 @@
   not the acceptance metric. Exact baseline-to-head changed executable coverage
   from the fresh LCOV is 144/150 lines (96.00%) and 146/161 branches (90.68%).
 
+## Full release verification
+
+- The first full invocation stopped before tests because accidentally committed
+  private `.planning` files violated reader-documentation policy. Their local
+  working copies were hashed and preserved outside Git; the tracked artifacts
+  were removed in `65b398c9` without changing product behavior.
+- The entire cheap preflight was restarted on clean, pushed SHA `65b398c9`; all
+  gates and the exact changed-code coverage above passed again.
+- `pnpm verify:release` then completed with exit code 0: 270 test files passed,
+  4 skipped; 4,344 tests passed, 19 skipped. Global coverage is 93.47%
+  statements, 90.07% branches, 93.02% functions, and 94.61% lines.
+- The same terminal run passed Node/Proto/frozen-descriptor checks, generated
+  build, tooling typecheck, repository ESLint, cleanup, TSDoc, copyright,
+  formatting, TypeDoc/API, audience, snippets, Buf, generated cleanliness,
+  logging containment, and release readiness.
+
 ## Cheap-preflight containment evidence
 
 - `pnpm check:logging-containment` initially failed only because

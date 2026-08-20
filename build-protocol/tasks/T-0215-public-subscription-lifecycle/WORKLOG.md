@@ -165,6 +165,17 @@
 - Fresh exact changed-code coverage is 144/150 executable lines (96.00%) and
   146/161 branches (90.68%).
 
+## 2026-08-20 — release verification
+
+- Removed accidentally tracked private planning artifacts after preserving and
+  hashing their local working copies outside Git. This resolved the first
+  release-readiness-only failure without weakening the checker.
+- Restarted the complete cheap preflight on clean pushed SHA `65b398c9`, then
+  ran the full release profile once more with no overlapping build/test process.
+- The terminal release run passed 4,344 tests across 270 files, with 19 tests / 4
+  files skipped by their existing gates. Global coverage is 93.47% statements,
+  90.07% branches, 93.02% functions, and 94.61% lines.
+
 ## 2026-08-20 — cheap-preflight containment correction
 
 - Registered the existing public pending-subscription cleanup log boundary as a
