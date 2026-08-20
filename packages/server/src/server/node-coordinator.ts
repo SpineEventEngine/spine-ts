@@ -29,6 +29,7 @@ import {
   BackendMembershipKernel,
   type BackendMembershipKernelOptions,
 } from "@spine-event-engine/deployment/internal/backend-membership-kernel";
+import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/internal/subscription-lifecycle";
 import {
   AckSchema,
   ResponseSchema,
@@ -228,6 +229,8 @@ export class NodeCoordinator {
   readonly #server: http2.Http2Server;
   readonly #sessions: Set<http2.ServerHttp2Session>;
   readonly #stopMembers: readonly (() => void)[];
+  readonly #cancellations = new Map<string, Promise<void>>();
+  readonly #pendingActivations = new Map<string, PendingActivation>();
 
   /**
    *
@@ -390,6 +393,7 @@ export class NodeCoordinator {
     } catch (error) {
       throw this.#availabilityError(error);
     }
+    this.#schedulePendingActivation(subscription);
     return subscription;
   }
 
@@ -398,6 +402,7 @@ export class NodeCoordinator {
     context: HandlerContext,
   ): AsyncIterable<SubscriptionUpdate> {
     const definition = toBinary(SubscriptionSchema, subscription);
+    this.#clearPendingActivation(subscription);
     const overflow = new AbortController();
     const abort = () => {
       overflow.abort();
@@ -418,21 +423,34 @@ export class NodeCoordinator {
       .finally(() => {
         updates.close();
       });
+    let failure: unknown;
     try {
       for await (const update of updates) yield update;
+    } catch (error) {
+      failure = error;
     } finally {
       context.signal.removeEventListener("abort", abort);
       overflow.abort();
       updates.close();
-      await activation;
+      try {
+        await activation;
+      } catch (error) {
+        failure ??= error;
+      }
+      try {
+        await this.#cancelDefinition(definition, new AbortController().signal);
+      } catch (error) {
+        if (failure !== undefined)
+          throw new AggregateError([failure, error], "Coordinator activation cleanup failed.");
+        throw error;
+      }
     }
+    if (failure !== undefined) throw failure;
   }
 
   async #cancel(subscription: Subscription, context: HandlerContext): Promise<Response> {
-    await this.#subscriptionKernel.cancel(
-      toBinary(SubscriptionSchema, subscription),
-      context.signal,
-    );
+    this.#clearPendingActivation(subscription);
+    await this.#cancelDefinition(toBinary(SubscriptionSchema, subscription), context.signal);
     return create(ResponseSchema, {
       status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
     });
@@ -450,6 +468,56 @@ export class NodeCoordinator {
     return error instanceof Error && error.message === "backend membership is unavailable."
       ? new ConnectError("No ready application replica is available.", Code.Unavailable)
       : error;
+  }
+
+  #schedulePendingActivation(subscription: Subscription): void {
+    const id = NodeCoordinatorValues.requiredValue(
+      subscription.id?.value,
+      "Coordinator subscription definition is missing an ID.",
+    );
+    this.#clearPendingActivation(subscription);
+    const pending: PendingActivation = {
+      definition: toBinary(SubscriptionSchema, subscription),
+      timer: setTimeout(() => {
+        void this.#expirePendingActivation(id, pending);
+      }, SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS),
+    };
+    pending.timer.unref();
+    this.#pendingActivations.set(id, pending);
+  }
+
+  #cancelDefinition(definition: Uint8Array, signal: AbortSignal): Promise<void> {
+    const id = NodeCoordinatorValues.requiredValue(
+      fromBinary(SubscriptionSchema, definition).id?.value,
+      "Coordinator subscription definition is missing an ID.",
+    );
+    const active = this.#cancellations.get(id);
+    if (active !== undefined) return active;
+    const cancellation = this.#subscriptionKernel.cancel(definition, signal).finally(() => {
+      if (this.#cancellations.get(id) === cancellation) this.#cancellations.delete(id);
+    });
+    this.#cancellations.set(id, cancellation);
+    return cancellation;
+  }
+
+  #clearPendingActivation(subscription: Subscription): void {
+    const id = subscription.id?.value;
+    if (id === undefined) return;
+    const pending = this.#pendingActivations.get(id);
+    if (pending === undefined) return;
+    clearTimeout(pending.timer);
+    this.#pendingActivations.delete(id);
+  }
+
+  async #expirePendingActivation(id: string, pending: PendingActivation): Promise<void> {
+    if (this.#pendingActivations.get(id) !== pending) return;
+    try {
+      await this.#cancelDefinition(pending.definition, new AbortController().signal);
+      if (this.#pendingActivations.get(id) === pending) this.#pendingActivations.delete(id);
+    } catch {
+      if (this.#pendingActivations.get(id) === pending)
+        this.#schedulePendingActivation(fromBinary(SubscriptionSchema, pending.definition));
+    }
   }
 
   #reconcile(): Promise<void> {
@@ -471,6 +539,8 @@ export class NodeCoordinator {
     this.#stopMembers.forEach((stop) => {
       stop();
     });
+    for (const pending of this.#pendingActivations.values()) clearTimeout(pending.timer);
+    this.#pendingActivations.clear();
     await this.#membershipReconciliation;
     const network = NodeCoordinatorValues.closeNetwork(this.#server, this.#sessions);
     await Promise.all([network, this.#unaryKernel.close(), this.#subscriptionKernel.close()]);
@@ -490,6 +560,11 @@ interface CoordinatorQuery {
   response: QueryResponse;
 }
 type CoordinatorRequest = CoordinatorCommand | CoordinatorQuery;
+
+interface PendingActivation {
+  readonly definition: Uint8Array;
+  readonly timer: NodeJS.Timeout;
+}
 
 /**
  * Buffers bounded Coordinator subscription updates for one public stream.

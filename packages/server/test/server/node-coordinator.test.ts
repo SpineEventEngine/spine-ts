@@ -25,6 +25,7 @@ import {
   type DynamicUnaryClient,
 } from "@spine-event-engine/auth";
 import { ApplicationNode } from "@spine-event-engine/deployment";
+import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/internal/subscription-lifecycle";
 import {
   ActorContextSchema,
   AckSchema,
@@ -156,6 +157,29 @@ describe("NodeCoordinator", () => {
     expect(first.cancellations()).toBe(1);
     expect(second.cancellations()).toBe(1);
     await coordinator.close();
+  });
+
+  it("cancels an unactivated definition at the shared activation-handshake deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const replica = await backend("pending-handshake");
+      closeables.push(replica.close);
+      const coordinator = await NodeCoordinator.open({
+        members: new TestReadyMembers([replica.member]),
+        port: 0,
+      });
+      closeables.push(() => coordinator.close());
+      const subscriptions = createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+      );
+      await subscriptions.subscribe(create(TopicSchema));
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
+
+      await expect.poll(() => replica.cancellations()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rehydrates the Gateway durable logical definition into a replacement Coordinator only", async () => {
@@ -376,7 +400,7 @@ describe("NodeCoordinator", () => {
     await expect.poll(() => replica.activationAborts()).toBe(1);
   });
 
-  it("immediately reconnects after an aborted native activation completes", async () => {
+  it("requires a new Subscribe after an aborted native activation removes its definition", async () => {
     const release = deferred<undefined>();
     const replica = await backend("reconnect-held", {
       holdActivation: true,
@@ -401,8 +425,9 @@ describe("NodeCoordinator", () => {
     await expect.poll(() => replica.activations()).toBe(1);
     firstAbort.abort();
     await expect(first).rejects.toMatchObject({ code: Code.Canceled });
-    const second = client.activate(subscription)[Symbol.asyncIterator]();
     release.resolve(undefined);
+    const replacement = await client.subscribe(create(TopicSchema));
+    const second = client.activate(replacement)[Symbol.asyncIterator]();
     await expect.poll(() => replica.activations()).toBe(2);
     await second.return?.();
   });
