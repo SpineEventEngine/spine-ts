@@ -126,6 +126,17 @@ all task work is isolated in `.worktrees/wave14-npm-publication` from exact
   before publication, use path-aware consumer isolation, and supply the React
   declarations required by `client-react`. The existing Terra/medium
   implementation owner retains the correction context.
+- The consolidated correction batch was pushed through `8e77e6aa0`. It pins
+  registry commands, compares fresh tarball hashes with the prepared baseline
+  before registry reads and again before publication, uses path-aware consumer
+  containment with an adversarial regression, supplies React declarations, and
+  establishes exact source/inventory trust before the external wrapper imports
+  permanent modules. The wrapper remains external and rejected an untracked
+  fixture before imports.
+- Correction evidence: focused permanent suites pass 28/28; the new
+  integrity/containment subset passes 15/15 with ESLint clean; the exact all-18
+  tarball consumer passes 2/2 in 29.99 seconds; wrapper syntax passes; Git status
+  contains only the preserved untracked planning directory.
 
 ## Implementation files
 

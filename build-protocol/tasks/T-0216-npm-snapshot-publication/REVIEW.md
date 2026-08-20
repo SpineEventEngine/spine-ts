@@ -57,3 +57,32 @@ Affected re-review after deterministic correction checks: style/maintainability,
 TypeScript/API documentation, performance/reliability, and security.
 Documentation completeness is not reopened because no accepted correction
 changes reader-facing claims.
+
+## Correction result
+
+- `541dae011` declares the React type peer required by the public
+  `client-react` declarations; `5f54a35db` updates only the lockfile.
+- `231ba8541` pins `npm whoami` and `npm publish` to the public registry while
+  publication retains inherited terminal stdio.
+- `9c9c55571` changes consumer containment to path-aware comparison;
+  `8e77e6aa0` adds the sibling-prefix regression and closes both integrity timing
+  boundaries against the prepared SHA-512 baseline.
+- `465808d63` adds the immediate pre-publish integrity recheck and zero-publish
+  mutation regression.
+- The external disposable wrapper now rejects every porcelain status entry,
+  validates the exact root/version/18-package inventory, and verifies embedded
+  SHA-512 hashes for all imported permanent publication modules before dynamic
+  import. A disposable Git fixture proves an untracked file is rejected before
+  imports. The wrapper remains outside Git.
+- Focused publication, artifact, and metadata suites pass 28/28; the added
+  integrity/containment subset passes 15/15 with focused ESLint clean. The exact
+  all-18 external consumer passes 2/2 in 29.99 seconds.
+
+## Affected re-review assignment gate
+
+| Concern                 | Existing role                      | Bounded scope                                                                                      | Explicit model  | Explicit reasoning | Runtime telemetry                                                                                         |
+| ----------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------- | --------------- | ------------------ | --------------------------------------------------------------------------------------------------------- |
+| Style/maintainability   | `style_maintainability_reviewer`   | Clean-checkout and mutation regressions plus the small corrected seams                             | `gpt-5.6-terra` | high               | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
+| TypeScript/API docs     | `typescript_api_docs_reviewer`     | React declaration dependency and exact consumer only                                               | `gpt-5.6-terra` | high               | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
+| Performance/reliability | `performance_reliability_reviewer` | Complete checkout gate, two integrity timing boundaries, isolation containment, and cleanup impact | `gpt-5.6-terra` | high               | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
+| Security                | `security_reviewer`                | Public-registry pin, pre-import trust, tarball integrity timing, and path containment              | `gpt-5.6-terra` | high               | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
