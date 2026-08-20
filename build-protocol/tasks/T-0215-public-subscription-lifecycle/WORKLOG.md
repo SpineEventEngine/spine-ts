@@ -80,3 +80,13 @@
 - Unary Gateway now accepts an absent transport credential in public mode,
   uses the frozen framework principal, and omits `expiresAt` from its public
   response. Authenticated session resolution remains source-compatible.
+
+## 2026-08-20 — browser and Message Board composition checkpoint
+
+- Browser request extraction now represents a missing Authorization header as
+  actual credential absence and passes `publicAccess` through to both Gateway
+  layers. Its standalone validation requires exactly public access or sessions.
+- Deleted Message Board's `PublicBoardAdmission`; both entrypoints now select
+  `publicAccess` and use a wall-clock adapter instead of an invented expiry.
+- Server and Message Board package typechecks passed. Durable public orphan
+  cleanup remains required before standalone public mode is complete.
