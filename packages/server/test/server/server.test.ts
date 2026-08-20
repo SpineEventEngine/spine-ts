@@ -17,7 +17,7 @@
 import * as http2 from "node:http2";
 import * as http from "node:http";
 
-import { create, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
@@ -646,6 +646,7 @@ describe("Server", () => {
       ),
     ).not.toThrow();
   });
+
 
   it("rejects missing standalone authentication collaborators before listener startup", () => {
     expect(() => {
