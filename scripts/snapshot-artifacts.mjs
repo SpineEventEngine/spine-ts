@@ -69,7 +69,7 @@ export function proveExactTarballConsumer({ root, destination, run }) {
   writeFileSync(join(consumer, "package.json"), JSON.stringify({ name: "@external/snapshot-proof", private: true, type: "module", dependencies, devDependencies: { typescript: "6.0.3" } }));
   writeFileSync(join(consumer, "pnpm-workspace.yaml"), "overrides:\n" + Object.entries(dependencies).map(([name, value]) => "  " + JSON.stringify(name) + ": " + JSON.stringify(value)).join("\n") + "\n");
   run("pnpm", ["install", "--offline", "--ignore-scripts"], consumer);
-  assertConsumerIsolation(consumer, root);
+  assertConsumerIsolation(consumer);
   writeFileSync(join(consumer, "tsconfig.json"), JSON.stringify({ compilerOptions: { module: "NodeNext", moduleResolution: "NodeNext", target: "ES2024", outDir: "dist", strict: true }, include: ["index.ts"] }));
   writeFileSync(join(consumer, "index.ts"), frameworkPackageNames.map((name) => "import " + JSON.stringify(name) + ";").join("\n") + "\nimport { BlackBox } from '@spine-event-engine/testing';\nimport { resetServerEnvironmentForTest } from '@spine-event-engine/server/testing';\nif (typeof BlackBox !== 'function' || typeof resetServerEnvironmentForTest !== 'function') throw new Error('Public runtime path is unavailable');\nawait resetServerEnvironmentForTest();\n");
   run(process.execPath, [join("node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"], consumer);
@@ -77,7 +77,7 @@ export function proveExactTarballConsumer({ root, destination, run }) {
   return packages;
 }
 
-function assertConsumerIsolation(consumer, root) {
+function assertConsumerIsolation(consumer) {
   const pending = [join(consumer, "node_modules")];
   const consumerRoot = realpathSync(consumer);
   while (pending.length) {

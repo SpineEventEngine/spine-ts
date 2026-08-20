@@ -29,13 +29,6 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import {
-  packedArchiveProblems,
-  packedContentProblems,
-  packedManifestProblems,
-  publicManifestProblems,
-  internalRuntimeDependencyProblems,
-} from "../../../scripts/package-artifacts.mjs";
 import { packFrameworkArtifacts } from "../../../scripts/snapshot-artifacts.mjs";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -68,6 +61,12 @@ interface PackedPackage {
   readonly name: string;
   readonly tarball: string;
 }
+
+const typedPackFrameworkArtifacts = packFrameworkArtifacts as unknown as (options: {
+  root: string;
+  destination: string;
+  run: (command: string, args: readonly string[], cwd: string) => void;
+}) => readonly PackedPackage[];
 
 describe("Windows spine-proto shim", () => {
   it("requires one quoted command string for a shim path containing spaces", () => {
@@ -102,7 +101,13 @@ function run(command: string, args: readonly string[], cwd: string): void {
 }
 
 function packSpinePackages(destination: string): readonly PackedPackage[] {
-  return packFrameworkArtifacts({ root: repositoryRoot, destination, run });
+  return typedPackFrameworkArtifacts({
+    root: repositoryRoot,
+    destination,
+    run: (command, args, cwd) => {
+      run(command, args, cwd);
+    },
+  });
 }
 
 function installTarballsWithPnpm(directory: string, packages: readonly PackedPackage[]): void {
@@ -159,30 +164,6 @@ function readPackedName(tarball: string): string {
       throw new Error(`Packed artifact has no package name: ${tarball}`);
     }
     return packageJson.name;
-  } finally {
-    rmSync(stage, { force: true, recursive: true });
-  }
-}
-
-function assertPackedArtifact(tarball: string): void {
-  const stage = mkdtempSync(join(tmpdir(), "spine-packed-policy-"));
-  try {
-    run("tar", ["-xzf", tarball, "--strip-components=1", "-C", stage], repositoryRoot);
-    const manifest = JSON.parse(readFileSync(join(stage, "package.json"), "utf8"));
-    const entries = readdirSync(stage, { recursive: true }).map((entry) => String(entry));
-    const sourceDirectory = manifest.repository?.directory;
-    const sourceManifest =
-      typeof sourceDirectory === "string"
-        ? JSON.parse(readFileSync(join(repositoryRoot, sourceDirectory, "package.json"), "utf8"))
-        : {};
-    const texts = entries
-      .filter((entry) => /\.(?:json|js|mjs|cjs|ts|d\.ts)$/u.test(entry))
-      .map((entry) => readFileSync(join(stage, entry), "utf8"));
-    expect(publicManifestProblems(manifest)).toEqual([]);
-    expect(packedManifestProblems(manifest)).toEqual([]);
-    expect(packedArchiveProblems(manifest, entries)).toEqual([]);
-    expect(packedContentProblems(manifest, entries, texts, sourceManifest.files ?? [])).toEqual([]);
-    expect(internalRuntimeDependencyProblems(manifest)).toEqual([]);
   } finally {
     rmSync(stage, { force: true, recursive: true });
   }
