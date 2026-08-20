@@ -57,3 +57,7 @@
   Gateway rejection. Other maintenance failures still propagate.
 - Focused tests are green. Public-access mode, durable public orphan cleanup,
   Proto output, Message Board migration, broader coverage, and preflight remain.
+- Extended the focused behavior proof: a higher overlapping purge horizon is
+  processed after the active bounded pass, and close joins coalesced purge work
+  before storage close. The single-flight observer handles both settlement
+  paths so it does not introduce an unhandled rejected observer promise.
