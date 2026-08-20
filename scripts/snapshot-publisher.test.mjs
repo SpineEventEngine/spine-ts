@@ -137,6 +137,23 @@ describe("snapshot publisher", () => {
     ]);
   });
 
+  it("refuses publication when tarball bytes change after registry comparison", async () => {
+    const calls = [];
+    let hashes = 0;
+    await expect(
+      runSnapshotPublication({
+        runner: async (command, args) => {
+          calls.push(command + " " + args.join(" "));
+          return "";
+        },
+        packages: [{ name: "@spine-event-engine/core", tarball: "core.tgz", integrity: "sha512-a" }],
+        integrityFor: async () => (hashes++ === 0 ? "sha512-a" : "sha512-b"),
+        publish: true,
+      }),
+    ).rejects.toThrow("Tarball changed");
+    expect(calls.some((call) => call.includes(" publish "))).toBe(false);
+  });
+
   it("publishes dependency-first and waits for each internal dependency", async () => {
     const calls = [];
     const report = await runSnapshotPublication({
