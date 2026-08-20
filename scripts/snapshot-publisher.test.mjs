@@ -25,8 +25,14 @@ describe("snapshot publisher", () => {
   });
 
   it("reports the exact prepared artifact identity before cleanup", async () => {
-    const artifact = { name: "@spine-event-engine/core", tarball: "core.tgz", integrity: "sha512-core" };
-    await expect(runSnapshotPublication({ runner: async () => "", packages: [artifact] })).resolves.toMatchObject({
+    const artifact = {
+      name: "@spine-event-engine/core",
+      tarball: "core.tgz",
+      integrity: "sha512-core",
+    };
+    await expect(
+      runSnapshotPublication({ runner: async () => "", packages: [artifact] }),
+    ).resolves.toMatchObject({
       prepared: 1,
       artifacts: [artifact],
     });
@@ -34,11 +40,15 @@ describe("snapshot publisher", () => {
 
   it("cleans up when preparation fails", async () => {
     const cleanup = [];
-    await expect(runSnapshotPublication({
-      runner: async () => "",
-      prepare: async () => { throw new Error("packing failed"); },
-      cleanup: async () => cleanup.push("cleanup"),
-    })).rejects.toThrow("packing failed");
+    await expect(
+      runSnapshotPublication({
+        runner: async () => "",
+        prepare: async () => {
+          throw new Error("packing failed");
+        },
+        cleanup: async () => cleanup.push("cleanup"),
+      }),
+    ).rejects.toThrow("packing failed");
     expect(cleanup).toEqual(["cleanup"]);
   });
 
@@ -147,10 +157,7 @@ describe("snapshot publisher", () => {
       waitForVisibility: async (name, version) => calls.push("wait " + name + "@" + version),
     });
 
-    expect(report.published).toEqual([
-      "@spine-event-engine/core",
-      "@spine-event-engine/server",
-    ]);
+    expect(report.published).toEqual(["@spine-event-engine/core", "@spine-event-engine/server"]);
     expect(calls).toContain("wait @spine-event-engine/core@2.0.0-snapshot.2");
     expect(calls.indexOf("npm publish core.tgz --access public --tag snapshot")).toBeLessThan(
       calls.indexOf("npm publish server.tgz --access public --tag snapshot"),

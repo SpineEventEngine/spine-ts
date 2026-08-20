@@ -15,29 +15,46 @@ export async function runSnapshotPublication({
   try {
     await runner("npm", ["whoami"]);
     const preparedPackages = prepare === undefined ? packages : await prepare();
-    const report = { prepared: preparedPackages.length, artifacts: preparedPackages, published: [], skipped: [] };
+    const report = {
+      prepared: preparedPackages.length,
+      artifacts: preparedPackages,
+      published: [],
+      skipped: [],
+    };
     if (!publish) return report;
 
     for (const entry of orderPackages(preparedPackages)) {
-    const tarball = typeof entry === "string" ? entry : entry.tarball;
-    const name = typeof entry === "string" ? undefined : entry.name;
-    const integrity = typeof entry === "string" ? undefined : entry.integrity;
-    if (name !== undefined && integrity !== undefined) {
-      let existing = "";
-      try {
-        existing = await runner("npm", ["view", name + "@2.0.0-snapshot.2", "dist.integrity", "--registry=https://registry.npmjs.org/"], { stdio: "pipe" });
-      } catch (error) {
-        if (error?.status !== 404) throw error;
+      const tarball = typeof entry === "string" ? entry : entry.tarball;
+      const name = typeof entry === "string" ? undefined : entry.name;
+      const integrity = typeof entry === "string" ? undefined : entry.integrity;
+      if (name !== undefined && integrity !== undefined) {
+        let existing = "";
+        try {
+          existing = await runner(
+            "npm",
+            [
+              "view",
+              name + "@2.0.0-snapshot.2",
+              "dist.integrity",
+              "--registry=https://registry.npmjs.org/",
+            ],
+            { stdio: "pipe" },
+          );
+        } catch (error) {
+          if (error?.status !== 404) throw error;
+        }
+        if (existing.trim()) {
+          if (existing.trim() !== integrity) throw new Error("Integrity mismatch for " + name);
+          report.skipped.push(name);
+          continue;
+        }
       }
-      if (existing.trim()) {
-        if (existing.trim() !== integrity) throw new Error("Integrity mismatch for " + name);
-        report.skipped.push(name);
-        continue;
-      }
-    }
       const dependencies = typeof entry === "string" ? [] : entry.dependencies || [];
-      for (const dependency of dependencies) await waitForVisibility(dependency, "2.0.0-snapshot.2");
-      await runner("npm", ["publish", tarball, "--access", "public", "--tag", "snapshot"], { stdio: "inherit" });
+      for (const dependency of dependencies)
+        await waitForVisibility(dependency, "2.0.0-snapshot.2");
+      await runner("npm", ["publish", tarball, "--access", "public", "--tag", "snapshot"], {
+        stdio: "inherit",
+      });
       report.published.push(name ?? tarball);
     }
     return report;
@@ -47,7 +64,9 @@ export async function runSnapshotPublication({
 }
 
 function orderPackages(entries) {
-  const byName = new Map(entries.filter((entry) => typeof entry !== "string").map((entry) => [entry.name, entry]));
+  const byName = new Map(
+    entries.filter((entry) => typeof entry !== "string").map((entry) => [entry.name, entry]),
+  );
   const ordered = [];
   const visited = new Set();
   const stringEntries = new Set();
@@ -122,12 +141,17 @@ export function installCleanupHandlers({ signals, cleanup, exit }) {
 export async function waitForRegistryVisibility({ runner, sleep, name, version, attempts = 6 }) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const visible = await runner("npm", ["view", name + "@" + version, "version", "--registry=https://registry.npmjs.org/"], { stdio: "pipe" });
+      const visible = await runner(
+        "npm",
+        ["view", name + "@" + version, "version", "--registry=https://registry.npmjs.org/"],
+        { stdio: "pipe" },
+      );
       if (visible.trim() === version) return;
       throw new Error("Registry returned an unexpected version for " + name);
     } catch (error) {
       if (error?.status !== 404) throw error;
-      if (attempt + 1 === attempts) throw new Error("Timed out waiting for " + name + "@" + version);
+      if (attempt + 1 === attempts)
+        throw new Error("Timed out waiting for " + name + "@" + version);
       await sleep(1000 * (attempt + 1));
     }
   }

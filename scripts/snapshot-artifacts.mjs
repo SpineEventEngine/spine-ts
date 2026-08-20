@@ -1,5 +1,14 @@
 import { createHash } from "node:crypto";
-import { lstatSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  lstatSync,
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import {
@@ -17,7 +26,18 @@ const packageDirectories = frameworkPackageNames.map((name) => "packages/" + nam
 export function packFrameworkArtifacts({ root, destination, run }) {
   run("pnpm", ["--dir", "packages/proto-tools", "exec", "tsc", "-b"], root);
   for (const directory of packageDirectories)
-    run("pnpm", ["--dir", directory, "pack", "--config.ignore-scripts=true", "--pack-destination", destination], root);
+    run(
+      "pnpm",
+      [
+        "--dir",
+        directory,
+        "pack",
+        "--config.ignore-scripts=true",
+        "--pack-destination",
+        destination,
+      ],
+      root,
+    );
   const entries = readdirSync(destination)
     .filter((file) => file.endsWith(".tgz"))
     .map((file) => inspectPackedArtifact({ root, tarball: join(destination, file), run }));
@@ -65,14 +85,52 @@ export function proveExactTarballConsumer({ root, destination, run }) {
   const packages = packFrameworkArtifacts({ root, destination, run });
   const consumer = join(destination, "consumer");
   mkdirSync(consumer);
-  const dependencies = Object.fromEntries(packages.map(({ name, tarball }) => [name, "file:" + tarball]));
-  writeFileSync(join(consumer, "package.json"), JSON.stringify({ name: "@external/snapshot-proof", private: true, type: "module", dependencies, devDependencies: { typescript: "6.0.3" } }));
-  writeFileSync(join(consumer, "pnpm-workspace.yaml"), "overrides:\n" + Object.entries(dependencies).map(([name, value]) => "  " + JSON.stringify(name) + ": " + JSON.stringify(value)).join("\n") + "\n");
+  const dependencies = Object.fromEntries(
+    packages.map(({ name, tarball }) => [name, "file:" + tarball]),
+  );
+  writeFileSync(
+    join(consumer, "package.json"),
+    JSON.stringify({
+      name: "@external/snapshot-proof",
+      private: true,
+      type: "module",
+      dependencies,
+      devDependencies: { typescript: "6.0.3" },
+    }),
+  );
+  writeFileSync(
+    join(consumer, "pnpm-workspace.yaml"),
+    "overrides:\n" +
+      Object.entries(dependencies)
+        .map(([name, value]) => "  " + JSON.stringify(name) + ": " + JSON.stringify(value))
+        .join("\n") +
+      "\n",
+  );
   run("pnpm", ["install", "--offline", "--ignore-scripts"], consumer);
   assertConsumerIsolation(consumer);
-  writeFileSync(join(consumer, "tsconfig.json"), JSON.stringify({ compilerOptions: { module: "NodeNext", moduleResolution: "NodeNext", target: "ES2024", outDir: "dist", strict: true }, include: ["index.ts"] }));
-  writeFileSync(join(consumer, "index.ts"), frameworkPackageNames.map((name) => "import " + JSON.stringify(name) + ";").join("\n") + "\nimport { BlackBox } from '@spine-event-engine/testing';\nimport { resetServerEnvironmentForTest } from '@spine-event-engine/server/testing';\nif (typeof BlackBox !== 'function' || typeof resetServerEnvironmentForTest !== 'function') throw new Error('Public runtime path is unavailable');\nawait resetServerEnvironmentForTest();\n");
-  run(process.execPath, [join("node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"], consumer);
+  writeFileSync(
+    join(consumer, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        target: "ES2024",
+        outDir: "dist",
+        strict: true,
+      },
+      include: ["index.ts"],
+    }),
+  );
+  writeFileSync(
+    join(consumer, "index.ts"),
+    frameworkPackageNames.map((name) => "import " + JSON.stringify(name) + ";").join("\n") +
+      "\nimport { BlackBox } from '@spine-event-engine/testing';\nimport { resetServerEnvironmentForTest } from '@spine-event-engine/server/testing';\nif (typeof BlackBox !== 'function' || typeof resetServerEnvironmentForTest !== 'function') throw new Error('Public runtime path is unavailable');\nawait resetServerEnvironmentForTest();\n",
+  );
+  run(
+    process.execPath,
+    [join("node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"],
+    consumer,
+  );
   run(process.execPath, ["dist/index.js"], consumer);
   return packages;
 }
@@ -85,8 +143,10 @@ function assertConsumerIsolation(consumer) {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       const path = join(current, entry.name);
       const actual = realpathSync(path);
-      if (!actual.startsWith(consumerRoot)) throw new Error("Consumer resolved repository path: " + relative(consumer, path));
-      if (lstatSync(path).isSymbolicLink() && !actual.startsWith(consumerRoot)) throw new Error("Consumer has workspace link");
+      if (!actual.startsWith(consumerRoot))
+        throw new Error("Consumer resolved repository path: " + relative(consumer, path));
+      if (lstatSync(path).isSymbolicLink() && !actual.startsWith(consumerRoot))
+        throw new Error("Consumer has workspace link");
       if (entry.isDirectory()) pending.push(path);
     }
   }
