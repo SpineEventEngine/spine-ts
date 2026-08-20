@@ -135,7 +135,7 @@ export function proveExactTarballConsumer({ root, destination, run }) {
   return packages;
 }
 
-function assertConsumerIsolation(consumer) {
+export function assertConsumerIsolation(consumer) {
   const pending = [join(consumer, "node_modules")];
   const consumerRoot = realpathSync(consumer);
   while (pending.length) {
@@ -157,5 +157,8 @@ export function isContainedPath(parent, child) {
 }
 
 export function isContainedRelative(path) {
-  return path === "" || (path !== ".." && !path.startsWith("../") && !path.startsWith("..\\") && !isAbsolute(path));
+  return (
+    path === "" ||
+    (path !== ".." && !path.startsWith("../") && !path.startsWith("..\\") && !isAbsolute(path))
+  );
 }
