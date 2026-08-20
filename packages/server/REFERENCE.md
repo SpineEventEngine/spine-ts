@@ -363,16 +363,18 @@ bindings so active streams settle, awaits listener closure, then closes the
 native backend. Concurrent calls share an attempt; a failed unfinished phase
 can be retried without repeating completed native cleanup.
 
-Browser subscription bindings are separate from service subscription
-records. `BrowserServerOptions.bindings` accepts the `SubscriptionBindings`
-contract from `@spine-event-engine/auth`. Production browser assembly requires
-the Server package's `DurableSubscriptionBindings`; it rejects a missing or
-in-memory binding store before listener open. The durable registry receives an explicit
-application namespace, storage factory, identifier source, and cleanup callback. It closes only
-its independently opened record-storage handle, not the application storage
-factory or a Spine JVM/TS backend. It stores canonical public Subscription
-definitions, never backend envelopes or membership topology, and never returns
-private native data through public subscription responses.
+Browser subscription bindings are separate from service subscription records.
+`BrowserAdmission` selects their ownership. Authenticated mode supplies
+`sessions` and may supply `BrowserServerOptions.bindings`; production then
+requires the Server package's `DurableSubscriptionBindings` and rejects a
+missing or in-memory binding store before listener open. Public mode supplies
+`publicAccess: true`, cannot supply bindings, and uses framework-owned
+process-local bindings. The durable registry receives an explicit application
+namespace, storage factory, identifier source, and cleanup callback. It closes
+only its independently opened record-storage handle, not the application
+storage factory or a Spine JVM/TS backend. It stores canonical public
+Subscription definitions, never backend envelopes or membership topology, and
+never returns private native data through public subscription responses.
 
 The durable registry preserves one approved `GatewayAuthenticatedSubscription`
 per public subscription through a process restart. It validates the record ID,

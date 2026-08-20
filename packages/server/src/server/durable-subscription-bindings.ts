@@ -297,7 +297,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       if (nowMs > coveredHorizon) this.#purgeHorizon = nowMs;
       return this.#purging;
     }
-    this.#purgeHorizon = nowMs;
+    this.#purgeHorizon = Math.max(this.#purgeHorizon ?? nowMs, nowMs);
     const task = this.#drainPurges();
     this.#purging = task;
     this.#track(task);

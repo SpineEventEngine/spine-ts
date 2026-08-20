@@ -1302,6 +1302,69 @@ describe("DurableSubscriptionBindings", () => {
     expect(cleaned).toEqual(["expired-1", "expired-2"]);
   });
 
+  it("retains a coalesced later purge horizon after the active purge fails", async () => {
+    const backing = new InMemoryStorageFactory();
+    let releaseFailure: (() => void) | undefined;
+    const firstQuery = new Promise<void>((resolve) => {
+      releaseFailure = resolve;
+    });
+    let failFirstQuery = true;
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
+    const factory: StorageFactory = {
+      createRecordStorage: ((
+        storageContext: StorageContext,
+        spec: RecordSpec<unknown, unknown>,
+      ) => {
+        const storage = backing.createRecordStorage(storageContext, spec);
+        const queryEntries = storage.queryEntries.bind(storage);
+        Object.assign(storage, {
+          queryEntries: async (...input: Parameters<typeof storage.queryEntries>) => {
+            if (failFirstQuery) {
+              failFirstQuery = false;
+              await firstQuery;
+              throw new Error("temporary expiry scan failure");
+            }
+            return queryEntries(...input);
+          },
+        });
+        return storage;
+      }) as never,
+    };
+    const cleaned: string[] = [];
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: factory,
+      namespace: "retry-later-expiry-purge-horizon",
+      nextId: (() => {
+        let next = 0;
+        return () => `expired-${String(++next)}`;
+      })(),
+      cleanup: (wire) => {
+        cleaned.push(subscriptionId(wire.bytes));
+        return Promise.resolve();
+      },
+    });
+    await bindings.create({
+      topic: { kind: "subscription-topic", bytes: topic() },
+      whenExpires: 1,
+    });
+    await bindings.create({
+      topic: { kind: "subscription-topic", bytes: topic() },
+      whenExpires: 2,
+    });
+
+    const initial = bindings.purgeExpired(1);
+    await vi.waitFor(() => {
+      expect(releaseFailure).toBeTypeOf("function");
+    });
+    const later = bindings.purgeExpired(2);
+    releaseFailure?.();
+
+    await expect(Promise.all([initial, later])).rejects.toThrow("temporary expiry scan failure");
+    await expect(bindings.purgeExpired(1)).resolves.toBeUndefined();
+
+    expect(cleaned).toEqual(["expired-1", "expired-2"]);
+  });
+
   it("joins a coalesced purge before closing storage", async () => {
     let releaseCleanup: (() => void) | undefined;
     const heldCleanup = new Promise<void>((resolve) => {

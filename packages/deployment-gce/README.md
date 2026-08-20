@@ -119,9 +119,11 @@ read from that environment so child executions do not publish separate leases.
 The Gateway resolves the same storage reference and namespace through its
 environment. It manages a GCE discovery lifecycle that refreshes the complete
 live-node registry snapshot every 10 seconds, stops that schedule when the
-browser server stops, and then closes its registry. Supply your durable
-subscription bindings, authentication, and browser collaborators in
-`browserOptions`.
+browser server stops, and then closes its registry. Supply browser collaborators
+in `browserOptions`. Choose one admission mode there: authenticated mode
+supplies `sessions` and may supply named durable subscription bindings; public
+mode supplies `publicAccess: true`, and the framework owns process-local
+bindings. Public mode cannot supply bindings.
 
 ```ts
 // docs-snippet-path: packages/deployment-gce/examples/gateway.ts
@@ -170,8 +172,8 @@ export const GceGatewayEntrypoint = Object.freeze({
 The complete, packaged examples are
 [`examples/application.ts`](examples/application.ts) and
 [`examples/gateway.ts`](examples/gateway.ts). They deliberately keep business
-contexts, storage configuration, identity, and durable subscription bindings
-in your application code. The GCE entrypoint's returned handle withdraws its
+contexts, storage configuration, identity, and (when using authenticated mode)
+durable subscription bindings in your application code. The GCE entrypoint's returned handle withdraws its
 Coordinator lease before stopping child replicas; abrupt VM loss remains covered
 by the existing lease expiry. The managed child marker is framework-owned
 process state: it makes the shared module assemble a child replica without
@@ -281,9 +283,10 @@ terraform apply -var='autoscaling_enabled=false' -var='application_replicas=2'
 ```
 
 The Gateway normally stays in place during an application replacement. A
-Gateway interruption disconnects browser clients. Its durable subscription
-definitions survive only when your Gateway bindings use the same persistent
-application storage. Clients reconnect and issue an authoritative query.
+Gateway interruption disconnects browser clients. In authenticated mode, durable
+subscription definitions survive only when the supplied named bindings use the
+same persistent application storage. Public-mode definitions are process-local
+and end with the Gateway process. Clients reconnect and issue an authoritative query.
 Replacing `gateway_image` performs its explicit one-unavailable, zero-surge
 singleton update and therefore causes that interruption. Replacing
 `delivery_image` performs the same singleton update; the supplied in-memory

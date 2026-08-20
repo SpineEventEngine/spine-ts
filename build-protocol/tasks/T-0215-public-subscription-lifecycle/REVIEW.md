@@ -68,3 +68,43 @@ converges. Review dispatch and dispositions are recorded here as they complete.
   declarations make both/neither and public-with-bindings invalid.
 - Full generated build, repository tooling typecheck, changed-file ESLint, and
   the affected 300-test wave pass after correction.
+
+## 2026-08-20 affected re-review dispatch
+
+- Correction head: `13948d73`.
+- The same existing reliability, TypeScript/API, and maintainability reviewer
+  contexts re-check only their accepted findings and the documented internal-
+  subpath disposition.
+- Their explicit configured profiles remain `gpt-5.6-terra` / `high`; runtime
+  telemetry limitations remain recorded. Re-review is read-only and subagent
+  spawning remains prohibited.
+
+## 2026-08-20 final correction implementation assignment
+
+- Existing `implementer` role, explicit configured `gpt-5.6-terra` / `medium`,
+  owns the bounded correction for failed-purge horizon retention and public API
+  documentation discoverability.
+- Runtime telemetry is not exposed by the execution surface. The immutable
+  configured role/profile above is the acceptance evidence.
+
+## 2026-08-20 affected re-review findings and correction
+
+- **Reliability P2 — accepted:** if an active expiry scan failed after a
+  coalesced caller requested a later cutoff, retrying an older cutoff overwrote
+  the pending later cutoff. The durable owner now starts with the greater of
+  its retained pending cutoff and the retry cutoff. The regression first proved
+  the loss (only the first expiry was removed), then proves both expiries are
+  removed after the retry.
+- **TypeScript/API P2 — accepted:** the public option aliases referenced private
+  admission constituents, so generated API documentation did not present the
+  two usable shapes. `GatewayAdmission` and `BrowserAdmission` are now exported
+  and fully documented. The Auth and Server root export inventories were
+  deliberately updated; this is a public declaration/documentation correction,
+  not a behavioral widening. Public Browser admission still prohibits supplied
+  bindings.
+- **Documentation finding — accepted:** Auth reference and GCE/GKE standalone
+  Gateway guidance now distinguish authenticated supplied durable bindings from
+  public framework-owned process-local bindings. Server reference wording now
+  makes the same ownership distinction.
+- **Internal subpath disposition — unchanged/rejected:** it remains a private
+  Core package convention and is unrelated to this correction.

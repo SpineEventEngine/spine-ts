@@ -100,3 +100,17 @@
 - The internal Core subpath finding was dispositioned as consistent with the
   repository's private-package `./internal/*` convention; no new public root
   export was added.
+
+## 2026-08-20 — final affected re-review correction
+
+- Added a failure/retry regression for durable expiry maintenance: an active
+  scan fails while a concurrent caller requests a later expiry cutoff, then an
+  older retry must still clean records through that later cutoff. The owner now
+  preserves the maximum pending cutoff across a failed attempt.
+- Exported and documented the admission discriminants used by the public Unary,
+  Subscription, and Browser options so generated API reference shows the real
+  authenticated-versus-public shapes. Browser public mode continues to reject
+  supplied bindings; authenticated mode may supply named durable bindings.
+- Updated Auth, Server, and GCE/GKE Gateway documentation to say the same
+  thing: durable bindings belong only to authenticated mode; public mode owns
+  process-local bindings and loses them with the Gateway process.

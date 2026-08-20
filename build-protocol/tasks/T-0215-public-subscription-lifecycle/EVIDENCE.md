@@ -71,3 +71,15 @@
 - Affected Auth/Server wave: 300/300 tests passed.
 - Type-aware ESLint over every baseline-to-worktree TypeScript/JavaScript file
   passed after deterministic test-fixture corrections.
+
+## Final affected re-review correction evidence
+
+- RED: after a failed active purge at cutoff `1`, a concurrent cutoff `2`, and
+  a retry at cutoff `1`, only `expired-1` was cleaned. GREEN: the retained
+  cutoff makes the retry clean `expired-1` and `expired-2`.
+- Focused durable/Auth/Browser/provider example suite: 83 tests passed.
+- Generated build and tooling typechecks passed. TSDoc enforcement and
+  changed-file type-aware ESLint passed.
+- API inventory, audience, and TypeScript snippet checks passed with 107 Auth
+  and 248 Server root exports, including documented `GatewayAdmission` and
+  `BrowserAdmission`.

@@ -120,9 +120,11 @@ The Gateway reads `"BACKEND_DISCOVERY_PORT"` and
 `BACKEND_DISCOVERY_SERVICE` from the same source.
 
 The standalone Gateway uses the headless Service name and application port from
-the module. In production it also supplies sessions, authorization, trusted
-actor-context resolution, allowed origins, a clock, type registry, and named
-durable subscription bindings. The complete
+the module. Choose one admission mode for it: authenticated mode supplies
+sessions and may supply named durable subscription bindings; public mode
+supplies `publicAccess: true`, and the framework owns process-local bindings.
+Both modes supply authorization, trusted actor-context resolution, allowed
+origins, a clock, and a type registry. The complete
 [server browser guide](../server/README.md#serve-browser-clients) and
 [browser authentication guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explain those application integration points.
@@ -166,9 +168,11 @@ export const GatewayEntrypoint = Object.freeze({
 ```
 
 The [complete Gateway entrypoint](examples/gateway.ts) receives your typed
-browser collaborators as `GatewayOptions`. Supply sessions, authorization,
-trusted actor-context resolution, allowed origins, a clock, type registry, and
-named durable subscription bindings there.
+browser collaborators as `GatewayOptions`. In authenticated mode, supply
+sessions, authorization, trusted actor-context resolution, allowed origins, a
+clock, type registry, and optionally named durable subscription bindings. In
+public mode, supply `publicAccess: true` with the shared collaborators; it
+cannot accept bindings because the framework owns process-local ones.
 
 The application entrypoint uses the same configuration source for its managed
 Coordinator. Set `application_process_count` and `delivery_shard_count`
@@ -223,12 +227,14 @@ typed bounded-context, service, and resource configuration as
 
 The ConfigMap in the template exposes matching service and port values as a
 simple convention. Adapt the names or use another configuration loader; Spine
-TS does not require a particular environment-variable format. Production
-startup rejects missing or volatile bindings before opening its browser
-listener. `DurableSubscriptionBindings` is the supplied durable option; give
-it a stable namespace and storage factory configured by the Gateway process.
-Use shared persistent storage across Gateway replacements; an in-memory store
-does not preserve bindings when a Gateway is replaced.
+TS does not require a particular environment-variable format. Authenticated
+production startup rejects missing or volatile bindings before opening its
+browser listener. `DurableSubscriptionBindings` is the supplied durable option;
+give it a stable namespace and storage factory configured by the Gateway
+process. Use shared persistent storage across Gateway replacements; an
+in-memory store does not preserve bindings when a Gateway is replaced. Public
+mode has no supplied bindings: its framework-owned process-local definitions
+end when the Gateway is replaced.
 
 ## Deploy
 

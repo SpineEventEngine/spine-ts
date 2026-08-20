@@ -630,16 +630,46 @@ export interface ServerOptions {
 
 /**
  * Selects exactly one browser admission mode and its binding ownership.
+ *
+ * An authenticated listener supplies `sessions` and may supply named durable
+ * `bindings`. A public listener supplies `publicAccess: true`; it owns
+ * process-local bindings itself and therefore cannot accept `bindings`.
  */
-type BrowserAdmission =
+export type BrowserAdmission =
   | {
+      // prettier-ignore
+
+      /**
+       * Resolves authenticated application sessions from incoming credentials.
+       */
       readonly sessions: SessionResolver;
+
+      /**
+       * Excludes non-session public admission from authenticated mode.
+       */
       readonly publicAccess?: never;
+
+      /**
+       * Supplies named subscription bindings owned by the authenticated application.
+       */
       readonly bindings?: SubscriptionBindings;
     }
   | {
+      // prettier-ignore
+
+      /**
+       * Excludes session resolution from public mode.
+       */
       readonly sessions?: never;
+
+      /**
+       * Admits requests under the framework-owned non-session public principal.
+       */
       readonly publicAccess: true;
+
+      /**
+       * Prevents callers from supplying bindings that public mode does not own.
+       */
       readonly bindings?: never;
     };
 

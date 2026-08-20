@@ -58,6 +58,7 @@ export {
 export { SpineServices, type SpineServicesOptions } from "./services/spine-services.js";
 export {
   Server,
+  type BrowserAdmission,
   type BrowserAuthRoute,
   type BrowserServerOptions,
   type ListenerLifecycle,

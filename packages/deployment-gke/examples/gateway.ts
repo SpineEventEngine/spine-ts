@@ -35,7 +35,9 @@ export interface GatewayOptions {
   // prettier-ignore
 
   /**
-   * Configures browser authentication, authorization, context, registry, and bindings.
+   * Configures browser admission, authorization, context, registry, and bindings.
+   * Authenticated mode supplies sessions and may name durable bindings. Public mode
+   * supplies `publicAccess: true`; the framework owns its process-local bindings.
    */
   readonly browser: GatewayBrowserOptions;
 }

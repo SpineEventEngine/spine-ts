@@ -628,6 +628,7 @@ export {
 } from "./native/index.js";
 export type {
   UnaryForwarder,
+  GatewayAdmission,
   UnaryGatewayOptions,
   UnaryGatewayRejection,
   UnaryGatewayRequest,

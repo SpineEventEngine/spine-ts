@@ -99,7 +99,9 @@ export interface UnaryForwarder {
 /**
  * Selects exactly one Gateway admission mode.
  *
- * @internal
+ * Supply `sessions` for authenticated requests, or `publicAccess: true` for a
+ * deliberately public Gateway whose authorization policy establishes trusted
+ * request context. The modes are mutually exclusive.
  */
 export type GatewayAdmission =
   | {
@@ -107,22 +109,26 @@ export type GatewayAdmission =
 
       /**
        * Resolves authenticated application sessions from incoming credentials.
-       */ readonly sessions: SessionResolver;
+       */
+      readonly sessions: SessionResolver;
 
       /**
        * Excludes non-session public admission from authenticated mode.
-       */ readonly publicAccess?: never;
+       */
+      readonly publicAccess?: never;
     }
   | {
       // prettier-ignore
 
       /**
        * Excludes session resolution from public mode.
-       */ readonly sessions?: never;
+       */
+      readonly sessions?: never;
 
       /**
        * Admits requests under the framework-owned non-session public principal.
-       */ readonly publicAccess: true;
+       */
+      readonly publicAccess: true;
     };
 
 interface UnaryGatewayCollaborators {
