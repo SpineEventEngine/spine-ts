@@ -157,6 +157,19 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
+  it("cleans public orphan records across bounded pages", async () => {
+    let next = 0;
+    const cleaned: string[] = [];
+    const bindings = new Server.DurablePublicSubscriptionBindings!({
+      storageFactory: new InMemoryStorageFactory(), namespace: "public-pages", nextId: () => `public-${(++next).toString().padStart(2, "0")}`,
+      cleanup: async (wire) => { cleaned.push(subscriptionId(wire.bytes)); },
+    });
+    await Promise.all(Array.from({ length: 26 }, () => bindings.create({ topic: { kind: "subscription-topic", bytes: topic() } })));
+    await bindings.cleanupOrphans();
+    expect(cleaned).toHaveLength(26);
+    await bindings.close();
+  });
+
   it("stores the approved authenticated subscription record directly", () => {
     const factory = new InMemoryStorageFactory();
     const open = factory.createRecordStorage.bind(factory);
