@@ -15,6 +15,21 @@ describe("package artifacts", () => {
     ]);
   });
 
+  it("rejects file and link dependency references in packed manifests", () => {
+    expect(
+      packedManifestProblems({
+        name: "@spine-event-engine/example",
+        dependencies: {
+          local: "file:../local",
+          linked: "link:../linked",
+        },
+      }),
+    ).toEqual([
+      "@spine-event-engine/example dependencies linked must not use link:../linked",
+      "@spine-event-engine/example dependencies local must not use file:../local",
+    ]);
+  });
+
   it("orders internal runtime dependencies before dependents", () => {
     expect(
       dependencyFirstOrder([
