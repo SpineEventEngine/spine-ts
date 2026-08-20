@@ -1047,6 +1047,7 @@ export class SubscriptionGateway {
       expiresAtMs === undefined
         ? undefined
         : setTimeout(() => activeController.abort(), Math.max(0, expiresAtMs - nowMs));
+    let activationFailure: unknown;
     try {
       const result = await this.#options.bindings.activate({
         id,
@@ -1059,6 +1060,7 @@ export class SubscriptionGateway {
       if (result.kind !== "activated") return SubscriptionGatewayValues.rejected("denied");
       return { kind: "activated" };
     } catch (error) {
+      activationFailure = error;
       if (error instanceof Error && error.message === "binding-busy")
         return SubscriptionGatewayValues.rejected("binding-busy");
       throw error;
@@ -1066,7 +1068,12 @@ export class SubscriptionGateway {
       if (expiry !== undefined) clearTimeout(expiry);
       signal?.removeEventListener("abort", abort);
       if (this.#options.publicAccess === true)
-        await this.#cancel(id, context, this.#nowMs() ?? nowMs).catch(() => undefined);
+        try {
+          await this.#cancel(id, context, this.#nowMs() ?? nowMs);
+        } catch (cleanupFailure) {
+          if (activationFailure === undefined) throw cleanupFailure;
+          throw new AggregateError([activationFailure, cleanupFailure], "public subscription cleanup failed");
+        }
     }
   }
   async #cancel(
