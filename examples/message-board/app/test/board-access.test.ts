@@ -156,15 +156,35 @@ describe("MessageBoard gateway policy", () => {
       actor: { value: "ada" },
       timestamp: { seconds: 42n },
     });
-    await expect(
-      services.subscription.subscribe(createBoardTopic("general", publicContext), handler),
-    ).resolves.toMatchObject({ id: { value: "message board-1" } });
+    const subscribed = await services.subscription.subscribe(
+      createBoardTopic("general", publicContext),
+      handler,
+    );
+    expect(subscribed).toMatchObject({ id: { value: "message board-1" } });
     await expect(
       services.subscription.subscribe(createBoardTopic("board-b"), handler),
     ).rejects.toMatchObject({ code: 7 });
     await expect(
       services.subscription.subscribe(createBoardTopic("general", hostileContext), handler),
     ).rejects.toMatchObject({ code: 7 });
+    const actorlessSubscription = create(SubscriptionSchema, {
+      ...subscribed,
+      topic: create(TopicSchema, { ...subscribed.topic, context: actorlessContext() }),
+    });
+    const actorlessTopic = actorlessSubscription.topic;
+    if (actorlessTopic === undefined) throw new Error("Expected actorless subscription topic.");
+    await expect(services.subscription.subscribe(actorlessTopic, handler)).rejects.toMatchObject({
+      code: 7,
+    });
+    await expect(
+      services.subscription.cancel(actorlessSubscription, handler),
+    ).rejects.toMatchObject({
+      code: 7,
+    });
+    const actorlessActivation = services.subscription.activate(actorlessSubscription, handler);
+    await expect(actorlessActivation[Symbol.asyncIterator]().next()).rejects.toMatchObject({
+      code: 7,
+    });
     const mixedNestedSubscribe = nestedBoardRequest(
       "subscribe",
       create(CompositeFilterSchema, {
@@ -221,6 +241,7 @@ describe("MessageBoard gateway policy", () => {
       timestamp: { seconds: 42n },
     });
     await expect(nativeQuery("general", [], hostileContext)).rejects.toMatchObject({ code: 3 });
+    await expect(nativeQuery("general", [], actorlessContext)).rejects.toMatchObject({ code: 7 });
     expect(forwarded).toHaveLength(2);
     await expect(nativeQuery("general", ["board-b"])).rejects.toMatchObject({ code: 7 });
     await expect(nativeQuery("board-b")).rejects.toMatchObject({ code: 7 });
@@ -445,6 +466,37 @@ describe("MessageBoard gateway policy", () => {
     ).resolves.toBe(false);
   });
 
+  it("denies missing or whitespace-only actors for every public operation", async () => {
+    const policy = new BoardAccessPolicy();
+    const publicPrincipal: AuthenticatedPrincipal = { id: "spine-gateway-public" };
+    const actorless = create(ActorContextSchema);
+    const whitespace = create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: " \t" }),
+    });
+    const subscription = create(SubscriptionSchema);
+    const operations = (context: ReturnType<typeof actorlessContext>) => [
+      { ...boardRequest("query", "general"), requestedContext: context },
+      { ...boardRequest("subscribe", "general"), requestedContext: context },
+      {
+        kind: "activate" as const,
+        subscription,
+        requestedContext: context,
+        transport: { service: "spine.client.SubscriptionService", method: "Activate" },
+      },
+      {
+        kind: "cancel" as const,
+        subscription,
+        requestedContext: context,
+        transport: { service: "spine.client.SubscriptionService", method: "Cancel" },
+      },
+    ];
+
+    for (const context of [actorless, whitespace]) {
+      for (const request of operations(context))
+        await expect(policy.authorize(publicPrincipal, request)).resolves.toBe(false);
+    }
+  });
+
   it("fails closed for empty, unrelated, and incomplete filter constraints", async () => {
     const policy = new BoardAccessPolicy();
     const incomplete = create(FilterSchema, {
@@ -535,6 +587,10 @@ function matchingContext() {
 
 function publicContext() {
   return create(ActorContextSchema, { actor: create(UserIdSchema, { value: "ada" }) });
+}
+
+function actorlessContext() {
+  return create(ActorContextSchema);
 }
 
 function hostileContext() {

@@ -133,3 +133,16 @@
   choice, completing TypeDoc navigation for every public option constituent.
 - Corrected the Auth reference to assign public principal admission to policy
   and trusted context reconstruction to `ContextResolver`.
+
+## 2026-08-20 — public actor admission correction
+
+- Added an early public-actor guard to Message Board authorization. Every
+  public request needs a non-whitespace requested actor before the context
+  resolver runs. The guard makes missing actors ordinary forbidden responses,
+  rather than resolver exceptions that native adapters surface as internal
+  errors.
+- Added native-adapter coverage for actorless Read, Subscribe, Activate, and
+  Cancel, plus policy coverage for missing and whitespace-only actors across
+  all four operations. The reference now names the shared 30-second incomplete
+  Subscribe-to-Activate cleanup and explicitly states that active public
+  subscriptions have no TTL.

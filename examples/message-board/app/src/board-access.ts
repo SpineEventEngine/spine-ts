@@ -54,6 +54,8 @@ export class BoardAccessPolicy implements AuthorizationPolicy {
    * @returns A promise that resolves to `true` when allowed and `false` otherwise.
    */
   authorize(principal: AuthenticatedPrincipal, request: IncomingRequest): Promise<boolean> {
+    if (principal.id === "spine-gateway-public" && !this.hasPublicActor(request))
+      return Promise.resolve(false);
     if (request.kind === "activate" || request.kind === "cancel") return Promise.resolve(true);
     try {
       const boards = this.boardNames(principal);
@@ -79,6 +81,11 @@ export class BoardAccessPolicy implements AuthorizationPolicy {
     return principal.id === "spine-gateway-public"
       ? request.requestedContext.actor?.value
       : principal.id;
+  }
+
+  private hasPublicActor(request: IncomingRequest): boolean {
+    const actor = request.requestedContext.actor?.value;
+    return actor !== undefined && actor.trim().length > 0;
   }
 
   private boardNames(principal: AuthenticatedPrincipal): readonly string[] {

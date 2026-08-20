@@ -166,6 +166,51 @@ converges. Review dispatch and dispositions are recorded here as they complete.
 - Final local correction estimate: 15–30 minutes, including TypeDoc generation,
   API inventory, typecheck, and focused checks; no unrelated work is included.
 
+## 2026-08-20 option-constituent correction
+
+- Correction head: `85db55b6`.
+- `SubscriptionGatewayCollaborators` and `BrowserBackend` are exported,
+  documented, registered in API inventories, and navigable from their public
+  option contracts. Auth reference assigns trusted-context reconstruction to
+  `ContextResolver`.
+- Generated/tooling typechecks, 148 focused proofs, API inventory (109 Auth / 250
+  Server), audience, snippets, TSDoc, ESLint, formatting, and diff hygiene pass.
+- Final narrow API/maintainability re-review estimate: 5–10 minutes. Both
+  reviewers retain explicit configured `gpt-5.6-terra` / `high` profiles.
+
+## 2026-08-20 specialist convergence
+
+- **Reliability — pass:** no P0–P2 findings; focused durable suite passes 44/44.
+- **TypeScript/API — pass:** every component of Unary, Subscription, and Browser
+  options is root-exported, inventory-checked, and navigable in TypeDoc. XOR
+  admission and the public binding prohibition remain intact.
+- **Maintainability/documentation — pass:** Auth reference correctly separates
+  authorization from trusted-context resolution, and the exported collaborator
+  contracts are clear.
+- Final security review estimate: 0.5–1 hour. The existing security reviewer is
+  assigned only the public admission/trust boundary, lifetime/cancellation,
+  bounded-resource behavior, and absence of public persisted bindings.
+- The existing documentation reviewer runs in parallel for an estimated
+  15–30 minutes, checking only beginner clarity and accuracy of the affected
+  public/authenticated subscription guidance. Its explicit configured profile
+  is `gpt-5.6-luna` / `medium`; runtime telemetry may be unavailable.
+
+## 2026-08-20 documentation and security findings
+
+- **Documentation P2 — accepted:** Auth reference must name the exact 30-second
+  incomplete activation handshake and state that active public subscriptions
+  have no framework TTL.
+- **Security P2 — accepted:** Message Board authorization permits actorless
+  public requests, after which context resolution throws and native adapters
+  surface an internal failure. Authorization must reject a missing/blank actor
+  before context resolution; regressions must prove no backend forwarding,
+  binding creation, or internal-error response.
+- No P0/P1 findings. The remaining public/session separation, context rewrite,
+  binding ownership, timers/cancellation, request/queue bounds, and logging
+  surfaces passed security review.
+- Final correction estimate: 0.5–1 hour, including RED/GREEN behavior tests,
+  exact documentation, affected security/docs re-review, and push.
+
 ## 2026-08-20 final TypeDoc correction implementation assignment
 
 - Existing `implementer` role, explicit configured `gpt-5.6-terra` / `medium`,
@@ -195,3 +240,14 @@ converges. Review dispatch and dispositions are recorded here as they complete.
 - **Documentation P2 — accepted:** the Auth reference now assigns public
   principal admission to authorization and trusted-context reconstruction to
   `ContextResolver`.
+
+## 2026-08-20 public actor-admission correction
+
+- Existing `implementer` role, explicit configured `gpt-5.6-terra` / `medium`,
+  owns this bounded security correction. Runtime telemetry is unavailable; the
+  immutable configured role/profile is the acceptance evidence.
+- **Security finding — accepted:** public actorless subscription operations
+  reached `BoardContextResolver` and produced an internal error. `BoardAccessPolicy`
+  now rejects missing or whitespace-only public actors before context resolution,
+  forwarding, or binding work. Native adapter regressions prove Read, Subscribe,
+  Activate, and Cancel are normal `PermissionDenied` failures.

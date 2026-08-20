@@ -97,3 +97,11 @@
 - Generated API reference exposes every public option constituent, including
   `SubscriptionGatewayCollaborators` and `BrowserBackend`; their inventory
   entries are intentional and documented.
+
+## Public actor-admission evidence
+
+- RED: native actorless Subscribe reached `BoardContextResolver` and rejected
+  with `Error: Public demo actor is required.` instead of `PermissionDenied`.
+- GREEN: adapter-level actorless Read, Subscribe, Activate, and Cancel reject
+  with code 7; no unary forward or subscription binding creation occurs. Missing
+  and whitespace-only actors are denied for every public operation.
