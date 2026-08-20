@@ -108,3 +108,55 @@ converges. Review dispatch and dispositions are recorded here as they complete.
   makes the same ownership distinction.
 - **Internal subpath disposition — unchanged/rejected:** it remains a private
   Core package convention and is unrelated to this correction.
+
+## 2026-08-20 final affected re-review dispatch
+
+- Correction head: `31e8c35f`.
+- Estimated review effort: 0.5–1 hour for the three affected concerns, including
+  a bounded deterministic correction if a reviewer confirms one.
+- The existing reliability, TypeScript/API, and maintainability reviewers
+  re-check only the failed-purge cutoff, the two intentional public admission
+  exports, and the corrected Auth/Server/GCE/GKE explanations.
+- Every reviewer retains its explicit configured `gpt-5.6-terra` / `high`
+  profile. Runtime telemetry may be unavailable; the immutable configured
+  role/profile is then the recorded evidence. Re-review is read-only and
+  subagent spawning is prohibited.
+
+## 2026-08-20 final affected re-review findings
+
+- **Reliability — pass:** the greatest coalesced purge cutoff survives a failed
+  pass and retry; duplicate cutoffs remain bounded, later cutoffs execute, and
+  close joins. Focused durable evidence passes 44/44.
+- **API P2 — accepted:** the public admission types are visible, but the
+  collaborator intersections used by Unary and Browser option pages remain
+  hidden from TypeDoc. The complete usable option shape must be visible.
+- **API P2 — accepted:** Auth reference incorrectly calls `ResolveContext`
+  authenticated-only. Public admission resolves trusted context without a
+  session expiry.
+- **Maintainability P2 — accepted:** the public admission TSDoc attributes
+  trusted-context establishment to authorization instead of distinguishing
+  authorization from the required context resolver.
+- Final bounded wording/type-presentation correction estimate: 0.5–1 hour,
+  owned by the existing `implementer` with explicit configured
+  `gpt-5.6-terra` / `medium`. Runtime telemetry may be unavailable; the
+  immutable configured profile remains the evidence.
+
+## 2026-08-20 final TypeDoc correction implementation assignment
+
+- Existing `implementer` role, explicit configured `gpt-5.6-terra` / `medium`,
+  owns public collaborator visibility and wording corrections. Runtime telemetry
+  is unavailable; the immutable configured role/profile is the acceptance
+  evidence.
+
+## 2026-08-20 final TypeDoc correction disposition
+
+- **API P2 — accepted:** `UnaryGatewayCollaborators` and
+  `BrowserServerCollaborators` are now public, documented constituents of their
+  option intersections. Their root-export inventories intentionally changed so
+  TypeDoc presents all common fields alongside the mutually exclusive admission
+  shapes. Runtime behavior did not change.
+- **API P2 — accepted:** public `ResolveContext` resolves trusted context for
+  the framework-owned public principal and omits `expiresAt`; the Auth reference
+  now says so.
+- **Maintainability P2 — accepted:** admission, authorization, and trusted
+  context resolution now have separate, accurate public TSDoc responsibilities.

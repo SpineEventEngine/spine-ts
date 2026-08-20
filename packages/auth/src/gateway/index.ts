@@ -100,8 +100,10 @@ export interface UnaryForwarder {
  * Selects exactly one Gateway admission mode.
  *
  * Supply `sessions` for authenticated requests, or `publicAccess: true` for a
- * deliberately public Gateway whose authorization policy establishes trusted
- * request context. The modes are mutually exclusive.
+ * deliberately public Gateway. Admission establishes a principal only:
+ * `authorize` decides whether that principal may perform a decoded request,
+ * and `contexts` independently resolves its trusted actor and tenant context.
+ * The modes are mutually exclusive.
  */
 export type GatewayAdmission =
   | {
@@ -131,7 +133,13 @@ export type GatewayAdmission =
       readonly publicAccess: true;
     };
 
-interface UnaryGatewayCollaborators {
+/**
+ * Common collaborators for every unary Gateway admission mode.
+ *
+ * Pair these with exactly one {@link GatewayAdmission} to form
+ * {@link UnaryGatewayOptions}.
+ */
+export interface UnaryGatewayCollaborators {
   // prettier-ignore
 
   /**
@@ -145,12 +153,12 @@ interface UnaryGatewayCollaborators {
   readonly maxRequestBytes: number;
 
   /**
-   * Authorizes a principal for each decoded request.
+   * Allows or rejects an admitted principal for each decoded request.
    */
   readonly authorize: AuthorizationPolicy["authorize"];
 
   /**
-   * Resolves the trusted actor context for an authorized request.
+   * Independently resolves trusted actor and tenant context after authorization.
    */
   readonly contexts: ContextResolver;
 

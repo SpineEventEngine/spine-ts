@@ -60,6 +60,7 @@ export {
   Server,
   type BrowserAdmission,
   type BrowserAuthRoute,
+  type BrowserServerCollaborators,
   type BrowserServerOptions,
   type ListenerLifecycle,
   type RunningServer,

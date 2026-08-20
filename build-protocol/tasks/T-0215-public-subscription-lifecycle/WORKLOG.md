@@ -114,3 +114,15 @@
 - Updated Auth, Server, and GCE/GKE Gateway documentation to say the same
   thing: durable bindings belong only to authenticated mode; public mode owns
   process-local bindings and loses them with the Gateway process.
+
+## 2026-08-20 — final TypeDoc correction
+
+- Exported the documented common collaborator interfaces used by Unary and
+  Browser option intersections, so the generated reference displays every
+  required common field and the separate admission union.
+- Corrected the public ResolveContext explanation: it resolves trusted context
+  for the framework public principal and omits `expiresAt`; authenticated mode
+  includes the real session expiry.
+- Clarified that admission selects a principal, authorization allows or rejects
+  a decoded request, and the context resolver independently resolves trusted
+  actor and tenant values.

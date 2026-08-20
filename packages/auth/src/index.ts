@@ -629,6 +629,7 @@ export {
 export type {
   UnaryForwarder,
   GatewayAdmission,
+  UnaryGatewayCollaborators,
   UnaryGatewayOptions,
   UnaryGatewayRejection,
   UnaryGatewayRequest,

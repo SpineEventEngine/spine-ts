@@ -681,9 +681,12 @@ type BrowserBackend =
   | { readonly baseUrl?: never; readonly baseUrls: readonly string[] };
 
 /**
- * Configures the browser-facing Connect and gRPC-Web listener.
+ * Common collaborators for every browser Server admission mode.
+ *
+ * Pair these with exactly one {@link BrowserAdmission} to form
+ * {@link BrowserServerOptions}.
  */
-interface BrowserServerCollaborators {
+export interface BrowserServerCollaborators {
   // prettier-ignore
 
   /**
@@ -740,12 +743,12 @@ interface BrowserServerCollaborators {
   readonly registry?: TypeRegistryLookup;
 
   /**
-   * Applies application authorization after admission.
+   * Allows or rejects an admitted principal for each decoded request.
    */
   readonly authorize: AuthorizationPolicy["authorize"];
 
   /**
-   * Replaces browser-supplied actor and tenant context with trusted values.
+   * Independently resolves trusted actor and tenant context after authorization.
    */
   readonly contexts: ContextResolver;
 

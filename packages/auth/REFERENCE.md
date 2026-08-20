@@ -38,7 +38,7 @@ facts. Both modes also require finite request limits, an authorization function,
 
 For Post and Read, it bounds and decodes bytes, admits the request through the selected mode, authorizes the decoded request, resolves trusted context, checks requested actor/tenant, and forwards exactly once. In authenticated mode, admission resolves the supplied session. In public mode, it uses the framework-owned public principal and no session. The forwarder receives only service, method, bytes, and optional cancellation signal. It does not receive credentials or extra transport facts. It returns `forwarded`, `resolved`, or a rejection reason: `request-too-large`, `unknown-operation`, `malformed-request`, `unauthenticated`, `forbidden`, or `context-stale`. Mapping a rejection to HTTP or gRPC status is the native transport adapter's job.
 
-ResolveContext is available only in authenticated mode: it validates the current session and returns informational actor, tenant, and expiry facts. Public mode has no session to resolve. It neither authorizes a business request nor creates a reusable credential. Later requests are independently admitted and authorized.
+ResolveContext returns informational trusted actor and tenant facts in both modes. In authenticated mode, it validates the current session and also returns its expiry. In public mode, it resolves context for the framework-owned public principal and omits `expiresAt` because no session exists. It neither authorizes a business request nor creates a reusable credential. Later requests are independently admitted and authorized.
 
 ## Sessions and sign-in
 

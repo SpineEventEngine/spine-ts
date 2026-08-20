@@ -83,3 +83,11 @@
 - API inventory, audience, and TypeScript snippet checks passed with 107 Auth
   and 248 Server root exports, including documented `GatewayAdmission` and
   `BrowserAdmission`.
+
+## Final TypeDoc correction evidence
+
+- Generated API reference exposes `UnaryGatewayCollaborators` and
+  `BrowserServerCollaborators`, with their complete common option fields, and
+  their intentional root inventories contain 108 Auth and 249 Server exports.
+- Generated build/tooling typechecks, TypeScript snippets, audience checks,
+  TSDoc, changed-file type-aware lint, formatting, and diff hygiene passed.
