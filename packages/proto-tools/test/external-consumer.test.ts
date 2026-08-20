@@ -31,8 +31,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   packedArchiveProblems,
+  packedContentProblems,
   packedManifestProblems,
   publicManifestProblems,
+  internalRuntimeDependencyProblems,
 } from "../../../scripts/package-artifacts.mjs";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -203,9 +205,19 @@ function assertPackedArtifact(tarball: string): void {
     run("tar", ["-xzf", tarball, "--strip-components=1", "-C", stage], repositoryRoot);
     const manifest = JSON.parse(readFileSync(join(stage, "package.json"), "utf8"));
     const entries = readdirSync(stage, { recursive: true }).map((entry) => String(entry));
+    const sourceDirectory = manifest.repository?.directory;
+    const sourceManifest =
+      typeof sourceDirectory === "string"
+        ? JSON.parse(readFileSync(join(repositoryRoot, sourceDirectory, "package.json"), "utf8"))
+        : {};
+    const texts = entries
+      .filter((entry) => /\.(?:json|js|mjs|cjs|ts|d\.ts)$/u.test(entry))
+      .map((entry) => readFileSync(join(stage, entry), "utf8"));
     expect(publicManifestProblems(manifest)).toEqual([]);
     expect(packedManifestProblems(manifest)).toEqual([]);
     expect(packedArchiveProblems(manifest, entries)).toEqual([]);
+    expect(packedContentProblems(manifest, entries, texts, sourceManifest.files ?? [])).toEqual([]);
+    expect(internalRuntimeDependencyProblems(manifest)).toEqual([]);
   } finally {
     rmSync(stage, { force: true, recursive: true });
   }

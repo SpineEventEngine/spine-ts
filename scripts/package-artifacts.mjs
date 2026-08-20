@@ -56,7 +56,8 @@ export function packedManifestProblems(manifest) {
 export function publicManifestProblems(manifest) {
   const name = typeof manifest.name === "string" ? manifest.name : "<unnamed package>";
   const problems = [];
-  if (!frameworkPackageNames.includes(name)) problems.push(name + " is not in the public inventory");
+  if (!frameworkPackageNames.includes(name))
+    problems.push(name + " is not in the public inventory");
   if (manifest.version !== "2.0.0-snapshot.2") problems.push(name + " must use snapshot.2");
   if (manifest.private === true) problems.push(name + " must not be private");
   if (manifest.license !== "Apache-2.0") problems.push(name + " must use Apache-2.0");
@@ -77,6 +78,71 @@ export function publicManifestProblems(manifest) {
   )
     problems.push(name + " has invalid repository");
   return problems.sort((left, right) => left.localeCompare(right));
+}
+
+export function packedContentProblems(manifest, entries, texts, sourceFiles = []) {
+  const name = typeof manifest.name === "string" ? manifest.name : "<unnamed package>";
+  const files = new Set(entries);
+  const problems = [];
+  for (const file of files) {
+    if (/^(?:src|test|tests|\.tmp)(?:\/|$)/u.test(file))
+      problems.push(name + " archive contains prohibited payload: " + file);
+    if (
+      sourceFiles.length &&
+      /\.[^/]+$/u.test(file) &&
+      !["package.json", "README.md", "REFERENCE.md", "LICENSE"].includes(file) &&
+      !sourceFiles.some(
+        (pattern) => file === pattern || file.startsWith(pattern.replace(/\*$/u, "")),
+      )
+    )
+      problems.push(name + " archive contains undeclared payload: " + file);
+  }
+  for (const value of texts) {
+    if (/workspace:|2\.0\.0-snapshot\.1/u.test(value))
+      problems.push(name + " archive text has prohibited specifier");
+    if (/\/Users\/|\/private\/var\/|\.worktrees\//u.test(value))
+      problems.push(name + " archive text has repository path");
+  }
+  for (const target of manifestTargets(manifest)) {
+    const relative = target.replace(/^\.\//u, "");
+    if (relative.includes("*")) {
+      const prefix = relative.split("*")[0];
+      if (![...files].some((file) => file.startsWith(prefix)))
+        problems.push(name + " wildcard target has no archive entry: " + target);
+    } else if (!files.has(relative)) {
+      problems.push(name + " archive is missing target: " + target);
+    }
+  }
+  return [...new Set(problems)].sort((left, right) => left.localeCompare(right));
+}
+
+export function internalRuntimeDependencyProblems(manifest) {
+  const name = typeof manifest.name === "string" ? manifest.name : "<unnamed package>";
+  const problems = [];
+  for (const group of ["dependencies", "optionalDependencies", "peerDependencies"]) {
+    for (const [dependency, version] of Object.entries(manifest[group] || {})) {
+      if (frameworkPackageNames.includes(dependency) && version !== "2.0.0-snapshot.2")
+        problems.push(name + " " + group + " " + dependency + " must use snapshot.2");
+      if (dependency === "@spine-event-engine/validation" && version !== "2.0.0-snapshot.7")
+        problems.push(name + " validation must use snapshot.7");
+    }
+  }
+  return problems.sort((left, right) => left.localeCompare(right));
+}
+
+function manifestTargets(manifest) {
+  const targets = [manifest.main, manifest.module, manifest.types].filter(
+    (value) => typeof value === "string",
+  );
+  if (typeof manifest.bin === "string") targets.push(manifest.bin);
+  if (manifest.bin && typeof manifest.bin === "object")
+    targets.push(...Object.values(manifest.bin));
+  for (const value of Object.values(manifest.exports || {})) {
+    if (typeof value === "string") targets.push(value);
+    else if (value && typeof value === "object")
+      targets.push(...Object.values(value).filter((target) => typeof target === "string"));
+  }
+  return targets;
 }
 
 /**
