@@ -7,12 +7,13 @@ and reasoning dispatch. The protected primary checkout is dirty and stale, so
 all task work is isolated in `.worktrees/wave14-npm-publication` from exact
 `origin/main@ea7ec5e8`.
 
-| Assignment | Existing role | Bounded ownership | Explicit model | Explicit reasoning | Child spawning | Runtime telemetry |
-| --- | --- | --- | --- | --- | --- | --- |
-| Version sequence | `implementer` | Exact 26 manifest top-level version changes, standalone commits, immediate feature-branch pushes, and mechanical history audit only | `gpt-5.6-terra` | medium | Prohibited | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
-| Publication policy | `implementer` | Internal pins, separate lockfile, 18 public manifests, package-policy TDD, and focused verification | `gpt-5.6-terra` | medium | Prohibited | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
-| Artifact scan | orchestrator-dispatched mechanical verification | Read-only analysis of existing pack/external-consumer seams, packed target and payload policy, and dependency graph | `gpt-5.6-luna` | medium | Prohibited | Explicit dispatch is visible; child self-telemetry is unavailable. |
-| Documentation scan | orchestrator-dispatched documentation verification | Read-only inventory of stale publication claims and smallest exact snapshot installation correction | `gpt-5.6-luna` | medium | Prohibited | Explicit dispatch is visible; child self-telemetry is unavailable. |
+| Assignment                | Existing role                                      | Bounded ownership                                                                                                                             | Explicit model  | Explicit reasoning | Child spawning | Runtime telemetry                                                                                         |
+| ------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------ | -------------- | --------------------------------------------------------------------------------------------------------- |
+| Version sequence          | `implementer`                                      | Exact 26 manifest top-level version changes, standalone commits, immediate feature-branch pushes, and mechanical history audit only           | `gpt-5.6-terra` | medium             | Prohibited     | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
+| Publication policy        | `implementer`                                      | Internal pins, separate lockfile, 18 public manifests, package-policy TDD, and focused verification                                           | `gpt-5.6-terra` | medium             | Prohibited     | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
+| Artifact scan             | orchestrator-dispatched mechanical verification    | Read-only analysis of existing pack/external-consumer seams, packed target and payload policy, and dependency graph                           | `gpt-5.6-luna`  | medium             | Prohibited     | Explicit dispatch is visible; child self-telemetry is unavailable.                                        |
+| Documentation scan        | orchestrator-dispatched documentation verification | Read-only inventory of stale publication claims and smallest exact snapshot installation correction                                           | `gpt-5.6-luna`  | medium             | Prohibited     | Explicit dispatch is visible; child self-telemetry is unavailable.                                        |
+| Artifact, docs, publisher | `implementer`                                      | Permanent artifact validator/tests, all-18 isolated consumer proof, narrow docs/checker updates, and external disposable wrapper/instructions | `gpt-5.6-terra` | medium             | Prohibited     | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
 
 ## Skill applicability
 
@@ -53,3 +54,30 @@ all task work is isolated in `.worktrees/wave14-npm-publication` from exact
   manifest per commit, one insertion/one deletion, only the top-level version
   line, and all 26 final versions at `2.0.0-snapshot.2`. Local and feature remote
   both resolve to `a3194128d`.
+- The same explicit Terra/medium owner completed policy TDD and pushed every
+  commit immediately: RED policy test `4ee344bef`, 18-package metadata
+  `a8335dbc5`, 47 concrete internal pins `8cc8e0703` (40 dependencies and seven
+  devDependencies), and lockfile-only update `f355aceaf`. The validation package
+  remains `2.0.0-snapshot.7`, every `workspace:*` remains unchanged, and no
+  snapshot-1 manifest pin remains.
+- Fresh-checkout installation was independently reproduced with Node 24.18.0
+  and pnpm 11.9.0: `pnpm install --frozen-lockfile --offline` installed all 455
+  locked packages without resolving unpublished snapshots from the registry.
+  The worktree-local package metadata test passes 12/12.
+- The explicit Luna/medium artifact scan accepted the existing
+  `packages/proto-tools/test/external-consumer.test.ts` seam and requires it to
+  generalize from eight to all 18 tarballs, validate archive targets/payloads,
+  compute a cycle-safe dependency order from final packed manifests, and retain
+  the no-symlink/no-repository-path external consumer proof.
+- The explicit Luna/medium documentation scan found stale publication claims in
+  the root README, browser/auth guide, core/proto/storage/storage-datastore/
+  storage-rdbms READMEs, and deployment README. It also found the existing
+  release-readiness registry-install prohibition must narrowly allow exact
+  snapshot or `@snapshot` examples while continuing to reject unqualified
+  installs.
+
+## Verification notes
+
+- The first scoped formatting command used an unsupported path argument and
+  exited with usage text. The supported full formatter then identified only
+  this new work log; no product or package file failed formatting.
