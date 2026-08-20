@@ -26,7 +26,7 @@ const staleDocumentationPatterns = [
   ["false Chat multi-model association", /\bChat model declares Users\b/gu],
   [
     "misleading private-package registry installation",
-    /\bpnpm\s+(?:add|install)\s+@spine-event-engine\/(?:core|proto|storage(?:-(?:datastore|rdbms))?|transport)\b/gu,
+    /\bpnpm\s+(?:add|install)\s+@spine-event-engine\/(?:core|proto|storage(?:-(?:datastore|rdbms))?|transport)(?!@(?:snapshot\b|2\.0\.0-snapshot\.2\b))\b/gu,
   ],
   ["stale missing storage-adapter claim", /\b(?:Datastore|RDBMS)\s+(?:is\s+)?not available\b/gu],
   ["retired delivery page callback", /\bonPage\b/gu],
