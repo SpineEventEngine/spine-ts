@@ -5,6 +5,27 @@ const dependencyGroups = [
   "peerDependencies",
 ];
 
+export const frameworkPackageNames = [
+  "@spine-event-engine/auth",
+  "@spine-event-engine/client-node",
+  "@spine-event-engine/client-react",
+  "@spine-event-engine/client-web",
+  "@spine-event-engine/core",
+  "@spine-event-engine/delivery-client",
+  "@spine-event-engine/delivery-server",
+  "@spine-event-engine/deployment",
+  "@spine-event-engine/deployment-gce",
+  "@spine-event-engine/deployment-gke",
+  "@spine-event-engine/proto",
+  "@spine-event-engine/proto-tools",
+  "@spine-event-engine/server",
+  "@spine-event-engine/storage",
+  "@spine-event-engine/storage-datastore",
+  "@spine-event-engine/storage-rdbms",
+  "@spine-event-engine/testing",
+  "@spine-event-engine/transport",
+];
+
 /**
  * Reports package manifest values that cannot be present in a packed npm artifact.
  *
@@ -29,6 +50,32 @@ export function packedManifestProblems(manifest) {
     }
   }
 
+  return problems.sort((left, right) => left.localeCompare(right));
+}
+
+export function publicManifestProblems(manifest) {
+  const name = typeof manifest.name === "string" ? manifest.name : "<unnamed package>";
+  const problems = [];
+  if (!frameworkPackageNames.includes(name)) problems.push(name + " is not in the public inventory");
+  if (manifest.version !== "2.0.0-snapshot.2") problems.push(name + " must use snapshot.2");
+  if (manifest.private === true) problems.push(name + " must not be private");
+  if (manifest.license !== "Apache-2.0") problems.push(name + " must use Apache-2.0");
+  if (typeof manifest.description !== "string" || !manifest.description.trim())
+    problems.push(name + " must have a description");
+  const publishConfig = JSON.stringify(manifest.publishConfig);
+  if (
+    publishConfig !==
+    JSON.stringify({ registry: "https://registry.npmjs.org/", access: "public", tag: "snapshot" })
+  )
+    problems.push(name + " has invalid publishConfig");
+  const repository = manifest.repository;
+  if (
+    repository === null ||
+    typeof repository !== "object" ||
+    repository.type !== "git" ||
+    repository.url !== "https://github.com/SpineEventEngine/spine-ts"
+  )
+    problems.push(name + " has invalid repository");
   return problems.sort((left, right) => left.localeCompare(right));
 }
 

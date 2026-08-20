@@ -29,6 +29,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+  packedArchiveProblems,
+  packedManifestProblems,
+  publicManifestProblems,
+} from "../../../scripts/package-artifacts.mjs";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const spineVersion = (
@@ -127,6 +132,7 @@ function packSpinePackages(destination: string): readonly PackedPackage[] {
     .filter((name) => name.endsWith(".tgz"))
     .map((name) => {
       const tarball = join(destination, name);
+      assertPackedArtifact(tarball);
       const packageName = readPackedName(tarball);
       return { name: packageName, tarball };
     });
@@ -186,6 +192,20 @@ function readPackedName(tarball: string): string {
       throw new Error(`Packed artifact has no package name: ${tarball}`);
     }
     return packageJson.name;
+  } finally {
+    rmSync(stage, { force: true, recursive: true });
+  }
+}
+
+function assertPackedArtifact(tarball: string): void {
+  const stage = mkdtempSync(join(tmpdir(), "spine-packed-policy-"));
+  try {
+    run("tar", ["-xzf", tarball, "--strip-components=1", "-C", stage], repositoryRoot);
+    const manifest = JSON.parse(readFileSync(join(stage, "package.json"), "utf8"));
+    const entries = readdirSync(stage, { recursive: true }).map((entry) => String(entry));
+    expect(publicManifestProblems(manifest)).toEqual([]);
+    expect(packedManifestProblems(manifest)).toEqual([]);
+    expect(packedArchiveProblems(manifest, entries)).toEqual([]);
   } finally {
     rmSync(stage, { force: true, recursive: true });
   }
