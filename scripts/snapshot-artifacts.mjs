@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import {
   frameworkPackageNames,
   internalRuntimeDependencyProblems,
@@ -143,11 +143,16 @@ function assertConsumerIsolation(consumer) {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       const path = join(current, entry.name);
       const actual = realpathSync(path);
-      if (!actual.startsWith(consumerRoot))
+      if (!isContained(consumerRoot, actual))
         throw new Error("Consumer resolved repository path: " + relative(consumer, path));
-      if (lstatSync(path).isSymbolicLink() && !actual.startsWith(consumerRoot))
+      if (lstatSync(path).isSymbolicLink() && !isContained(consumerRoot, actual))
         throw new Error("Consumer has workspace link");
       if (entry.isDirectory()) pending.push(path);
     }
   }
+}
+
+function isContained(parent, child) {
+  const path = relative(parent, child);
+  return path === "" || (!path.startsWith(".." + "/") && path !== ".." && !isAbsolute(path));
 }
