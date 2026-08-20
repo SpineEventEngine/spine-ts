@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -58,4 +58,18 @@ export function inspectPackedArtifact({ root, tarball, run }) {
   } finally {
     rmSync(stage, { force: true, recursive: true });
   }
+}
+
+/** Proves the exact packed tarballs resolve in a fresh non-workspace consumer. */
+export function proveExactTarballConsumer({ root, destination, run }) {
+  const packages = packFrameworkArtifacts({ root, destination, run });
+  const consumer = join(destination, "consumer");
+  mkdirSync(consumer);
+  const dependencies = Object.fromEntries(packages.map(({ name, tarball }) => [name, "file:" + tarball]));
+  writeFileSync(join(consumer, "package.json"), JSON.stringify({ name: "@external/snapshot-proof", private: true, type: "module", dependencies, devDependencies: { typescript: "6.0.3" } }));
+  writeFileSync(join(consumer, "pnpm-workspace.yaml"), "overrides:\n" + Object.entries(dependencies).map(([name, value]) => "  " + JSON.stringify(name) + ": " + JSON.stringify(value)).join("\n") + "\n");
+  run("pnpm", ["install", "--offline", "--ignore-scripts"], consumer);
+  writeFileSync(join(consumer, "index.mjs"), frameworkPackageNames.map((name) => "await import(" + JSON.stringify(name) + ");").join("\n") + "\nawait import('@spine-event-engine/testing');\nawait import('@spine-event-engine/server');\n");
+  run(process.execPath, ["index.mjs"], consumer);
+  return packages;
 }

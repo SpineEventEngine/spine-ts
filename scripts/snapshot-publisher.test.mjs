@@ -4,6 +4,7 @@ import {
   installCleanupHandlers,
   prepareSnapshotPublication,
   runSnapshotPublication,
+  waitForRegistryVisibility,
 } from "./snapshot-publisher.mjs";
 
 describe("snapshot publisher", () => {
@@ -187,5 +188,25 @@ describe("snapshot publisher", () => {
     dispose();
     expect(calls).toEqual(["cleanup", "exit 130"]);
     expect(handlers.size).toBe(0);
+  });
+
+  it("polls registry visibility after a not-found response", async () => {
+    const calls = [];
+    let attempts = 0;
+    await waitForRegistryVisibility({
+      runner: async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          const error = new Error("missing");
+          error.status = 404;
+          throw error;
+        }
+        return "2.0.0-snapshot.2";
+      },
+      sleep: async () => calls.push("sleep"),
+      name: "@spine-event-engine/core",
+      version: "2.0.0-snapshot.2",
+    });
+    expect(calls).toEqual(["sleep"]);
   });
 });

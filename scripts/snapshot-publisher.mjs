@@ -112,3 +112,18 @@ export function installCleanupHandlers({ signals, cleanup, exit }) {
     for (const [signal, handler] of handlers) signals.off(signal, handler);
   };
 }
+
+/** Polls npm's public registry, retrying only an explicit not-found response. */
+export async function waitForRegistryVisibility({ runner, sleep, name, version, attempts = 6 }) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const visible = await runner("npm", ["view", name + "@" + version, "version", "--registry=https://registry.npmjs.org/"]);
+      if (visible.trim() === version) return;
+      throw new Error("Registry returned an unexpected version for " + name);
+    } catch (error) {
+      if (error?.status !== 404) throw error;
+      if (attempt + 1 === attempts) throw new Error("Timed out waiting for " + name + "@" + version);
+      await sleep(1000 * (attempt + 1));
+    }
+  }
+}
