@@ -111,3 +111,10 @@
 - Auth reference now scopes the shared 30-second pending
   Subscribe-to-Activate cleanup to public definitions and documents
   session-derived expiry for authenticated durable definitions.
+
+## Cheap-preflight containment evidence
+
+- `pnpm check:logging-containment` initially failed only because
+  `auth.public_pending_subscription_cleanup` was absent from the manifest.
+  It is now registered as a no-log cleanup boundary with the existing focused
+  Auth subscription test owner.

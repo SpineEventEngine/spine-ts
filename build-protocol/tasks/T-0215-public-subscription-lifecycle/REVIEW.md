@@ -235,6 +235,16 @@ converges. Review dispatch and dispositions are recorded here as they complete.
 - Exact documentation correction estimate: 5–10 minutes, including deterministic
   documentation checks, push, and narrow documentation re-review.
 
+## 2026-08-20 final review disposition
+
+- **Security — pass:** public actor validation now fails closed before context
+  resolution, forwarding, or binding work; no P0–P2 findings remain.
+- **Documentation — pass:** public pending activation cleanup is accurately
+  documented as 30 seconds, active public streams have no framework TTL,
+  authenticated durable definitions use session-derived expiry, and public
+  definitions are process-local.
+- All relevant specialist, security, and documentation concerns have converged.
+
 ## 2026-08-20 final TypeDoc correction implementation assignment
 
 - Existing `implementer` role, explicit configured `gpt-5.6-terra` / `medium`,
@@ -282,3 +292,13 @@ converges. Review dispatch and dispositions are recorded here as they complete.
   Subscribe-to-Activate cleanup is now explicitly scoped to public,
   process-local definitions. Authenticated durable definitions instead use their
   stored session-derived expiry; healthy active public streams have no TTL.
+
+## 2026-08-20 cheap-preflight containment correction
+
+- Preflight failed on the previously unregistered
+  `auth.public_pending_subscription_cleanup` boundary. Its adjacent source
+  performs a best-effort local pending-definition cleanup, so it is registered
+  as the distinct `auth.subscription.cleanup` no-log operation with its existing
+  deterministic Auth subscription test owner. Estimated correction effort:
+  15–30 minutes; existing `implementer`, explicit `gpt-5.6-terra` / `medium`;
+  runtime telemetry unavailable.

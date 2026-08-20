@@ -153,3 +153,10 @@
   process-local definitions and contrasted it with authenticated durable
   session-derived expiry, while retaining the explicit no-TTL active public
   stream rule.
+
+## 2026-08-20 — cheap-preflight containment correction
+
+- Registered the existing public pending-subscription cleanup log boundary as a
+  no-log `auth.subscription.cleanup` operation. The manifest points to the
+  established deterministic Auth subscription test; no runtime logging behavior
+  or production code changed.

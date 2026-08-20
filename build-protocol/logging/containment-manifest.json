@@ -492,6 +492,13 @@
       "test": "packages/auth/test/subscriptions/index.test.ts"
     },
     {
+      "id": "auth.public_pending_subscription_cleanup",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.cleanup",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts"
+    },
+    {
       "id": "auth.subscription_recovered_cleanup",
       "source": "../../packages/auth/src/subscriptions/index.ts",
       "operation": "auth.subscription.cleanup",
