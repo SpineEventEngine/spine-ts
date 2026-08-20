@@ -1,9 +1,9 @@
 # Spine TS Project Completion Plan
 
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
-remotely closed. The T-0203 complete-replica correction is implemented through
-the T-0212 generic-routing removal checkpoint; deployment-correction release
-closure is the remaining documented follow-up.
+remotely closed. The complete-replica deployment correction is closed through
+T-0213. The subsequent beginner-example and public-subscription corrections are
+also complete, release-verified, integrated, and pushed to `origin/main`.
 
 Plan date: 2026-07-12
 
@@ -64,8 +64,8 @@ ordered deployment correction, not the next implementation task.
 The Gateway-hosted Integration Hub for physically split server applications is
 outside the first release. T-0212 completed the mandatory deletion of the
 generic signal-routing layer after replacement acceptance; it is not a
-retained fallback. The remaining closure reconciles only release commands,
-current documentation, and acceptance evidence for this correction.
+retained fallback. T-0213 completed the release-command, documentation, and
+acceptance-evidence reconciliation. The deployment correction is closed.
 
 ## Purpose
 
