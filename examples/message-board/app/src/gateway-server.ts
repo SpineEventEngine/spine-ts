@@ -17,6 +17,7 @@
  * It owns browser requests and subscriptions, but no Bounded Context or Delivery worker.
  */
 
+import { InMemorySubscriptionBindings } from "@spine-event-engine/auth";
 import { Server } from "@spine-event-engine/server";
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
 import { Datastore } from "@google-cloud/datastore";
@@ -32,7 +33,10 @@ const logger = MessageBoardDeployment.logger(config.projectId, process.env);
 const storage = MessageBoardDeployment.storage(client);
 MessageBoardDeployment.configureGatewayServer(config, storage, logger);
 const policy = new BoardAccessPolicy();
-const bindings = MessageBoardDeployment.bindings(config, storage);
+const bindings = new InMemorySubscriptionBindings({
+  nextId: globalThis.crypto.randomUUID,
+  dispose: () => Promise.resolve(),
+});
 const server = await Server.atPort(config.port, {
   host: config.host,
   browser: {

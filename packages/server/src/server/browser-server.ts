@@ -424,10 +424,10 @@ export const BrowserServer: Readonly<{
     if (standalone && production && options.registry === undefined)
       throw new Error("Production standalone browser server requires a type registry.");
     const bindings = options.bindings;
-    if (production && !isDurableSubscriptionBindings(bindings))
+    if (production && options.publicAccess !== true && !isDurableSubscriptionBindings(bindings))
       throw new Error("Production browser server requires durable subscription bindings.");
     if (
-      standalone &&
+      standalone && options.publicAccess !== true &&
       production &&
       (bindings === undefined ||
         !("namespace" in bindings) ||

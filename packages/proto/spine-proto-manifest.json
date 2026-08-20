@@ -6,7 +6,6 @@
     "grpc/health/v1/health.proto",
     "spine/auth/authenticated_subscription.proto",
     "spine/auth/authentication_service.proto",
-    "spine/auth/public_subscription.proto",
     "spine/base/error.proto",
     "spine/base/field_path.proto",
     "spine/client/command_service.proto",
@@ -59,7 +58,6 @@
     "grpc/health/v1/health.proto": "generated/grpc/health/v1/health_pb.js",
     "spine/auth/authenticated_subscription.proto": "generated/spine/auth/authenticated_subscription_pb.js",
     "spine/auth/authentication_service.proto": "generated/spine/auth/authentication_service_pb.js",
-    "spine/auth/public_subscription.proto": "generated/spine/auth/public_subscription_pb.js",
     "spine/base/error.proto": "generated/spine/base/error_pb.js",
     "spine/base/field_path.proto": "generated/spine/base/field_path_pb.js",
     "spine/client/command_service.proto": "generated/spine/client/command_service_pb.js",
@@ -110,5 +108,5 @@
   },
   "dependencies": [],
   "moduleExport": "spineProtoModule",
-  "generationId": "1b9f338e-7199-4dc5-ac39-bcc35368306a"
+  "generationId": "ddbd936d-0fdd-4961-a92e-cb4fdf8d06e4"
 }
