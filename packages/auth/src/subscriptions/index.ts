@@ -751,7 +751,13 @@ export interface SubscriptionCoordinator {
   ): Promise<void>;
 }
 
-interface SubscriptionGatewayCollaborators {
+/**
+ * Common collaborators for every subscription Gateway admission mode.
+ *
+ * Pair these with exactly one {@link GatewayAdmission} to form
+ * {@link SubscriptionGatewayOptions}.
+ */
+export interface SubscriptionGatewayCollaborators {
   // prettier-ignore
 
   /**
@@ -760,12 +766,12 @@ interface SubscriptionGatewayCollaborators {
   readonly bindings: SubscriptionBindings;
 
   /**
-   * Authorizes each resolved request.
+   * Allows or rejects an admitted principal for each decoded request.
    */
   readonly authorize: AuthorizationPolicy["authorize"];
 
   /**
-   * Resolves trusted actor contexts.
+   * Independently resolves trusted actor and tenant context after authorization.
    */
   readonly contexts: ContextResolver;
 

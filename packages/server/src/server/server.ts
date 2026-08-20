@@ -674,11 +674,35 @@ export type BrowserAdmission =
     };
 
 /**
- * Configures the browser-facing Connect and gRPC-Web listener.
+ * Selects one separately hosted Spine backend or a non-empty fixed node set.
  */
-type BrowserBackend =
-  | { readonly baseUrl: string; readonly baseUrls?: never }
-  | { readonly baseUrl?: never; readonly baseUrls: readonly string[] };
+export type BrowserBackend =
+  | {
+      // prettier-ignore
+
+      /**
+       * Supplies one canonical backend HTTP(S) origin.
+       */
+      readonly baseUrl: string;
+
+      /**
+       * Excludes a multi-node backend list when one backend is supplied.
+       */
+      readonly baseUrls?: never;
+    }
+  | {
+      // prettier-ignore
+
+      /**
+       * Excludes a single backend origin when a fixed node set is supplied.
+       */
+      readonly baseUrl?: never;
+
+      /**
+       * Supplies a non-empty fixed set of canonical backend HTTP(S) origins.
+       */
+      readonly baseUrls: readonly string[];
+    };
 
 /**
  * Common collaborators for every browser Server admission mode.

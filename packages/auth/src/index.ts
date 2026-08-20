@@ -639,6 +639,7 @@ export type {
   SubscriptionCreator,
   SubscriptionCoordinator,
   SubscriptionGatewayLimits,
+  SubscriptionGatewayCollaborators,
   SubscriptionGatewayOptions,
   SubscriptionGatewayRequest,
   SubscriptionGatewayResult,

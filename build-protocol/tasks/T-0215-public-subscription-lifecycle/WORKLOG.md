@@ -126,3 +126,10 @@
 - Clarified that admission selects a principal, authorization allows or rejects
   a decoded request, and the context resolver independently resolves trusted
   actor and tenant values.
+
+## 2026-08-20 — final constituent visibility correction
+
+- Exported documented Subscription Gateway collaborators and the Browser backend
+  choice, completing TypeDoc navigation for every public option constituent.
+- Corrected the Auth reference to assign public principal admission to policy
+  and trusted context reconstruction to `ContextResolver`.

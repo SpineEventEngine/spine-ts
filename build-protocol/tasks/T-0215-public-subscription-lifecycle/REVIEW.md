@@ -141,6 +141,31 @@ converges. Review dispatch and dispositions are recorded here as they complete.
   `gpt-5.6-terra` / `medium`. Runtime telemetry may be unavailable; the
   immutable configured profile remains the evidence.
 
+## 2026-08-20 declaration and wording correction
+
+- Correction head: `cec1ae2b`.
+- The documented Auth and Server collaborator types now make the complete
+  public option shapes visible. Auth reference documents public
+  `ResolveContext` without session expiry, and admission TSDoc separates
+  authorization from trusted-context resolution.
+- Focused Unary/Browser proofs pass 148/148. API inventory, audience, snippets,
+  TSDoc, changed-file ESLint, formatting, and diff hygiene pass.
+- Final affected API and maintainability re-review estimate: 0.25–0.5 hour.
+  Both existing reviewers retain explicit configured `gpt-5.6-terra` / `high`
+  profiles; runtime telemetry may be unavailable.
+
+## 2026-08-20 final narrow re-review findings
+
+- **API/maintainability P2 — accepted:** `SubscriptionGatewayOptions` still
+  references a private collaborator declaration, and public
+  `BrowserServerCollaborators` still references private `BrowserBackend`.
+  Both constituent shapes must be visible and navigable in generated TypeDoc.
+- **Documentation P2 — accepted:** one Auth reference sentence still attributes
+  trusted-context reconstruction to authorization rather than the separate
+  context resolver.
+- Final local correction estimate: 15–30 minutes, including TypeDoc generation,
+  API inventory, typecheck, and focused checks; no unrelated work is included.
+
 ## 2026-08-20 final TypeDoc correction implementation assignment
 
 - Existing `implementer` role, explicit configured `gpt-5.6-terra` / `medium`,
@@ -160,3 +185,13 @@ converges. Review dispatch and dispositions are recorded here as they complete.
   now says so.
 - **Maintainability P2 — accepted:** admission, authorization, and trusted
   context resolution now have separate, accurate public TSDoc responsibilities.
+
+## 2026-08-20 final constituent visibility disposition
+
+- **API/maintainability P2 — accepted:** `SubscriptionGatewayCollaborators` and
+  `BrowserBackend` are now exported and documented, completing the navigable
+  public constituents of Unary, Subscription, and Browser option shapes. Their
+  root export inventories intentionally changed; no runtime behavior changed.
+- **Documentation P2 — accepted:** the Auth reference now assigns public
+  principal admission to authorization and trusted-context reconstruction to
+  `ContextResolver`.

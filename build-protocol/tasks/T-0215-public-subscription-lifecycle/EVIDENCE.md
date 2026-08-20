@@ -91,3 +91,9 @@
   their intentional root inventories contain 108 Auth and 249 Server exports.
 - Generated build/tooling typechecks, TypeScript snippets, audience checks,
   TSDoc, changed-file type-aware lint, formatting, and diff hygiene passed.
+
+## Final constituent visibility evidence
+
+- Generated API reference exposes every public option constituent, including
+  `SubscriptionGatewayCollaborators` and `BrowserBackend`; their inventory
+  entries are intentional and documented.

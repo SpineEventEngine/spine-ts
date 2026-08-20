@@ -32,8 +32,9 @@ membership is empty.
 `SubscriptionGateway` with exactly one admission mode: a `SessionResolver`, or
 `publicAccess: true`. Public access creates no login session and no synthetic
 expiry. It is appropriate only when the application deliberately exposes the
-Gateway and its authorization policy reconstructs trusted context from request
-facts. Both modes also require finite request limits, an authorization function,
+Gateway, its authorization policy admits the public principal, and its
+`ContextResolver` reconstructs trusted context from request facts. Both modes
+also require finite request limits, an authorization function,
 `ContextResolver`, clock, and the corresponding forwarding collaborator.
 
 For Post and Read, it bounds and decodes bytes, admits the request through the selected mode, authorizes the decoded request, resolves trusted context, checks requested actor/tenant, and forwards exactly once. In authenticated mode, admission resolves the supplied session. In public mode, it uses the framework-owned public principal and no session. The forwarder receives only service, method, bytes, and optional cancellation signal. It does not receive credentials or extra transport facts. It returns `forwarded`, `resolved`, or a rejection reason: `request-too-large`, `unknown-operation`, `malformed-request`, `unauthenticated`, `forbidden`, or `context-stale`. Mapping a rejection to HTTP or gRPC status is the native transport adapter's job.
