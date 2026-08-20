@@ -52,7 +52,7 @@ describe("Message Board public-demo trust policy", () => {
         join(repositoryRoot, "examples/message-board/app/src/public-board-admission.ts"),
         "utf8",
       ),
-    ).toContain("publicAccess: true");
+    ).toContain("PublicBoardAdmission");
   });
 
   it("documents purpose-named startup modules, launchers, and every supported mode", () => {

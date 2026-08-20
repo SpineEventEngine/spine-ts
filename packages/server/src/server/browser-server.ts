@@ -49,10 +49,6 @@ import {
   attachDurableSubscriptionCleanup,
   isDurableSubscriptionBindings,
 } from "./durable-subscription-bindings.js";
-import {
-  attachDurablePublicSubscriptionCleanup,
-  isDurablePublicSubscriptionBindings,
-} from "./durable-public-subscription-bindings.js";
 import reservedSpineRpcPaths from "./reserved-spine-rpc-paths.json" with { type: "json" };
 
 const gracefulBrowserDrainMs = 100;
@@ -195,12 +191,6 @@ export const BrowserServer: Readonly<{
         attachDurableSubscriptionCleanup(bindings, (definition, signal) =>
           creator.cancel({ wire: definition }, signal),
         );
-      if (isDurablePublicSubscriptionBindings(bindings)) {
-        attachDurablePublicSubscriptionCleanup(bindings, (definition, signal) =>
-          creator.cancel({ wire: definition }, signal),
-        );
-        await bindings.cleanupOrphans();
-      }
       const durableBindings = bindings as SubscriptionBindings;
       if (durableBindings.recoverActive !== undefined) {
         const now = options.clock.now();
@@ -220,7 +210,6 @@ export const BrowserServer: Readonly<{
           });
       }
     } catch (error) {
-      if (isDurablePublicSubscriptionBindings(bindings)) bindings.abandon();
       const failures = [error];
       for (const cleanup of [
         () => subscriptions.close(),
@@ -435,17 +424,8 @@ export const BrowserServer: Readonly<{
     if (standalone && production && options.registry === undefined)
       throw new Error("Production standalone browser server requires a type registry.");
     const bindings = options.bindings;
-    if (standalone && production) {
-      if (
-        options.publicAccess === true &&
-        !isDurablePublicSubscriptionBindings(bindings)
-      )
-        throw new Error(
-          "Production public browser server requires durable public subscription bindings.",
-        );
-      if (options.sessions !== undefined && !isDurableSubscriptionBindings(bindings))
-        throw new Error("Production browser server requires durable subscription bindings.");
-    }
+    if (production && !isDurableSubscriptionBindings(bindings))
+      throw new Error("Production browser server requires durable subscription bindings.");
     if (
       standalone &&
       production &&

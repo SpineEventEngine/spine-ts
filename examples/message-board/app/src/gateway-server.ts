@@ -32,7 +32,7 @@ const logger = MessageBoardDeployment.logger(config.projectId, process.env);
 const storage = MessageBoardDeployment.storage(client);
 MessageBoardDeployment.configureGatewayServer(config, storage, logger);
 const policy = new BoardAccessPolicy();
-const bindings = MessageBoardDeployment.publicBindings(config, storage);
+const bindings = MessageBoardDeployment.bindings(config, storage);
 const server = await Server.atPort(config.port, {
   host: config.host,
   browser: {

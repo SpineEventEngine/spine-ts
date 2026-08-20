@@ -58,7 +58,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BoundedContext,
   DurableSubscriptionBindings,
-  DurablePublicSubscriptionBindings,
   EnvironmentType,
   Server,
   ServerEnvironment,
@@ -607,44 +606,6 @@ describe("Server", () => {
         true,
       );
     }).toThrow("durable subscription bindings");
-  });
-
-  it("requires the public orphan-cleanup ledger for a production public standalone gateway", () => {
-    const production = {
-      ...browserGateway(),
-      backend: { baseUrl: "https://backend.example.test" },
-      registry: new TypeRegistry(),
-      publicAccess: true as const,
-      sessions: undefined,
-    };
-    expect(() =>
-      BrowserServer.requireDurableBindings(
-        {
-          ...production,
-          bindings: new DurableSubscriptionBindings({
-            storageFactory: new InMemoryStorageFactory(),
-            namespace: "wrong-public-kind",
-            nextId: () => "wrong-public-kind",
-            cleanup: () => Promise.resolve(),
-          }),
-        },
-        true,
-      ),
-    ).toThrow("durable public subscription bindings");
-    expect(() =>
-      BrowserServer.requireDurableBindings(
-        {
-          ...production,
-          bindings: new DurablePublicSubscriptionBindings({
-            storageFactory: new InMemoryStorageFactory(),
-            namespace: "right-public-kind",
-            nextId: () => "right-public-kind",
-            cleanup: () => Promise.resolve(),
-          }),
-        },
-        true,
-      ),
-    ).not.toThrow();
   });
 
   it("rejects missing standalone authentication collaborators before listener startup", () => {

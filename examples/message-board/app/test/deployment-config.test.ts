@@ -217,7 +217,7 @@ describe("MessageBoard deployment configuration", () => {
   it("assembles a closeable durable registry over supplied local storage", async () => {
     const config = MessageBoardDeployment.combined(completeEnvironment);
     const storage = new InMemoryStorageFactory();
-    const bindings = MessageBoardDeployment.publicBindings(config, storage);
+    const bindings = MessageBoardDeployment.bindings(config, storage);
 
     expect(bindings.namespace).toBe("message-board-subscriptions");
 

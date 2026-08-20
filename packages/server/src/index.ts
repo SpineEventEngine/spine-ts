@@ -75,11 +75,6 @@ export {
   isDurableSubscriptionBindings,
   type DurableSubscriptionBindingsOptions,
 } from "./server/durable-subscription-bindings.js";
-export {
-  DurablePublicSubscriptionBindings,
-  isDurablePublicSubscriptionBindings,
-  type DurablePublicSubscriptionBindingsOptions,
-} from "./server/durable-public-subscription-bindings.js";
 export { Environment, EnvironmentType } from "./server/environment.js";
 export {
   ServerEnvironment,

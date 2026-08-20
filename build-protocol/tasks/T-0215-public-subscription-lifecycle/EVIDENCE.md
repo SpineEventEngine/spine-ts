@@ -28,5 +28,3 @@
 - `pnpm exec vitest run packages/auth/test/subscriptions/index.test.ts --pool=forks --reporter=dot -t "keeps a public subscription active"` passed after a prior RED failure at the missing session resolver.
 - `pnpm typecheck:build:generated --filter @spine-event-engine/auth` passed.
 - `pnpm exec vitest run packages/auth/test/unary-gateway.test.ts --pool=forks --reporter=dot -t "resolves public context"` passed after its missing-resolver RED failure.
-- `pnpm exec vitest run packages/server/test/server/durable-subscription-bindings.test.ts --pool=forks --reporter=dot -t "stores a public orphan"` first failed because the public ledger export was absent, then passed after implementation.
-- `pnpm exec vitest run packages/server/test/server/server.test.ts --pool=forks --reporter=dot -t "requires the public orphan"` first failed because authenticated durable bindings were accepted for public standalone mode, then passed after binding-kind validation.

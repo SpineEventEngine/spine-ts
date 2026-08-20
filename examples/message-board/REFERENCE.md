@@ -21,9 +21,7 @@ Nothing in the family is published. Generated Proto, handler output, and
 public Connect/gRPC-Web listener on `127.0.0.1:8090`. The framework manages
 routing, exact-origin CORS, subscription bindings, readiness, rollback, signals,
 and shutdown. The application supplies `BoardAccessPolicy`,
-`BoardContextResolver` and its model registry. The standalone Gateway uses a
-durable public orphan-cleanup ledger; the combined process keeps subscriptions
-in memory because native, application, and Gateway share one lifetime. The
+`BoardContextResolver`, its model registry, and `PublicBoardAdmission`. The
 browser never receives the private backend URL.
 
 The local browser origin is exactly `http://127.0.0.1:5173`. The example

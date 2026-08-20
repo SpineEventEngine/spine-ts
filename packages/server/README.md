@@ -394,12 +394,7 @@ const running = await new Server({
 void running;
 ```
 
-In production, authenticated standalone browser access requires
-`DurableSubscriptionBindings`. Public standalone access requires
-`DurablePublicSubscriptionBindings`; startup cancels and deletes its orphan
-ledger rows before it accepts browser traffic. Combined public servers may use
-the framework-owned in-memory bindings because all subscription owners share a
-process lifetime. Startup
+In production, browser access requires `DurableSubscriptionBindings`. Startup
 rejects missing or in-memory bindings before opening a listener. The registry
 uses the storage factory that your application supplies and closes only the
 handle, so you can use a separate factory from application-data storage or
