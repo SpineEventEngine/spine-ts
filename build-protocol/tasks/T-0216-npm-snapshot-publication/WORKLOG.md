@@ -142,6 +142,11 @@ all task work is isolated in `.worktrees/wave14-npm-publication` from exact
   final narrow batch: Windows-separator containment, a real escaping-symlink
   regression, an executable embedded wrapper cleanliness fixture, and immutable
   reviewed-commit authentication before the wrapper installs or packs.
+- Final style and reliability re-reviews are clean. Security found that Git
+  status alone can trust configuration/index flags which conceal files. The
+  accepted external-only correction forces untracked/ignored visibility and
+  independently authenticates tracked worktree bytes and modes against the
+  pinned commit tree, with an `assume-unchanged` fixture.
 
 ## Implementation files
 

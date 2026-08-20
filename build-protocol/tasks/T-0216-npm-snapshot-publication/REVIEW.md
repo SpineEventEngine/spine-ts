@@ -115,3 +115,18 @@ No other concern is reopened. The wrapper's final immutable commit value may be
 refreshed deterministically after integration so the human's fresh `main`
 checkout is the authenticated candidate; the validation behavior itself is the
 reviewed security contract.
+
+## Final re-review result
+
+- Style/maintainability and performance/reliability are clean. The wrapper
+  fixture exercises its production cleanliness guard, and native/Windows plus
+  real symlink traversal regressions pass with bounded cleanup.
+- Security accepts the commit pin, import ordering, registry pinning, integrity
+  boundaries, and containment, but found one remaining P1: ordinary Git status
+  can honor configuration or index flags that hide untracked or modified paths.
+- Accepted final correction: force complete untracked/ignored visibility and
+  independently compare every tracked worktree file's Git blob identity and
+  mode with the pinned commit tree before imports. Extend the embedded fixture
+  with a modified `assume-unchanged` tracked file so this bypass is executable.
+  This changes only the external disposable wrapper and will be security
+  re-reviewed; permanent/package code remains converged.
