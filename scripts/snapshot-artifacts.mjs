@@ -153,6 +153,9 @@ function assertConsumerIsolation(consumer) {
 }
 
 export function isContainedPath(parent, child) {
-  const path = relative(parent, child);
+  return isContainedRelative(relative(parent, child));
+}
+
+export function isContainedRelative(path) {
   return path === "" || (path !== ".." && !path.startsWith("../") && !path.startsWith("..\\") && !isAbsolute(path));
 }
