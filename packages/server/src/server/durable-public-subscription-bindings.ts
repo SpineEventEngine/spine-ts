@@ -62,7 +62,6 @@ export class DurablePublicSubscriptionBindings implements SubscriptionBindings {
   readonly #pending = new Map<string, Promise<unknown>>();
   readonly #active = new Map<string, AbortController>();
   #closed = false;
-  #closing: Promise<void> | undefined;
 
   /** Opens a public cleanup ledger without taking ownership of the storage factory. */
   constructor(options: DurablePublicSubscriptionBindingsOptions) {
@@ -178,21 +177,12 @@ export class DurablePublicSubscriptionBindings implements SubscriptionBindings {
   }
 
   /** Gracefully removes backend definitions before closing the ledger. */
-  close(): Promise<void> {
-    if (this.#closed) return Promise.resolve();
-    this.#closing ??= this.#close();
-    return this.#closing;
-  }
-
-  async #close(): Promise<void> {
+  async close(): Promise<void> {
+    if (this.#closed) return;
     for (const controller of this.#active.values()) controller.abort();
-    try {
-      await this.cleanupOrphans();
-      this.#closed = true;
-      this.#storage.close();
-    } finally {
-      if (!this.#closed) this.#closing = undefined;
-    }
+    await this.cleanupOrphans();
+    this.#closed = true;
+    this.#storage.close();
   }
 
   /** Closes storage after failed startup without retrying orphan cleanup. @internal */
