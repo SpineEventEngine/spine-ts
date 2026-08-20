@@ -49,7 +49,7 @@ remain outside tracked repository paths.
 8. The feature branch, integrated `main`, and any task tags are pushed only to
    `origin`; remote refs are mechanically confirmed. NPM remains untouched.
 
-## Human invariants
+## Human-Imposed Requirements Ledger
 
 - Publish all 18 framework packages and no root/example package.
 - Use exact version `2.0.0-snapshot.2` and explicit tag `snapshot`, never
@@ -60,4 +60,3 @@ remain outside tracked repository paths.
   never accepts, stores, prints, or manufactures credentials.
 - The publisher never clones, changes versions, commits, tags, pushes, unpublishes,
   overwrites, or changes distribution tags.
-
