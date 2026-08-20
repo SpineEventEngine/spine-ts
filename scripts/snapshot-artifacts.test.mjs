@@ -1,14 +1,18 @@
+import { mkdtempSync, mkdirSync, realpathSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { isContainedPath } from "./snapshot-artifacts.mjs";
 
-describe("snapshot artifact consumer isolation", () => {
-  it("rejects a sibling path whose text merely shares the consumer prefix", () => {
-    expect(isContainedPath("/tmp/consumer", "/tmp/consumer-outside/node_modules/pkg")).toBe(false);
-  });
-
-  it("accepts the consumer root and actual descendants", () => {
-    expect(isContainedPath("/tmp/consumer", "/tmp/consumer")).toBe(true);
-    expect(isContainedPath("/tmp/consumer", "/tmp/consumer/node_modules/pkg")).toBe(true);
+describe("snapshot artifact containment", () => {
+  it("rejects sibling-prefix and real symlink escapes", () => {
+    const parent = mkdtempSync(join(tmpdir(), "snapshot-consumer-"));
+    const sibling = parent + "-sibling";
+    mkdirSync(sibling);
+    const link = join(parent, "escape");
+    symlinkSync(sibling, link);
+    expect(isContainedPath(parent, sibling)).toBe(false);
+    expect(isContainedPath(parent, realpathSync(link))).toBe(false);
   });
 });
