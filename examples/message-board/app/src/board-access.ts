@@ -76,13 +76,13 @@ export class BoardAccessPolicy implements AuthorizationPolicy {
     principal: AuthenticatedPrincipal,
     request: IncomingRequest,
   ): string | undefined {
-    return principal.id === "message-board-public-demo"
+    return principal.id === "spine-gateway-public"
       ? request.requestedContext.actor?.value
       : principal.id;
   }
 
   private boardNames(principal: AuthenticatedPrincipal): readonly string[] {
-    return principal.id === "message-board-public-demo"
+    return principal.id === "spine-gateway-public"
       ? ["general"]
       : (principal.attributes?.boards?.split(",").filter(Boolean) ?? []);
   }
@@ -159,7 +159,7 @@ export class BoardContextResolver implements ContextResolver {
     request: IncomingRequest,
     clock: Clock,
   ): Promise<AuthorizedRequestContext> {
-    if (_principal.id !== "message-board-public-demo") return this.resolveContext(_principal, clock);
+    if (_principal.id !== "spine-gateway-public") return this.resolveContext(_principal, clock);
     const actor = request.requestedContext.actor?.value;
     if (actor === undefined || actor.length === 0) throw new Error("Public demo actor is required.");
     return Promise.resolve({ actor: create(UserIdSchema, { value: actor }), timestamp: clock.now() });

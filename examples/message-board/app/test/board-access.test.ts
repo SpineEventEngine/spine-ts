@@ -64,10 +64,9 @@ const principal: AuthenticatedPrincipal = {
 };
 
 describe("MessageBoard gateway policy", () => {
-  it("composes native services with the MessageBoard registry, policy, and trusted context", async () => {
+  it("composes publicAccess with request-derived actor context and no session fixture", async () => {
     const policy = new BoardAccessPolicy();
     const contexts = new BoardContextResolver();
-    const trustedPrincipal = { id: "ada", attributes: { boards: "board-a", tenant: "tenant-a" } };
     const clock: Clock = { now: () => create(TimestampSchema, { seconds: 42n }) };
     const forwarded: {
       readonly service: string;
@@ -77,13 +76,7 @@ describe("MessageBoard gateway policy", () => {
     const unary = new UnaryGateway({
       registry: typeRegistry,
       maxRequestBytes: 10_000,
-      sessions: {
-        resolve: () =>
-          Promise.resolve({
-            principal: trustedPrincipal,
-            expiresAt: create(TimestampSchema, { seconds: 99n }),
-          }),
-      },
+      publicAccess: true,
       authorize: policy.authorize.bind(policy),
       contexts,
       clock,
@@ -104,13 +97,7 @@ describe("MessageBoard gateway policy", () => {
     });
     const subscriptions = new SubscriptionGateway({
       bindings,
-      sessions: {
-        resolve: () =>
-          Promise.resolve({
-            principal: trustedPrincipal,
-            expiresAt: create(TimestampSchema, { seconds: 99n }),
-          }),
-      },
+      publicAccess: true,
       authorize: policy.authorize.bind(policy),
       contexts,
       clock,
@@ -127,8 +114,7 @@ describe("MessageBoard gateway policy", () => {
       unary,
       subscriptions,
       requests: {
-        // Mirrors BrowserServer's missing-Authorization sentinel; PublicBoardAdmission ignores it.
-        credential: () => ({ kind: "bearer", value: "" }),
+        credential: () => undefined,
         transport: () => ({ service: "ignored", method: "ignored" }),
       },
     });
@@ -136,7 +122,7 @@ describe("MessageBoard gateway policy", () => {
     const nativePost = (
       author: string,
       board: string,
-      context: typeof matchingContext = matchingContext,
+      context: typeof publicContext = publicContext,
     ) =>
       services.command.post(
         create(CommandSchema, {
@@ -158,9 +144,9 @@ describe("MessageBoard gateway policy", () => {
         handler,
       );
 
-    await expect(nativePost("ada", "board-a")).resolves.toEqual(create(AckSchema));
-    await expect(nativePost("ada", "board-a", hostileContext)).rejects.toMatchObject({ code: 3 });
-    await expect(nativePost("mallory", "board-a")).rejects.toMatchObject({ code: 7 });
+    await expect(nativePost("ada", "general")).resolves.toEqual(create(AckSchema));
+    await expect(nativePost("ada", "general", hostileContext)).rejects.toMatchObject({ code: 7 });
+    await expect(nativePost("mallory", "general")).rejects.toMatchObject({ code: 7 });
     await expect(nativePost("ada", "board-b")).rejects.toMatchObject({ code: 7 });
     expect(forwarded).toHaveLength(1);
     expect(forwarded[0]).not.toHaveProperty("credential");
@@ -168,24 +154,23 @@ describe("MessageBoard gateway policy", () => {
     const rewritten = fromBinary(CommandSchema, forwarded[0]?.value ?? new Uint8Array());
     expect(rewritten.context?.actorContext).toMatchObject({
       actor: { value: "ada" },
-      tenantId: { kind: { case: "value", value: "tenant-a" } },
       timestamp: { seconds: 42n },
     });
     await expect(
-      services.subscription.subscribe(createBoardTopic("board-a"), handler),
+      services.subscription.subscribe(createBoardTopic("general", publicContext), handler),
     ).resolves.toMatchObject({ id: { value: "message board-1" } });
     await expect(
       services.subscription.subscribe(createBoardTopic("board-b"), handler),
     ).rejects.toMatchObject({ code: 7 });
     await expect(
-      services.subscription.subscribe(createBoardTopic("board-a", hostileContext), handler),
+      services.subscription.subscribe(createBoardTopic("general", hostileContext), handler),
     ).rejects.toMatchObject({ code: 7 });
     const mixedNestedSubscribe = nestedBoardRequest(
       "subscribe",
       create(CompositeFilterSchema, {
         operator: CompositeFilter_CompositeOperator.EITHER,
         compositeFilter: [
-          boardComposite(CompositeFilter_CompositeOperator.ALL, ["board-a"]),
+          boardComposite(CompositeFilter_CompositeOperator.ALL, ["general"]),
           boardComposite(CompositeFilter_CompositeOperator.ALL, ["board-b"]),
         ],
       }),
@@ -196,7 +181,7 @@ describe("MessageBoard gateway policy", () => {
       services.subscription.subscribe(
         create(TopicSchema, {
           ...mixedNestedSubscribe.topic,
-          context: matchingContext(),
+          context: publicContext(),
         }),
         handler,
       ),
@@ -206,14 +191,13 @@ describe("MessageBoard gateway policy", () => {
       fromBinary(SubscriptionSchema, subscriptionWires[0] ?? new Uint8Array()).topic?.context,
     ).toMatchObject({
       actor: { value: "ada" },
-      tenantId: { kind: { case: "value", value: "tenant-a" } },
       timestamp: { seconds: 42n },
     });
     await subscriptions.close();
     const nativeQuery = (
       board: string,
       additionalRooms: readonly string[] = [],
-      context: typeof matchingContext = matchingContext,
+      context: typeof publicContext = publicContext,
     ) => {
       const request = boardRequest(
         "query",
@@ -230,16 +214,15 @@ describe("MessageBoard gateway policy", () => {
         handler,
       );
     };
-    await expect(nativeQuery("board-a")).resolves.toEqual(create(QueryService.method.read.output));
+    await expect(nativeQuery("general")).resolves.toEqual(create(QueryService.method.read.output));
     expect(forwarded).toHaveLength(2);
     expect(fromBinary(QuerySchema, forwarded[1]?.value ?? new Uint8Array()).context).toMatchObject({
       actor: { value: "ada" },
-      tenantId: { kind: { case: "value", value: "tenant-a" } },
       timestamp: { seconds: 42n },
     });
-    await expect(nativeQuery("board-a", [], hostileContext)).rejects.toMatchObject({ code: 3 });
+    await expect(nativeQuery("general", [], hostileContext)).rejects.toMatchObject({ code: 3 });
     expect(forwarded).toHaveLength(2);
-    await expect(nativeQuery("board-a", ["board-b"])).rejects.toMatchObject({ code: 7 });
+    await expect(nativeQuery("general", ["board-b"])).rejects.toMatchObject({ code: 7 });
     await expect(nativeQuery("board-b")).rejects.toMatchObject({ code: 7 });
     expect(forwarded).toHaveLength(2);
   });
@@ -548,6 +531,10 @@ function matchingContext() {
     actor: create(UserIdSchema, { value: "ada" }),
     tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
   });
+}
+
+function publicContext() {
+  return create(ActorContextSchema, { actor: create(UserIdSchema, { value: "ada" }) });
 }
 
 function hostileContext() {

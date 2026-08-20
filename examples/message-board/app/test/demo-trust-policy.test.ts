@@ -13,7 +13,7 @@
  */
 
 /**
- * Keeps the public demonstration board free of browser-session credentials.
+ * Keeps the public demonstration board on framework-owned public access.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -24,7 +24,7 @@ import { describe, expect, it } from "vitest";
 const repositoryRoot = process.cwd();
 
 describe("Message Board public-demo trust policy", () => {
-  it("uses the Gateway public-demo extension instead of any Message Board session credential", () => {
+  it("uses framework publicAccess with request-derived actor context and no example admission fixture", () => {
     const sources = [
       "examples/message-board/app/src/deployment-config.ts",
       "examples/message-board/app/src/index.ts",
@@ -35,6 +35,7 @@ describe("Message Board public-demo trust policy", () => {
     const forbidden = [
       "SignedSessions",
       "BrowserSession",
+      "PublicBoardAdmission",
       "message-board-local-fixture",
       "MESSAGE_BOARD_SESSION_",
     ] as const;
@@ -47,12 +48,13 @@ describe("Message Board public-demo trust policy", () => {
     expect(
       existsSync(join(repositoryRoot, "examples/message-board/app/src/local-session.ts")),
     ).toBe(false);
-    expect(
-      readFileSync(
-        join(repositoryRoot, "examples/message-board/app/src/public-board-admission.ts"),
-        "utf8",
-      ),
-    ).toContain("PublicBoardAdmission");
+    for (const source of [
+      "examples/message-board/app/src/index.ts",
+      "examples/message-board/app/src/gateway-server.ts",
+    ])
+      expect(readFileSync(join(repositoryRoot, source), "utf8"), source).toContain(
+        "publicAccess: true",
+      );
   });
 
   it("documents purpose-named startup modules, launchers, and every supported mode", () => {

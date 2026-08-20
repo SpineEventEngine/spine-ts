@@ -151,7 +151,6 @@ test("routes credential-free gRPC-Web commands, queries, and subscriptions throu
     );
     controller.abort();
     await updates.return?.();
-    await subscriptions.cancel(subscription);
     await Promise.race([
       eventually(async () => (topology.bindingCount() === 0 ? true : undefined)),
       new Promise((_, reject) =>
