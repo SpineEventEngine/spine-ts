@@ -197,7 +197,9 @@ export const BrowserServer: Readonly<{
         );
       if (isDurablePublicSubscriptionBindings(bindings)) {
         attachDurablePublicSubscriptionCleanup(bindings, (definition, signal) =>
-          creator.cancel({ wire: definition }, signal),
+          creator
+            .rehydrate(definition)
+            .then(() => creator.cancel({ wire: definition }, signal)),
         );
         await bindings.cleanupOrphans();
       }
