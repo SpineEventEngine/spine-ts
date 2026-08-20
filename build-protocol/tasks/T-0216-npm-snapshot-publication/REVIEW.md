@@ -24,5 +24,36 @@
 
 ## Wave result
 
-Pending one complete concern-specific wave. No correction begins until all five
-lanes report and findings are deduplicated into one accepted batch.
+All five concern-specific lanes reported. Documentation completeness is clean.
+The other reports are technically accepted and deduplicated into this one
+correction batch:
+
+1. Reject every tracked, staged, and untracked checkout change before install,
+   validation, packing, or publication; add a regression for an untracked file.
+2. Pin `npm whoami` and `npm publish` to
+   `https://registry.npmjs.org/` and preserve inherited publication stdio.
+3. Validate repository identity and reviewed publication-module hashes before
+   importing checkout code from the disposable wrapper.
+4. Recompute each tarball's SHA-512 immediately before the registry comparison
+   and publication; abort without publishing if the bytes changed. Add explicit
+   mismatch/zero-publication coverage.
+5. Replace string-prefix consumer containment with path-aware containment and
+   cover a sibling-prefix/symlink escape.
+6. Declare the React type dependency required by the published `client-react`
+   declarations, update the lockfile separately, and rerun the exact consumer.
+
+The style and reliability clean-checkout reports are one root cause. The
+security integrity report and the style mismatch-test report share one
+regression. No finding is waived, and none requires broader compiler, tooling,
+authentication, or SPI restructuring.
+
+## Correction assignment gate
+
+| Existing role | Bounded ownership                                                                                                                                   | Explicit model  | Explicit reasoning | Child spawning | Runtime telemetry                                                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------ | -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `implementer` | The six accepted corrections above in package metadata/lockfile, publication/artifact modules and tests, and the two external disposable files only | `gpt-5.6-terra` | medium             | Prohibited     | Explicit follow-up dispatch and immutable configured role/profile will be visible; child self-telemetry is unavailable. |
+
+Affected re-review after deterministic correction checks: style/maintainability,
+TypeScript/API documentation, performance/reliability, and security.
+Documentation completeness is not reopened because no accepted correction
+changes reader-facing claims.

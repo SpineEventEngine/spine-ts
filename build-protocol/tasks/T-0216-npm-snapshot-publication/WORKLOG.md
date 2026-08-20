@@ -7,14 +7,15 @@ and reasoning dispatch. The protected primary checkout is dirty and stale, so
 all task work is isolated in `.worktrees/wave14-npm-publication` from exact
 `origin/main@ea7ec5e8`.
 
-| Assignment                    | Existing role                                      | Bounded ownership                                                                                                                              | Explicit model  | Explicit reasoning | Child spawning | Runtime telemetry                                                                                                   |
-| ----------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Version sequence              | `implementer`                                      | Exact 26 manifest top-level version changes, standalone commits, immediate feature-branch pushes, and mechanical history audit only            | `gpt-5.6-terra` | medium             | Prohibited     | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable.           |
-| Publication policy            | `implementer`                                      | Internal pins, separate lockfile, 18 public manifests, package-policy TDD, and focused verification                                            | `gpt-5.6-terra` | medium             | Prohibited     | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable.           |
-| Artifact scan                 | orchestrator-dispatched mechanical verification    | Read-only analysis of existing pack/external-consumer seams, packed target and payload policy, and dependency graph                            | `gpt-5.6-luna`  | medium             | Prohibited     | Explicit dispatch is visible; child self-telemetry is unavailable.                                                  |
-| Documentation scan            | orchestrator-dispatched documentation verification | Read-only inventory of stale publication claims and smallest exact snapshot installation correction                                            | `gpt-5.6-luna`  | medium             | Prohibited     | Explicit dispatch is visible; child self-telemetry is unavailable.                                                  |
-| Artifact, docs, publisher     | `implementer`                                      | Permanent artifact validator/tests, all-18 isolated consumer proof, narrow docs/checker updates, and external disposable wrapper/instructions  | `gpt-5.6-terra` | medium             | Prohibited     | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable.           |
-| Version-derived Proto records | `implementer`                                      | Regenerate only tracked Proto package manifests and paired generation-ID markers derived from the 26 workspace bumps; align the To-Do contract | `gpt-5.6-terra` | medium             | Prohibited     | Explicit follow-up dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
+| Assignment                    | Existing role                                      | Bounded ownership                                                                                                                                                        | Explicit model  | Explicit reasoning | Child spawning | Runtime telemetry                                                                                                   |
+| ----------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------- | ------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Version sequence              | `implementer`                                      | Exact 26 manifest top-level version changes, standalone commits, immediate feature-branch pushes, and mechanical history audit only                                      | `gpt-5.6-terra` | medium             | Prohibited     | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable.           |
+| Publication policy            | `implementer`                                      | Internal pins, separate lockfile, 18 public manifests, package-policy TDD, and focused verification                                                                      | `gpt-5.6-terra` | medium             | Prohibited     | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable.           |
+| Artifact scan                 | orchestrator-dispatched mechanical verification    | Read-only analysis of existing pack/external-consumer seams, packed target and payload policy, and dependency graph                                                      | `gpt-5.6-luna`  | medium             | Prohibited     | Explicit dispatch is visible; child self-telemetry is unavailable.                                                  |
+| Documentation scan            | orchestrator-dispatched documentation verification | Read-only inventory of stale publication claims and smallest exact snapshot installation correction                                                                      | `gpt-5.6-luna`  | medium             | Prohibited     | Explicit dispatch is visible; child self-telemetry is unavailable.                                                  |
+| Artifact, docs, publisher     | `implementer`                                      | Permanent artifact validator/tests, all-18 isolated consumer proof, narrow docs/checker updates, and external disposable wrapper/instructions                            | `gpt-5.6-terra` | medium             | Prohibited     | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable.           |
+| Version-derived Proto records | `implementer`                                      | Regenerate only tracked Proto package manifests and paired generation-ID markers derived from the 26 workspace bumps; align the To-Do contract                           | `gpt-5.6-terra` | medium             | Prohibited     | Explicit follow-up dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
+| Review correction batch       | `implementer`                                      | Clean/source-trusted checkout, public-registry pinning, last-moment artifact integrity, safe consumer containment, React declaration dependency, and focused regressions | `gpt-5.6-terra` | medium             | Prohibited     | Explicit follow-up dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
 
 ## Skill applicability
 
@@ -36,11 +37,11 @@ all task work is isolated in `.worktrees/wave14-npm-publication` from exact
 
 ## Canonical concern dispositions
 
-- Style/maintainability: pending relevant review after mechanical convergence.
-- Performance/reliability: pending publisher interruption/resumption and cleanup review.
-- TypeScript/API documentation: pending artifact contract and package documentation review.
-- Documentation completeness: pending reader-claim review.
-- Security: pending final release-readiness review because publishing is credential-adjacent.
+- Style/maintainability: accepted clean-checkout and integrity-mismatch-test findings; correction pending.
+- Performance/reliability: accepted the deduplicated clean-checkout finding; correction pending.
+- TypeScript/API documentation: accepted the missing React declaration dependency; correction pending.
+- Documentation completeness: clean; no finding and no correction-lane impact.
+- Security: accepted explicit-registry, pre-import source trust, last-moment integrity, and path-containment findings; correction pending.
 
 ## Progress
 
@@ -119,6 +120,12 @@ all task work is isolated in `.worktrees/wave14-npm-publication` from exact
 - Selected final verification profile: one `verify:release` after review
   convergence because dependencies, all public package artifacts, and shared
   release tooling changed. No earlier full release profile was used.
+- The complete first specialist wave accepted six deduplicated corrections:
+  reject untracked checkout state, pin npmjs mutation/read identity commands,
+  establish wrapper source trust before imports, rehash tarballs immediately
+  before publication, use path-aware consumer isolation, and supply the React
+  declarations required by `client-react`. The existing Terra/medium
+  implementation owner retains the correction context.
 
 ## Implementation files
 
