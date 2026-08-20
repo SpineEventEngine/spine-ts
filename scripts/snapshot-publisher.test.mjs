@@ -194,7 +194,8 @@ describe("snapshot publisher", () => {
     const calls = [];
     let attempts = 0;
     await waitForRegistryVisibility({
-      runner: async () => {
+      runner: async (_command, _args, options) => {
+        expect(options).toEqual({ stdio: "pipe" });
         attempts += 1;
         if (attempts === 1) {
           const error = new Error("missing");

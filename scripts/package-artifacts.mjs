@@ -26,6 +26,26 @@ export const frameworkPackageNames = [
   "@spine-event-engine/transport",
 ];
 
+/** Returns deterministic errors for the public inventory in a checkout root. */
+export function validatePublicationInventory(root) {
+  const rootManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const actual = readdirSync(join(root, "packages"), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(join(root, "packages", entry.name, "package.json")))
+    .map((entry) => "@spine-event-engine/" + entry.name)
+    .sort((left, right) => left.localeCompare(right));
+  const expected = [...frameworkPackageNames].sort((left, right) => left.localeCompare(right));
+  const problems = [];
+  if (rootManifest.version !== "2.0.0-snapshot.2") problems.push("root must use snapshot.2");
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) problems.push("public package paths do not match exact inventory");
+  for (const name of expected) {
+    const directory = join(root, "packages", name.split("/")[1]);
+    if (!existsSync(join(directory, "package.json"))) continue;
+    const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
+    problems.push(...publicManifestProblems(manifest));
+  }
+  return problems.sort((left, right) => left.localeCompare(right));
+}
+
 /**
  * Reports package manifest values that cannot be present in a packed npm artifact.
  *
@@ -205,3 +225,5 @@ export function packedArchiveProblems(manifest, entries) {
 
   return problems.sort((left, right) => left.localeCompare(right));
 }
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
