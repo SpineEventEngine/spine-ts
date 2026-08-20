@@ -72,3 +72,11 @@
   authenticated mode retains its exact timestamp and timer behavior.
 - This is only the auth subscription layer. Unary Gateway, Browser Server,
   durable public orphan cleanup, Proto, and Message Board composition remain.
+
+## 2026-08-20 — unary public admission checkpoint
+
+- Added and observed a RED `ResolveContext` public-mode test, which failed at
+  the unconditional session resolver access.
+- Unary Gateway now accepts an absent transport credential in public mode,
+  uses the frozen framework principal, and omits `expiresAt` from its public
+  response. Authenticated session resolution remains source-compatible.

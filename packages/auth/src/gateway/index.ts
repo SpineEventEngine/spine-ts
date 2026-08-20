@@ -64,7 +64,7 @@ export interface UnaryGatewayRequest {
   /**
    * Holds the credential resolved by the gateway.
    */
-  readonly credential: RequestCredential;
+  readonly credential?: RequestCredential;
 
   /**
    * Holds the allowlisted request transport facts.
@@ -115,7 +115,10 @@ export interface UnaryGatewayOptions {
   /**
    * Resolves application sessions from incoming credentials.
    */
-  readonly sessions: SessionResolver;
+  readonly sessions?: SessionResolver;
+
+  /** Admits requests under the framework-owned non-session public principal. */
+  readonly publicAccess?: true;
 
   /**
    * Authorizes a principal for each decoded request.
@@ -224,6 +227,8 @@ export class UnaryGateway {
   constructor(options: UnaryGatewayOptions) {
     if (!Number.isSafeInteger(options.maxRequestBytes) || options.maxRequestBytes < 0)
       throw new RangeError("maxRequestBytes must be a finite non-negative integer");
+    if ((options.sessions === undefined) === (options.publicAccess !== true))
+      throw new Error("Unary gateway requires exactly one of sessions or publicAccess.");
     this.#options = Object.freeze({ ...options });
   }
 
@@ -243,7 +248,7 @@ export class UnaryGateway {
     const source = UnaryGatewayValues.decode(operation, value, transport, this.#options.registry);
     if (source === undefined) return UnaryGatewayValues.reject("malformed-request");
     const requestedContext = clone(ActorContextSchema, source.requestedContext);
-    const session = await this.#options.sessions.resolve(request.credential);
+    const session = await this.#session(request.credential);
     if (session === undefined) return UnaryGatewayValues.reject("unauthenticated");
     const authorizationRequest = UnaryGatewayValues.decode(
       operation,
@@ -289,7 +294,7 @@ export class UnaryGateway {
     } catch {
       return UnaryGatewayValues.reject("malformed-request");
     }
-    const session = await this.#options.sessions.resolve(request.credential);
+    const session = await this.#session(request.credential);
     if (session === undefined) return UnaryGatewayValues.reject("unauthenticated");
     const context = await this.#options.contexts.resolveContext(
       session.principal,
@@ -302,13 +307,23 @@ export class UnaryGateway {
         create(ResolveContextResponseSchema, {
           actor: context.actor,
           tenant: context.tenant,
-          expiresAt: session.expiresAt,
+          ...(session.expiresAt === undefined ? {} : { expiresAt: session.expiresAt }),
         }),
       ),
     };
   }
+
+  async #session(
+    credential: RequestCredential | undefined,
+  ): Promise<{ readonly principal: { readonly id: string }; readonly expiresAt?: import("@bufbuild/protobuf/wkt").Timestamp } | undefined> {
+    if (this.#options.publicAccess === true)
+      return { principal: UnaryGatewayValues.publicPrincipal };
+    if (credential === undefined) return undefined;
+    return this.#options.sessions?.resolve(credential);
+  }
 }
 const UnaryGatewayValues = Object.freeze({
+  publicPrincipal: Object.freeze({ id: "spine-gateway-public" }),
   reject(reason: UnaryGatewayRejection): UnaryGatewayResult {
     return { kind: "rejected", reason };
   },

@@ -27,3 +27,4 @@
   immutable configured existing `implementer` role, `gpt-5.6-terra` / `medium`.
 - `pnpm exec vitest run packages/auth/test/subscriptions/index.test.ts --pool=forks --reporter=dot -t "keeps a public subscription active"` passed after a prior RED failure at the missing session resolver.
 - `pnpm typecheck:build:generated --filter @spine-event-engine/auth` passed.
+- `pnpm exec vitest run packages/auth/test/unary-gateway.test.ts --pool=forks --reporter=dot -t "resolves public context"` passed after its missing-resolver RED failure.

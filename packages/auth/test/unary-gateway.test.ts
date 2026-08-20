@@ -68,7 +68,7 @@ function setup(
 ) {
   const calls: string[] = [];
   const forwarded: { service: string; method: string; value: Uint8Array }[] = [];
-  const gateway = new UnaryGateway({
+  const options = {
     ...(overrides.registry === undefined ? {} : { registry: overrides.registry }),
     maxRequestBytes: overrides.maxRequestBytes ?? 1024,
     sessions: {
@@ -114,8 +114,9 @@ function setup(
       if (overrides.forward !== undefined) return overrides.forward(request);
       return Promise.resolve(new Uint8Array([1]));
     },
-  });
-  return { calls, forwarded, gateway };
+  };
+  const gateway = new UnaryGateway(options);
+  return { calls, forwarded, gateway, options };
 }
 
 function request(service: string, method: string, value: Uint8Array): UnaryGatewayRequest {
@@ -129,6 +130,27 @@ function request(service: string, method: string, value: Uint8Array): UnaryGatew
 }
 
 describe("UnaryGateway", () => {
+  it("resolves public context without a session expiry", async () => {
+    const fixture = setup();
+    const gateway = new UnaryGateway({
+      ...fixture.options,
+      sessions: undefined,
+      publicAccess: true,
+    } as unknown as UnaryGatewayOptions);
+
+    const result = await gateway.handle(
+      request(
+        "spine.auth.AuthenticationService",
+        "ResolveContext",
+        toBinary(ResolveContextRequestSchema, create(ResolveContextRequestSchema)),
+      ),
+    );
+
+    expect(result.kind).toBe("resolved");
+    if (result.kind !== "resolved") return;
+    expect(fromBinary(ResolveContextResponseSchema, result.value).expiresAt).toBeUndefined();
+  });
+
   it("retains its construction-time registry while session resolution is pending", async () => {
     const registered = new TypeRegistry([TenantIdSchema]);
     const replacement = new TypeRegistry();
