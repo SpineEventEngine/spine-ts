@@ -20,8 +20,11 @@ export function packedManifestProblems(manifest) {
     if (dependencies === null || typeof dependencies !== "object") continue;
 
     for (const [dependency, version] of Object.entries(dependencies)) {
-      if (version === "workspace:*") {
-        problems.push(`${name} ${group} ${dependency} must not use workspace:*`);
+      if (typeof version === "string" && /^(?:workspace:|file:|link:)/u.test(version)) {
+        problems.push(`${name} ${group} ${dependency} must not use ${version}`);
+      }
+      if (version === "2.0.0-snapshot.1") {
+        problems.push(`${name} ${group} ${dependency} must not use snapshot.1`);
       }
     }
   }
