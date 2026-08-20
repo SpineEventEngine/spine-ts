@@ -62,7 +62,6 @@ export class DurablePublicSubscriptionBindings implements SubscriptionBindings {
   readonly #pending = new Map<string, Promise<unknown>>();
   readonly #active = new Map<string, AbortController>();
   #closed = false;
-  #accepting = true;
   #closing: Promise<void> | undefined;
 
   /** Opens a public cleanup ledger without taking ownership of the storage factory. */
@@ -159,7 +158,7 @@ export class DurablePublicSubscriptionBindings implements SubscriptionBindings {
 
   /** Cancels and deletes every orphaned native definition in bounded storage pages. */
   async cleanupOrphans(cleanup: OnSubscriptionDefinition = publicCleanupFor(this)): Promise<void> {
-    this.#open(this.#closing !== undefined);
+    this.#open();
     let after: { readonly id: SubscriptionId; readonly values: readonly [{ readonly field: "id"; readonly value: SubscriptionId }] } | undefined;
     for (;;) {
       const page = await this.#storage.queryEntries({
@@ -171,7 +170,7 @@ export class DurablePublicSubscriptionBindings implements SubscriptionBindings {
         if (current === undefined) return;
         await cleanup(PublicSubscriptionValues.wire(current), new AbortController().signal);
         await this.#storage.compareAndSet(id, current, undefined);
-      }, true);
+      });
       const last = page.at(-1);
       if (last === undefined) throw new Error("Public subscription cleanup page is invalid.");
       after = { id: last.id, values: [{ field: "id", value: last.id }] };
@@ -181,13 +180,7 @@ export class DurablePublicSubscriptionBindings implements SubscriptionBindings {
   /** Gracefully removes backend definitions before closing the ledger. */
   close(): Promise<void> {
     if (this.#closed) return Promise.resolve();
-    this.#accepting = false;
-    if (this.#closing === undefined) {
-      let resolveStarted: (() => void) | undefined;
-      const started = new Promise<void>((resolve) => { resolveStarted = resolve; });
-      this.#closing = started.then(() => this.#close());
-      resolveStarted?.();
-    }
+    this.#closing ??= this.#close();
     return this.#closing;
   }
 
@@ -220,8 +213,8 @@ export class DurablePublicSubscriptionBindings implements SubscriptionBindings {
     return record === undefined ? undefined : PublicSubscriptionValues.wire(record);
   }
 
-  async #forId<T>(id: string, operation: (id: string) => Promise<T>, closing = false): Promise<T> {
-    this.#open(closing);
+  async #forId<T>(id: string, operation: (id: string) => Promise<T>): Promise<T> {
+    this.#open();
     if (id.trim().length === 0) throw new Error("subscription ID must be non-blank");
     const previous = this.#pending.get(id) ?? Promise.resolve();
     const task = previous.then(() => operation(id), () => operation(id));
@@ -229,10 +222,7 @@ export class DurablePublicSubscriptionBindings implements SubscriptionBindings {
     try { return await task; } finally { if (this.#pending.get(id) === task) this.#pending.delete(id); }
   }
 
-  #open(closing = false): void {
-    if (this.#closed || (!closing && !this.#accepting))
-      throw new Error("public subscription store is closed");
-  }
+  #open(): void { if (this.#closed) throw new Error("public subscription store is closed"); }
 }
 
 /** Checks whether bindings use the durable public orphan-cleanup ledger. */
