@@ -29,9 +29,10 @@ For the detailed contract and integration notes, see
 pnpm typecheck:build
 ```
 
-Run this workspace-wide TypeScript build from the repository root. This private
-snapshot package is not published to an npm registry; use it from this
-workspace while developing the framework.
+Run this workspace-wide TypeScript build from the repository root. For an
+experimental npm consumer, install
+`@spine-event-engine/core@2.0.0-snapshot.2` or the explicit
+`@spine-event-engine/core@snapshot` tag.
 
 ## ✅ Validate a message
 

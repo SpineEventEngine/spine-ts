@@ -22,9 +22,10 @@ For database requirements, query limits, lifecycle, and error details, see
 pnpm typecheck:build
 ```
 
-Run this workspace-wide TypeScript build from the repository root. This private
-snapshot package is not published to an npm registry; use it from this
-workspace while developing the framework.
+Run this workspace-wide TypeScript build from the repository root. For an
+experimental npm consumer, install
+`@spine-event-engine/storage-rdbms@2.0.0-snapshot.2` or the explicit
+`@spine-event-engine/storage-rdbms@snapshot` tag.
 
 ## 🔌 Create and close a MySQL factory
 

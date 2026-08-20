@@ -134,9 +134,18 @@ Spine TS requires Node.js 24 LTS or newer and `pnpm@11.9.0`.
 | `pnpm docs:api`        | Generates and validates API documentation.          |
 | `pnpm verify`          | Runs the complete release-readiness check.          |
 
-## ⚠️ Current limits
+## ⚠️ Experimental npm snapshots
 
-- Packages are not published to npm yet; examples run from this workspace.
+Framework packages are available as experimental snapshots. Install an exact
+version, for example:
+
+```sh
+pnpm add @spine-event-engine/server@2.0.0-snapshot.2
+```
+
+Or select the explicit snapshot tag with
+`pnpm add @spine-event-engine/server@snapshot`. Do not use an unqualified
+install, which would select npm's `latest` tag.
 
 ## 📄 License
 
