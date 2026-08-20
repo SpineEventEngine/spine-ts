@@ -2,7 +2,8 @@
 
 ## Status
 
-Active from `origin/main@ea7ec5e8cf7f0cbcdfa78befd45a41788aee8c8c`.
+Verified and ready for integration from
+`origin/main@ea7ec5e8cf7f0cbcdfa78befd45a41788aee8c8c`.
 
 ## Classification
 

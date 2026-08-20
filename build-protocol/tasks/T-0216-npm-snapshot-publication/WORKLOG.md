@@ -151,6 +151,22 @@ all task work is isolated in `.worktrees/wave14-npm-publication` from exact
   untracked/concealed-mutation fixture. Final security re-review is clean, as
   are all other relevant concern dispositions. No P0-P3 finding remains before
   final mechanical verification.
+- The cheap preflight first exposed and then deterministically closed a missing
+  `.mjs` tooling declaration, release-script line-length violations, and
+  one-line TSDoc export summaries. After those commits, the complete preflight
+  passed build/tooling, lint, documentation, generated/readiness gates, and six
+  focused suites with 54/54 tests.
+- The single full `pnpm verify:release` profile passed after convergence: 273
+  test files passed with four skipped; 4,365 tests passed with 19 skipped;
+  statement coverage is 93.47%, branch coverage 90.07%, function coverage
+  93.02%, and line coverage 94.61%. Release readiness proved 87 imports, 54
+  assets, and 404 relative Markdown links.
+- Final mechanical audit proves all 26 required version commits have the exact
+  message, one manifest, and one snapshot-1/snapshot-2 version-line pair. All 26
+  tracked workspace manifests are snapshot.2; exactly 18 framework manifests
+  are public; root plus seven examples are private; snapshot.1 pins are absent;
+  validation remains snapshot.7; `git diff --check` passes. No NPM publication
+  command ran.
 
 ## Implementation files
 
