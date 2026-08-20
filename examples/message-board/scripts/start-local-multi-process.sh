@@ -81,7 +81,7 @@ grep -q 'MessageBoard managed coordinator ready' "$coordinator_log" || {
 }
 
 HOST=127.0.0.1 PORT=8090 BROWSER_ORIGIN=http://127.0.0.1:5173 BACKEND_URLS=http://127.0.0.1:8091 \
-  SUBSCRIPTION_REGISTRY_NAMESPACE="$name" DATASTORE_PROJECT_ID=message-board-local \
+  DATASTORE_PROJECT_ID=message-board-local \
   DATASTORE_EMULATOR_HOST=127.0.0.1:8081 node "$root/examples/message-board/app/dist/src/gateway-server.js" \
   >"$gateway_log" 2>&1 & gateway_pid=$!
 for attempt in $(seq 1 30); do

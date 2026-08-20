@@ -4,7 +4,6 @@ metadata:
   name: message-board-config
 data:
   BROWSER_ORIGIN: https://message-board.example.test
-  SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-production
   DELIVERY_SERVER_URL: http://simple-delivery-server:8484
 apiVersion: apps/v1
 kind: StatefulSet

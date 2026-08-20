@@ -85,7 +85,6 @@ flowchart LR
   Aggregate -->|MessagePosted| Projection[BoardViewProjection]
   Aggregate --> Storage[(Application-selected storage)]
   Projection --> Storage
-  Gateway --> Registry[(Gateway subscription registry)]
   React -->|authoritative query| Gateway
   Native -->|query response| Gateway
   Gateway -->|query response| React
@@ -176,7 +175,8 @@ pnpm --config.verify-deps-before-run=false --dir examples/message-board/web test
 The browser suite needs Playwright browsers; install them once with
 `pnpm exec playwright install chromium firefox webkit`.
 
-Local mode uses in-memory application storage and subscription bindings. It is
+Local mode uses in-memory application storage. The public browser Gateway
+creates process-local subscription bindings. It is
 a public demonstration: the actor ID in each command, query, and subscription
 context becomes the actor reconstructed by the Gateway; no browser credential is
 used. After a reconnect, the UI first queries the current board and then listens
@@ -213,13 +213,11 @@ flowchart LR
   subgraph Combined[Combined topology]
     C[Message Board app + public browser gateway]
     C --> CS[(Application storage)]
-    C --> CR[(Subscription registry)]
     C --> D
   end
   Envoy -->|combined alternative| C
   subgraph Standalone[Standalone topology]
     Envoy -->|standalone alternative| G[One standalone Gateway]
-    G --> R[(Durable registry)]
     G -->|discovered unary request| A1[Application replica]
     G -->|discovered unary request| A2[Application replica]
     A1 --> S[(Application-selected storage)]
@@ -231,17 +229,15 @@ flowchart LR
 ```
 
 The branches leaving the Gateway are alternatives, not broadcast: a unary
-request selects one private application node. The
-registry and delivery connections represent shared topology and subscription
-fan-in, not additional unary request routes.
+request selects one private application node. Delivery represents shared
+application topology, not an additional unary request route.
 
-Application code selects and manages its storage. Gateway code manages the separate durable subscription
-registry in one namespace. Operators configure TLS,
+Application code selects and manages its storage. The public browser Gateway
+creates process-local subscription bindings. Operators configure TLS,
 image distribution, network policy, and production delivery infrastructure.
 The reference simple delivery server is in-memory and not highly available;
-the Gateway remembers what a browser watches, not a replayable history of every
-update. After a disconnect, the browser queries the current board and then
-continues listening.
+after a Gateway restart the browser reconnects, queries the current board, and
+then continues listening.
 
 ### Build local images
 

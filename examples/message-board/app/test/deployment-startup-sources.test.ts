@@ -54,16 +54,15 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(deployment).not.toContain('"SPINE_IPC_DIRECTORY"');
   });
 
-  it("configures both browser modes with one named durable binding assembly", () => {
+  it("lets framework publicAccess create process-local browser bindings", () => {
     const gateway = readFileSync(join(sourceRoot, "gateway-server.ts"), "utf8");
     const combined = readFileSync(join(sourceRoot, "combined-server.ts"), "utf8");
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
-    expect(deployment).toContain("new DurableSubscriptionBindings");
-    expect(deployment).toContain("storageFactory,");
-    expect(gateway).toContain("MessageBoardDeployment.bindings(config, storage)");
-    expect(combined).toContain("bindings: MessageBoardDeployment.bindings(config, storage)");
-    expect(gateway).toContain("bindings,");
-    expect(deployment).toContain('"SUBSCRIPTION_REGISTRY_NAMESPACE"');
+    expect(deployment).not.toContain("DurableSubscriptionBindings");
+    expect(gateway).not.toContain("InMemorySubscriptionBindings");
+    expect(gateway).toContain("publicAccess: true");
+    expect(combined).not.toContain("bindings:");
+    expect(deployment).not.toContain('"SUBSCRIPTION_REGISTRY_NAMESPACE"');
   });
 
   it("configures production storage and transport before resolving a server", () => {
@@ -113,13 +112,10 @@ describe("MessageBoard deployment entrypoints", () => {
       process.env,
       calls.logger,
     );
-    expect(calls.runCombined).toHaveBeenCalledWith(
-      expect.objectContaining({ bindings: calls.bindings }),
-      calls.storageResult,
-    );
+    expect(calls.runCombined).toHaveBeenCalledWith(calls.combinedConfig, calls.storageResult);
   });
 
-  it("executes gateway startup with configured browser bindings", async () => {
+  it("executes gateway startup with framework-owned public bindings", async () => {
     const calls = startupMocks();
 
     await import("../src/gateway-server.js");
@@ -136,7 +132,7 @@ describe("MessageBoard deployment entrypoints", () => {
       calls.gatewayConfig.port,
       expect.objectContaining({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        browser: expect.objectContaining({ bindings: calls.bindings }),
+        browser: expect.not.objectContaining({ bindings: expect.anything() }),
       }) as object,
     );
   });
@@ -260,7 +256,6 @@ describe("MessageBoard deployment entrypoints", () => {
 function startupMocks() {
   vi.resetModules();
   const storage = {};
-  const bindings = {};
   const applicationConfig = { projectId: "project", port: 0 };
   const combinedConfig = { projectId: "project", port: 0 };
   const gatewayConfig: {
@@ -304,7 +299,6 @@ function startupMocks() {
       configureGatewayServer,
       logger: createLogger,
       storage: storageFactory,
-      bindings: () => bindings,
     },
   }));
   vi.doMock("../src/index.js", () => ({
@@ -328,7 +322,6 @@ function startupMocks() {
 
   return {
     applicationConfig,
-    bindings,
     client,
     combinedConfig,
     configureServer,

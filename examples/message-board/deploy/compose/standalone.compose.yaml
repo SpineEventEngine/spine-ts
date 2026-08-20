@@ -61,7 +61,6 @@ services:
       NODE_ENV: production
       BROWSER_ORIGIN: http://localhost:18080
       BACKEND_URLS: http://application-node:8080
-      SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone
       DATASTORE_PROJECT_ID: message-board-compose
       DATASTORE_EMULATOR_HOST: datastore:8081
     networks:

@@ -18,7 +18,6 @@
  */
 
 import { clone, create } from "@bufbuild/protobuf";
-import type { SubscriptionBindings } from "@spine-event-engine/auth";
 import {
   Aggregate,
   Assign,
@@ -190,14 +189,6 @@ export interface BoardServerOptions {
    * Selects the sole browser origin admitted by the local gateway.
    */
   readonly webOrigin?: string;
-
-  /**
-   * Supplies browser-subscription coordination.
-   *
-   * Production requires durable bindings. Local development may use an
-   * in-memory implementation.
-   */
-  readonly bindings?: SubscriptionBindings;
 }
 
 /**
@@ -323,7 +314,6 @@ export class MessageBoardApplication {
               authorize: policy.authorize.bind(policy),
               contexts: new BoardContextResolver(),
               clock: new SystemClock(),
-              ...(options.bindings === undefined ? {} : { bindings: options.bindings }),
             },
           }
         : {}),

@@ -20,7 +20,6 @@
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import {
-  DurableSubscriptionBindings,
   EnvironmentType,
   ServerEnvironment,
   type ServerEnvironmentDelivery,
@@ -31,7 +30,6 @@ import type { Datastore } from "@google-cloud/datastore";
 import { Logging, type Log } from "@google-cloud/logging";
 import { GoogleCloudLoggingTransport } from "@loglayer/transport-google-cloud-logging";
 import { LogLayer, type ILogLayer } from "loglayer";
-import { randomUUID } from "node:crypto";
 
 import type { BoardServerOptions } from "./index.js";
 import { typeRegistry } from "./model-registry.js";
@@ -44,7 +42,6 @@ interface DeploymentConfig extends BoardServerOptions {
 
 interface CombinedConfig extends DeploymentConfig {
   readonly webOrigin: string;
-  readonly subscriptionNamespace: string;
 }
 
 interface GatewayConfig extends CombinedConfig {
@@ -68,7 +65,6 @@ interface DeploymentContract {
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig;
   managed(environment: NodeJS.ProcessEnv): ManagedConfig;
   storage(client: Datastore): StorageFactory;
-  bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings;
   logger(projectId: string, environment: NodeJS.ProcessEnv): ILogLayer | undefined;
   cloudLogger(log: Log): ILogLayer;
 
@@ -107,10 +103,6 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     return {
       ...MessageBoardDeployment.application(environment),
       webOrigin: DeploymentValues.required(environment, "BROWSER_ORIGIN"),
-      subscriptionNamespace: DeploymentValues.required(
-        environment,
-        "SUBSCRIPTION_REGISTRY_NAMESPACE",
-      ),
     };
   },
 
@@ -153,15 +145,6 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
       .setClient(client)
       .setStringifierRegistry(stringifiers)
       .build();
-  },
-
-  bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings {
-    return new DurableSubscriptionBindings({
-      storageFactory,
-      namespace: config.subscriptionNamespace,
-      nextId: randomUUID,
-      cleanup: () => Promise.resolve(),
-    });
   },
 
   logger(projectId: string, environment: NodeJS.ProcessEnv): ILogLayer | undefined {

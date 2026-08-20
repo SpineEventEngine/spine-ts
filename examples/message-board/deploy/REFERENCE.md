@@ -10,8 +10,8 @@ one replica, and is not highly available or durable.
 
 Combined mode runs one application/gateway process. Standalone Kubernetes mode
 has two managed application nodes and one Gateway. Each managed node starts two
-complete child replicas, for four application replicas in total. The Gateway's
-durable subscription registry uses one namespace and cancellation fencing.
+complete child replicas, for four application replicas in total. The public
+Gateway creates process-local subscription bindings.
 Replicated application deployments require standalone mode. All application
 replicas use the same application-selected storage configuration; deployment
 does not select a storage provider.
@@ -24,11 +24,10 @@ wait for the delivery server before startup; the Gateway does not use Delivery.
 References use TCP startup/readiness probes and deliberately omit liveness
 probes and application health endpoints.
 
-The public demo creates no browser credential. The Gateway remembers the
-logical definition of what a browser watches, but not a history of every update
-delivered to that browser. Like a doorbell, a notification only helps when the
-browser is present: after an interruption it queries the current board state,
-then resumes live updates.
+The public demo creates no browser credential. Browser subscription state is
+local to the Gateway process. Like a doorbell, a notification only helps when
+the browser is present: after a Gateway restart it reconnects, queries the
+current board state, then resumes live updates.
 
 `message-board-storage`, `message-board-runtime`, and `message-board-envoy-tls`
 are external Secrets managed by the operator; the reference YAML deliberately does not

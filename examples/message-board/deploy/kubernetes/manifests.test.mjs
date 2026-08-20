@@ -29,6 +29,8 @@ for (const mode of ["combined", "standalone"]) {
     assert.match(document, /secretRef:/u);
     assert.match(document, /configMapRef:/u);
     assert.doesNotMatch(document, /MESSAGE_BOARD_SESSION_/u);
+    assert.doesNotMatch(document, /SUBSCRIPTION_REGISTRY_NAMESPACE/u);
+    assert.doesNotMatch(document, /DurableSubscriptionBindings/u);
     assert.match(document, /secretRef: \{ name: message-board-runtime \}/u);
     assert.doesNotMatch(document, /kind: Secret[\s\S]*name: message-board-runtime/u);
     assert.match(document, /name: message-board-envoy-config/u);

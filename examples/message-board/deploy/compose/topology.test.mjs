@@ -12,7 +12,7 @@ const standalone = join(composeRoot, "standalone.compose.yaml");
 const combinedEnvoy = join(composeRoot, "combined-envoy.yaml");
 const standaloneEnvoy = join(composeRoot, "standalone-envoy.yaml");
 
-test("declares a combined topology with its durable registry and one delivery server", () => {
+test("declares a combined topology with framework-owned public bindings and one delivery server", () => {
   assert.equal(existsSync(combined), true, "combined Compose reference must exist");
   const document = readFileSync(combined, "utf8");
 
@@ -22,7 +22,7 @@ test("declares a combined topology with its durable registry and one delivery se
   assert.match(document, /^ {2}web:/mu);
   assert.match(document, /^ {2}delivery:/mu);
   assert.match(document, /^ {2}datastore:/mu);
-  assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-combined/mu);
+  assert.doesNotMatch(document, /SUBSCRIPTION_REGISTRY_NAMESPACE/u);
   assert.match(document, /spine-ts\/simple-delivery-server:local/u);
   assert.doesNotMatch(document, /MESSAGE_BOARD_SESSION_/u);
   assert.doesNotMatch(document, /replicas:/u);
@@ -44,7 +44,7 @@ test("declares one local-fixture gateway and one managed complete-replica node",
   assert.match(document, /multi-process-app\.js/u);
   assert.doesNotMatch(document, /SPINE_IPC_DIRECTORY/u);
   assert.doesNotMatch(document, /LOCAL_STATIC_BACKENDS/u);
-  assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone/mu);
+  assert.doesNotMatch(document, /SUBSCRIPTION_REGISTRY_NAMESPACE/u);
   assert.match(document, /DATASTORE_EMULATOR_HOST: datastore:8081/mu);
   assert.match(
     document,

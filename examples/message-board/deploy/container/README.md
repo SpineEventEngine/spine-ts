@@ -34,18 +34,17 @@ node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-proces
 
 The images set `NODE_ENV=production`. Supply these values when starting them:
 
-| Process                  | Required environment variables                                                                                                                     |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Managed application node | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `DELIVERY_SERVER_URL`, `PROCESS_COUNT`, `DELIVERY_SHARD_COUNT`                                             |
-| Combined                 | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `DELIVERY_SERVER_URL`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE`                                 |
-| Gateway (local)          | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE`, `BACKEND_URLS` or `BACKEND_URL`                       |
-| Gateway (GKE)            | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE`, `BACKEND_DISCOVERY_SERVICE`, `BACKEND_DISCOVERY_PORT` |
-| Delivery server          | `HOST`, `PORT`                                                                                                                                     |
+| Process                  | Required environment variables                                                                                  |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Managed application node | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `DELIVERY_SERVER_URL`, `PROCESS_COUNT`, `DELIVERY_SHARD_COUNT`          |
+| Combined                 | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `DELIVERY_SERVER_URL`, `BROWSER_ORIGIN`                                 |
+| Gateway (local)          | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `BACKEND_URLS` or `BACKEND_URL`                       |
+| Gateway (GKE)            | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `BACKEND_DISCOVERY_SERVICE`, `BACKEND_DISCOVERY_PORT` |
+| Delivery server          | `HOST`, `PORT`                                                                                                  |
 
 No browser login setup is required for this public demo.
 Each process constructs a Datastore client from
 `DATASTORE_PROJECT_ID` and passes that same client into its storage factory.
-Browser-capable replicas share the registry namespace.
 
 `DELIVERY_SERVER_URL` is the sole application Delivery setting. In these
 references it is `http://delivery:8484` for Compose and
@@ -56,9 +55,9 @@ delivery host or port variables.
 `PROCESS_COUNT` is the explicit number of full application replicas launched
 inside one managed node. `DELIVERY_SHARD_COUNT` is selected independently by
 the application; this reference uses two of each. Application code selects
-Datastore for Message Board data. The standalone gateway creates a separate Datastore-backed
-subscription registry and isolates its records with the required namespace.
-Infrastructure passes these values; it does not choose a storage provider.
+Datastore for Message Board data. The standalone Gateway creates process-local
+public browser subscription bindings; it does not need a separate subscription
+store. Infrastructure passes these values; it does not choose a storage provider.
 
 `BACKEND_URLS` is the comma-separated local Compose fixture and `BACKEND_URL`
 remains its legacy single-backend form. Production Kubernetes gateways use

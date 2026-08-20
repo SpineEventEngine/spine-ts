@@ -41,7 +41,6 @@ services:
       PORT: 8080
       NODE_ENV: production
       BROWSER_ORIGIN: http://localhost:18080
-      SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-combined
       DATASTORE_PROJECT_ID: message-board-compose
       DATASTORE_EMULATOR_HOST: datastore:8081
       DELIVERY_SERVER_URL: http://delivery:8484

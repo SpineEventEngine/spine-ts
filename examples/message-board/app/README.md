@@ -82,17 +82,18 @@ The production-shaped source files are named for the process they start:
 Start with `combined-server.ts` to see the fewest production-shaped processes.
 Read `multi-process-app.ts` when learning how one machine uses several CPU cores.
 
-Local commands use in-memory storage and subscription bindings.
+Local commands use in-memory application storage. The public browser Gateway
+creates its own process-local subscription bindings.
 Prebuilt production commands require `HOST`, `PORT`, `DATASTORE_PROJECT_ID`,
 `DELIVERY_SERVER_URL`; managed nodes additionally require `PROCESS_COUNT` and
 `DELIVERY_SHARD_COUNT`; browser modes additionally
-require `BROWSER_ORIGIN` and `SUBSCRIPTION_REGISTRY_NAMESPACE`, while the
+require `BROWSER_ORIGIN`, while the
 standalone gateway uses `BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT`
 in Kubernetes; local Compose alone uses comma-separated `BACKEND_URLS` as an
-explicit static fixture and accepts legacy `BACKEND_URL`. A missing registry namespace stops a
-browser-mode process before it opens a listener. Application data uses
-application Datastore storage; gateway subscription registry storage is
-separate. Production browser processes require the shared registry namespace.
+explicit static fixture and accepts legacy `BACKEND_URL`. Application data uses
+application Datastore storage. Public browser subscription state is local to the
+Gateway process, so a Gateway restart makes the browser reconnect, query the
+current board, and resume live updates.
 The public-demo Gateway has no browser credential configuration.
 Each entrypoint constructs one Datastore client from
 `DATASTORE_PROJECT_ID` and hands that exact client to the storage factory.
@@ -101,7 +102,6 @@ registry. This lets message-valued IDs and `(column)` values inside `Any`
 metadata use the same compact JSON representation when they are written and
 queried. See the small setup in
 [`deployment-config.ts`](src/deployment-config.ts).
-Changing the registry namespace splits subscription state.
 The [container image guide](../deploy/container/README.md) lists the production
 commands, fixed image tags, and runtime values.
 

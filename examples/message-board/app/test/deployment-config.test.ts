@@ -13,7 +13,6 @@
  */
 
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import type { Datastore } from "@google-cloud/datastore";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -24,7 +23,6 @@ const completeEnvironment: NodeJS.ProcessEnv = {
   PORT: "8080",
   DATASTORE_PROJECT_ID: "message-board-test",
   BROWSER_ORIGIN: "https://board.example.com",
-  SUBSCRIPTION_REGISTRY_NAMESPACE: "message-board-subscriptions",
   BACKEND_URL: "http://application:8081",
   DELIVERY_SERVER_URL: "http://delivery:8484",
 };
@@ -87,7 +85,6 @@ describe("MessageBoard deployment configuration", () => {
     });
     expect(MessageBoardDeployment.combined(completeEnvironment)).toMatchObject({
       webOrigin: "https://board.example.com",
-      subscriptionNamespace: "message-board-subscriptions",
     });
     expect(MessageBoardDeployment.gateway(completeEnvironment)).toMatchObject({
       backendUrls: ["http://application:8081"],
@@ -155,7 +152,6 @@ describe("MessageBoard deployment configuration", () => {
     ["HOST", undefined],
     ["DATASTORE_PROJECT_ID", ""],
     ["BROWSER_ORIGIN", undefined],
-    ["SUBSCRIPTION_REGISTRY_NAMESPACE", ""],
     ["BACKEND_URL", undefined],
   ])("rejects missing required %s", (name, value) => {
     expect(() => MessageBoardDeployment.gateway({ ...completeEnvironment, [name]: value })).toThrow(
@@ -212,16 +208,5 @@ describe("MessageBoard deployment configuration", () => {
         DELIVERY_SERVER_URL: deliveryUrl,
       }),
     ).toThrow(expected);
-  });
-
-  it("assembles a closeable durable registry over supplied local storage", async () => {
-    const config = MessageBoardDeployment.combined(completeEnvironment);
-    const storage = new InMemoryStorageFactory();
-    const bindings = MessageBoardDeployment.bindings(config, storage);
-
-    expect(bindings.namespace).toBe("message-board-subscriptions");
-
-    await bindings.close();
-    storage.close();
   });
 });

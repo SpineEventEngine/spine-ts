@@ -24,16 +24,11 @@ Gateway; Envoy is the only public service and the Gateway reaches its private
 Coordinator, never a child listener.
 
 Both modes require application-selected storage and a delivery server. The
-Gateway admits this example's requests from their request actor and uses one
-subscription-registry namespace per topology.
-The Gateway remembers each logical subscription, such as “Ada watches board
-`general`,” in durable storage. It does **not** store a history of every update
-sent to Ada's browser. If the browser disconnects while a message is posted, it
-may miss that notification. After reconnecting, the browser queries the current
-board, replaces its local copy, and then continues listening. Receiving the same
-complete board twice is harmless for the same reason. This is what the reference
-means by _best-effort subscription updates_. The supplied simple delivery server
-is in-memory and not highly available.
+Gateway admits this example's requests from their request actor and creates
+process-local subscription bindings. A Gateway restart makes the browser
+reconnect, query the current board, replace its local copy, and then resume live
+updates. The supplied simple delivery server is in-memory and not highly
+available.
 
 For the smaller runnable development topology of exactly two identical
 applications and one Gateway, use
@@ -62,8 +57,8 @@ docker compose --file examples/message-board/deploy/compose/combined.compose.yam
 
 Use `standalone.compose.yaml` for one managed node with two complete replicas.
 It sets `PROCESS_COUNT=2` and `DELIVERY_SHARD_COUNT=2` independently, then
-starts one Coordinator, one Gateway, Envoy, one shared registry namespace, and
-exactly one in-memory delivery server. `BACKEND_URLS` names that Coordinator in
+starts one Coordinator, one Gateway, Envoy, and exactly one in-memory delivery
+server. `BACKEND_URLS` names that Coordinator in
 this local-only static fixture, not a child listener.
 
 Start it with:
@@ -84,17 +79,17 @@ operator.
 kubectl apply --filename examples/message-board/deploy/kubernetes/combined.yaml
 ```
 
-Application and Gateway processes use the same Datastore configuration and
-registry namespace for their topology. Each process creates its Datastore client
-and passes that exact client to its storage factory.
+Application processes use the Datastore configuration for their topology. Each
+application process creates its Datastore client and passes that exact client to
+its storage factory.
 
 For multiple managed nodes, apply `standalone.yaml`. Each pod chooses its own
 explicit process and shard counts. Its public LoadBalancer service exposes Envoy
 only; the one Gateway uses `GkeNodeDiscovery` against the application headless
 Service and follows ready Coordinator DNS membership rather than fixed child
 backend lists.
-The durable Gateway registry remembers **what** each client watches, not every
-notification the client has seen. A reconnect restores the watch. A normal
-query restores the current board if a notification was missed or repeated.
+Public browser subscription state is local to the Gateway process. When that
+process restarts, the browser reconnects, queries the current board, and resumes
+live updates.
 The references use TCP startup/readiness only and intentionally omit liveness
 probes and application health endpoints.
