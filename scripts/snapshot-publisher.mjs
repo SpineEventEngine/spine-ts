@@ -27,7 +27,14 @@ export async function runSnapshotPublication({
     for (const entry of orderPackages(preparedPackages)) {
       const tarball = typeof entry === "string" ? entry : entry.tarball;
       const name = typeof entry === "string" ? undefined : entry.name;
+      const preparedIntegrity = typeof entry === "string" ? undefined : entry.integrity;
       const integrity = typeof entry === "string" ? undefined : await integrityFor(entry);
+      if (
+        preparedIntegrity !== undefined &&
+        integrity !== undefined &&
+        integrity !== preparedIntegrity
+      )
+        throw new Error("Tarball changed after preparation for " + name);
       if (name !== undefined && integrity !== undefined) {
         let existing = "";
         try {
@@ -53,11 +60,27 @@ export async function runSnapshotPublication({
       const dependencies = typeof entry === "string" ? [] : entry.dependencies || [];
       for (const dependency of dependencies)
         await waitForVisibility(dependency, "2.0.0-snapshot.2");
-      if (name !== undefined && integrity !== undefined && (await integrityFor(entry)) !== integrity)
+      if (
+        name !== undefined &&
+        preparedIntegrity !== undefined &&
+        (await integrityFor(entry)) !== preparedIntegrity
+      )
         throw new Error("Tarball changed after registry comparison for " + name);
-      await runner("npm", ["publish", tarball, "--access", "public", "--tag", "snapshot", "--registry=https://registry.npmjs.org/"], {
-        stdio: "inherit",
-      });
+      await runner(
+        "npm",
+        [
+          "publish",
+          tarball,
+          "--access",
+          "public",
+          "--tag",
+          "snapshot",
+          "--registry=https://registry.npmjs.org/",
+        ],
+        {
+          stdio: "inherit",
+        },
+      );
       report.published.push(name ?? tarball);
     }
     return report;

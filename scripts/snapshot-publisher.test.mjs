@@ -133,7 +133,18 @@ describe("snapshot publisher", () => {
 
     expect(commands).toEqual([
       ["npm", ["whoami", "--registry=https://registry.npmjs.org/"]],
-      ["npm", ["publish", "core.tgz", "--access", "public", "--tag", "snapshot", "--registry=https://registry.npmjs.org/"]],
+      [
+        "npm",
+        [
+          "publish",
+          "core.tgz",
+          "--access",
+          "public",
+          "--tag",
+          "snapshot",
+          "--registry=https://registry.npmjs.org/",
+        ],
+      ],
     ]);
   });
 
@@ -146,11 +157,32 @@ describe("snapshot publisher", () => {
           calls.push(command + " " + args.join(" "));
           return "";
         },
-        packages: [{ name: "@spine-event-engine/core", tarball: "core.tgz", integrity: "sha512-a" }],
+        packages: [
+          { name: "@spine-event-engine/core", tarball: "core.tgz", integrity: "sha512-a" },
+        ],
         integrityFor: async () => (hashes++ === 0 ? "sha512-a" : "sha512-b"),
         publish: true,
       }),
     ).rejects.toThrow("Tarball changed");
+    expect(calls.some((call) => call.includes(" publish "))).toBe(false);
+  });
+
+  it("refuses registry access when tarball bytes changed after preparation", async () => {
+    const calls = [];
+    await expect(
+      runSnapshotPublication({
+        runner: async (command, args) => {
+          calls.push(command + " " + args.join(" "));
+          return "";
+        },
+        packages: [
+          { name: "@spine-event-engine/core", tarball: "core.tgz", integrity: "sha512-prepared" },
+        ],
+        integrityFor: async () => "sha512-mutated",
+        publish: true,
+      }),
+    ).rejects.toThrow("Tarball changed after preparation");
+    expect(calls.some((call) => call.includes(" view "))).toBe(false);
     expect(calls.some((call) => call.includes(" publish "))).toBe(false);
   });
 
@@ -176,8 +208,14 @@ describe("snapshot publisher", () => {
 
     expect(report.published).toEqual(["@spine-event-engine/core", "@spine-event-engine/server"]);
     expect(calls).toContain("wait @spine-event-engine/core@2.0.0-snapshot.2");
-    expect(calls.indexOf("npm publish core.tgz --access public --tag snapshot --registry=https://registry.npmjs.org/")).toBeLessThan(
-      calls.indexOf("npm publish server.tgz --access public --tag snapshot --registry=https://registry.npmjs.org/"),
+    expect(
+      calls.indexOf(
+        "npm publish core.tgz --access public --tag snapshot --registry=https://registry.npmjs.org/",
+      ),
+    ).toBeLessThan(
+      calls.indexOf(
+        "npm publish server.tgz --access public --tag snapshot --registry=https://registry.npmjs.org/",
+      ),
     );
   });
 

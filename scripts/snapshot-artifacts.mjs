@@ -143,16 +143,16 @@ function assertConsumerIsolation(consumer) {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       const path = join(current, entry.name);
       const actual = realpathSync(path);
-      if (!isContained(consumerRoot, actual))
+      if (!isContainedPath(consumerRoot, actual))
         throw new Error("Consumer resolved repository path: " + relative(consumer, path));
-      if (lstatSync(path).isSymbolicLink() && !isContained(consumerRoot, actual))
+      if (lstatSync(path).isSymbolicLink() && !isContainedPath(consumerRoot, actual))
         throw new Error("Consumer has workspace link");
       if (entry.isDirectory()) pending.push(path);
     }
   }
 }
 
-function isContained(parent, child) {
+export function isContainedPath(parent, child) {
   const path = relative(parent, child);
   return path === "" || (!path.startsWith(".." + "/") && path !== ".." && !isAbsolute(path));
 }
