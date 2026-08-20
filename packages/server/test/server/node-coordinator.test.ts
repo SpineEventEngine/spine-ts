@@ -182,6 +182,71 @@ describe("NodeCoordinator", () => {
     }
   });
 
+  it("retries failed pending cleanup without accumulating cancellation work", async () => {
+    vi.useFakeTimers();
+    try {
+      const replica = await backend("pending-retry", { cancelFailures: 1 });
+      closeables.push(replica.close);
+      const coordinator = await NodeCoordinator.open({
+        members: new TestReadyMembers([replica.member]),
+        port: 0,
+      });
+      closeables.push(() => coordinator.close());
+      const subscriptions = createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+      );
+      await subscriptions.subscribe(create(TopicSchema));
+
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
+      await expect.poll(() => replica.cancellations()).toBe(1);
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
+      await expect.poll(() => replica.cancellations()).toBe(2);
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS * 2);
+      expect(replica.cancellations()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps an active Coordinator stream alive beyond the handshake window", async () => {
+    vi.useFakeTimers();
+    try {
+      const replica = await backend("active-no-expiry", {
+        holdActivation: true,
+      });
+      closeables.push(replica.close);
+      const coordinator = await NodeCoordinator.open({
+        members: new TestReadyMembers([replica.member]),
+        port: 0,
+      });
+      closeables.push(() => coordinator.close());
+      const client = createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+      );
+      const subscription = await client.subscribe(create(TopicSchema));
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS - 1);
+      const controller = new AbortController();
+      const pending = client
+        .activate(subscription, { signal: controller.signal })
+        [Symbol.asyncIterator]()
+        .next();
+      await expect.poll(() => replica.activations()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS * 2);
+      expect(replica.cancellations()).toBe(0);
+      expect(replica.activationAborts()).toBe(0);
+
+      controller.abort();
+      await expect(pending).rejects.toMatchObject({ code: Code.Canceled });
+      await expect.poll(() => replica.cancellations()).toBe(1);
+      await expect.poll(() => replica.activationAborts()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rehydrates the Gateway durable logical definition into a replacement Coordinator only", async () => {
     const replica = await backend("durable-recovery");
     closeables.push(replica.close);
@@ -425,6 +490,7 @@ describe("NodeCoordinator", () => {
     await expect.poll(() => replica.activations()).toBe(1);
     firstAbort.abort();
     await expect(first).rejects.toMatchObject({ code: Code.Canceled });
+    await expect.poll(() => replica.cancellations()).toBe(1);
     release.resolve(undefined);
     const replacement = await client.subscribe(create(TopicSchema));
     const second = client.activate(replacement)[Symbol.asyncIterator]();
@@ -747,6 +813,31 @@ describe("NodeCoordinator", () => {
     await expect(first).resolves.toBeUndefined();
   });
 
+  it("clears pending activation deadlines during close", async () => {
+    vi.useFakeTimers();
+    try {
+      const replica = await backend("close-pending");
+      closeables.push(replica.close);
+      const coordinator = await NodeCoordinator.open({
+        members: new TestReadyMembers([replica.member]),
+        port: 0,
+      });
+      const subscriptions = createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+      );
+      await subscriptions.subscribe(create(TopicSchema));
+
+      await coordinator.close();
+      const cancellationsAfterClose = replica.cancellations();
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS * 2);
+
+      expect(replica.cancellations()).toBe(cancellationsAfterClose);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rolls back a listener-open failure without retaining a second coordinator", async () => {
     const first = await NodeCoordinator.open({ members: new TestReadyMembers([]), port: 0 });
     closeables.push(() => first.close());
@@ -920,6 +1011,7 @@ async function backend(
     readonly ignoreActivationAbort?: boolean;
     readonly releaseActivation?: Promise<void>;
     readonly observeActivationAbort?: boolean;
+    readonly cancelFailures?: number;
     readonly subscribeGate?: Promise<undefined>;
     readonly subscriptionStarted?: { readonly resolve: (value: undefined) => void };
   } = {},
@@ -992,6 +1084,8 @@ async function backend(
           },
           cancel: () => {
             value.cancellations++;
+            if (value.cancellations <= (options.cancelFailures ?? 0))
+              throw new ConnectError("native cancellation failed", Code.Unavailable);
             return create(SubscriptionService.method.cancel.output);
           },
         });

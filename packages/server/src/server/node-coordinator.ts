@@ -423,29 +423,39 @@ export class NodeCoordinator {
       .finally(() => {
         updates.close();
       });
-    let failure: unknown;
+    let failure: Error | undefined;
     try {
       for await (const update of updates) yield update;
     } catch (error) {
-      failure = error;
+      failure = NodeCoordinatorValues.error(error);
     } finally {
       context.signal.removeEventListener("abort", abort);
       overflow.abort();
       updates.close();
-      try {
-        await activation;
-      } catch (error) {
-        failure ??= error;
-      }
-      try {
-        await this.#cancelDefinition(definition, new AbortController().signal);
-      } catch (error) {
-        if (failure !== undefined)
-          throw new AggregateError([failure, error], "Coordinator activation cleanup failed.");
-        throw error;
-      }
+      await this.#finishActivation(definition, activation, failure);
     }
-    if (failure !== undefined) throw failure;
+  }
+
+  async #finishActivation(
+    definition: Uint8Array,
+    activation: Promise<void>,
+    previousFailure: Error | undefined,
+  ): Promise<void> {
+    const failures: Error[] = previousFailure === undefined ? [] : [previousFailure];
+    try {
+      await activation;
+    } catch (error) {
+      failures.push(NodeCoordinatorValues.error(error));
+    }
+    try {
+      await this.#cancelDefinition(definition, new AbortController().signal);
+    } catch (error) {
+      failures.push(NodeCoordinatorValues.error(error));
+    }
+    const first = failures[0];
+    if (first !== undefined && failures.length === 1) throw first;
+    if (failures.length > 1)
+      throw new AggregateError(failures, "Coordinator activation cleanup failed.");
   }
 
   async #cancel(subscription: Subscription, context: HandlerContext): Promise<Response> {
@@ -767,6 +777,11 @@ const NodeCoordinatorValues = Object.freeze({
   requiredValue<Value>(value: Value | undefined, message: string): Value {
     if (value === undefined) throw new Error(message);
     return value;
+  },
+  error(error: unknown): Error {
+    return error instanceof Error
+      ? error
+      : new Error("Coordinator subscription operation failed.", { cause: error });
   },
   host(value: string): string {
     const normalized = value.trim();
