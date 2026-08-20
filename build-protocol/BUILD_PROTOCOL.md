@@ -48,6 +48,22 @@ or alongside the first related change. An implementation may not be called
 complete while code, docs, examples, tests, or generated artifacts contradict a
 recorded human-imposed invariant.
 
+Before starting every task, wave, or correction, the orchestrator must give the
+human an estimate in hours of uninterrupted agent work. The estimate must:
+
+- state the expected range or total in hours;
+- list the concrete implementation, verification, review, integration, and
+  reporting work included;
+- explain the material reasons for the duration, such as required live waiting,
+  expensive repository gates, or uncertainty that may reveal further defects;
+- distinguish elapsed waiting time from active implementation time when that
+  distinction is useful; and
+- be revised promptly when evidence materially changes the remaining work.
+
+This estimate is mandatory even when the work continues autonomously. Omit it
+only when the human explicitly asks to skip the estimate for that particular
+task, wave, or correction.
+
 Required persistent records during implementation:
 
 - `DECISION_LOG.md` for architectural/tooling decisions;
