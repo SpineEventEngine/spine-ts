@@ -50,3 +50,21 @@
   the production dependency split removes the detected installed packages.
 - Next: subsequent Wave 14 implementation streams satisfy the retained red
   contracts, then rerun the focused consumer through compile/import.
+
+## Fixture-boundary cleanup
+
+- Baseline RED: the AST/realpath scanner reported 18 reachable sibling package
+  implementation paths before generated package outputs exposed a further 11;
+  the complete observed inventory was 29 paths.
+- Migrated test and fixture consumers to declared package imports, including
+  generated Proto exports and child-process package entry points. Added narrowly
+  scoped `./testing` seams for compiler test support, in-process Delivery
+  assembly, and existing server test-only helpers; root exports remain unchanged.
+- Current scanner evidence: `siblingPackageTreeReachProblems(...)` returns
+  `[]`. The full policy test still has only its accepted browser/auth assertions
+  red. The compiler regression was corrected by identifying `External` through
+  its nearest owning package manifest (`@spine-event-engine/server`), rather
+  than the analyzer module directory. The compiled `proto-tools/testing` seam
+  now accepts the canonical server declaration and rejects the path-mapped
+  counterfeit; all 14 affected suites pass (13 files, one intentionally
+  skipped; 100 tests passed and four skipped).

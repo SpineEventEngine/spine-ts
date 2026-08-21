@@ -13,10 +13,9 @@
  */
 
 import { Buffer } from "node:buffer";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join, resolve } from "node:path";
 
 import type * as Protobuf from "@bufbuild/protobuf";
 import type * as ProtobufWkt from "@bufbuild/protobuf/wkt";
@@ -365,7 +364,6 @@ interface HandlerDecoratorUse extends DecoratorUse {
 const handlerDecorators = new Set<HandlerDecorator>(["Assign", "Command", "React", "Subscribe"]);
 const entityBaseNames = new Set(["Aggregate", "Projection", "ProcessManager"]);
 const maxAliasDepth = 50;
-const handlerModuleDirectory = dirname(fileURLToPath(import.meta.url));
 // `spine.options.entity` in the frozen `spine/options.proto` contract.
 const entityOptionFieldNumber = 73903;
 const protobuf = requirePackage("@bufbuild/protobuf") as typeof Protobuf;
@@ -1393,8 +1391,8 @@ const HandlerSources = Object.freeze({
       (declaration) =>
         ts.isTypeAliasDeclaration(declaration) &&
         declaration.name.text === "External" &&
-        resolve(dirname(declaration.getSourceFile().fileName)) ===
-          resolve(handlerModuleDirectory) &&
+        PackageIdentity.nameFor(declaration.getSourceFile().fileName) ===
+          "@spine-event-engine/server" &&
         /^external(?:\.d)?\.ts$/u.test(
           declaration.getSourceFile().fileName.split(/[\\/]/u).at(-1) ?? "",
         ),
@@ -1860,6 +1858,26 @@ const HandlerSources = Object.freeze({
         message.options?.$unknown?.some((field) => field.no === entityOptionFieldNumber) === true,
       nested: message.nestedType.map(HandlerSources.descriptorMessage),
     };
+  },
+});
+
+const PackageIdentity = Object.freeze({
+  nameFor(sourceFile: string): string | undefined {
+    let directory = resolve(dirname(sourceFile));
+    while (true) {
+      const manifest = join(directory, "package.json");
+      if (existsSync(manifest)) {
+        try {
+          const { name } = JSON.parse(readFileSync(manifest, "utf8")) as { name?: unknown };
+          return typeof name === "string" ? name : undefined;
+        } catch {
+          return undefined;
+        }
+      }
+      const parent = dirname(directory);
+      if (parent === directory) return undefined;
+      directory = parent;
+    }
   },
 });
 

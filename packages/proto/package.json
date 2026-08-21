@@ -57,5 +57,9 @@
   ],
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1"
+  },
+  "devDependencies": {
+    "@spine-event-engine/core": "workspace:*",
+    "@spine-event-engine/server": "workspace:*"
   }
 }

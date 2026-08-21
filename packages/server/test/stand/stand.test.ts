@@ -61,7 +61,7 @@ import {
   type EventBus as EventBusType,
   type EventSubscriber,
 } from "../../src/bus/event-bus.js";
-import * as EntityLog from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
+import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 import { tenant } from "../tenant-fixture.js";
 

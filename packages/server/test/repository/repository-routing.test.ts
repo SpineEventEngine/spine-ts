@@ -99,7 +99,7 @@ import {
   EntityUnarchivedSchema,
   EventDispatchedToSubscriberSchema,
   EventDispatchedToReactorSchema,
-} from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
+} from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import type { ILogLayer } from "loglayer";
 

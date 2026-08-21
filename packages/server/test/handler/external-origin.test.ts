@@ -22,8 +22,10 @@ import { AnyMessages } from "@spine-event-engine/core";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import { BuildHandlerAnalyzer } from "../../../proto-tools/src/generation/build-time-handler-analyzer.js";
-import { GeneratedRegistryWriter } from "../../../proto-tools/src/generation/generated-registry-writer.js";
+import {
+  BuildHandlerAnalyzer,
+  GeneratedRegistryWriter,
+} from "@spine-event-engine/proto-tools/testing";
 import { BoundedContext } from "@spine-event-engine/server";
 import { expectWave13ContractToCompile } from "../integration/wave13-compile-contract.js";
 import {

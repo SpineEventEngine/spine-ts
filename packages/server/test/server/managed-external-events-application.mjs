@@ -22,15 +22,15 @@ import process from "node:process";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { RemoteDelivery } from "../../../delivery-client/dist/index.js";
+import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { TypeRegistry } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { TaskCreatedSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_events_pb.js";
+import { TaskCreatedSchema } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_events_pb.js";
 import {
   TaskIdSchema,
   TaskListIdSchema,
-} from "../../../../examples/todo/dist/generated/spine/examples/todo/task_id_pb.js";
-import { createTodoContext } from "../../../../examples/todo/dist/src/index.js";
+} from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_id_pb.js";
+import { createTodoContext } from "@spine-event-engine/example-todo";
 import {
   BoundedContext,
   EnvironmentType,
@@ -42,8 +42,8 @@ import {
   ServerEnvironment,
   ThirdPartyContext,
   UniformAcrossAllShards,
-} from "../../dist/index.js";
-import { managedServerApplicationAccess } from "../../dist/server/managed-server-application.js";
+} from "@spine-event-engine/server";
+import { managedServerApplicationAccess } from "@spine-event-engine/server/testing";
 import { file_spine_options, UserIdSchema } from "@spine-event-engine/proto";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.ts";
 
