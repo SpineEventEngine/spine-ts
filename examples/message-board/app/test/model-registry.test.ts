@@ -98,7 +98,11 @@ describe("MessageBoard Projection backend", () => {
   });
 
   it("assembles every supported application server mode", async () => {
-    const start = vi.fn().mockResolvedValue({ host: "127.0.0.1", baseUrl: "http://started", close: async () => undefined });
+    const start = vi.fn().mockResolvedValue({
+      host: "127.0.0.1",
+      baseUrl: "http://started",
+      close: () => Promise.resolve(),
+    });
     const run = vi.fn().mockResolvedValue({ baseUrl: "http://running" });
     const add = vi.fn(function (this: unknown) {
       return this;
@@ -107,11 +111,11 @@ describe("MessageBoard Projection backend", () => {
     const storage = new InMemoryStorageFactory();
     try {
       browserHost.open.mockResolvedValueOnce({ baseUrl: "http://started" });
-      browserHost.run.mockImplementationOnce(async (native: { run(): Promise<unknown> }) =>
-        await native.run(),
+      browserHost.run.mockImplementationOnce(
+        async (native: { run(): Promise<unknown> }) => await native.run(),
       );
-      browserHost.run.mockImplementationOnce(async (native: { run(): Promise<unknown> }) =>
-        await native.run(),
+      browserHost.run.mockImplementationOnce(
+        async (native: { run(): Promise<unknown> }) => await native.run(),
       );
       await expect(application.start({ host: "127.0.0.2", port: 1 })).resolves.toEqual({
         baseUrl: "http://started",

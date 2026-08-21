@@ -730,9 +730,8 @@ type BrowserServerTestAccess = Omit<
   typeof browserServerImplementation,
   "open" | "run" | "requests" | "requireDurableBindings" | "preflight"
 > & {
-  open(native: RunningServer, options: BrowserServerTestOptions): Promise<RunningServer>;
   open(
-    native: string | readonly string[] | undefined,
+    native: RunningServer | string | readonly string[] | undefined,
     options: BrowserServerTestOptions,
   ): Promise<RunningServer>;
   run(options: BrowserServerTestOptions): Promise<RunningServer>;
@@ -749,7 +748,7 @@ type BrowserServerTestAccess = Omit<
 
 export const browserServerTestAccess: BrowserServerTestAccess = Object.freeze({
   ...browserServerImplementation,
-}) as BrowserServerTestAccess;
+});
 
 const BrowserServer = browserServerImplementation;
 
@@ -769,7 +768,7 @@ const BrowserServerValues = Object.freeze({
   isLoopback(host: string): boolean {
     if (host === "::1" || host === "::ffff:127.0.0.1") return true;
     const match = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(host);
-    return match !== null && match.slice(1).every((part) => Number(part) <= 255);
+    return match?.slice(1).every((part) => Number(part) <= 255) === true;
   },
   async rollback(error: unknown, cleanups: readonly (() => Promise<void>)[]): Promise<never> {
     const failures = [error];
