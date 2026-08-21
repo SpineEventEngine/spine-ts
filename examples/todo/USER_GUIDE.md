@@ -74,8 +74,9 @@ The same exported name works in two places: use `TaskEvent` or
 runtime value as the token passed to `.route(...)`. The application aliases the
 assignment token only to make that distinction easy to read.
 
+<!-- docs-snippet-path: examples/todo/src/todo-app.ts -->
+
 ```ts
-// docs-snippet-path: examples/todo/src/todo-app.ts
 import { EventRouting } from "@spine-event-engine/server";
 import { TaskReassignedSchema } from "../generated/spine/examples/todo/task_events_pb.js";
 import type { TaskListId } from "../generated/spine/examples/todo/task_id_pb.js";

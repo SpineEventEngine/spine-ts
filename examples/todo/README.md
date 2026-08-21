@@ -86,8 +86,9 @@ available container logs. It then cleans up only resources it created.
 observes that Event and makes the resulting task list readable. The walkthrough
 explains the generated Proto model, handlers, and routing in more depth.
 
+<!-- docs-snippet-path: examples/todo/src/todo-app.ts -->
+
 ```ts
-// docs-snippet-path: examples/todo/src/todo-app.ts
 import { create } from "@bufbuild/protobuf";
 import { TaskIdSchema, TaskListIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
 import { TaskCreatedSchema } from "../generated/spine/examples/todo/task_events_pb.js";

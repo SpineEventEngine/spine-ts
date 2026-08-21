@@ -70,8 +70,9 @@ Your application assembles a `BoundedContext`, selects storage, and starts a
 `Server`. For a process managed by Spine TS, use `run()`; an embedded
 application uses `start()` and closes the server itself.
 
+<!-- docs-snippet-path: packages/server/test/context/bounded-context.test.ts -->
+
 ```ts
-// docs-snippet-path: packages/server/test/context/bounded-context.test.ts
 import { BoundedContext } from "@spine-event-engine/server";
 
 const context = await BoundedContext.singleTenant("MessageBoard").buildAsync();
@@ -246,8 +247,9 @@ only when the selected provider behavior is part of the feature.
 boundary that an application uses. It is useful for posting commands, reading a
 Projection, and waiting for genuinely asynchronous visibility.
 
+<!-- docs-snippet-path: packages/testing/src/black-box/black-box.ts -->
+
 ```ts
-// docs-snippet-path: packages/testing/src/black-box/black-box.ts
 import { BlackBox } from "@spine-event-engine/testing";
 import { BoundedContext } from "@spine-event-engine/server";
 
@@ -275,8 +277,9 @@ an external receptor with the type-only `External<T>` marker on its first
 parameter; the generated registry then filters imported events to that
 handler:
 
+<!-- docs-snippet-path: examples/message-board/app/src/index.ts -->
+
 ```ts
-// docs-snippet-path: examples/message-board/app/src/index.ts
 import { Subscribe, type External } from "@spine-event-engine/server";
 import type { MessagePosted } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
 
@@ -309,8 +312,9 @@ and the actor timestamp is preserved. This assumes `ServerEnvironment` was
 configured first with the complete application `typeRegistry` that contains
 `MessagePosted`:
 
+<!-- docs-snippet-path: examples/message-board/app/src/index.ts -->
+
 ```ts
-// docs-snippet-path: examples/message-board/app/src/index.ts
 import { ThirdPartyContext } from "@spine-event-engine/server";
 import type { ActorContext } from "@spine-event-engine/proto";
 import type { MessagePosted } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
