@@ -31,7 +31,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   GeneratedRegistryWriter,
   type BuildHandlerAnalysis,
-} from "../../src/handler/generated-registry-writer.js";
+} from "../../../proto-tools/src/generation/generated-registry-writer.js";
 
 describe("generated registry writer", () => {
   it("renders deterministic registry source from analyzed handlers", () => {
@@ -45,7 +45,7 @@ describe("generated registry writer", () => {
     expect(source).toBe(
       [
         "import type { GeneratedHandlerRegistry } from " +
-          '"@spine-event-engine/server/internal/generated-handler-registry";',
+          '"@spine-event-engine/server/spi/handler-registry";',
         'import { TaskAggregate } from "../../src/task-aggregate.js";',
         'import { TaskProjection } from "../../src/task-projection.js";',
         'import { CreateTaskSchema, RenameTaskSchema } from "../spine/examples/todo/task_commands_pb.js";',
@@ -475,7 +475,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("../../src/handler/generated-registry-writer.js");
+        await import("../../../proto-tools/src/generation/generated-registry-writer.js");
 
       expect(() =>
         new MockedWriter().write(analysis(repoRoot), {
@@ -515,7 +515,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("../../src/handler/generated-registry-writer.js");
+        await import("../../../proto-tools/src/generation/generated-registry-writer.js");
 
       expect(() =>
         new MockedWriter().write(analysis(repoRoot), {
@@ -630,7 +630,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("../../src/handler/generated-registry-writer.js");
+        await import("../../../proto-tools/src/generation/generated-registry-writer.js");
 
       expect(() =>
         new MockedWriter().write(analysis(repoRoot), {
@@ -666,7 +666,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("../../src/handler/generated-registry-writer.js");
+        await import("../../../proto-tools/src/generation/generated-registry-writer.js");
 
       new MockedWriter().write(analysis(repoRoot), {
         generatedRoot,
@@ -819,7 +819,7 @@ function createCompileFixture(): string {
 
   mkdirSync(join(repoRoot, "packages/demo/generated/handler"), { recursive: true });
   mkdirSync(join(repoRoot, "packages/demo/src"), { recursive: true });
-  mkdirSync(join(repoRoot, "node_modules/@spine-event-engine/server/internal"), {
+  mkdirSync(join(repoRoot, "node_modules/@spine-event-engine/server/spi"), {
     recursive: true,
   });
   mkdirSync(join(repoRoot, "node_modules/@acme/generated"), { recursive: true });
@@ -830,7 +830,7 @@ function createCompileFixture(): string {
   writeFileSync(
     join(
       repoRoot,
-      "node_modules/@spine-event-engine/server/internal/generated-handler-registry.d.ts",
+      "node_modules/@spine-event-engine/server/spi/handler-registry.d.ts",
     ),
     [
       "export interface GeneratedHandlerRegistry {",

@@ -719,7 +719,7 @@ describe("spine proto model tooling", () => {
     expect(source).toContain("Generated from Proto: chat/v1/commands.proto");
     expect(source).not.toContain("CodeMatters");
     expect(source).toContain("@acme/handler-model/generated/chat/v1/message_board_pb.js");
-    expect(source).toContain("@spine-event-engine/server/internal/generated-handler-registry");
+    expect(source).toContain("@spine-event-engine/server/spi/handler-registry");
     execFileSync(
       process.execPath,
       [join(app, "node_modules/typescript/bin/tsc"), "--noEmit", "-p", "tsconfig.json"],
@@ -730,7 +730,7 @@ describe("spine proto model tooling", () => {
     );
     const require = createRequire(join(app, "package.json"));
     expect(
-      require.resolve("@spine-event-engine/server/internal/generated-handler-registry"),
+      require.resolve("@spine-event-engine/server/spi/handler-registry"),
     ).toContain("generated-handler-registry.js");
     expect(require.resolve("@acme/handler-model/generated/chat/v1/message_board_pb.js")).toContain(
       "message_board_pb.js",
@@ -739,6 +739,7 @@ describe("spine proto model tooling", () => {
     HandlerGeneration.generate(app);
     expect(readFileSync(registry, "utf8")).toBe(firstRegistry);
   }, 120_000);
+
   it("runs packaged Buf to generate only a model's owned source and module", () => {
     const model = packageDirectory("@example/users-model");
     writeJson(model, "spine-proto.json", modelConfig("@example/users-model"));

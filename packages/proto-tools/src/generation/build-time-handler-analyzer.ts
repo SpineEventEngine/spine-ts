@@ -22,10 +22,13 @@ import type * as Protobuf from "@bufbuild/protobuf";
 import type * as ProtobufWkt from "@bufbuild/protobuf/wkt";
 import ts from "typescript";
 
-import type {
-  GeneratedHandlerKind,
-  GeneratedHandlerParameterCount,
-} from "./generated-handler-registry.js";
+type GeneratedHandlerKind =
+  | "command-assignment"
+  | "command-reaction"
+  | "event-subscription"
+  | "state-subscription"
+  | "event-reaction";
+type GeneratedHandlerParameterCount = 1 | 2;
 
 /**
  * Build-time analysis result for bare decorated entity handler methods.
