@@ -1885,7 +1885,9 @@ console.log(
     `${expectedDeploymentGkeExports.length} expected @spine-event-engine/deployment-gke exports`,
     `${expectedServerExports.length} expected @spine-event-engine/server exports`,
     `${expectedStorageExports.length} expected @spine-event-engine/storage exports`,
-    `${expectedStorageProviderDocumentedExports.length} documented and ${expectedStorageProviderDeclaredExports.length} declared @spine-event-engine/storage/provider exports`,
+    `${expectedStorageProviderDocumentedExports.length} documented and ` +
+      `${expectedStorageProviderDeclaredExports.length} declared ` +
+      "@spine-event-engine/storage/provider exports",
     `${expectedTransportExports.length} expected @spine-event-engine/transport exports`,
     `${expectedTestingExports.length} expected @spine-event-engine/testing exports.`,
   ].join(", "),
