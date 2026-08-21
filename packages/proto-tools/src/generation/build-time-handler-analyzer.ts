@@ -1861,7 +1861,7 @@ const HandlerSources = Object.freeze({
   },
 });
 
-const PackageIdentity = Object.freeze({
+export const PackageIdentity = Object.freeze({
   nameFor(sourceFile: string): string | undefined {
     let directory = resolve(dirname(sourceFile));
     while (true) {
