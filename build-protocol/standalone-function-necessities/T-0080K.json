@@ -7,5 +7,41 @@
     "name": "managedReplicaOptions",
     "disposition": "necessity",
     "reason": "TypeScript framework boundary: managedReplicaOptions supplies the Coordinator-required child factory and synchronization callbacks."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/message-board/web/src/docs/client-react-provider-query.ts",
+    "kind": "function-declaration",
+    "identity": "Tasks()#1",
+    "name": "Tasks",
+    "disposition": "necessity",
+    "reason": "TypeScript React boundary: Tasks is the hook-owning example component required to demonstrate query state rendering."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/message-board/web/src/docs/client-react-provider-query.ts",
+    "kind": "function-declaration",
+    "identity": "App()#1",
+    "name": "App",
+    "disposition": "necessity",
+    "reason": "TypeScript React boundary: App composes the documented client provider and Tasks component for the runnable query example."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/message-board/web/src/docs/client-react-provider-query.ts",
+    "kind": "function-declaration",
+    "identity": "stopApplication()#1",
+    "name": "stopApplication",
+    "disposition": "necessity",
+    "reason": "TypeScript lifecycle boundary: stopApplication closes the documented client transport after the React provider example completes."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/message-board/web/src/docs/client-react-subscription.ts",
+    "kind": "function-declaration",
+    "identity": "TaskUpdates()#1",
+    "name": "TaskUpdates",
+    "disposition": "necessity",
+    "reason": "TypeScript React boundary: TaskUpdates owns subscription hooks for the minimal documented live-update component."
   }
 ]
