@@ -1,6 +1,6 @@
 # Missing snippet context fixture
 
+<!-- docs-snippet-path: examples/todo/src/missing.ts -->
 ```ts
-// docs-snippet-path: examples/todo/src/missing.ts
 const value = 1;
 ```

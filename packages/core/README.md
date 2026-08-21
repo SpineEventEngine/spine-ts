@@ -5,6 +5,9 @@ Spine TS application. Use it when application code needs to validate a message,
 pack it into `google.protobuf.Any`, create a command or event envelope, or look
 up a generated message schema by its Spine type URL.
 
+This is an experimental snapshot package. Use Node 24 or newer and generated
+Spine message schemas.
+
 ## Message-interface tokens
 
 A generated interface export has one name in two TypeScript namespaces: use it
@@ -30,9 +33,8 @@ pnpm typecheck:build
 ```
 
 Run this workspace-wide TypeScript build from the repository root. For an
-experimental npm consumer, install
-`@spine-event-engine/core@2.0.0-snapshot.2` or the explicit
-`@spine-event-engine/core@snapshot` tag.
+experimental npm consumer, install `@spine-event-engine/core@snapshot`.
+The snapshot tag can change before a stable release.
 
 ## ✅ Validate a message
 
@@ -122,8 +124,9 @@ an application's `*rejections.proto` files. Application code imports that
 generated companion and throws its factory result. This example is from a
 source file in the Todo model package's `src` directory.
 
+<!-- docs-snippet-path: examples/todo/src/index.ts -->
+
 ```ts
-// docs-snippet-path: examples/todo/src/index.ts
 import { create } from "@bufbuild/protobuf";
 import { TaskIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
 import { TaskAlreadyDone } from "../generated/spine/examples/todo/task_rejections.js";

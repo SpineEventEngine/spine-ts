@@ -6,6 +6,9 @@ schemas, validation messages, options, and schemas needed by the supported
 client and delivery packages. Most applications use it as a dependency of their
 model package rather than calling it directly.
 
+This is an experimental snapshot package; use generated Spine contracts and
+Node 24 or newer.
+
 ## TypeScript interface options
 
 Use `(every_is).ts_type = "TaskEvent"` with `(every_is).generate = true` to
@@ -32,9 +35,8 @@ pnpm typecheck:build
 ```
 
 Run this workspace-wide TypeScript build from the repository root. For an
-experimental npm consumer, install
-`@spine-event-engine/proto@2.0.0-snapshot.2` or the explicit
-`@spine-event-engine/proto@snapshot` tag.
+experimental npm consumer, install `@spine-event-engine/proto@snapshot`.
+The snapshot tag can change before a stable release.
 
 ## 🧱 Use a Spine schema
 

@@ -1,44 +1,59 @@
-# Deployment
+# Application-node discovery for Spine TS
 
-Use this package when a single Gateway must learn which application nodes are
-ready. Start with a fixed list for a combined or local distributed deployment;
-move to a leased registry when nodes can be replaced independently. The
-[reference](REFERENCE.md) holds the exact discovery and lease contract.
+`@spine-event-engine/deployment` helps a Gateway learn which application nodes
+are ready. It is for operators and application-infrastructure developers
+deploying a combined or distributed Spine TS application.
 
-Install this experimental package as
-`@spine-event-engine/deployment@2.0.0-snapshot.2` or with the explicit
-`@spine-event-engine/deployment@snapshot` tag. Consumers create
-`ApplicationNode` values and publish initial and replacement complete sets
-with `StaticNodeDiscovery`. Each snapshot is authoritative membership input;
-the consumer reconciler compares stable IDs, canonical HTTP(S) origins, and
-HTTPS TLS names. The expected 32 nodes is an operational expectation, never a
-routing cap.
+This is an experimental snapshot package. You need Node 24 or newer, an
+application node endpoint, and—only for leased discovery—a configured
+`StorageFactory`. Read the [reference](REFERENCE.md) before production work;
+it defines discovery, lease, and shutdown semantics.
+
+## Install
+
+```sh
+pnpm add @spine-event-engine/deployment@snapshot
+```
+
+The `snapshot` tag can change before a stable release.
+
+## First success: publish one known node
+
+Use static discovery for local development or a combined deployment. Each
+replacement is the complete authoritative membership set, not an incremental
+update.
+
+<!-- docs-snippet-path: packages/deployment/src/index.ts -->
 
 ```ts
 import { ApplicationNode, StaticNodeDiscovery } from "@spine-event-engine/deployment";
 
 const discovery = new StaticNodeDiscovery([
-  new ApplicationNode({ id: "node/a", endpoint: "http://10.0.0.1:8080" }),
+  new ApplicationNode({ id: "node/a", endpoint: "http://127.0.0.1:8080" }),
 ]);
 
-discovery.replace([]);
+let published: readonly ApplicationNode[] = [];
+const stop = discovery.watch((nodes) => {
+  published = nodes;
+});
+try {
+  if (published[0]?.id !== "node/a") throw new Error("The static node was not published.");
+} finally {
+  await stop();
+}
 ```
 
-For storage-backed GCE-style discovery, create `LeasedNodeRegistry` with both
-the application's chosen `StorageFactory` and a separate operator-chosen
-namespace. The registry is a discovery directory, not a domain repository or
-Stand subscription registry. It persists the approved application-node lease
-record with a typed node identity, registration fence, and exact millisecond
-expiry. Read its [reference contract](REFERENCE.md) before assembling a
-registrar or selecting a MySQL or Datastore layout. A registration identity is
-a fence: an old process cannot renew or remove a newer process's lease after a
-node ID is reused.
+## When nodes are independently replaced
+
+Use `LeasedNodeRegistry` with the application's `StorageFactory` and an
+operator-chosen namespace. A registration identity is a fence: an older process
+cannot renew or remove a newer lease after a node ID is reused.
 
 ```ts
 import { ApplicationNode, LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
-const factory = new InMemoryStorageFactory(); // The application creates this factory.
+const factory = new InMemoryStorageFactory();
 const registry = new LeasedNodeRegistry({ factory, namespace: "gateway-nodes" });
 
 try {
@@ -48,8 +63,18 @@ try {
     expiresAt: Date.now() + 30_000,
   });
   const liveNodes = await registry.read(Date.now());
-  await registry.cleanup(Date.now()); // Expiry filtering works even without cleanup.
+  void liveNodes;
 } finally {
-  await registry.close(); // Closes this registry handle; the caller must still call factory.close().
+  await registry.close();
+  factory.close();
 }
 ```
+
+## Limits and next steps
+
+Discovery is not a domain repository, a Stand subscription registry, or a
+routing cap; an expected node count is only an operational expectation. The
+registry does not provide a public deployment API or select storage settings
+for you. Read the [reference](REFERENCE.md) for expiry, cleanup, TLS-origin,
+and reconciliation rules, then choose [Datastore](../storage-datastore/README.md)
+or [MySQL](../storage-rdbms/README.md) when durable leases are required.

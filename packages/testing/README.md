@@ -7,6 +7,13 @@ API; applications do not need internal test utilities.
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).
 
+This is an experimental snapshot package. Use Node 24 or newer and an
+application Bounded Context before writing BlackBox tests.
+
+```sh
+pnpm add -D @spine-event-engine/testing@snapshot
+```
+
 ## 💡 Why use it?
 
 - ✅ Tests a complete bounded context through real Spine services.
@@ -20,8 +27,9 @@ For detailed contracts intended for coding agents, see the
 Create a `BlackBox` from a built context or its builder. It starts an ephemeral
 local server and closes it when the test is finished.
 
+<!-- docs-snippet-path: packages/testing/src/black-box/black-box.ts -->
+
 ```ts
-// docs-snippet-path: packages/testing/src/black-box/black-box.ts
 import { BlackBox } from "@spine-event-engine/testing";
 import { BoundedContext } from "@spine-event-engine/server";
 
@@ -34,14 +42,20 @@ void guest;
 Create a named scope when a test needs to act as a particular user. Scopes send
 queries, post commands, and create subscriptions through the public client API.
 
+<!-- docs-snippet-path: examples/todo/test/black-box.test.ts -->
+
 ```ts
-// docs-snippet-path: packages/testing/src/black-box/black-box.ts
+import { create } from "@bufbuild/protobuf";
+import { CreateTaskSchema } from "../generated/spine/examples/todo/task_commands_pb.js";
 import type { BlackBox } from "@spine-event-engine/testing";
 
 declare const box: BlackBox;
 const alice = box.onBehalfOf("alice");
-// await alice.post(command);
-// const result = await alice.send(query);
+const acknowledgement = await alice.post(
+  CreateTaskSchema,
+  create(CreateTaskSchema, { id: { value: "task-42" }, title: "First task" }),
+);
+if (acknowledgement.kind !== "ok") throw new Error("CreateTask was not accepted.");
 ```
 
 ## ⏳ Observe an asynchronous result
@@ -49,8 +63,9 @@ const alice = box.onBehalfOf("alice");
 Use `eventually()` only for a result that becomes visible later. Assert an
 immediate command result directly instead of polling for it.
 
+<!-- docs-snippet-path: packages/testing/src/black-box/black-box.ts -->
+
 ```ts
-// docs-snippet-path: packages/testing/src/black-box/black-box.ts
 import type { BlackBox } from "@spine-event-engine/testing";
 
 declare const box: BlackBox;

@@ -5,6 +5,9 @@ Datastore, including Firestore in Datastore mode. It implements the storage
 contract from `@spine-event-engine/storage`; it does not use Firestore Native
 APIs.
 
+This is an experimental snapshot package. Use Node 24 or newer, generated
+record schemas, and a configured Google Datastore client.
+
 For exact query limits, entity-storage behavior, and failure handling, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
@@ -23,22 +26,46 @@ pnpm typecheck:build
 ```
 
 Run this workspace-wide TypeScript build from the repository root. For an
-experimental npm consumer, install
-`@spine-event-engine/storage-datastore@2.0.0-snapshot.2` or the explicit
-`@spine-event-engine/storage-datastore@snapshot` tag.
+experimental npm consumer, install `@spine-event-engine/storage-datastore@snapshot`.
+The snapshot tag can change before a stable release.
 
 ## 🔌 Create a factory
 
 Give the adapter an already configured Datastore client when the application
 controls Google authentication and client lifetime.
 
+<!-- docs-snippet-path: packages/storage-datastore/src/index.ts -->
+
 ```ts
 import { Datastore } from "@google-cloud/datastore";
+import { create, ScalarType } from "@bufbuild/protobuf";
+import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 
 const factory = DatastoreStorageFactory.newBuilder()
   .setClient(new Datastore({ projectId: "my-project" }))
   .build();
+const records = factory.createRecordStorage(
+  { name: "Tasks", multitenant: false },
+  new RecordSpec<string, StringValue>({
+    recordType: StringValueSchema,
+    idKind: "string",
+    extractId: (record) => record.value,
+    columns: [
+      new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
+    ],
+  }),
+);
+
+try {
+  await records.write(create(StringValueSchema, { value: "task-42" }));
+  const stored = await records.read("task-42");
+  if (stored?.value !== "task-42") throw new Error("The record was not stored.");
+} finally {
+  await records.close();
+  factory.close();
+}
 ```
 
 The builder always uses a client supplied by the caller. Its fixed finite reconciliation
