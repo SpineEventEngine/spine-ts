@@ -16,6 +16,7 @@
     "packages/delivery-server/src/testing/index.ts",
     "packages/core/src/index.ts",
     "packages/server/src/index.ts",
+    "packages/server/src/browser/index.ts",
     "packages/server/src/testing/index.ts",
     "packages/transport/src/index.ts",
     "packages/storage/src/index.ts",

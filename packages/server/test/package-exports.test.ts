@@ -13,6 +13,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 import { describe, expect, expectTypeOf, it } from "vitest";
 
@@ -21,7 +22,37 @@ import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testin
 
 type RootExports = typeof import("@spine-event-engine/server");
 
+type BrowserExports = typeof import("@spine-event-engine/server/browser");
+
 describe("@spine-event-engine/server package exports", () => {
+  it("keeps browser and durable-auth APIs out of the native root and exposes them only at browser", async () => {
+    expect("BrowserServer" in serverRoot).toBe(false);
+    expect("BrowserServerOptions" in serverRoot).toBe(false);
+    expect("DurableSubscriptionBindings" in serverRoot).toBe(false);
+    expectTypeOf<"BrowserServer" extends keyof RootExports ? true : false>().toEqualTypeOf<false>();
+    expectTypeOf<
+      "DurableSubscriptionBindings" extends keyof RootExports ? true : false
+    >().toEqualTypeOf<false>();
+    expectTypeOf<
+      "BrowserServer" extends keyof BrowserExports ? true : false
+    >().toEqualTypeOf<true>();
+    expectTypeOf<
+      "DurableSubscriptionBindings" extends keyof BrowserExports ? true : false
+    >().toEqualTypeOf<true>();
+
+    const browser = await import("@spine-event-engine/server/browser");
+    expect(typeof browser.BrowserServer.open).toBe("function");
+    expect(typeof browser.BrowserServer.run).toBe("function");
+    expect(Object.keys(browser.BrowserServer).sort()).toEqual(["open", "run"]);
+    expect(typeof browser.DurableSubscriptionBindings).toBe("function");
+  });
+
+  it("emits a native root declaration with no auth or browser resolution path", () => {
+    const declaration = readFileSync(new URL("../dist/index.d.ts", import.meta.url), "utf8");
+
+    expect(declaration).not.toMatch(/auth|browser|connect-node|node:http/iu);
+  });
+
   it("keeps reset out of the root declaration and runtime export", () => {
     expect("resetServerEnvironmentForTest" in serverRoot).toBe(false);
     expectTypeOf<

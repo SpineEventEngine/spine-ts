@@ -19,7 +19,7 @@
 
 import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { GceNodeDiscovery } from "@spine-event-engine/deployment-gce";
-import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
+import { BrowserServer, type BrowserServerOptions } from "@spine-event-engine/server/browser";
 
 import {
   GceDeploymentSettings,
@@ -76,10 +76,11 @@ export const GceGatewayEntrypoint = Object.freeze({
       namespace: GceDeploymentSettings.registryNamespace(environment),
     });
     const discovery = new GceNodeDiscovery({ registry });
-    const server = Server.atPort(GceDeploymentSettings.port(environment, "PORT"), {
+    await BrowserServer.run({
       host: "0.0.0.0",
-      browser: { ...options.browser, discovery },
+      port: GceDeploymentSettings.port(environment, "PORT"),
+      ...options.browser,
+      discovery,
     });
-    await server.run();
   },
 });

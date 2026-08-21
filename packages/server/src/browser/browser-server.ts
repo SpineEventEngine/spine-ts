@@ -47,12 +47,21 @@ import {
   SubscriptionService,
 } from "@spine-event-engine/proto/client";
 
-import type { BrowserAuthRoute, BrowserServerOptions, RunningServer } from "./server.js";
+import type { RunningServer } from "../server/server.js";
+import { Server, serverBuilderAccess } from "../server/server.js";
+import type {
+  BrowserAuthRoute,
+  BrowserServerOptions,
+  StandaloneBrowserServerOptions,
+} from "./options.js";
 import {
   attachDurableSubscriptionCleanup,
   isDurableSubscriptionBindings,
 } from "./durable-subscription-bindings.js";
-import reservedSpineRpcPaths from "./reserved-spine-rpc-paths.json" with { type: "json" };
+import reservedSpineRpcPaths from "../server/reserved-spine-rpc-paths.json" with { type: "json" };
+import { Environment, EnvironmentType } from "../server/environment.js";
+import { ProcessServerCoordinator } from "../server/process-server-coordinator.js";
+import { ServerEnvironment } from "../server/server-environment.js";
 
 const gracefulBrowserDrainMs = 100;
 const reservedPathSet = new Set(reservedSpineRpcPaths);
@@ -64,7 +73,6 @@ interface UncheckedBrowserAdmission {
   readonly contexts?: ContextResolver;
   readonly clock?: Clock;
 }
-
 type BrowserHostOptions = BrowserServerOptions & {
   readonly host: string;
   readonly port: number;
@@ -77,13 +85,17 @@ type BrowserHostOptions = BrowserServerOptions & {
 /**
  * Runs the private native endpoint behind one admitted browser listener.
  *
- * @internal
+ * Hosts browser-facing Spine gateway routes independently from native server assembly.
  */
-export const BrowserServer: Readonly<{
+/** @internal White-box browser host seam for source-level behavior tests. */
+export const browserServerTestAccess: Readonly<{
+  open(native: RunningServer, options: BrowserServerOptions): Promise<RunningServer>;
   open(
-    native: RunningServer | string | readonly string[] | undefined,
-    options: BrowserHostOptions,
+    native: string | readonly string[] | undefined,
+    options: StandaloneBrowserServerOptions,
   ): Promise<RunningServer>;
+  run(options: StandaloneBrowserServerOptions): Promise<RunningServer>;
+  run(native: Server, options: BrowserServerOptions): Promise<RunningServer>;
   requests(options: BrowserServerOptions): {
     credential(context: { readonly requestHeader: Headers }):
       | {
@@ -113,12 +125,28 @@ export const BrowserServer: Readonly<{
   ): Promise<void>;
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo>;
   closeListener(server: http.Server): Promise<void>;
+  preflight(
+    mode: "combined" | "standalone",
+    options: BrowserServerOptions,
+  ): BrowserHostOptions;
 }> = Object.freeze({
   async open(
     native: RunningServer | string | readonly string[] | undefined,
-    options: BrowserHostOptions,
+    input: BrowserServerOptions,
   ): Promise<RunningServer> {
-    BrowserServer.requireDurableBindings(options, options.production);
+    const running = BrowserServerValues.running(native);
+    if (running !== undefined && !BrowserServerValues.isLoopback(running.host))
+      throw new Error("Combined browser server requires a loopback native listener.");
+    let options: BrowserHostOptions;
+    try {
+      options = BrowserServer.preflight(native === undefined ? "standalone" : "combined", input);
+    } catch (error) {
+      await BrowserServerValues.rollback(
+        error,
+        running === undefined ? [] : [() => running.close()],
+      );
+      throw error;
+    }
     const origins = BrowserServer.origins(options.origins);
     const authRoutes = BrowserServer.authRoutes(options.authRoutes);
     const activeAuth = new Set<AbortController>();
@@ -126,10 +154,11 @@ export const BrowserServer: Readonly<{
     if (!Number.isSafeInteger(maxActiveAuthRequests) || maxActiveAuthRequests < 1)
       throw new Error("Browser maxActiveAuthRequests must be a positive safe integer.");
     let draining = false;
-    const running = BrowserServerValues.running(native);
     const backendBaseUrls =
       native === undefined
-        ? []
+        ? options.backend === undefined
+          ? []
+          : BrowserServer.backendUrls(BrowserServerValues.backendUrlsFor(options.backend))
         : Array.isArray(native)
           ? BrowserServer.backendUrls(native)
           : [
@@ -310,6 +339,7 @@ export const BrowserServer: Readonly<{
         stopDiscovery?.(),
         dynamic.close(),
         BrowserServer.closeListener(server),
+        running?.close(),
       ]);
       const failures = cleanup.flatMap((result) =>
         result.status === "rejected" ? [result.reason] : [],
@@ -330,6 +360,54 @@ export const BrowserServer: Readonly<{
       stopDiscovery,
       dynamic,
     );
+  },
+  async run(
+    nativeOrOptions: Server | BrowserServerOptions,
+    suppliedOptions?: BrowserServerOptions,
+  ): Promise<RunningServer> {
+    const options = suppliedOptions ?? (nativeOrOptions as BrowserServerOptions);
+    if (nativeOrOptions instanceof Server) {
+      if (!serverBuilderAccess.isLoopback(nativeOrOptions))
+        throw new Error("Combined browser server requires a loopback native listener.");
+      BrowserServer.preflight("combined", options);
+    } else BrowserServer.preflight("standalone", options);
+    const native = nativeOrOptions instanceof Server ? await nativeOrOptions.start() : undefined;
+    const running =
+      native === undefined
+        ? await BrowserServer.open(undefined, options as StandaloneBrowserServerOptions)
+        : await BrowserServer.open(native, options);
+    return ProcessServerCoordinator.add(
+      running,
+      native === undefined ? undefined : ServerEnvironment.instance(),
+      undefined,
+      () => undefined,
+    );
+  },
+  preflight(mode, input): BrowserHostOptions {
+    const options: BrowserHostOptions = {
+      ...input,
+      host: input.host ?? "127.0.0.1",
+      port: input.port ?? 0,
+      readMaxBytes: input.readMaxBytes ?? 4_194_304,
+      writeMaxBytes: input.writeMaxBytes ?? 4_194_304,
+      production: Environment.instance().type === EnvironmentType.Production,
+    };
+    if (!options.host.trim()) throw new Error("Browser server host must not be blank.");
+    if (!Number.isInteger(options.port) || options.port < 0 || options.port > 65_535)
+      throw new Error("Browser server port must be an integer from 0 through 65535.");
+    if (!Number.isInteger(options.readMaxBytes) || options.readMaxBytes < 1)
+      throw new Error("Browser server readMaxBytes must be a positive integer.");
+    if (!Number.isInteger(options.writeMaxBytes) || options.writeMaxBytes < 1)
+      throw new Error("Browser server writeMaxBytes must be a positive integer.");
+    if (mode === "standalone" && options.backend === undefined && options.discovery === undefined)
+      throw new Error("Standalone browser server requires a backend or discovery.");
+    BrowserServer.requireDurableBindings(options, options.production);
+    BrowserServer.origins(options.origins);
+    BrowserServer.authRoutes(options.authRoutes);
+    const capacity = options.maxActiveAuthRequests ?? 64;
+    if (!Number.isSafeInteger(capacity) || capacity < 1)
+      throw new Error("Browser maxActiveAuthRequests must be a positive safe integer.");
+    return options;
   },
   requests(options: BrowserServerOptions) {
     return {
@@ -642,6 +720,8 @@ export const BrowserServer: Readonly<{
   },
 });
 
+const BrowserServer = browserServerTestAccess;
+
 const BrowserServerValues = Object.freeze({
   async watch(
     source: NodeDiscovery,
@@ -654,6 +734,22 @@ const BrowserServerValues = Object.freeze({
   requiredRunning(value: RunningServer | undefined): RunningServer {
     if (value === undefined) throw new Error("Browser server local backend is absent.");
     return value;
+  },
+  isLoopback(host: string): boolean {
+    if (host === "::1" || host === "::ffff:127.0.0.1") return true;
+    const match = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(host);
+    return match !== null && match.slice(1).every((part) => Number(part) <= 255);
+  },
+  async rollback(error: unknown, cleanups: readonly (() => Promise<void>)[]): Promise<never> {
+    const failures = [error];
+    for (const cleanup of cleanups)
+      try {
+        await cleanup();
+      } catch (cleanupError) {
+        failures.push(cleanupError);
+      }
+    if (failures.length === 1) throw error;
+    throw new AggregateError(failures, "Browser server startup rollback failed.");
   },
   firstCreator(values: readonly NativeSubscriptionCreator[]): NativeSubscriptionCreator {
     const creator = values[0];
@@ -780,7 +876,6 @@ class RunningBrowserServer implements RunningServer {
       throw primary;
     }
   }
-
   async #phase(
     operation: Promise<void> | undefined,
     onSuccess: () => void,

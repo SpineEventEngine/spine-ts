@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 describe("authenticated subscription public contract", () => {
   it("contains only the approved direct-record persistence model", async () => {
     const source = await readFile(
-      new URL("../../src/server/durable-subscription-bindings.ts", import.meta.url),
+      new URL("../../src/browser/durable-subscription-bindings.ts", import.meta.url),
       "utf8",
     );
 

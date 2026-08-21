@@ -58,11 +58,6 @@ export {
 export { SpineServices, type SpineServicesOptions } from "./services/spine-services.js";
 export {
   Server,
-  type BrowserAdmission,
-  type BrowserAuthRoute,
-  type BrowserBackend,
-  type BrowserServerCollaborators,
-  type BrowserServerOptions,
   type ListenerLifecycle,
   type RunningServer,
   type ServerOptions,
@@ -73,11 +68,6 @@ export {
   type ManagedServerApplicationOptions,
   type ManagedServerRestartOptions,
 } from "./server/managed-server-application.js";
-export {
-  DurableSubscriptionBindings,
-  isDurableSubscriptionBindings,
-  type DurableSubscriptionBindingsOptions,
-} from "./server/durable-subscription-bindings.js";
 export { Environment, EnvironmentType } from "./server/environment.js";
 export {
   ServerEnvironment,

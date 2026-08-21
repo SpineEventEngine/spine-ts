@@ -82,6 +82,102 @@
 - Package identity continues to prove canonical compiled/workspace server
   `External` recognition and rejection of the existing path-mapped counterfeit.
 
+## Browser/auth boundary implementation checkpoint
+
+- Classification: high-risk public package, optional-peer, authenticated gateway,
+  and lifecycle boundary. Acceptance criteria are a native-only root declaration
+  and runtime closure, a public `./browser` host surface, and unchanged browser
+  admission/cleanup semantics.
+- RED evidence: before implementation, the focused package-export suite failed
+  because `@spine-event-engine/server/browser` was absent from package exports.
+- GREEN evidence: after adding the browser subpath and removing root browser/
+  durable exports, `pnpm --config.verify-deps-before-run=false exec vitest run
+packages/server/test/package-exports.test.ts --passWithNoTests` passed 5/5;
+  the server project build completed after generated Proto prerequisites were
+  regenerated.
+- The worktree baseline has a pre-existing manifest/lockfile mismatch, so frozen
+  installation is unavailable without the release-owned lockfile update. Local
+  dependencies were installed with lockfile reads/writes disabled; no lockfile
+  is staged by this stream.
+- Browser composition now exposes standalone signal-managed `BrowserServer.run(options)`
+  and combined `BrowserServer.run(nativeServer, options)` alongside caller-managed
+  `open(...)`; the latter owns the browser listener and closes its native running
+  server on startup rollback/close. GCE/GKE and Message Board gateway entrypoints
+  now import that browser-only package surface.
+- Focused migration evidence: package exports/index plus GCE/GKE example suites
+  passed 31 tests. The Message Board deployment-config suite could not load its
+  unrelated `@spine-event-engine/delivery-client` package because its generated
+  build output is absent in this worktree.
+- Durable-binding tests now consume the browser entrypoint rather than the root;
+  their focused suite passed 44/44. The remaining browser-host cases are still
+  concentrated in `packages/server/test/server/server.test.ts` and use the
+  removed `ServerOptions.browser` shape, so they require a mechanical but large
+  migration to `BrowserServer.open/run` before the browser suite can be green.
+- Browser host and durable-binding production sources now reside under
+  `packages/server/src/browser/`; the native `src/server/` tree has no browser
+  implementation source. Focused build plus durable/public-contract/Coordinator
+  tests passed 81/81 after the move.
+- Browser test migration uses one bounded test-only composition helper that
+  delegates all former root browser construction to public `BrowserServer.open`
+  / `run` while leaving native-only construction unchanged. Static browser
+  validation runs before combined native startup. The public-bind rollback now
+  closes a supplied running native server; the single-worker browser suite
+  passes 126/126. Provider conformance passes 2/2 and Message Board deployment
+  configuration passes 23/23 after locally building ignored dependent output.
+
+## Browser/auth boundary final consumer proof
+
+- Full browser-host evidence: `packages/server/test/server/server.test.ts` was
+  run single-worker and in-order with 126/126 passing assertions. The retained
+  helper only replaces legacy construction; browser admission, CORS,
+  credentials, auth-route, durable recovery, discovery, drain, retry, and
+  startup rollback assertions remain intact.
+- Combined browser, durable, provider, Message Board, and GCE/GKE focused
+  evidence passed 137/137. Generated dependencies were locally bootstrapped
+  with verification disabled and the ten nondeterministic proto manifest files
+  restored afterwards; no lockfile is included.
+- The packed native-root consumer now installs the packed server artifact,
+  compiles and imports it without the auth package or TypeScript compiler in
+  its dependency closure. It carries `@types/node` solely to resolve the
+  native Node declaration references exposed by the root contract. Boundary
+  policy plus snapshot-artifact evidence passed 11/11.
+- `typecheck:build:generated` passed. `docs:api:check` remains blocked only by
+  the separately classified storage provider inventory regression (missing
+  TenantBoundary, TenantCatalog, and TenantCatalogProvider); this stream made
+  no further TypeDoc/API-inventory changes beyond its pushed server correction.
+
+## Browser/auth review correction batch
+
+- Combined browser composition now rejects non-loopback native builders before
+  start and rejects non-loopback running servers. Browser preflight validates
+  standalone forwarding, origins, auth routes, capacity, host, and transport
+  limits before native start; an accepted native running server closes exactly
+  once when that preflight fails.
+- Root `server.ts` no longer retains Browser/auth placeholder declarations or
+  browser helpers. The browser entrypoint publishes only `open` and `run`; its
+  validation/listener seams are source-only test access. Direct browser and
+  native lifecycle evidence passes 130/130 and 51/51 respectively.
+
+## Browser public-API test cleanup
+
+- Review identified that the broad browser suite still used a typed legacy
+  `{ ...ServerOptions, browser }` adapter which duplicated browser preflight and
+  message-limit forwarding. A bounded follow-up removed the adapter and all 58
+  call sites, replacing them with native `Server`, typed combined
+  `BrowserServer.open(...)`, or typed standalone browser host calls.
+- All five browser message-limit cases now place `readMaxBytes` or
+  `writeMaxBytes` directly in browser options. Standalone ownership cases assert
+  the actual public separation: a standalone Gateway does not accept or own a
+  native server's contexts/resources.
+- Cleanup evidence: zero `BrowserComposedOptions`/`browserComposedServer`
+  matches; browser tests 134/134, lifecycle integration 51/51, server no-emit
+  typecheck, targeted Prettier, and `git diff --check` pass. The cleanup was
+  committed and immediately pushed as `1b222fd87`.
+- Restored property-level browser API TSDoc for admission ownership, standalone
+  forwarding, canonical origins, bounded auth routes, listener limits, and
+  trusted collaborators. `docs:api:check` and server typecheck pass after the
+  provider/browser inventory integration.
+
 ## Node client and Proto Tools README stream
 
 - 2026-08-21 (Europe/Lisbon): The bounded documentation owner updated

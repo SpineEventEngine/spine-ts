@@ -46,7 +46,6 @@ interface DurableCleanupState {
   readonly caller: OnSubscriptionDefinition;
   backend: OnSubscriptionDefinition | undefined;
 }
-
 const durableCleanupStates = new WeakMap<DurableSubscriptionBindings, DurableCleanupState>();
 
 /**
