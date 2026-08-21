@@ -233,7 +233,9 @@ describe("Server", () => {
     const native = Server.atPort(0, { host: "localhost" });
     const start = vi.spyOn(native, "start");
 
-    await expect(BrowserHost.run(native, browserGateway())).rejects.toThrow("loopback native listener");
+    await expect(BrowserHost.run(native, browserGateway())).rejects.toThrow(
+      "loopback native listener",
+    );
     expect(start).not.toHaveBeenCalled();
   });
 
@@ -267,6 +269,9 @@ describe("Server", () => {
     );
     expect(error).toBeInstanceOf(AggregateError);
     expect((error as AggregateError).errors).toHaveLength(2);
+    expect((error as AggregateError).errors[0]).toMatchObject({
+      message: "Server browser origins must be unique and non-empty.",
+    });
     expect((error as AggregateError).errors[1]).toBe(closeError);
     expect(close).toHaveBeenCalledOnce();
   });

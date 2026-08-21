@@ -26,15 +26,35 @@ import type { NodeDiscovery } from "@spine-event-engine/deployment";
 /** Selects exactly one admission mode and binding ownership for a browser host. */
 export type BrowserAdmission =
   | {
+      /** Resolves authenticated application sessions from incoming credentials. */
       readonly sessions: SessionResolver;
+      /** Excludes intentionally public admission from authenticated mode. */
       readonly publicAccess?: never;
+      /** Optionally supplies application-owned authenticated subscription bindings. */
       readonly bindings?: SubscriptionBindings;
     }
-  | { readonly sessions?: never; readonly publicAccess: true; readonly bindings?: never };
+  | {
+      /** Excludes session resolution from framework-owned public admission. */
+      readonly sessions?: never;
+      /** Enables intentionally public admission and framework-owned bindings. */
+      readonly publicAccess: true;
+      /** Excludes bindings because public admission owns them process-locally. */
+      readonly bindings?: never;
+    };
 
 export type BrowserBackend =
-  | { readonly baseUrl: string; readonly baseUrls?: never }
-  | { readonly baseUrl?: never; readonly baseUrls: readonly string[] };
+  | {
+      /** Supplies one canonical HTTP(S) backend origin. */
+      readonly baseUrl: string;
+      /** Excludes a multi-backend set when one backend is supplied. */
+      readonly baseUrls?: never;
+    }
+  | {
+      /** Excludes a single backend when a fixed backend set is supplied. */
+      readonly baseUrl?: never;
+      /** Supplies a non-empty ordered set of canonical HTTP(S) backend origins. */
+      readonly baseUrls: readonly string[];
+    };
 
 export interface BrowserServerCollaborators {
   /** Public listener host; defaults to local loopback. */
