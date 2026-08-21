@@ -126,7 +126,7 @@ export const browserServerTestAccess: Readonly<{
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo>;
   closeListener(server: http.Server): Promise<void>;
   preflight(
-    native: RunningServer | string | readonly string[] | undefined,
+    mode: "combined" | "standalone",
     options: BrowserServerOptions,
   ): BrowserHostOptions;
 }> = Object.freeze({
@@ -139,7 +139,7 @@ export const browserServerTestAccess: Readonly<{
       throw new Error("Combined browser server requires a loopback native listener.");
     let options: BrowserHostOptions;
     try {
-      options = BrowserServer.preflight(native, input);
+      options = BrowserServer.preflight(native === undefined ? "standalone" : "combined", input);
     } catch (error) {
       await BrowserServerValues.rollback(
         error,
@@ -369,8 +369,8 @@ export const browserServerTestAccess: Readonly<{
     if (nativeOrOptions instanceof Server) {
       if (!serverBuilderAccess.isLoopback(nativeOrOptions))
         throw new Error("Combined browser server requires a loopback native listener.");
-      BrowserServer.preflight(undefined, options);
-    } else BrowserServer.preflight(undefined, options);
+      BrowserServer.preflight("combined", options);
+    } else BrowserServer.preflight("standalone", options);
     const native = nativeOrOptions instanceof Server ? await nativeOrOptions.start() : undefined;
     const running =
       native === undefined
@@ -383,7 +383,7 @@ export const browserServerTestAccess: Readonly<{
       () => undefined,
     );
   },
-  preflight(native, input): BrowserHostOptions {
+  preflight(mode, input): BrowserHostOptions {
     const options: BrowserHostOptions = {
       ...input,
       host: input.host ?? "127.0.0.1",
@@ -399,7 +399,7 @@ export const browserServerTestAccess: Readonly<{
       throw new Error("Browser server readMaxBytes must be a positive integer.");
     if (!Number.isInteger(options.writeMaxBytes) || options.writeMaxBytes < 1)
       throw new Error("Browser server writeMaxBytes must be a positive integer.");
-    if (native === undefined && options.backend === undefined && options.discovery === undefined)
+    if (mode === "standalone" && options.backend === undefined && options.discovery === undefined)
       throw new Error("Standalone browser server requires a backend or discovery.");
     BrowserServer.requireDurableBindings(options, options.production);
     BrowserServer.origins(options.origins);
@@ -736,7 +736,7 @@ const BrowserServerValues = Object.freeze({
     return value;
   },
   isLoopback(host: string): boolean {
-    if (host === "localhost" || host === "::1" || host === "::ffff:127.0.0.1") return true;
+    if (host === "::1" || host === "::ffff:127.0.0.1") return true;
     const match = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(host);
     return match !== null && match.slice(1).every((part) => Number(part) <= 255);
   },

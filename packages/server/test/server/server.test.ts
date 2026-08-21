@@ -211,6 +211,32 @@ describe("Server", () => {
     await running.close();
   });
 
+  it("starts and closes a loopback combined browser host without standalone forwarding", async () => {
+    const native = Server.atPort(0, { host: "127.0.0.1" });
+    const running = await BrowserHost.run(native, browserGateway());
+
+    expect(running.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:/u);
+    await running.close();
+  });
+
+  it("preflights invalid combined options before native start", async () => {
+    const native = Server.atPort(0, { host: "127.0.0.1" });
+    const start = vi.spyOn(native, "start");
+
+    await expect(BrowserHost.run(native, { ...browserGateway(), origins: [] })).rejects.toThrow(
+      "origins must be unique and non-empty",
+    );
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("rejects localhost before combined native start", async () => {
+    const native = Server.atPort(0, { host: "localhost" });
+    const start = vi.spyOn(native, "start");
+
+    await expect(BrowserHost.run(native, browserGateway())).rejects.toThrow("loopback native listener");
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it("closes an accepted native listener when public option preflight fails", async () => {
     const close = vi.fn().mockResolvedValue(undefined);
     const native: RunningServer = {
@@ -223,6 +249,25 @@ describe("Server", () => {
     await expect(BrowserHost.open(native, { ...browserGateway(), origins: [] })).rejects.toThrow(
       "origins must be unique and non-empty",
     );
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("aggregates accepted-native preflight and close failures in order", async () => {
+    const closeError = new Error("native close failed");
+    const close = vi.fn().mockRejectedValue(closeError);
+    const native: RunningServer = {
+      host: "127.0.0.1",
+      port: 65534,
+      baseUrl: "http://127.0.0.1:65534",
+      close,
+    };
+
+    const error = await BrowserHost.open(native, { ...browserGateway(), origins: [] }).catch(
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors).toHaveLength(2);
+    expect((error as AggregateError).errors[1]).toBe(closeError);
     expect(close).toHaveBeenCalledOnce();
   });
 
