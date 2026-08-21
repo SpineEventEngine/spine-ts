@@ -2,6 +2,13 @@
 
 This reference describes the public server contracts for coding agents.
 
+## Delivery SPI
+
+Delivery adapters import `conditionalPickUp` from
+`@spine-event-engine/server/spi/delivery`. It registers or looks up an optional
+conditional-pickup capability for a `DeliveryWorkRegistry`; it is not part of
+the server root API and does not create delivery work on its own.
+
 ## Integration broker and event origin
 
 Each `BoundedContext` creates and closes exactly one private integration broker.

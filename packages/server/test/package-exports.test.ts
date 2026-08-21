@@ -58,6 +58,21 @@ describe("@spine-event-engine/server package exports", () => {
     void resetServerEnvironmentForTest;
   });
 
+  it("resolves the delivery SPI through its declared package subpath", () => {
+    const output = execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        `import { conditionalPickUp } from "@spine-event-engine/server/spi/delivery";
+         process.stdout.write(typeof conditionalPickUp.register);`,
+      ],
+      { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+    );
+
+    expect(output).toBe("function");
+  });
+
   it("restores local defaults after testing reset from a production-profile process", () => {
     const output = execFileSync(
       process.execPath,

@@ -54,11 +54,11 @@ import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/ser
 import { EntityTypeNameSchema } from "@spine-event-engine/proto/generated/spine/system/server/entity_type_pb.js";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
-  TenantBoundary,
   type StorageContext,
   type StorageFactory,
   type StorageMode,
 } from "@spine-event-engine/storage";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import type {
   EntityEventHistoryPort,
   EntityRecordStorage,

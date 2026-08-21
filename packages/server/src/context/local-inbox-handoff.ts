@@ -14,7 +14,7 @@
 
 import type { Any } from "@bufbuild/protobuf/wkt";
 import type { TenantId } from "@spine-event-engine/proto";
-import { TenantBoundary } from "@spine-event-engine/storage";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
 import { Delivery, type DeliveryEndpointMessage } from "../delivery/delivery.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";

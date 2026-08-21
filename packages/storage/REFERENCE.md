@@ -7,15 +7,17 @@ This reference is for agents working with the Spine TS storage contract.
 Import public types from `@spine-event-engine/storage`. The entry point exports
 `StorageFactory`, `RecordStorage`, `RecordSpec`, `RecordSpecOptions`, `RecordColumn`, `RecordQuery`,
 `RecordMask`, `StorageGroup`, `ColumnTypes`, `ColumnMappings`, the exported
-column-mapping contracts, `TenantBoundary`, `TenantCatalog`,
-`TenantCatalogProvider`, `InMemoryStorageFactory`,
+column-mapping contracts, `InMemoryStorageFactory`,
 `InMemoryStorageBackend`, event-store types, normalized query policy/evaluator
 types, and entity history interfaces.
-The `./internal/entity-history` subpath supplies Entity records, source-type
-inputs, and current/state/event-history ports. The separate
-`./internal/entity-commit` subpath supplies atomic commit input/result types,
-`EntityCommitStorage`, and `EntityCommitStorageFactories`; both are
-framework/provider seams, not application-facing remote APIs.
+
+## Provider SPI
+
+Storage-adapter implementers import the complete provider-only contract set from
+`@spine-event-engine/storage/provider`: Event Store record access, Entity
+history and atomic commit contracts, query values, tenant boundaries/catalogs,
+and delivery-cleanup handles. The storage root intentionally does not export
+these provider seams; application code uses its root storage contracts instead.
 
 ## Record storage
 
@@ -99,7 +101,7 @@ its scoped rows.
 
 ## Entity storage
 
-The `./internal/entity-history` seam supplies the framework's Entity storage
+The provider SPI supplies the framework's Entity storage
 ports. Current Entity state is a generated `spine.server.entity.EntityRecord`.
 Retained state history stores generated `EntityStateKey`/`EntityRecord` rows in
 a `StorageGroup` named after the Entity state type. Retained diagnostic event
@@ -112,7 +114,7 @@ not open or allocate its grouped records. Current Entity loading always uses
 the current record, never retained history. Event history is diagnostic data,
 not a source for rebuilding current state.
 
-The separate `./internal/entity-commit` port combines one current record with
+The provider SPI's Entity commit contract combines one current record with
 the nonempty enabled history families and delivery events. For the in-memory
 provider only, that operation stages and atomically publishes its touched
 families. Its outcomes are `"committed"` and `"conflict"`; it has no receipt or

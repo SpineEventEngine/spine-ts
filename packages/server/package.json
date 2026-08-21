@@ -31,9 +31,9 @@
       "types": "./dist/handler/handler-codegen.d.ts",
       "default": "./dist/handler/handler-codegen.js"
     },
-    "./internal/conditional-pickup": {
-      "types": "./dist/delivery/conditional-pickup.d.ts",
-      "default": "./dist/delivery/conditional-pickup.js"
+    "./spi/delivery": {
+      "types": "./dist/spi/delivery.d.ts",
+      "default": "./dist/spi/delivery.js"
     }
   },
   "files": [
