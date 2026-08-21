@@ -245,7 +245,7 @@ export class Server {
       ProcessServerCoordinator.add(
         server,
         environment,
-        environment === undefined ? undefined : serverEnvironmentAccess.loggerFor(environment),
+        serverEnvironmentAccess.loggerFor(environment),
         () => {
           if (this.#run === running) {
             this.#run = undefined;
@@ -510,7 +510,7 @@ export const serverBuilderAccess: Readonly<{
 function isLoopbackHost(host: string): boolean {
   if (host === "::1" || host === "::ffff:127.0.0.1") return true;
   const match = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(host);
-  return match !== null && match.slice(1).every((part) => Number(part) <= 255);
+  return match?.slice(1).every((part) => Number(part) <= 255) === true;
 }
 
 /**

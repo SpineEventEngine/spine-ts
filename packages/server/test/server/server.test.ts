@@ -57,7 +57,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   BoundedContext,
-  Environment,
   EnvironmentType,
   Server,
   ServerEnvironment,
@@ -921,8 +920,7 @@ describe("Server", () => {
   });
 
   it("rejects local ownership for discovery-only browser hosting", async () => {
-    let closed = false;
-    void closed;
+    const closed = false;
     await expect(
       openStandalone({
         ...browserGateway(),

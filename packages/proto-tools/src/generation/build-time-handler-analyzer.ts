@@ -367,8 +367,8 @@ const entityBaseNames = new Set(["Aggregate", "Projection", "ProcessManager"]);
 const maxAliasDepth = 50;
 // `spine.options.entity` in the frozen `spine/options.proto` contract.
 const entityOptionFieldNumber = 73903;
-let protobuf: typeof Protobuf;
-let protobufWkt: typeof ProtobufWkt;
+let packageDependencies:
+  { readonly protobuf: typeof Protobuf; readonly protobufWkt: typeof ProtobufWkt } | undefined;
 
 const HandlerSources = Object.freeze({
   appSourceFiles(program: ts.Program): readonly ts.SourceFile[] {
@@ -1793,6 +1793,7 @@ const HandlerSources = Object.freeze({
     }
 
     try {
+      const { protobuf, protobufWkt } = PackageDependencies.current();
       const file = protobuf.fromBinary(
         protobufWkt.FileDescriptorProtoSchema,
         Buffer.from(descriptor.text, "base64"),
@@ -1866,31 +1867,37 @@ export const PackageIdentity: Readonly<{ nameFor(sourceFile: string): string | u
   Object.freeze({
     nameFor(sourceFile: string): string | undefined {
       let directory = resolve(dirname(sourceFile));
-      while (true) {
-        const manifest = join(directory, "package.json");
-        if (existsSync(manifest)) {
-          try {
-            const { name } = JSON.parse(readFileSync(manifest, "utf8")) as { name?: unknown };
-            return typeof name === "string" ? name : undefined;
-          } catch {
-            return undefined;
-          }
-        }
+      let manifest = join(directory, "package.json");
+      while (!existsSync(manifest)) {
         const parent = dirname(directory);
         if (parent === directory) return undefined;
         directory = parent;
+        manifest = join(directory, "package.json");
+      }
+      try {
+        const { name } = JSON.parse(readFileSync(manifest, "utf8")) as { name?: unknown };
+        return typeof name === "string" ? name : undefined;
+      } catch {
+        return undefined;
       }
     },
   });
 
 const PackageDependencies = Object.freeze({
   load(program: ts.Program): void {
-    if (protobuf !== undefined && protobufWkt !== undefined) return;
-    protobuf = PackageDependencies.require("@bufbuild/protobuf", program) as typeof Protobuf;
-    protobufWkt = PackageDependencies.require(
-      "@bufbuild/protobuf/wkt",
-      program,
-    ) as typeof ProtobufWkt;
+    packageDependencies ??= {
+      protobuf: PackageDependencies.require("@bufbuild/protobuf", program) as typeof Protobuf,
+      protobufWkt: PackageDependencies.require(
+        "@bufbuild/protobuf/wkt",
+        program,
+      ) as typeof ProtobufWkt,
+    };
+  },
+
+  current(): { readonly protobuf: typeof Protobuf; readonly protobufWkt: typeof ProtobufWkt } {
+    if (packageDependencies === undefined)
+      throw new Error("Build handler analyzer dependencies are not loaded.");
+    return packageDependencies;
   },
 
   require(specifier: string, program: ts.Program): unknown {
