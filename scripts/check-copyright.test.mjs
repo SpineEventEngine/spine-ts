@@ -308,6 +308,23 @@ describe("copyright checker", () => {
     ).toEqual([]);
   });
 
+  it("falls back to origin/master when origin/main is unavailable", () => {
+    const calls = [];
+    const comparison = gitComparison((args) => {
+      calls.push(args);
+      if (args.join(" ") === "merge-base origin/main HEAD") return { status: 128, stdout: "" };
+      if (args.join(" ") === "merge-base origin/master HEAD")
+        return { status: 0, stdout: "base\n" };
+      return { status: 0, stdout: "" };
+    });
+
+    expect(comparison.deletedBasePaths()).toEqual([]);
+    expect(calls.slice(0, 2)).toEqual([
+      ["merge-base", "origin/main", "HEAD"],
+      ["merge-base", "origin/master", "HEAD"],
+    ]);
+  });
+
   it("does not make a single rename ambiguous when Git reports it in multiple comparisons", () => {
     const old = `${compliantHeader}${body}`;
     const comparison = gitComparison((args) => {
