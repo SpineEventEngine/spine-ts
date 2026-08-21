@@ -31,7 +31,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   GeneratedRegistryWriter,
   type BuildHandlerAnalysis,
-} from "@spine-event-engine/proto-tools/testing";
+} from "../src/generation/generated-registry-writer.js";
 
 describe("generated registry writer", () => {
   it("renders deterministic registry source from analyzed handlers", () => {
@@ -475,7 +475,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("@spine-event-engine/proto-tools/testing");
+        await import("../src/generation/generated-registry-writer.js");
 
       expect(() =>
         new MockedWriter().write(analysis(repoRoot), {
@@ -515,7 +515,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("@spine-event-engine/proto-tools/testing");
+        await import("../src/generation/generated-registry-writer.js");
 
       expect(() =>
         new MockedWriter().write(analysis(repoRoot), {
@@ -630,7 +630,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("@spine-event-engine/proto-tools/testing");
+        await import("../src/generation/generated-registry-writer.js");
 
       expect(() =>
         new MockedWriter().write(analysis(repoRoot), {

@@ -47,7 +47,7 @@ export default defineConfig({
         "examples/*/*/generated/**",
         // The build-time handler analyzer is a TypeScript compiler integration
         // with focused tests; keep global thresholds centered on runtime code.
-        "packages/server/src/handler/build-time-handler-analyzer.ts",
+        "packages/proto-tools/src/generation/build-time-handler-analyzer.ts",
         // Vitest cannot execute raw TypeScript standard decorators here; the
         // example test covers this source through its `tsc` output.
         "examples/todo/src/index.ts",
