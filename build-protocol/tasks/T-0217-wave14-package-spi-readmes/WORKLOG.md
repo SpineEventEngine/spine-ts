@@ -50,3 +50,23 @@
   the production dependency split removes the detected installed packages.
 - Next: subsequent Wave 14 implementation streams satisfy the retained red
   contracts, then rerun the focused consumer through compile/import.
+
+## Node client and Proto Tools README stream
+
+- 2026-08-21 (Europe/Lisbon): The bounded documentation owner updated
+  `packages/client-node/README.md` and `packages/proto-tools/README.md` only.
+  Both now identify their external audience, label the `2.0.0-snapshot.3`
+  install as experimental, state prerequisites, lead with a concrete first
+  success, link `REFERENCE.md` before advanced detail, and state cleanup or
+  build-time limits. The Client Node examples retain source-backed, real public
+  declarations and now use hidden snippet-context directives. Proto Tools
+  removes its unnecessary programmatic-internals snippet and teaches the public
+  CLI model-generation flow. Baseline red evidence was the three visible
+  in-fence `docs-snippet-path` controls reported by the focused snippet checker.
+  Focused green validation passed: the two README snippet checker invocation
+  reported no diagnostics; `scripts/check-typescript-snippets.test.mjs` passed
+  15/15; audience policy, exact-path Prettier, and `git diff --check` passed.
+  Documentation-only `pnpm verify:task -- --no-tests` passed after its normal
+  Node, Proto, TypeScript, lint, documentation, and release-readiness gates.
+  The external implementation report is recorded at the Wave 14 planning path.
+  Commit and immediate push remain pending.
