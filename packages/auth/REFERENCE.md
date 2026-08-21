@@ -53,7 +53,7 @@ ResolveContext returns informational trusted actor and tenant facts in both mode
 
 `SubscriptionGateway` and `InMemorySubscriptionBindings` compose subscription creation, activation, cancellation, and relaying at the gateway boundary. The Gateway accepts a logical `SubscriptionCoordinator`; native `SubscriptionCreator` instances remain a per-node implementation seam. This is an intentional replacement of the former public native-creator input, with no compatibility adapter because Spine TS has no deployed users. In-memory bindings are local to one process and have finite operation limits; they do not provide cross-machine propagation. `createNativeGatewayServices`, `NativeSubscriptionCreator`, and `SubscriptionUpdateRelay` adapt these public contracts to the native service layer. They do not make a deployment secure by themselves: applications choose how their listener accepts only gateway-routed traffic.
 
-`DurableSubscriptionBindings` in the Server package retains one approved
+`DurableSubscriptionBindings` from `@spine-event-engine/server/browser` retains one approved
 `GatewayAuthenticatedSubscription` per public Subscription. The retained Topic
 includes the trusted Actor and Tenant, so Activate and Cancel compare that pair
 with the newly resolved request context. It is single-Gateway persistence, not

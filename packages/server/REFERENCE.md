@@ -275,7 +275,7 @@ callback failures are isolated from post-commit observation and other
 consumers. The package does not guarantee cluster-complete observations,
 subscription replay, event-gap repair, or exactly-once effects.
 
-### Standalone and browser hosting
+### Native and managed hosting
 
 `Server.start()` installs no process signal handlers, never closes its
 environment, and shares only a caller-managed active generation. `Server.run()`
@@ -317,12 +317,10 @@ call on a sibling child. Subscription fan-out follows current READY members;
 later and replacement members attach the retained subscription before managed
 admission.
 
-`ServerOptions.browser` changes the public listener, not the bounded-context
-services. The native HTTP/2 backend binds to an ephemeral loopback port and is
-never returned. After it is ready, the server creates `UnaryGateway`,
-`SubscriptionGateway`, and native gateway services, then binds one HTTP/1.1
-Connect/gRPC-Web listener. A public bind failure closes subscription resources
-and the native backend; multiple rollback failures are aggregated.
+`ServerOptions` is native-only: it configures contexts, resources, services,
+and the native listener. It has no `browser` option and the root package does
+not load `@spine-event-engine/auth`. Browser hosting belongs to the explicit
+`@spine-event-engine/server/browser` entry point; see the [browser/auth guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
 
 Browser unary gateway admission has a fixed 1 MiB (1,048,576-byte) request
 limit. A larger unary gateway request is rejected with `ResourceExhausted`.
@@ -331,7 +329,7 @@ gRPC-Web transport message accepted by the public listener, so the effective
 inbound limit is the stricter applicable limit. `writeMaxBytes` limits public
 transport responses independently.
 
-Browser origins must be unique canonical HTTP(S) origins with no path, query,
+For `BrowserServer` from `@spine-event-engine/server/browser`, origins must be unique canonical HTTP(S) origins with no path, query,
 fragment, or trailing slash. Requests without an allowed exact `Origin` receive
 403 before RPC handling. Allowed responses include credentialed exact-origin
 CORS, `Vary: Origin`, protocol request headers, and exposed gRPC status headers.
@@ -380,7 +378,7 @@ can be retried without repeating completed native cleanup.
 Browser subscription bindings are separate from service subscription records.
 `BrowserAdmission` selects their ownership. Authenticated mode supplies
 `sessions` and may supply `BrowserServerOptions.bindings`; production then
-requires the Server package's `DurableSubscriptionBindings` and rejects a
+requires `DurableSubscriptionBindings` from `@spine-event-engine/server/browser` and rejects a
 missing or in-memory binding store before listener open. Public mode supplies
 `publicAccess: true`, cannot supply bindings, and uses framework-owned
 process-local bindings. The durable registry receives an explicit application
@@ -499,4 +497,4 @@ environment: attachment supervisors and their source reads belong to that facili
 
 # Dynamic unary discovery
 
-`BrowserServerOptions.discovery` may supply changing complete application-node snapshots alongside fixed `backend` configuration. Both unary routing and native subscription streams use the same current membership. Empty membership retains durable definitions and later nodes reactivate them; a new backend-dependent subscription is unavailable until a node exists.
+`BrowserServerOptions.discovery` from `@spine-event-engine/server/browser` may supply changing complete application-node snapshots alongside fixed `backend` configuration. Both unary routing and native subscription streams use the same current membership. Empty membership retains durable definitions and later nodes reactivate them; a new backend-dependent subscription is unavailable until a node exists.
