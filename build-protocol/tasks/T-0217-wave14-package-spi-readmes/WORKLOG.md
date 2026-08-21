@@ -157,6 +157,22 @@ packages/server/test/package-exports.test.ts --passWithNoTests` passed 5/5;
   browser helpers. The browser entrypoint publishes only `open` and `run`; its
   validation/listener seams are source-only test access. Direct browser and
   native lifecycle evidence passes 130/130 and 51/51 respectively.
+
+## Browser public-API test cleanup
+
+- Review identified that the broad browser suite still used a typed legacy
+  `{ ...ServerOptions, browser }` adapter which duplicated browser preflight and
+  message-limit forwarding. A bounded follow-up removed the adapter and all 58
+  call sites, replacing them with native `Server`, typed combined
+  `BrowserServer.open(...)`, or typed standalone browser host calls.
+- All five browser message-limit cases now place `readMaxBytes` or
+  `writeMaxBytes` directly in browser options. Standalone ownership cases assert
+  the actual public separation: a standalone Gateway does not accept or own a
+  native server's contexts/resources.
+- Cleanup evidence: zero `BrowserComposedOptions`/`browserComposedServer`
+  matches; browser tests 134/134, lifecycle integration 51/51, server no-emit
+  typecheck, targeted Prettier, and `git diff --check` pass. The cleanup was
+  committed and immediately pushed as `1b222fd87`.
 - Restored property-level browser API TSDoc for admission ownership, standalone
   forwarding, canonical origins, bounded auth routes, listener limits, and
   trusted collaborators. `docs:api:check` and server typecheck pass after the
