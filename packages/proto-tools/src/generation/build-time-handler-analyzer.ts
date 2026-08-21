@@ -1861,25 +1861,26 @@ const HandlerSources = Object.freeze({
   },
 });
 
-export const PackageIdentity = Object.freeze({
-  nameFor(sourceFile: string): string | undefined {
-    let directory = resolve(dirname(sourceFile));
-    while (true) {
-      const manifest = join(directory, "package.json");
-      if (existsSync(manifest)) {
-        try {
-          const { name } = JSON.parse(readFileSync(manifest, "utf8")) as { name?: unknown };
-          return typeof name === "string" ? name : undefined;
-        } catch {
-          return undefined;
+export const PackageIdentity: Readonly<{ nameFor(sourceFile: string): string | undefined }> =
+  Object.freeze({
+    nameFor(sourceFile: string): string | undefined {
+      let directory = resolve(dirname(sourceFile));
+      while (true) {
+        const manifest = join(directory, "package.json");
+        if (existsSync(manifest)) {
+          try {
+            const { name } = JSON.parse(readFileSync(manifest, "utf8")) as { name?: unknown };
+            return typeof name === "string" ? name : undefined;
+          } catch {
+            return undefined;
+          }
         }
+        const parent = dirname(directory);
+        if (parent === directory) return undefined;
+        directory = parent;
       }
-      const parent = dirname(directory);
-      if (parent === directory) return undefined;
-      directory = parent;
-    }
-  },
-});
+    },
+  });
 
 function requirePackage(specifier: string): unknown {
   const directRequire = createRequire(import.meta.url);
