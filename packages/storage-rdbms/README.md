@@ -35,7 +35,12 @@ Provide a MySQL URL that includes a database name. Building the factory opens
 its pool only; each record family creates and verifies its private table lazily
 on first use.
 
+<!-- docs-snippet-path: packages/storage-rdbms/src/index.ts -->
+
 ```ts
+import { create, ScalarType } from "@bufbuild/protobuf";
+import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
 
 const factory = await MysqlStorageFactory.newBuilder()
@@ -45,10 +50,24 @@ const factory = await MysqlStorageFactory.newBuilder()
     tls: { rejectUnauthorized: true },
   })
   .build();
+const records = factory.createRecordStorage(
+  { name: "Tasks", multitenant: false },
+  new RecordSpec<string, StringValue>({
+    recordType: StringValueSchema,
+    idKind: "string",
+    extractId: (record) => record.value,
+    columns: [
+      new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
+    ],
+  }),
+);
 
 try {
-  // Pass factory to a Spine TS server or create record storage through it.
+  await records.write(create(StringValueSchema, { value: "task-42" }));
+  const stored = await records.read("task-42");
+  if (stored?.value !== "task-42") throw new Error("The record was not stored.");
 } finally {
+  await records.close();
   factory.close();
 }
 ```

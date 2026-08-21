@@ -34,13 +34,38 @@ The snapshot tag can change before a stable release.
 Give the adapter an already configured Datastore client when the application
 controls Google authentication and client lifetime.
 
+<!-- docs-snippet-path: packages/storage-datastore/src/index.ts -->
+
 ```ts
 import { Datastore } from "@google-cloud/datastore";
+import { create, ScalarType } from "@bufbuild/protobuf";
+import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 
 const factory = DatastoreStorageFactory.newBuilder()
   .setClient(new Datastore({ projectId: "my-project" }))
   .build();
+const records = factory.createRecordStorage(
+  { name: "Tasks", multitenant: false },
+  new RecordSpec<string, StringValue>({
+    recordType: StringValueSchema,
+    idKind: "string",
+    extractId: (record) => record.value,
+    columns: [
+      new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
+    ],
+  }),
+);
+
+try {
+  await records.write(create(StringValueSchema, { value: "task-42" }));
+  const stored = await records.read("task-42");
+  if (stored?.value !== "task-42") throw new Error("The record was not stored.");
+} finally {
+  await records.close();
+  factory.close();
+}
 ```
 
 The builder always uses a client supplied by the caller. Its fixed finite reconciliation

@@ -23,6 +23,8 @@ Use static discovery for local development or a combined deployment. Each
 replacement is the complete authoritative membership set, not an incremental
 update.
 
+<!-- docs-snippet-path: packages/deployment/src/index.ts -->
+
 ```ts
 import { ApplicationNode, StaticNodeDiscovery } from "@spine-event-engine/deployment";
 
@@ -30,7 +32,15 @@ const discovery = new StaticNodeDiscovery([
   new ApplicationNode({ id: "node/a", endpoint: "http://127.0.0.1:8080" }),
 ]);
 
-discovery.replace([]);
+let published: readonly ApplicationNode[] = [];
+const stop = discovery.watch((nodes) => {
+  published = nodes;
+});
+try {
+  if (published[0]?.id !== "node/a") throw new Error("The static node was not published.");
+} finally {
+  await stop();
+}
 ```
 
 ## When nodes are independently replaced

@@ -42,18 +42,20 @@ void guest;
 Create a named scope when a test needs to act as a particular user. Scopes send
 queries, post commands, and create subscriptions through the public client API.
 
-<!-- docs-snippet-path: packages/testing/src/black-box/black-box.ts -->
+<!-- docs-snippet-path: examples/todo/test/black-box.test.ts -->
 
 ```ts
+import { create } from "@bufbuild/protobuf";
+import { CreateTaskSchema } from "../generated/spine/examples/todo/task_commands_pb.js";
 import type { BlackBox } from "@spine-event-engine/testing";
 
 declare const box: BlackBox;
 const alice = box.onBehalfOf("alice");
-const result = await box.eventually(
-  async () => ({ actor: alice }),
-  (response) => response.actor === alice,
+const acknowledgement = await alice.post(
+  CreateTaskSchema,
+  create(CreateTaskSchema, { id: { value: "task-42" }, title: "First task" }),
 );
-void result;
+if (acknowledgement.kind !== "ok") throw new Error("CreateTask was not accepted.");
 ```
 
 ## ⏳ Observe an asynchronous result

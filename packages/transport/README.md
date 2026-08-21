@@ -25,11 +25,47 @@ code request its typed `MessageChannel`. The channel carries generated
 `ExternalMessage` values and canonical target type URLs; it does not serialize
 them for another process.
 
+<!-- docs-snippet-path: packages/transport/test/memory/message-transport.test.ts -->
+
 ```ts
+import { create, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import {
+  BoundedContextNameSchema,
+  ChannelIdSchema,
+  ExternalMessageSchema,
+} from "@spine-event-engine/proto";
 import { InMemoryTransportFactory } from "@spine-event-engine/transport";
 
-const transport = new InMemoryTransportFactory();
-void transport;
+const factory = new InMemoryTransportFactory();
+const channel = create(ChannelIdSchema, { targetType: "type.spine.io/acme.tasks.Task" });
+const subscriber = await factory.createSubscriber(channel);
+const received: string[] = [];
+const consumer = await subscriber.addConsumer((message) => {
+  received.push(message.id?.typeUrl ?? "");
+});
+const publisher = await factory.createPublisher(channel);
+const id = create(AnySchema, {
+  typeUrl: "type.spine.io/google.protobuf.StringValue",
+  value: toBinary(StringValueSchema, create(StringValueSchema, { value: "task-42" })),
+});
+
+try {
+  await publisher.publish(
+    id,
+    create(ExternalMessageSchema, {
+      id,
+      originalMessage: id,
+      boundedContextName: create(BoundedContextNameSchema, { value: "tasks" }),
+    }),
+  );
+  if (received[0] !== id.typeUrl) throw new Error("The consumer did not receive the frame.");
+} finally {
+  await consumer.close();
+  await subscriber.close();
+  await publisher.close();
+  await factory.close();
+}
 ```
 
 ## What it does not provide
