@@ -117,3 +117,10 @@
   `packages/server/src/browser/`; the native `src/server/` tree has no browser
   implementation source. Focused build plus durable/public-contract/Coordinator
   tests passed 81/81 after the move.
+- Browser test migration uses one bounded test-only composition helper that
+  delegates all former root browser construction to public `BrowserServer.open`
+  / `run` while leaving native-only construction unchanged. Static browser
+  validation runs before combined native startup. The public-bind rollback now
+  closes a supplied running native server; the single-worker browser suite
+  passes 126/126. Provider conformance passes 2/2 and Message Board deployment
+  configuration passes 23/23 after locally building ignored dependent output.

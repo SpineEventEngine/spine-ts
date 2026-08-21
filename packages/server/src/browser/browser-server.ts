@@ -143,7 +143,9 @@ export const BrowserServer: Readonly<{
     const running = BrowserServerValues.running(native);
     const backendBaseUrls =
       native === undefined
-        ? []
+        ? options.backend === undefined
+          ? []
+          : BrowserServer.backendUrls(BrowserServerValues.backendUrlsFor(options.backend))
         : Array.isArray(native)
           ? BrowserServer.backendUrls(native)
           : [
@@ -324,6 +326,7 @@ export const BrowserServer: Readonly<{
         stopDiscovery?.(),
         dynamic.close(),
         BrowserServer.closeListener(server),
+        running?.close(),
       ]);
       const failures = cleanup.flatMap((result) =>
         result.status === "rejected" ? [result.reason] : [],
