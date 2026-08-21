@@ -245,5 +245,5 @@ kind, and key. The runtime never chooses a winner.
 ## 🔗 Learn more
 
 - [Storage API](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage/README.md)
-- [Datastore guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/USER_GUIDE.md#12-develop-with-google-cloud-datastore)
+- [Datastore guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/USER_GUIDE.md#6-persist-application-data)
 - [Reference for coding agents](REFERENCE.md)

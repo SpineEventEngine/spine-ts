@@ -219,5 +219,5 @@ new `ID`; migrate those rows offline and stop on every conflict.
 ## 🔗 Learn more
 
 - [Storage API](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage/README.md)
-- [End-user storage guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/USER_GUIDE.md#13-develop-with-mysql-rdbms-storage)
+- [End-user storage guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/USER_GUIDE.md#6-persist-application-data)
 - [Reference for coding agents](REFERENCE.md)

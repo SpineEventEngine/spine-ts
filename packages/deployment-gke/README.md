@@ -140,7 +140,7 @@ sessions and may supply named durable subscription bindings; public mode
 supplies `publicAccess: true`, and the framework owns process-local bindings.
 Both modes supply authorization, trusted actor-context resolution, allowed
 origins, a clock, and a type registry. The complete
-[server browser guide](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/server/README.md#serve-browser-clients) and
+[server browser guide](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/server/README.md#browser-gateway-migration) and
 [browser authentication guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explain those application integration points.
 
