@@ -108,3 +108,8 @@
   passed 31 tests. The Message Board deployment-config suite could not load its
   unrelated `@spine-event-engine/delivery-client` package because its generated
   build output is absent in this worktree.
+- Durable-binding tests now consume the browser entrypoint rather than the root;
+  their focused suite passed 44/44. The remaining browser-host cases are still
+  concentrated in `packages/server/test/server/server.test.ts` and use the
+  removed `ServerOptions.browser` shape, so they require a mechanical but large
+  migration to `BrowserServer.open/run` before the browser suite can be green.
