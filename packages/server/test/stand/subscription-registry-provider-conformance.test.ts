@@ -27,13 +27,13 @@ import {
   type StorageContext,
   type StorageFactory,
 } from "@spine-event-engine/storage";
-import { createPool } from "../../../storage-rdbms/node_modules/mysql2/promise.js";
+import { createPool } from "mysql2/promise";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StorageSubscriptionRegistry } from "../../src/stand/subscription-registry.js";
-import { MysqlStorageFactory } from "../../../storage-rdbms/src/index.js";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
 
-vi.mock("../../../storage-rdbms/node_modules/mysql2/promise.js", () => ({ createPool: vi.fn() }));
+vi.mock("mysql2/promise", () => ({ createPool: vi.fn() }));
 
 function id(value: string): SubscriptionId {
   return create(SubscriptionIdSchema, { value });

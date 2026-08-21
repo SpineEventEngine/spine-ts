@@ -1,3 +1,6 @@
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, posix } from "node:path";
+
 const dependencyGroups = [
   "dependencies",
   "devDependencies",
@@ -40,7 +43,7 @@ export function validatePublicationInventory(root) {
     .sort((left, right) => left.localeCompare(right));
   const expected = [...frameworkPackageNames].sort((left, right) => left.localeCompare(right));
   const problems = [];
-  if (rootManifest.version !== "2.0.0-snapshot.2") problems.push("root must use snapshot.2");
+  if (rootManifest.version !== "2.0.0-snapshot.3") problems.push("root must use snapshot.3");
   if (JSON.stringify(actual) !== JSON.stringify(expected))
     problems.push("public package paths do not match exact inventory");
   for (const name of expected) {
@@ -84,7 +87,7 @@ export function publicManifestProblems(manifest) {
   const problems = [];
   if (!frameworkPackageNames.includes(name))
     problems.push(name + " is not in the public inventory");
-  if (manifest.version !== "2.0.0-snapshot.2") problems.push(name + " must use snapshot.2");
+  if (manifest.version !== "2.0.0-snapshot.3") problems.push(name + " must use snapshot.3");
   if (manifest.private === true) problems.push(name + " must not be private");
   if (manifest.license !== "Apache-2.0") problems.push(name + " must use Apache-2.0");
   if (typeof manifest.description !== "string" || !manifest.description.trim())
@@ -149,8 +152,8 @@ export function internalRuntimeDependencyProblems(manifest) {
   const problems = [];
   for (const group of ["dependencies", "optionalDependencies", "peerDependencies"]) {
     for (const [dependency, version] of Object.entries(manifest[group] || {})) {
-      if (frameworkPackageNames.includes(dependency) && version !== "2.0.0-snapshot.2")
-        problems.push(name + " " + group + " " + dependency + " must use snapshot.2");
+      if (frameworkPackageNames.includes(dependency) && version !== "2.0.0-snapshot.3")
+        problems.push(name + " " + group + " " + dependency + " must use snapshot.3");
       if (dependency === "@spine-event-engine/validation" && version !== "2.0.0-snapshot.7")
         problems.push(name + " validation must use snapshot.7");
     }
@@ -231,5 +234,183 @@ export function packedArchiveProblems(manifest, entries) {
 
   return problems.sort((left, right) => left.localeCompare(right));
 }
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+
+/**
+ * Reports README links that cannot be followed from the packed package alone.
+ *
+ * @param {Record<string, unknown>} manifest packed package manifest
+ * @param {readonly string[]} entries tar entry paths without the package prefix
+ * @param {string} readme packed README source
+ * @returns {string[]} sorted policy violations
+ */
+export function packedReadmeLinkProblems(manifest, entries, readme) {
+  const name = typeof manifest.name === "string" ? manifest.name : "<unnamed package>";
+  const files = new Set(entries.map((entry) => entry.replace(/^package\//u, "")));
+  const problems = [];
+
+  for (const target of markdownLinkTargets(readme)) {
+    const path = localLinkPath(target);
+    if (path === undefined) continue;
+    const decodedPath = decodeLinkPath(path.split(/[?#]/u, 1)[0])
+      .replace(/\\([!"#$%&'()*+,./:;<=>?@[\\\]^_`{|}~ -])/gu, "$1")
+      .replaceAll("\\", "/");
+    const normalized = posix.normalize(decodedPath);
+    if (
+      decodedPath.startsWith("/") ||
+      /^[a-z]:\//iu.test(decodedPath) ||
+      normalized === ".." ||
+      normalized.startsWith("../")
+    ) {
+      problems.push(`${name} README link escapes package artifact: ${target}`);
+    } else if (!files.has(normalized)) {
+      problems.push(`${name} README link is missing from package artifact: ${target}`);
+    }
+  }
+
+  return [...new Set(problems)].sort((left, right) => left.localeCompare(right));
+}
+
+function markdownLinkTargets(readme) {
+  const targets = [];
+  let activeFence;
+
+  for (const sourceLine of readme.split("\n")) {
+    const delimiter = fenceDelimiter(sourceLine);
+    if (activeFence !== undefined) {
+      if (
+        delimiter !== undefined &&
+        delimiter[0] === activeFence[0] &&
+        delimiter.length >= activeFence.length
+      ) {
+        activeFence = undefined;
+      }
+      continue;
+    }
+    if (delimiter !== undefined) {
+      activeFence = delimiter;
+      continue;
+    }
+    if (/^(?: {4}|\t)/u.test(sourceLine)) continue;
+
+    const line = stripInlineCode(sourceLine);
+    const reference = /^\s{0,3}\[[^\]]+\]:\s*/u.exec(line);
+    if (reference !== null) {
+      const target = readReferenceDestination(line, reference[0].length);
+      if (target) targets.push(target);
+    }
+
+    let index = 0;
+    while (index < line.length) {
+      const labelStart = line.indexOf("[", index);
+      if (labelStart === -1) break;
+      if (isEscaped(line, labelStart)) {
+        index = labelStart + 1;
+        continue;
+      }
+      const labelEnd = line.indexOf("](", labelStart + 1);
+      if (labelEnd === -1) break;
+      const destination = readInlineDestination(line, labelEnd + 2);
+      if (destination === undefined) {
+        index = labelEnd + 2;
+        continue;
+      }
+      const target = withoutMarkdownTitle(destination.target);
+      if (target) targets.push(target);
+      index = destination.end;
+    }
+  }
+  return targets;
+}
+
+function fenceDelimiter(line) {
+  return /^\s{0,3}(`{3,}|~{3,})/u.exec(line)?.[1];
+}
+
+function stripInlineCode(line) {
+  let result = "";
+  let index = 0;
+  while (index < line.length) {
+    if (line[index] !== "`") {
+      result += line[index];
+      index += 1;
+      continue;
+    }
+    let delimiterEnd = index + 1;
+    while (line[delimiterEnd] === "`") delimiterEnd += 1;
+    const delimiter = line.slice(index, delimiterEnd);
+    const closing = line.indexOf(delimiter, delimiterEnd);
+    if (closing === -1) {
+      result += delimiter;
+      index = delimiterEnd;
+      continue;
+    }
+    result += " ".repeat(closing + delimiter.length - index);
+    index = closing + delimiter.length;
+  }
+  return result;
+}
+
+function readInlineDestination(line, from) {
+  let index = from;
+  while (/\s/u.test(line[index] ?? "")) index += 1;
+  if (line[index] === "<") {
+    const end = line.indexOf(">", index + 1);
+    if (end === -1) return undefined;
+    const close = line.indexOf(")", end + 1);
+    if (close === -1) return undefined;
+    return { target: line.slice(index + 1, end), end: close + 1 };
+  }
+
+  const targetStart = index;
+  let depth = 0;
+  while (index < line.length) {
+    if (line[index] === "\\") {
+      index += 2;
+      continue;
+    }
+    if (line[index] === "(") depth += 1;
+    if (line[index] === ")") {
+      if (depth === 0) return { target: line.slice(targetStart, index), end: index + 1 };
+      depth -= 1;
+    }
+    index += 1;
+  }
+  return undefined;
+}
+
+function isEscaped(line, index) {
+  let slashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && line[cursor] === "\\"; cursor -= 1) slashes += 1;
+  return slashes % 2 === 1;
+}
+
+function withoutMarkdownTitle(destination) {
+  return destination.replace(/\s+(?:"[^"\n]*"|'[^'\n]*'|\([^)]*\))\s*$/u, "").trim();
+}
+
+function readReferenceDestination(line, from) {
+  const destination = line.slice(from).trim();
+  if (destination.startsWith("<")) {
+    const end = destination.indexOf(">");
+    return end === -1 ? undefined : destination.slice(1, end);
+  }
+  const match = /^(?:\\.|\S)+/u.exec(destination);
+  return match?.[0];
+}
+
+function localLinkPath(target) {
+  if (target.startsWith("#")) return undefined;
+  if (target.startsWith("//")) return undefined;
+  if (/^file:/iu.test(target)) return target.slice("file:".length);
+  if (/^[a-z]:[\\/]/iu.test(target)) return target;
+  if (/^[a-z][a-z0-9+.-]*:/iu.test(target)) return undefined;
+  return target;
+}
+
+function decodeLinkPath(path) {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { generateHandlerRegistry } from "@spine-event-engine/server/internal/handler-codegen";
+import { generateHandlerRegistry } from "./handler-codegen.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ProtoConfig, ProtoManifest } from "../index.js";

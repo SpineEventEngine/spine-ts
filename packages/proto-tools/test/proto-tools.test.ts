@@ -390,6 +390,22 @@ it("does not generate a companion for frozen delivery rejection sources", () => 
 
 function packedHandlerTarballs(): readonly string[] {
   const destination = mkdtempSync(join(tmpdir(), "spine-handler-tarballs-"));
+  packHandlerFrameworkPackages(destination);
+  createHandlerModelTarball(destination);
+  return readdirSync(destination).map((name) => join(destination, name));
+}
+
+type PackageCommandRunner = (
+  command: string,
+  args: readonly string[],
+  options: { readonly cwd: string; readonly stdio: "pipe"; readonly timeout: number },
+) => void;
+
+function packHandlerFrameworkPackages(
+  destination: string,
+  run: PackageCommandRunner = runPackageCommand,
+): void {
+  run("pnpm", ["--dir", "packages/proto-tools", "run", "build"], packageCommandOptions());
   const packages = [
     "packages/proto-tools",
     "packages/server",
@@ -400,7 +416,7 @@ function packedHandlerTarballs(): readonly string[] {
     "examples/message-board/model",
   ];
   for (const packagePath of packages) {
-    execFileSync(
+    run(
       "pnpm",
       [
         "--dir",
@@ -410,15 +426,25 @@ function packedHandlerTarballs(): readonly string[] {
         "--pack-destination",
         destination,
       ],
-      {
-        cwd: process.cwd(),
-        stdio: "pipe",
-        timeout: 30_000,
-      },
+      packageCommandOptions(),
     );
   }
-  createHandlerModelTarball(destination);
-  return readdirSync(destination).map((name) => join(destination, name));
+}
+
+function packageCommandOptions(): {
+  readonly cwd: string;
+  readonly stdio: "pipe";
+  readonly timeout: number;
+} {
+  return { cwd: process.cwd(), stdio: "pipe", timeout: 30_000 };
+}
+
+function runPackageCommand(
+  command: string,
+  args: readonly string[],
+  options: { readonly cwd: string; readonly stdio: "pipe"; readonly timeout: number },
+): void {
+  execFileSync(command, [...args], options);
 }
 
 function createHandlerModelTarball(destination: string): void {
@@ -541,6 +567,26 @@ function linkThirdParty(app: string): void {
 }
 
 describe("spine proto model tooling", () => {
+  it("builds current proto-tools output before packing with lifecycle scripts disabled", () => {
+    const commands: string[][] = [];
+
+    packHandlerFrameworkPackages("/tmp/handler-tarballs", (_command, args) => {
+      commands.push([...args]);
+    });
+
+    expect(commands[0]).toEqual(["--dir", "packages/proto-tools", "run", "build"]);
+    expect(commands.slice(1)).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining([
+          "--dir",
+          "packages/proto-tools",
+          "pack",
+          "--config.ignore-scripts=true",
+        ]),
+      ]),
+    );
+  });
+
   it("removes proprietary block and line preambles from direct package output", () => {
     const rendered = generatedSource(
       [
@@ -719,7 +765,7 @@ describe("spine proto model tooling", () => {
     expect(source).toContain("Generated from Proto: chat/v1/commands.proto");
     expect(source).not.toContain("CodeMatters");
     expect(source).toContain("@acme/handler-model/generated/chat/v1/message_board_pb.js");
-    expect(source).toContain("@spine-event-engine/server/internal/generated-handler-registry");
+    expect(source).toContain("@spine-event-engine/server/spi/handler-registry");
     execFileSync(
       process.execPath,
       [join(app, "node_modules/typescript/bin/tsc"), "--noEmit", "-p", "tsconfig.json"],
@@ -729,9 +775,9 @@ describe("spine proto model tooling", () => {
       },
     );
     const require = createRequire(join(app, "package.json"));
-    expect(
-      require.resolve("@spine-event-engine/server/internal/generated-handler-registry"),
-    ).toContain("generated-handler-registry.js");
+    expect(require.resolve("@spine-event-engine/server/spi/handler-registry")).toContain(
+      "generated-handler-registry.js",
+    );
     expect(require.resolve("@acme/handler-model/generated/chat/v1/message_board_pb.js")).toContain(
       "message_board_pb.js",
     );
@@ -739,6 +785,7 @@ describe("spine proto model tooling", () => {
     HandlerGeneration.generate(app);
     expect(readFileSync(registry, "utf8")).toBe(firstRegistry);
   }, 120_000);
+
   it("runs packaged Buf to generate only a model's owned source and module", () => {
     const model = packageDirectory("@example/users-model");
     writeJson(model, "spine-proto.json", modelConfig("@example/users-model"));

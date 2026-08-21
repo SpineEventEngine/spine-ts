@@ -15,18 +15,8 @@
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
-import type {
-  AuthorizationPolicy,
-  Clock,
-  ContextResolver,
-  OpaqueSessionCookies,
-  SessionResolver,
-  SubscriptionBindings,
-} from "@spine-event-engine/auth";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
-import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import type { StorageFactory } from "@spine-event-engine/storage";
-import type { NodeDiscovery } from "@spine-event-engine/deployment";
 
 import {
   BoundedContext,
@@ -39,7 +29,6 @@ import {
   spineServicesAccess,
   type SpineServicesOptions,
 } from "../services/spine-services.js";
-import { BrowserServer } from "./browser-server.js";
 import type {
   EnvironmentAttachmentHandle,
   EnvironmentOwnership,
@@ -47,7 +36,6 @@ import type {
 import { ProcessServerCoordinator } from "./process-server-coordinator.js";
 import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";
-import { EnvironmentType } from "./environment.js";
 
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
@@ -56,6 +44,7 @@ const maximumMessageMaxBytes = 0xffff_ffff;
 const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
 const runningContexts = new WeakMap<RunningServer, readonly BoundedContext[]>();
+const serverHosts = new WeakMap<Server, string>();
 
 /**
  * Performs work coupled to listener readiness and network shutdown.
@@ -95,7 +84,6 @@ export class Server {
   readonly #resources: { close(): unknown }[] = [];
   readonly #listenerLifecycles: ListenerLifecycle[] = [];
   readonly #services: Omit<SpineServicesOptions, "contexts">;
-  readonly #browser: BrowserServerOptions | undefined;
   readonly #environment: ServerEnvironment;
   #starting: Promise<RunningServer> | undefined;
   #startingOwnership: EnvironmentOwnership | undefined;
@@ -123,8 +111,8 @@ export class Server {
     this.#contexts.push(...(options.contexts ?? []));
     this.#resources.push(...(options.resources ?? []));
     this.#services = options.services ?? {};
-    this.#browser = options.browser;
     this.#environment = ServerEnvironment.instance();
+    serverHosts.set(this, this.#host);
   }
 
   /**
@@ -243,8 +231,7 @@ export class Server {
    * Concurrent calls on one builder return one managed handle. Run-managed
    * siblings share an active generation but reject while caller-managed
    * ownership is active. The final local environment-owning run retirement
-   * permanently closes its environment; a standalone browser Gateway remains
-   * signal-managed but never owns or closes that environment. A failed final
+   * permanently closes its environment. A failed final
    * close stays retryable through `close()` or a later process signal.
    * Caller-managed servers never close their environment.
    *
@@ -253,14 +240,12 @@ export class Server {
   run(): Promise<RunningServer> {
     const current = this.#run;
     if (current !== undefined) return current;
-    const environment = ServerValues.isStandaloneBrowser(this.#browser)
-      ? undefined
-      : this.#environment;
+    const environment = this.#environment;
     const running = this.#start("server").then((server) =>
       ProcessServerCoordinator.add(
         server,
         environment,
-        environment === undefined ? undefined : serverEnvironmentAccess.loggerFor(environment),
+        serverEnvironmentAccess.loggerFor(environment),
         () => {
           if (this.#run === running) {
             this.#run = undefined;
@@ -278,39 +263,6 @@ export class Server {
   }
 
   async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
-    const browser = this.#browser;
-    const standalone = ServerValues.isStandaloneBrowser(browser);
-    if (browser?.backend !== undefined)
-      BrowserServer.backendUrls(ServerValues.browserBackendUrls(browser.backend));
-    if (
-      standalone &&
-      (this.#contexts.length > 0 ||
-        this.#resources.length > 0 ||
-        Object.keys(this.#services).length > 0 ||
-        this.#listenerLifecycles.length > 0)
-    )
-      throw new Error(
-        "Standalone browser server cannot own local contexts, services, or resources.",
-      );
-    if (browser !== undefined)
-      BrowserServer.requireDurableBindings(
-        browser,
-        this.#environment.environment.type === EnvironmentType.Production,
-      );
-    if (standalone && browser !== undefined)
-      return BrowserServer.open(
-        browser.backend === undefined
-          ? undefined
-          : BrowserServer.backendUrls(ServerValues.browserBackendUrls(browser.backend)),
-        {
-          ...browser,
-          host: browser.host ?? this.#host,
-          port: browser.port ?? this.#port,
-          readMaxBytes: this.#readMaxBytes,
-          writeMaxBytes: this.#writeMaxBytes,
-          production: this.#environment.environment.type === EnvironmentType.Production,
-        },
-      );
     const contexts = await ServerValues.buildContexts(
       this.#contexts,
       this.#environment.storageFactory,
@@ -363,10 +315,7 @@ export class Server {
       this.#readMaxBytes,
       this.#writeMaxBytes,
     );
-    const listener =
-      this.#browser === undefined
-        ? { host: this.#host, port: this.#port }
-        : { host: defaultHost, port: defaultPort };
+    const listener = { host: this.#host, port: this.#port };
     const address = await ServerValues.listen(httpServer, listener.host, listener.port).catch(
       async (error: unknown) => {
         const cleanup: FailedStartCleanup = {
@@ -403,27 +352,7 @@ export class Server {
       else this.#failedStartConsumed = true;
       throw error;
     }
-    if (browser === undefined) return running;
-    try {
-      return await BrowserServer.open(running, {
-        ...browser,
-        host: browser.host ?? this.#host,
-        port: browser.port ?? this.#port,
-        readMaxBytes: this.#readMaxBytes,
-        writeMaxBytes: this.#writeMaxBytes,
-        production: this.#environment.environment.type === EnvironmentType.Production,
-      });
-    } catch (error) {
-      try {
-        await running.close();
-      } catch (closeError) {
-        throw new AggregateError(
-          [error, closeError],
-          "Server browser startup failed and rollback failed.",
-        );
-      }
-      throw error;
-    }
+    return running;
   }
 
   async #retryFailedStartCleanup(cleanup: FailedStartCleanup): Promise<never> {
@@ -569,6 +498,26 @@ interface FailedStartNetwork {
 }
 
 /**
+ * Checks whether browser composition may start a private native listener.
+ *
+ * @internal
+ */
+export const serverBuilderAccess: Readonly<{
+  isLoopback(server: Server): boolean;
+}> = Object.freeze({
+  isLoopback(server: Server): boolean {
+    const host = serverHosts.get(server);
+    return host !== undefined && isLoopbackHost(host);
+  },
+});
+
+function isLoopbackHost(host: string): boolean {
+  if (host === "::1" || host === "::ffff:127.0.0.1") return true;
+  const match = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(host);
+  return match?.slice(1).every((part) => Number(part) <= 255) === true;
+}
+
+/**
  * Options for building a local Spine HTTP/2 service host.
  */
 export interface ServerOptions {
@@ -619,223 +568,6 @@ export interface ServerOptions {
    * Extra framework-owned closeables to close after contexts become safe to close.
    */
   readonly resources?: readonly { close(): unknown }[];
-
-  /**
-   * Browser admission and listener configuration. When present, the native
-   * HTTP/2 listener remains private on loopback and this public listener
-   * becomes the returned server URL.
-   */
-  readonly browser?: BrowserServerOptions;
-}
-
-/**
- * Selects exactly one browser admission mode and its binding ownership.
- *
- * An authenticated listener supplies `sessions` and may supply named durable
- * `bindings`. A public listener supplies `publicAccess: true`; it owns
- * process-local bindings itself and therefore cannot accept `bindings`.
- */
-export type BrowserAdmission =
-  | {
-      // prettier-ignore
-
-      /**
-       * Resolves authenticated application sessions from incoming credentials.
-       */
-      readonly sessions: SessionResolver;
-
-      /**
-       * Excludes non-session public admission from authenticated mode.
-       */
-      readonly publicAccess?: never;
-
-      /**
-       * Supplies named subscription bindings owned by the authenticated application.
-       */
-      readonly bindings?: SubscriptionBindings;
-    }
-  | {
-      // prettier-ignore
-
-      /**
-       * Excludes session resolution from public mode.
-       */
-      readonly sessions?: never;
-
-      /**
-       * Admits requests under the framework-owned non-session public principal.
-       */
-      readonly publicAccess: true;
-
-      /**
-       * Prevents callers from supplying bindings that public mode does not own.
-       */
-      readonly bindings?: never;
-    };
-
-/**
- * Selects one separately hosted Spine backend or a non-empty fixed node set.
- */
-export type BrowserBackend =
-  | {
-      // prettier-ignore
-
-      /**
-       * Supplies one canonical backend HTTP(S) origin.
-       */
-      readonly baseUrl: string;
-
-      /**
-       * Excludes a multi-node backend list when one backend is supplied.
-       */
-      readonly baseUrls?: never;
-    }
-  | {
-      // prettier-ignore
-
-      /**
-       * Excludes a single backend origin when a fixed node set is supplied.
-       */
-      readonly baseUrl?: never;
-
-      /**
-       * Supplies a non-empty fixed set of canonical backend HTTP(S) origins.
-       */
-      readonly baseUrls: readonly string[];
-    };
-
-/**
- * Common collaborators for every browser Server admission mode.
- *
- * Pair these with exactly one {@link BrowserAdmission} to form
- * {@link BrowserServerOptions}.
- */
-export interface BrowserServerCollaborators {
-  // prettier-ignore
-
-  /**
-   * Public browser listener host. Defaults to the server host.
-   */
-  readonly host?: string;
-
-  /**
-   * Public browser listener port. Defaults to the server port.
-   */
-  readonly port?: number;
-
-  /**
-   * Selects one separately hosted Spine backend or a non-empty fixed node set.
-   *
-   * Each URL must be one canonical HTTP(S) origin without credentials, query,
-   * fragment, or a path beyond `/`. `baseUrl` and `baseUrls` are exclusive;
-   * fan-in is best effort, so clients re-query authoritative state after a
-   * duplicate update or generic loss notice.
-   */
-  readonly backend?: BrowserBackend;
-
-  /**
-   * Supplies changing complete membership for unary routing and native streams.
-   * Supplying discovery makes this a standalone Gateway, so the server does
-   * not assemble or own local contexts, services, resources, or listener
-   * lifecycles. When both backend and discovery are supplied, discovery is the
-   * active membership source and fixed backend values are not reconciled.
-   */
-  readonly discovery?: NodeDiscovery;
-
-  /**
-   * Application-owned, exact authentication endpoints exposed beside the fixed
-   * Spine RPC paths. These endpoints are not a general-purpose router.
-   */
-  readonly authRoutes?: readonly BrowserAuthRoute[];
-
-  /**
-   * Limits concurrently admitted application authentication requests across
-   * this listener. Defaults to 64 and must be a positive safe integer. Excess
-   * requests receive 503 before handler invocation; capacity recovers when an
-   * admitted request settles.
-   */
-  readonly maxActiveAuthRequests?: number;
-
-  /**
-   * Exact browser origins permitted to make RPC calls.
-   */
-  readonly origins: readonly string[];
-
-  /**
-   * Decodes application request content for authorization and actor resolution.
-   */
-  readonly registry?: TypeRegistryLookup;
-
-  /**
-   * Allows or rejects an admitted principal for each decoded request.
-   */
-  readonly authorize: AuthorizationPolicy["authorize"];
-
-  /**
-   * Independently resolves trusted actor and tenant context after authorization.
-   */
-  readonly contexts: ContextResolver;
-
-  /**
-   * Supplies trusted timestamps for gateway decisions.
-   */
-  readonly clock: Clock;
-
-  /**
-   * Enables strict opaque-cookie extraction alongside bearer credentials.
-   */
-  readonly cookies?: OpaqueSessionCookies;
-}
-
-/**
- * Browser collaborators with exactly one admission and binding-ownership mode.
- */
-export type BrowserServerOptions = BrowserServerCollaborators & BrowserAdmission;
-
-/**
- * Configures one bounded application authentication request.
- */
-export interface BrowserAuthRoute {
-  // prettier-ignore
-
-  /**
-   * Selects the accepted HTTP method.
-   */
-  readonly method: "GET" | "POST";
-
-  /**
-   * Selects the exact canonical request path.
-   */
-  readonly path: string;
-
-  /**
-   * Lists exact browser origins allowed for this route.
-   */
-  readonly origins: readonly string[];
-
-  /**
-   * Allows an OAuth callback without an Origin header.
-   */
-  readonly allowMissingOrigin?: boolean;
-
-  /**
-   * Limits accepted request-body bytes.
-   */
-  readonly maxRequestBytes: number;
-
-  /**
-   * Limits request processing time in milliseconds.
-   */
-  readonly timeoutMs: number;
-
-  /**
-   * Handles one admitted authentication request.
-   *
-   * @param request Supplies the bounded Fetch request.
-   * @param signal Signals timeout, disconnect, or gateway close.
-   * @returns Returns the application response.
-   */
-  readonly onRequest: (request: Request, signal: AbortSignal) => Response | Promise<Response>;
 }
 
 /**
@@ -1268,23 +1000,6 @@ const ServerValues = Object.freeze({
       throw new Error("Server host must not be blank.");
     }
     return normalized;
-  },
-
-  browserBackendUrls(backend: NonNullable<BrowserServerOptions["backend"]>): readonly string[] {
-    const source = backend as { readonly baseUrl?: unknown; readonly baseUrls?: unknown };
-    if (typeof source.baseUrl === "string" && source.baseUrls === undefined)
-      return [source.baseUrl];
-    if (source.baseUrl === undefined && Array.isArray(source.baseUrls)) {
-      const values: readonly unknown[] = source.baseUrls;
-      if (values.some((value) => typeof value !== "string"))
-        throw new Error("Server browser backend URLs must be strings.");
-      return values as readonly string[];
-    }
-    throw new Error("Server browser backend must configure exactly one of baseUrl or baseUrls.");
-  },
-
-  isStandaloneBrowser(browser: BrowserServerOptions | undefined): boolean {
-    return browser?.backend !== undefined || browser?.discovery !== undefined;
   },
 
   normalizeMessageMaxBytes(value: number, name: "readMaxBytes" | "writeMaxBytes"): number {

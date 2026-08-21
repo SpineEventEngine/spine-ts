@@ -1,33 +1,34 @@
 # Protobuf tooling for Spine applications
 
-This package generates TypeScript from application Proto models and
-assembles those models into an application registry. Those models can define
-commands, events, and state used by Aggregates or Projections. It runs at build
-time, not inside a server process.
+Use this build-time package to generate TypeScript from application Proto
+models, assemble model registries, and generate handler registries. Models can
+define commands, events, and state used by Aggregates or Projections; this tool
+does not run inside a server process.
 
-## Generate interface artifacts
+This is an experimental snapshot. Install the snapshot explicitly while its CLI
+and generated-output contract continue to evolve:
 
-`pnpm proto:generate` discovers `ts_type` options and emits model-local
-`generated/interfaces/*.ts` artifacts. Generated `TaskEvent` is a complete
-generated declaration; generated `TaskAssignmentEvent` binds the token to an
-authored interface in the same model module. Do not edit output: rerun the
-generator instead.
+```sh
+pnpm add -D @spine-event-engine/proto-tools@2.0.0-snapshot.3
+```
 
-For detailed contracts intended for coding agents, see the
-[REFERENCE.md documentation for agents](REFERENCE.md).
+For configuration, manifest, and generated-output details, read the
+[reference](REFERENCE.md).
 
-## 💡 Why use it?
+## 💡 Who should use it?
 
-- ✅ Generates Protobuf-ES code for application models.
-- ✅ Creates one importable `ProtoModule` per model package.
-- ✅ Follows dependencies between model packages deterministically.
-- ✅ Generates typed rejection helpers and handler registries.
+- ✅ Authors of Node.js/pnpm Spine model packages and application packages.
+- ✅ Teams with canonical `.proto` sources, the `spine-proto` CLI, and the
+  required Protobuf compiler/plugins available to their workspace.
+- ❌ Runtime application code; import the generated model module and registry
+  instead of invoking this CLI from a server.
 
-## 🚀 Create a model package
+## 🚀 Generate and compile one model
 
-A model package contains canonical `.proto` files, generated code, and one exported
-`ProtoModule`. Use separate model packages for independently developed bounded
-contexts; a small application may use one combined model package.
+Start in a Node.js/pnpm workspace with the CLI installed, a model package, and
+the Protobuf compiler/plugin toolchain available. A model package keeps its
+canonical `.proto` files under `proto/` and declares its generated locations in
+`spine-proto.json`:
 
 ```json
 {
@@ -42,17 +43,19 @@ contexts; a small application may use one combined model package.
 }
 ```
 
-Run generation from that package directory:
+From that model package directory, generate the model. The command emits
+Protobuf-ES source under `generated/`, an importable `generated/proto-module.ts`,
+and `spine-proto-manifest.json`; then compile the package.
 
 ```sh
-spine-proto generate
+pnpm exec spine-proto generate
+tsc -b
 ```
 
-Generation creates the generated Protobuf-ES sources, a `proto-module.ts`,
-typed rejection companions for rejection Proto files in the package, and a deterministic
-`spine-proto-manifest.json`. Do not edit generated output by hand.
+Do not edit generated output by hand: change the Proto source or configuration,
+then run generation again.
 
-## 🧩 Compose an application
+## 🧩 Compose an application after the first model succeeds
 
 An application lists its direct model packages and a source location for the
 generated registry.
@@ -67,36 +70,34 @@ generated registry.
 ```
 
 ```sh
-spine-proto compose
-spine-proto handlers
+pnpm exec spine-proto compose
+pnpm exec spine-proto handlers
 tsc -b
 ```
 
 `compose` follows declared model dependencies transitively. `handlers` creates
-the generated handler registry for decorated application classes. Run both after
-the related model or handler changes.
+the generated handler registry for decorated application classes. Its emitted
+source imports the Server handler-registry contract as a type from
+`@spine-event-engine/server/spi/handler-registry`; the CLI itself has no Server
+runtime dependency. Run both after the related model or handler changes.
 
-The public CLI is `spine-proto`. Its programmatic config and manifest readers
-are for tooling that needs the same validated package contracts; application
+The public CLI is `spine-proto`. Programmatic config and manifest readers are
+for build tooling that needs the same validated package contracts; application
 code should import generated model modules instead.
 
-```ts
-// docs-snippet-path: packages/proto-tools/src/index.ts
-import { ProtoConfig } from "@spine-event-engine/proto-tools";
-
-const config = ProtoConfig.read(".");
-void config;
-```
-
-## ⚠️ Build-time only
+## ⚠️ Cleanup and limits
 
 Run this tooling after changing Proto files or decorated handlers. Generated
 files are outputs, not source: never edit them by hand. Application runtime code
 imports the generated model module and registry; it does not invoke the CLI.
 
+Keep model-package dependencies explicit in both `package.json` and
+`spine-proto.json`. `compose` follows declared model dependencies transitively;
+it does not discover undeclared packages or create a running application.
+
 ## 🔗 Learn more
 
-- [Spine Protobuf package](../proto/README.md)
-- [Core message tools](../core/README.md)
-- [Message Board model example](../../examples/message-board/model/README.md)
+- [Spine Protobuf package](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/proto/README.md)
+- [Core message tools](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/core/README.md)
+- [Message Board model example](https://github.com/SpineEventEngine/spine-ts/blob/main/examples/message-board/model/README.md)
 - [Reference for coding agents](REFERENCE.md)

@@ -361,24 +361,6 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/server/src/handler/build-time-handler-analyzer.ts",
-    "kind": "function-declaration",
-    "identity": "requirePackage()#1",
-    "name": "requirePackage",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration requirePackage()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/handler/handler-codegen.ts",
-    "kind": "function-declaration",
-    "identity": "generateHandlerRegistry()#1",
-    "name": "generateHandlerRegistry",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration generateHandlerRegistry()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
     "file": "packages/server/src/handler/handler-decorators.ts",
     "kind": "function-declaration",
     "identity": "Apply()#1",
@@ -523,7 +505,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/server/src/server/durable-subscription-bindings.ts",
+    "file": "packages/server/src/browser/durable-subscription-bindings.ts",
     "kind": "function-declaration",
     "identity": "attachDurableSubscriptionCleanup()#1",
     "name": "attachDurableSubscriptionCleanup",
@@ -532,7 +514,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/server/src/server/durable-subscription-bindings.ts",
+    "file": "packages/server/src/browser/durable-subscription-bindings.ts",
     "kind": "function-declaration",
     "identity": "durableCleanupFor()#1",
     "name": "durableCleanupFor",
@@ -541,12 +523,21 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/server/src/server/durable-subscription-bindings.ts",
+    "file": "packages/server/src/browser/durable-subscription-bindings.ts",
     "kind": "function-declaration",
     "identity": "isDurableSubscriptionBindings()#1",
     "name": "isDurableSubscriptionBindings",
     "disposition": "necessity",
     "reason": "TypeScript public type-predicate boundary: isDurableSubscriptionBindings narrows an optional binding collaborator at server assembly without owning registry state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/server/server.ts",
+    "kind": "function-declaration",
+    "identity": "isLoopbackHost()#1",
+    "name": "isLoopbackHost",
+    "disposition": "necessity",
+    "reason": "TypeScript network boundary: isLoopbackHost validates canonical loopback host text before BrowserServer composes a private native listener."
   },
   {
     "rule": "standalone-function",

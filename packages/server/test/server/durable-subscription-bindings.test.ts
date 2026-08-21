@@ -24,8 +24,11 @@ import {
 } from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
 
-import { DurableSubscriptionBindings, isDurableSubscriptionBindings } from "../../src/index.js";
-import { attachDurableSubscriptionCleanup } from "../../src/server/durable-subscription-bindings.js";
+import {
+  DurableSubscriptionBindings,
+  isDurableSubscriptionBindings,
+} from "../../src/browser/index.js";
+import { attachDurableSubscriptionCleanup } from "../../src/browser/durable-subscription-bindings.js";
 
 type RecordSpec<I, R> = StorageRecordSpec<I, R extends Message ? R : Message>;
 

@@ -23,7 +23,7 @@ import type {
 } from "./build-time-handler-analyzer.js";
 
 const defaultRegistryConst = "generatedHandlerRegistry";
-const defaultRegistryModule = "@spine-event-engine/server/internal/generated-handler-registry";
+const defaultRegistryModule = "@spine-event-engine/server/spi/handler-registry";
 const registryTypeName = "GeneratedHandlerRegistry";
 const identRe = /^[$A-Z_a-z][$\w]*$/;
 const reservedWords = new Set([

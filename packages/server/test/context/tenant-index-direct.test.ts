@@ -14,12 +14,8 @@
 
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it, vi } from "vitest";
-import {
-  InMemoryStorageFactory,
-  StorageFactory,
-  TenantBoundary,
-  type TenantCatalog,
-} from "@spine-event-engine/storage";
+import { InMemoryStorageFactory, StorageFactory } from "@spine-event-engine/storage";
+import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/provider";
 import { InternetDomainSchema, TenantIdSchema } from "@spine-event-engine/proto";
 
 import { TenantIndexes } from "../../src/context/tenant-index.js";

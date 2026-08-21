@@ -12,11 +12,8 @@
  * the License.
  */
 
-import {
-  TenantBoundary,
-  type StorageContext,
-  type StorageFactory,
-} from "@spine-event-engine/storage";
+import { type StorageContext, type StorageFactory } from "@spine-event-engine/storage";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import { fromBinary } from "@bufbuild/protobuf";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import type { ILogLayer } from "loglayer";

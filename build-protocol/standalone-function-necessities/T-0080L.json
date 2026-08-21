@@ -79,5 +79,14 @@
     "name": "createTodoContext",
     "disposition": "necessity",
     "reason": "TypeScript framework boundary: createTodoContext supplies the reusable bounded-context assembly to both executable modes."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/todo/src/docs/create-task.ts",
+    "kind": "function-declaration",
+    "identity": "createTask()#1",
+    "name": "createTask",
+    "disposition": "necessity",
+    "reason": "TypeScript generated-Proto boundary: createTask constructs the documented TaskCreated value from typed task identifiers."
   }
 ]

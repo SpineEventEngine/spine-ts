@@ -19,7 +19,7 @@ import {
   type CleanupOperation,
   type DeliveryCleanupInput,
   type DeliveryCleanupStorage,
-} from "@spine-event-engine/storage/internal/delivery-cleanup";
+} from "@spine-event-engine/storage/provider";
 import type { RecordSpec, StorageContext } from "@spine-event-engine/storage";
 
 import { MysqlRecordStorage } from "./record-storage.js";

@@ -31,7 +31,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   GeneratedRegistryWriter,
   type BuildHandlerAnalysis,
-} from "../../src/handler/generated-registry-writer.js";
+} from "../src/generation/generated-registry-writer.js";
 
 describe("generated registry writer", () => {
   it("renders deterministic registry source from analyzed handlers", () => {
@@ -45,7 +45,7 @@ describe("generated registry writer", () => {
     expect(source).toBe(
       [
         "import type { GeneratedHandlerRegistry } from " +
-          '"@spine-event-engine/server/internal/generated-handler-registry";',
+          '"@spine-event-engine/server/spi/handler-registry";',
         'import { TaskAggregate } from "../../src/task-aggregate.js";',
         'import { TaskProjection } from "../../src/task-projection.js";',
         'import { CreateTaskSchema, RenameTaskSchema } from "../spine/examples/todo/task_commands_pb.js";',
@@ -449,6 +449,88 @@ describe("generated registry writer", () => {
     ).toThrow(/ignored by Git/);
   });
 
+  it("rejects unsafe repository and generated output locations before writing", () => {
+    const repoRoot = createRepoFixture("packages/demo/generated/\n");
+    const generatedRoot = join(repoRoot, "packages/demo/generated");
+    const outputFile = join(generatedRoot, "handler/generated-handler-registry.ts");
+    const writer = new GeneratedRegistryWriter();
+
+    expect(() =>
+      writer.write(analysis(repoRoot), {
+        generatedRoot: join(repoRoot, "packages/demo/build"),
+        outputFile,
+        repoRoot,
+      }),
+    ).toThrow(/Generated root must end with/);
+
+    expect(() =>
+      writer.write(analysis(repoRoot), {
+        generatedRoot,
+        outputFile,
+        repoRoot: join(repoRoot, "missing"),
+      }),
+    ).toThrow(/Repository root does not exist/);
+
+    const nonDirectoryRoot = join(repoRoot, "not-a-directory");
+    writeFileSync(nonDirectoryRoot, "not a directory\n");
+    expect(() =>
+      writer.write(analysis(repoRoot), {
+        generatedRoot,
+        outputFile,
+        repoRoot: nonDirectoryRoot,
+      }),
+    ).toThrow(/Repository root must be a directory/);
+
+    expect(() =>
+      writer.write(analysis(repoRoot), {
+        generatedRoot,
+        outputFile,
+        repoRoot: join(nonDirectoryRoot, "nested-repository"),
+      }),
+    ).toThrow(/Repository root path ancestor is not a directory/);
+
+    expect(() =>
+      writer.write(analysis(repoRoot), {
+        generatedRoot,
+        outputFile: join(repoRoot, "outside-generated.ts"),
+        repoRoot,
+      }),
+    ).toThrow(/Generated output must stay within/);
+
+    mkdirSync(generatedRoot, { recursive: true });
+    const blockedDirectory = join(generatedRoot, "blocked");
+    writeFileSync(blockedDirectory, "not a directory\n");
+    expect(() =>
+      writer.write(analysis(repoRoot), {
+        generatedRoot,
+        outputFile: join(blockedDirectory, "generated-handler-registry.ts"),
+        repoRoot,
+      }),
+    ).toThrow(/Generated output directory ancestor is not a directory/);
+  });
+
+  it("renders CommonJS, ESM, and extensionless entity imports", () => {
+    const repoRoot = "/workspace/repo";
+    const outputFile = join(repoRoot, "generated/handler/generated-handler-registry.ts");
+    const source = new GeneratedRegistryWriter().render(
+      {
+        diagnostics: [],
+        entities: [
+          entity("CommonJsEntity", join(repoRoot, "src/commonjs.cts")),
+          entity("EsmEntity", join(repoRoot, "src/esm.mts")),
+          entity("ExtensionlessEntity", join(repoRoot, "src/extensionless")),
+          entity("CoLocatedEntity", join(dirname(outputFile), "co-located.cts")),
+        ],
+      },
+      { outputFile },
+    );
+
+    expect(source).toContain('from "../../src/commonjs.cjs";');
+    expect(source).toContain('from "../../src/esm.mjs";');
+    expect(source).toContain('from "../../src/extensionless";');
+    expect(source).toContain('from "./co-located.cjs";');
+  });
+
   it("reports git ignore verification failures before writing", async () => {
     const repoRoot = createRepoFixture("packages/demo/generated/\n");
     const generatedRoot = join(repoRoot, "packages/demo/generated");
@@ -475,7 +557,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("../../src/handler/generated-registry-writer.js");
+        await import("../src/generation/generated-registry-writer.js");
 
       expect(() =>
         new MockedWriter().write(analysis(repoRoot), {
@@ -515,7 +597,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("../../src/handler/generated-registry-writer.js");
+        await import("../src/generation/generated-registry-writer.js");
 
       expect(() =>
         new MockedWriter().write(analysis(repoRoot), {
@@ -630,7 +712,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("../../src/handler/generated-registry-writer.js");
+        await import("../src/generation/generated-registry-writer.js");
 
       expect(() =>
         new MockedWriter().write(analysis(repoRoot), {
@@ -666,7 +748,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("../../src/handler/generated-registry-writer.js");
+        await import("@spine-event-engine/proto-tools/testing");
 
       new MockedWriter().write(analysis(repoRoot), {
         generatedRoot,
@@ -795,6 +877,24 @@ function analysis(repoRoot: string): BuildHandlerAnalysis {
   };
 }
 
+function entity(className: string, sourceFile: string) {
+  return {
+    className,
+    sourceFile,
+    stateSchema: schema("../generated/task_pb.js", "TaskSchema"),
+    handlers: [
+      {
+        kind: "command-assignment" as const,
+        methodName: "createTask",
+        signalSchema: schema("../generated/command_pb.js", "CreateTaskSchema"),
+        emittedSchemas: [],
+        parameterCount: 1 as const,
+        origin: "domestic" as const,
+      },
+    ],
+  };
+}
+
 function schema(moduleSpecifier: string, exportName: string) {
   return { exportName, moduleSpecifier };
 }
@@ -819,7 +919,7 @@ function createCompileFixture(): string {
 
   mkdirSync(join(repoRoot, "packages/demo/generated/handler"), { recursive: true });
   mkdirSync(join(repoRoot, "packages/demo/src"), { recursive: true });
-  mkdirSync(join(repoRoot, "node_modules/@spine-event-engine/server/internal"), {
+  mkdirSync(join(repoRoot, "node_modules/@spine-event-engine/server/spi"), {
     recursive: true,
   });
   mkdirSync(join(repoRoot, "node_modules/@acme/generated"), { recursive: true });
@@ -828,10 +928,7 @@ function createCompileFixture(): string {
     ["export class TaskAggregate {", "  createTask(): void {}", "}", ""].join("\n"),
   );
   writeFileSync(
-    join(
-      repoRoot,
-      "node_modules/@spine-event-engine/server/internal/generated-handler-registry.d.ts",
-    ),
+    join(repoRoot, "node_modules/@spine-event-engine/server/spi/handler-registry.d.ts"),
     [
       "export interface GeneratedHandlerRegistry {",
       "  readonly version: 3;",

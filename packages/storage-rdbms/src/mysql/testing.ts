@@ -21,7 +21,7 @@ import {
   eventHistorySpec,
   stateHistorySpec,
   type EntityStorageInput,
-} from "@spine-event-engine/storage/internal/entity-history";
+} from "@spine-event-engine/storage/provider";
 import type { RecordSpec, StorageGroup } from "@spine-event-engine/storage";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 

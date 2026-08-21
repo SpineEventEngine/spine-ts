@@ -14,7 +14,10 @@
 
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { EntityStateChangedSchema } from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
+// prettier-ignore
+import {
+  EntityStateChangedSchema,
+} from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { MessageInterfaces } from "@spine-event-engine/core";
 import { describe, expect, expectTypeOf, it } from "vitest";
 

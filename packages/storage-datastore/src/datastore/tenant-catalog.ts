@@ -17,7 +17,7 @@ import {
   TenantBoundary,
   type TenantBoundary as TenantBoundaryValue,
   type TenantCatalog,
-} from "@spine-event-engine/storage";
+} from "@spine-event-engine/storage/provider";
 
 import { NamespaceAssignments, type NamespaceConverter } from "./namespace.js";
 

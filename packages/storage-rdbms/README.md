@@ -5,6 +5,9 @@ durable implementation of `@spine-event-engine/storage` and manages the mysql2
 connection pool and its private tables. PostgreSQL is not supported by this
 package.
 
+This is an experimental snapshot package. Use Node 24 or newer, generated
+record schemas, and a reachable MySQL database.
+
 For database requirements, query limits, lifecycle, and error details, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
@@ -23,9 +26,8 @@ pnpm typecheck:build
 ```
 
 Run this workspace-wide TypeScript build from the repository root. For an
-experimental npm consumer, install
-`@spine-event-engine/storage-rdbms@2.0.0-snapshot.2` or the explicit
-`@spine-event-engine/storage-rdbms@snapshot` tag.
+experimental npm consumer, install `@spine-event-engine/storage-rdbms@snapshot`.
+The snapshot tag can change before a stable release.
 
 ## 🔌 Create and close a MySQL factory
 
@@ -33,7 +35,12 @@ Provide a MySQL URL that includes a database name. Building the factory opens
 its pool only; each record family creates and verifies its private table lazily
 on first use.
 
+<!-- docs-snippet-path: packages/storage-rdbms/src/index.ts -->
+
 ```ts
+import { create, ScalarType } from "@bufbuild/protobuf";
+import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
 
 const factory = await MysqlStorageFactory.newBuilder()
@@ -43,10 +50,24 @@ const factory = await MysqlStorageFactory.newBuilder()
     tls: { rejectUnauthorized: true },
   })
   .build();
+const records = factory.createRecordStorage(
+  { name: "Tasks", multitenant: false },
+  new RecordSpec<string, StringValue>({
+    recordType: StringValueSchema,
+    idKind: "string",
+    extractId: (record) => record.value,
+    columns: [
+      new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
+    ],
+  }),
+);
 
 try {
-  // Pass factory to a Spine TS server or create record storage through it.
+  await records.write(create(StringValueSchema, { value: "task-42" }));
+  const stored = await records.read("task-42");
+  if (stored?.value !== "task-42") throw new Error("The record was not stored.");
 } finally {
+  await records.close();
   factory.close();
 }
 ```
@@ -197,6 +218,6 @@ new `ID`; migrate those rows offline and stop on every conflict.
 
 ## 🔗 Learn more
 
-- [Storage API](../storage/README.md)
-- [End-user storage guide](../../docs/USER_GUIDE.md#13-develop-with-mysql-rdbms-storage)
+- [Storage API](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage/README.md)
+- [End-user storage guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/USER_GUIDE.md#6-persist-application-data)
 - [Reference for coding agents](REFERENCE.md)

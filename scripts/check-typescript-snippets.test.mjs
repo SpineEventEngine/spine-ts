@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { COPYRIGHT_HEADER } from "./check-copyright.mjs";
 import {
   checkTypeScriptSnippets,
   documentationSnippetFile,
@@ -28,6 +29,18 @@ const documentedPackageReadmes = [
   "packages/client-node/README.md",
   "packages/client-web/README.md",
   "packages/client-react/README.md",
+];
+const beginnerPackageReadmes = [
+  "packages/proto/README.md",
+  "packages/core/README.md",
+  "packages/transport/README.md",
+  "packages/storage/README.md",
+  "packages/testing/README.md",
+  "packages/delivery-client/README.md",
+  "packages/delivery-server/README.md",
+  "packages/storage-datastore/README.md",
+  "packages/storage-rdbms/README.md",
+  "packages/deployment/README.md",
 ];
 
 describe("TypeScript documentation snippets", () => {
@@ -127,6 +140,52 @@ describe("TypeScript documentation snippets", () => {
     }
   });
 
+  it("keeps owned package README snippet contexts hidden and beginner entry points explicit", () => {
+    for (const document of beginnerPackageReadmes) {
+      const source = readFileSync(resolve(root, document), "utf8");
+
+      expect(source, document).not.toMatch(/```(?:ts|typescript)\s*\n\s*\/\/ docs-snippet-path:/iu);
+      expect(source, document).toMatch(/\]\(REFERENCE\.md\)/u);
+      expect(source, document).toMatch(/@spine-event-engine\/[\w-]+@snapshot/u);
+      expect(source, document).toMatch(/experimental snapshot/iu);
+    }
+  });
+
+  it("keeps source-linked beginner snippets free of source copyright headers", () => {
+    const snippets = [
+      [
+        "packages/client-react/README.md",
+        "examples/message-board/web/src/docs/client-react-provider-query.ts",
+      ],
+      [
+        "packages/client-react/README.md",
+        "examples/message-board/web/src/docs/client-react-subscription.ts",
+      ],
+      [
+        "packages/client-web/README.md",
+        "examples/message-board/web/src/docs/client-web-create-client.ts",
+      ],
+      [
+        "packages/client-web/README.md",
+        "examples/message-board/web/src/docs/client-web-request-subscription.ts",
+      ],
+      ["examples/todo/README.md", "examples/todo/src/docs/create-task.ts"],
+      ["examples/todo/USER_GUIDE.md", "examples/todo/src/docs/routing.ts"],
+    ];
+
+    for (const [document, sourcePath] of snippets) {
+      const source = readFileSync(resolve(root, sourcePath), "utf8");
+      const markdown = readFileSync(resolve(root, document), "utf8");
+      const matchingSnippet = extractTypeScriptSnippets(markdown).find((snippet) =>
+        markdown.slice(0, snippet.index).endsWith(`<!-- docs-snippet-path: ${sourcePath} -->\n\n`),
+      );
+
+      expect(source.startsWith(COPYRIGHT_HEADER), sourcePath).toBe(true);
+      expect(matchingSnippet, `${document}: ${sourcePath}`).toBeDefined();
+      expect(matchingSnippet?.[1], `${document}: ${sourcePath}`).not.toContain("Copyright");
+    }
+  });
+
   it("keeps the Todo introduction fence as executable domain behavior", () => {
     const source = readFileSync(resolve(root, "examples/todo/README.md"), "utf8");
     const snippet = extractTypeScriptSnippets(source).find((entry) =>
@@ -148,7 +207,7 @@ describe("TypeScript documentation snippets", () => {
 
     expect(guide).toContain('option (every_is).ts_type = "TaskEvent";');
     expect(guide).toContain('option (is).ts_type = "TaskAssignmentEvent";');
-    expect(guide).toContain("// docs-snippet-path: examples/todo/src/todo-app.ts");
+    expect(guide).toContain("<!-- docs-snippet-path: examples/todo/src/docs/routing.ts -->");
     expect(guide).toContain("TaskReassigned");
     expect(guide).toContain("zero, one, and two");
     expect(guide).toContain(
@@ -177,10 +236,24 @@ describe("TypeScript documentation snippets", () => {
       snippet[1].includes("TaskAlreadyDone"),
     );
 
-    expect(rejectionSnippet?.[1]).toContain("// docs-snippet-path: examples/todo/src/index.ts");
+    expect(source).toContain("<!-- docs-snippet-path: examples/todo/src/index.ts -->");
+    expect(rejectionSnippet?.[1]).not.toContain("docs-snippet-path");
     expect(rejectionSnippet?.[1]).toContain("../generated/spine/examples/todo/task_rejections.js");
     expect(documentationSnippetFile("packages/core/README.md", "examples/todo/src/index.ts")).toBe(
       resolve(root, "examples/todo/src/index.ts"),
+    );
+  });
+
+  it("uses a hidden HTML directive immediately before a TypeScript fence as its source context", () => {
+    expect(checkTypeScriptSnippets(["scripts/fixtures/hidden-snippet-context.md"])).toEqual([]);
+  });
+
+  it("rejects a visible in-fence snippet control", () => {
+    const result = runSnippetChecker(["scripts/fixtures/visible-snippet-context.md"]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "scripts/fixtures/visible-snippet-context.md:3: docs-snippet-path must be a hidden HTML directive immediately before a TypeScript fence.",
     );
   });
 
@@ -195,7 +268,7 @@ describe("TypeScript documentation snippets", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      "scripts/fixtures/missing-snippet-context.md:3: Missing docs-snippet-path in scripts/fixtures/missing-snippet-context.md: examples/todo/src/missing.ts",
+      "scripts/fixtures/missing-snippet-context.md:4: Missing docs-snippet-path in scripts/fixtures/missing-snippet-context.md: examples/todo/src/missing.ts",
     );
   });
 
@@ -218,7 +291,7 @@ describe("TypeScript documentation snippets", () => {
     expect(diagnostics).toEqual([
       {
         document: "scripts/fixtures/missing-snippet-context.md",
-        line: 3,
+        line: 4,
         message:
           "Missing docs-snippet-path in scripts/fixtures/missing-snippet-context.md: examples/todo/src/missing.ts",
       },
@@ -243,7 +316,7 @@ describe("TypeScript documentation snippets", () => {
     ).toEqual([
       {
         document: "scripts/fixtures/invalid-built-declaration-snippet.md",
-        line: 3,
+        line: 4,
         message:
           "Module '\"@spine-event-engine/core\"' has no exported member 'MissingCoreExport'.",
       },

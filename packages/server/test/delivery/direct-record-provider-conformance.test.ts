@@ -23,16 +23,16 @@ import {
 } from "@spine-event-engine/proto/delivery";
 import { CommandSchema } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { createPool } from "../../../storage-rdbms/node_modules/mysql2/promise.js";
+import { createPool } from "mysql2/promise";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DatastoreStorageFactory } from "../../../storage-datastore/src/index.js";
-import { MysqlStorageFactory } from "../../../storage-rdbms/src/index.js";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 
-vi.mock("../../../storage-rdbms/node_modules/mysql2/promise.js", () => ({ createPool: vi.fn() }));
+vi.mock("mysql2/promise", () => ({ createPool: vi.fn() }));
 
 afterEach(() => vi.clearAllMocks());
 

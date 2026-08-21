@@ -124,9 +124,18 @@ export function checkTypeScriptSnippets(documents) {
     for (const [index, snippet] of extractTypeScriptSnippets(source).entries()) {
       const code = snippet[1];
       const line = source.slice(0, snippet.index).split("\n").length;
+      if (/^\s*\/\/ docs-snippet-path:/mu.test(code)) {
+        diagnostics.push({
+          document,
+          line,
+          message:
+            "docs-snippet-path must be a hidden HTML directive immediately before a TypeScript fence.",
+        });
+        continue;
+      }
       let context;
       try {
-        context = snippetContext(document, code, index + 1);
+        context = snippetContext(document, source.slice(0, snippet.index), index + 1);
       } catch (error) {
         diagnostics.push({
           document,
@@ -146,8 +155,10 @@ export function checkTypeScriptSnippets(documents) {
   );
 }
 
-function snippetContext(document, code, index) {
-  const declaredPath = /^\/\/ docs-snippet-path: ([^\n]+)$/mu.exec(code)?.[1];
+function snippetContext(document, precedingMarkdown, index) {
+  const declaredPath = /<!-- docs-snippet-path: ([^\n]+) -->\r?\n(?:\r?\n)?$/u.exec(
+    precedingMarkdown,
+  )?.[1];
   if (declaredPath !== undefined) return documentationSnippetFile(document, declaredPath);
   return resolve(root, document, "..", `.docs-snippet-${index}.ts`);
 }

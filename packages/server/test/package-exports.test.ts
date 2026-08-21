@@ -13,6 +13,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 import { describe, expect, expectTypeOf, it } from "vitest";
 
@@ -21,7 +22,45 @@ import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testin
 
 type RootExports = typeof import("@spine-event-engine/server");
 
+type BrowserExports = typeof import("@spine-event-engine/server/browser");
+
 describe("@spine-event-engine/server package exports", () => {
+  it("keeps browser and durable-auth APIs out of the native root and exposes them only at browser", async () => {
+    expect("BrowserServer" in serverRoot).toBe(false);
+    expect("BrowserServerOptions" in serverRoot).toBe(false);
+    expect("DurableSubscriptionBindings" in serverRoot).toBe(false);
+    expectTypeOf<"BrowserServer" extends keyof RootExports ? true : false>().toEqualTypeOf<false>();
+    expectTypeOf<
+      "DurableSubscriptionBindings" extends keyof RootExports ? true : false
+    >().toEqualTypeOf<false>();
+    expectTypeOf<
+      "BrowserServer" extends keyof BrowserExports ? true : false
+    >().toEqualTypeOf<true>();
+    expectTypeOf<
+      "DurableSubscriptionBindings" extends keyof BrowserExports ? true : false
+    >().toEqualTypeOf<true>();
+
+    const browser = await import("@spine-event-engine/server/browser");
+    expect(typeof browser.BrowserServer.open).toBe("function");
+    expect(typeof browser.BrowserServer.run).toBe("function");
+    expect(Object.keys(browser.BrowserServer).sort()).toEqual(["open", "run"]);
+    expect(typeof browser.DurableSubscriptionBindings).toBe("function");
+  });
+
+  it("connects the public browser facade to production implementation names", () => {
+    const source = readFileSync(new URL("../src/browser/index.ts", import.meta.url), "utf8");
+
+    expect(source).toContain('from "./browser-server.js"');
+    expect(source).toContain("browserServerImplementation");
+    expect(source).not.toContain("browserServerTestAccess");
+  });
+
+  it("emits a native root declaration with no auth or browser resolution path", () => {
+    const declaration = readFileSync(new URL("../dist/index.d.ts", import.meta.url), "utf8");
+
+    expect(declaration).not.toMatch(/auth|browser|connect-node|node:http/iu);
+  });
+
   it("keeps reset out of the root declaration and runtime export", () => {
     expect("resetServerEnvironmentForTest" in serverRoot).toBe(false);
     expectTypeOf<
@@ -56,6 +95,21 @@ describe("@spine-event-engine/server package exports", () => {
       nodeChangedAfterTestingReset: true,
     });
     void resetServerEnvironmentForTest;
+  });
+
+  it("resolves the delivery SPI through its declared package subpath", () => {
+    const output = execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        `import { conditionalPickUp } from "@spine-event-engine/server/spi/delivery";
+         process.stdout.write(typeof conditionalPickUp.register);`,
+      ],
+      { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+    );
+
+    expect(output).toBe("function");
   });
 
   it("restores local defaults after testing reset from a production-profile process", () => {

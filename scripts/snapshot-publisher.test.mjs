@@ -207,7 +207,7 @@ describe("snapshot publisher", () => {
     });
 
     expect(report.published).toEqual(["@spine-event-engine/core", "@spine-event-engine/server"]);
-    expect(calls).toContain("wait @spine-event-engine/core@2.0.0-snapshot.2");
+    expect(calls).toContain("wait @spine-event-engine/core@2.0.0-snapshot.3");
     expect(
       calls.indexOf(
         "npm publish core.tgz --access public --tag snapshot --registry=https://registry.npmjs.org/",
@@ -264,11 +264,11 @@ describe("snapshot publisher", () => {
           error.status = 404;
           throw error;
         }
-        return "2.0.0-snapshot.2";
+        return "2.0.0-snapshot.3";
       },
       sleep: async () => calls.push("sleep"),
       name: "@spine-event-engine/core",
-      version: "2.0.0-snapshot.2",
+      version: "2.0.0-snapshot.3",
     });
     expect(calls).toEqual(["sleep"]);
   });

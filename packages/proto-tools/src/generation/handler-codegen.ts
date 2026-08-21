@@ -85,7 +85,7 @@ const defaultOperations: HandlerCodegenOperations = {
 };
 
 /**
- * Creates and atomically replaces an application's generated handler registry.
+ * Creates and atomically replaces an application's generated handler registry from tooling.
  *
  * @param options Application root and generation configuration.
  * @param operations Optional filesystem operations used for generation.

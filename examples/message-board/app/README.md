@@ -29,8 +29,9 @@ browser listener is ready. Stop it with `Ctrl-C`.
 
 The complete entry point is intentionally small:
 
+<!-- docs-snippet-path: examples/message-board/app/src/local-application-server.ts -->
+
 ```ts
-// docs-snippet-path: examples/message-board/app/src/local-application-server.ts
 import { MessageBoardApplication } from "./index.js";
 
 const server = await new MessageBoardApplication().run({ port: 8090 });
@@ -39,8 +40,9 @@ console.log(`MessageBoard local server ready at ${server.baseUrl}`);
 
 Use `start()` instead of `run()` when another host handles process signals:
 
+<!-- docs-snippet-path: examples/message-board/app/src/local-application-server.ts -->
+
 ```ts
-// docs-snippet-path: examples/message-board/app/src/local-application-server.ts
 import { MessageBoardApplication } from "./index.js";
 
 const server = await new MessageBoardApplication().start({ port: 0 });
@@ -53,7 +55,8 @@ try {
 
 ## Public demo boundary
 
-The demo creates no browser credential. Its Gateway admits the public board and
+The demo creates no browser credential. Its Gateway (from
+`@spine-event-engine/server/browser`) admits the public board and
 rebuilds the actor context from each decoded request before forwarding it. It
 does not copy browser-supplied tenant or other trusted fields.
 

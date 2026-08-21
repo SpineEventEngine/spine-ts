@@ -19,7 +19,7 @@ import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-s
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { create } from "@bufbuild/protobuf";
 import { ShardIndex } from "@spine-event-engine/server";
-import { InMemoryDelivery } from "../../delivery-server/src/index.js";
+import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
 import { DeliveryClient, DeliveryOutcomeUnknownError, RemoteWorkRegistry } from "../src/index.js";
 import { domainMessage } from "./shared-fixtures.js";
 

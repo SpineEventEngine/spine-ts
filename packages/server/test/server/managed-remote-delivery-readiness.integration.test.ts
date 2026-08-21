@@ -38,13 +38,13 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { CreateTaskSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_commands_pb.js";
+import { CreateTaskSchema } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_commands_pb.js";
 import {
   TaskIdSchema,
   TaskListIdSchema,
-} from "../../../../examples/todo/dist/generated/spine/examples/todo/task_id_pb.js";
-import { TaskListSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_list_pb.js";
-import { DeliveryAssembly } from "../../../delivery-server/src/server/assembly.js";
+} from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskListSchema } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_list_pb.js";
+import { DeliveryAssembly } from "@spine-event-engine/delivery-server/testing";
 import { afterEach, expect, it } from "vitest";
 
 const children = new Set<ChildProcess>();

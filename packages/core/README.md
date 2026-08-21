@@ -5,13 +5,16 @@ Spine TS application. Use it when application code needs to validate a message,
 pack it into `google.protobuf.Any`, create a command or event envelope, or look
 up a generated message schema by its Spine type URL.
 
+This is an experimental snapshot package. Use Node 24 or newer and generated
+Spine message schemas.
+
 ## Message-interface tokens
 
 A generated interface export has one name in two TypeScript namespaces: use it
 as a type for message shape and as a value token in a repository `.route(...)`
 call. The To-Do `TaskEvent` token groups task events; its authored
 `TaskAssignmentEvent` counterpart groups assignment events. Start with the
-[To-Do walkthrough](../../examples/todo/USER_GUIDE.md) for the complete path.
+[To-Do walkthrough](https://github.com/SpineEventEngine/spine-ts/blob/main/examples/todo/USER_GUIDE.md) for the complete path.
 
 For the detailed contract and integration notes, see
 [REFERENCE documentation for agents](REFERENCE.md).
@@ -30,9 +33,8 @@ pnpm typecheck:build
 ```
 
 Run this workspace-wide TypeScript build from the repository root. For an
-experimental npm consumer, install
-`@spine-event-engine/core@2.0.0-snapshot.2` or the explicit
-`@spine-event-engine/core@snapshot` tag.
+experimental npm consumer, install `@spine-event-engine/core@snapshot`.
+The snapshot tag can change before a stable release.
 
 ## ✅ Validate a message
 
@@ -122,8 +124,9 @@ an application's `*rejections.proto` files. Application code imports that
 generated companion and throws its factory result. This example is from a
 source file in the Todo model package's `src` directory.
 
+<!-- docs-snippet-path: examples/todo/src/index.ts -->
+
 ```ts
-// docs-snippet-path: examples/todo/src/index.ts
 import { create } from "@bufbuild/protobuf";
 import { TaskIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
 import { TaskAlreadyDone } from "../generated/spine/examples/todo/task_rejections.js";
@@ -145,7 +148,7 @@ by hand.
 
 ## 🔗 Learn more
 
-- [Protobuf package](../proto/README.md)
-- [Model-generation tools](../proto-tools/README.md)
-- [Server](../server/README.md)
+- [Protobuf package](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/proto/README.md)
+- [Model-generation tools](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/proto-tools/README.md)
+- [Server](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/server/README.md)
 - [Reference for coding agents](REFERENCE.md)

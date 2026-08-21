@@ -19,7 +19,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { LeasedNodeRegistry } from "../src/index.js";
 import { leaseRecordSpec } from "../src/registry/leased-node-registry.js";
-import { MysqlStorageFactory } from "../../storage-rdbms/src/index.js";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
 
 vi.mock("mysql2/promise", () => ({ createPool: vi.fn() }));
 

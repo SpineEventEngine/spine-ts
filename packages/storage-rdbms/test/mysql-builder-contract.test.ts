@@ -18,7 +18,7 @@ import { createPool } from "mysql2/promise";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import { EventSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
 import {
   ColumnTypes,
   RecordColumn,

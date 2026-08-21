@@ -14,6 +14,18 @@
 
 import { ServerEnvironmentLifecycle } from "../server/server-environment.js";
 
+export { commitFenced } from "../repository/commit-fence.js";
+export { managedServerApplicationAccess } from "../server/managed-server-application.js";
+export { serverEnvironmentAccess } from "../server/server-environment.js";
+
+export {
+  toExternalEvent,
+  unpackExternalEvent,
+  wrapBoundedContextOnline,
+  wrapExternalEvent,
+  wrapExternalEventsWanted,
+} from "../integration/external-messages.js";
+
 /**
  * Provides deterministic server-environment cleanup for package tests.
  */

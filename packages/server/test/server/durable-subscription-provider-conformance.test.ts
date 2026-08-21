@@ -18,13 +18,13 @@ import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/prot
 import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
-import { createPool } from "../../../storage-rdbms/node_modules/mysql2/promise.js";
+import { createPool } from "mysql2/promise";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MysqlStorageFactory } from "../../../storage-rdbms/src/index.js";
-import { DurableSubscriptionBindings } from "../../src/index.js";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
+import { DurableSubscriptionBindings } from "../../src/browser/index.js";
 
-vi.mock("../../../storage-rdbms/node_modules/mysql2/promise.js", () => ({ createPool: vi.fn() }));
+vi.mock("mysql2/promise", () => ({ createPool: vi.fn() }));
 
 const context = create(ActorContextSchema, {
   actor: create(UserIdSchema, { value: "actor" }),

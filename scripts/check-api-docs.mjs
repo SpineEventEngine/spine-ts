@@ -2,7 +2,14 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { createSourceFile, ScriptTarget, SyntaxKind } from "typescript";
+import {
+  createProgram,
+  createSourceFile,
+  ModuleKind,
+  ModuleResolutionKind,
+  ScriptTarget,
+  SyntaxKind,
+} from "typescript";
 
 const expectedProtoExports = [
   "ActorContext",
@@ -459,10 +466,40 @@ const expectedStorageExports = [
   "StorageQueryFeature",
   "StorageQueryEvaluator",
   "StorageQueryPolicy",
+];
+const expectedStorageProviderDocumentedExports = [
+  "CleanupOperation",
+  "DeliveryCleanupInput",
+  "DeliveryCleanupStorage",
+  "DeliveryCleanupStorageFactories",
+  "DeliveryCleanupStorageFactory",
+  "EntityCommitInput",
+  "EntityCommitResult",
+  "EntityCommitStorage",
+  "EntityCommitStorageFactories",
+  "EntityCommitStorageFactory",
+  "EntityEventHistoryPort",
+  "EntityHistoryConformance",
+  "EntityHistoryConformanceAdapter",
+  "EntityIdCodec",
+  "EntityRecord",
+  "EntityRecordStorage",
+  "EntityStateHistoryPort",
+  "EntityStorageConformance",
+  "EntityStorageInput",
+  "StorageQueryValues",
   "TenantBoundary",
   "TenantCatalog",
   "TenantCatalogProvider",
+  "cleanupOperationActive",
+  "disabledEventHistoryPort",
+  "disabledStateHistoryPort",
+  "eventHistorySpec",
+  "eventStoreAccess",
+  "eventStoreRecordSpec",
+  "stateHistorySpec",
 ];
+const expectedStorageProviderDeclaredExports = [...expectedStorageProviderDocumentedExports].sort();
 const expectedDatastoreStorageExports = [
   "CreateEntityStorage",
   "CreateRecordStorage",
@@ -518,11 +555,6 @@ const expectedServerExports = [
   "BoundedContextName",
   "BoundedContextNameError",
   "BoundedContextSnapshot",
-  "BrowserAdmission",
-  "BrowserBackend",
-  "BrowserServerCollaborators",
-  "BrowserServerOptions",
-  "BrowserAuthRoute",
   "CommandBus",
   "Command",
   "CommandEndpoint",
@@ -575,8 +607,6 @@ const expectedServerExports = [
   "PickUpAction",
   "ReceptionAction",
   "UniformAcrossAllShards",
-  "DurableSubscriptionBindings",
-  "DurableSubscriptionBindingsOptions",
   "DeclaredEntityVisibility",
   "DescriptorFieldMetadata",
   "DescriptorMessageSchema",
@@ -609,7 +639,6 @@ const expectedServerExports = [
   "InboxStorage",
   "InboxStorageOptions",
   "InboxWriteResult",
-  "isDurableSubscriptionBindings",
   "ListenerLifecycle",
   "MessageId",
   "PlainEntityVersionMetadata",
@@ -760,6 +789,18 @@ const expectedServerExports = [
   "materializeDecoratedEntityHandlers",
   "validateEntityStateTransition",
 ];
+const expectedBrowserServerExports = [
+  "BrowserAdmission",
+  "BrowserAuthRoute",
+  "BrowserBackend",
+  "BrowserServer",
+  "BrowserServerCollaborators",
+  "BrowserServerOptions",
+  "DurableSubscriptionBindings",
+  "DurableSubscriptionBindingsOptions",
+  "StandaloneBrowserServerOptions",
+  "isDurableSubscriptionBindings",
+];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const boundedContextProtoPath = join(
   "packages",
@@ -798,9 +839,11 @@ const deploymentIndexPath = join("packages", "deployment", "src", "index.ts");
 const deploymentGceIndexPath = join("packages", "deployment-gce", "src", "index.ts");
 const deploymentGkeIndexPath = join("packages", "deployment-gke", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
+const storageProviderPath = join("packages", "storage", "src", "provider.ts");
 const datastoreStorageIndexPath = join("packages", "storage-datastore", "src", "index.ts");
 const rdbmsStorageIndexPath = join("packages", "storage-rdbms", "src", "index.ts");
 const serverIndexPath = join("packages", "server", "src", "index.ts");
+const browserServerIndexPath = join("packages", "server", "src", "browser", "index.ts");
 const testingIndexPath = join("packages", "testing", "src", "index.ts");
 const transportIndexPath = join("packages", "transport", "src", "index.ts");
 
@@ -830,6 +873,7 @@ if (typedocResult.status !== 0) {
 const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
 const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
+const browserServerModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src/browser");
 const authModuleNames = collectDirectModuleNames(apiDocs, "packages/auth/src");
 const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client-node/src");
 const clientWebModuleNames = collectDirectModuleNames(apiDocs, "packages/client-web/src");
@@ -840,6 +884,10 @@ const deploymentModuleNames = collectDirectModuleNames(apiDocs, "packages/deploy
 const deploymentGceModuleNames = collectDirectModuleNames(apiDocs, "packages/deployment-gce/src");
 const deploymentGkeModuleNames = collectDirectModuleNames(apiDocs, "packages/deployment-gke/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
+const storageProviderModuleNames = collectDirectModuleNames(
+  apiDocs,
+  "packages/storage/src/provider",
+);
 const datastoreStorageModuleNames = collectDirectModuleNames(
   apiDocs,
   "packages/storage-datastore/src",
@@ -1160,6 +1208,7 @@ const forbiddenStorageTypeDocNames = [
   "createEventStore",
 ];
 const declaredServerExports = collectNamedExports(serverIndexPath);
+const declaredBrowserServerExports = collectNamedExports(browserServerIndexPath);
 const declaredAuthExports = collectNamedExports(authIndexPath);
 const declaredProtoToolsExports = collectNamedExports(protoToolsIndexPath);
 const declaredClientExports = collectNamedExports(clientIndexPath);
@@ -1170,6 +1219,7 @@ const declaredDeploymentExports = collectNamedExports(deploymentIndexPath);
 const declaredDeploymentGceExports = collectNamedExports(deploymentGceIndexPath);
 const declaredDeploymentGkeExports = collectNamedExports(deploymentGkeIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
+const declaredStorageProviderExports = collectModuleExports(storageProviderPath);
 const declaredDatastoreStorageExports = collectNamedExports(datastoreStorageIndexPath);
 const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
@@ -1195,6 +1245,15 @@ const unexpectedTransportExports = declaredTransportExports.filter(
   (name) => !expectedTransportExports.includes(name),
 );
 const missingServerExports = expectedServerExports.filter((name) => !serverModuleNames.has(name));
+const missingBrowserServerExports = expectedBrowserServerExports.filter(
+  (name) => !browserServerModuleNames.has(name),
+);
+const missingDeclaredBrowserServerExports = expectedBrowserServerExports.filter(
+  (name) => !declaredBrowserServerExports.includes(name),
+);
+const unexpectedDeclaredBrowserServerExports = declaredBrowserServerExports.filter(
+  (name) => !expectedBrowserServerExports.includes(name),
+);
 const missingAuthExports = expectedAuthExports.filter((name) => !authModuleNames.has(name));
 const missingDeclaredAuthExports = expectedAuthExports.filter(
   (name) => !declaredAuthExports.includes(name),
@@ -1288,6 +1347,12 @@ const missingStorageExports = expectedStorageExports.filter(
 const missingDeclaredStorageExports = expectedStorageExports.filter(
   (name) => !declaredStorageExports.includes(name),
 );
+const missingStorageProviderExports = expectedStorageProviderDocumentedExports.filter(
+  (name) => !storageProviderModuleNames.has(name),
+);
+const missingDeclaredStorageProviderExports = expectedStorageProviderDeclaredExports.filter(
+  (name) => !declaredStorageProviderExports.includes(name),
+);
 const unexpectedServerExports = declaredServerExports.filter(
   (name) => !expectedServerExports.includes(name),
 );
@@ -1305,6 +1370,16 @@ const forbiddenDocumentedServerExports = forbiddenServerExports.filter((name) =>
 );
 const unexpectedStorageExports = declaredStorageExports.filter(
   (name) => !expectedStorageExports.includes(name),
+);
+const unexpectedStorageProviderExports = declaredStorageProviderExports.filter(
+  (name) => !expectedStorageProviderDeclaredExports.includes(name),
+);
+const unexpectedDocumentedStorageProviderExports = [...storageProviderModuleNames].filter(
+  (name) => !expectedStorageProviderDocumentedExports.includes(name),
+);
+const providerOnlyStorageContracts = ["TenantBoundary", "TenantCatalog", "TenantCatalogProvider"];
+const leakedStorageRootContracts = providerOnlyStorageContracts.filter(
+  (name) => storageModuleNames.has(name) || declaredStorageExports.includes(name),
 );
 const missingDatastoreStorageExports = expectedDatastoreStorageExports.filter(
   (name) => !datastoreStorageModuleNames.has(name),
@@ -1543,6 +1618,30 @@ if (unexpectedServerExports.length > 0) {
   process.exit(1);
 }
 
+if (missingDeclaredBrowserServerExports.length > 0) {
+  console.error(
+    "@spine-event-engine/server/browser is missing expected exports: " +
+      missingDeclaredBrowserServerExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingBrowserServerExports.length > 0) {
+  console.error(
+    "TypeDoc JSON is missing expected @spine-event-engine/server/browser exports: " +
+      missingBrowserServerExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedDeclaredBrowserServerExports.length > 0) {
+  console.error(
+    "@spine-event-engine/server/browser exports changed without updating docs expectations: " +
+      unexpectedDeclaredBrowserServerExports.join(", "),
+  );
+  process.exit(1);
+}
+
 if (forbiddenDeclaredServerExports.length > 0 || forbiddenDocumentedServerExports.length > 0) {
   console.error(
     "@spine-event-engine/server must not expose internal scheduler/run-control API: " +
@@ -1571,6 +1670,46 @@ if (unexpectedStorageExports.length > 0) {
   console.error(
     "@spine-event-engine/storage root exports changed without updating docs expectations: " +
       unexpectedStorageExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingStorageProviderExports.length > 0) {
+  console.error(
+    "TypeDoc JSON is missing expected @spine-event-engine/storage/provider exports: " +
+      missingStorageProviderExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingDeclaredStorageProviderExports.length > 0) {
+  console.error(
+    "@spine-event-engine/storage/provider is missing expected exports: " +
+      missingDeclaredStorageProviderExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedStorageProviderExports.length > 0) {
+  console.error(
+    "@spine-event-engine/storage/provider exports changed without updating docs expectations: " +
+      unexpectedStorageProviderExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedDocumentedStorageProviderExports.length > 0) {
+  console.error(
+    "TypeDoc JSON has unexpected @spine-event-engine/storage/provider exports: " +
+      unexpectedDocumentedStorageProviderExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (leakedStorageRootContracts.length > 0) {
+  console.error(
+    "@spine-event-engine/storage must expose tenant contracts only from ./provider: " +
+      leakedStorageRootContracts.join(", "),
   );
   process.exit(1);
 }
@@ -1746,6 +1885,9 @@ console.log(
     `${expectedDeploymentGkeExports.length} expected @spine-event-engine/deployment-gke exports`,
     `${expectedServerExports.length} expected @spine-event-engine/server exports`,
     `${expectedStorageExports.length} expected @spine-event-engine/storage exports`,
+    `${expectedStorageProviderDocumentedExports.length} documented and ` +
+      `${expectedStorageProviderDeclaredExports.length} declared ` +
+      "@spine-event-engine/storage/provider exports",
     `${expectedTransportExports.length} expected @spine-event-engine/transport exports`,
     `${expectedTestingExports.length} expected @spine-event-engine/testing exports.`,
   ].join(", "),
@@ -1789,6 +1931,26 @@ function collectNamedExports(indexPath) {
   }
 
   return [...names].sort();
+}
+
+function collectModuleExports(modulePath) {
+  const program = createProgram([modulePath], {
+    module: ModuleKind.NodeNext,
+    moduleResolution: ModuleResolutionKind.NodeNext,
+    skipLibCheck: true,
+    target: ScriptTarget.ESNext,
+  });
+  const source = program.getSourceFile(modulePath);
+  const symbol =
+    source === undefined ? undefined : program.getTypeChecker().getSymbolAtLocation(source);
+
+  return symbol === undefined
+    ? []
+    : program
+        .getTypeChecker()
+        .getExportsOfModule(symbol)
+        .map((value) => value.getName())
+        .sort();
 }
 
 function hasExportModifier(statement) {

@@ -13,19 +13,21 @@
  */
 
 import { Buffer } from "node:buffer";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join, resolve } from "node:path";
 
 import type * as Protobuf from "@bufbuild/protobuf";
 import type * as ProtobufWkt from "@bufbuild/protobuf/wkt";
 import ts from "typescript";
 
-import type {
-  GeneratedHandlerKind,
-  GeneratedHandlerParameterCount,
-} from "./generated-handler-registry.js";
+type GeneratedHandlerKind =
+  | "command-assignment"
+  | "command-reaction"
+  | "event-subscription"
+  | "state-subscription"
+  | "event-reaction";
+type GeneratedHandlerParameterCount = 1 | 2;
 
 /**
  * Build-time analysis result for bare decorated entity handler methods.
@@ -247,6 +249,7 @@ export const BuildHandlerAnalyzer: BuildHandlerAnalyzer = Object.freeze({
     program: ts.Program,
     sourceFiles: readonly ts.SourceFile[] = HandlerSources.appSourceFiles(program),
   ): BuildHandlerAnalysis {
+    PackageDependencies.load(program);
     const entities: BuildEntityHandlers[] = [];
     const diagnostics: BuildHandlerDiagnostic[] = [];
 
@@ -362,11 +365,10 @@ interface HandlerDecoratorUse extends DecoratorUse {
 const handlerDecorators = new Set<HandlerDecorator>(["Assign", "Command", "React", "Subscribe"]);
 const entityBaseNames = new Set(["Aggregate", "Projection", "ProcessManager"]);
 const maxAliasDepth = 50;
-const handlerModuleDirectory = dirname(fileURLToPath(import.meta.url));
 // `spine.options.entity` in the frozen `spine/options.proto` contract.
 const entityOptionFieldNumber = 73903;
-const protobuf = requirePackage("@bufbuild/protobuf") as typeof Protobuf;
-const protobufWkt = requirePackage("@bufbuild/protobuf/wkt") as typeof ProtobufWkt;
+let packageDependencies:
+  { readonly protobuf: typeof Protobuf; readonly protobufWkt: typeof ProtobufWkt } | undefined;
 
 const HandlerSources = Object.freeze({
   appSourceFiles(program: ts.Program): readonly ts.SourceFile[] {
@@ -1390,8 +1392,8 @@ const HandlerSources = Object.freeze({
       (declaration) =>
         ts.isTypeAliasDeclaration(declaration) &&
         declaration.name.text === "External" &&
-        resolve(dirname(declaration.getSourceFile().fileName)) ===
-          resolve(handlerModuleDirectory) &&
+        PackageIdentity.nameFor(declaration.getSourceFile().fileName) ===
+          "@spine-event-engine/server" &&
         /^external(?:\.d)?\.ts$/u.test(
           declaration.getSourceFile().fileName.split(/[\\/]/u).at(-1) ?? "",
         ),
@@ -1791,6 +1793,7 @@ const HandlerSources = Object.freeze({
     }
 
     try {
+      const { protobuf, protobufWkt } = PackageDependencies.current();
       const file = protobuf.fromBinary(
         protobufWkt.FileDescriptorProtoSchema,
         Buffer.from(descriptor.text, "base64"),
@@ -1860,19 +1863,74 @@ const HandlerSources = Object.freeze({
   },
 });
 
-function requirePackage(specifier: string): unknown {
-  const directRequire = createRequire(import.meta.url);
-  try {
-    return directRequire(specifier);
-  } catch (error) {
-    const packageRequire = createRequire(resolve(process.cwd(), "packages/server/package.json"));
+/**
+ * Finds the package identity that owns an analyzed source file.
+ */
+export const PackageIdentity: Readonly<{ nameFor(sourceFile: string): string | undefined }> =
+  Object.freeze({
+    nameFor(sourceFile: string): string | undefined {
+      let directory = resolve(dirname(sourceFile));
+      let manifest = join(directory, "package.json");
+      while (!existsSync(manifest)) {
+        const parent = dirname(directory);
+        if (parent === directory) return undefined;
+        directory = parent;
+        manifest = join(directory, "package.json");
+      }
+      try {
+        const { name } = JSON.parse(readFileSync(manifest, "utf8")) as { name?: unknown };
+        return typeof name === "string" ? name : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+  });
+
+const PackageDependencies = Object.freeze({
+  load(program: ts.Program): void {
+    packageDependencies ??= {
+      protobuf: PackageDependencies.require("@bufbuild/protobuf", program) as typeof Protobuf,
+      protobufWkt: PackageDependencies.require(
+        "@bufbuild/protobuf/wkt",
+        program,
+      ) as typeof ProtobufWkt,
+    };
+  },
+
+  current(): { readonly protobuf: typeof Protobuf; readonly protobufWkt: typeof ProtobufWkt } {
+    if (packageDependencies === undefined)
+      throw new Error("Build handler analyzer dependencies are not loaded.");
+    return packageDependencies;
+  },
+
+  require(specifier: string, program: ts.Program): unknown {
     try {
-      return packageRequire(specifier);
-    } catch {
-      throw error;
+      return createRequire(import.meta.url)(specifier);
+    } catch (directError) {
+      const appRoot = program.getRootFileNames()[0];
+      if (appRoot === undefined) throw directError;
+      const applicationRequire = createRequire(appRoot);
+      try {
+        const toolingEntry = applicationRequire.resolve("@spine-event-engine/proto-tools");
+        return createRequire(join(PackageDependencies.rootFor(toolingEntry), "package.json"))(
+          specifier,
+        );
+      } catch {
+        throw directError;
+      }
     }
-  }
-}
+  },
+
+  rootFor(entry: string): string {
+    let directory = dirname(entry);
+    while (!existsSync(join(directory, "package.json"))) {
+      const parent = dirname(directory);
+      if (parent === directory) throw new Error("Cannot locate proto-tools package manifest.");
+      directory = parent;
+    }
+    return directory;
+  },
+});
 
 const HandlerTypes = Object.freeze({
   recordNamedExport(statement: ts.Statement, exports: GeneratedExports): void {
