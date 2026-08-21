@@ -245,3 +245,44 @@ packages/server/test/package-exports.test.ts --passWithNoTests` passed 5/5;
   exports. Focused tests now generate TypeDoc JSON and assert the direct page
   child, and independently reject each of TenantBoundary, TenantCatalog, and
   TenantCatalogProvider at the storage root so a partial leak cannot pass.
+
+## Wave 14 closure
+
+- The final public package graph contains exactly 18 acyclic framework
+  packages. Native `@spine-event-engine/server` consumers install neither the
+  TypeScript compiler nor auth/browser runtime; browser hosting is owned by the
+  documented `@spine-event-engine/server/browser` subpath. Tooling, storage,
+  lifecycle, membership, delivery, and test-only seams have deliberate package
+  ownership, and no manifest exports an `internal/*` path.
+- All 18 package READMEs now begin from an external developer's context, use
+  experimental snapshot.3 installation guidance, hide snippet harness controls,
+  and retain tarball-valid links to their references. Packed README validation,
+  the connected beginner review, generated snippet checks, audience policy, API
+  documentation, and release-readiness link checks passed.
+- The snapshot.3 history contains exactly 26 commits with message
+  `Bump version -> 2.0.0-snapshot.3`. Mechanical audit proved one manifest and
+  one top-level version-line replacement per commit. Later commits aligned 46
+  concrete internal manifest pins, five generated Proto manifests, and 47
+  lockfile references; `workspace:*` specifications and validation snapshot.7
+  remain unchanged.
+- Every framework package packed successfully. The artifact policy proves
+  metadata, payload, targets, exports, README, REFERENCE, LICENSE, dependencies,
+  and absence of workspace/file/snapshot.2 leaks. Fresh non-workspace consumers
+  installed the exact tarballs, compiled and imported all packages, generated
+  handler code, and executed both the full framework/testing path and the
+  native-server-without-auth/compiler path.
+- The converged review wave recorded clean API/documentation,
+  maintainability, reliability, and security dispositions. Affected re-review
+  accepted the final compiler-test ownership, registry-writer safety, and real
+  browser rollback coverage without threshold reduction or coverage gaming.
+- The final `pnpm verify:release` passed at integration commit `c3f2c6654`:
+  4,412 tests passed, 20 were intentionally skipped, and branch coverage was
+  13,130/14,586 (90.01%). Earlier diagnostic runs exposed and corrected
+  tooling typing, lint, cleanup, TSDoc, copyright, formatting, startup-fixture,
+  and coverage failures; no failing run is represented as release evidence.
+- Permanent work is complete and pushed to
+  `origin/codex/wave14-package-spi-readmes`. The remaining closure actions are
+  the record-only commit, integration into `origin/main`, post-merge
+  verification, and creation of the disposable untracked snapshot.3 publisher.
+  No implementation or test command published to NPM or pushed to the official
+  SpineEventEngine remote.

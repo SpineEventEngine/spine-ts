@@ -224,8 +224,10 @@ durably closed.
   [real two-process proof](tasks/T-0201-wave13-cross-process-acceptance/TASK.md).
   T-0202 owns documentation, final reviews/security, release verification,
   integration, and remote closure.
-- **Wave 14:** establish publishable runtime/tooling/auth and cross-package SPI
-  boundaries.
+- **Wave 14 (complete):** T-0216 published the first public snapshot package
+  metadata and T-0217 completed the runtime/tooling/auth split, deliberate
+  cross-package SPI boundaries, beginner-ready package documentation, and the
+  verified `2.0.0-snapshot.3` artifact set.
 - **Wave 15:** add deliberate registry-integrity and tenant-admission controls.
 - **Wave 16:** implement JVM-equivalent Projection catch-up with repository-level
   targeting, durable progress, Inbox coordination, restart, and live-event
