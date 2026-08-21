@@ -121,3 +121,31 @@
   `7644b582a`. This record-only closure does not reopen the focused
   documentation checks. The closure record committed and immediately pushed as
   `42a1f9372`.
+
+## Storage provider API-docs correction
+
+- 2026-08-21 (Europe/Lisbon): Corrected the provider-aware TypeDoc inventory
+  without changing storage runtime or package exports. `typedoc.json` now has a
+  distinct `packages/storage/src/provider.ts` entrypoint. The API checker keeps
+  the 43 root declarations separate from 29 direct TypeDoc and 30 declared
+  provider exports; `EntityRecord` is declaration-only in the provider module
+  because TypeDoc does not emit it as a direct module child. TenantBoundary,
+  TenantCatalog, and TenantCatalogProvider are explicitly rejected if they
+  leak back to the root, while missing and unexpected provider declarations or
+  documentation fail the checker.
+- TDD evidence: the added focused inventory test was red because the provider
+  TypeDoc entrypoint was absent, then green (2/2) after the entrypoint and
+  checker inventories were added. After local Proto generation and declaration
+  build, `pnpm docs:api:check` passed and reported 43 root storage exports plus
+  29 documented and 30 declared provider exports. Generated Proto manifests
+  were local build by-products only and are excluded from the commit.
+
+## Storage provider API-docs review correction
+
+- 2026-08-21 (Europe/Lisbon): The provider entrypoint now defines a documented
+  local `EntityRecord` type alias to the same entity-record type. This preserves
+  the public type while making it a direct child of the generated provider API
+  page. The provider inventory is consequently 30 documented and 30 declared
+  exports. Focused tests now generate TypeDoc JSON and assert the direct page
+  child, and independently reject each of TenantBoundary, TenantCatalog, and
+  TenantCatalogProvider at the storage root so a partial leak cannot pass.
