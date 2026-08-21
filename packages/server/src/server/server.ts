@@ -15,18 +15,8 @@
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
-import type {
-  AuthorizationPolicy,
-  Clock,
-  ContextResolver,
-  OpaqueSessionCookies,
-  SessionResolver,
-  SubscriptionBindings,
-} from "@spine-event-engine/auth";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
-import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import type { StorageFactory } from "@spine-event-engine/storage";
-import type { NodeDiscovery } from "@spine-event-engine/deployment";
 
 import {
   BoundedContext,
@@ -39,7 +29,6 @@ import {
   spineServicesAccess,
   type SpineServicesOptions,
 } from "../services/spine-services.js";
-import { BrowserServer } from "./browser-server.js";
 import type {
   EnvironmentAttachmentHandle,
   EnvironmentOwnership,
@@ -47,7 +36,6 @@ import type {
 import { ProcessServerCoordinator } from "./process-server-coordinator.js";
 import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";
-import { EnvironmentType } from "./environment.js";
 
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
@@ -55,6 +43,16 @@ const defaultMessageMaxBytes = 4_194_304;
 const maximumMessageMaxBytes = 0xffff_ffff;
 const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
+// Browser declarations remain private to this source module during the package split.
+// The public browser contract is declared by `../browser/options.js`.
+type AuthorizationPolicy = { readonly authorize: (...arguments_: never[]) => unknown };
+type Clock = unknown;
+type ContextResolver = unknown;
+type NodeDiscovery = unknown;
+type OpaqueSessionCookies = unknown;
+type SessionResolver = unknown;
+type SubscriptionBindings = unknown;
+type TypeRegistryLookup = unknown;
 const runningContexts = new WeakMap<RunningServer, readonly BoundedContext[]>();
 
 /**
@@ -95,7 +93,6 @@ export class Server {
   readonly #resources: { close(): unknown }[] = [];
   readonly #listenerLifecycles: ListenerLifecycle[] = [];
   readonly #services: Omit<SpineServicesOptions, "contexts">;
-  readonly #browser: BrowserServerOptions | undefined;
   readonly #environment: ServerEnvironment;
   #starting: Promise<RunningServer> | undefined;
   #startingOwnership: EnvironmentOwnership | undefined;
@@ -123,7 +120,6 @@ export class Server {
     this.#contexts.push(...(options.contexts ?? []));
     this.#resources.push(...(options.resources ?? []));
     this.#services = options.services ?? {};
-    this.#browser = options.browser;
     this.#environment = ServerEnvironment.instance();
   }
 
@@ -243,8 +239,7 @@ export class Server {
    * Concurrent calls on one builder return one managed handle. Run-managed
    * siblings share an active generation but reject while caller-managed
    * ownership is active. The final local environment-owning run retirement
-   * permanently closes its environment; a standalone browser Gateway remains
-   * signal-managed but never owns or closes that environment. A failed final
+   * permanently closes its environment. A failed final
    * close stays retryable through `close()` or a later process signal.
    * Caller-managed servers never close their environment.
    *
@@ -253,9 +248,7 @@ export class Server {
   run(): Promise<RunningServer> {
     const current = this.#run;
     if (current !== undefined) return current;
-    const environment = ServerValues.isStandaloneBrowser(this.#browser)
-      ? undefined
-      : this.#environment;
+    const environment = this.#environment;
     const running = this.#start("server").then((server) =>
       ProcessServerCoordinator.add(
         server,
@@ -278,39 +271,6 @@ export class Server {
   }
 
   async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
-    const browser = this.#browser;
-    const standalone = ServerValues.isStandaloneBrowser(browser);
-    if (browser?.backend !== undefined)
-      BrowserServer.backendUrls(ServerValues.browserBackendUrls(browser.backend));
-    if (
-      standalone &&
-      (this.#contexts.length > 0 ||
-        this.#resources.length > 0 ||
-        Object.keys(this.#services).length > 0 ||
-        this.#listenerLifecycles.length > 0)
-    )
-      throw new Error(
-        "Standalone browser server cannot own local contexts, services, or resources.",
-      );
-    if (browser !== undefined)
-      BrowserServer.requireDurableBindings(
-        browser,
-        this.#environment.environment.type === EnvironmentType.Production,
-      );
-    if (standalone && browser !== undefined)
-      return BrowserServer.open(
-        browser.backend === undefined
-          ? undefined
-          : BrowserServer.backendUrls(ServerValues.browserBackendUrls(browser.backend)),
-        {
-          ...browser,
-          host: browser.host ?? this.#host,
-          port: browser.port ?? this.#port,
-          readMaxBytes: this.#readMaxBytes,
-          writeMaxBytes: this.#writeMaxBytes,
-          production: this.#environment.environment.type === EnvironmentType.Production,
-        },
-      );
     const contexts = await ServerValues.buildContexts(
       this.#contexts,
       this.#environment.storageFactory,
@@ -363,10 +323,7 @@ export class Server {
       this.#readMaxBytes,
       this.#writeMaxBytes,
     );
-    const listener =
-      this.#browser === undefined
-        ? { host: this.#host, port: this.#port }
-        : { host: defaultHost, port: defaultPort };
+    const listener = { host: this.#host, port: this.#port };
     const address = await ServerValues.listen(httpServer, listener.host, listener.port).catch(
       async (error: unknown) => {
         const cleanup: FailedStartCleanup = {
@@ -403,27 +360,7 @@ export class Server {
       else this.#failedStartConsumed = true;
       throw error;
     }
-    if (browser === undefined) return running;
-    try {
-      return await BrowserServer.open(running, {
-        ...browser,
-        host: browser.host ?? this.#host,
-        port: browser.port ?? this.#port,
-        readMaxBytes: this.#readMaxBytes,
-        writeMaxBytes: this.#writeMaxBytes,
-        production: this.#environment.environment.type === EnvironmentType.Production,
-      });
-    } catch (error) {
-      try {
-        await running.close();
-      } catch (closeError) {
-        throw new AggregateError(
-          [error, closeError],
-          "Server browser startup failed and rollback failed.",
-        );
-      }
-      throw error;
-    }
+    return running;
   }
 
   async #retryFailedStartCleanup(cleanup: FailedStartCleanup): Promise<never> {
@@ -620,12 +557,6 @@ export interface ServerOptions {
    */
   readonly resources?: readonly { close(): unknown }[];
 
-  /**
-   * Browser admission and listener configuration. When present, the native
-   * HTTP/2 listener remains private on loopback and this public listener
-   * becomes the returned server URL.
-   */
-  readonly browser?: BrowserServerOptions;
 }
 
 /**

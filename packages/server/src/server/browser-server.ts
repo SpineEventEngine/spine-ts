@@ -47,12 +47,14 @@ import {
   SubscriptionService,
 } from "@spine-event-engine/proto/client";
 
-import type { BrowserAuthRoute, BrowserServerOptions, RunningServer } from "./server.js";
+import type { RunningServer } from "./server.js";
+import type { BrowserAuthRoute, BrowserServerOptions } from "../browser/options.js";
 import {
   attachDurableSubscriptionCleanup,
   isDurableSubscriptionBindings,
 } from "./durable-subscription-bindings.js";
 import reservedSpineRpcPaths from "./reserved-spine-rpc-paths.json" with { type: "json" };
+import { Environment, EnvironmentType } from "./environment.js";
 
 const gracefulBrowserDrainMs = 100;
 const reservedPathSet = new Set(reservedSpineRpcPaths);
@@ -77,12 +79,12 @@ type BrowserHostOptions = BrowserServerOptions & {
 /**
  * Runs the private native endpoint behind one admitted browser listener.
  *
- * @internal
+ * Hosts browser-facing Spine gateway routes independently from native server assembly.
  */
 export const BrowserServer: Readonly<{
   open(
     native: RunningServer | string | readonly string[] | undefined,
-    options: BrowserHostOptions,
+    options: BrowserServerOptions,
   ): Promise<RunningServer>;
   requests(options: BrowserServerOptions): {
     credential(context: { readonly requestHeader: Headers }):
@@ -116,8 +118,16 @@ export const BrowserServer: Readonly<{
 }> = Object.freeze({
   async open(
     native: RunningServer | string | readonly string[] | undefined,
-    options: BrowserHostOptions,
+    input: BrowserServerOptions,
   ): Promise<RunningServer> {
+    const options: BrowserHostOptions = {
+      ...input,
+      host: input.host ?? "127.0.0.1",
+      port: input.port ?? 0,
+      readMaxBytes: 4_194_304,
+      writeMaxBytes: 4_194_304,
+      production: Environment.instance().type === EnvironmentType.Production,
+    };
     BrowserServer.requireDurableBindings(options, options.production);
     const origins = BrowserServer.origins(options.origins);
     const authRoutes = BrowserServer.authRoutes(options.authRoutes);

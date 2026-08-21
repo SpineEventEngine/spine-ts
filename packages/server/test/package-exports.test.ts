@@ -21,7 +21,27 @@ import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testin
 
 type RootExports = typeof import("@spine-event-engine/server");
 
+type BrowserExports = typeof import("@spine-event-engine/server/browser");
+
 describe("@spine-event-engine/server package exports", () => {
+  it("keeps browser and durable-auth APIs out of the native root and exposes them only at browser", async () => {
+    expect("BrowserServer" in serverRoot).toBe(false);
+    expect("BrowserServerOptions" in serverRoot).toBe(false);
+    expect("DurableSubscriptionBindings" in serverRoot).toBe(false);
+    expectTypeOf<"BrowserServer" extends keyof RootExports ? true : false>().toEqualTypeOf<false>();
+    expectTypeOf<
+      "DurableSubscriptionBindings" extends keyof RootExports ? true : false
+    >().toEqualTypeOf<false>();
+    expectTypeOf<"BrowserServer" extends keyof BrowserExports ? true : false>().toEqualTypeOf<true>();
+    expectTypeOf<
+      "DurableSubscriptionBindings" extends keyof BrowserExports ? true : false
+    >().toEqualTypeOf<true>();
+
+    const browser = await import("@spine-event-engine/server/browser");
+    expect(typeof browser.BrowserServer.open).toBe("function");
+    expect(typeof browser.DurableSubscriptionBindings).toBe("function");
+  });
+
   it("keeps reset out of the root declaration and runtime export", () => {
     expect("resetServerEnvironmentForTest" in serverRoot).toBe(false);
     expectTypeOf<

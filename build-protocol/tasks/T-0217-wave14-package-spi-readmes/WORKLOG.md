@@ -81,3 +81,21 @@
   private.
 - Package identity continues to prove canonical compiled/workspace server
   `External` recognition and rejection of the existing path-mapped counterfeit.
+
+## Browser/auth boundary implementation checkpoint
+
+- Classification: high-risk public package, optional-peer, authenticated gateway,
+  and lifecycle boundary. Acceptance criteria are a native-only root declaration
+  and runtime closure, a public `./browser` host surface, and unchanged browser
+  admission/cleanup semantics.
+- RED evidence: before implementation, the focused package-export suite failed
+  because `@spine-event-engine/server/browser` was absent from package exports.
+- GREEN evidence: after adding the browser subpath and removing root browser/
+  durable exports, `pnpm --config.verify-deps-before-run=false exec vitest run
+  packages/server/test/package-exports.test.ts --passWithNoTests` passed 5/5;
+  the server project build completed after generated Proto prerequisites were
+  regenerated.
+- The worktree baseline has a pre-existing manifest/lockfile mismatch, so frozen
+  installation is unavailable without the release-owned lockfile update. Local
+  dependencies were installed with lockfile reads/writes disabled; no lockfile
+  is staged by this stream.
