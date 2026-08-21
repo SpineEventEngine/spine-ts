@@ -23,13 +23,9 @@
       "types": "./dist/testing/index.d.ts",
       "default": "./dist/testing/index.js"
     },
-    "./internal/generated-handler-registry": {
+    "./spi/handler-registry": {
       "types": "./dist/handler/generated-handler-registry.d.ts",
       "default": "./dist/handler/generated-handler-registry.js"
-    },
-    "./internal/handler-codegen": {
-      "types": "./dist/handler/handler-codegen.d.ts",
-      "default": "./dist/handler/handler-codegen.js"
     },
     "./internal/conditional-pickup": {
       "types": "./dist/delivery/conditional-pickup.d.ts",
@@ -51,8 +47,7 @@
     "@spine-event-engine/proto": "2.0.0-snapshot.2",
     "@spine-event-engine/storage": "2.0.0-snapshot.2",
     "@spine-event-engine/transport": "2.0.0-snapshot.2",
-    "loglayer": "9.4.0",
-    "typescript": "6.0.3"
+    "loglayer": "9.4.0"
   },
   "devDependencies": {
     "@spine-event-engine/storage-datastore": "2.0.0-snapshot.2",

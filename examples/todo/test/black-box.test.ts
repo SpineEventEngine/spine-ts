@@ -65,8 +65,8 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { BuildHandlerAnalyzer } from "../../../packages/server/src/handler/build-time-handler-analyzer.js";
-import { GeneratedRegistryWriter } from "../../../packages/server/src/handler/generated-registry-writer.js";
+import { BuildHandlerAnalyzer } from "../../../packages/proto-tools/src/generation/build-time-handler-analyzer.js";
+import { GeneratedRegistryWriter } from "../../../packages/proto-tools/src/generation/generated-registry-writer.js";
 import {
   InMemoryStorageBackend,
   InMemoryStorageFactory,
