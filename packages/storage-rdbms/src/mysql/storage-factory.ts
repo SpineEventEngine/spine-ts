@@ -723,10 +723,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
     private readonly onClose: () => void,
   ) {}
   async commit<Id, State extends Message>(
-    input: import("@spine-event-engine/storage/provider").EntityCommitInput<
-      Id,
-      State
-    >,
+    input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
   ): Promise<import("@spine-event-engine/storage/provider").EntityCommitResult> {
     if (!this.#open) throw new MysqlStorageOperationError("Entity commit storage is closed.");
     if (input.entity.sourceType.typeName !== this.entity.sourceType.typeName)
@@ -791,10 +788,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
     this.onClose();
   }
   private accepts<Id, State extends Message>(
-    input: import("@spine-event-engine/storage/provider").EntityCommitInput<
-      Id,
-      State
-    >,
+    input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
   ): boolean {
     return (
       input.context.multitenant === this.entity.context.multitenant &&

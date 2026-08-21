@@ -14,10 +14,7 @@
 
 import type { TenantId } from "@spine-event-engine/proto";
 import { type StorageFactory } from "@spine-event-engine/storage";
-import type {
-  TenantCatalog,
-  TenantCatalogProvider,
-} from "@spine-event-engine/storage/provider";
+import type { TenantCatalog, TenantCatalogProvider } from "@spine-event-engine/storage/provider";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
 type TenantMode = "single-tenant" | "multitenant";
