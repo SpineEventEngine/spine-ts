@@ -99,3 +99,12 @@
   installation is unavailable without the release-owned lockfile update. Local
   dependencies were installed with lockfile reads/writes disabled; no lockfile
   is staged by this stream.
+- Browser composition now exposes standalone signal-managed `BrowserServer.run(options)`
+  and combined `BrowserServer.run(nativeServer, options)` alongside caller-managed
+  `open(...)`; the latter owns the browser listener and closes its native running
+  server on startup rollback/close. GCE/GKE and Message Board gateway entrypoints
+  now import that browser-only package surface.
+- Focused migration evidence: package exports/index plus GCE/GKE example suites
+  passed 31 tests. The Message Board deployment-config suite could not load its
+  unrelated `@spine-event-engine/delivery-client` package because its generated
+  build output is absent in this worktree.

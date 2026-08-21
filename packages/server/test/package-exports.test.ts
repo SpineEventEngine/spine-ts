@@ -13,6 +13,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 import { describe, expect, expectTypeOf, it } from "vitest";
 
@@ -40,6 +41,15 @@ describe("@spine-event-engine/server package exports", () => {
     const browser = await import("@spine-event-engine/server/browser");
     expect(typeof browser.BrowserServer.open).toBe("function");
     expect(typeof browser.DurableSubscriptionBindings).toBe("function");
+  });
+
+  it("emits a native root declaration with no auth or browser resolution path", () => {
+    const declaration = readFileSync(
+      new URL("../dist/index.d.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(declaration).not.toMatch(/auth|browser|connect-node|node:http/iu);
   });
 
   it("keeps reset out of the root declaration and runtime export", () => {

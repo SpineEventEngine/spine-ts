@@ -48,6 +48,7 @@ import {
 } from "@spine-event-engine/proto/client";
 
 import type { RunningServer } from "./server.js";
+import { Server } from "./server.js";
 import type { BrowserAuthRoute, BrowserServerOptions } from "../browser/options.js";
 import {
   attachDurableSubscriptionCleanup,
@@ -55,6 +56,8 @@ import {
 } from "./durable-subscription-bindings.js";
 import reservedSpineRpcPaths from "./reserved-spine-rpc-paths.json" with { type: "json" };
 import { Environment, EnvironmentType } from "./environment.js";
+import { ProcessServerCoordinator } from "./process-server-coordinator.js";
+import { ServerEnvironment } from "./server-environment.js";
 
 const gracefulBrowserDrainMs = 100;
 const reservedPathSet = new Set(reservedSpineRpcPaths);
@@ -86,6 +89,8 @@ export const BrowserServer: Readonly<{
     native: RunningServer | string | readonly string[] | undefined,
     options: BrowserServerOptions,
   ): Promise<RunningServer>;
+  run(options: BrowserServerOptions): Promise<RunningServer>;
+  run(native: Server, options: BrowserServerOptions): Promise<RunningServer>;
   requests(options: BrowserServerOptions): {
     credential(context: { readonly requestHeader: Headers }):
       | {
@@ -124,8 +129,8 @@ export const BrowserServer: Readonly<{
       ...input,
       host: input.host ?? "127.0.0.1",
       port: input.port ?? 0,
-      readMaxBytes: 4_194_304,
-      writeMaxBytes: 4_194_304,
+      readMaxBytes: input.readMaxBytes ?? 4_194_304,
+      writeMaxBytes: input.writeMaxBytes ?? 4_194_304,
       production: Environment.instance().type === EnvironmentType.Production,
     };
     BrowserServer.requireDurableBindings(options, options.production);
@@ -339,6 +344,20 @@ export const BrowserServer: Readonly<{
       },
       stopDiscovery,
       dynamic,
+    );
+  },
+  async run(
+    nativeOrOptions: Server | BrowserServerOptions,
+    suppliedOptions?: BrowserServerOptions,
+  ): Promise<RunningServer> {
+    const native = nativeOrOptions instanceof Server ? await nativeOrOptions.start() : undefined;
+    const options = suppliedOptions ?? (nativeOrOptions as BrowserServerOptions);
+    const running = await BrowserServer.open(native, options);
+    return ProcessServerCoordinator.add(
+      running,
+      native === undefined ? undefined : ServerEnvironment.instance(),
+      undefined,
+      () => undefined,
     );
   },
   requests(options: BrowserServerOptions) {

@@ -31,6 +31,7 @@ import {
   type RunningServer,
   type StandSubscriptionRegistry,
 } from "@spine-event-engine/server";
+import { BrowserServer, type BrowserServerOptions } from "@spine-event-engine/server/browser";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import type { StorageFactory } from "@spine-event-engine/storage";
 
@@ -233,7 +234,8 @@ export class MessageBoardApplication {
    * @returns The running server, which callers must close when finished.
    */
   async start(options: BoardServerOptions = {}): Promise<RunningServer> {
-    return (await this.#server(options, new InMemoryStorageFactory(), true)).start();
+    const native = await this.#server(options, new InMemoryStorageFactory(), true);
+    return BrowserServer.open(await native.start(), this.#browserOptions(options));
   }
 
   /**
@@ -243,7 +245,10 @@ export class MessageBoardApplication {
    * @returns The running server after the browser listener is ready.
    */
   async run(options: BoardServerOptions = {}): Promise<RunningServer> {
-    return (await this.#server(options, new InMemoryStorageFactory(), true)).run();
+    return BrowserServer.run(
+      await this.#server(options, new InMemoryStorageFactory(), true),
+      this.#browserOptions(options),
+    );
   }
 
   /**
@@ -291,7 +296,10 @@ export class MessageBoardApplication {
     options: BoardServerOptions,
     storageFactory: StorageFactory,
   ): Promise<RunningServer> {
-    return (await this.#server(options, storageFactory, true)).run();
+    return BrowserServer.run(
+      await this.#server(options, storageFactory, true),
+      this.#browserOptions(options),
+    );
   }
 
   async #server(
@@ -301,26 +309,27 @@ export class MessageBoardApplication {
     deliveryStrategy?: DeliveryStrategy,
     subscriptionRegistry?: StandSubscriptionRegistry,
   ): Promise<Server> {
-    const policy = new BoardAccessPolicy();
-    const server = Server.atPort(options.port ?? 0, {
-      host: options.host ?? "127.0.0.1",
+    const server = Server.atPort(browser ? 0 : (options.port ?? 0), {
+      host: browser ? "127.0.0.1" : (options.host ?? "127.0.0.1"),
       services: { subscriptionLimit: 1_000 },
-      ...(browser
-        ? {
-            browser: {
-              origins: [options.webOrigin ?? "http://127.0.0.1:5173"],
-              registry: typeRegistry,
-              publicAccess: true,
-              authorize: policy.authorize.bind(policy),
-              contexts: new BoardContextResolver(),
-              clock: new SystemClock(),
-            },
-          }
-        : {}),
     });
     return server.add(
       await this.createContext(storageFactory, deliveryStrategy, subscriptionRegistry),
     );
+  }
+
+  #browserOptions(options: BoardServerOptions): BrowserServerOptions {
+    const policy = new BoardAccessPolicy();
+    return {
+      host: options.host ?? "127.0.0.1",
+      port: options.port ?? 0,
+      origins: [options.webOrigin ?? "http://127.0.0.1:5173"],
+      registry: typeRegistry,
+      publicAccess: true,
+      authorize: policy.authorize.bind(policy),
+      contexts: new BoardContextResolver(),
+      clock: new SystemClock(),
+    };
   }
 }
 

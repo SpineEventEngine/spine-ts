@@ -34,6 +34,8 @@ export type BrowserBackend =
 export interface BrowserServerCollaborators {
   readonly host?: string;
   readonly port?: number;
+  readonly readMaxBytes?: number;
+  readonly writeMaxBytes?: number;
   readonly backend?: BrowserBackend;
   readonly discovery?: NodeDiscovery;
   readonly authRoutes?: readonly BrowserAuthRoute[];
