@@ -81,3 +81,43 @@
   private.
 - Package identity continues to prove canonical compiled/workspace server
   `External` recognition and rejection of the existing path-mapped counterfeit.
+
+## Node client and Proto Tools README stream
+
+- 2026-08-21 (Europe/Lisbon): The bounded documentation owner updated
+  `packages/client-node/README.md` and `packages/proto-tools/README.md` only.
+  Both now identify their external audience, label the `2.0.0-snapshot.3`
+  install as experimental, state prerequisites, lead with a concrete first
+  success, link `REFERENCE.md` before advanced detail, and state cleanup or
+  build-time limits. The Client Node examples retain source-backed, real public
+  declarations and now use hidden snippet-context directives. Proto Tools
+  removes its unnecessary programmatic-internals snippet and teaches the public
+  CLI model-generation flow. Baseline red evidence was the three visible
+  in-fence `docs-snippet-path` controls reported by the focused snippet checker.
+  Focused green validation passed: the two README snippet checker invocation
+  reported no diagnostics; `scripts/check-typescript-snippets.test.mjs` passed
+  15/15; audience policy, exact-path Prettier, and `git diff --check` passed.
+  Documentation-only `pnpm verify:task -- --no-tests` passed after its normal
+  Node, Proto, TypeScript, lint, documentation, and release-readiness gates.
+  The external implementation report is recorded at the Wave 14 planning path.
+  The implementation committed and immediately pushed as `6564df6d7`.
+
+## Client Node README review correction
+
+- 2026-08-21 (Europe/Lisbon): Accepted the consolidated documentation review
+  findings against `6564df6d7`. The local Message Board first-success endpoint
+  is now the actual single-tenant `http://127.0.0.1:8090`, with no client
+  tenant option. The README now establishes the concrete workspace checkout,
+  install/build, and application-start commands before using the private
+  Message Board model package; it identifies those imports as a workspace
+  contract and directs external applications to their own `package.json` and
+  `spine-proto.json` generated exports. The hidden source context remains
+  `examples/message-board/app/src/index.ts`, so the snippet compiles against
+  real declarations. Focused green evidence: the Client Node snippet checker
+  emitted no diagnostics; the policy suite passed 15/15; audience policy,
+  exact-path Prettier, and `git diff --check` passed. The correction committed
+  as `7644b582a docs: correct Node client Message Board setup` and immediately
+  pushed `origin/codex/wave14-readmes-node-tools` from `6564df6d7` to
+  `7644b582a`. This record-only closure does not reopen the focused
+  documentation checks. The closure record committed and immediately pushed as
+  `42a1f9372`.
