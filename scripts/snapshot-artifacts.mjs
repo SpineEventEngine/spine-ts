@@ -149,6 +149,68 @@ export function proveExactTarballConsumer({ root, destination, run }) {
   return packages;
 }
 
+/**
+ * Proves the server root can be consumed without browser-auth or compiler packages.
+ * The repository compiler is invoked by absolute path so it is not installed into the consumer.
+ */
+export function proveNativeServerTarballConsumer({ root, destination, run, packages }) {
+  const artifacts = packages ?? packFrameworkArtifacts({ root, destination, run });
+  const consumer = join(destination, "native-server-consumer");
+  mkdirSync(consumer, { recursive: true });
+  const tarballs = Object.fromEntries(
+    artifacts.map(({ name, tarball }) => [name, "file:" + tarball]),
+  );
+  writeFileSync(
+    join(consumer, "package.json"),
+    JSON.stringify({
+      name: "@external/native-server-consumer",
+      private: true,
+      type: "module",
+      dependencies: { "@spine-event-engine/server": tarballs["@spine-event-engine/server"] },
+    }),
+  );
+  writeFileSync(
+    join(consumer, "pnpm-workspace.yaml"),
+    "overrides:\n" +
+      Object.entries(tarballs)
+        .map(([name, value]) => "  " + JSON.stringify(name) + ": " + JSON.stringify(value))
+        .join("\n") +
+      "\n",
+  );
+  run("pnpm", ["install", "--offline", "--ignore-scripts"], consumer);
+  assertConsumerIsolation(consumer);
+  const serverManifest = JSON.parse(
+    readFileSync(
+      join(consumer, "node_modules", "@spine-event-engine", "server", "package.json"),
+      "utf8",
+    ),
+  );
+  for (const forbidden of ["typescript", "@spine-event-engine/auth"])
+    if (forbidden in (serverManifest.dependencies ?? {}))
+      throw new Error("Native server consumer declared forbidden package: " + forbidden);
+  writeFileSync(
+    join(consumer, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        target: "ES2024",
+        outDir: "dist",
+        strict: true,
+      },
+      include: ["index.ts"],
+    }),
+  );
+  writeFileSync(join(consumer, "index.ts"), 'import "@spine-event-engine/server";\n');
+  run(
+    process.execPath,
+    [join(root, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"],
+    consumer,
+  );
+  run(process.execPath, ["dist/index.js"], consumer);
+  return artifacts;
+}
+
 export function assertConsumerIsolation(consumer) {
   const pending = [join(consumer, "node_modules")];
   const consumerRoot = realpathSync(consumer);
