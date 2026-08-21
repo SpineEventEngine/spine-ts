@@ -157,6 +157,10 @@ packages/server/test/package-exports.test.ts --passWithNoTests` passed 5/5;
   browser helpers. The browser entrypoint publishes only `open` and `run`; its
   validation/listener seams are source-only test access. Direct browser and
   native lifecycle evidence passes 130/130 and 51/51 respectively.
+- Restored property-level browser API TSDoc for admission ownership, standalone
+  forwarding, canonical origins, bounded auth routes, listener limits, and
+  trusted collaborators. `docs:api:check` and server typecheck pass after the
+  provider/browser inventory integration.
 
 ## Node client and Proto Tools README stream
 
