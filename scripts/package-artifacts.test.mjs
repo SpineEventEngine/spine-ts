@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   dependencyFirstOrder,
   packedArchiveProblems,
+  packedReadmeLinkProblems,
   packedManifestProblems,
 } from "./package-artifacts.mjs";
 
@@ -28,6 +29,26 @@ describe("package artifacts", () => {
     ).toEqual([
       "@spine-event-engine/example archive is missing LICENSE",
       "@spine-event-engine/example archive is missing REFERENCE.md",
+    ]);
+  });
+
+  it("rejects packed README links that leave the package artifact", () => {
+    expect(
+      packedReadmeLinkProblems(
+        { name: "@spine-event-engine/example" },
+        ["README.md", "REFERENCE.md", "assets/diagram.svg"],
+        [
+          "[repository guide](../docs/guide.md)",
+          "[missing](guides/first-steps.md)",
+          "[reference](./REFERENCE.md?view=full#configuration)",
+          "[diagram](assets/diagram.svg#overview)",
+          "[website](https://spine.io/docs)",
+          "[section](#installation)",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "@spine-event-engine/example README link escapes package artifact: ../docs/guide.md",
+      "@spine-event-engine/example README link is missing from package artifact: guides/first-steps.md",
     ]);
   });
 

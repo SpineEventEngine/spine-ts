@@ -1,3 +1,6 @@
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, posix } from "node:path";
+
 const dependencyGroups = [
   "dependencies",
   "devDependencies",
@@ -231,5 +234,56 @@ export function packedArchiveProblems(manifest, entries) {
 
   return problems.sort((left, right) => left.localeCompare(right));
 }
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+
+/**
+ * Reports README links that cannot be followed from the packed package alone.
+ *
+ * @param {Record<string, unknown>} manifest packed package manifest
+ * @param {readonly string[]} entries tar entry paths without the package prefix
+ * @param {string} readme packed README source
+ * @returns {string[]} sorted policy violations
+ */
+export function packedReadmeLinkProblems(manifest, entries, readme) {
+  const name = typeof manifest.name === "string" ? manifest.name : "<unnamed package>";
+  const files = new Set(entries.map((entry) => entry.replace(/^package\//u, "")));
+  const problems = [];
+
+  for (const target of markdownLinkTargets(readme)) {
+    if (isExternalOrFragmentLink(target)) continue;
+    const path = target.split(/[?#]/u, 1)[0];
+    const decodedPath = decodeLinkPath(path);
+    const normalized = posix.normalize(decodedPath);
+    if (decodedPath.startsWith("/") || normalized === ".." || normalized.startsWith("../")) {
+      problems.push(`${name} README link escapes package artifact: ${target}`);
+    } else if (!files.has(normalized)) {
+      problems.push(`${name} README link is missing from package artifact: ${target}`);
+    }
+  }
+
+  return [...new Set(problems)].sort((left, right) => left.localeCompare(right));
+}
+
+function markdownLinkTargets(readme) {
+  const targets = [];
+  const inline = /!?\[[^\]]*\]\(\s*(?:<([^>\n]+)>|([^\s)]+))/gu;
+  const reference = /^\s*\[[^\]]+\]:\s*(?:<([^>\n]+)>|(\S+))/gmu;
+  for (const pattern of [inline, reference]) {
+    for (const match of readme.matchAll(pattern)) {
+      const target = (match[1] ?? match[2] ?? "").trim();
+      if (target) targets.push(target);
+    }
+  }
+  return targets;
+}
+
+function isExternalOrFragmentLink(target) {
+  return target.startsWith("#") || target.startsWith("//") || /^[a-z][a-z0-9+.-]*:/iu.test(target);
+}
+
+function decodeLinkPath(path) {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
