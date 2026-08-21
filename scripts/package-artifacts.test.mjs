@@ -52,6 +52,50 @@ describe("package artifacts", () => {
     ]);
   });
 
+  it("validates rendered README destinations without parsing code or malformed Markdown", () => {
+    expect(
+      packedReadmeLinkProblems(
+        { name: "@spine-event-engine/example" },
+        [
+          "README.md",
+          "REFERENCE.md",
+          "assets/diagram.svg",
+          "guides/with (parentheses).md",
+          "guides/with space.md",
+          "images/diagram.svg",
+        ],
+        [
+          "```md",
+          "[fenced escape](../not-rendered.md)",
+          "```",
+          "`[inline escape](../not-rendered.md)`",
+          "[unfinished](../not-rendered.md",
+          "[reference](nested/../REFERENCE.md?view=full#configuration)",
+          "![image](images/diagram.svg?size=2#top)",
+          "[parentheses](guides/with (parentheses).md)",
+          "[escaped space](guides/with\\ space.md)",
+          "[external](https://spine.io/docs)",
+          "[mail](mailto:hello@spine.io)",
+          "[data](data:text/plain,ok)",
+          "[file escape](file:../outside.md)",
+          "[file absolute](file:///outside.md)",
+          "[windows drive](C:\\outside\\README.md)",
+          "[windows traversal](..\\outside\\README.md)",
+          "[root path](/outside.md)",
+          "[encoded traversal](%2e%2e/outside.md)",
+          "[reference definition]: assets/diagram.svg?raw=1#preview",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "@spine-event-engine/example README link escapes package artifact: ..\\outside\\README.md",
+      "@spine-event-engine/example README link escapes package artifact: /outside.md",
+      "@spine-event-engine/example README link escapes package artifact: %2e%2e/outside.md",
+      "@spine-event-engine/example README link escapes package artifact: C:\\outside\\README.md",
+      "@spine-event-engine/example README link escapes package artifact: file:../outside.md",
+      "@spine-event-engine/example README link escapes package artifact: file:///outside.md",
+    ]);
+  });
+
   it("rejects file and link dependency references in packed manifests", () => {
     expect(
       packedManifestProblems({

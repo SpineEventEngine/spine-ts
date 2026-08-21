@@ -249,11 +249,18 @@ export function packedReadmeLinkProblems(manifest, entries, readme) {
   const problems = [];
 
   for (const target of markdownLinkTargets(readme)) {
-    if (isExternalOrFragmentLink(target)) continue;
-    const path = target.split(/[?#]/u, 1)[0];
-    const decodedPath = decodeLinkPath(path);
+    const path = localLinkPath(target);
+    if (path === undefined) continue;
+    const decodedPath = decodeLinkPath(path.split(/[?#]/u, 1)[0])
+      .replace(/\\([!"#$%&'()*+,./:;<=>?@[\\\]^_`{|}~ -])/gu, "$1")
+      .replaceAll("\\", "/");
     const normalized = posix.normalize(decodedPath);
-    if (decodedPath.startsWith("/") || normalized === ".." || normalized.startsWith("../")) {
+    if (
+      decodedPath.startsWith("/") ||
+      /^[a-z]:\//iu.test(decodedPath) ||
+      normalized === ".." ||
+      normalized.startsWith("../")
+    ) {
       problems.push(`${name} README link escapes package artifact: ${target}`);
     } else if (!files.has(normalized)) {
       problems.push(`${name} README link is missing from package artifact: ${target}`);
@@ -265,19 +272,122 @@ export function packedReadmeLinkProblems(manifest, entries, readme) {
 
 function markdownLinkTargets(readme) {
   const targets = [];
-  const inline = /!?\[[^\]]*\]\(\s*(?:<([^>\n]+)>|([^\s)]+))/gu;
-  const reference = /^\s*\[[^\]]+\]:\s*(?:<([^>\n]+)>|(\S+))/gmu;
-  for (const pattern of [inline, reference]) {
-    for (const match of readme.matchAll(pattern)) {
-      const target = (match[1] ?? match[2] ?? "").trim();
+  let activeFence;
+
+  for (const sourceLine of readme.split("\n")) {
+    const delimiter = fenceDelimiter(sourceLine);
+    if (activeFence !== undefined) {
+      if (
+        delimiter !== undefined &&
+        delimiter[0] === activeFence[0] &&
+        delimiter.length >= activeFence.length
+      ) {
+        activeFence = undefined;
+      }
+      continue;
+    }
+    if (delimiter !== undefined) {
+      activeFence = delimiter;
+      continue;
+    }
+
+    const line = stripInlineCode(sourceLine);
+    const reference = /^\s{0,3}\[[^\]]+\]:\s*/u.exec(line);
+    if (reference !== null) {
+      const target = readReferenceDestination(line, reference[0].length);
       if (target) targets.push(target);
+    }
+
+    let index = 0;
+    while (index < line.length) {
+      const labelStart = line.indexOf("[", index);
+      if (labelStart === -1) break;
+      const labelEnd = line.indexOf("](", labelStart + 1);
+      if (labelEnd === -1) break;
+      const destination = readInlineDestination(line, labelEnd + 2);
+      if (destination === undefined) {
+        index = labelEnd + 2;
+        continue;
+      }
+      if (destination.target) targets.push(destination.target);
+      index = destination.end;
     }
   }
   return targets;
 }
 
-function isExternalOrFragmentLink(target) {
-  return target.startsWith("#") || target.startsWith("//") || /^[a-z][a-z0-9+.-]*:/iu.test(target);
+function fenceDelimiter(line) {
+  return /^\s{0,3}(`{3,}|~{3,})/u.exec(line)?.[1];
+}
+
+function stripInlineCode(line) {
+  let result = "";
+  let index = 0;
+  while (index < line.length) {
+    if (line[index] !== "`") {
+      result += line[index];
+      index += 1;
+      continue;
+    }
+    let delimiterEnd = index + 1;
+    while (line[delimiterEnd] === "`") delimiterEnd += 1;
+    const delimiter = line.slice(index, delimiterEnd);
+    const closing = line.indexOf(delimiter, delimiterEnd);
+    if (closing === -1) {
+      result += delimiter;
+      index = delimiterEnd;
+      continue;
+    }
+    result += " ".repeat(closing + delimiter.length - index);
+    index = closing + delimiter.length;
+  }
+  return result;
+}
+
+function readInlineDestination(line, from) {
+  let index = from;
+  while (/\s/u.test(line[index] ?? "")) index += 1;
+  if (line[index] === "<") {
+    const end = line.indexOf(">", index + 1);
+    if (end === -1) return undefined;
+    const close = line.indexOf(")", end + 1);
+    if (close === -1) return undefined;
+    return { target: line.slice(index + 1, end), end: close + 1 };
+  }
+
+  const targetStart = index;
+  let depth = 0;
+  while (index < line.length) {
+    if (line[index] === "\\") {
+      index += 2;
+      continue;
+    }
+    if (line[index] === "(") depth += 1;
+    if (line[index] === ")") {
+      if (depth === 0) return { target: line.slice(targetStart, index), end: index + 1 };
+      depth -= 1;
+    }
+    index += 1;
+  }
+  return undefined;
+}
+
+function readReferenceDestination(line, from) {
+  const destination = line.slice(from).trim();
+  if (destination.startsWith("<")) {
+    const end = destination.indexOf(">");
+    return end === -1 ? undefined : destination.slice(1, end);
+  }
+  const match = /^(?:\\.|\S)+/u.exec(destination);
+  return match?.[0];
+}
+
+function localLinkPath(target) {
+  if (target.startsWith("#")) return undefined;
+  if (target.startsWith("file:")) return target.slice("file:".length);
+  if (/^[a-z]:[\\/]/iu.test(target)) return target;
+  if (/^[a-z][a-z0-9+.-]*:/iu.test(target)) return undefined;
+  return target;
 }
 
 function decodeLinkPath(path) {
