@@ -13,7 +13,8 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import ts from "typescript";
 
 function packageDirectories(root) {
   return readdirSync(join(root, "packages"), { withFileTypes: true })
@@ -147,7 +148,9 @@ export function nativeServerRootDependencyProblems(root) {
 function trackedTestOrFixtureFiles(root) {
   const extensions = /\.(?:[cm]?[jt]sx?)$/u;
   const isTestOrFixture = (path) =>
-    extensions.test(path) && /(?:^|\/)(?:test|tests|test-fixtures|fixtures)(?:\/|$)/u.test(path);
+    extensions.test(path) &&
+    (/(?:^|\/)(?:test|tests|test-fixtures|fixtures)(?:\/|$)/u.test(path) ||
+      /\.(?:test|spec)\.(?:[cm]?[jt]sx?)$/u.test(path));
   try {
     return execFileSync("git", ["ls-files", "-z", "--", "packages"], {
       cwd: root,
@@ -177,8 +180,14 @@ function discoveredTestOrFixtureFiles(root, isTestOrFixture) {
 }
 
 function packageRootFor(root, path) {
-  const relativePath = relative(join(root, "packages"), path).split("/");
+  const relativePath = relative(join(root, "packages"), path).split(sep);
   return relativePath.length > 1 ? join(root, "packages", relativePath[0]) : undefined;
+}
+
+/** Compares nested paths with an injected platform path implementation when needed in tests. */
+export function isNestedPath(parent, child, path = { relative, sep }) {
+  const nested = path.relative(parent, child);
+  return nested === "" || (nested !== ".." && !nested.startsWith(".." + path.sep));
 }
 
 function resolvedRelativeTarget(importer, specifier) {
@@ -205,10 +214,43 @@ function resolvedRelativeTarget(importer, specifier) {
   return target === undefined ? undefined : realpathSync(target);
 }
 
-function relativeSpecifiers(text) {
-  return [
-    ...text.matchAll(/(?:\bfrom\s*|\bimport\s*\(|\bnew\s+URL\s*\()["'](\.{1,2}\/[^"']+)["']/gu),
-  ].map((match) => match[1]);
+function scriptKind(path) {
+  if (/\.(?:cjs|mjs)$/u.test(path)) return ts.ScriptKind.JS;
+  if (/\.tsx$/u.test(path)) return ts.ScriptKind.TSX;
+  if (/\.jsx$/u.test(path)) return ts.ScriptKind.JSX;
+  return ts.ScriptKind.TS;
+}
+
+function stringSpecifier(node) {
+  return node !== undefined && ts.isStringLiteralLike(node) ? node.text : undefined;
+}
+
+function relativeSpecifiers(path, text) {
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, false, scriptKind(path));
+  const specifiers = [];
+  const add = (specifier) => {
+    if (specifier?.startsWith("./") || specifier?.startsWith("../")) specifiers.push(specifier);
+  };
+  const visit = (node) => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node))
+      add(stringSpecifier(node.moduleSpecifier));
+    else if (ts.isImportEqualsDeclaration(node))
+      add(stringSpecifier(node.moduleReference.expression));
+    else if (ts.isCallExpression(node)) {
+      if (node.expression.kind === ts.SyntaxKind.ImportKeyword)
+        add(stringSpecifier(node.arguments[0]));
+      if (ts.isIdentifier(node.expression) && node.expression.text === "require")
+        add(stringSpecifier(node.arguments[0]));
+    } else if (
+      ts.isNewExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "URL"
+    )
+      add(stringSpecifier(node.arguments[0]));
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return specifiers;
 }
 
 /**
@@ -227,14 +269,14 @@ export function siblingPackageTreeReachProblems(root) {
   for (const importer of trackedTestOrFixtureFiles(actualRoot)) {
     const ownRoot = packageRootFor(actualRoot, importer);
     if (ownRoot === undefined) continue;
-    for (const specifier of relativeSpecifiers(readFileSync(importer, "utf8"))) {
+    for (const specifier of relativeSpecifiers(importer, readFileSync(importer, "utf8"))) {
       const target = resolvedRelativeTarget(importer, specifier);
       if (target === undefined) continue;
       const siblingRoot = packageRoots.find(
         (packageRoot) =>
           packageRoot !== realpathSync(ownRoot) &&
           relative(packageRoot, target) !== "" &&
-          !relative(packageRoot, target).startsWith(".."),
+          isNestedPath(packageRoot, target),
       );
       if (siblingRoot === undefined) continue;
       const siblingRelativePath = relative(siblingRoot, target);
