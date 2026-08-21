@@ -449,6 +449,88 @@ describe("generated registry writer", () => {
     ).toThrow(/ignored by Git/);
   });
 
+  it("rejects unsafe repository and generated output locations before writing", () => {
+    const repoRoot = createRepoFixture("packages/demo/generated/\n");
+    const generatedRoot = join(repoRoot, "packages/demo/generated");
+    const outputFile = join(generatedRoot, "handler/generated-handler-registry.ts");
+    const writer = new GeneratedRegistryWriter();
+
+    expect(() =>
+      writer.write(analysis(repoRoot), {
+        generatedRoot: join(repoRoot, "packages/demo/build"),
+        outputFile,
+        repoRoot,
+      }),
+    ).toThrow(/Generated root must end with/);
+
+    expect(() =>
+      writer.write(analysis(repoRoot), {
+        generatedRoot,
+        outputFile,
+        repoRoot: join(repoRoot, "missing"),
+      }),
+    ).toThrow(/Repository root does not exist/);
+
+    const nonDirectoryRoot = join(repoRoot, "not-a-directory");
+    writeFileSync(nonDirectoryRoot, "not a directory\n");
+    expect(() =>
+      writer.write(analysis(repoRoot), {
+        generatedRoot,
+        outputFile,
+        repoRoot: nonDirectoryRoot,
+      }),
+    ).toThrow(/Repository root must be a directory/);
+
+    expect(() =>
+      writer.write(analysis(repoRoot), {
+        generatedRoot,
+        outputFile,
+        repoRoot: join(nonDirectoryRoot, "nested-repository"),
+      }),
+    ).toThrow(/Repository root path ancestor is not a directory/);
+
+    expect(() =>
+      writer.write(analysis(repoRoot), {
+        generatedRoot,
+        outputFile: join(repoRoot, "outside-generated.ts"),
+        repoRoot,
+      }),
+    ).toThrow(/Generated output must stay within/);
+
+    mkdirSync(generatedRoot, { recursive: true });
+    const blockedDirectory = join(generatedRoot, "blocked");
+    writeFileSync(blockedDirectory, "not a directory\n");
+    expect(() =>
+      writer.write(analysis(repoRoot), {
+        generatedRoot,
+        outputFile: join(blockedDirectory, "generated-handler-registry.ts"),
+        repoRoot,
+      }),
+    ).toThrow(/Generated output directory ancestor is not a directory/);
+  });
+
+  it("renders CommonJS, ESM, and extensionless entity imports", () => {
+    const repoRoot = "/workspace/repo";
+    const outputFile = join(repoRoot, "generated/handler/generated-handler-registry.ts");
+    const source = new GeneratedRegistryWriter().render(
+      {
+        diagnostics: [],
+        entities: [
+          entity("CommonJsEntity", join(repoRoot, "src/commonjs.cts")),
+          entity("EsmEntity", join(repoRoot, "src/esm.mts")),
+          entity("ExtensionlessEntity", join(repoRoot, "src/extensionless")),
+          entity("CoLocatedEntity", join(dirname(outputFile), "co-located.cts")),
+        ],
+      },
+      { outputFile },
+    );
+
+    expect(source).toContain('from "../../src/commonjs.cjs";');
+    expect(source).toContain('from "../../src/esm.mjs";');
+    expect(source).toContain('from "../../src/extensionless";');
+    expect(source).toContain('from "./co-located.cjs";');
+  });
+
   it("reports git ignore verification failures before writing", async () => {
     const repoRoot = createRepoFixture("packages/demo/generated/\n");
     const generatedRoot = join(repoRoot, "packages/demo/generated");
@@ -790,6 +872,24 @@ function analysis(repoRoot: string): BuildHandlerAnalysis {
             origin: "domestic",
           },
         ],
+      },
+    ],
+  };
+}
+
+function entity(className: string, sourceFile: string) {
+  return {
+    className,
+    sourceFile,
+    stateSchema: schema("../generated/task_pb.js", "TaskSchema"),
+    handlers: [
+      {
+        kind: "command-assignment" as const,
+        methodName: "createTask",
+        signalSchema: schema("../generated/command_pb.js", "CreateTaskSchema"),
+        emittedSchemas: [],
+        parameterCount: 1 as const,
+        origin: "domestic" as const,
       },
     ],
   };
