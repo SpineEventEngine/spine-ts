@@ -6,10 +6,6 @@ import type { TaskListId } from "../../generated/spine/examples/todo/task_id_pb.
 import { TaskAssignmentEvent as TaskAssignmentEventToken } from "../../generated/interfaces/task-assignment-event.js";
 import { TaskEvent } from "../../generated/interfaces/task-event.js";
 
-export interface TaskAssignmentEvent {
-  readonly assignee?: UserId | undefined;
-}
-
 const taskListRouting = EventRouting.create<TaskListId>().route(TaskEvent, (event) =>
   event.taskListId === undefined ? [] : [event.taskListId],
 );

@@ -69,10 +69,10 @@ do not hand-edit `generated/interfaces/`.
 
 ## Register exact and interface routes
 
-The same exported name works in two places: use `TaskEvent` or
-`TaskAssignmentEvent` as a type in a type annotation, and use the imported
-runtime value as the token passed to `.route(...)`. The application aliases the
-assignment token only to make that distinction easy to read.
+The application declares the authored `TaskAssignmentEvent` interface once in
+`src/todo-app.ts`. Generation creates a runtime token with the same name. Code
+that only configures routing imports that token and aliases it to make its
+runtime role explicit.
 
 <!-- docs-snippet-path: examples/todo/src/docs/routing.ts -->
 
@@ -84,10 +84,6 @@ import { TaskReassignedSchema } from "../../generated/spine/examples/todo/task_e
 import type { TaskListId } from "../../generated/spine/examples/todo/task_id_pb.js";
 import { TaskAssignmentEvent as TaskAssignmentEventToken } from "../../generated/interfaces/task-assignment-event.js";
 import { TaskEvent } from "../../generated/interfaces/task-event.js";
-
-export interface TaskAssignmentEvent {
-  readonly assignee?: UserId | undefined;
-}
 
 const taskListRouting = EventRouting.create<TaskListId>().route(TaskEvent, (event) =>
   event.taskListId === undefined ? [] : [event.taskListId],
