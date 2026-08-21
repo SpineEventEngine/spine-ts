@@ -1,0 +1,34 @@
+import { create } from "@bufbuild/protobuf";
+import { TypeUrls } from "@spine-event-engine/core";
+import { Client } from "@spine-event-engine/client-web";
+import { ActorContextSchema } from "@spine-event-engine/proto";
+import {
+  QueryIdSchema,
+  QuerySchema,
+  TargetSchema,
+  TopicIdSchema,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
+import { BoardMessageViewSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
+
+const client = Client.forGrpcWeb("http://127.0.0.1:8080");
+const request = client.onBehalfOf("alice");
+const target = create(TargetSchema, {
+  type: TypeUrls.derive(BoardMessageViewSchema),
+  criterion: { case: "includeAll", value: true },
+});
+const query = create(QuerySchema, { id: create(QueryIdSchema, { value: "messages" }), target });
+const topic = create(TopicSchema, {
+  id: create(TopicIdSchema, { value: "messages" }),
+  target,
+  context: create(ActorContextSchema, { actor: { value: "alice" } }),
+});
+const response = await request.send(query);
+const subscription = await request.createSubscription(topic, {
+  kind: "entity",
+  authoritativeQuery: () => query,
+});
+await subscription.activate();
+await subscription.cancel();
+console.log(response.message.length);
+await client.close();
