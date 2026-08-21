@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { COPYRIGHT_HEADER } from "./check-copyright.mjs";
 import {
   checkTypeScriptSnippets,
   documentationSnippetFile,
@@ -150,6 +151,41 @@ describe("TypeScript documentation snippets", () => {
     }
   });
 
+  it("keeps source-linked beginner snippets free of source copyright headers", () => {
+    const snippets = [
+      [
+        "packages/client-react/README.md",
+        "examples/message-board/web/src/docs/client-react-provider-query.ts",
+      ],
+      [
+        "packages/client-react/README.md",
+        "examples/message-board/web/src/docs/client-react-subscription.ts",
+      ],
+      [
+        "packages/client-web/README.md",
+        "examples/message-board/web/src/docs/client-web-create-client.ts",
+      ],
+      [
+        "packages/client-web/README.md",
+        "examples/message-board/web/src/docs/client-web-request-subscription.ts",
+      ],
+      ["examples/todo/README.md", "examples/todo/src/docs/create-task.ts"],
+      ["examples/todo/USER_GUIDE.md", "examples/todo/src/docs/routing.ts"],
+    ];
+
+    for (const [document, sourcePath] of snippets) {
+      const source = readFileSync(resolve(root, sourcePath), "utf8");
+      const markdown = readFileSync(resolve(root, document), "utf8");
+      const matchingSnippet = extractTypeScriptSnippets(markdown).find((snippet) =>
+        markdown.slice(0, snippet.index).endsWith(`<!-- docs-snippet-path: ${sourcePath} -->\n\n`),
+      );
+
+      expect(source.startsWith(COPYRIGHT_HEADER), sourcePath).toBe(true);
+      expect(matchingSnippet, `${document}: ${sourcePath}`).toBeDefined();
+      expect(matchingSnippet?.[1], `${document}: ${sourcePath}`).not.toContain("Copyright");
+    }
+  });
+
   it("keeps the Todo introduction fence as executable domain behavior", () => {
     const source = readFileSync(resolve(root, "examples/todo/README.md"), "utf8");
     const snippet = extractTypeScriptSnippets(source).find((entry) =>
@@ -171,7 +207,7 @@ describe("TypeScript documentation snippets", () => {
 
     expect(guide).toContain('option (every_is).ts_type = "TaskEvent";');
     expect(guide).toContain('option (is).ts_type = "TaskAssignmentEvent";');
-    expect(guide).toContain("// docs-snippet-path: examples/todo/src/todo-app.ts");
+    expect(guide).toContain("<!-- docs-snippet-path: examples/todo/src/docs/routing.ts -->");
     expect(guide).toContain("TaskReassigned");
     expect(guide).toContain("zero, one, and two");
     expect(guide).toContain(
