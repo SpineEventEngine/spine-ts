@@ -23,71 +23,158 @@ import type {
 import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import type { NodeDiscovery } from "@spine-event-engine/deployment";
 
-/** Selects exactly one admission mode and binding ownership for a browser host. */
+/**
+ * Selects exactly one admission mode and binding ownership for a browser host.
+ */
 export type BrowserAdmission =
   | {
-      /** Resolves authenticated application sessions from incoming credentials. */
+      // prettier-ignore
+
+      /**
+       * Resolves authenticated application sessions from incoming credentials.
+       */
       readonly sessions: SessionResolver;
-      /** Excludes intentionally public admission from authenticated mode. */
+
+      /**
+       * Excludes intentionally public admission from authenticated mode.
+       */
       readonly publicAccess?: never;
-      /** Optionally supplies application-owned authenticated subscription bindings. */
+
+      /**
+       * Optionally supplies application-owned authenticated subscription bindings.
+       */
       readonly bindings?: SubscriptionBindings;
     }
   | {
-      /** Excludes session resolution from framework-owned public admission. */
+      // prettier-ignore
+
+      /**
+       * Excludes session resolution from framework-owned public admission.
+       */
       readonly sessions?: never;
-      /** Enables intentionally public admission and framework-owned bindings. */
+
+      /**
+       * Enables intentionally public admission and framework-owned bindings.
+       */
       readonly publicAccess: true;
-      /** Excludes bindings because public admission owns them process-locally. */
+
+      /**
+       * Excludes bindings because public admission owns them process-locally.
+       */
       readonly bindings?: never;
     };
 
+/**
+ * Describes one fixed backend or ordered fixed backend set for browser forwarding.
+ */
 export type BrowserBackend =
   | {
-      /** Supplies one canonical HTTP(S) backend origin. */
+      // prettier-ignore
+
+      /**
+       * Supplies one canonical HTTP(S) backend origin.
+       */
       readonly baseUrl: string;
-      /** Excludes a multi-backend set when one backend is supplied. */
+
+      /**
+       * Excludes a multi-backend set when one backend is supplied.
+       */
       readonly baseUrls?: never;
     }
   | {
-      /** Excludes a single backend when a fixed backend set is supplied. */
+      // prettier-ignore
+
+      /**
+       * Excludes a single backend when a fixed backend set is supplied.
+       */
       readonly baseUrl?: never;
-      /** Supplies a non-empty ordered set of canonical HTTP(S) backend origins. */
+
+      /**
+       * Supplies a non-empty ordered set of canonical HTTP(S) backend origins.
+       */
       readonly baseUrls: readonly string[];
     };
 
+/**
+ * Collects collaborators and listener settings for a browser gateway.
+ */
 export interface BrowserServerCollaborators {
-  /** Public listener host; defaults to local loopback. */
+  // prettier-ignore
+
+  /**
+   * Public listener host; defaults to local loopback.
+   */
   readonly host?: string;
-  /** Public listener port; defaults to an ephemeral port. */
+
+  /**
+   * Public listener port; defaults to an ephemeral port.
+   */
   readonly port?: number;
-  /** Maximum accepted request bytes; defaults to 4 MiB. */
+
+  /**
+   * Maximum accepted request bytes; defaults to 4 MiB.
+   */
   readonly readMaxBytes?: number;
-  /** Maximum emitted response or auth callback bytes; defaults to 4 MiB. */
+
+  /**
+   * Maximum emitted response or auth callback bytes; defaults to 4 MiB.
+   */
   readonly writeMaxBytes?: number;
-  /** Fixed canonical HTTP(S) backends for standalone forwarding. */
+
+  /**
+   * Fixed canonical HTTP(S) backends for standalone forwarding.
+   */
   readonly backend?: BrowserBackend;
-  /** Complete-snapshot backend discovery for standalone forwarding. */
+
+  /**
+   * Complete-snapshot backend discovery for standalone forwarding.
+   */
   readonly discovery?: NodeDiscovery;
-  /** Exact, bounded application auth callbacks; never a general router. */
+
+  /**
+   * Exact, bounded application auth callbacks; never a general router.
+   */
   readonly authRoutes?: readonly BrowserAuthRoute[];
-  /** Maximum concurrently admitted auth callbacks; defaults to 64. */
+
+  /**
+   * Maximum concurrently admitted auth callbacks; defaults to 64.
+   */
   readonly maxActiveAuthRequests?: number;
-  /** Exact canonical HTTP(S) origins permitted to call Spine RPCs. */
+
+  /**
+   * Exact canonical HTTP(S) origins permitted to call Spine RPCs.
+   */
   readonly origins: readonly string[];
-  /** Registry used to decode requests before authorization. */
+
+  /**
+   * Registry used to decode requests before authorization.
+   */
   readonly registry?: TypeRegistryLookup;
-  /** Authorizes every decoded operation after admission. */
+
+  /**
+   * Authorizes every decoded operation after admission.
+   */
   readonly authorize: AuthorizationPolicy["authorize"];
-  /** Rebuilds trusted actor and tenant facts independently of browser input. */
+
+  /**
+   * Rebuilds trusted actor and tenant facts independently of browser input.
+   */
   readonly contexts: ContextResolver;
-  /** Trusted clock for gateway and durable-subscription decisions. */
+
+  /**
+   * Trusted clock for gateway and durable-subscription decisions.
+   */
   readonly clock: Clock;
-  /** Strict opaque-cookie extraction alongside exact bearer credentials. */
+
+  /**
+   * Strict opaque-cookie extraction alongside exact bearer credentials.
+   */
   readonly cookies?: OpaqueSessionCookies;
 }
 
-/** Options for a combined loopback-native browser host or a standalone gateway. */
+/**
+ * Supplies options for a combined loopback-native browser host or a standalone gateway.
+ */
 export type BrowserServerOptions = BrowserServerCollaborators & BrowserAdmission;
 
 /**
@@ -98,23 +185,76 @@ export type BrowserServerOptions = BrowserServerCollaborators & BrowserAdmission
  */
 export type StandaloneBrowserServerOptions = BrowserServerOptions &
   (
-    | { readonly backend: BrowserBackend; readonly discovery?: NodeDiscovery }
-    | { readonly backend?: BrowserBackend; readonly discovery: NodeDiscovery }
+    | {
+        // prettier-ignore
+
+        /**
+         * Supplies fixed backends when discovery is optional.
+         */
+        readonly backend: BrowserBackend;
+
+        /**
+         * Optionally supplements the fixed backend set with discovery.
+         */
+        readonly discovery?: NodeDiscovery;
+      }
+    | {
+        // prettier-ignore
+
+        /**
+         * Optionally supplies fixed backends alongside required discovery.
+         */
+        readonly backend?: BrowserBackend;
+
+        /**
+         * Supplies required discovery when no fixed backend is configured.
+         */
+        readonly discovery: NodeDiscovery;
+      }
   );
 
+/**
+ * Defines one bounded application authentication callback exposed by a browser gateway.
+ */
 export interface BrowserAuthRoute {
-  /** Accepted method; auth routes only support GET or POST. */
+  // prettier-ignore
+
+  /**
+   * Accepted method; auth routes only support GET or POST.
+   */
   readonly method: "GET" | "POST";
-  /** Exact canonical non-root path; reserved Spine RPC paths are forbidden. */
+
+  /**
+   * Exact canonical non-root path; reserved Spine RPC paths are forbidden.
+   */
   readonly path: string;
-  /** Exact canonical origins allowed for this callback. */
+
+  /**
+   * Exact canonical origins allowed for this callback.
+   */
   readonly origins: readonly string[];
-  /** Permits an origin-less OAuth callback only when explicitly enabled. */
+
+  /**
+   * Permits an origin-less OAuth callback only when explicitly enabled.
+   */
   readonly allowMissingOrigin?: boolean;
-  /** Positive request-body limit, capped at the transport bound. */
+
+  /**
+   * Positive request-body limit, capped at the transport bound.
+   */
   readonly maxRequestBytes: number;
-  /** Positive callback deadline in milliseconds. */
+
+  /**
+   * Positive callback deadline in milliseconds.
+   */
   readonly timeoutMs: number;
-  /** Bounded callback invoked only after origin and body admission. */
+
+  /**
+   * Invokes the bounded callback only after origin and body admission.
+   *
+   * @param request Admitted callback request.
+   * @param signal Aborts when the callback deadline expires or the client disconnects.
+   * @returns A bounded callback response.
+   */
   readonly onRequest: (request: Request, signal: AbortSignal) => Response | Promise<Response>;
 }

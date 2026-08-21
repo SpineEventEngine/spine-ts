@@ -1863,6 +1863,9 @@ const HandlerSources = Object.freeze({
   },
 });
 
+/**
+ * Finds the package identity that owns an analyzed source file.
+ */
 export const PackageIdentity: Readonly<{ nameFor(sourceFile: string): string | undefined }> =
   Object.freeze({
     nameFor(sourceFile: string): string | undefined {

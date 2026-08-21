@@ -63,7 +63,9 @@ const exactFrameworkPackages = [
   "transport",
 ].map((directory) => `@spine-event-engine/${directory}`);
 
-/** Returns every accidentally-public package export key. */
+/**
+ * Returns every accidentally-public package export key.
+ */
 export function packageExportInternalPathProblems(root) {
   return packageManifests(root).flatMap(({ manifest }) => {
     return Object.keys(manifest.exports ?? {})
@@ -102,7 +104,9 @@ function packageGraphProblems(manifests) {
   return [...new Set(problems)].sort((left, right) => left.localeCompare(right));
 }
 
-/** Returns package-surface and graph violations for the final Wave 14 boundary. */
+/**
+ * Returns package-surface and graph violations for the final Wave 14 boundary.
+ */
 export function finalPublicSurfaceProblems(root) {
   const manifests = packageManifests(root);
   const byName = new Map(manifests.map(({ manifest }) => [manifest.name, manifest]));
@@ -179,7 +183,9 @@ function packageRootFor(root, path) {
   return relativePath.length > 1 ? join(root, "packages", relativePath[0]) : undefined;
 }
 
-/** Compares nested paths with an injected platform path implementation when needed in tests. */
+/**
+ * Compares nested paths with an injected platform path implementation when needed in tests.
+ */
 export function isNestedPath(parent, child, path = { relative, sep }) {
   const nested = path.relative(parent, child);
   return nested === "" || (nested !== ".." && !nested.startsWith(".." + path.sep));

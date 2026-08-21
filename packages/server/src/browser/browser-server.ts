@@ -73,6 +73,12 @@ interface UncheckedBrowserAdmission {
   readonly contexts?: ContextResolver;
   readonly clock?: Clock;
 }
+
+/**
+ * Holds fully normalized options while a browser listener is being assembled.
+ *
+ * @internal
+ */
 type BrowserHostOptions = BrowserServerOptions & {
   readonly host: string;
   readonly port: number;
@@ -82,19 +88,17 @@ type BrowserHostOptions = BrowserServerOptions & {
   readonly dynamicManagerFactory?: (node: ApplicationNode) => Http2SessionManager;
 };
 
-/** @internal Options accepted only through the browser-server white-box seam. */
+/**
+ * Accepts options used only through the browser-server white-box seam.
+ *
+ * @internal
+ */
 type BrowserServerTestOptions = BrowserServerOptions & Partial<BrowserHostOptions>;
 
 /**
  * Runs the private native endpoint behind one admitted browser listener.
  *
  * Hosts browser-facing Spine gateway routes independently from native server assembly.
- */
-/**
- * Production implementation for the public browser-server facade.
- *
- * The facade intentionally selects only `open` and `run`; source-level tests
- * use a separate internal view declared below.
  */
 export const browserServerImplementation: Readonly<{
   open(native: RunningServer, options: BrowserServerOptions): Promise<RunningServer>;
@@ -725,7 +729,11 @@ export const browserServerImplementation: Readonly<{
   },
 });
 
-/** @internal White-box browser host seam for source-level behavior tests. */
+/**
+ * Exposes white-box browser-host operations to source-level behavior tests.
+ *
+ * @internal
+ */
 type BrowserServerTestAccess = Omit<
   typeof browserServerImplementation,
   "open" | "run" | "requests" | "requireDurableBindings" | "preflight"
@@ -746,6 +754,11 @@ type BrowserServerTestAccess = Omit<
   preflight(mode: "combined" | "standalone", options: BrowserServerTestOptions): BrowserHostOptions;
 };
 
+/**
+ * Provides the internal white-box browser-host seam for source-level behavior tests.
+ *
+ * @internal
+ */
 export const browserServerTestAccess: BrowserServerTestAccess = Object.freeze({
   ...browserServerImplementation,
 });
