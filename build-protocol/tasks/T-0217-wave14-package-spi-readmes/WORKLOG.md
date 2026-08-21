@@ -1,0 +1,52 @@
+# T-0217 — Wave 14 package/SPI boundary contracts
+
+## Scope and dispatch
+
+- Classification: high-risk public package, artifact, and optional-auth
+  contract checkpoint; production package sources remain out of scope.
+- Existing role: bounded implementation owner.
+- Expected model/reasoning: `gpt-5.6-terra` / `medium`, explicitly selected by
+  the orchestrator dispatch. Runtime self-introspection is unavailable on this
+  surface; configured dispatch is the available metadata.
+- Owner paths: `scripts/` policy/consumer tests and helpers, this combined
+  work record, and the Wave 14 contract report.
+
+## Contract checkpoint
+
+- Commit `a7eaf6b879831315213743192084e2d64eb0fdb2` added red acceptance tests
+  for zero `internal/*` exports, resolved sibling-package test/fixture reaches,
+  native server compiler/auth closure, named final SPI/browser surfaces and
+  exact acyclic 18-package graph, and a packed native-server consumer.
+- The commit was pushed immediately to
+  `origin/codex/wave14-package-spi-readmes`.
+- Expected-red evidence: 11 internal exports, 24 sibling package implementation
+  reaches, server runtime dependencies on auth and TypeScript, six absent final
+  entry points, and native packed consumer dependency failure. Formatting,
+  focused lint, and 17 unaffected artifact/publication tests were green.
+
+## Confirmed review correction batch
+
+- Review found that the initial scanner missed filename-only tests and several
+  JavaScript/TypeScript module forms, used raw-text matching, and did not prove
+  pnpm virtual-store closure contents.
+- Red evidence before correction: the focused scanner fixture omitted the
+  filename-only, CommonJS `require`, and TypeScript import-equals reaches; the
+  virtual-store helper was absent.
+- Correction: parse source through the TypeScript AST for static/dynamic
+  imports, export-from, require, import-equals, and `new URL`; derive tracked
+  candidates from both test/fixture directories and `*.test.*`/`*.spec.*`;
+  use path-module-aware containment; add false-positive and Windows semantic
+  fixtures; inspect every physically installed package manifest, including
+  `.pnpm`, after the native consumer install.
+- Green correction evidence: scanner fixtures and virtual-store closure fixture
+  pass. Intentional production-red assertions remain unchanged: 11 internal
+  exports, 24 real reaches, auth/TypeScript native closure, six missing public
+  paths, and packed consumer installed auth.
+
+## Limits and next step
+
+- `verify:release` is excluded by the contract-test brief.
+- The native consumer compile/import stage remains correctly unreachable until
+  the production dependency split removes the detected installed packages.
+- Next: subsequent Wave 14 implementation streams satisfy the retained red
+  contracts, then rerun the focused consumer through compile/import.

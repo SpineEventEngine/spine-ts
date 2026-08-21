@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  existsSync,
   lstatSync,
   mkdtempSync,
   mkdirSync,
@@ -179,6 +180,7 @@ export function proveNativeServerTarballConsumer({ root, destination, run, packa
   );
   run("pnpm", ["install", "--offline", "--ignore-scripts"], consumer);
   assertConsumerIsolation(consumer);
+  assertNativeConsumerDependencyClosure(consumer);
   const serverManifest = JSON.parse(
     readFileSync(
       join(consumer, "node_modules", "@spine-event-engine", "server", "package.json"),
@@ -209,6 +211,33 @@ export function proveNativeServerTarballConsumer({ root, destination, run, packa
   );
   run(process.execPath, ["dist/index.js"], consumer);
   return artifacts;
+}
+
+/**
+ * Rejects forbidden packages anywhere in the physical installed dependency closure,
+ * including pnpm's `.pnpm` virtual store.
+ */
+export function assertNativeConsumerDependencyClosure(consumer) {
+  const pending = [join(consumer, "node_modules")];
+  const visited = new Set();
+  const installed = [];
+  while (pending.length) {
+    const current = pending.pop();
+    if (current === undefined) continue;
+    const actual = realpathSync(current);
+    if (visited.has(actual)) continue;
+    visited.add(actual);
+    const manifestPath = join(actual, "package.json");
+    if (existsSync(manifestPath)) {
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      if (typeof manifest.name === "string") installed.push(manifest.name);
+    }
+    for (const entry of readdirSync(actual, { withFileTypes: true }))
+      if (entry.isDirectory() || entry.isSymbolicLink()) pending.push(join(actual, entry.name));
+  }
+  for (const forbidden of ["@spine-event-engine/auth", "typescript"])
+    if (installed.includes(forbidden))
+      throw new Error("Native server consumer installed forbidden package: " + forbidden);
 }
 
 export function assertConsumerIsolation(consumer) {
