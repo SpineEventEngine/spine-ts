@@ -2547,6 +2547,156 @@ describe("Server", () => {
     }
   });
 
+  it("aggregates admitted browser cleanup failures when its listener cannot bind", async () => {
+    const occupied = await Server.atPort(0).start();
+    const bindingFailure = new Error("binding cleanup failed");
+    const discoveryFailure = new Error("discovery cleanup failed");
+    const nativeFailure = new Error("native cleanup failed");
+    const bindings = inMemoryBindings();
+    const bindingClose = vi.spyOn(bindings, "close").mockRejectedValue(bindingFailure);
+    const native = {
+      host: "127.0.0.1",
+      port: 65534,
+      baseUrl: "http://127.0.0.1:65534",
+      close: vi.fn().mockRejectedValue(nativeFailure),
+    };
+    const stopped = vi.fn().mockRejectedValue(discoveryFailure);
+    const aborted = vi.fn();
+
+    try {
+      const error = await BrowserServer.open(native as never, {
+        ...browserGateway(),
+        bindings,
+        discovery: {
+          async watch(publish) {
+            publish([new ApplicationNode({ id: "node/a", endpoint: "https://10.0.0.1" })]);
+            await Promise.resolve();
+            return stopped;
+          },
+        },
+        dynamicManagerFactory: () => ({ abort: aborted }) as never,
+        host: "127.0.0.1",
+        port: occupied.port,
+        readMaxBytes: 1_048_576,
+        writeMaxBytes: 1_048_576,
+        production: false,
+      }).catch((reason: unknown) => reason);
+
+      expect(error).toBeInstanceOf(AggregateError);
+      expect((error as AggregateError).errors).toEqual(
+        expect.arrayContaining([bindingFailure, discoveryFailure, nativeFailure]),
+      );
+      expect(bindingClose).toHaveBeenCalledOnce();
+      expect(stopped).toHaveBeenCalledOnce();
+      expect(aborted).toHaveBeenCalledOnce();
+      expect(native.close).toHaveBeenCalledOnce();
+    } finally {
+      bindingClose.mockRestore();
+      await occupied.close();
+    }
+  });
+
+  it("releases framework-owned public gateway resources when its listener cannot bind", async () => {
+    const occupied = await Server.atPort(0).start();
+    const aborted = vi.fn();
+
+    try {
+      await expect(
+        BrowserServer.open(undefined, {
+          ...publicBrowserGateway(),
+          backend: { baseUrl: "https://10.0.0.1" },
+          dynamicManagerFactory: () => ({ abort: aborted }) as never,
+          host: "127.0.0.1",
+          port: occupied.port,
+          readMaxBytes: 1_048_576,
+          writeMaxBytes: 1_048_576,
+          production: false,
+        }),
+      ).rejects.toMatchObject({ code: "EADDRINUSE" });
+
+      expect(aborted).toHaveBeenCalledOnce();
+    } finally {
+      await occupied.close();
+    }
+  });
+
+  it.each([
+    ["host", { host: " \t" }, "host must not be blank"],
+    ["port", { port: -1 }, "port must be an integer"],
+    ["read bound", { readMaxBytes: 0 }, "readMaxBytes must be a positive integer"],
+    ["write bound", { writeMaxBytes: 0 }, "writeMaxBytes must be a positive integer"],
+    ["auth capacity", { maxActiveAuthRequests: 0 }, "maxActiveAuthRequests must be a positive"],
+  ] as const)(
+    "rejects an invalid browser %s before opening a listener",
+    (_name, override, message) => {
+      expect(() =>
+        BrowserServer.preflight("combined", { ...browserGateway(), ...override }),
+      ).toThrow(message);
+    },
+  );
+
+  it("requires a named durable binding for an authenticated production gateway", () => {
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "gateway",
+      nextId: () => "subscription",
+      cleanup: () => Promise.resolve(),
+    });
+    const options = {
+      ...browserGateway(),
+      backend: { baseUrl: "https://backend.example.test" },
+      bindings,
+      registry: spineCoreRegistry,
+    };
+
+    expect(() => {
+      BrowserServer.requireDurableBindings(options, true);
+    }).not.toThrow();
+    (bindings as { namespace: string }).namespace = " ";
+    expect(() => {
+      BrowserServer.requireDurableBindings(options, true);
+    }).toThrow("named durable subscription bindings");
+  });
+
+  it.each([
+    "not a URL",
+    "ftp://backend.example.test",
+    "https://backend.example.test/path",
+    "https://backend.example.test?query=value",
+    "https://backend.example.test#fragment",
+    "https://user@backend.example.test",
+    "https://user:secret@backend.example.test",
+  ])("rejects a noncanonical standalone backend %s", (backend) => {
+    expect(() => BrowserServer.backendUrl(backend)).toThrow("canonical HTTP(S) origin");
+  });
+
+  it("aborts an overdue browser auth callback with a gateway timeout response", async () => {
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "POST",
+          path: "/auth/timeout",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 32,
+          timeoutMs: 1,
+          onRequest: () => new Promise<Response>(() => undefined),
+        },
+      ],
+    });
+
+    try {
+      const response = await fetch(`${server.baseUrl}/auth/timeout`, {
+        method: "POST",
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      expect(response.status).toBe(504);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("retries only the unfinished native close phase behind the browser listener", async () => {
     let attempts = 0;
     const server = await openCombined(
