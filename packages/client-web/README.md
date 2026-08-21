@@ -13,11 +13,17 @@ explains application sign-in and gateway composition.
 ## Install and prepare an application
 
 This is an experimental snapshot. In a browser application with its generated
-Proto model already available, install the browser client explicitly:
+Proto model already available, install every package imported by the browser
+examples explicitly:
 
 ```sh
-pnpm add @spine-event-engine/client-web@2.0.0-snapshot.3
+pnpm add @bufbuild/protobuf@2.12.1 @spine-event-engine/core@2.0.0-snapshot.3 @spine-event-engine/proto@2.0.0-snapshot.3 @spine-event-engine/client-web@2.0.0-snapshot.3
 ```
+
+Generate your application's model from its authored Proto sources with the
+[Proto tools guide](../proto-tools/README.md), then import its published
+schemas from your own model package. The Message Board schema used below is a
+repository example of that application-owned output, not a package to install.
 
 Before the first request, provide an application Gateway endpoint that permits
 the browser origin, selects either gRPC-Web or binary Connect, and establishes
@@ -39,7 +45,7 @@ Choose the protocol deliberately. gRPC-Web is the portable browser choice.
 Connect is an optional binary optimization for a gateway already configured to
 accept it; the client does not probe or fall back between protocols.
 
-<!-- docs-snippet-path: examples/message-board/web/src/index.tsx -->
+<!-- docs-snippet-path: examples/message-board/web/src/docs/client-web-create-client.ts -->
 
 ```ts
 import { BrowserSession, Client } from "@spine-event-engine/client-web";
@@ -66,7 +72,7 @@ protocol and allow its origin.
 Use an actor or guest request scope. Commands return an application outcome;
 queries return the raw Spine response.
 
-<!-- docs-snippet-path: examples/message-board/web/src/index.tsx -->
+<!-- docs-snippet-path: examples/message-board/web/src/docs/client-web-request-subscription.ts -->
 
 ```ts
 import { create } from "@bufbuild/protobuf";
@@ -82,8 +88,6 @@ import {
 } from "@spine-event-engine/proto/client";
 import { BoardMessageViewSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 
-// BoardMessageViewSchema comes from this application's generated model; it is
-// not an installable dependency of client-web.
 const client = Client.forGrpcWeb("http://127.0.0.1:8080");
 const request = client.onBehalfOf("alice");
 const target = create(TargetSchema, {

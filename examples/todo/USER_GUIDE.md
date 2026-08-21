@@ -74,15 +74,16 @@ The same exported name works in two places: use `TaskEvent` or
 runtime value as the token passed to `.route(...)`. The application aliases the
 assignment token only to make that distinction easy to read.
 
-<!-- docs-snippet-path: examples/todo/src/todo-app.ts -->
+<!-- docs-snippet-path: examples/todo/src/docs/routing.ts -->
 
 ```ts
 import { EventRouting } from "@spine-event-engine/server";
-import { TaskReassignedSchema } from "../generated/spine/examples/todo/task_events_pb.js";
-import type { TaskListId } from "../generated/spine/examples/todo/task_id_pb.js";
 import type { UserId } from "@spine-event-engine/proto";
-import { TaskAssignmentEvent as TaskAssignmentEventToken } from "../generated/interfaces/task-assignment-event.js";
-import { TaskEvent } from "../generated/interfaces/task-event.js";
+
+import { TaskReassignedSchema } from "../../generated/spine/examples/todo/task_events_pb.js";
+import type { TaskListId } from "../../generated/spine/examples/todo/task_id_pb.js";
+import { TaskAssignmentEvent as TaskAssignmentEventToken } from "../../generated/interfaces/task-assignment-event.js";
+import { TaskEvent } from "../../generated/interfaces/task-event.js";
 
 export interface TaskAssignmentEvent {
   readonly assignee?: UserId | undefined;
