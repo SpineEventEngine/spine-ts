@@ -290,6 +290,7 @@ function markdownLinkTargets(readme) {
       activeFence = delimiter;
       continue;
     }
+    if (/^(?: {4}|\t)/u.test(sourceLine)) continue;
 
     const line = stripInlineCode(sourceLine);
     const reference = /^\s{0,3}\[[^\]]+\]:\s*/u.exec(line);
@@ -302,6 +303,10 @@ function markdownLinkTargets(readme) {
     while (index < line.length) {
       const labelStart = line.indexOf("[", index);
       if (labelStart === -1) break;
+      if (isEscaped(line, labelStart)) {
+        index = labelStart + 1;
+        continue;
+      }
       const labelEnd = line.indexOf("](", labelStart + 1);
       if (labelEnd === -1) break;
       const destination = readInlineDestination(line, labelEnd + 2);
@@ -309,7 +314,8 @@ function markdownLinkTargets(readme) {
         index = labelEnd + 2;
         continue;
       }
-      if (destination.target) targets.push(destination.target);
+      const target = withoutMarkdownTitle(destination.target);
+      if (target) targets.push(target);
       index = destination.end;
     }
   }
@@ -372,6 +378,16 @@ function readInlineDestination(line, from) {
   return undefined;
 }
 
+function isEscaped(line, index) {
+  let slashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && line[cursor] === "\\"; cursor -= 1) slashes += 1;
+  return slashes % 2 === 1;
+}
+
+function withoutMarkdownTitle(destination) {
+  return destination.replace(/\s+(?:"[^"\n]*"|'[^'\n]*'|\([^)]*\))\s*$/u, "").trim();
+}
+
 function readReferenceDestination(line, from) {
   const destination = line.slice(from).trim();
   if (destination.startsWith("<")) {
@@ -384,7 +400,8 @@ function readReferenceDestination(line, from) {
 
 function localLinkPath(target) {
   if (target.startsWith("#")) return undefined;
-  if (target.startsWith("file:")) return target.slice("file:".length);
+  if (target.startsWith("//")) return undefined;
+  if (/^file:/iu.test(target)) return target.slice("file:".length);
   if (/^[a-z]:[\\/]/iu.test(target)) return target;
   if (/^[a-z][a-z0-9+.-]*:/iu.test(target)) return undefined;
   return target;
