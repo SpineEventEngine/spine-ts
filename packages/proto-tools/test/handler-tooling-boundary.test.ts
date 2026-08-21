@@ -28,6 +28,7 @@ it("keeps handler tooling independent of the Server runtime package", () => {
   };
 
   expect(toolingPackage.dependencies?.["@spine-event-engine/server"]).toBeUndefined();
+  expect(toolingPackage.dependencies?.typescript).toBe("6.0.3");
   expect(serverPackage.dependencies?.typescript).toBeUndefined();
   expect(serverPackage.exports?.["./internal/handler-codegen"]).toBeUndefined();
   expect(serverPackage.exports?.["./internal/generated-handler-registry"]).toBeUndefined();
