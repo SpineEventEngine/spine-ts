@@ -26,10 +26,17 @@ For detailed public contracts, lifecycle rules, and limits, read the
 
 Before running this example, use Node.js with ESM support, generate and build
 your application's Proto model, and start that application's local Spine
-service. The Message Board workspace app provides one concrete local service at
-`http://127.0.0.1:8080`; its generated model imports below stand for your own
-published application model. Do not add the private example package as an
-application dependency.
+service. For the concrete Message Board workspace walkthrough, clone this
+repository, run `pnpm install --frozen-lockfile && pnpm typecheck:build`, then
+start `pnpm --dir examples/message-board/app start`. That command starts the
+single-tenant local service at `http://127.0.0.1:8090`.
+
+The imports below are the Message Board workspace model contract: its
+`package.json` exports compiled `generated/*.js` modules after the setup above.
+They are not an installable dependency for an external application. In your
+application, depend on your own generated model package and replace this model
+package name and generated export paths with the ones declared by its
+`package.json` and `spine-proto.json`.
 
 Create one client for the component that manages the connection. A client from
 `connectTo()` owns its HTTP/2 session, so always close it.
@@ -40,14 +47,14 @@ Create one client for the component that manages the connection. A client from
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Client } from "@spine-event-engine/client-node";
-import { PostMessageSchema } from "../../model/generated/spine/examples/messageboard/commands_pb.js";
+import { PostMessageSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
 import {
   BoardIdSchema,
   MessageIdSchema,
-} from "../../model/generated/spine/examples/messageboard/message_board_pb.js";
-import { UserIdSchema } from "../../model/generated/spine/examples/messageboard/user_pb.js";
+} from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
+import { UserIdSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/user_pb.js";
 
-const client = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
+const client = Client.connectTo("http://127.0.0.1:8090");
 const request = client.onBehalfOf("alice");
 const result = await request.post(
   PostMessageSchema,

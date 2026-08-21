@@ -70,3 +70,20 @@
   Node, Proto, TypeScript, lint, documentation, and release-readiness gates.
   The external implementation report is recorded at the Wave 14 planning path.
   Commit and immediate push remain pending.
+
+## Client Node README review correction
+
+- 2026-08-21 (Europe/Lisbon): Accepted the consolidated documentation review
+  findings against `6564df6d7`. The local Message Board first-success endpoint
+  is now the actual single-tenant `http://127.0.0.1:8090`, with no client
+  tenant option. The README now establishes the concrete workspace checkout,
+  install/build, and application-start commands before using the private
+  Message Board model package; it identifies those imports as a workspace
+  contract and directs external applications to their own `package.json` and
+  `spine-proto.json` generated exports. The hidden source context remains
+  `examples/message-board/app/src/index.ts`, so the snippet compiles against
+  real declarations. Focused green evidence: the Client Node snippet checker
+  emitted no diagnostics; the policy suite passed 15/15; audience policy,
+  exact-path Prettier, and `git diff --check` passed. This record-only update
+  does not reopen the focused documentation checks. Commit and immediate push
+  remain pending.
