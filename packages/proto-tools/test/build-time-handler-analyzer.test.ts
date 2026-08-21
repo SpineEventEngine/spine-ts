@@ -20,7 +20,7 @@ import { entity, EntityOptionSchema } from "@spine-event-engine/proto";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import { BuildHandlerAnalyzer } from "@spine-event-engine/proto-tools/testing";
+import { BuildHandlerAnalyzer } from "../src/generation/build-time-handler-analyzer.js";
 
 const analyzeBuildHandlers = (...args: Parameters<typeof BuildHandlerAnalyzer.analyze>) =>
   BuildHandlerAnalyzer.analyze(...args);
