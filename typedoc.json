@@ -20,6 +20,7 @@
     "packages/server/src/testing/index.ts",
     "packages/transport/src/index.ts",
     "packages/storage/src/index.ts",
+    "packages/storage/src/provider.ts",
     "packages/storage-datastore/src/index.ts",
     "packages/storage-rdbms/src/index.ts",
     "packages/testing/src/index.ts",

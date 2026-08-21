@@ -12,6 +12,8 @@
  * the License.
  */
 
+import type { EntityRecord as EntityRecordValue } from "./entity/entity-record.js";
+
 /** Provider-only contracts for implementing a Spine storage adapter. */
 export * from "./internal/delivery-cleanup.js";
 export * from "./internal/entity-commit.js";
@@ -19,3 +21,11 @@ export * from "./internal/entity-history.js";
 export * from "./internal/event-store.js";
 export * from "./internal/query-values.js";
 export * from "./internal/tenancy.js";
+
+/**
+ * A persisted entity record supplied to a storage-provider implementation.
+ *
+ * This local alias makes the provider entrypoint's EntityRecord contract visible in generated API
+ * documentation without changing its type.
+ */
+export type EntityRecord = EntityRecordValue;
