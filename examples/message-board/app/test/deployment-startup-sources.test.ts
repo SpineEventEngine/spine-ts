@@ -128,24 +128,19 @@ describe("MessageBoard deployment entrypoints", () => {
       calls.logger,
     );
 
-    expect(calls.serverAtPort).toHaveBeenCalledWith(
-      calls.gatewayConfig.port,
-      expect.objectContaining({
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        browser: expect.not.objectContaining({ bindings: expect.anything() }),
-      }) as object,
-    );
+    expect(calls.serverAtPort).not.toHaveBeenCalled();
   });
 
   it("executes gateway startup with GKE discovery when configured", async () => {
     const calls = startupMocks();
-    calls.gatewayConfig.discovery = { namespace: "boards" };
+    calls.gatewayConfig.discovery = { serviceName: "boards", port: 8080 };
 
     await import("../src/gateway-server.js");
 
-    expect(calls.serverAtPort).toHaveBeenCalledOnce();
+    expect(calls.serverAtPort).not.toHaveBeenCalled();
     expect(calls.gkeNodeDiscovery).toHaveBeenCalledWith({
-      namespace: "boards",
+      serviceName: "boards",
+      port: 8080,
       logger: calls.logger,
     });
   });
@@ -263,8 +258,15 @@ function startupMocks() {
     port: number;
     host: string;
     webOrigin: string;
-    discovery?: { namespace: string };
-  } = { projectId: "project", port: 0, host: "127.0.0.1", webOrigin: "http://web" };
+    backendUrls?: readonly string[];
+    discovery?: { serviceName: string; port: number };
+  } = {
+    projectId: "project",
+    port: 0,
+    host: "127.0.0.1",
+    webOrigin: "http://web",
+    backendUrls: ["http://application"],
+  };
   const runApplication = vi.fn().mockResolvedValue({ baseUrl: "http://application" });
   const runCombined = vi.fn().mockResolvedValue({ baseUrl: "http://combined" });
   const serverAtPort = vi
@@ -287,6 +289,7 @@ function startupMocks() {
   });
   const gkeNodeDiscovery = vi.fn(function GkeNodeDiscovery(options: unknown) {
     void options;
+    return { watch: () => () => Promise.resolve() };
   });
   vi.doMock("@google-cloud/datastore", () => ({ Datastore: datastore }));
   vi.doMock("@google-cloud/logging", () => ({ Logging: logging }));
@@ -309,16 +312,19 @@ function startupMocks() {
   }));
   vi.doMock("@spine-event-engine/server", () => ({ Server: { atPort: serverAtPort } }));
   // These constructable boundary doubles have no behavior beyond import-time startup.
-  /* eslint-disable @typescript-eslint/no-extraneous-class, @typescript-eslint/no-empty-function */
+  /* eslint-disable @typescript-eslint/no-empty-function */
   vi.doMock("@spine-event-engine/deployment-gke", () => ({ GkeNodeDiscovery: gkeNodeDiscovery }));
   vi.doMock("../src/board-access.js", () => ({
     BoardAccessPolicy: class {
       authorize() {}
     },
-    BoardContextResolver: class {},
+    BoardContextResolver: class {
+      resolve() {}
+      resolveContext() {}
+    },
   }));
   vi.doMock("../src/model-registry.js", () => ({ typeRegistry: {} }));
-  /* eslint-enable @typescript-eslint/no-extraneous-class, @typescript-eslint/no-empty-function */
+  /* eslint-enable @typescript-eslint/no-empty-function */
 
   return {
     applicationConfig,
