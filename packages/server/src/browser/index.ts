@@ -12,12 +12,12 @@
  * the License.
  */
 
-export { BrowserServer } from "../server/browser-server.js";
+export { BrowserServer } from "./browser-server.js";
 export {
   DurableSubscriptionBindings,
   isDurableSubscriptionBindings,
   type DurableSubscriptionBindingsOptions,
-} from "../server/durable-subscription-bindings.js";
+} from "./durable-subscription-bindings.js";
 export type {
   BrowserAdmission,
   BrowserAuthRoute,

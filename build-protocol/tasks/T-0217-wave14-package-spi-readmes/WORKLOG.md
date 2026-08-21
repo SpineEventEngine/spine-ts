@@ -113,3 +113,7 @@
   concentrated in `packages/server/test/server/server.test.ts` and use the
   removed `ServerOptions.browser` shape, so they require a mechanical but large
   migration to `BrowserServer.open/run` before the browser suite can be green.
+- Browser host and durable-binding production sources now reside under
+  `packages/server/src/browser/`; the native `src/server/` tree has no browser
+  implementation source. Focused build plus durable/public-contract/Coordinator
+  tests passed 81/81 after the move.

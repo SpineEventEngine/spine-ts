@@ -66,10 +66,10 @@ import {
   type ServerEnvironmentCloseable,
 } from "../../src/index.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
-import { BrowserServer } from "../../src/server/browser-server.js";
+import { BrowserServer } from "../../src/browser/browser-server.js";
 import { runningServerAccess } from "../../src/server/server.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
-import { attachDurableSubscriptionCleanup } from "../../src/server/durable-subscription-bindings.js";
+import { attachDurableSubscriptionCleanup } from "../../src/browser/durable-subscription-bindings.js";
 import { EnvironmentTests } from "../../src/server/environment.js";
 import type { ILogLayer } from "loglayer";
 

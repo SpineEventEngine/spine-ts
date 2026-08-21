@@ -28,7 +28,7 @@ import {
   DurableSubscriptionBindings,
   isDurableSubscriptionBindings,
 } from "../../src/browser/index.js";
-import { attachDurableSubscriptionCleanup } from "../../src/server/durable-subscription-bindings.js";
+import { attachDurableSubscriptionCleanup } from "../../src/browser/durable-subscription-bindings.js";
 
 type RecordSpec<I, R> = StorageRecordSpec<I, R extends Message ? R : Message>;
 

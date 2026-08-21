@@ -47,17 +47,17 @@ import {
   SubscriptionService,
 } from "@spine-event-engine/proto/client";
 
-import type { RunningServer } from "./server.js";
-import { Server } from "./server.js";
-import type { BrowserAuthRoute, BrowserServerOptions } from "../browser/options.js";
+import type { RunningServer } from "../server/server.js";
+import { Server } from "../server/server.js";
+import type { BrowserAuthRoute, BrowserServerOptions } from "./options.js";
 import {
   attachDurableSubscriptionCleanup,
   isDurableSubscriptionBindings,
 } from "./durable-subscription-bindings.js";
-import reservedSpineRpcPaths from "./reserved-spine-rpc-paths.json" with { type: "json" };
-import { Environment, EnvironmentType } from "./environment.js";
-import { ProcessServerCoordinator } from "./process-server-coordinator.js";
-import { ServerEnvironment } from "./server-environment.js";
+import reservedSpineRpcPaths from "../server/reserved-spine-rpc-paths.json" with { type: "json" };
+import { Environment, EnvironmentType } from "../server/environment.js";
+import { ProcessServerCoordinator } from "../server/process-server-coordinator.js";
+import { ServerEnvironment } from "../server/server-environment.js";
 
 const gracefulBrowserDrainMs = 100;
 const reservedPathSet = new Set(reservedSpineRpcPaths);
@@ -69,7 +69,6 @@ interface UncheckedBrowserAdmission {
   readonly contexts?: ContextResolver;
   readonly clock?: Clock;
 }
-
 type BrowserHostOptions = BrowserServerOptions & {
   readonly host: string;
   readonly port: number;
@@ -807,9 +806,8 @@ class RunningBrowserServer implements RunningServer {
       if (failures.length > 1)
         Object.defineProperty(primary, "cleanupErrors", { value: failures.slice(1) });
       throw primary;
-    }
   }
-
+}
   async #phase(
     operation: Promise<void> | undefined,
     onSuccess: () => void,
