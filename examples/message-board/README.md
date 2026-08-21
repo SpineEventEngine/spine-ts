@@ -94,8 +94,9 @@ flowchart LR
 ```
 
 The browser never receives the native backend address. For local development,
-`Server` starts a private native HTTP/2 backend and a public loopback browser
-gateway on port 8090. The public-demo Gateway rebuilds the selected actor context
+`BrowserServer` from `@spine-event-engine/server/browser` starts a private
+native HTTP/2 backend and a public loopback browser gateway on port 8090. The
+public-demo Gateway rebuilds the selected actor context
 from the request actor and forwards only approved traffic; the bounded context
 does not read browser credentials. The React client may use either gRPC-Web or
 Connect at that public boundary.
@@ -105,8 +106,9 @@ changes state. This is the `postMessage()` handler excerpt from
 [`BoardMessageAggregate`](app/src/index.ts); imports and unrelated class members
 are omitted to focus on the handler. Its return value feeds the read model:
 
+<!-- docs-snippet-path: examples/message-board/app/src/index.ts -->
+
 ```ts
-// docs-snippet-path: examples/message-board/app/src/index.ts
 import { clone, create } from "@bufbuild/protobuf";
 import { Aggregate, Assign } from "@spine-event-engine/server";
 import {

@@ -9,10 +9,24 @@ storage and supplies its configuration.
 This is a guide for people deploying an application. For exact discovery API
 and lifecycle behavior, see the [deployment reference](REFERENCE.md).
 
+This experimental `2.0.0-snapshot.3` package is for operators who already own
+an application, images, and a GKE cluster. Install its library API when writing
+the Gateway or application entrypoint:
+
+```bash
+pnpm add @spine-event-engine/deployment-gke@2.0.0-snapshot.3
+```
+
+Copy the packaged Terraform directory into an operator deployment repository
+only when you want its private reference topology. Installing this library, or
+copying Terraform, does not create the cluster, public Gateway policy,
+authentication/session implementation, application secrets, or storage.
+
 ## Before you begin
 
 You need an existing GKE cluster, `gcloud`, `kubectl`, Terraform 1.6 or newer,
-and images for three processes:
+an existing Kubernetes ServiceAccount with the image-pull and configuration
+access required by your workload, and images for three processes:
 
 - your Spine TS application-node image;
 - your standalone Gateway image; and
@@ -92,8 +106,9 @@ hard-coding the Terraform defaults:
 Both supplied entrypoints bind `host: "0.0.0.0"` so the Kubernetes Service can
 reach their listeners.
 
+<!-- docs-snippet-path: packages/deployment-gke/examples/deployment-settings.ts -->
+
 ```ts
-// docs-snippet-path: packages/deployment-gke/examples/deployment-settings.ts
 export type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
 
 export const DeploymentSettings = Object.freeze({
@@ -129,10 +144,11 @@ origins, a clock, and a type registry. The complete
 [browser authentication guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explain those application integration points.
 
+<!-- docs-snippet-path: packages/deployment-gke/examples/gateway.ts -->
+
 ```ts
-// docs-snippet-path: packages/deployment-gke/examples/gateway.ts
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
-import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
+import { BrowserServer, type BrowserServerOptions } from "@spine-event-engine/server/browser";
 
 type GatewayBrowserOptions = BrowserServerOptions extends infer Options
   ? Options extends BrowserServerOptions
@@ -155,14 +171,12 @@ export const GatewayEntrypoint = Object.freeze({
       serviceName: DeploymentSettings.serviceName(environment),
       port: DeploymentSettings.port(environment, "BACKEND_DISCOVERY_PORT"),
     });
-    const server = Server.atPort(DeploymentSettings.port(environment, "PORT"), {
+    await BrowserServer.run({
       host: "0.0.0.0",
-      browser: {
-        ...options.browser,
-        discovery,
-      },
+      port: DeploymentSettings.port(environment, "PORT"),
+      ...options.browser,
+      discovery,
     });
-    await server.run();
   },
 });
 ```
@@ -179,8 +193,9 @@ Coordinator. Set `application_process_count` and `delivery_shard_count`
 explicitly in Terraform. The former starts complete local replicas; the latter
 is passed to your context assembly and is not inferred from hardware:
 
+<!-- docs-snippet-path: packages/deployment-gke/examples/application.ts -->
+
 ```ts
-// docs-snippet-path: packages/deployment-gke/examples/application.ts
 import {
   ManagedServerApplication,
   type ManagedServerApplicationHandle,
@@ -300,8 +315,9 @@ capacity, disable autoscaling and set `application_replicas` in the same apply.
 CPU alone cannot wake an application Deployment from zero because no Pod is
 running to report CPU. On Standard GKE, Google documents KEDA as the scale from
 zero path. For that policy, set `autoscaling_enabled = false` and let
-operator-managed KEDA be the sole autoscaler for the Deployment. Never run the
-module HPA and a KEDA-managed HPA together. Add the KEDA configuration
+operator-managed KEDA be the sole autoscaler for the Deployment. HPA and KEDA
+are mutually exclusive: never run the module HPA and a KEDA-managed HPA
+together. Add the KEDA configuration
 separately; this editable template does not install CRDs or assume a metric
 provider.
 

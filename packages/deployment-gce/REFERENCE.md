@@ -4,6 +4,11 @@ Read the [deployment guide](README.md) before using this exact template
 contract. It supports one Gateway; Multiple-Gateway routing and Cloud Run are
 outside this offering.
 
+The library supplies discovery and entrypoint helpers. The editable Terraform
+reference is a separate operator choice, and neither it nor this package owns
+the public Gateway policy, authentication/session implementation, secrets, or
+application storage.
+
 ## Deployment template
 
 The packaged `terraform` directory is an editable Google Compute Engine
