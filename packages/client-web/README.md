@@ -21,7 +21,7 @@ pnpm add @bufbuild/protobuf@2.12.1 @spine-event-engine/core@2.0.0-snapshot.3 @sp
 ```
 
 Generate your application's model from its authored Proto sources with the
-[Proto tools guide](../proto-tools/README.md), then import its published
+[Proto tools guide](https://github.com/SpineEventEngine/spine-ts/tree/main/packages/proto-tools#readme), then import its published
 schemas from your own model package. The Message Board schema used below is a
 repository example of that application-owned output, not a package to install.
 

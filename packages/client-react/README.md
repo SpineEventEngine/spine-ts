@@ -22,7 +22,7 @@ pnpm add @bufbuild/protobuf@2.12.1 @spine-event-engine/core@2.0.0-snapshot.3 @sp
 ```
 
 Generate and publish the application's model schemas using the [Proto tools
-guide](../proto-tools/README.md). The Message Board schema in this guide is a
+guide](https://github.com/SpineEventEngine/spine-ts/tree/main/packages/proto-tools#readme). The Message Board schema in this guide is a
 repository example of such output; it is not a public dependency to install.
 
 The application, not React, creates the authenticated Gateway connection and
