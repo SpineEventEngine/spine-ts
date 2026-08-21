@@ -53,7 +53,7 @@ export async function runSnapshotPublication({
             "npm",
             [
               "view",
-              name + "@2.0.0-snapshot.2",
+              name + "@2.0.0-snapshot.3",
               "dist.integrity",
               "--registry=https://registry.npmjs.org/",
             ],
@@ -70,7 +70,7 @@ export async function runSnapshotPublication({
       }
       const dependencies = typeof entry === "string" ? [] : entry.dependencies || [];
       for (const dependency of dependencies)
-        await waitForVisibility(dependency, "2.0.0-snapshot.2");
+        await waitForVisibility(dependency, "2.0.0-snapshot.3");
       if (
         name !== undefined &&
         preparedIntegrity !== undefined &&

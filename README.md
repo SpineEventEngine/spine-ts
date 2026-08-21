@@ -140,7 +140,7 @@ Framework packages are available as experimental snapshots. Install an exact
 version, for example:
 
 ```sh
-pnpm add @spine-event-engine/server@2.0.0-snapshot.2
+pnpm add @spine-event-engine/server@2.0.0-snapshot.3
 ```
 
 Or select the explicit snapshot tag with
