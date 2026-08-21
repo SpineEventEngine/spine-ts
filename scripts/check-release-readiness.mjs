@@ -29,7 +29,7 @@ const staleDocumentationPatterns = [
     new RegExp(
       String.raw`\bpnpm\s+(?:add|install)\s+@spine-event-engine\/` +
         String.raw`(?:core|proto|storage(?:-(?:datastore|rdbms))?|transport)` +
-        String.raw`(?!@(?:snapshot\b|2\.0\.0-snapshot\.2\b))\b`,
+        String.raw`(?!@(?:snapshot\b|2\.0\.0-snapshot\.3\b))\b`,
       "gu",
     ),
   ],

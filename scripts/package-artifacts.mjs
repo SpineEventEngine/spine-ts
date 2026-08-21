@@ -40,7 +40,7 @@ export function validatePublicationInventory(root) {
     .sort((left, right) => left.localeCompare(right));
   const expected = [...frameworkPackageNames].sort((left, right) => left.localeCompare(right));
   const problems = [];
-  if (rootManifest.version !== "2.0.0-snapshot.2") problems.push("root must use snapshot.2");
+  if (rootManifest.version !== "2.0.0-snapshot.3") problems.push("root must use snapshot.3");
   if (JSON.stringify(actual) !== JSON.stringify(expected))
     problems.push("public package paths do not match exact inventory");
   for (const name of expected) {
@@ -84,7 +84,7 @@ export function publicManifestProblems(manifest) {
   const problems = [];
   if (!frameworkPackageNames.includes(name))
     problems.push(name + " is not in the public inventory");
-  if (manifest.version !== "2.0.0-snapshot.2") problems.push(name + " must use snapshot.2");
+  if (manifest.version !== "2.0.0-snapshot.3") problems.push(name + " must use snapshot.3");
   if (manifest.private === true) problems.push(name + " must not be private");
   if (manifest.license !== "Apache-2.0") problems.push(name + " must use Apache-2.0");
   if (typeof manifest.description !== "string" || !manifest.description.trim())
@@ -149,8 +149,8 @@ export function internalRuntimeDependencyProblems(manifest) {
   const problems = [];
   for (const group of ["dependencies", "optionalDependencies", "peerDependencies"]) {
     for (const [dependency, version] of Object.entries(manifest[group] || {})) {
-      if (frameworkPackageNames.includes(dependency) && version !== "2.0.0-snapshot.2")
-        problems.push(name + " " + group + " " + dependency + " must use snapshot.2");
+      if (frameworkPackageNames.includes(dependency) && version !== "2.0.0-snapshot.3")
+        problems.push(name + " " + group + " " + dependency + " must use snapshot.3");
       if (dependency === "@spine-event-engine/validation" && version !== "2.0.0-snapshot.7")
         problems.push(name + " validation must use snapshot.7");
     }

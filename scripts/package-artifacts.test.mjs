@@ -11,7 +11,7 @@ describe("package artifacts", () => {
     expect(
       packedManifestProblems({
         name: "@spine-event-engine/example",
-        version: "2.0.0-snapshot.2",
+        version: "2.0.0-snapshot.3",
         dependencies: { "@spine-event-engine/core": "workspace:*" },
       }),
     ).toEqual([
@@ -51,11 +51,11 @@ describe("package artifacts", () => {
       dependencyFirstOrder([
         {
           name: "@spine-event-engine/server",
-          dependencies: { "@spine-event-engine/core": "2.0.0-snapshot.2" },
+          dependencies: { "@spine-event-engine/core": "2.0.0-snapshot.3" },
         },
         {
           name: "@spine-event-engine/core",
-          dependencies: { "@spine-event-engine/proto": "2.0.0-snapshot.2" },
+          dependencies: { "@spine-event-engine/proto": "2.0.0-snapshot.3" },
         },
         { name: "@spine-event-engine/proto" },
       ]),
