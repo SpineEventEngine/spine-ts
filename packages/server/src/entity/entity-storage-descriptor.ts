@@ -27,7 +27,7 @@ import {
   RecordSpec,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
+import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 
 import { describeEntityMetadata, type DescriptorMessageSchema } from "./entity-metadata.js";
 import type { PrimitiveId } from "../repository/primitive-id.js";

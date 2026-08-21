@@ -64,9 +64,9 @@ import type {
   EntityRecordStorage,
   EntityStateHistoryPort,
   EntityStorageInput,
-} from "@spine-event-engine/storage/internal/entity-history";
-import type { EntityCommitStorage } from "@spine-event-engine/storage/internal/entity-commit";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
+} from "@spine-event-engine/storage/provider";
+import type { EntityCommitStorage } from "@spine-event-engine/storage/provider";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
 
 import { CommandValidationError } from "../bus/command-errors.js";
 import {

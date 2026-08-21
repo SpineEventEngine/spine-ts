@@ -93,11 +93,11 @@ import {
 } from "@spine-event-engine/proto";
 import {
   RecordMask,
-  TenantBoundary,
   type NormalizedComparisonOperator,
   type NormalizedQueryPlan,
   type NormalizedQueryPredicate,
 } from "@spine-event-engine/storage";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
 import { CommandValidationError } from "../bus/command-errors.js";

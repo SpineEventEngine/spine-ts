@@ -15,7 +15,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 import type { TenantId } from "@spine-event-engine/proto";
-import { TenantBoundary } from "@spine-event-engine/storage";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
 import { Delivery } from "../delivery/delivery.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";

@@ -19,9 +19,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./internal/backend-membership-kernel": {
-      "types": "./dist/internal/backend-membership-kernel.d.ts",
-      "default": "./dist/internal/backend-membership-kernel.js"
+    "./spi/backend-membership": {
+      "types": "./dist/spi/backend-membership.d.ts",
+      "default": "./dist/spi/backend-membership.js"
     }
   },
   "files": [

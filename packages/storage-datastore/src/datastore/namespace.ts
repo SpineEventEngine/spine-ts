@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { InternetDomainSchema, TenantIdSchema, type TenantId } from "@spine-event-engine/proto";
-import { TenantBoundary } from "@spine-event-engine/storage";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
 /**
  * Converts complete tenant identifiers to and from Datastore namespaces.

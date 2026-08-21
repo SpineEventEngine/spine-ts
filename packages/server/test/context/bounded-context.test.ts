@@ -48,7 +48,7 @@ import {
   type StorageContext,
   StorageFactory,
 } from "@spine-event-engine/storage";
-import type { EntityRecordStorage } from "@spine-event-engine/storage/internal/entity-history";
+import type { EntityRecordStorage } from "@spine-event-engine/storage/provider";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {

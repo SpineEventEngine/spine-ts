@@ -18,20 +18,19 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import {
   StorageFactory,
-  TenantBoundary,
-  type TenantCatalog,
   type RecordStorage,
   type RecordSpec,
   type StorageContext,
   type StorageGroup,
 } from "@spine-event-engine/storage";
+import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/provider";
 import {
   EntityCommitStorageFactories,
   type EntityCommitStorage,
-} from "@spine-event-engine/storage/internal/entity-commit";
-import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/internal/delivery-cleanup";
-import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
-import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
+} from "@spine-event-engine/storage/provider";
+import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/provider";
+import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
+import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
 import type { TenantId } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
@@ -724,11 +723,11 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
     private readonly onClose: () => void,
   ) {}
   async commit<Id, State extends Message>(
-    input: import("@spine-event-engine/storage/internal/entity-commit").EntityCommitInput<
+    input: import("@spine-event-engine/storage/provider").EntityCommitInput<
       Id,
       State
     >,
-  ): Promise<import("@spine-event-engine/storage/internal/entity-commit").EntityCommitResult> {
+  ): Promise<import("@spine-event-engine/storage/provider").EntityCommitResult> {
     if (!this.#open) throw new MysqlStorageOperationError("Entity commit storage is closed.");
     if (input.entity.sourceType.typeName !== this.entity.sourceType.typeName)
       throw new MysqlStorageOperationError("Entity commit source type is incompatible.");
@@ -792,7 +791,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
     this.onClose();
   }
   private accepts<Id, State extends Message>(
-    input: import("@spine-event-engine/storage/internal/entity-commit").EntityCommitInput<
+    input: import("@spine-event-engine/storage/provider").EntityCommitInput<
       Id,
       State
     >,

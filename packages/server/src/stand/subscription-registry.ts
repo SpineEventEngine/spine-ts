@@ -13,7 +13,7 @@
  */
 
 import { clone, ScalarType, toBinary } from "@bufbuild/protobuf";
-import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/internal/subscription-lifecycle";
+import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
 import {
   SubscriptionIdSchema,
   SubscriptionSchema,

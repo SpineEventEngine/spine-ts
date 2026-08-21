@@ -19,7 +19,6 @@ import {
   ColumnMappings,
   defaultQueryCandidateLimit,
   RecordStorage,
-  TenantBoundary,
   type NormalizedQueryPlan,
   type NormalizedQueryPredicate,
   type RecordEntry,
@@ -29,7 +28,8 @@ import {
   type StorageGroup,
   type StorageQueryCapabilities,
 } from "@spine-event-engine/storage";
-import { StorageQueryValues } from "@spine-event-engine/storage/internal/query-values";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
+import { StorageQueryValues } from "@spine-event-engine/storage/provider";
 
 import { DatastoreColumnMapping } from "./column-mapping.js";
 import { DatastoreIdColumn } from "./id-column.js";

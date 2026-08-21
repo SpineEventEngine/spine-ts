@@ -14,7 +14,7 @@
 
 import { clone, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { ApplicationNode } from "@spine-event-engine/deployment";
-import { BackendMembershipKernel } from "@spine-event-engine/deployment/internal/backend-membership-kernel";
+import { BackendMembershipKernel } from "@spine-event-engine/deployment/spi/backend-membership";
 import { SubscriptionSchema } from "@spine-event-engine/proto/client";
 import type { ILogLayer } from "loglayer";
 

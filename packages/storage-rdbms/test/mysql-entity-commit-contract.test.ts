@@ -32,7 +32,7 @@ import {
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { RecordSpec } from "@spine-event-engine/storage";
-import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
+import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
 
 import { mysqlEntityLockKey, MysqlEntityCommitCoordinator } from "../src/mysql/entity-commit.js";

@@ -28,8 +28,8 @@ import {
   type BackendMemberClient,
   BackendMembershipKernel,
   type BackendMembershipKernelOptions,
-} from "@spine-event-engine/deployment/internal/backend-membership-kernel";
-import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/internal/subscription-lifecycle";
+} from "@spine-event-engine/deployment/spi/backend-membership";
+import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
 import {
   AckSchema,
   ResponseSchema,
