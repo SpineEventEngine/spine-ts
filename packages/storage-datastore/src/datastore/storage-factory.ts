@@ -23,7 +23,10 @@ import {
   type StorageContext,
   type StorageGroup,
 } from "@spine-event-engine/storage";
-import { type TenantCatalog, type TenantCatalogProvider } from "@spine-event-engine/storage/provider";
+import {
+  type TenantCatalog,
+  type TenantCatalogProvider,
+} from "@spine-event-engine/storage/provider";
 import type {
   EntityCommitStorage,
   EntityEventHistoryPort,
