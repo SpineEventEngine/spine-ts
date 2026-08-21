@@ -84,6 +84,8 @@
   `examples/message-board/app/src/index.ts`, so the snippet compiles against
   real declarations. Focused green evidence: the Client Node snippet checker
   emitted no diagnostics; the policy suite passed 15/15; audience policy,
-  exact-path Prettier, and `git diff --check` passed. This record-only update
-  does not reopen the focused documentation checks. Commit and immediate push
-  remain pending.
+  exact-path Prettier, and `git diff --check` passed. The correction committed
+  as `7644b582a docs: correct Node client Message Board setup` and immediately
+  pushed `origin/codex/wave14-readmes-node-tools` from `6564df6d7` to
+  `7644b582a`. This record-only closure does not reopen the focused
+  documentation checks.
