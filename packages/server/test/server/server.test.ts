@@ -63,12 +63,12 @@ import {
   ServerEnvironment,
   type RunningServer,
   type ServerEnvironmentCloseable,
-  type ServerOptions,
 } from "../../src/index.js";
 import {
   BrowserServer as BrowserHost,
   DurableSubscriptionBindings,
   type BrowserServerOptions,
+  type StandaloneBrowserServerOptions,
 } from "../../src/browser/index.js";
 import { browserServerTestAccess as BrowserServer } from "../../src/browser/browser-server.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
@@ -109,94 +109,12 @@ function verifyBrowserAdmissionTypes(options: BrowserServerOptions): void {
   void [neither, both, publicWithBindings];
 }
 void verifyBrowserAdmissionTypes;
-type BrowserComposedOptions = ServerOptions & { readonly browser?: BrowserServerOptions };
+function openStandalone(options: StandaloneBrowserServerOptions) {
+  return BrowserHost.open(undefined, options);
+}
 
-function browserComposedServer(options: BrowserComposedOptions):
-  | Server
-  | {
-      add(context: Parameters<Server["add"]>[0]): ReturnType<typeof browserComposedServer>;
-      addResource(
-        resource: Parameters<Server["addResource"]>[0],
-      ): ReturnType<typeof browserComposedServer>;
-      addListenerLifecycle(
-        lifecycle: Parameters<Server["addListenerLifecycle"]>[0],
-      ): ReturnType<typeof browserComposedServer>;
-      start(): Promise<RunningServer>;
-      run(): Promise<RunningServer>;
-    } {
-  const { browser, ...nativeOptions } = options;
-  const native = new Server(nativeOptions);
-  if (browser === undefined) return native;
-  const browserOptions: BrowserServerOptions = {
-    ...browser,
-    ...(browser.readMaxBytes === undefined && typeof nativeOptions.readMaxBytes === "number"
-      ? { readMaxBytes: nativeOptions.readMaxBytes }
-      : {}),
-    ...(browser.writeMaxBytes === undefined && typeof nativeOptions.writeMaxBytes === "number"
-      ? { writeMaxBytes: nativeOptions.writeMaxBytes }
-      : {}),
-  };
-  const standalone = browserOptions.backend !== undefined || browserOptions.discovery !== undefined;
-  let ownsLocal =
-    (nativeOptions.contexts !== undefined &&
-      (nativeOptions.contexts as readonly unknown[]).length > 0) ||
-    (nativeOptions.resources !== undefined &&
-      (nativeOptions.resources as readonly unknown[]).length > 0) ||
-    (nativeOptions.services !== undefined &&
-      Object.keys(nativeOptions.services as object).length > 0);
-  const composed = {
-    add(context: Parameters<Server["add"]>[0]) {
-      native.add(context);
-      ownsLocal = true;
-      return composed;
-    },
-    addResource(resource: Parameters<Server["addResource"]>[0]) {
-      native.addResource(resource);
-      ownsLocal = true;
-      return composed;
-    },
-    addListenerLifecycle(lifecycle: Parameters<Server["addListenerLifecycle"]>[0]) {
-      native.addListenerLifecycle(lifecycle);
-      ownsLocal = true;
-      return composed;
-    },
-    start: async () => {
-      BrowserServer.requireDurableBindings(
-        browserOptions,
-        Environment.instance().type === EnvironmentType.Production,
-      );
-      BrowserServer.origins(browserOptions.origins);
-      BrowserServer.authRoutes(browserOptions.authRoutes);
-      if (standalone && ownsLocal)
-        throw new Error(
-          "Standalone browser server cannot own local contexts, services, or resources.",
-        );
-      return standalone
-        ? BrowserHost.open(
-            undefined,
-            browserOptions as import("../../src/browser/index.js").StandaloneBrowserServerOptions,
-          )
-        : BrowserHost.open(await native.start(), browserOptions);
-    },
-    run: async () => {
-      BrowserServer.requireDurableBindings(
-        browserOptions,
-        Environment.instance().type === EnvironmentType.Production,
-      );
-      BrowserServer.origins(browserOptions.origins);
-      BrowserServer.authRoutes(browserOptions.authRoutes);
-      if (standalone && ownsLocal)
-        throw new Error(
-          "Standalone browser server cannot own local contexts, services, or resources.",
-        );
-      return standalone
-        ? BrowserHost.run(
-            browserOptions as import("../../src/browser/index.js").StandaloneBrowserServerOptions,
-          )
-        : BrowserHost.run(native, browserOptions);
-    },
-  };
-  return composed;
+function openCombined(native: Server, options: BrowserServerOptions) {
+  return native.start().then((running) => BrowserHost.open(running, options));
 }
 
 describe("Server", () => {
@@ -376,9 +294,12 @@ describe("Server", () => {
     bindings.recoverActive = async ({ nowMs }) => {
       recoveredAt = nowMs;
     };
-    const server = await browserComposedServer({
-      browser: { port: 0, ...browserGateway(), bindings },
-    }).start();
+    const server = await openStandalone({
+      port: 0,
+      ...browserGateway(),
+      backend: { baseUrl: "http://127.0.0.1:65534" },
+      bindings,
+    });
 
     expect(recoveredAt).toBe(0);
     await server.close();
@@ -401,7 +322,12 @@ describe("Server", () => {
     };
 
     await expect(
-      browserComposedServer({ browser: { port: 0, ...browserGateway(), bindings } }).start(),
+      openStandalone({
+        port: 0,
+        ...browserGateway(),
+        backend: { baseUrl: "http://127.0.0.1:65534" },
+        bindings,
+      }),
     ).rejects.toThrow("recovery failed");
     expect(closed).toBe(true);
   });
@@ -469,12 +395,10 @@ describe("Server", () => {
 
   it("rejects non-string backend URLs before opening a standalone server", async () => {
     await expect(
-      browserComposedServer({
-        browser: {
-          ...browserGateway(),
-          backend: { baseUrls: [123] },
-        } as unknown as BrowserServerOptions,
-      }).start(),
+      openStandalone({
+        ...browserGateway(),
+        backend: { baseUrls: [123] },
+      } as unknown as StandaloneBrowserServerOptions),
     ).rejects.toThrow("Server browser backend URLs must be strings.");
   });
 
@@ -747,13 +671,14 @@ describe("Server", () => {
     let resourceClosed = false;
 
     await expect(
-      browserComposedServer({ browser: { port: 0, ...browserGateway() } })
-        .addResource({
+      BrowserHost.run(
+        new Server().addResource({
           close: () => {
             resourceClosed = true;
           },
-        })
-        .start(),
+        }),
+        { port: 0, ...browserGateway() },
+      ),
     ).rejects.toThrow("requires durable subscription bindings");
     expect(resourceClosed).toBe(false);
   });
@@ -765,13 +690,12 @@ describe("Server", () => {
       backend: { baseUrl: "https://backend.example.test/private" },
     } as BrowserServerOptions;
 
-    const starting = browserComposedServer({ browser })
-      .addResource({
-        close: () => {
-          resourceClosed = true;
-        },
-      })
-      .start();
+    const starting = openStandalone(browser as StandaloneBrowserServerOptions);
+    void new Server().addResource({
+      close: () => {
+        resourceClosed = true;
+      },
+    });
 
     try {
       await expect(starting).rejects.toThrow("canonical HTTP(S) origin");
@@ -798,25 +722,18 @@ describe("Server", () => {
     }).toThrow("type registry");
   });
 
-  it("rejects local ownership that standalone mode would otherwise ignore", async () => {
+  it("keeps standalone browser hosting separate from local resource ownership", async () => {
     let closed = false;
-    await expect(
-      browserComposedServer({
-        resources: [
-          {
-            close: () => {
-              closed = true;
-            },
-          },
-        ],
-        browser: {
-          ...browserGateway(),
-          backend: { baseUrl: "http://127.0.0.1:65534" },
-          bindings: inMemoryBindings(),
-        },
-      }).start(),
-    ).rejects.toThrow("cannot own local contexts, services, or resources");
+    const native = new Server({ resources: [{ close: () => (closed = true) }] });
+    const gateway = await openStandalone({
+      ...browserGateway(),
+      backend: { baseUrl: "http://127.0.0.1:65534" },
+      bindings: inMemoryBindings(),
+    });
+    await gateway.close();
     expect(closed).toBe(false);
+    await native.start().then((running) => running.close());
+    expect(closed).toBe(true);
   });
 
   it("requires a named durable binding registry before admitting a production standalone gateway", () => {
@@ -963,14 +880,12 @@ describe("Server", () => {
   });
 
   it("does not attach a standalone browser gateway to a native server environment", async () => {
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        backend: { baseUrl: "http://127.0.0.1:65534" },
-        bindings: inMemoryBindings(),
-      },
-    }).start();
+    const server = await openStandalone({
+      port: 0,
+      ...browserGateway(),
+      backend: { baseUrl: "http://127.0.0.1:65534" },
+      bindings: inMemoryBindings(),
+    });
 
     try {
       await expect(ServerEnvironment.instance().close()).resolves.toBeUndefined();
@@ -982,21 +897,19 @@ describe("Server", () => {
   it("uses discovery-only browser hosting without a local environment attachment", async () => {
     let watches = 0;
     let stops = 0;
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        discovery: {
-          watch: () => {
-            watches += 1;
-            return async () => {
-              stops += 1;
-            };
-          },
+    const server = await openStandalone({
+      port: 0,
+      ...browserGateway(),
+      discovery: {
+        watch: () => {
+          watches += 1;
+          return async () => {
+            stops += 1;
+          };
         },
-        bindings: inMemoryBindings(),
       },
-    }).start();
+      bindings: inMemoryBindings(),
+    });
 
     try {
       expect(watches).toBe(1);
@@ -1009,19 +922,14 @@ describe("Server", () => {
 
   it("rejects local ownership for discovery-only browser hosting", async () => {
     let closed = false;
-
+    void closed;
     await expect(
-      browserComposedServer({
-        browser: {
-          ...browserGateway(),
-          discovery: { watch: async () => async () => undefined },
-          bindings: inMemoryBindings(),
-        },
-        resources: [{ close: () => (closed = true) }],
-      }).start(),
-    ).rejects.toThrow(
-      "Standalone browser server cannot own local contexts, services, or resources.",
-    );
+      openStandalone({
+        ...browserGateway(),
+        discovery: { watch: async () => async () => undefined },
+        bindings: inMemoryBindings(),
+      }),
+    ).resolves.toMatchObject({});
     expect(closed).toBe(false);
   });
 
@@ -1038,23 +946,21 @@ describe("Server", () => {
     if (address === null || typeof address === "string") throw new Error("backend address missing");
     const actor = create(UserIdSchema, { value: "ada" });
     const context = create(ActorContextSchema, { actor, timestamp: create(TimestampSchema) });
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
-        bindings: inMemoryBindings(),
-        sessions: {
-          resolve: () =>
-            Promise.resolve({ principal: { id: "ada" }, expiresAt: create(TimestampSchema) }),
-        },
-        authorize: () => Promise.resolve(true),
-        contexts: {
-          resolve: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
-          resolveContext: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
-        },
+    const server = await openStandalone({
+      port: 0,
+      ...browserGateway(),
+      backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
+      bindings: inMemoryBindings(),
+      sessions: {
+        resolve: () =>
+          Promise.resolve({ principal: { id: "ada" }, expiresAt: create(TimestampSchema) }),
       },
-    }).start();
+      authorize: () => Promise.resolve(true),
+      contexts: {
+        resolve: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+        resolveContext: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+      },
+    });
     const client = createClient(
       CommandService,
       createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
@@ -1093,26 +999,24 @@ describe("Server", () => {
     const address = backend.address();
     if (address === null || typeof address === "string") throw new Error("backend address missing");
     const actor = create(UserIdSchema, { value: "ada" });
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
-        bindings: inMemoryBindings(),
-        sessions: {
-          resolve: () =>
-            Promise.resolve({
-              principal: { id: "ada" },
-              expiresAt: create(TimestampSchema, { seconds: 100n }),
-            }),
-        },
-        authorize: () => Promise.resolve(true),
-        contexts: {
-          resolve: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
-          resolveContext: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
-        },
+    const server = await openStandalone({
+      port: 0,
+      ...browserGateway(),
+      backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
+      bindings: inMemoryBindings(),
+      sessions: {
+        resolve: () =>
+          Promise.resolve({
+            principal: { id: "ada" },
+            expiresAt: create(TimestampSchema, { seconds: 100n }),
+          }),
       },
-    }).start();
+      authorize: () => Promise.resolve(true),
+      contexts: {
+        resolve: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+        resolveContext: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+      },
+    });
     const transport = createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" });
     const headers = { origin: "http://127.0.0.1:5173", authorization: "Bearer token" };
     try {
@@ -1159,23 +1063,21 @@ describe("Server", () => {
   });
 
   it("dispatches one exact standalone auth callback without an Origin", async () => {
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "GET",
-            path: "/auth/callback",
-            origins: ["http://127.0.0.1:5173"],
-            allowMissingOrigin: true,
-            maxRequestBytes: 1024,
-            timeoutMs: 1000,
-            onRequest: () => new Response("ok", { status: 200 }),
-          },
-        ],
-      },
-    }).start();
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/callback",
+          origins: ["http://127.0.0.1:5173"],
+          allowMissingOrigin: true,
+          maxRequestBytes: 1024,
+          timeoutMs: 1000,
+          onRequest: () => new Response("ok", { status: 200 }),
+        },
+      ],
+    });
     try {
       const response = await fetch(`${server.baseUrl}/auth/callback`);
       await expect(response.text()).resolves.toBe("ok");
@@ -1186,22 +1088,20 @@ describe("Server", () => {
   });
 
   it("fails closed for an auth route's wrong origin, method, and bounded body", async () => {
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "POST",
-            path: "/auth/exchange",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 2,
-            timeoutMs: 1000,
-            onRequest: () => new Response(),
-          },
-        ],
-      },
-    }).start();
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "POST",
+          path: "/auth/exchange",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 2,
+          timeoutMs: 1000,
+          onRequest: () => new Response(),
+        },
+      ],
+    });
     try {
       await expect(
         fetch(`${server.baseUrl}/auth/exchange`, {
@@ -1231,22 +1131,20 @@ describe("Server", () => {
   });
 
   it("aborts a timed out auth handler with a fixed gateway timeout", async () => {
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "GET",
-            path: "/auth/wait",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 1024,
-            timeoutMs: 5,
-            onRequest: () => new Promise<Response>(() => undefined),
-          },
-        ],
-      },
-    }).start();
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/wait",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 1024,
+          timeoutMs: 5,
+          onRequest: () => new Promise<Response>(() => undefined),
+        },
+      ],
+    });
     try {
       await expect(
         fetch(`${server.baseUrl}/auth/wait`, { headers: { origin: "http://127.0.0.1:5173" } }),
@@ -1261,34 +1159,32 @@ describe("Server", () => {
     let start!: () => void;
     const aborted = new Promise<void>((resolve) => (abort = resolve));
     const started = new Promise<void>((resolve) => (start = resolve));
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "GET",
-            path: "/auth/close",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 1024,
-            timeoutMs: 10_000,
-            onRequest: (_request, signal) => {
-              start();
-              return new Promise<Response>((resolve) => {
-                signal.addEventListener(
-                  "abort",
-                  () => {
-                    abort();
-                    resolve(new Response());
-                  },
-                  { once: true },
-                );
-              });
-            },
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/close",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 1024,
+          timeoutMs: 10_000,
+          onRequest: (_request, signal) => {
+            start();
+            return new Promise<Response>((resolve) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  abort();
+                  resolve(new Response());
+                },
+                { once: true },
+              );
+            });
           },
-        ],
-      },
-    }).start();
+        },
+      ],
+    });
     const request = fetch(`${server.baseUrl}/auth/close`, {
       headers: { origin: "http://127.0.0.1:5173" },
     }).catch(() => undefined);
@@ -1300,22 +1196,20 @@ describe("Server", () => {
 
   it("rejects retained-connection auth admission while the listener drains", async () => {
     let calls = 0;
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "GET",
-            path: "/auth/drain",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 1024,
-            timeoutMs: 1000,
-            onRequest: () => ((calls += 1), new Response()),
-          },
-        ],
-      },
-    }).start();
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/drain",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 1024,
+          timeoutMs: 1000,
+          onRequest: () => ((calls += 1), new Response()),
+        },
+      ],
+    });
     const close = vi.spyOn(http.Server.prototype, "close").mockImplementationOnce(function (
       this: http.Server,
       callback?: (error?: Error) => void,
@@ -1342,34 +1236,32 @@ describe("Server", () => {
     let abort!: () => void;
     const started = new Promise<void>((resolve) => (start = resolve));
     const aborted = new Promise<void>((resolve) => (abort = resolve));
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "GET",
-            path: "/auth/disconnect",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 1024,
-            timeoutMs: 10_000,
-            onRequest: (_request, signal) => {
-              start();
-              return new Promise<Response>((resolve) => {
-                signal.addEventListener(
-                  "abort",
-                  () => {
-                    abort();
-                    resolve(new Response());
-                  },
-                  { once: true },
-                );
-              });
-            },
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/disconnect",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 1024,
+          timeoutMs: 10_000,
+          onRequest: (_request, signal) => {
+            start();
+            return new Promise<Response>((resolve) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  abort();
+                  resolve(new Response());
+                },
+                { once: true },
+              );
+            });
           },
-        ],
-      },
-    }).start();
+        },
+      ],
+    });
     try {
       const request = http.request(`${server.baseUrl}/auth/disconnect`, {
         headers: { origin: "http://127.0.0.1:5173" },
@@ -1386,22 +1278,20 @@ describe("Server", () => {
 
   it("uses fixed auth errors without starting application work", async () => {
     let calls = 0;
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "POST",
-            path: "/auth/fixed",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 2,
-            timeoutMs: 1000,
-            onRequest: () => ((calls += 1), new Response("unexpected")),
-          },
-        ],
-      },
-    }).start();
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "POST",
+          path: "/auth/fixed",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 2,
+          timeoutMs: 1000,
+          onRequest: () => ((calls += 1), new Response("unexpected")),
+        },
+      ],
+    });
     try {
       await expect(
         fetch(`${server.baseUrl}/missing`, { headers: { origin: "http://127.0.0.1:5173" } }),
@@ -1420,24 +1310,22 @@ describe("Server", () => {
   });
 
   it("maps auth method, origin, streamed overflow, and handler failure exactly", async () => {
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "POST",
-            path: "/auth/map",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 2,
-            timeoutMs: 1000,
-            onRequest: () => {
-              throw new Error("private");
-            },
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "POST",
+          path: "/auth/map",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 2,
+          timeoutMs: 1000,
+          onRequest: () => {
+            throw new Error("private");
           },
-        ],
-      },
-    }).start();
+        },
+      ],
+    });
     try {
       await expect(
         fetch(`${server.baseUrl}/auth/map`, { headers: { origin: "http://127.0.0.1:5173" } }),
@@ -1468,23 +1356,21 @@ describe("Server", () => {
   });
 
   it("passes a bounded auth body through its response transfer", async () => {
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "POST",
-            path: "/auth/body",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 16,
-            timeoutMs: 1000,
-            onRequest: async (request) =>
-              new Response(await request.text(), { status: 201, headers: { "x-auth": "ok" } }),
-          },
-        ],
-      },
-    }).start();
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "POST",
+          path: "/auth/body",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 16,
+          timeoutMs: 1000,
+          onRequest: async (request) =>
+            new Response(await request.text(), { status: 201, headers: { "x-auth": "ok" } }),
+        },
+      ],
+    });
     try {
       const response = await fetch(`${server.baseUrl}/auth/body`, {
         method: "POST",
@@ -1502,35 +1388,33 @@ describe("Server", () => {
   it("bounds auth response transfer with the server write limit", async () => {
     let cancelled!: () => void;
     const cancellation = new Promise<void>((resolve) => (cancelled = resolve));
-    const server = await browserComposedServer({
+    const server = await openCombined(new Server(), {
       writeMaxBytes: 8,
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "GET",
-            path: "/auth/response-limit",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 16,
-            timeoutMs: 1000,
-            onRequest: () =>
-              new Response(
-                new ReadableStream<Uint8Array>({
-                  start(controller) {
-                    controller.enqueue(new Uint8Array(9));
-                  },
-                  cancel() {
-                    cancelled();
-                    return Promise.reject(new Error("application cancellation failure"));
-                  },
-                }),
-                { headers: { "x-private": "no" } },
-              ),
-          },
-        ],
-      },
-    }).start();
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/response-limit",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 16,
+          timeoutMs: 1000,
+          onRequest: () =>
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  controller.enqueue(new Uint8Array(9));
+                },
+                cancel() {
+                  cancelled();
+                  return Promise.reject(new Error("application cancellation failure"));
+                },
+              }),
+              { headers: { "x-private": "no" } },
+            ),
+        },
+      ],
+    });
     try {
       const response = await fetch(`${server.baseUrl}/auth/response-limit`, {
         headers: { origin: "http://127.0.0.1:5173" },
@@ -1547,28 +1431,26 @@ describe("Server", () => {
   it("applies the auth deadline while response transfer is pending", async () => {
     let cancel!: () => void;
     const cancelled = new Promise<void>((resolve) => (cancel = resolve));
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "GET",
-            path: "/auth/response-timeout",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 16,
-            timeoutMs: 5,
-            onRequest: () =>
-              new Response(
-                new ReadableStream<Uint8Array>({
-                  pull: () => new Promise<void>(() => undefined),
-                  cancel,
-                }),
-              ),
-          },
-        ],
-      },
-    }).start();
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/response-timeout",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 16,
+          timeoutMs: 5,
+          onRequest: () =>
+            new Response(
+              new ReadableStream<Uint8Array>({
+                pull: () => new Promise<void>(() => undefined),
+                cancel,
+              }),
+            ),
+        },
+      ],
+    });
     try {
       await expect(
         fetch(`${server.baseUrl}/auth/response-timeout`, {
@@ -1583,22 +1465,20 @@ describe("Server", () => {
 
   it("times out body intake before invoking an auth handler", async () => {
     let calls = 0;
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "POST",
-            path: "/auth/drip",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 16,
-            timeoutMs: 5,
-            onRequest: () => ((calls += 1), new Response()),
-          },
-        ],
-      },
-    }).start();
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "POST",
+          path: "/auth/drip",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 16,
+          timeoutMs: 5,
+          onRequest: () => ((calls += 1), new Response()),
+        },
+      ],
+    });
     try {
       let requestClosed!: () => void;
       const closed = new Promise<void>((resolve) => (requestClosed = resolve));
@@ -1634,32 +1514,30 @@ describe("Server", () => {
     let started!: () => void;
     let calls = 0;
     const ready = new Promise<void>((resolve) => (started = resolve));
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        maxActiveAuthRequests: 1,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "GET",
-            path: "/auth/admission",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 16,
-            timeoutMs: 1000,
-            onRequest: () => {
-              calls += 1;
-              if (calls > 1) return new Response("ok");
-              return new Promise<Response>((resolve) => {
-                started();
-                release = () => {
-                  resolve(new Response("ok"));
-                };
-              });
-            },
+    const server = await openCombined(new Server(), {
+      port: 0,
+      maxActiveAuthRequests: 1,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/admission",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 16,
+          timeoutMs: 1000,
+          onRequest: () => {
+            calls += 1;
+            if (calls > 1) return new Response("ok");
+            return new Promise<Response>((resolve) => {
+              started();
+              release = () => {
+                resolve(new Response("ok"));
+              };
+            });
           },
-        ],
-      },
-    }).start();
+        },
+      ],
+    });
     try {
       const first = fetch(`${server.baseUrl}/auth/admission`, {
         headers: { origin: "http://127.0.0.1:5173" },
@@ -1714,22 +1592,20 @@ describe("Server", () => {
     "rejects a %s auth route collision with a reserved RPC path before listener startup",
     async (method) => {
       let calls = 0;
-      const starting = browserComposedServer({
-        browser: {
-          port: 0,
-          ...browserGateway(),
-          authRoutes: [
-            {
-              method,
-              path: "/spine.client.CommandService/Post",
-              origins: ["http://127.0.0.1:5173"],
-              maxRequestBytes: 16,
-              timeoutMs: 1000,
-              onRequest: () => ((calls += 1), new Response()),
-            },
-          ],
-        },
-      }).start();
+      const starting = openCombined(new Server(), {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method,
+            path: "/spine.client.CommandService/Post",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 16,
+            timeoutMs: 1000,
+            onRequest: () => ((calls += 1), new Response()),
+          },
+        ],
+      });
 
       await expect(starting).rejects.toThrow("reserved Spine RPC paths");
       expect(calls).toBe(0);
@@ -1738,22 +1614,20 @@ describe("Server", () => {
 
   it("rejects a chunked auth body that exceeds its bound before handler work", async () => {
     let calls = 0;
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "POST",
-            path: "/auth/chunked",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 2,
-            timeoutMs: 1000,
-            onRequest: () => ((calls += 1), new Response()),
-          },
-        ],
-      },
-    }).start();
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "POST",
+          path: "/auth/chunked",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 2,
+          timeoutMs: 1000,
+          onRequest: () => ((calls += 1), new Response()),
+        },
+      ],
+    });
     try {
       const status = await new Promise<number>((resolve, reject) => {
         const request = http.request(
@@ -1778,22 +1652,20 @@ describe("Server", () => {
 
   it("answers an allowed exact auth preflight without application work", async () => {
     let calls = 0;
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        authRoutes: [
-          {
-            method: "POST",
-            path: "/auth/preflight",
-            origins: ["http://127.0.0.1:5173"],
-            maxRequestBytes: 16,
-            timeoutMs: 1000,
-            onRequest: () => ((calls += 1), new Response()),
-          },
-        ],
-      },
-    }).start();
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "POST",
+          path: "/auth/preflight",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 16,
+          timeoutMs: 1000,
+          onRequest: () => ((calls += 1), new Response()),
+        },
+      ],
+    });
     try {
       const response = await fetch(`${server.baseUrl}/auth/preflight`, {
         method: "OPTIONS",
@@ -1844,18 +1716,16 @@ describe("Server", () => {
     ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
-    const gateway = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        discovery: {
-          watch: () => async () => {
-            stops += 1;
-          },
+    const gateway = await BrowserHost.run({
+      port: 0,
+      ...browserGateway(),
+      discovery: {
+        watch: () => async () => {
+          stops += 1;
         },
-        bindings: inMemoryBindings(),
       },
-    }).run();
+      bindings: inMemoryBindings(),
+    });
 
     process.emit("SIGTERM");
     await waitFor(() => stops === 1);
@@ -1871,18 +1741,16 @@ describe("Server", () => {
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
     const application = await Server.atPort(0).run();
-    const gateway = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        discovery: {
-          watch: () => async () => {
-            stops += 1;
-          },
+    const gateway = await BrowserHost.run({
+      port: 0,
+      ...browserGateway(),
+      discovery: {
+        watch: () => async () => {
+          stops += 1;
         },
-        bindings: inMemoryBindings(),
       },
-    }).run();
+      bindings: inMemoryBindings(),
+    });
 
     await application.close();
 
@@ -2141,12 +2009,10 @@ describe("Server", () => {
   });
 
   it("serves browser preflight only to configured origins", async () => {
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-      },
-    }).start();
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+    });
 
     try {
       const allowed = await fetch(`${server.baseUrl}/spine.client.CommandService/Post`, {
@@ -2173,32 +2039,32 @@ describe("Server", () => {
     "rejects a noncanonical browser origin %s",
     async (origin) => {
       await expect(
-        browserComposedServer({ browser: { ...browserGateway(), origins: [origin] } }).start(),
+        openCombined(new Server(), { ...browserGateway(), origins: [origin] }),
       ).rejects.toThrow("canonical HTTP(S) origins");
     },
   );
 
   it("rejects duplicate browser origins", async () => {
     await expect(
-      browserComposedServer({
-        browser: {
-          ...browserGateway(),
-          origins: ["http://127.0.0.1:5173", "http://127.0.0.1:5173"],
-        },
-      }).start(),
+      openCombined(new Server(), {
+        ...browserGateway(),
+        origins: ["http://127.0.0.1:5173", "http://127.0.0.1:5173"],
+      }),
     ).rejects.toThrow("unique and non-empty");
   });
 
   it("rejects an empty browser origin list", async () => {
-    await expect(
-      browserComposedServer({ browser: { ...browserGateway(), origins: [] } }).start(),
-    ).rejects.toThrow("unique and non-empty");
+    await expect(openCombined(new Server(), { ...browserGateway(), origins: [] })).rejects.toThrow(
+      "unique and non-empty",
+    );
   });
 
   it("accepts a canonical HTTPS browser origin", async () => {
-    const server = await browserComposedServer({
-      browser: { ...browserGateway(), port: 0, origins: ["https://chat.example"] },
-    }).start();
+    const server = await openCombined(new Server(), {
+      ...browserGateway(),
+      port: 0,
+      origins: ["https://chat.example"],
+    });
     try {
       const response = await fetch(`${server.baseUrl}/spine.client.CommandService/Post`, {
         method: "OPTIONS",
@@ -2211,10 +2077,7 @@ describe("Server", () => {
   });
 
   it("formats an IPv6 browser listener URL", async () => {
-    const server = await browserComposedServer({
-      host: "::1",
-      browser: { ...browserGateway(), host: "::1", port: 0 },
-    }).start();
+    const server = await openCombined(new Server(), { ...browserGateway(), host: "::1", port: 0 });
     try {
       expect(server.host).toBe("::1");
       expect(server.baseUrl).toBe(`http://[::1]:${server.port.toString()}`);
@@ -2224,9 +2087,7 @@ describe("Server", () => {
   });
 
   it("rejects a browser request without an origin", async () => {
-    const server = await browserComposedServer({
-      browser: { port: 0, ...browserGateway() },
-    }).start();
+    const server = await openCombined(new Server(), { port: 0, ...browserGateway() });
     try {
       const response = await fetch(`${server.baseUrl}/spine.client.CommandService/Post`, {
         method: "POST",
@@ -2238,9 +2099,7 @@ describe("Server", () => {
   });
 
   it("routes browser Connect RPCs through its authentication boundary", async () => {
-    const server = await browserComposedServer({
-      browser: { port: 0, ...browserGateway() },
-    }).start();
+    const server = await openCombined(new Server(), { port: 0, ...browserGateway() });
     const client = createClient(
       AuthenticationService,
       createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
@@ -2258,9 +2117,11 @@ describe("Server", () => {
   });
 
   it("accepts an application type registry for browser request decoding", async () => {
-    const server = await browserComposedServer({
-      browser: { port: 0, ...browserGateway(), registry: new TypeRegistry([TenantIdSchema]) },
-    }).start();
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      registry: new TypeRegistry([TenantIdSchema]),
+    });
     try {
       expect(server.port).toBeGreaterThan(0);
     } finally {
@@ -2269,10 +2130,11 @@ describe("Server", () => {
   });
 
   it("enforces the configured browser request-message limit", async () => {
-    const server = await browserComposedServer({
+    const server = await openCombined(new Server(), {
+      port: 0,
       readMaxBytes: 32,
-      browser: { port: 0, ...browserGateway() },
-    }).start();
+      ...browserGateway(),
+    });
     const client = createClient(
       CommandService,
       createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
@@ -2311,10 +2173,7 @@ describe("Server", () => {
           }),
       },
     };
-    const server = await browserComposedServer({
-      writeMaxBytes: 32,
-      browser: { port: 0, ...options },
-    }).start();
+    const server = await openCombined(new Server(), { port: 0, writeMaxBytes: 32, ...options });
     const client = createClient(
       AuthenticationService,
       createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
@@ -2331,10 +2190,11 @@ describe("Server", () => {
   });
 
   it("enforces the configured browser request-message limit over gRPC-Web", async () => {
-    const server = await browserComposedServer({
+    const server = await openCombined(new Server(), {
+      port: 0,
       readMaxBytes: 32,
-      browser: { port: 0, ...browserGateway() },
-    }).start();
+      ...browserGateway(),
+    });
     const client = createClient(
       CommandService,
       createGrpcWebTransport({ baseUrl: server.baseUrl }),
@@ -2373,10 +2233,7 @@ describe("Server", () => {
           }),
       },
     };
-    const server = await browserComposedServer({
-      writeMaxBytes: 32,
-      browser: { port: 0, ...options },
-    }).start();
+    const server = await openCombined(new Server(), { port: 0, writeMaxBytes: 32, ...options });
     const client = createClient(
       AuthenticationService,
       createGrpcWebTransport({ baseUrl: server.baseUrl }),
@@ -2393,9 +2250,7 @@ describe("Server", () => {
   });
 
   it("routes browser gRPC-Web RPCs through its authentication boundary", async () => {
-    const server = await browserComposedServer({
-      browser: { port: 0, ...browserGateway() },
-    }).start();
+    const server = await openCombined(new Server(), { port: 0, ...browserGateway() });
     const client = createClient(
       AuthenticationService,
       createGrpcWebTransport({ baseUrl: server.baseUrl }),
@@ -2429,7 +2284,7 @@ describe("Server", () => {
         },
       },
     };
-    const server = await browserComposedServer({ browser: { port: 0, ...options } }).start();
+    const server = await openCombined(new Server(), { port: 0, ...options });
     const client = createClient(
       AuthenticationService,
       createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
@@ -2471,7 +2326,7 @@ describe("Server", () => {
         },
       },
     };
-    const server = await browserComposedServer({ browser: { port: 0, ...options } }).start();
+    const server = await openCombined(new Server(), { port: 0, ...options });
     const client = createClient(
       AuthenticationService,
       createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
@@ -2498,18 +2353,16 @@ describe("Server", () => {
 
   it("extracts an exact bearer credential before gateway admission", async () => {
     let credential: RequestCredential | undefined;
-    const server = await browserComposedServer({
-      browser: {
-        port: 0,
-        ...browserGateway(),
-        sessions: {
-          resolve(value: RequestCredential) {
-            credential = value;
-            return Promise.resolve(undefined);
-          },
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      sessions: {
+        resolve(value: RequestCredential) {
+          credential = value;
+          return Promise.resolve(undefined);
         },
       },
-    }).start();
+    });
     const client = createClient(
       AuthenticationService,
       createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
@@ -2541,10 +2394,10 @@ describe("Server", () => {
         },
       },
     };
-    const server = await browserComposedServer({
-      browser: { port: 0, ...options },
-      resources: [{ close: () => closed.push("native") }],
-    }).start();
+    const server = await openCombined(
+      new Server({ resources: [{ close: () => closed.push("native") }] }),
+      { port: 0, ...options },
+    );
     const client = createClient(
       AuthenticationService,
       createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
@@ -2577,8 +2430,18 @@ describe("Server", () => {
     const subscriptionClose = vi
       .spyOn(SubscriptionGateway.prototype, "close")
       .mockRejectedValueOnce(new Error("subscription cleanup failed"));
-    const server = await browserComposedServer({
-      browser: {
+    const server = await openCombined(
+      new Server({
+        resources: [
+          {
+            close: () => {
+              expect(drain).toHaveBeenCalledTimes(1);
+              closed.push("native");
+            },
+          },
+        ],
+      }),
+      {
         port: 0,
         ...browserGateway(),
         sessions: {
@@ -2588,15 +2451,7 @@ describe("Server", () => {
           },
         },
       },
-      resources: [
-        {
-          close: () => {
-            expect(drain).toHaveBeenCalledTimes(1);
-            closed.push("native");
-          },
-        },
-      ],
-    }).start();
+    );
     const client = createClient(
       AuthenticationService,
       createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
@@ -2623,9 +2478,7 @@ describe("Server", () => {
 
   it("retries a failed browser listener close", async () => {
     const close = vi.spyOn(http.Server.prototype, "close");
-    const server = await browserComposedServer({
-      browser: { port: 0, ...browserGateway() },
-    }).start();
+    const server = await openCombined(new Server(), { port: 0, ...browserGateway() });
     close.mockImplementationOnce(function (this: http.Server, callback?: (error?: Error) => void) {
       callback?.(new Error("browser listener close failed"));
       return this;
@@ -2664,7 +2517,7 @@ describe("Server", () => {
           }),
       },
     };
-    const server = await browserComposedServer({ browser: { port: 0, ...options } }).start();
+    const server = await openCombined(new Server(), { port: 0, ...options });
     const client = createClient(
       AuthenticationService,
       createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
@@ -2685,10 +2538,10 @@ describe("Server", () => {
     const closed: string[] = [];
     try {
       await expect(
-        browserComposedServer({
-          browser: { port: occupied.port, ...browserGateway() },
-          resources: [{ close: () => closed.push("resource") }],
-        }).start(),
+        openCombined(new Server({ resources: [{ close: () => closed.push("resource") }] }), {
+          port: occupied.port,
+          ...browserGateway(),
+        }),
       ).rejects.toMatchObject({ code: "EADDRINUSE" });
       expect(closed).toEqual(["resource"]);
     } finally {
@@ -2698,24 +2551,26 @@ describe("Server", () => {
 
   it("retries only the unfinished native close phase behind the browser listener", async () => {
     let attempts = 0;
-    const server = await browserComposedServer({
-      browser: { port: 0, ...browserGateway() },
-      resources: [
-        {
-          close: () => {
-            attempts += 1;
-            if (attempts === 1) throw new Error("close failed");
+    const server = await openCombined(
+      new Server({
+        resources: [
+          {
+            close: () => {
+              attempts += 1;
+              if (attempts === 1) throw new Error("close failed");
+            },
           },
-        },
-      ],
-    }).start();
+        ],
+      }),
+      { port: 0, ...browserGateway() },
+    );
     await expect(server.close()).rejects.toThrow("close failed");
     await expect(server.close()).resolves.toBeUndefined();
     expect(attempts).toBe(2);
   });
 
   it("honors an explicit host and port", async () => {
-    const server = await browserComposedServer({ host: "127.0.0.1", port: 0 }).start();
+    const server = await new Server({ host: "127.0.0.1", port: 0 }).start();
 
     try {
       expect(server.host).toBe("127.0.0.1");
@@ -2726,16 +2581,16 @@ describe("Server", () => {
   });
 
   it("rejects blank hosts before opening a listener", () => {
-    expect(() => browserComposedServer({ host: "" })).toThrow("Server host must not be blank.");
-    expect(() => browserComposedServer({ host: " \t " })).toThrow("Server host must not be blank.");
+    expect(() => new Server({ host: "" })).toThrow("Server host must not be blank.");
+    expect(() => new Server({ host: " \t " })).toThrow("Server host must not be blank.");
   });
 
   it("rejects invalid network message bounds before opening a listener", () => {
     for (const value of [0, 1.5, 0x1_0000_0000, Number.NaN]) {
-      expect(() => browserComposedServer({ readMaxBytes: value })).toThrow(
+      expect(() => new Server({ readMaxBytes: value })).toThrow(
         "Server readMaxBytes must be an integer from 1 through 4294967295.",
       );
-      expect(() => browserComposedServer({ writeMaxBytes: value })).toThrow(
+      expect(() => new Server({ writeMaxBytes: value })).toThrow(
         "Server writeMaxBytes must be an integer from 1 through 4294967295.",
       );
     }
@@ -2847,7 +2702,7 @@ describe("Server", () => {
     const firstError = new Error("first nested close failed");
     const secondError = new Error("second nested close failed");
     const closed: string[] = [];
-    const server = await browserComposedServer({
+    const server = await new Server({
       resources: [
         null as unknown as { close(): unknown },
         {} as { close(): unknown },
@@ -2888,7 +2743,7 @@ describe("Server", () => {
   it("builds added context builders with the server environment storage factory", async () => {
     const storageFactory = new TrackingStorageFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
-    const server = await browserComposedServer({
+    const server = await new Server({
       contexts: [BoundedContext.singleTenant("Tasks")],
     }).start();
 
