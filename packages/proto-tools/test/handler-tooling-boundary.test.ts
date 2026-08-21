@@ -34,3 +34,13 @@ it("keeps handler tooling independent of the Server runtime package", () => {
   expect(serverPackage.exports?.["./internal/generated-handler-registry"]).toBeUndefined();
   expect(serverPackage.exports?.["./spi/handler-registry"]).toBeDefined();
 });
+
+it("resolves direct tooling dependencies from the package-local module identity", () => {
+  const analyzer = readFileSync(
+    join(process.cwd(), "packages/proto-tools/src/generation/build-time-handler-analyzer.ts"),
+    "utf8",
+  );
+
+  expect(analyzer).not.toContain('process.cwd(), "packages/server/package.json"');
+  expect(analyzer).not.toContain("packages/server/package.json");
+});

@@ -47,6 +47,14 @@ describe("@spine-event-engine/server package exports", () => {
     expect(typeof browser.DurableSubscriptionBindings).toBe("function");
   });
 
+  it("connects the public browser facade to production implementation names", () => {
+    const source = readFileSync(new URL("../src/browser/index.ts", import.meta.url), "utf8");
+
+    expect(source).toContain('from "./browser-server.js"');
+    expect(source).toContain("browserServerImplementation");
+    expect(source).not.toContain("browserServerTestAccess");
+  });
+
   it("emits a native root declaration with no auth or browser resolution path", () => {
     const declaration = readFileSync(new URL("../dist/index.d.ts", import.meta.url), "utf8");
 
