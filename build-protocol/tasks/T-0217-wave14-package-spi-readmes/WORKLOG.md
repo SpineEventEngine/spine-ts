@@ -92,7 +92,7 @@
   because `@spine-event-engine/server/browser` was absent from package exports.
 - GREEN evidence: after adding the browser subpath and removing root browser/
   durable exports, `pnpm --config.verify-deps-before-run=false exec vitest run
-  packages/server/test/package-exports.test.ts --passWithNoTests` passed 5/5;
+packages/server/test/package-exports.test.ts --passWithNoTests` passed 5/5;
   the server project build completed after generated Proto prerequisites were
   regenerated.
 - The worktree baseline has a pre-existing manifest/lockfile mismatch, so frozen
@@ -124,3 +124,24 @@
   closes a supplied running native server; the single-worker browser suite
   passes 126/126. Provider conformance passes 2/2 and Message Board deployment
   configuration passes 23/23 after locally building ignored dependent output.
+
+## Browser/auth boundary final consumer proof
+
+- Full browser-host evidence: `packages/server/test/server/server.test.ts` was
+  run single-worker and in-order with 126/126 passing assertions. The retained
+  helper only replaces legacy construction; browser admission, CORS,
+  credentials, auth-route, durable recovery, discovery, drain, retry, and
+  startup rollback assertions remain intact.
+- Combined browser, durable, provider, Message Board, and GCE/GKE focused
+  evidence passed 137/137. Generated dependencies were locally bootstrapped
+  with verification disabled and the ten nondeterministic proto manifest files
+  restored afterwards; no lockfile is included.
+- The packed native-root consumer now installs the packed server artifact,
+  compiles and imports it without the auth package or TypeScript compiler in
+  its dependency closure. It carries `@types/node` solely to resolve the
+  native Node declaration references exposed by the root contract. Boundary
+  policy plus snapshot-artifact evidence passed 11/11.
+- `typecheck:build:generated` passed. `docs:api:check` remains blocked only by
+  the separately classified storage provider inventory regression (missing
+  TenantBoundary, TenantCatalog, and TenantCatalogProvider); this stream made
+  no further TypeDoc/API-inventory changes beyond its pushed server correction.

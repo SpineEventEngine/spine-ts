@@ -124,6 +124,7 @@ export function proveExactTarballConsumer({ root, destination, run }) {
         target: "ES2024",
         outDir: "dist",
         strict: true,
+        types: ["node"],
       },
       include: ["index.ts"],
     }),
@@ -168,6 +169,7 @@ export function proveNativeServerTarballConsumer({ root, destination, run, packa
       private: true,
       type: "module",
       dependencies: { "@spine-event-engine/server": tarballs["@spine-event-engine/server"] },
+      devDependencies: { "@types/node": "24.13.2" },
     }),
   );
   writeFileSync(
@@ -199,6 +201,7 @@ export function proveNativeServerTarballConsumer({ root, destination, run, packa
         target: "ES2024",
         outDir: "dist",
         strict: true,
+        types: ["node"],
       },
       include: ["index.ts"],
     }),
