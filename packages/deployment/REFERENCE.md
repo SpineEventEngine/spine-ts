@@ -9,6 +9,14 @@ A consumer treats conflicting descriptors for one stable ID in one snapshot as a
 
 `ScheduledNodeDiscovery` permits one active watch. It is terminal after close: close is idempotent, cancels and joins its active read, and later `watch()` calls reject.
 
+## Backend membership SPI
+
+Framework gateway integrations import `BackendMembershipKernel`,
+`BackendMemberClient`, and `BackendMembershipKernelOptions` from
+`@spine-event-engine/deployment/spi/backend-membership`. The SPI owns ephemeral
+member reconciliation and child subscriptions; callers retain logical
+subscription persistence and do not use it as an application discovery API.
+
 ## Leased node registry
 
 `LeasedNodeRegistry` persists application-node discovery leases through an

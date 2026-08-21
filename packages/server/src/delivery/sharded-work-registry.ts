@@ -24,11 +24,11 @@ import {
 } from "@spine-event-engine/proto/delivery";
 import {
   RecordSpec,
-  TenantBoundary,
   type RecordStorage,
   type StorageContext,
   type StorageFactory,
 } from "@spine-event-engine/storage";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import { DeliveryLeases } from "./delivery-lease.js";
 import { ShardIndex } from "./shard-index.js";

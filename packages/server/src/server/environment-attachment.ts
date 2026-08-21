@@ -14,11 +14,8 @@
 
 import { clone } from "@bufbuild/protobuf";
 import { TenantIdSchema } from "@spine-event-engine/proto";
-import {
-  TenantBoundary,
-  type StorageContext,
-  type StorageFactory,
-} from "@spine-event-engine/storage";
+import { type StorageContext, type StorageFactory } from "@spine-event-engine/storage";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
 import type { ContextDeliveryDescriptor, DeliveryTenantScope } from "../context/bounded-context.js";
 import type { DeliveryEndpoint, DeliveryReady } from "../context/local-inbox-handoff.js";

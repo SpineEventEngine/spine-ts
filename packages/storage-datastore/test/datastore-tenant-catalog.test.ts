@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { TenantIdSchema } from "@spine-event-engine/proto";
-import { TenantBoundary } from "@spine-event-engine/storage";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
 
 import { DatastoreStorageFactory, DefaultNamespaceConverter } from "../src/index.js";

@@ -25,7 +25,7 @@ import {
   type DynamicUnaryClient,
 } from "@spine-event-engine/auth";
 import { ApplicationNode } from "@spine-event-engine/deployment";
-import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/internal/subscription-lifecycle";
+import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
 import {
   ActorContextSchema,
   AckSchema,

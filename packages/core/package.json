@@ -19,9 +19,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./internal/subscription-lifecycle": {
-      "types": "./dist/internal/subscription-lifecycle.d.ts",
-      "default": "./dist/internal/subscription-lifecycle.js"
+    "./spi/subscription-lifecycle": {
+      "types": "./dist/spi/subscription-lifecycle.d.ts",
+      "default": "./dist/spi/subscription-lifecycle.js"
     }
   },
   "files": [

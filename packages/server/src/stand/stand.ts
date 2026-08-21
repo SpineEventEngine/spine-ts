@@ -25,16 +25,16 @@ import {
   RecordColumn,
   RecordMask,
   RecordQuery,
-  TenantBoundary,
   type NormalizedQueryPlan,
   type StorageContext,
   type StorageMode,
 } from "@spine-event-engine/storage";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import type { StorageFactory } from "@spine-event-engine/storage";
 import type {
   EntityRecordStorage,
   EntityStorageInput,
-} from "@spine-event-engine/storage/internal/entity-history";
+} from "@spine-event-engine/storage/provider";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
   EntityRecords,

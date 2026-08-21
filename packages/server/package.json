@@ -27,9 +27,9 @@
       "types": "./dist/handler/generated-handler-registry.d.ts",
       "default": "./dist/handler/generated-handler-registry.js"
     },
-    "./internal/conditional-pickup": {
-      "types": "./dist/delivery/conditional-pickup.d.ts",
-      "default": "./dist/delivery/conditional-pickup.js"
+    "./spi/delivery": {
+      "types": "./dist/spi/delivery.d.ts",
+      "default": "./dist/spi/delivery.js"
     }
   },
   "files": [

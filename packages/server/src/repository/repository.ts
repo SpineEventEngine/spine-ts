@@ -54,19 +54,19 @@ import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/ser
 import { EntityTypeNameSchema } from "@spine-event-engine/proto/generated/spine/system/server/entity_type_pb.js";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
-  TenantBoundary,
   type StorageContext,
   type StorageFactory,
   type StorageMode,
 } from "@spine-event-engine/storage";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import type {
   EntityEventHistoryPort,
   EntityRecordStorage,
   EntityStateHistoryPort,
   EntityStorageInput,
-} from "@spine-event-engine/storage/internal/entity-history";
-import type { EntityCommitStorage } from "@spine-event-engine/storage/internal/entity-commit";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
+} from "@spine-event-engine/storage/provider";
+import type { EntityCommitStorage } from "@spine-event-engine/storage/provider";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
 
 import { CommandValidationError } from "../bus/command-errors.js";
 import {

@@ -19,29 +19,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./internal/entity-history": {
-      "types": "./dist/internal/entity-history.d.ts",
-      "default": "./dist/internal/entity-history.js"
-    },
-    "./internal/entity-commit": {
-      "types": "./dist/internal/entity-commit.d.ts",
-      "default": "./dist/internal/entity-commit.js"
-    },
-    "./internal/delivery-cleanup": {
-      "types": "./dist/internal/delivery-cleanup.d.ts",
-      "default": "./dist/internal/delivery-cleanup.js"
-    },
-    "./internal/event-store": {
-      "types": "./dist/internal/event-store.d.ts",
-      "default": "./dist/internal/event-store.js"
-    },
-    "./internal/tenancy": {
-      "types": "./dist/internal/tenancy.d.ts",
-      "default": "./dist/internal/tenancy.js"
-    },
-    "./internal/query-values": {
-      "types": "./dist/internal/query-values.d.ts",
-      "default": "./dist/internal/query-values.js"
+    "./provider": {
+      "types": "./dist/provider.d.ts",
+      "default": "./dist/provider.js"
     }
   },
   "files": [

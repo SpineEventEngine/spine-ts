@@ -18,6 +18,13 @@ Import from `@spine-event-engine/core`. The package exports `Validate`,
 `StringifierRegistry`, the `Stringifier` contract, and their exported input,
 result, and metadata types.
 
+## Subscription lifecycle SPI
+
+Framework integrations that coordinate subscription activation import
+`SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS` from
+`@spine-event-engine/core/spi/subscription-lifecycle`. This is not an
+application subscription API and is not exported from the core root.
+
 ## Storage value helpers
 
 `Identifiers` packs and unpacks the generated-message and supported primitive

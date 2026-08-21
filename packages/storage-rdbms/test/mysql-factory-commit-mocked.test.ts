@@ -17,7 +17,7 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
 
 const seam = vi.hoisted(() => ({

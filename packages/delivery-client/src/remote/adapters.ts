@@ -29,7 +29,7 @@ import type {
 import { ShardIndex } from "@spine-event-engine/server";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 
-import { conditionalPickUp } from "@spine-event-engine/server/internal/conditional-pickup";
+import { conditionalPickUp } from "@spine-event-engine/server/spi/delivery";
 import { DeliveryClient, deliveryClientAccess } from "../client/client.js";
 import {
   DeliveryPagingError,

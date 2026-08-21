@@ -18,8 +18,8 @@ import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/
 import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
-import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
+import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
 
 import { DatastoreStorageFactory } from "../../src/index.js";
