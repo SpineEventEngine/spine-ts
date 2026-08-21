@@ -1,5 +1,11 @@
 # @spine-event-engine/delivery-server reference
 
+## Testing entry point
+
+`@spine-event-engine/delivery-server/testing` serves in-process framework
+fixtures that need a Delivery assembly. It is not an application root API and
+its compatibility boundary is limited to package-test consumers.
+
 This reference describes the public in-memory Delivery server API. Read the
 [package guide](README.md) first for the shortest local setup.
 

@@ -90,12 +90,7 @@ function packageGraphProblems(manifests) {
     if (visited.has(name)) return;
     visiting.add(name);
     const manifest = byName.get(name);
-    for (const group of [
-      "dependencies",
-      "devDependencies",
-      "optionalDependencies",
-      "peerDependencies",
-    ])
+    for (const group of ["dependencies", "optionalDependencies", "peerDependencies"])
       for (const dependency of Object.keys(manifest?.[group] ?? {}).sort((left, right) =>
         left.localeCompare(right),
       ))

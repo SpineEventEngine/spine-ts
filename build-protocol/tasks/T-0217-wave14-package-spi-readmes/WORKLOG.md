@@ -68,3 +68,16 @@
   now accepts the canonical server declaration and rejects the path-mapped
   counterfeit; all 14 affected suites pass (13 files, one intentionally
   skipped; 100 tests passed and four skipped).
+
+## Fixture-boundary review corrections
+
+- Publication graph traversal now considers `dependencies`, `optionalDependencies`,
+  and `peerDependencies` only. Development-only test edges remain declared but
+  cannot create runtime/public graph cycles; focused policy evidence leaves only
+  the accepted auth/browser reds.
+- TypeDoc now includes all three deliberate `./testing` entry points. Their
+  references identify framework test/fixture consumers and state that they are
+  outside normal end-user compatibility; proto-tools generation modules remain
+  private.
+- Package identity continues to prove canonical compiled/workspace server
+  `External` recognition and rejection of the existing path-mapped counterfeit.
