@@ -210,7 +210,7 @@ describe("Server", () => {
   });
 
   it("rejects a standalone public gateway without backend or discovery", async () => {
-    await expect(BrowserHost.run(browserGateway() as BrowserServerOptions)).rejects.toThrow(
+    await expect(BrowserServer.run(browserGateway() as BrowserServerOptions)).rejects.toThrow(
       "requires a backend or discovery",
     );
   });

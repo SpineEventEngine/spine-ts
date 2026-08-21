@@ -82,6 +82,9 @@ type BrowserHostOptions = BrowserServerOptions & {
   readonly dynamicManagerFactory?: (node: ApplicationNode) => Http2SessionManager;
 };
 
+/** @internal Options accepted only through the browser-server white-box seam. */
+type BrowserServerTestOptions = BrowserServerOptions & Partial<BrowserHostOptions>;
+
 /**
  * Runs the private native endpoint behind one admitted browser listener.
  *
@@ -723,9 +726,30 @@ export const browserServerImplementation: Readonly<{
 });
 
 /** @internal White-box browser host seam for source-level behavior tests. */
-export const browserServerTestAccess: typeof browserServerImplementation = Object.freeze({
+type BrowserServerTestAccess = Omit<
+  typeof browserServerImplementation,
+  "open" | "run" | "requests" | "requireDurableBindings" | "preflight"
+> & {
+  open(native: RunningServer, options: BrowserServerTestOptions): Promise<RunningServer>;
+  open(
+    native: string | readonly string[] | undefined,
+    options: BrowserServerTestOptions,
+  ): Promise<RunningServer>;
+  run(options: BrowserServerTestOptions): Promise<RunningServer>;
+  run(native: Server, options: BrowserServerTestOptions): Promise<RunningServer>;
+  requests(options: BrowserServerTestOptions): {
+    credential(context: {
+      readonly requestHeader: Headers;
+    }): { readonly kind: "bearer" | "cookie"; readonly value: string } | undefined;
+    transport(context: { readonly requestHeader: Headers }): ReturnType<typeof TransportFacts.from>;
+  };
+  requireDurableBindings(options: BrowserServerTestOptions, production: boolean): void;
+  preflight(mode: "combined" | "standalone", options: BrowserServerTestOptions): BrowserHostOptions;
+};
+
+export const browserServerTestAccess: BrowserServerTestAccess = Object.freeze({
   ...browserServerImplementation,
-});
+}) as BrowserServerTestAccess;
 
 const BrowserServer = browserServerImplementation;
 
