@@ -18,6 +18,7 @@ import {
   packedArchiveProblems,
   packedContentProblems,
   packedManifestProblems,
+  packedReadmeLinkProblems,
   publicManifestProblems,
 } from "./package-artifacts.mjs";
 
@@ -60,6 +61,7 @@ export function inspectPackedArtifact({ root, tarball, run }) {
     const entries = readdirSync(stage, { recursive: true }).map(String);
     const sourceDirectory = manifest.repository?.directory;
     const source = JSON.parse(readFileSync(join(root, sourceDirectory, "package.json"), "utf8"));
+    const readme = readFileSync(join(stage, "README.md"), "utf8");
     const texts = entries
       .filter((entry) => /\.(?:json|js|mjs|cjs|ts|d\.ts)$/u.test(entry))
       .map((entry) => readFileSync(join(stage, entry), "utf8"));
@@ -68,6 +70,7 @@ export function inspectPackedArtifact({ root, tarball, run }) {
       ...packedManifestProblems(manifest),
       ...packedArchiveProblems(manifest, entries),
       ...packedContentProblems(manifest, entries, texts, source.files ?? []),
+      ...packedReadmeLinkProblems(manifest, entries, readme),
       ...internalRuntimeDependencyProblems(manifest),
     ];
     if (problems.length) throw new Error(problems.join("\n"));
