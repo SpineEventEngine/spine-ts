@@ -12,5 +12,7 @@
  * the License.
  */
 
-/** Subscription-lifecycle timing shared by framework integrations. */
+/**
+ * Exports subscription-lifecycle timing shared by framework integrations.
+ */
 export { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "../internal/subscription-lifecycle.js";

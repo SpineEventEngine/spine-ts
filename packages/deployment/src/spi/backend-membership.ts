@@ -12,7 +12,9 @@
  * the License.
  */
 
-/** Backend-membership contracts shared by deployment integrations. */
+/**
+ * Exports backend-membership contracts shared by deployment integrations.
+ */
 export {
   BackendMembershipKernel,
   type BackendMemberClient,

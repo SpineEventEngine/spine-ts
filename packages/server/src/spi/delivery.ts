@@ -12,5 +12,7 @@
  * the License.
  */
 
-/** Delivery capability negotiated between the server and delivery adapters. */
+/**
+ * Exports the delivery capability negotiated between the server and delivery adapters.
+ */
 export { conditionalPickUp } from "../delivery/conditional-pickup.js";

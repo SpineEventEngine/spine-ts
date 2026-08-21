@@ -12,5 +12,7 @@
  * the License.
  */
 
-/** Test support for applications that host a Delivery server assembly in-process. */
+/**
+ * Exports test support for applications that host a Delivery server assembly in-process.
+ */
 export { DeliveryAssembly } from "../server/assembly.js";

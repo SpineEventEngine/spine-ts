@@ -12,7 +12,9 @@
  * the License.
  */
 
-/** Compiler-focused test support for consumers that verify generated handler registries. */
+/**
+ * Exports compiler-focused test support for consumers that verify generated handler registries.
+ */
 export { BuildHandlerAnalyzer } from "../generation/build-time-handler-analyzer.js";
 export { GeneratedRegistryWriter } from "../generation/generated-registry-writer.js";
 export type { BuildHandlerAnalysis } from "../generation/generated-registry-writer.js";

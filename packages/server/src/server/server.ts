@@ -497,7 +497,11 @@ interface FailedStartNetwork {
   readonly sessions: Set<http2.ServerHttp2Session>;
 }
 
-/** @internal Browser composition may only start a private native listener. */
+/**
+ * Checks whether browser composition may start a private native listener.
+ *
+ * @internal
+ */
 export const serverBuilderAccess: Readonly<{
   isLoopback(server: Server): boolean;
 }> = Object.freeze({
