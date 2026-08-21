@@ -43,17 +43,8 @@ const defaultMessageMaxBytes = 4_194_304;
 const maximumMessageMaxBytes = 0xffff_ffff;
 const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
-// Browser declarations remain private to this source module during the package split.
-// The public browser contract is declared by `../browser/options.js`.
-type AuthorizationPolicy = { readonly authorize: (...arguments_: never[]) => unknown };
-type Clock = unknown;
-type ContextResolver = unknown;
-type NodeDiscovery = unknown;
-type OpaqueSessionCookies = unknown;
-type SessionResolver = unknown;
-type SubscriptionBindings = unknown;
-type TypeRegistryLookup = unknown;
 const runningContexts = new WeakMap<RunningServer, readonly BoundedContext[]>();
+const serverHosts = new WeakMap<Server, string>();
 
 /**
  * Performs work coupled to listener readiness and network shutdown.
@@ -121,6 +112,7 @@ export class Server {
     this.#resources.push(...(options.resources ?? []));
     this.#services = options.services ?? {};
     this.#environment = ServerEnvironment.instance();
+    serverHosts.set(this, this.#host);
   }
 
   /**
@@ -505,6 +497,22 @@ interface FailedStartNetwork {
   readonly sessions: Set<http2.ServerHttp2Session>;
 }
 
+/** @internal Browser composition may only start a private native listener. */
+export const serverBuilderAccess: Readonly<{
+  isLoopback(server: Server): boolean;
+}> = Object.freeze({
+  isLoopback(server: Server): boolean {
+    const host = serverHosts.get(server);
+    return host !== undefined && isLoopbackHost(host);
+  },
+});
+
+function isLoopbackHost(host: string): boolean {
+  if (host === "localhost" || host === "::1" || host === "::ffff:127.0.0.1") return true;
+  const match = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(host);
+  return match !== null && match.slice(1).every((part) => Number(part) <= 255);
+}
+
 /**
  * Options for building a local Spine HTTP/2 service host.
  */
@@ -556,217 +564,6 @@ export interface ServerOptions {
    * Extra framework-owned closeables to close after contexts become safe to close.
    */
   readonly resources?: readonly { close(): unknown }[];
-
-}
-
-/**
- * Selects exactly one browser admission mode and its binding ownership.
- *
- * An authenticated listener supplies `sessions` and may supply named durable
- * `bindings`. A public listener supplies `publicAccess: true`; it owns
- * process-local bindings itself and therefore cannot accept `bindings`.
- */
-export type BrowserAdmission =
-  | {
-      // prettier-ignore
-
-      /**
-       * Resolves authenticated application sessions from incoming credentials.
-       */
-      readonly sessions: SessionResolver;
-
-      /**
-       * Excludes non-session public admission from authenticated mode.
-       */
-      readonly publicAccess?: never;
-
-      /**
-       * Supplies named subscription bindings owned by the authenticated application.
-       */
-      readonly bindings?: SubscriptionBindings;
-    }
-  | {
-      // prettier-ignore
-
-      /**
-       * Excludes session resolution from public mode.
-       */
-      readonly sessions?: never;
-
-      /**
-       * Admits requests under the framework-owned non-session public principal.
-       */
-      readonly publicAccess: true;
-
-      /**
-       * Prevents callers from supplying bindings that public mode does not own.
-       */
-      readonly bindings?: never;
-    };
-
-/**
- * Selects one separately hosted Spine backend or a non-empty fixed node set.
- */
-export type BrowserBackend =
-  | {
-      // prettier-ignore
-
-      /**
-       * Supplies one canonical backend HTTP(S) origin.
-       */
-      readonly baseUrl: string;
-
-      /**
-       * Excludes a multi-node backend list when one backend is supplied.
-       */
-      readonly baseUrls?: never;
-    }
-  | {
-      // prettier-ignore
-
-      /**
-       * Excludes a single backend origin when a fixed node set is supplied.
-       */
-      readonly baseUrl?: never;
-
-      /**
-       * Supplies a non-empty fixed set of canonical backend HTTP(S) origins.
-       */
-      readonly baseUrls: readonly string[];
-    };
-
-/**
- * Common collaborators for every browser Server admission mode.
- *
- * Pair these with exactly one {@link BrowserAdmission} to form
- * {@link BrowserServerOptions}.
- */
-export interface BrowserServerCollaborators {
-  // prettier-ignore
-
-  /**
-   * Public browser listener host. Defaults to the server host.
-   */
-  readonly host?: string;
-
-  /**
-   * Public browser listener port. Defaults to the server port.
-   */
-  readonly port?: number;
-
-  /**
-   * Selects one separately hosted Spine backend or a non-empty fixed node set.
-   *
-   * Each URL must be one canonical HTTP(S) origin without credentials, query,
-   * fragment, or a path beyond `/`. `baseUrl` and `baseUrls` are exclusive;
-   * fan-in is best effort, so clients re-query authoritative state after a
-   * duplicate update or generic loss notice.
-   */
-  readonly backend?: BrowserBackend;
-
-  /**
-   * Supplies changing complete membership for unary routing and native streams.
-   * Supplying discovery makes this a standalone Gateway, so the server does
-   * not assemble or own local contexts, services, resources, or listener
-   * lifecycles. When both backend and discovery are supplied, discovery is the
-   * active membership source and fixed backend values are not reconciled.
-   */
-  readonly discovery?: NodeDiscovery;
-
-  /**
-   * Application-owned, exact authentication endpoints exposed beside the fixed
-   * Spine RPC paths. These endpoints are not a general-purpose router.
-   */
-  readonly authRoutes?: readonly BrowserAuthRoute[];
-
-  /**
-   * Limits concurrently admitted application authentication requests across
-   * this listener. Defaults to 64 and must be a positive safe integer. Excess
-   * requests receive 503 before handler invocation; capacity recovers when an
-   * admitted request settles.
-   */
-  readonly maxActiveAuthRequests?: number;
-
-  /**
-   * Exact browser origins permitted to make RPC calls.
-   */
-  readonly origins: readonly string[];
-
-  /**
-   * Decodes application request content for authorization and actor resolution.
-   */
-  readonly registry?: TypeRegistryLookup;
-
-  /**
-   * Allows or rejects an admitted principal for each decoded request.
-   */
-  readonly authorize: AuthorizationPolicy["authorize"];
-
-  /**
-   * Independently resolves trusted actor and tenant context after authorization.
-   */
-  readonly contexts: ContextResolver;
-
-  /**
-   * Supplies trusted timestamps for gateway decisions.
-   */
-  readonly clock: Clock;
-
-  /**
-   * Enables strict opaque-cookie extraction alongside bearer credentials.
-   */
-  readonly cookies?: OpaqueSessionCookies;
-}
-
-/**
- * Browser collaborators with exactly one admission and binding-ownership mode.
- */
-export type BrowserServerOptions = BrowserServerCollaborators & BrowserAdmission;
-
-/**
- * Configures one bounded application authentication request.
- */
-export interface BrowserAuthRoute {
-  // prettier-ignore
-
-  /**
-   * Selects the accepted HTTP method.
-   */
-  readonly method: "GET" | "POST";
-
-  /**
-   * Selects the exact canonical request path.
-   */
-  readonly path: string;
-
-  /**
-   * Lists exact browser origins allowed for this route.
-   */
-  readonly origins: readonly string[];
-
-  /**
-   * Allows an OAuth callback without an Origin header.
-   */
-  readonly allowMissingOrigin?: boolean;
-
-  /**
-   * Limits accepted request-body bytes.
-   */
-  readonly maxRequestBytes: number;
-
-  /**
-   * Limits request processing time in milliseconds.
-   */
-  readonly timeoutMs: number;
-
-  /**
-   * Handles one admitted authentication request.
-   *
-   * @param request Supplies the bounded Fetch request.
-   * @param signal Signals timeout, disconnect, or gateway close.
-   * @returns Returns the application response.
-   */
-  readonly onRequest: (request: Request, signal: AbortSignal) => Response | Promise<Response>;
 }
 
 /**
@@ -1199,23 +996,6 @@ const ServerValues = Object.freeze({
       throw new Error("Server host must not be blank.");
     }
     return normalized;
-  },
-
-  browserBackendUrls(backend: NonNullable<BrowserServerOptions["backend"]>): readonly string[] {
-    const source = backend as { readonly baseUrl?: unknown; readonly baseUrls?: unknown };
-    if (typeof source.baseUrl === "string" && source.baseUrls === undefined)
-      return [source.baseUrl];
-    if (source.baseUrl === undefined && Array.isArray(source.baseUrls)) {
-      const values: readonly unknown[] = source.baseUrls;
-      if (values.some((value) => typeof value !== "string"))
-        throw new Error("Server browser backend URLs must be strings.");
-      return values as readonly string[];
-    }
-    throw new Error("Server browser backend must configure exactly one of baseUrl or baseUrls.");
-  },
-
-  isStandaloneBrowser(browser: BrowserServerOptions | undefined): boolean {
-    return browser?.backend !== undefined || browser?.discovery !== undefined;
   },
 
   normalizeMessageMaxBytes(value: number, name: "readMaxBytes" | "writeMaxBytes"): number {

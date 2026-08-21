@@ -145,3 +145,15 @@ packages/server/test/package-exports.test.ts --passWithNoTests` passed 5/5;
   the separately classified storage provider inventory regression (missing
   TenantBoundary, TenantCatalog, and TenantCatalogProvider); this stream made
   no further TypeDoc/API-inventory changes beyond its pushed server correction.
+
+## Browser/auth review correction batch
+
+- Combined browser composition now rejects non-loopback native builders before
+  start and rejects non-loopback running servers. Browser preflight validates
+  standalone forwarding, origins, auth routes, capacity, host, and transport
+  limits before native start; an accepted native running server closes exactly
+  once when that preflight fails.
+- Root `server.ts` no longer retains Browser/auth placeholder declarations or
+  browser helpers. The browser entrypoint publishes only `open` and `run`; its
+  validation/listener seams are source-only test access. Direct browser and
+  native lifecycle evidence passes 130/130 and 51/51 respectively.

@@ -33,21 +33,22 @@ describe("@spine-event-engine/server package exports", () => {
     expectTypeOf<
       "DurableSubscriptionBindings" extends keyof RootExports ? true : false
     >().toEqualTypeOf<false>();
-    expectTypeOf<"BrowserServer" extends keyof BrowserExports ? true : false>().toEqualTypeOf<true>();
+    expectTypeOf<
+      "BrowserServer" extends keyof BrowserExports ? true : false
+    >().toEqualTypeOf<true>();
     expectTypeOf<
       "DurableSubscriptionBindings" extends keyof BrowserExports ? true : false
     >().toEqualTypeOf<true>();
 
     const browser = await import("@spine-event-engine/server/browser");
     expect(typeof browser.BrowserServer.open).toBe("function");
+    expect(typeof browser.BrowserServer.run).toBe("function");
+    expect(Object.keys(browser.BrowserServer).sort()).toEqual(["open", "run"]);
     expect(typeof browser.DurableSubscriptionBindings).toBe("function");
   });
 
   it("emits a native root declaration with no auth or browser resolution path", () => {
-    const declaration = readFileSync(
-      new URL("../dist/index.d.ts", import.meta.url),
-      "utf8",
-    );
+    const declaration = readFileSync(new URL("../dist/index.d.ts", import.meta.url), "utf8");
 
     expect(declaration).not.toMatch(/auth|browser|connect-node|node:http/iu);
   });

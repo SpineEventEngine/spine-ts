@@ -24,7 +24,11 @@ import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import type { NodeDiscovery } from "@spine-event-engine/deployment";
 
 export type BrowserAdmission =
-  | { readonly sessions: SessionResolver; readonly publicAccess?: never; readonly bindings?: SubscriptionBindings }
+  | {
+      readonly sessions: SessionResolver;
+      readonly publicAccess?: never;
+      readonly bindings?: SubscriptionBindings;
+    }
   | { readonly sessions?: never; readonly publicAccess: true; readonly bindings?: never };
 
 export type BrowserBackend =
@@ -49,6 +53,18 @@ export interface BrowserServerCollaborators {
 }
 
 export type BrowserServerOptions = BrowserServerCollaborators & BrowserAdmission;
+
+/**
+ * Browser options for a gateway that does not wrap a local native server.
+ *
+ * A standalone gateway must forward to fixed backends or discovery; it can
+ * never expose an empty routing surface.
+ */
+export type StandaloneBrowserServerOptions = BrowserServerOptions &
+  (
+    | { readonly backend: BrowserBackend; readonly discovery?: NodeDiscovery }
+    | { readonly backend?: BrowserBackend; readonly discovery: NodeDiscovery }
+  );
 
 export interface BrowserAuthRoute {
   readonly method: "GET" | "POST";

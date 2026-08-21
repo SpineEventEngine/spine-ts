@@ -18,12 +18,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   BoundedContext,
-  type BrowserServerOptions,
   EnvironmentType,
   type ListenerLifecycle,
   Server,
   ServerEnvironment,
 } from "../../src/index.js";
+import { BrowserServer, type StandaloneBrowserServerOptions } from "../../src/browser/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import type { EnvironmentAttachmentHandle } from "../../src/server/environment-attachment.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
@@ -207,13 +207,15 @@ describe("Server lifecycle integration", () => {
     await running.close();
   });
 
-  it("rejects standalone browser backends before listener lifecycle startup", async () => {
+  it("rejects incomplete standalone browser options without starting a native lifecycle", async () => {
     const start = vi.fn();
     const close = vi.fn();
-    const server = new Server({
-      browser: { backend: { baseUrls: ["http://10.0.0.1"] } } as BrowserServerOptions,
-    }).addListenerLifecycle({ start, close });
-    await expect(server.start()).rejects.toThrow("Standalone browser server");
+    new Server().addListenerLifecycle({ start, close });
+    await expect(
+      BrowserServer.run({
+        backend: { baseUrls: ["http://10.0.0.1"] },
+      } as StandaloneBrowserServerOptions),
+    ).rejects.toThrow("Standalone browser server");
     expect(start).not.toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
   });

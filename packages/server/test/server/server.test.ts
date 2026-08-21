@@ -63,12 +63,14 @@ import {
   ServerEnvironment,
   type RunningServer,
   type ServerEnvironmentCloseable,
+  type ServerOptions,
 } from "../../src/index.js";
 import {
-  BrowserServer,
+  BrowserServer as BrowserHost,
   DurableSubscriptionBindings,
   type BrowserServerOptions,
 } from "../../src/browser/index.js";
+import { browserServerTestAccess as BrowserServer } from "../../src/browser/browser-server.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { runningServerAccess } from "../../src/server/server.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
@@ -107,14 +109,22 @@ function verifyBrowserAdmissionTypes(options: BrowserServerOptions): void {
   void [neither, both, publicWithBindings];
 }
 void verifyBrowserAdmissionTypes;
-function browserComposedServer(options: Record<string, unknown>): Server | {
-  add(context: Parameters<Server["add"]>[0]): ReturnType<typeof browserComposedServer>;
-  addResource(resource: Parameters<Server["addResource"]>[0]): ReturnType<typeof browserComposedServer>;
-  addListenerLifecycle(lifecycle: Parameters<Server["addListenerLifecycle"]>[0]): ReturnType<typeof browserComposedServer>;
-  start(): Promise<RunningServer>;
-  run(): Promise<RunningServer>;
-} {
-  const { browser, ...nativeOptions } = options as { readonly browser?: BrowserServerOptions };
+type BrowserComposedOptions = ServerOptions & { readonly browser?: BrowserServerOptions };
+
+function browserComposedServer(options: BrowserComposedOptions):
+  | Server
+  | {
+      add(context: Parameters<Server["add"]>[0]): ReturnType<typeof browserComposedServer>;
+      addResource(
+        resource: Parameters<Server["addResource"]>[0],
+      ): ReturnType<typeof browserComposedServer>;
+      addListenerLifecycle(
+        lifecycle: Parameters<Server["addListenerLifecycle"]>[0],
+      ): ReturnType<typeof browserComposedServer>;
+      start(): Promise<RunningServer>;
+      run(): Promise<RunningServer>;
+    } {
+  const { browser, ...nativeOptions } = options;
   const native = new Server(nativeOptions);
   if (browser === undefined) return native;
   const browserOptions: BrowserServerOptions = {
@@ -128,13 +138,28 @@ function browserComposedServer(options: Record<string, unknown>): Server | {
   };
   const standalone = browserOptions.backend !== undefined || browserOptions.discovery !== undefined;
   let ownsLocal =
-    (nativeOptions.contexts !== undefined && (nativeOptions.contexts as readonly unknown[]).length > 0) ||
-    (nativeOptions.resources !== undefined && (nativeOptions.resources as readonly unknown[]).length > 0) ||
-    (nativeOptions.services !== undefined && Object.keys(nativeOptions.services as object).length > 0);
+    (nativeOptions.contexts !== undefined &&
+      (nativeOptions.contexts as readonly unknown[]).length > 0) ||
+    (nativeOptions.resources !== undefined &&
+      (nativeOptions.resources as readonly unknown[]).length > 0) ||
+    (nativeOptions.services !== undefined &&
+      Object.keys(nativeOptions.services as object).length > 0);
   const composed = {
-    add(context: Parameters<Server["add"]>[0]) { native.add(context); ownsLocal = true; return composed; },
-    addResource(resource: Parameters<Server["addResource"]>[0]) { native.addResource(resource); ownsLocal = true; return composed; },
-    addListenerLifecycle(lifecycle: Parameters<Server["addListenerLifecycle"]>[0]) { native.addListenerLifecycle(lifecycle); ownsLocal = true; return composed; },
+    add(context: Parameters<Server["add"]>[0]) {
+      native.add(context);
+      ownsLocal = true;
+      return composed;
+    },
+    addResource(resource: Parameters<Server["addResource"]>[0]) {
+      native.addResource(resource);
+      ownsLocal = true;
+      return composed;
+    },
+    addListenerLifecycle(lifecycle: Parameters<Server["addListenerLifecycle"]>[0]) {
+      native.addListenerLifecycle(lifecycle);
+      ownsLocal = true;
+      return composed;
+    },
     start: async () => {
       BrowserServer.requireDurableBindings(
         browserOptions,
@@ -142,10 +167,16 @@ function browserComposedServer(options: Record<string, unknown>): Server | {
       );
       BrowserServer.origins(browserOptions.origins);
       BrowserServer.authRoutes(browserOptions.authRoutes);
-      if (standalone && ownsLocal) throw new Error("Standalone browser server cannot own local contexts, services, or resources.");
+      if (standalone && ownsLocal)
+        throw new Error(
+          "Standalone browser server cannot own local contexts, services, or resources.",
+        );
       return standalone
-        ? BrowserServer.open(undefined, browserOptions)
-        : BrowserServer.open(await native.start(), browserOptions);
+        ? BrowserHost.open(
+            undefined,
+            browserOptions as import("../../src/browser/index.js").StandaloneBrowserServerOptions,
+          )
+        : BrowserHost.open(await native.start(), browserOptions);
     },
     run: async () => {
       BrowserServer.requireDurableBindings(
@@ -154,15 +185,68 @@ function browserComposedServer(options: Record<string, unknown>): Server | {
       );
       BrowserServer.origins(browserOptions.origins);
       BrowserServer.authRoutes(browserOptions.authRoutes);
-      if (standalone && ownsLocal) throw new Error("Standalone browser server cannot own local contexts, services, or resources.");
-      return standalone ? BrowserServer.run(browserOptions) : BrowserServer.run(native, browserOptions);
+      if (standalone && ownsLocal)
+        throw new Error(
+          "Standalone browser server cannot own local contexts, services, or resources.",
+        );
+      return standalone
+        ? BrowserHost.run(
+            browserOptions as import("../../src/browser/index.js").StandaloneBrowserServerOptions,
+          )
+        : BrowserHost.run(native, browserOptions);
     },
   };
   return composed;
 }
 
-
 describe("Server", () => {
+  it("rejects a public native builder before it starts browser composition", async () => {
+    const native = Server.atPort(0, { host: "0.0.0.0" });
+
+    await expect(BrowserHost.run(native, browserGateway())).rejects.toThrow(
+      "loopback native listener",
+    );
+
+    const running = await native.start();
+    await running.close();
+  });
+
+  it("closes an accepted native listener when public option preflight fails", async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    const native: RunningServer = {
+      host: "127.0.0.1",
+      port: 65534,
+      baseUrl: "http://127.0.0.1:65534",
+      close,
+    };
+
+    await expect(BrowserHost.open(native, { ...browserGateway(), origins: [] })).rejects.toThrow(
+      "origins must be unique and non-empty",
+    );
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a non-loopback running native listener without presenting it as protected", async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    const native: RunningServer = {
+      host: "0.0.0.0",
+      port: 65534,
+      baseUrl: "http://0.0.0.0:65534",
+      close,
+    };
+
+    await expect(BrowserHost.open(native, browserGateway())).rejects.toThrow(
+      "loopback native listener",
+    );
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("rejects a standalone public gateway without backend or discovery", async () => {
+    await expect(BrowserHost.run(browserGateway() as BrowserServerOptions)).rejects.toThrow(
+      "requires a backend or discovery",
+    );
+  });
+
   it("exposes subscription registry facts only for framework-owned running servers", async () => {
     const context = BoundedContext.singleTenant("RegistryFacts").build();
     const running = await Server.atPort(0).add(context).start();
@@ -422,6 +506,8 @@ describe("Server", () => {
     let stops = 0;
     const aborted: string[] = [];
     const native = {
+      host: "127.0.0.1",
+      port: 65534,
       baseUrl: "http://127.0.0.1:65534",
       close: vi.fn().mockResolvedValue(undefined),
     };
@@ -2088,7 +2174,9 @@ describe("Server", () => {
   });
 
   it("rejects a browser request without an origin", async () => {
-    const server = await browserComposedServer({ browser: { port: 0, ...browserGateway() } }).start();
+    const server = await browserComposedServer({
+      browser: { port: 0, ...browserGateway() },
+    }).start();
     try {
       const response = await fetch(`${server.baseUrl}/spine.client.CommandService/Post`, {
         method: "POST",
@@ -2100,7 +2188,9 @@ describe("Server", () => {
   });
 
   it("routes browser Connect RPCs through its authentication boundary", async () => {
-    const server = await browserComposedServer({ browser: { port: 0, ...browserGateway() } }).start();
+    const server = await browserComposedServer({
+      browser: { port: 0, ...browserGateway() },
+    }).start();
     const client = createClient(
       AuthenticationService,
       createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
@@ -2253,7 +2343,9 @@ describe("Server", () => {
   });
 
   it("routes browser gRPC-Web RPCs through its authentication boundary", async () => {
-    const server = await browserComposedServer({ browser: { port: 0, ...browserGateway() } }).start();
+    const server = await browserComposedServer({
+      browser: { port: 0, ...browserGateway() },
+    }).start();
     const client = createClient(
       AuthenticationService,
       createGrpcWebTransport({ baseUrl: server.baseUrl }),
@@ -2481,7 +2573,9 @@ describe("Server", () => {
 
   it("retries a failed browser listener close", async () => {
     const close = vi.spyOn(http.Server.prototype, "close");
-    const server = await browserComposedServer({ browser: { port: 0, ...browserGateway() } }).start();
+    const server = await browserComposedServer({
+      browser: { port: 0, ...browserGateway() },
+    }).start();
     close.mockImplementationOnce(function (this: http.Server, callback?: (error?: Error) => void) {
       callback?.(new Error("browser listener close failed"));
       return this;

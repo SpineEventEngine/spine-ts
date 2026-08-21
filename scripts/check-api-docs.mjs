@@ -752,6 +752,18 @@ const expectedServerExports = [
   "materializeDecoratedEntityHandlers",
   "validateEntityStateTransition",
 ];
+const expectedBrowserServerExports = [
+  "BrowserAdmission",
+  "BrowserAuthRoute",
+  "BrowserBackend",
+  "BrowserServer",
+  "BrowserServerCollaborators",
+  "BrowserServerOptions",
+  "DurableSubscriptionBindings",
+  "DurableSubscriptionBindingsOptions",
+  "StandaloneBrowserServerOptions",
+  "isDurableSubscriptionBindings",
+];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const boundedContextProtoPath = join(
   "packages",
@@ -793,6 +805,7 @@ const storageIndexPath = join("packages", "storage", "src", "index.ts");
 const datastoreStorageIndexPath = join("packages", "storage-datastore", "src", "index.ts");
 const rdbmsStorageIndexPath = join("packages", "storage-rdbms", "src", "index.ts");
 const serverIndexPath = join("packages", "server", "src", "index.ts");
+const browserServerIndexPath = join("packages", "server", "src", "browser", "index.ts");
 const testingIndexPath = join("packages", "testing", "src", "index.ts");
 const transportIndexPath = join("packages", "transport", "src", "index.ts");
 
@@ -822,6 +835,7 @@ if (typedocResult.status !== 0) {
 const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
 const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
+const browserServerModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src/browser");
 const authModuleNames = collectDirectModuleNames(apiDocs, "packages/auth/src");
 const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client-node/src");
 const clientWebModuleNames = collectDirectModuleNames(apiDocs, "packages/client-web/src");
@@ -1152,6 +1166,7 @@ const forbiddenStorageTypeDocNames = [
   "createEventStore",
 ];
 const declaredServerExports = collectNamedExports(serverIndexPath);
+const declaredBrowserServerExports = collectNamedExports(browserServerIndexPath);
 const declaredAuthExports = collectNamedExports(authIndexPath);
 const declaredProtoToolsExports = collectNamedExports(protoToolsIndexPath);
 const declaredClientExports = collectNamedExports(clientIndexPath);
@@ -1187,6 +1202,15 @@ const unexpectedTransportExports = declaredTransportExports.filter(
   (name) => !expectedTransportExports.includes(name),
 );
 const missingServerExports = expectedServerExports.filter((name) => !serverModuleNames.has(name));
+const missingBrowserServerExports = expectedBrowserServerExports.filter(
+  (name) => !browserServerModuleNames.has(name),
+);
+const missingDeclaredBrowserServerExports = expectedBrowserServerExports.filter(
+  (name) => !declaredBrowserServerExports.includes(name),
+);
+const unexpectedDeclaredBrowserServerExports = declaredBrowserServerExports.filter(
+  (name) => !expectedBrowserServerExports.includes(name),
+);
 const missingAuthExports = expectedAuthExports.filter((name) => !authModuleNames.has(name));
 const missingDeclaredAuthExports = expectedAuthExports.filter(
   (name) => !declaredAuthExports.includes(name),
@@ -1531,6 +1555,30 @@ if (unexpectedServerExports.length > 0) {
   console.error(
     "@spine-event-engine/server root exports changed without updating docs expectations: " +
       unexpectedServerExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingDeclaredBrowserServerExports.length > 0) {
+  console.error(
+    "@spine-event-engine/server/browser is missing expected exports: " +
+      missingDeclaredBrowserServerExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingBrowserServerExports.length > 0) {
+  console.error(
+    "TypeDoc JSON is missing expected @spine-event-engine/server/browser exports: " +
+      missingBrowserServerExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedDeclaredBrowserServerExports.length > 0) {
+  console.error(
+    "@spine-event-engine/server/browser exports changed without updating docs expectations: " +
+      unexpectedDeclaredBrowserServerExports.join(", "),
   );
   process.exit(1);
 }

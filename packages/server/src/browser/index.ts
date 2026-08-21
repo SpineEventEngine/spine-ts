@@ -12,7 +12,19 @@
  * the License.
  */
 
-export { BrowserServer } from "./browser-server.js";
+import { browserServerTestAccess as browserServerImplementation } from "./browser-server.js";
+
+/**
+ * Composes an admitted browser gateway around a loopback native server, or
+ * runs a standalone gateway forwarding to declared backends or discovery.
+ */
+export const BrowserServer: Readonly<{
+  open: typeof browserServerImplementation.open;
+  run: typeof browserServerImplementation.run;
+}> = Object.freeze({
+  open: browserServerImplementation.open,
+  run: browserServerImplementation.run,
+});
 export {
   DurableSubscriptionBindings,
   isDurableSubscriptionBindings,
@@ -24,4 +36,5 @@ export type {
   BrowserBackend,
   BrowserServerCollaborators,
   BrowserServerOptions,
+  StandaloneBrowserServerOptions,
 } from "./options.js";
