@@ -1911,6 +1911,14 @@ const PackageDependencies = Object.freeze({
       if (appRoot === undefined) throw directError;
       const applicationRequire = createRequire(appRoot);
       try {
+        return applicationRequire(specifier);
+      } catch {
+        // The in-repository generator transpiles this module into a temporary
+        // cache directory. A fresh workspace install has the descriptor
+        // package at the application's resolution boundary, while the
+        // temporary module has no package boundary of its own.
+      }
+      try {
         const toolingEntry = applicationRequire.resolve("@spine-event-engine/proto-tools");
         return createRequire(join(PackageDependencies.rootFor(toolingEntry), "package.json"))(
           specifier,

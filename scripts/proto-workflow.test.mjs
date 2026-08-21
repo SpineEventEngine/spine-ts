@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -552,7 +553,76 @@ function stagedHandlerRegistryFixture() {
   return { root, appRoot, modelRoot, liveRoot, stagedRoot };
 }
 
+function packageRootFor(entry) {
+  let directory = dirname(entry);
+  while (!existsSync(join(directory, "package.json"))) {
+    const parent = dirname(directory);
+    if (parent === directory) throw new Error(`Cannot locate package root for ${entry}.`);
+    directory = parent;
+  }
+  return directory;
+}
+
 describe("proto-workflow", () => {
+  it("loads handler-registry descriptor dependencies from the application boundary", () => {
+    const script = fileURLToPath(new URL("./generate-handler-registry.mjs", import.meta.url));
+    const repoRoot = dirname(dirname(script));
+    const fixture = stagedHandlerRegistryFixture();
+    const protobufEntry = createRequire(join(repoRoot, "examples/todo/package.json")).resolve(
+      "@bufbuild/protobuf",
+    );
+    const protobufLink = join(fixture.appRoot, "node_modules/@bufbuild/protobuf");
+    mkdirSync(dirname(protobufLink), { recursive: true });
+    symlinkSync(packageRootFor(protobufEntry), protobufLink, "dir");
+    const unavailableProtoTools = join(
+      fixture.appRoot,
+      "node_modules/@spine-event-engine/proto-tools",
+    );
+    mkdirSync(unavailableProtoTools, { recursive: true });
+    writeFileSync(
+      join(unavailableProtoTools, "package.json"),
+      JSON.stringify({
+        name: "@spine-event-engine/proto-tools",
+        type: "module",
+        exports: null,
+      }),
+    );
+    const output = join(fixture.appRoot, "generated/handler-registry.ts");
+
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          script,
+          "--project",
+          join(fixture.appRoot, "tsconfig.json"),
+          "--generated-root",
+          join(fixture.appRoot, "generated"),
+          "--out",
+          output,
+          "--repo-root",
+          repoRoot,
+          "--source-generated-redirects",
+          JSON.stringify([
+            {
+              source: fixture.liveRoot,
+              staged: fixture.stagedRoot,
+              packageName: "@example/model",
+              moduleRoot: fixture.stagedRoot,
+            },
+          ]),
+        ],
+        { cwd: repoRoot, encoding: "utf8", env: { ...process.env, NODE_PATH: "" } },
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(readFileSync(output, "utf8")).toContain("GeneratedHandlerRegistry");
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it("removes retired Stand subscription generated artifacts after full publication", () => {
     const repoRoot = todoTransactionFixture();
     const paths = [
