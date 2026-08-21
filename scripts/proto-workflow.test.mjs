@@ -553,6 +553,36 @@ function stagedHandlerRegistryFixture() {
 }
 
 describe("proto-workflow", () => {
+  it("loads handler-registry descriptor dependencies from the application after a frozen install", () => {
+    const outputRoot = mkdtempSync(join(tmpdir(), "spine-handler-fresh-install-"));
+    const script = fileURLToPath(new URL("./generate-handler-registry.mjs", import.meta.url));
+    const repoRoot = dirname(dirname(script));
+
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          script,
+          "--project",
+          join(repoRoot, "examples/todo/tsconfig.json"),
+          "--generated-root",
+          join(repoRoot, "examples/todo/generated"),
+          "--out",
+          join(outputRoot, "generated-handler-registry.ts"),
+          "--repo-root",
+          repoRoot,
+        ],
+        { cwd: repoRoot, encoding: "utf8" },
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("MISSING_ENTITY_STATE_SCHEMA");
+      expect(result.stderr).not.toContain("Cannot find module '@bufbuild/protobuf'");
+    } finally {
+      rmSync(outputRoot, { recursive: true, force: true });
+    }
+  });
+
   it("removes retired Stand subscription generated artifacts after full publication", () => {
     const repoRoot = todoTransactionFixture();
     const paths = [
