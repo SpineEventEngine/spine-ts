@@ -275,8 +275,8 @@ packages/server/test/package-exports.test.ts --passWithNoTests` passed 5/5;
   maintainability, reliability, and security dispositions. Affected re-review
   accepted the final compiler-test ownership, registry-writer safety, and real
   browser rollback coverage without threshold reduction or coverage gaming.
-- The final `pnpm verify:release` passed at integration commit `c3f2c6654`:
-  4,412 tests passed, 20 were intentionally skipped, and branch coverage was
+- The converged feature `pnpm verify:release` passed at integration commit
+  `c3f2c6654`: 4,420 tests passed, 19 were intentionally skipped, and branch coverage was
   13,130/14,586 (90.01%). Earlier diagnostic runs exposed and corrected
   tooling typing, lint, cleanup, TSDoc, copyright, formatting, startup-fixture,
   and coverage failures; no failing run is represented as release evidence.
@@ -286,3 +286,12 @@ packages/server/test/package-exports.test.ts --passWithNoTests` passed 5/5;
   verification, and creation of the disposable untracked snapshot.3 publisher.
   No implementation or test command published to NPM or pushed to the official
   SpineEventEngine remote.
+- Fresh post-merge verification then exposed a temporary analyzer dependency
+  lookup that a long-lived worktree had masked. TDD correction `0abc4d728` and
+  fixture correction `c16a035dd` make the repository generator resolve its
+  fixed protobuf dependencies at the analyzed application's pnpm boundary when
+  its temporary cache module and an unbuilt Proto Tools entry cannot resolve
+  them. Affected reliability and security re-review passed. From a frozen
+  install, `verify:task -- --no-tests` and the final merged-main
+  `pnpm verify:release` passed; the latter reports 4,421 tests passed, 19
+  intentional skips, and unchanged 90.01% branch coverage.
