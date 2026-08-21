@@ -54,8 +54,9 @@ Provider configuration selects the `ApplicationNodeLease` record family. For
 MySQL, use the record-only table-name registration because this lease has the
 same source and record type:
 
+<!-- docs-snippet-path: packages/deployment/src/index.ts -->
+
 ```ts
-// docs-snippet-path: packages/deployment/src/index.ts
 import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
 
