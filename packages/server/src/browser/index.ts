@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { browserServerTestAccess as browserServerImplementation } from "./browser-server.js";
+import { browserServerImplementation } from "./browser-server.js";
 
 /**
  * Composes an admitted browser gateway around a loopback native server, or

@@ -87,8 +87,13 @@ type BrowserHostOptions = BrowserServerOptions & {
  *
  * Hosts browser-facing Spine gateway routes independently from native server assembly.
  */
-/** @internal White-box browser host seam for source-level behavior tests. */
-export const browserServerTestAccess: Readonly<{
+/**
+ * Production implementation for the public browser-server facade.
+ *
+ * The facade intentionally selects only `open` and `run`; source-level tests
+ * use a separate internal view declared below.
+ */
+export const browserServerImplementation: Readonly<{
   open(native: RunningServer, options: BrowserServerOptions): Promise<RunningServer>;
   open(
     native: string | readonly string[] | undefined,
@@ -125,10 +130,7 @@ export const browserServerTestAccess: Readonly<{
   ): Promise<void>;
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo>;
   closeListener(server: http.Server): Promise<void>;
-  preflight(
-    mode: "combined" | "standalone",
-    options: BrowserServerOptions,
-  ): BrowserHostOptions;
+  preflight(mode: "combined" | "standalone", options: BrowserServerOptions): BrowserHostOptions;
 }> = Object.freeze({
   async open(
     native: RunningServer | string | readonly string[] | undefined,
@@ -720,7 +722,12 @@ export const browserServerTestAccess: Readonly<{
   },
 });
 
-const BrowserServer = browserServerTestAccess;
+/** @internal White-box browser host seam for source-level behavior tests. */
+export const browserServerTestAccess: typeof browserServerImplementation = Object.freeze({
+  ...browserServerImplementation,
+});
+
+const BrowserServer = browserServerImplementation;
 
 const BrowserServerValues = Object.freeze({
   async watch(
