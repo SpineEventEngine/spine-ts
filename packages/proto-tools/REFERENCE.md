@@ -1,5 +1,12 @@
 # @spine-event-engine/proto-tools reference
 
+## Testing entry point
+
+`@spine-event-engine/proto-tools/testing` supports compiler-focused framework
+tests that analyze or render handler registries. Direct implementation modules
+under `src/generation` remain private; only this deliberate testing subpath is
+available to package-test consumers, with test-infrastructure stability only.
+
 This reference describes the public build-time Proto tooling for coding agents.
 
 ## Interface discovery and provenance

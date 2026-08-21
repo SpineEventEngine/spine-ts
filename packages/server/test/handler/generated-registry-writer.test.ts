@@ -31,7 +31,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   GeneratedRegistryWriter,
   type BuildHandlerAnalysis,
-} from "../../../proto-tools/src/generation/generated-registry-writer.js";
+} from "@spine-event-engine/proto-tools/testing";
 
 describe("generated registry writer", () => {
   it("renders deterministic registry source from analyzed handlers", () => {
@@ -475,7 +475,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("../../../proto-tools/src/generation/generated-registry-writer.js");
+        await import("@spine-event-engine/proto-tools/testing");
 
       expect(() =>
         new MockedWriter().write(analysis(repoRoot), {
@@ -515,7 +515,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("../../../proto-tools/src/generation/generated-registry-writer.js");
+        await import("@spine-event-engine/proto-tools/testing");
 
       expect(() =>
         new MockedWriter().write(analysis(repoRoot), {
@@ -630,7 +630,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("../../../proto-tools/src/generation/generated-registry-writer.js");
+        await import("@spine-event-engine/proto-tools/testing");
 
       expect(() =>
         new MockedWriter().write(analysis(repoRoot), {
@@ -666,7 +666,7 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("../../../proto-tools/src/generation/generated-registry-writer.js");
+        await import("@spine-event-engine/proto-tools/testing");
 
       new MockedWriter().write(analysis(repoRoot), {
         generatedRoot,
@@ -828,10 +828,7 @@ function createCompileFixture(): string {
     ["export class TaskAggregate {", "  createTask(): void {}", "}", ""].join("\n"),
   );
   writeFileSync(
-    join(
-      repoRoot,
-      "node_modules/@spine-event-engine/server/spi/handler-registry.d.ts",
-    ),
+    join(repoRoot, "node_modules/@spine-event-engine/server/spi/handler-registry.d.ts"),
     [
       "export interface GeneratedHandlerRegistry {",
       "  readonly version: 3;",

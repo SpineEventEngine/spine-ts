@@ -31,5 +31,8 @@
     "@connectrpc/connect-node": "2.1.2",
     "@spine-event-engine/proto": "2.0.0-snapshot.2",
     "@spine-event-engine/server": "2.0.0-snapshot.2"
+  },
+  "devDependencies": {
+    "@spine-event-engine/delivery-server": "workspace:*"
   }
 }

@@ -26,7 +26,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { generateHandlerRegistry } from "../../../proto-tools/src/generation/handler-codegen.js";
+import { generateHandlerRegistry } from "@spine-event-engine/proto-tools/testing";
 
 describe("handler codegen", () => {
   it("preserves live output and removes staging when writing fails", () => {

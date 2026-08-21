@@ -123,3 +123,27 @@ it("keeps the native server root free of compiler and browser-auth runtime depen
 it("declares the final named SPI and browser surfaces in an acyclic 18-package graph", () => {
   expect(finalPublicSurfaceProblems(repoRoot)).toEqual([]);
 });
+
+it("excludes development-only package edges from the publication graph", () => {
+  const root = mkdtempSync(join(tmpdir(), "spine-public-graph-"));
+  try {
+    for (const [directory, manifest] of [
+      [
+        "alpha",
+        { name: "@spine-event-engine/core", devDependencies: { "@spine-event-engine/proto": "*" } },
+      ],
+      [
+        "proto",
+        { name: "@spine-event-engine/proto", devDependencies: { "@spine-event-engine/core": "*" } },
+      ],
+    ]) {
+      mkdirSync(join(root, "packages", directory), { recursive: true });
+      writeFileSync(join(root, "packages", directory, "package.json"), JSON.stringify(manifest));
+    }
+    expect(finalPublicSurfaceProblems(root)).not.toContain(
+      "framework dependency graph is cyclic: @spine-event-engine/core -> @spine-event-engine/proto -> @spine-event-engine/core",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

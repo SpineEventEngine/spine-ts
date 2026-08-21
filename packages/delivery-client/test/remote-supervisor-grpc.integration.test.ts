@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { DeliveryServer } from "../../delivery-server/src/index.js";
+import { DeliveryServer } from "@spine-event-engine/delivery-server";
 import { DeliveryClient, RemoteDelivery } from "../src/index.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
