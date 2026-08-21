@@ -482,6 +482,7 @@ const expectedStorageProviderDocumentedExports = [
   "EntityHistoryConformance",
   "EntityHistoryConformanceAdapter",
   "EntityIdCodec",
+  "EntityRecord",
   "EntityRecordStorage",
   "EntityStateHistoryPort",
   "EntityStorageConformance",
@@ -498,10 +499,7 @@ const expectedStorageProviderDocumentedExports = [
   "eventStoreRecordSpec",
   "stateHistorySpec",
 ];
-const expectedStorageProviderDeclaredExports = [
-  ...expectedStorageProviderDocumentedExports,
-  "EntityRecord",
-].sort();
+const expectedStorageProviderDeclaredExports = [...expectedStorageProviderDocumentedExports].sort();
 const expectedDatastoreStorageExports = [
   "CreateEntityStorage",
   "CreateRecordStorage",

@@ -139,3 +139,13 @@
   build, `pnpm docs:api:check` passed and reported 43 root storage exports plus
   29 documented and 30 declared provider exports. Generated Proto manifests
   were local build by-products only and are excluded from the commit.
+
+## Storage provider API-docs review correction
+
+- 2026-08-21 (Europe/Lisbon): The provider entrypoint now defines a documented
+  local `EntityRecord` type alias to the same entity-record type. This preserves
+  the public type while making it a direct child of the generated provider API
+  page. The provider inventory is consequently 30 documented and 30 declared
+  exports. Focused tests now generate TypeDoc JSON and assert the direct page
+  child, and independently reject each of TenantBoundary, TenantCatalog, and
+  TenantCatalogProvider at the storage root so a partial leak cannot pass.

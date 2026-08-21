@@ -11,8 +11,10 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -70,6 +72,34 @@ function moduleExports(path) {
         .sort((left, right) => left.localeCompare(right));
 }
 
+function namedChild(value, name) {
+  if (value === null || typeof value !== "object") return undefined;
+  if (value.name === name) return value;
+  return value.children
+    ?.map((child) => namedChild(child, name))
+    .find((child) => child !== undefined);
+}
+
+function documentedModuleExports(moduleName) {
+  const output = mkdtempSync(join(tmpdir(), "spine-api-docs-test-"));
+  const jsonPath = join(output, "api.json");
+
+  try {
+    const result = spawnSync(
+      resolve(repoRoot, "node_modules/.bin/typedoc"),
+      ["--options", "typedoc.json", "--json", jsonPath],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+
+    const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
+    const module = namedChild(apiDocs, moduleName);
+    return (module?.children ?? []).map((child) => child.name);
+  } finally {
+    rmSync(output, { force: true, recursive: true });
+  }
+}
+
 describe("storage API documentation inventory", () => {
   it("documents the provider entry point separately from the storage root", () => {
     const typedoc = JSON.parse(readFileSync(resolve(repoRoot, "typedoc.json"), "utf8"));
@@ -77,13 +107,17 @@ describe("storage API documentation inventory", () => {
     expect(typedoc.entryPoints).toContain("packages/storage/src/provider.ts");
   });
 
+  it("lists EntityRecord directly on the provider TypeDoc page", () => {
+    expect(documentedModuleExports("packages/storage/src/provider")).toContain("EntityRecord");
+  }, 30_000);
+
   it("keeps tenant contracts in the provider module only", () => {
     const rootExports = moduleExports(resolve(repoRoot, "packages/storage/src/index.ts"));
     const providerExports = moduleExports(resolve(repoRoot, "packages/storage/src/provider.ts"));
 
-    expect(rootExports).not.toEqual(
-      expect.arrayContaining(["TenantBoundary", "TenantCatalog", "TenantCatalogProvider"]),
-    );
+    for (const name of ["TenantBoundary", "TenantCatalog", "TenantCatalogProvider"]) {
+      expect(rootExports).not.toContain(name);
+    }
     expect(providerExports).toEqual(
       [...expectedStorageProviderExports].sort((left, right) => left.localeCompare(right)),
     );
