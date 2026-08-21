@@ -6,7 +6,7 @@ sign-in, Commands, Queries, and subscriptions without exposing a native
 backend. For declarations, use the [API index](api/README.md).
 
 The framework packages are available as experimental npm snapshots. Install
-`@spine-event-engine/client-web@2.0.0-snapshot.2` (or the explicit
+`@spine-event-engine/client-web@2.0.0-snapshot.3` (or the explicit
 `@spine-event-engine/client-web@snapshot` tag); do not use an unqualified
 npm install.
 
@@ -43,8 +43,9 @@ Use gRPC-Web as the universal browser path. Use Connect only when the endpoint
 is separately configured for it. `Client.forConnect()` sends binary
 `application/proto`; it never probes a server and never falls back to gRPC-Web.
 
+<!-- docs-snippet-path: examples/message-board/web/src/index.tsx -->
+
 ```ts
-// docs-snippet-path: examples/message-board/web/src/index.tsx
 import { Client, BrowserSession } from "@spine-event-engine/client-web";
 
 const session = BrowserSession.cookie({ maxRequestMs: 10_000 });
@@ -112,8 +113,9 @@ updates, and emits `resynchronizing`. An event subscription emits
 `gapPossible` then continues. Application code must re-query after reconnect
 or an observed gap when its UI needs authoritative state.
 
+<!-- docs-snippet-path: examples/message-board/web/src/index.tsx -->
+
 ```ts
-// docs-snippet-path: examples/message-board/web/src/index.tsx
 import type { ClientRequest } from "@spine-event-engine/client-web";
 
 declare const request: ClientRequest;
@@ -179,8 +181,9 @@ then resolves and injects a trusted context. Browser-visible actor/tenant is
 informational, not a credential. An application may request hints, but it may
 not establish actor, tenant, timestamp, zone, or language by presenting them.
 
+<!-- docs-snippet-path: packages/auth/src/index.ts -->
+
 ```ts
-// docs-snippet-path: packages/auth/src/index.ts
 import type {
   AuthenticatedPrincipal,
   AuthorizationPolicy,
@@ -247,8 +250,9 @@ forward credentials to native services, expose backend-only subscription state, 
 client-provided context become trusted. See the generated
 [auth declarations](api/README.md) for the complete exported inventory.
 
+<!-- docs-snippet-path: packages/auth/src/index.ts -->
+
 ```ts
-// docs-snippet-path: packages/auth/src/index.ts
 import type {
   ApplicationSessionIssuer,
   AuthenticatedPrincipal,
