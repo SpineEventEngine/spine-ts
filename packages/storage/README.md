@@ -5,6 +5,9 @@ includes an in-memory implementation for local development and tests. Use it
 when an application needs a small record store, or when an adapter needs to
 implement the same storage contract for a durable provider.
 
+This is an experimental snapshot package. Use Node 24 or newer and generated
+Protobuf record schemas before configuring storage.
+
 For detailed query, lifecycle, and adapter notes, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
@@ -22,9 +25,8 @@ pnpm typecheck:build
 ```
 
 Run this workspace-wide TypeScript build from the repository root. For an
-experimental npm consumer, install
-`@spine-event-engine/storage@2.0.0-snapshot.2` or the explicit
-`@spine-event-engine/storage@snapshot` tag.
+experimental npm consumer, install `@spine-event-engine/storage@snapshot`.
+The snapshot tag can change before a stable release.
 
 ## 🧪 Start with the Proto fields people may query
 

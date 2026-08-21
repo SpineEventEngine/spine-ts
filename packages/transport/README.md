@@ -1,12 +1,45 @@
-# Transport
+# Local transport for Spine TS
 
-`@spine-event-engine/transport` provides process-local typed message channels
-for IntegrationBroker external-message exchange.
+`@spine-event-engine/transport` gives a Spine application typed, process-local
+message channels. It is for application and infrastructure developers who need
+to connect the external-message broker in a local or test process; it is not a
+general internet messaging client.
 
-Use `InMemoryTransportFactory` for local and test environments. The package
-exports `TransportFactory`, `MessageChannel`, `Publisher`, `Subscriber`,
-and `ConsumerHandle`; channels carry generated `ExternalMessage` values and
-canonical target type URLs.
+This is an experimental snapshot package. Use Node 24 or newer and generated
+Spine Protobuf contracts before integrating it. Start with the package
+[reference](REFERENCE.md) for the complete lifecycle and channel contract.
 
-For lifecycle and channel semantics, see the
-[REFERENCE documentation for agents](REFERENCE.md).
+## Install
+
+```sh
+pnpm add @spine-event-engine/transport@snapshot
+```
+
+The `snapshot` tag is intentionally experimental and can change before a
+stable release.
+
+## First success: create a local channel
+
+Create an `InMemoryTransportFactory`, then let the broker-facing application
+code request its typed `MessageChannel`. The channel carries generated
+`ExternalMessage` values and canonical target type URLs; it does not serialize
+them for another process.
+
+```ts
+import { InMemoryTransportFactory } from "@spine-event-engine/transport";
+
+const transport = new InMemoryTransportFactory();
+void transport;
+```
+
+## What it does not provide
+
+This package has no network listener, persistence, cross-process delivery,
+authentication, or broker retry policy. Use it for local composition and tests;
+choose a deployment-specific transport for communication across processes.
+
+## Next steps
+
+- Read the [transport reference for coding agents](REFERENCE.md) for publisher,
+  subscriber, and `ConsumerHandle` lifecycle rules.
+- See [Protobuf contracts](../proto/README.md) for generated message types.

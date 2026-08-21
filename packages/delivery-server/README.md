@@ -8,6 +8,13 @@ when the process stops.
 The [reference](REFERENCE.md) records finite limits, shutdown order, and the
 complete protocol contract, including API detail for coding agents.
 
+This is an experimental snapshot package. Use Node 24 or newer; an embedded
+server also needs an application-managed Connect listener.
+
+```sh
+pnpm add @spine-event-engine/delivery-server@snapshot
+```
+
 ## 💡 Why use it?
 
 - ✅ Coordinates inbox work and shard ownership between trusted Node processes.
@@ -20,8 +27,9 @@ complete protocol contract, including API detail for coding agents.
 Construct a server, start it, and close it during application shutdown. Port
 zero asks the operating system for a free local port.
 
+<!-- docs-snippet-path: packages/delivery-server/src/server/delivery-server.ts -->
+
 ```ts
-// docs-snippet-path: packages/delivery-server/src/server/delivery-server.ts
 import { DeliveryServer } from "@spine-event-engine/delivery-server";
 
 const server = new DeliveryServer({ host: "127.0.0.1", port: 0 });
@@ -58,8 +66,9 @@ An embedded consumer must declare and install direct dependencies on
 exported from `@spine-event-engine/proto/delivery-server`; do not rely on the
 delivery server's transitive dependencies.
 
+<!-- docs-snippet-path: packages/delivery-server/src/core/in-memory-delivery-core.ts -->
+
 ```ts
-// docs-snippet-path: packages/delivery-server/src/core/in-memory-delivery-core.ts
 import { createRouterTransport } from "@connectrpc/connect";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
 import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";

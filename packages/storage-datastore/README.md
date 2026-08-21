@@ -5,6 +5,9 @@ Datastore, including Firestore in Datastore mode. It implements the storage
 contract from `@spine-event-engine/storage`; it does not use Firestore Native
 APIs.
 
+This is an experimental snapshot package. Use Node 24 or newer, generated
+record schemas, and a configured Google Datastore client.
+
 For exact query limits, entity-storage behavior, and failure handling, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
@@ -23,9 +26,8 @@ pnpm typecheck:build
 ```
 
 Run this workspace-wide TypeScript build from the repository root. For an
-experimental npm consumer, install
-`@spine-event-engine/storage-datastore@2.0.0-snapshot.2` or the explicit
-`@spine-event-engine/storage-datastore@snapshot` tag.
+experimental npm consumer, install `@spine-event-engine/storage-datastore@snapshot`.
+The snapshot tag can change before a stable release.
 
 ## 🔌 Create a factory
 

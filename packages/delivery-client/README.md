@@ -8,6 +8,13 @@ remote Delivery server.
 The [reference](REFERENCE.md) records the complete protocol, retry, and limit
 contract, including API detail for coding agents.
 
+This is an experimental snapshot package. Use Node 24 or newer and a reachable
+Delivery server on a trusted network.
+
+```sh
+pnpm add @spine-event-engine/delivery-client@snapshot
+```
+
 ## 💡 Why use it?
 
 - ✅ Connects a Node process to a local or remote Delivery server.
@@ -20,8 +27,9 @@ contract, including API detail for coding agents.
 Connect to an absolute HTTP(S) origin whose path is `/`. The client manages this
 connection and `close()` ends its active reads and streams.
 
+<!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
+
 ```ts
-// docs-snippet-path: packages/delivery-client/src/client/client.ts
 import { DeliveryClient } from "@spine-event-engine/delivery-client";
 
 const client = DeliveryClient.connectTo("http://127.0.0.1:8484", { pageSize: 100 });
@@ -34,8 +42,9 @@ Read operations can use the configured bounded retry policy. Mutations never
 retry automatically: a lost mutation response means the remote outcome is
 unknown and must be reconciled before any later action.
 
+<!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
+
 ```ts
-// docs-snippet-path: packages/delivery-client/src/client/client.ts
 import { DeliveryOutcomeUnknownError } from "@spine-event-engine/delivery-client";
 
 try {
@@ -52,8 +61,9 @@ try {
 Use a snapshot to establish current facts and an observation stream for later
 hints. Cancel the stream when it is no longer needed.
 
+<!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
+
 ```ts
-// docs-snippet-path: packages/delivery-client/src/client/client.ts
 import { DeliveryClient } from "@spine-event-engine/delivery-client";
 
 declare const client: DeliveryClient;
@@ -74,8 +84,9 @@ row is the deduplication fact, but a handler effect and its acknowledgement are
 not one transaction. If an acknowledgement is lost, delivery can happen again
 after restart, so make downstream effects idempotent.
 
+<!-- docs-snippet-path: packages/delivery-client/src/remote/adapters.ts -->
+
 ```ts
-// docs-snippet-path: packages/delivery-client/src/remote/adapters.ts
 import {
   DeliveryClient,
   RemoteInbox,
@@ -110,8 +121,9 @@ including rows that arrive while a drain is active, before it releases the
 shard. A pre-commit ownership probe fences known stale owners, but it is not a
 linearizable distributed transaction with Entity storage.
 
+<!-- docs-snippet-path: packages/delivery-client/src/remote/remote-delivery.ts -->
+
 ```ts
-// docs-snippet-path: packages/delivery-client/src/remote/remote-delivery.ts
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 
 const delivery = RemoteDelivery.connectTo({ endpoint: "https://delivery.example.test" });
