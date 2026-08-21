@@ -140,6 +140,6 @@ attempt history or quarantine records.
 
 ## 🔗 Learn more
 
-- [Delivery server](../delivery-server/README.md)
-- [Server delivery APIs](../server/README.md#delivery-and-environment)
+- [Delivery server](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/delivery-server/README.md)
+- [Server delivery APIs](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/server/README.md#delivery-and-environment)
 - [Detailed delivery reference](REFERENCE.md)

@@ -97,7 +97,7 @@ it does not discover undeclared packages or create a running application.
 
 ## 🔗 Learn more
 
-- [Spine Protobuf package](../proto/README.md)
-- [Core message tools](../core/README.md)
-- [Message Board model example](../../examples/message-board/model/README.md)
+- [Spine Protobuf package](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/proto/README.md)
+- [Core message tools](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/core/README.md)
+- [Message Board model example](https://github.com/SpineEventEngine/spine-ts/blob/main/examples/message-board/model/README.md)
 - [Reference for coding agents](REFERENCE.md)

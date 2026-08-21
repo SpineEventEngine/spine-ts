@@ -95,12 +95,12 @@ automatically, and an interrupted subscription must be recreated before the
 application re-reads current entity state.
 
 Node subscriptions use the same `createSubscription`, `activate`, and `cancel`
-API as the browser client; see the [client-web reference](../client-web/REFERENCE.md)
+API as the browser client; see the [client-web reference](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/client-web/REFERENCE.md)
 for lifecycle and recovery limits. Close the client during process shutdown so
 its owned HTTP/2 session and subscriptions can finish cleanup.
 
 ## 🔗 Learn more
 
-- [Browser client](../client-web/README.md)
-- [Server](../server/README.md)
+- [Browser client](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/client-web/README.md)
+- [Server](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/server/README.md)
 - [Detailed coding-agent reference](REFERENCE.md)

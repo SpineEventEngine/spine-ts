@@ -136,7 +136,7 @@ mapping is used for writes, key lookups, filters, ordering continuations, and
 reads. Primitive values use their native Datastore representation. There is no
 `_scope`, copied ID, storage revision, fingerprint, marker, or compatibility
 entity. The runnable configuration is in the
-[Message Board deployment](../../examples/message-board/app/src/deployment-config.ts).
+[Message Board deployment](https://github.com/SpineEventEngine/spine-ts/blob/main/examples/message-board/app/src/deployment-config.ts).
 
 When a user queries `board == BoardId("board-7")`, Spine converts that generated
 `BoardId` with the same stringifier and sends a Datastore property filter for
@@ -244,6 +244,6 @@ kind, and key. The runtime never chooses a winner.
 
 ## 🔗 Learn more
 
-- [Storage API](../storage/README.md)
-- [Datastore guide](../../docs/USER_GUIDE.md#12-develop-with-google-cloud-datastore)
+- [Storage API](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage/README.md)
+- [Datastore guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/USER_GUIDE.md#12-develop-with-google-cloud-datastore)
 - [Reference for coding agents](REFERENCE.md)

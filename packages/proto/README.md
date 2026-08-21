@@ -15,7 +15,7 @@ Use `(every_is).ts_type = "TaskEvent"` with `(every_is).generate = true` to
 generate a shared interface/token for a Proto file. Use
 `(is).ts_type = "TaskAssignmentEvent"` when the model module authors that
 interface. Run `pnpm proto:generate` after changing either declaration. The
-[To-Do model](../../examples/todo/proto/spine/examples/todo/task_events.proto)
+[To-Do model](https://github.com/SpineEventEngine/spine-ts/blob/main/examples/todo/proto/spine/examples/todo/task_events.proto)
 uses both forms.
 
 For the complete export map and model-package contract, see
@@ -94,8 +94,8 @@ Spine definitions preserve their original versioned Proto packages.
 
 ## 🔗 Learn more
 
-- [Model-generation tools](../proto-tools/README.md)
-- [Core message tools](../core/README.md)
+- [Model-generation tools](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/proto-tools/README.md)
+- [Core message tools](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/core/README.md)
 - [Reference for coding agents](REFERENCE.md)
 
 ## Integration wire contracts

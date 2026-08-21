@@ -7,7 +7,7 @@ in `@spine-event-engine/client-react`.
 For protocol, browser-session, reconnect, and security limits, read the
 [reference](REFERENCE.md).
 
-The [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+The [browser client and gateway guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explains application sign-in and gateway composition.
 
 ## Install and prepare an application
@@ -136,7 +136,7 @@ may be duplicated, reordered, or missed while disconnected.
 
 ## 🔗 Learn more
 
-- [React adapter](../client-react/README.md)
-- [Authentication package](../auth/README.md)
-- [Browser authentication and extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+- [React adapter](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/client-react/README.md)
+- [Authentication package](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/auth/README.md)
+- [Browser authentication and extension guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 - [Detailed coding-agent reference](REFERENCE.md)

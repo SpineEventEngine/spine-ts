@@ -90,6 +90,6 @@ integration test intentionally covers that provider.
 
 ## 🔗 Learn more
 
-- [Todo example tests](../../examples/todo/README.md)
-- [Server](../server/README.md)
+- [Todo example tests](https://github.com/SpineEventEngine/spine-ts/blob/main/examples/todo/README.md)
+- [Server](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/server/README.md)
 - [Reference for coding agents](REFERENCE.md)

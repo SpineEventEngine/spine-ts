@@ -78,4 +78,4 @@ choose a deployment-specific transport for communication across processes.
 
 - Read the [transport reference for coding agents](REFERENCE.md) for publisher,
   subscriber, and `ConsumerHandle` lifecycle rules.
-- See [Protobuf contracts](../proto/README.md) for generated message types.
+- See [Protobuf contracts](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/proto/README.md) for generated message types.

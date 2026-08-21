@@ -7,7 +7,7 @@ system.
 
 For detailed hook lifecycles and error behavior, read the [reference](REFERENCE.md).
 
-The [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+The [browser client and gateway guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explains the subscription and authentication limits inherited from the browser client.
 
 ## Install and prepare an application
@@ -136,6 +136,6 @@ a possible gap.
 
 ## 🔗 Learn more
 
-- [Browser client](../client-web/README.md)
-- [Message Board web example](../../examples/message-board/web/README.md)
+- [Browser client](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/client-web/README.md)
+- [Message Board web example](https://github.com/SpineEventEngine/spine-ts/blob/main/examples/message-board/web/README.md)
 - [Detailed coding-agent reference](REFERENCE.md)
