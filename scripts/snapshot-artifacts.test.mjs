@@ -8,6 +8,7 @@ import {
   assertNativeConsumerDependencyClosure,
   assertConsumerIsolation,
   isContainedRelative,
+  proveExactTarballConsumer,
   proveNativeServerTarballConsumer,
 } from "./snapshot-artifacts.mjs";
 
@@ -60,6 +61,22 @@ describe("snapshot artifact containment", () => {
     try {
       expect(() =>
         proveNativeServerTarballConsumer({
+          root: repoRoot,
+          destination: root,
+          run: (command, args, cwd) =>
+            execFileSync(command, args, { cwd, stdio: "pipe", timeout: 30_000 }),
+        }),
+      ).not.toThrow();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("installs, compiles, imports, and executes all exact framework tarballs", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-exact-tarball-consumer-"));
+    try {
+      expect(() =>
+        proveExactTarballConsumer({
           root: repoRoot,
           destination: root,
           run: (command, args, cwd) =>

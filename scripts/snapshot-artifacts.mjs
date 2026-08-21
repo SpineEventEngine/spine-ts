@@ -104,8 +104,9 @@ export function proveExactTarballConsumer({ root, destination, run }) {
       name: "@external/snapshot-proof",
       private: true,
       type: "module",
+      packageManager: "pnpm@11.9.0",
       dependencies,
-      devDependencies: { typescript: "6.0.3" },
+      devDependencies: { "@types/node": "24.13.2", typescript: "6.0.3" },
     }),
   );
   writeFileSync(
@@ -171,6 +172,7 @@ export function proveNativeServerTarballConsumer({ root, destination, run, packa
       name: "@external/native-server-consumer",
       private: true,
       type: "module",
+      packageManager: "pnpm@11.9.0",
       dependencies: { "@spine-event-engine/server": tarballs["@spine-event-engine/server"] },
       devDependencies: { "@types/node": "24.13.2" },
     }),
