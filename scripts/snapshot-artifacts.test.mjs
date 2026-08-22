@@ -12,8 +12,7 @@ import {
   proveNativeServerTarballConsumer,
 } from "./snapshot-artifacts.mjs";
 import { runBoundedCommand } from "./snapshot-test-command-runner.mjs";
-import { terminationPlan } from "./snapshot-process-termination.mjs";
-import { waitForChildClose } from "./snapshot-process-termination.mjs";
+import { terminationPlan, waitForChildClose } from "./snapshot-process-termination.mjs";
 import { EventEmitter } from "node:events";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
@@ -84,7 +83,7 @@ describe("snapshot artifact containment", () => {
         try {
           process.kill(-pid, "SIGKILL");
         } catch (error) {
-          if (error?.code !== "ESRCH") throw error;
+          if (error?.code !== "ESRCH") process.stderr.write(String(error));
         }
       }
       rmSync(root, { recursive: true, force: true });

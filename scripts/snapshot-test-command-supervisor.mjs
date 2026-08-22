@@ -9,7 +9,7 @@ child.stdout.on("data", (chunk) => (stdout = appendOutput(stdout, chunk)));
 child.stderr.on("data", (chunk) => (stderr = appendOutput(stderr, chunk)));
 let timedOut = false;
 let shutdown = Promise.resolve();
-const timer = setTimeout(() => {
+const timer = globalThis.setTimeout(() => {
   timedOut = true;
   shutdown = terminateGroup();
 }, timeout);
@@ -17,7 +17,7 @@ const result = await new Promise((resolve, reject) => {
   child.once("error", reject);
   child.once("close", (status) => resolve({ status }));
 });
-clearTimeout(timer);
+globalThis.clearTimeout(timer);
 await shutdown;
 process.stdout.write(JSON.stringify({ ...result, timedOut, stdout, stderr }));
 
@@ -69,7 +69,7 @@ async function gone(timeout) {
       if (error?.code === "ESRCH") return true;
       throw error;
     }
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 10));
   }
   return false;
 }
