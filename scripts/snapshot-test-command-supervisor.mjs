@@ -1,5 +1,9 @@
 import { spawn, spawnSync } from "node:child_process";
-import { terminationPlan, waitForChildClose } from "./snapshot-process-termination.mjs";
+import {
+  taskkillOutcome,
+  terminationPlan,
+  waitForChildClose,
+} from "./snapshot-process-termination.mjs";
 
 const { command, args, cwd, timeout } = JSON.parse(process.argv[2]);
 const child = spawn(command, args, { cwd, detached: process.platform !== "win32", stdio: "pipe" });
@@ -21,14 +25,14 @@ globalThis.clearTimeout(timer);
 await shutdown;
 process.stdout.write(JSON.stringify({ ...result, timedOut, stdout, stderr }));
 
-function signal(value) {
+async function signal(value) {
   if (process.platform === "win32") {
     const plan = terminationPlan("win32", child.pid);
     const result = spawnSync(plan.command, plan.args, {
-      stdio: "ignore",
+      encoding: "utf8",
+      stdio: "pipe",
     });
-    if (result.error !== undefined || result.status !== 0)
-      throw result.error ?? new Error("taskkill failed");
+    await taskkillOutcome(result, () => waitForChildClose(child, 100));
     return;
   }
   try {
@@ -47,14 +51,14 @@ function appendOutput(current, chunk) {
 
 async function terminateGroup() {
   if (process.platform === "win32") {
-    signal("SIGKILL");
+    await signal("SIGKILL");
     if (!(await gone(1_000)))
       throw new Error(`Timed-out process tree ${child.pid} did not terminate.`);
     return;
   }
-  signal("SIGTERM");
+  await signal("SIGTERM");
   if (await gone(200)) return;
-  signal("SIGKILL");
+  await signal("SIGKILL");
   if (!(await gone(1_000)))
     throw new Error(`Timed-out process group ${child.pid} did not terminate.`);
 }

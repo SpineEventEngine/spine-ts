@@ -16,3 +16,12 @@ export function waitForChildClose(child, timeout, timers = globalThis) {
     child.once("close", onClose);
   });
 }
+
+export async function taskkillOutcome(result, waitForClose) {
+  if (result.error === undefined && result.status === 0) return;
+  if (await waitForClose()) return;
+  throw (
+    result.error ??
+    new Error(`taskkill failed with status ${result.status}: ${result.stderr ?? ""}`)
+  );
+}

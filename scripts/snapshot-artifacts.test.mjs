@@ -12,7 +12,11 @@ import {
   proveNativeServerTarballConsumer,
 } from "./snapshot-artifacts.mjs";
 import { runBoundedCommand } from "./snapshot-test-command-runner.mjs";
-import { terminationPlan, waitForChildClose } from "./snapshot-process-termination.mjs";
+import {
+  taskkillOutcome,
+  terminationPlan,
+  waitForChildClose,
+} from "./snapshot-process-termination.mjs";
 import { EventEmitter } from "node:events";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
@@ -51,6 +55,10 @@ describe("snapshot artifact containment", () => {
     expect(await wait).toBe(false);
     expect(cleared).toBe(true);
     expect(child.listenerCount("close")).toBe(0);
+  });
+  it("accepts an already-closed child after taskkill reports failure", async () => {
+    await expect(taskkillOutcome({ status: 1 }, async () => true)).resolves.toBeUndefined();
+    await expect(taskkillOutcome({ status: 1 }, async () => false)).rejects.toThrow("status 1");
   });
 
   it("truncates noisy command diagnostics", () => {
