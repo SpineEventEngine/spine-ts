@@ -32,15 +32,19 @@ const logger = MessageBoardDeployment.logger(config.projectId, process.env);
 const storage = MessageBoardDeployment.storage(client);
 MessageBoardDeployment.configureGatewayServer(config, storage, logger);
 const policy = new BoardAccessPolicy();
+const { discovery, backendUrls } = config;
 const topology =
-  config.discovery === undefined
-    ? fixedBackend(config.backendUrls)
+  discovery === undefined
+    ? backendUrls === undefined
+      ? undefined
+      : { backend: { baseUrls: backendUrls } }
     : {
         discovery: new GkeNodeDiscovery({
-          ...config.discovery,
+          ...discovery,
           ...(logger === undefined ? {} : { logger }),
         }),
       };
+if (topology === undefined) throw new Error("Gateway requires a fixed backend URL or discovery.");
 const server = await BrowserServer.run({
   host: config.host,
   port: config.port,
@@ -53,8 +57,3 @@ const server = await BrowserServer.run({
   clock: new SystemClock(),
 });
 console.log(`MessageBoard gateway ready at ${server.baseUrl}`);
-
-function fixedBackend(urls: readonly [string, ...string[]] | undefined) {
-  if (urls === undefined) throw new Error("Gateway requires a fixed backend URL or discovery.");
-  return { backend: { baseUrls: urls } };
-}

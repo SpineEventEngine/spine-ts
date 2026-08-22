@@ -148,6 +148,14 @@ This task remains in progress pending final verification and integration.
 - `2026-08-22`: Cheap-preflight diagnostic: ESLint rejected deprecated
   `toMatchTypeOf` calls in the browser backend boundary test. The equivalent
   supported `toExtend` assertions preserve the populated backend proof.
+- `2026-08-22`: Second cheap-preflight diagnostic: cleanup rules rejected the
+  long snapshot-command failure construction and the standalone Message Board
+  `fixedBackend` helper. The runner now assembles the same diagnostic through a
+  local summary; the gateway now forms its validated topology inline while
+  preserving discovery precedence. GREEN: `pnpm lint:cleanup`,
+  `pnpm typecheck:tooling`, focused Message Board configuration/startup and
+  server-export tests (44 passed), focused ESLint, Prettier, and
+  `git diff --check` passed.
 
 ## Affected Re-Review Assignments
 

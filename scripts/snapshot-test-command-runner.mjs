@@ -13,7 +13,8 @@ export function runBoundedCommand(command, args, cwd, timeout) {
     throw new Error(`Command supervisor failed\nstderr: ${result.stderr}`);
   const report = JSON.parse(result.stdout);
   if (report.status === 0 && !report.timedOut) return;
+  const summary = report.timedOut ? "timed out" : `failed with status ${report.status}`;
   throw new Error(
-    `${command} ${args.join(" ")} ${report.timedOut ? "timed out" : `failed with status ${report.status}`}\nstdout: ${report.stdout}\nstderr: ${report.stderr}`,
+    `${command} ${args.join(" ")} ${summary}\nstdout: ${report.stdout}\nstderr: ${report.stderr}`,
   );
 }
