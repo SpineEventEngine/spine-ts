@@ -1,6 +1,6 @@
 # T-0217: Wave 14 Package And SPI Boundaries
 
-Status: Ready for final release verification
+Status: Implementation and review complete; ready for integration
 Start: `2026-08-22 Europe/Lisbon`
 End: Pending
 Baseline commit: `e72222053d20a8828ca63aa4c76d7c13dc9216b5`
@@ -156,7 +156,7 @@ Out of scope:
 
 ## Coverage Result
 
-- Focused policy/export suites pass. No focused coverage run was selected because these are export-map and documentation-policy assertions. Final release verification is explicitly pending orchestrator review convergence.
+- Focused policy/export suites pass. No focused coverage run was selected because these are export-map and documentation-policy assertions. The final release result is recorded below.
 
 ## Documentation And Public API Impact
 
@@ -188,15 +188,22 @@ Testing README source used a five-component standalone helper without a
 necessity disposition. The snippet is now top-level, preserving connected
 create/post/acknowledgement/finally-close behavior. Cleanup, real README snippet
 compilation, focused policy, tooling TypeScript, formatting, and diff checks are
-green. The final release profile remains pending its single orchestrator rerun.
+green. The final release rerun subsequently passed, as recorded below.
 
 The second final `verify:release` at `b049c3fc9` passed deterministic gates and
 reported 4,422 passing and 19 skipped tests, but one covered-suite timeout:
 the EntityRecord TypeDoc assertion in `scripts/check-api-docs.test.mjs` exceeded
 its 30-second hard limit while a full TypeDoc subprocess contended with parallel
 coverage work. The exact isolated file passed 3/3 in 25.41 seconds. Its timeout
-is now 60 seconds; final release verification remains pending the next single
-rerun.
+is now 60 seconds; the subsequent final release verification passed, as recorded
+below.
+
+Final `verify:release` at `41d991152` passed: 277 files passed with 4 skipped;
+4,423 tests passed with 19 skipped; duration 180.30 seconds; statement coverage
+93.15% (22,221/23,853), branch coverage 90% (13,130/14,588), function coverage
+92.81% (5,451/5,873), and line coverage 94.36% (20,608/21,839). Implementation
+and review are ready for integration; integration, final branch HEAD, and task
+end remain pending.
 
 ## Review Waves And Dispositions
 

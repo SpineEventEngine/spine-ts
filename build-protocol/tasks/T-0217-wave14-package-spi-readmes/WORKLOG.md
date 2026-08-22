@@ -53,12 +53,17 @@
   the five-component standalone helper lacked a necessity disposition. It is
   now the same top-level connected snippet; focused cleanup, snippet compiler,
   policy, tooling typecheck, format, and diff evidence is green. Final release
-  rerun remains pending.
+  rerun subsequently passed.
 - Second final release attempt at `b049c3fc9` passed deterministic gates and
   4,422 tests (19 skipped), then timed out only in the EntityRecord TypeDoc
   assertion's 30-second limit under parallel covered-suite contention. The exact
   file passed 3/3 in 25.41 seconds; its hard timeout is now 60 seconds. No
-  production behavior changed; final release rerun remains pending.
+  production behavior changed; the final release rerun subsequently passed.
+- Final `verify:release` at `41d991152` is green: 277 files passed/4 skipped,
+  4,423 tests passed/19 skipped, duration 180.30s; statements 93.15%
+  (22,221/23,853), branches 90% (13,130/14,588), functions 92.81%
+  (5,451/5,873), lines 94.36% (20,608/21,839). Implementation and review are
+  ready for integration; integration and task end remain pending.
 
 ## Contract checkpoint
 

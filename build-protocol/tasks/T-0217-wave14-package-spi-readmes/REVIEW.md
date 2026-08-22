@@ -46,7 +46,7 @@ profiles; runtime self-introspection remains unavailable as recorded.
 | P2       | Records           | TASK candidate/head fields have drifted.                                                                         | Accepted: reconcile commits/history without claiming final verification or integration. |
 
 Correction batch `a4df30c2f` implements all accepted findings. Affected review
-lanes re-reviewed clean; final release verification remains pending.
+lanes re-reviewed clean; final release evidence is recorded below.
 
 ## Affected Re-review Gate
 
@@ -67,7 +67,7 @@ The first final `verify:release` attempt failed only at cleanup because the
 Testing README source used a five-component standalone helper without a
 necessity disposition. The correction makes it a top-level connected snippet.
 Focused cleanup, snippet compiler, policy, tooling TypeScript, formatting, and
-diff checks are green; final release verification remains pending its rerun.
+diff checks are green; the subsequent final release rerun passed.
 
 ## Verification Stability Correction
 
@@ -75,7 +75,15 @@ The second `verify:release` at `b049c3fc9` passed deterministic gates and
 4,422 tests with 19 skipped, then timed out only in the EntityRecord TypeDoc
 test's 30-second hard limit while the covered suite ran in parallel. The exact
 file passed 3/3 in 25.41 seconds. Its test-only timeout is 60 seconds; final
-release verification remains pending its rerun.
+release verification subsequently passed.
+
+## Final Release Evidence
+
+Final `verify:release` at `41d991152` passed: 277 files passed with 4 skipped,
+4,423 tests passed with 19 skipped, in 180.30 seconds. Coverage: statements
+93.15% (22,221/23,853), branches 90% (13,130/14,588), functions 92.81%
+(5,451/5,873), and lines 94.36% (20,608/21,839). All review concerns remain
+clean; implementation and review are ready for integration.
 
 ## Clean Results
 
