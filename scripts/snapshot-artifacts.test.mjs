@@ -28,6 +28,8 @@ describe("snapshot artifact containment", () => {
       });
       expect(result.error).toBeUndefined();
       expect(result.status).not.toBe(0);
+      const pid = Number(readFileSync(pidFile, "utf8"));
+      expect(waitForProcessExit(pid)).toBe(true);
     } finally {
       const pid = Number(readFileSync(pidFile, "utf8"));
       try {
