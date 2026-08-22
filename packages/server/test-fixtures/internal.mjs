@@ -13,6 +13,7 @@
  */
 
 import { commitFenced } from "../dist/repository/commit-fence.js";
+import { managedServerApplicationAccess } from "../dist/server/managed-server-application.js";
 import { serverEnvironmentAccess } from "../dist/server/server-environment.js";
 
-export { commitFenced, serverEnvironmentAccess };
+export { commitFenced, managedServerApplicationAccess, serverEnvironmentAccess };

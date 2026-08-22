@@ -1,4 +1,5 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -15,6 +16,37 @@ import { runBoundedCommand } from "./snapshot-test-command-runner.mjs";
 const repoRoot = new URL("..", import.meta.url).pathname;
 
 describe("snapshot artifact containment", () => {
+  it("does not hang when the direct command ignores SIGTERM", () => {
+    const root = mkdtempSync(join(tmpdir(), "snapshot-direct-timeout-"));
+    const pidFile = join(root, "direct.pid");
+    const invocation = `import { runBoundedCommand } from ${JSON.stringify(new URL("./snapshot-test-command-runner.mjs", import.meta.url).href)}; runBoundedCommand(process.execPath, ['--eval', ${JSON.stringify(`const { writeFileSync } = require('node:fs'); process.on('SIGTERM', () => {}); writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000);`)}], ${JSON.stringify(root)}, 100);`;
+    try {
+      const result = spawnSync(process.execPath, ["--input-type=module", "--eval", invocation], {
+        cwd: root,
+        detached: process.platform !== "win32",
+        timeout: 1_000,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status).not.toBe(0);
+    } finally {
+      const pid = Number(readFileSync(pidFile, "utf8"));
+      try {
+        process.kill(-pid, "SIGKILL");
+      } catch {}
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports command output when a consumer command fails", () => {
+    expect(() =>
+      runBoundedCommand(
+        process.execPath,
+        ["--eval", "process.stdout.write('out'); process.stderr.write('err'); process.exit(3)"],
+        process.cwd(),
+        1_000,
+      ),
+    ).toThrow(/out.*err/u);
+  });
   it("terminates a timed-out command together with its forked descendant", () => {
     const root = mkdtempSync(join(tmpdir(), "snapshot-command-tree-"));
     const descendantPidFile = join(root, "descendant.pid");
