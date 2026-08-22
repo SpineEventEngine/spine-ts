@@ -110,10 +110,21 @@ explicitly excluded.
 
 ## Review Dispositions
 
-- Code style/maintainability: pending.
-- Documentation completeness: pending.
-- TypeScript/API docs: pending.
-- Performance/reliability: pending.
+- `2026-08-22`: Complete review wave accepted one consolidated correction batch.
+  Reliability/style (`gpt-5.6-terra` / high) found that `spawnSync` can remain
+  blocked when the direct child ignores `SIGTERM`, preventing the current
+  process-group escalation; failure diagnostics also discard useful command and
+  output context. TypeScript/API (`gpt-5.6-terra` / high) found two remaining
+  server fixture imports of `managedServerApplicationAccess` and the
+  contradictory `@internal` marker on the public reset alias. Documentation
+  (`gpt-5.6-luna` / medium) found public install commands still name unpublished
+  `2.0.0-snapshot.3` and records that blur published snapshot.2 with local,
+  unpublished snapshot.3. Runtime self-telemetry was unavailable for every
+  reviewer; immutable explicit dispatch profiles are the recorded evidence.
+- Code style/maintainability: correction batch in progress.
+- Documentation completeness: correction batch in progress.
+- TypeScript/API docs: correction batch in progress.
+- Performance/reliability: correction batch in progress.
 - Security: N/A; the human excluded the publisher and this task changes no
   credential, authentication, deserialization, dependency, or tenant boundary.
 
