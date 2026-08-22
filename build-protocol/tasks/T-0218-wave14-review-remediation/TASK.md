@@ -129,6 +129,22 @@ explicitly excluded.
 - Documentation completeness: correction batch in progress.
 - TypeScript/API docs: correction batch in progress.
 - Performance/reliability: correction batch in progress.
+
+## Affected Re-Review Assignments
+
+- Focused GREEN evidence: timeout/direct-ignore/diagnostic/descendant regressions
+  pass; the public-install policy passes; release-readiness, formatting, and
+  `git diff --check` pass.
+
+| Concern               | Existing role                      | Explicit profile        | Bounded re-review scope                                                             | Child spawning | Runtime telemetry                                                        |
+| --------------------- | ---------------------------------- | ----------------------- | ----------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------ |
+| Reliability           | `performance_reliability_reviewer` | `gpt-5.6-terra` / high  | Supervisor direct-ignore, process-group exit, TERM/KILL escalation, and diagnostics | Prohibited     | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
+| TypeScript/API        | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` / high  | Two migrated managed fixtures plus public reset documentation and export boundary   | Prohibited     | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
+| Documentation         | `documentation_reviewer`           | `gpt-5.6-luna` / medium | Public install commands and snapshot.2/snapshot.3 publication records               | Prohibited     | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
+| Style/maintainability | `style_maintainability_reviewer`   | `gpt-5.6-terra` / high  | Supervisor structure/diagnostics/test quality and non-published fixture seam        | Prohibited     | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
+
+These lanes are pending affected re-review; no clean disposition is claimed.
+
 - Security: N/A; the human excluded the publisher and this task changes no
   credential, authentication, deserialization, dependency, or tenant boundary.
 
