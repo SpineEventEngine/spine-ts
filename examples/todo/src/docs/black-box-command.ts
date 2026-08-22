@@ -18,19 +18,14 @@ import { BlackBox } from "@spine-event-engine/testing";
 import { CreateTaskSchema } from "../../generated/spine/examples/todo/task_commands_pb.js";
 import { createTodoContext } from "../todo-app.js";
 
-/**
- * Creates a task through the BlackBox client boundary.
- */
-export async function createTaskThroughBlackBox(): Promise<void> {
-  const box = await BlackBox.from(await createTodoContext());
-  try {
-    const scope = box.asGuest();
-    const acknowledgement = await scope.post(
-      CreateTaskSchema,
-      create(CreateTaskSchema, { id: { value: "task-42" }, title: "First task" }),
-    );
-    if (acknowledgement.kind !== "ok") throw new Error("CreateTask was not accepted.");
-  } finally {
-    await box.close();
-  }
+const box = await BlackBox.from(await createTodoContext());
+try {
+  const scope = box.asGuest();
+  const acknowledgement = await scope.post(
+    CreateTaskSchema,
+    create(CreateTaskSchema, { id: { value: "task-42" }, title: "First task" }),
+  );
+  if (acknowledgement.kind !== "ok") throw new Error("CreateTask was not accepted.");
+} finally {
+  await box.close();
 }

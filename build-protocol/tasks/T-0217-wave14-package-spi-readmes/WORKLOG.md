@@ -49,6 +49,12 @@
   orchestrator's single final release verification; final HEAD, integration,
   and task end remain pending.
 
+- Final release diagnostic found one cleanup-only documentation-source issue:
+  the five-component standalone helper lacked a necessity disposition. It is
+  now the same top-level connected snippet; focused cleanup, snippet compiler,
+  policy, tooling typecheck, format, and diff evidence is green. Final release
+  rerun remains pending.
+
 ## Contract checkpoint
 
 - Commit `a7eaf6b879831315213743192084e2d64eb0fdb2` added red acceptance tests

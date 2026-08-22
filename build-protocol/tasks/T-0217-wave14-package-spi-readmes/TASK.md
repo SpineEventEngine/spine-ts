@@ -183,6 +183,13 @@ boundaries, deserialization, and logging are unaffected.
 - Mandatory cheap preflight and relevant specialist review precede the single
   converged release run.
 
+Final `verify:release` diagnostic reached cleanup and failed only because the
+Testing README source used a five-component standalone helper without a
+necessity disposition. The snippet is now top-level, preserving connected
+create/post/acknowledgement/finally-close behavior. Cleanup, real README snippet
+compilation, focused policy, tooling TypeScript, formatting, and diff checks are
+green. The final release profile remains pending its single orchestrator rerun.
+
 ## Review Waves And Dispositions
 
 | Concern                    | Disposition                                                                                                |

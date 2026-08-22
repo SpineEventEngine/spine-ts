@@ -61,6 +61,14 @@ Independent affected evidence after `a4df30c2f`: the external publisher
 self-test, combined export/snippet suites (25/25), and exact packed handler
 consumer (1/1) pass. No publication or registry mutation occurred.
 
+## Final Gate Diagnostic
+
+The first final `verify:release` attempt failed only at cleanup because the
+Testing README source used a five-component standalone helper without a
+necessity disposition. The correction makes it a top-level connected snippet.
+Focused cleanup, snippet compiler, policy, tooling TypeScript, formatting, and
+diff checks are green; final release verification remains pending its rerun.
+
 ## Clean Results
 
 | Concern                    | Reviewer agent                                 | Result                                                                                            | Immutable configured profile / telemetry                         |
