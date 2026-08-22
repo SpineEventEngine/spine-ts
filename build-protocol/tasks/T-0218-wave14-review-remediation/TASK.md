@@ -1,7 +1,8 @@
 # T-0218: Wave 14 Review Remediation
 
-Status: In progress
+Status: Complete
 Start: `2026-08-22 Europe/Lisbon`
+End: `2026-08-22 Europe/Lisbon`
 Baseline commit: `da40d2cafc39c3aa8c631363308502f1496f7ba9`
 Branch: `codex/T-0218-wave14-review-remediation`
 Worktree: `.worktrees/T-0218-wave14-review-remediation`
@@ -18,8 +19,8 @@ convergence.
 ## Objective
 
 The registry contains `2.0.0-snapshot.2`; local workspace manifests and tested
-snapshot.3 artifacts are not registry-published. This remediation remains in
-progress.
+snapshot.3 artifacts are not registry-published. This remediation does not
+change that publication state.
 
 Resolve the repository findings from the fresh Wave 14 review, except findings
 that concern the disposable external publisher wrapper, which the human
@@ -241,4 +242,11 @@ below.
 
 ## Integration Result
 
-Pending.
+Complete. The verified feature tree was pushed to `origin/main` without
+conflicts after confirming that `origin/main` had not moved from the recorded
+baseline. The integrated tree is byte-identical to the tree that passed
+`verify:release`. Post-integration focused checks passed the POSIX liveness and
+real descendant-timeout behaviors (2 passed; unrelated cases filtered), all 13
+Message Board Gateway startup tests, `git diff --check`, and a clean status
+check. The dirty primary checkout was left untouched because it contains
+unrelated human work.
