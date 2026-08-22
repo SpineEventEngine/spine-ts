@@ -47,3 +47,16 @@ profiles; runtime self-introspection remains unavailable as recorded.
 
 Correction batch `a4df30c2f` implements all accepted findings. Affected review
 lanes and final verification remain pending.
+
+## Affected Re-review Gate
+
+| Concern                    | Existing role                      | Bounded correction scope                                                         | Explicit model  | Explicit reasoning | Runtime telemetry                                                                                 |
+| -------------------------- | ---------------------------------- | -------------------------------------------------------------------------------- | --------------- | ------------------ | ------------------------------------------------------------------------------------------------- |
+| Style/maintainability      | `style_maintainability_reviewer`   | Shared disposable cleanliness guard/self-test and reconciled records             | `gpt-5.6-terra` | high               | Desktop immutable dispatch fields are authoritative; child self-introspection may be unavailable. |
+| Documentation completeness | `documentation_reviewer`           | Connected Testing README BlackBox command flow and corrected review claims       | `gpt-5.6-luna`  | medium             | Desktop immutable dispatch fields are authoritative; child self-introspection may be unavailable. |
+| TypeScript/API docs        | `typescript_api_docs_reviewer`     | Packed generated-handler consumer facade resolution and public SPI compatibility | `gpt-5.6-terra` | high               | Desktop immutable dispatch fields are authoritative; child self-introspection may be unavailable. |
+| Performance/reliability    | `performance_reliability_reviewer` | Real preparation clean callback, two-gate self-test, and mutation-free behavior  | `gpt-5.6-terra` | high               | Desktop immutable dispatch fields are authoritative; child self-introspection may be unavailable. |
+
+Independent affected evidence after `a4df30c2f`: the external publisher
+self-test, combined export/snippet suites (25/25), and exact packed handler
+consumer (1/1) pass. No publication or registry mutation occurred.
