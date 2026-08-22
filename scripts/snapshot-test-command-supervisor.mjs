@@ -46,6 +46,12 @@ function appendOutput(current, chunk) {
 }
 
 async function terminateGroup() {
+  if (process.platform === "win32") {
+    signal("SIGKILL");
+    if (!(await gone(1_000)))
+      throw new Error(`Timed-out process tree ${child.pid} did not terminate.`);
+    return;
+  }
   signal("SIGTERM");
   if (await gone(200)) return;
   signal("SIGKILL");

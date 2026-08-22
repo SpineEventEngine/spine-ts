@@ -50,10 +50,12 @@ describe("snapshot artifact containment", () => {
       expect(waitForProcessExit(pid)).toBe(true);
     } finally {
       const pid = Number(readFileSync(pidFile, "utf8"));
-      try {
-        process.kill(-pid, "SIGKILL");
-      } catch (error) {
-        if (error?.code !== "ESRCH") throw error;
+      if (process.platform !== "win32") {
+        try {
+          process.kill(-pid, "SIGKILL");
+        } catch (error) {
+          if (error?.code !== "ESRCH") throw error;
+        }
       }
       rmSync(root, { recursive: true, force: true });
     }
