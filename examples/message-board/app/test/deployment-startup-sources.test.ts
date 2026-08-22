@@ -145,6 +145,30 @@ describe("MessageBoard deployment entrypoints", () => {
     });
   });
 
+  it("executes gateway startup with the configured fixed backend", async () => {
+    const calls = startupMocks();
+
+    await import("../src/gateway-server.js");
+
+    expect(calls.gkeNodeDiscovery).not.toHaveBeenCalled();
+    expect(calls.browserServerRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: { baseUrls: ["http://application"] },
+      }),
+    );
+  });
+
+  it("rejects gateway startup with neither discovery nor a fixed backend", async () => {
+    const calls = startupMocks();
+    delete calls.gatewayConfig.backendUrls;
+
+    await expect(import("../src/gateway-server.js")).rejects.toThrow(
+      "Gateway requires a fixed backend URL or discovery.",
+    );
+
+    expect(calls.browserServerRun).not.toHaveBeenCalled();
+  });
+
   it("loads the Coordinator parent or replica child branch without starting both", async () => {
     vi.resetModules();
     const coordinator = vi.fn();
@@ -269,6 +293,7 @@ function startupMocks() {
   };
   const runApplication = vi.fn().mockResolvedValue({ baseUrl: "http://application" });
   const runCombined = vi.fn().mockResolvedValue({ baseUrl: "http://combined" });
+  const browserServerRun = vi.fn().mockResolvedValue({ baseUrl: "http://gateway" });
   const serverAtPort = vi
     .fn()
     .mockReturnValue({ run: vi.fn().mockResolvedValue({ baseUrl: "http://gateway" }) });
@@ -311,6 +336,9 @@ function startupMocks() {
     },
   }));
   vi.doMock("@spine-event-engine/server", () => ({ Server: { atPort: serverAtPort } }));
+  vi.doMock("@spine-event-engine/server/browser", () => ({
+    BrowserServer: { run: browserServerRun },
+  }));
   // These constructable boundary doubles have no behavior beyond import-time startup.
   /* eslint-disable @typescript-eslint/no-empty-function */
   vi.doMock("@spine-event-engine/deployment-gke", () => ({ GkeNodeDiscovery: gkeNodeDiscovery }));
@@ -328,6 +356,7 @@ function startupMocks() {
 
   return {
     applicationConfig,
+    browserServerRun,
     client,
     combinedConfig,
     configureServer,

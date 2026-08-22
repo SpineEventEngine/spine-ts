@@ -173,6 +173,16 @@ This task remains in progress pending final verification and integration.
   global coverage, while focused checks include external/process integration.
   The task remains in progress pending final release verification and
   integration.
+- `2026-08-22`: Final `verify:release` test execution passed but global branch
+  coverage was 89.99% against the 90% threshold. The uncovered branches were
+  Message Board Gateway topology selection. Coverage correction tests were
+  added first: fixed-backend startup, missing-source rejection, and configured
+  discovery. They were GREEN on the first run because the production topology
+  was already correct, so no production refactor was needed. GREEN evidence:
+  Message Board deployment configuration/startup tests passed 36/36;
+  `pnpm typecheck:tooling`, cleanup rules, focused ESLint, Prettier, and
+  `git diff --check` passed. Final release verification and integration remain
+  pending.
 
 ## Affected Re-Review Assignments
 
