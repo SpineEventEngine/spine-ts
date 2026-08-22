@@ -91,6 +91,23 @@ explicitly excluded.
 - `2026-08-22`: Export-boundary RED: the built package-export test found direct `commitFenced`, `managedServerApplicationAccess`, `serverEnvironmentAccess`, and `toExternalEvent` exports from `@spine-event-engine/server/testing`. Type RED: `pnpm typecheck:tooling` reported an unused `@ts-expect-error`, proving `BrowserBackend` accepted `{ baseUrls: [] }`. GREEN: the public testing entrypoint now retains only reset and documented integration-frame helpers; the one repository-only remote delivery fixture reads its managed-host helpers through non-published `packages/server/test-fixtures/internal.mjs`; the unrelated Proto contract no longer reaches the internal conversion helper. `BrowserBackend.baseUrls` is a non-empty tuple, and Message Board deployment configuration carries that invariant. Focused package export, Proto contract, remote Delivery fixture, and Message Board configuration tests passed 50/50; `pnpm typecheck:tooling` passed.
 - `2026-08-22`: Record correction: T-0217 now records its actual integration closure at `da40d2caf` and completed worktree cleanup. The completion plan now distinguishes the human-approved experimental Wave 14 `snapshot` publication from any future automated or `latest` release policy. `git branch -r --no-merged origin/main` identified the unrelated `origin/codex/t0213-release-closure` branch; repository safety preserves unrelated unmerged history, and this task makes no false remote-cleanup claim.
 
+## Pre-Review Assignments
+
+| Concern                    | Existing role                      | Explicit model  | Explicit reasoning | Bounded scope                                                                                         | Child spawning | Runtime telemetry                                                        |
+| -------------------------- | ---------------------------------- | --------------- | ------------------ | ----------------------------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------ |
+| Style/maintainability      | `style_maintainability_reviewer`   | `gpt-5.6-terra` | high               | Process runner/helper structure, server testing boundary, and non-empty tuple implementation          | Prohibited     | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
+| Documentation completeness | `documentation_reviewer`           | `gpt-5.6-luna`  | medium             | Completion plan, T-0217/T-0218 records, and server testing reference                                  | Prohibited     | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
+| TypeScript/API docs        | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` | high               | Testing export narrowing, non-empty backend URL tuple, and repository-only fixture compatibility      | Prohibited     | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
+| Performance/reliability    | `performance_reliability_reviewer` | `gpt-5.6-terra` | high               | Process-group timeout cleanup, escalation/reaping, and external-consumer command/suite timeout bounds | Prohibited     | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
+
+- Orchestrator pre-review lint: `git diff --check` and `git status --short`
+  are clean. The public testing entrypoint contains no direct forbidden
+  internal names; repository-wide matches are the non-published fixture,
+  negative export test, and historical task evidence. T-0217 `ready` and
+  `pending` phrases are chronological evidence superseded by its completed
+  header and integration result; they are not active task status and are
+  intentionally preserved.
+
 ## Review Dispositions
 
 - Code style/maintainability: pending.
