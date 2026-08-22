@@ -13,6 +13,8 @@ import {
 } from "./snapshot-artifacts.mjs";
 import { runBoundedCommand } from "./snapshot-test-command-runner.mjs";
 import { terminationPlan } from "./snapshot-process-termination.mjs";
+import { waitForChildClose } from "./snapshot-process-termination.mjs";
+import { EventEmitter } from "node:events";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 
@@ -22,6 +24,34 @@ describe("snapshot artifact containment", () => {
       command: "taskkill",
       args: ["/PID", "42", "/T", "/F"],
     });
+  });
+  it("clears the close wait timer when the child closes first", async () => {
+    const child = new EventEmitter();
+    let cleared = false;
+    const wait = waitForChildClose(child, 10, {
+      setTimeout: () => 1,
+      clearTimeout: () => {
+        cleared = true;
+      },
+    });
+    child.emit("close");
+    expect(await wait).toBe(true);
+    expect(cleared).toBe(true);
+  });
+  it("removes the close listener when the wait times out", async () => {
+    const child = new EventEmitter();
+    let fire;
+    let cleared = false;
+    const wait = waitForChildClose(child, 10, {
+      setTimeout: (fn) => ((fire = fn), 1),
+      clearTimeout: () => {
+        cleared = true;
+      },
+    });
+    fire();
+    expect(await wait).toBe(false);
+    expect(cleared).toBe(true);
+    expect(child.listenerCount("close")).toBe(0);
   });
 
   it("truncates noisy command diagnostics", () => {

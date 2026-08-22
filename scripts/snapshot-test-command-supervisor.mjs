@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { terminationPlan } from "./snapshot-process-termination.mjs";
+import { terminationPlan, waitForChildClose } from "./snapshot-process-termination.mjs";
 
 const { command, args, cwd, timeout } = JSON.parse(process.argv[2]);
 const child = spawn(command, args, { cwd, detached: process.platform !== "win32", stdio: "pipe" });
@@ -60,11 +60,7 @@ async function terminateGroup() {
 }
 
 async function gone(timeout) {
-  if (process.platform === "win32")
-    return await Promise.race([
-      new Promise((resolve) => child.once("close", () => resolve(true))),
-      new Promise((resolve) => setTimeout(() => resolve(false), timeout)),
-    ]);
+  if (process.platform === "win32") return await waitForChildClose(child, timeout);
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     try {

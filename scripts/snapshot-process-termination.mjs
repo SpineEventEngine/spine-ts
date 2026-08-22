@@ -3,3 +3,16 @@ export function terminationPlan(platform, pid) {
     ? { command: "taskkill", args: ["/PID", String(pid), "/T", "/F"] }
     : { command: "kill", args: ["-TERM", `-${pid}`] };
 }
+
+export function waitForChildClose(child, timeout, timers = globalThis) {
+  return new Promise((resolve) => {
+    const onClose = () => finish(true);
+    const timer = timers.setTimeout(() => finish(false), timeout);
+    function finish(value) {
+      timers.clearTimeout(timer);
+      child.removeListener("close", onClose);
+      resolve(value);
+    }
+    child.once("close", onClose);
+  });
+}
