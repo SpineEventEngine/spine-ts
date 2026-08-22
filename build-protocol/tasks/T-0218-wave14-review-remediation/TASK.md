@@ -145,6 +145,14 @@ explicitly excluded.
 
 These lanes are pending affected re-review; no clean disposition is claimed.
 
+## Final Affected Re-Review Correction Batch
+
+- `2026-08-22`: Reliability/style re-review accepted a final batch: add a
+  complete Windows process-tree termination route, prove the direct ignored
+  process is gone before emergency fixture cleanup, and bound captured command
+  diagnostics with an explicit truncation marker. The synchronous artifact
+  runner contract remains binding.
+
 - Security: N/A; the human excluded the publisher and this task changes no
   credential, authentication, deserialization, dependency, or tenant boundary.
 
