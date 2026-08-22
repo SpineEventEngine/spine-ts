@@ -43,6 +43,11 @@
   three P2 corrections: the external preparation callback must use the shared
   guard and execute it in self-test, the testing README must post a real command
   with cleanup, and records must distinguish review basis from final HEAD.
+- All four canonical concerns and affected re-reviews are clean. Independent
+  GREEN evidence is the external `--self-test`, combined export/snippet suites
+  (25/25), and exact packed handler consumer (1/1). The task is ready for the
+  orchestrator's single final release verification; final HEAD, integration,
+  and task end remain pending.
 
 ## Contract checkpoint
 
