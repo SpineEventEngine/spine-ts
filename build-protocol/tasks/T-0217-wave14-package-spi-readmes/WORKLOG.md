@@ -29,6 +29,11 @@
   is intentionally reserved for the orchestrator after review convergence.
 - Independent orchestrator evidence also records the external publisher
   `--self-test` green and combined focused tests green at 25/25.
+- Cheap preflight found a test-only TypeScript assertion defect: a runtime
+  namespace type cannot prove a type-only SPI export. The focused boundary test
+  now directly asserts the allowed registry type and uses expected-error type
+  imports to prove all three forbidden ingestion exports remain unavailable.
+  The required ESLint-project `tsc --noEmit` and focused export suite are green.
 
 ## Contract checkpoint
 

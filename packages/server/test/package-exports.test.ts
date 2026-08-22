@@ -19,12 +19,20 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import * as serverRoot from "@spine-event-engine/server";
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
+import type { GeneratedHandlerRegistry } from "@spine-event-engine/server/spi/handler-registry";
+
+// @ts-expect-error Handler ingestion is server implementation, not SPI.
+import type { HandlerRegistryIngestor } from "@spine-event-engine/server/spi/handler-registry";
+
+// @ts-expect-error Ingestion failures are server implementation, not SPI.
+import type { HandlerRegistryIngestionError } from "@spine-event-engine/server/spi/handler-registry";
+
+// @ts-expect-error Ingestion error codes are server implementation, not SPI.
+import type { RegistryIngestionErrorCode } from "@spine-event-engine/server/spi/handler-registry";
 
 type RootExports = typeof import("@spine-event-engine/server");
 
 type BrowserExports = typeof import("@spine-event-engine/server/browser");
-
-type HandlerRegistrySpiExports = typeof import("@spine-event-engine/server/spi/handler-registry");
 
 describe("@spine-event-engine/server package exports", () => {
   it("keeps browser and durable-auth APIs out of the native root and exposes them only at browser", async () => {
@@ -115,18 +123,10 @@ describe("@spine-event-engine/server package exports", () => {
   });
 
   it("exposes generated handler-registry data only through its SPI subpath", async () => {
-    expectTypeOf<
-      "GeneratedHandlerRegistry" extends keyof HandlerRegistrySpiExports ? true : false
-    >().toEqualTypeOf<true>();
-    expectTypeOf<
-      "HandlerRegistryIngestor" extends keyof HandlerRegistrySpiExports ? true : false
-    >().toEqualTypeOf<false>();
-    expectTypeOf<
-      "HandlerRegistryIngestionError" extends keyof HandlerRegistrySpiExports ? true : false
-    >().toEqualTypeOf<false>();
-    expectTypeOf<
-      "RegistryIngestionErrorCode" extends keyof HandlerRegistrySpiExports ? true : false
-    >().toEqualTypeOf<false>();
+    expectTypeOf<GeneratedHandlerRegistry>().toMatchTypeOf<{
+      readonly version: 3;
+      readonly entities: readonly unknown[];
+    }>();
 
     const registry = await import("@spine-event-engine/server/spi/handler-registry");
     expect(Object.keys(registry)).toEqual([]);

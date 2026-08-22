@@ -140,6 +140,13 @@ Out of scope:
 - GREEN: the same focused policy suite passed 17/17; `node docs/check-typescript-snippets.mjs packages/core/README.md packages/proto/README.md packages/storage/README.md packages/testing/README.md` passed.
 - Orchestrator-independent GREEN: the external `--self-test` passed and the
   combined focused Vitest run passed 25/25.
+- Diagnostic correction: cheap preflight initially failed in
+  `tsc --noEmit -p tsconfig.eslint.json` because `typeof import(...)` is a
+  runtime module namespace and cannot contain the SPI's type-only registry
+  contract. The boundary test now directly imports `GeneratedHandlerRegistry`,
+  uses a meaningful type assertion, and has `@ts-expect-error` type imports for
+  each forbidden ingestion symbol. GREEN: the specified typecheck passed and
+  `packages/server/test/package-exports.test.ts` passed 8/8.
 
 ## Coverage Result
 
