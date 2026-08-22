@@ -76,6 +76,8 @@ describe("snapshot artifact containment", () => {
     const root = mkdtempSync(join(tmpdir(), "snapshot-direct-timeout-"));
     const pidFile = join(root, "direct.pid");
     const invocation = `import { runBoundedCommand } from ${JSON.stringify(new URL("./snapshot-test-command-runner.mjs", import.meta.url).href)}; runBoundedCommand(process.execPath, ['--eval', ${JSON.stringify(`const { writeFileSync } = require('node:fs'); process.on('SIGTERM', () => {}); writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000);`)}], ${JSON.stringify(root)}, 100);`;
+    let primary;
+    let cleanup;
     try {
       const result = spawnSync(process.execPath, ["--input-type=module", "--eval", invocation], {
         cwd: root,
@@ -86,17 +88,35 @@ describe("snapshot artifact containment", () => {
       expect(result.status).not.toBe(0);
       const pid = Number(readFileSync(pidFile, "utf8"));
       expect(waitForProcessExit(pid)).toBe(true);
-    } finally {
+    } catch (error) {
+      primary = error;
+    }
+    try {
       const pid = Number(readFileSync(pidFile, "utf8"));
-      if (process.platform !== "win32") {
-        try {
-          process.kill(-pid, "SIGKILL");
-        } catch (error) {
-          if (error?.code !== "ESRCH") process.stderr.write(String(error));
+      if (!waitForProcessExit(pid)) {
+        if (process.platform === "win32") {
+          const plan = terminationPlan("win32", pid);
+          const result = spawnSync(plan.command, plan.args, { stdio: "ignore" });
+          if (result.error !== undefined || result.status !== 0)
+            throw result.error ?? new Error("taskkill failed");
+        } else {
+          try {
+            process.kill(-pid, "SIGKILL");
+          } catch (error) {
+            if (error?.code !== "ESRCH") throw error;
+          }
         }
+        if (!waitForProcessExit(pid)) throw new Error("Emergency process cleanup failed.");
       }
+    } catch (error) {
+      cleanup = error;
+    } finally {
       rmSync(root, { recursive: true, force: true });
     }
+    if (primary !== undefined && cleanup !== undefined)
+      throw new AggregateError([primary, cleanup]);
+    if (primary !== undefined) throw primary;
+    if (cleanup !== undefined) throw cleanup;
   });
 
   it("reports command output when a consumer command fails", () => {
