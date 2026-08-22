@@ -156,6 +156,14 @@ This task remains in progress pending final verification and integration.
   `pnpm typecheck:tooling`, focused Message Board configuration/startup and
   server-export tests (44 passed), focused ESLint, Prettier, and
   `git diff --check` passed.
+- `2026-08-22`: Third cheap-preflight diagnostic: both managed server fixture
+  applications imported the non-published access seam from one directory too
+  shallow, so their four integration behaviors failed before startup with
+  `ERR_MODULE_NOT_FOUND`. RED: the focused integration suites failed 4/4; new
+  deterministic seam assertions failed 2/2. GREEN: both imports now resolve
+  `../../test-fixtures/internal.mjs`; seam assertions plus the real managed
+  fixture startup/integration behaviors passed 6/6, the package-export suite
+  passed 10/10, and focused ESLint, Prettier, and `git diff --check` passed.
 
 ## Affected Re-Review Assignments
 

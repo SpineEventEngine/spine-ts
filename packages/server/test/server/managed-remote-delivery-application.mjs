@@ -23,7 +23,7 @@ import {
   ServerEnvironment,
   UniformAcrossAllShards,
 } from "@spine-event-engine/server";
-import { managedServerApplicationAccess } from "../test-fixtures/internal.mjs";
+import { managedServerApplicationAccess } from "../../test-fixtures/internal.mjs";
 import process from "node:process";
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";

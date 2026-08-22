@@ -50,6 +50,9 @@ import { afterEach, expect, it } from "vitest";
 const children = new Set<ChildProcess>();
 const deliveries = new Set<GatedDeliveryListener>();
 const handlerGates = new Set<HandlerGate>();
+const childPath = fileURLToPath(
+  new URL("./managed-remote-delivery-application.mjs", import.meta.url),
+);
 
 afterEach(async () => {
   // Release either real Delivery gate before asking the managed parent to shut
@@ -73,23 +76,25 @@ afterEach(async () => {
   handlerGates.clear();
 });
 
+it("resolves its managed-host access seam outside the published package", async () => {
+  const source = await readFile(childPath, "utf8");
+
+  expect(source).toContain('from "../../test-fixtures/internal.mjs"');
+});
+
 it("RED-27/28 keeps the final managed subscription relay until fenced Delivery work drains", async () => {
   const delivery = await new GatedDeliveryListener().start();
   deliveries.add(delivery);
   const handlerGate = await HandlerGate.create();
   handlerGates.add(handlerGate);
-  const child = fork(
-    fileURLToPath(new URL("./managed-remote-delivery-application.mjs", import.meta.url)),
-    [],
-    {
-      env: {
-        ...process.env,
-        SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl,
-        SPINE_MANAGED_HANDLER_GATE: handlerGate.directory,
-      },
-      stdio: ["ignore", "ignore", "pipe", "ipc"],
+  const child = fork(childPath, [], {
+    env: {
+      ...process.env,
+      SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl,
+      SPINE_MANAGED_HANDLER_GATE: handlerGate.directory,
     },
-  );
+    stdio: ["ignore", "ignore", "pipe", "ipc"],
+  });
   children.add(child);
   const ready = await receive(child, "managed-ready");
   expect(ready.members).toHaveLength(2);
@@ -138,18 +143,14 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
   deliveries.add(delivery);
   const handlerGate = await HandlerGate.create();
   handlerGates.add(handlerGate);
-  const child = fork(
-    fileURLToPath(new URL("./managed-remote-delivery-application.mjs", import.meta.url)),
-    [],
-    {
-      env: {
-        ...process.env,
-        SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl,
-        SPINE_MANAGED_HANDLER_GATE: handlerGate.directory,
-      },
-      stdio: ["ignore", "ignore", "pipe", "ipc"],
+  const child = fork(childPath, [], {
+    env: {
+      ...process.env,
+      SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl,
+      SPINE_MANAGED_HANDLER_GATE: handlerGate.directory,
     },
-  );
+    stdio: ["ignore", "ignore", "pipe", "ipc"],
+  });
   children.add(child);
   const ready = await receive(child, "managed-ready");
   const members = memberFacts(ready);

@@ -43,7 +43,7 @@ import {
   ThirdPartyContext,
   UniformAcrossAllShards,
 } from "@spine-event-engine/server";
-import { managedServerApplicationAccess } from "../test-fixtures/internal.mjs";
+import { managedServerApplicationAccess } from "../../test-fixtures/internal.mjs";
 import { file_spine_options, UserIdSchema } from "@spine-event-engine/proto";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.ts";
 

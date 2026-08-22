@@ -65,6 +65,12 @@ afterEach(async () => {
   triggerDirectories.clear();
 });
 
+it("resolves its managed-host access seam outside the published package", async () => {
+  const source = await readFile(childPath, "utf8");
+
+  expect(source).toContain('from "../../test-fixtures/internal.mjs"');
+});
+
 it(
   "RED-17/18/29 delivers domestic Todo Events through local brokers and " +
     "Delivery-backed external state subscriptions",
