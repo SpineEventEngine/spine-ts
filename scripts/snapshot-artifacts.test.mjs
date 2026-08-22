@@ -32,7 +32,9 @@ describe("snapshot artifact containment", () => {
       const pid = Number(readFileSync(pidFile, "utf8"));
       try {
         process.kill(-pid, "SIGKILL");
-      } catch {}
+      } catch (error) {
+        if (error?.code !== "ESRCH") throw error;
+      }
       rmSync(root, { recursive: true, force: true });
     }
   });
