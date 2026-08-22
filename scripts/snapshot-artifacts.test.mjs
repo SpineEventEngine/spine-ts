@@ -12,10 +12,28 @@ import {
   proveNativeServerTarballConsumer,
 } from "./snapshot-artifacts.mjs";
 import { runBoundedCommand } from "./snapshot-test-command-runner.mjs";
+import { terminationPlan } from "./snapshot-process-termination.mjs";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 
 describe("snapshot artifact containment", () => {
+  it("selects taskkill without a negative PID on Windows", () => {
+    expect(terminationPlan("win32", 42)).toEqual({
+      command: "taskkill",
+      args: ["/PID", "42", "/T", "/F"],
+    });
+  });
+
+  it("truncates noisy command diagnostics", () => {
+    expect(() =>
+      runBoundedCommand(
+        process.execPath,
+        ["--eval", "process.stderr.write('x'.repeat(20000)); process.exit(1)"],
+        process.cwd(),
+        1_000,
+      ),
+    ).toThrow(/\[output truncated\]/u);
+  });
   it("does not hang when the direct command ignores SIGTERM", () => {
     const root = mkdtempSync(join(tmpdir(), "snapshot-direct-timeout-"));
     const pidFile = join(root, "direct.pid");

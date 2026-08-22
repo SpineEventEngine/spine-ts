@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { terminationPlan } from "./snapshot-process-termination.mjs";
 
 const { command, args, cwd, timeout } = JSON.parse(process.argv[2]);
 const child = spawn(command, args, { cwd, detached: process.platform !== "win32", stdio: "pipe" });
@@ -22,7 +23,8 @@ process.stdout.write(JSON.stringify({ ...result, timedOut, stdout, stderr }));
 
 function signal(value) {
   if (process.platform === "win32") {
-    const result = spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
+    const plan = terminationPlan("win32", child.pid);
+    const result = spawnSync(plan.command, plan.args, {
       stdio: "ignore",
     });
     if (result.error !== undefined || result.status !== 0)
@@ -52,6 +54,11 @@ async function terminateGroup() {
 }
 
 async function gone(timeout) {
+  if (process.platform === "win32")
+    return await Promise.race([
+      new Promise((resolve) => child.once("close", () => resolve(true))),
+      new Promise((resolve) => setTimeout(() => resolve(false), timeout)),
+    ]);
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     try {
