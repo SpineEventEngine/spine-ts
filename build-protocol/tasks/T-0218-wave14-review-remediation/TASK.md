@@ -181,7 +181,12 @@ This task remains in progress pending final verification and integration.
   was already correct, so no production refactor was needed. GREEN evidence:
   Message Board deployment configuration/startup tests passed 36/36;
   `pnpm typecheck:tooling`, cleanup rules, focused ESLint, Prettier, and
-  `git diff --check` passed. Final release verification and integration remain
+  `git diff --check` passed.
+- `2026-08-22`: The mandatory cheap preflight was restarted after the coverage
+  correction and passed in full: all shared generated build, tooling, lint,
+  cleanup, TSDoc, copyright, logging, formatting, documentation,
+  generated-clean, and release-readiness gates passed; the nine selected test
+  files passed 89/89 tests. Final release verification and integration remain
   pending.
 
 ## Affected Re-Review Assignments
