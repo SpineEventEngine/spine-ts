@@ -9,6 +9,8 @@ export function runBoundedCommand(command, args, cwd, timeout) {
     { cwd, encoding: "utf8", stdio: "pipe", timeout: timeout + 5_000 },
   );
   if (result.error !== undefined) throw result.error;
+  if (result.stdout.length === 0)
+    throw new Error(`Command supervisor failed\nstderr: ${result.stderr}`);
   const report = JSON.parse(result.stdout);
   if (report.status === 0 && !report.timedOut) return;
   throw new Error(
