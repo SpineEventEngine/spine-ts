@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import {
+  processGroupLiveness,
   taskkillOutcome,
   terminationPlan,
   waitForChildClose,
@@ -66,12 +67,7 @@ async function gone(timeout) {
   if (process.platform === "win32") return await waitForChildClose(child, timeout);
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    try {
-      process.kill(-child.pid, 0);
-    } catch (error) {
-      if (error?.code === "ESRCH") return true;
-      throw error;
-    }
+    if (processGroupLiveness(child.pid) === "gone") return true;
     await new Promise((resolve) => globalThis.setTimeout(resolve, 10));
   }
   return false;

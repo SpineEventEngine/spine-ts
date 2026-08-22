@@ -13,6 +13,7 @@ import {
 } from "./snapshot-artifacts.mjs";
 import { runBoundedCommand } from "./snapshot-test-command-runner.mjs";
 import {
+  processGroupLiveness,
   taskkillOutcome,
   terminationPlan,
   waitForChildClose,
@@ -27,6 +28,21 @@ describe("snapshot artifact containment", () => {
       command: "taskkill",
       args: ["/PID", "42", "/T", "/F"],
     });
+  });
+  it("classifies an inaccessible POSIX process group as not gone", () => {
+    const errno = (code) => Object.assign(new Error(code), { code });
+
+    expect(processGroupLiveness(42, () => undefined)).toBe("alive");
+    expect(
+      processGroupLiveness(42, () => {
+        throw errno("ESRCH");
+      }),
+    ).toBe("gone");
+    expect(
+      processGroupLiveness(42, () => {
+        throw errno("EPERM");
+      }),
+    ).toBe("inaccessible");
   });
   it("clears the close wait timer when the child closes first", async () => {
     const child = new EventEmitter();

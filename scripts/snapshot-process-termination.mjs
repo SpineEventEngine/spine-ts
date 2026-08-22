@@ -4,6 +4,17 @@ export function terminationPlan(platform, pid) {
     : { command: "kill", args: ["-TERM", `-${pid}`] };
 }
 
+export function processGroupLiveness(pid, probe = (candidate) => process.kill(candidate, 0)) {
+  try {
+    probe(-pid);
+    return "alive";
+  } catch (error) {
+    if (error?.code === "ESRCH") return "gone";
+    if (error?.code === "EPERM") return "inaccessible";
+    throw error;
+  }
+}
+
 export function waitForChildClose(child, timeout, timers = globalThis) {
   return new Promise((resolve) => {
     const onClose = () => finish(true);

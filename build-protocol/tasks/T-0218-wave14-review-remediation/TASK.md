@@ -188,6 +188,19 @@ This task remains in progress pending final verification and integration.
   generated-clean, and release-readiness gates passed; the nine selected test
   files passed 89/89 tests. Final release verification and integration remain
   pending.
+- `2026-08-22`: The subsequent final `verify:release` executed 4,438 tests but
+  failed one timed descendant-timeout assertion: the supervisor crashed while
+  probing a POSIX process group with `EPERM`, so the caller lost its normal
+  timed-out diagnostic. Root-cause investigation used macOS `kill(2)`: for a
+  negative PID, `ESRCH` alone means no process group; `EPERM` means a group
+  still exists with an inaccessible member. The old probe threw instead of
+  making that distinction. RED: a deterministic injected-probe regression
+  failed because `processGroupLiveness` did not exist. GREEN: it classifies
+  `EPERM` as `inaccessible`, which the supervisor treats as present and
+  continues through its TERM/KILL fail-closed path rather than declaring a
+  group gone. The regression passed and the real direct-ignore/descendant
+  timeout tests passed 20/20 across ten independent runs. Final verification
+  and integration remain pending.
 
 ## Affected Re-Review Assignments
 
