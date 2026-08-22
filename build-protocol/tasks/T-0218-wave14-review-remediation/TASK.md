@@ -130,6 +130,21 @@ explicitly excluded.
 - TypeScript/API docs: correction batch in progress.
 - Performance/reliability: correction batch in progress.
 
+## Final Review Closure
+
+- Documentation is clean at `0361d4074` / `c0e63ab06`.
+- TypeScript/API is clean with the 10/10 export and tarball-exclusion proof.
+- Reliability is clean for the production endpoint with focused tests and lint;
+  stale pre-fix process groups were externally cleaned by the orchestrator.
+- Style/maintainability is clean at `639dadd7a`.
+- All accepted P1/P2 findings are resolved. The P3 emergency-cleanup concern
+  was resolved as P2. Security is N/A because the excluded publisher boundary
+  was not changed.
+- Selected final profile: `verify:release`, because shared release-test
+  infrastructure and a public TypeScript contract changed.
+
+This task remains in progress pending final verification and integration.
+
 ## Affected Re-Review Assignments
 
 - Focused GREEN evidence: timeout/direct-ignore/diagnostic/descendant regressions
