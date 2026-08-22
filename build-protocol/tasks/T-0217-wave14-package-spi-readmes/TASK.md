@@ -1,8 +1,8 @@
 # T-0217: Wave 14 Package And SPI Boundaries
 
-Status: Implementation and review complete; ready for integration
+Status: Complete; mechanical worktree cleanup pending
 Start: `2026-08-22 Europe/Lisbon`
-End: Pending
+End: `2026-08-22 Europe/Lisbon` (integration complete; cleanup pending)
 Baseline commit: `e72222053d20a8828ca63aa4c76d7c13dc9216b5`
 Task log path: `build-protocol/tasks/T-0217-wave14-package-spi-readmes/TASK.md`
 Branch: `codex/wave14-review-corrections`
@@ -12,7 +12,8 @@ Configured dispatch: `gpt-5.6-terra` / `medium` (explicit; runtime self-telemetr
 Reviewers: complete clean wave and affected re-reviews recorded in `REVIEW.md`
 Implementation history: `159aed14a`, `4d2c3fbd3`, `3ecc9a56d`, and `5d19572f5`
 Current review basis: `5d19572f5`; accepted review correction batch: `a4df30c2f`
-Final branch HEAD: pending final review/verification; do not infer from this task record
+Integration merge: `2841fbf21` on `origin/main`
+Final branch HEAD: integration closure record commit pending
 
 Task classification: High-risk
 Classification reason: the accepted correction narrows a published TypeScript
@@ -227,3 +228,12 @@ recorded evidence.
 ## Integration Result
 
 Pending.
+
+Post-merge fresh-worktree `pnpm install --frozen-lockfile && pnpm verify:release`
+passed after merge `2841fbf21`: 277 files passed/4 skipped; 4,423 tests
+passed/19 skipped; duration 195.49 seconds; statement coverage 93.27%
+(22,250/23,853), branch coverage 90% (13,130/14,588), function coverage
+92.79% (5,450/5,873), and line coverage 94.43% (20,624/21,839). The task is
+complete except mechanical worktree cleanup. Completed clean Wave 14 worktrees
+will be removed after this closure commit; `wave14-npm-publication` is preserved
+because it has untracked planning state.

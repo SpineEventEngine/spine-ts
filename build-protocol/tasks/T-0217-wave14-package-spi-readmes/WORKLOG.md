@@ -349,3 +349,11 @@ packages/server/test/package-exports.test.ts --passWithNoTests` passed 5/5;
   install, `verify:task -- --no-tests` and the final merged-main
   `pnpm verify:release` passed; the latter reports 4,421 tests passed, 19
   intentional skips, and unchanged 90.01% branch coverage.
+- T-0217 integrated through merge `2841fbf21` on `origin/main`. A fresh
+  worktree ran `pnpm install --frozen-lockfile && pnpm verify:release` green:
+  277 files passed/4 skipped; 4,423 tests passed/19 skipped; 195.49s;
+  statements 93.27% (22,250/23,853), branches 90% (13,130/14,588), functions
+  92.79% (5,450/5,873), lines 94.43% (20,624/21,839). The task is complete
+  except mechanical cleanup. Clean completed Wave 14 worktrees will be removed
+  after this closure commit; `wave14-npm-publication` remains due to untracked
+  planning state.

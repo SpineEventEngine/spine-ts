@@ -93,3 +93,14 @@ clean; implementation and review are ready for integration.
 | Documentation completeness | `/root/wave14_correction_documentation_review` | Clean; connected BlackBox command/readme correction is resolved.                                  | `gpt-5.6-luna` / medium; runtime self-introspection unavailable. |
 | TypeScript/API docs        | `/root/wave14_correction_api_review`           | Clean; packed handler tooling resolves the public facade and SPI remains type-only/runtime-empty. | `gpt-5.6-terra` / high; runtime self-introspection unavailable.  |
 | Performance/reliability    | `/root/wave14_correction_reliability_review`   | Clean; actual preparation callback uses the shared guard and self-test remains mutation-free.     | `gpt-5.6-terra` / high; runtime self-introspection unavailable.  |
+
+## Integration Closure
+
+Merge `2841fbf21` is on `origin/main`. Fresh-worktree
+`pnpm install --frozen-lockfile && pnpm verify:release` passed: 277 files
+passed/4 skipped; 4,423 tests passed/19 skipped; duration 195.49 seconds;
+statements 93.27% (22,250/23,853), branches 90% (13,130/14,588), functions
+92.79% (5,450/5,873), and lines 94.43% (20,624/21,839). Review and integration
+are complete; only mechanical cleanup remains. Clean completed Wave 14
+worktrees will be removed after this closure commit; `wave14-npm-publication`
+remains because of untracked planning state.
