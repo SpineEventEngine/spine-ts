@@ -32,8 +32,7 @@ async function signal(value) {
       encoding: "utf8",
       stdio: "pipe",
     });
-    await taskkillOutcome(result, () => waitForChildClose(child, 100));
-    return;
+    return await taskkillOutcome(result, () => waitForChildClose(child, 100));
   }
   try {
     process.kill(-child.pid, value);
@@ -51,7 +50,7 @@ function appendOutput(current, chunk) {
 
 async function terminateGroup() {
   if (process.platform === "win32") {
-    await signal("SIGKILL");
+    if (await signal("SIGKILL")) return;
     if (!(await gone(1_000)))
       throw new Error(`Timed-out process tree ${child.pid} did not terminate.`);
     return;

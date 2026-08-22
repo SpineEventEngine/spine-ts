@@ -18,8 +18,8 @@ export function waitForChildClose(child, timeout, timers = globalThis) {
 }
 
 export async function taskkillOutcome(result, waitForClose) {
-  if (result.error === undefined && result.status === 0) return;
-  if (await waitForClose()) return;
+  if (result.error === undefined && result.status === 0) return false;
+  if (await waitForClose()) return true;
   throw (
     result.error ??
     new Error(`taskkill failed with status ${result.status}: ${result.stderr ?? ""}`)

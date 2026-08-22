@@ -57,7 +57,8 @@ describe("snapshot artifact containment", () => {
     expect(child.listenerCount("close")).toBe(0);
   });
   it("accepts an already-closed child after taskkill reports failure", async () => {
-    await expect(taskkillOutcome({ status: 1 }, async () => true)).resolves.toBeUndefined();
+    await expect(taskkillOutcome({ status: 1 }, async () => true)).resolves.toBe(true);
+    await expect(taskkillOutcome({ status: 0 }, async () => false)).resolves.toBe(false);
     await expect(taskkillOutcome({ status: 1 }, async () => false)).rejects.toThrow("status 1");
   });
 
