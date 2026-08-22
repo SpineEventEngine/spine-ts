@@ -152,6 +152,10 @@ These lanes are pending affected re-review; no clean disposition is claimed.
   process is gone before emergency fixture cleanup, and bound captured command
   diagnostics with an explicit truncation marker. The synchronous artifact
   runner contract remains binding.
+- `2026-08-22`: GREEN: focused timeout tests cover POSIX descendant cleanup,
+  direct ignored commands, bounded diagnostics, Windows routing, close-first,
+  timeout-first, and taskkill-already-gone handling (6 passed). Exact script
+  ESLint, formatting, syntax checks, and `git diff --check` passed.
 
 - Security: N/A; the human excluded the publisher and this task changes no
   credential, authentication, deserialization, dependency, or tenant boundary.
