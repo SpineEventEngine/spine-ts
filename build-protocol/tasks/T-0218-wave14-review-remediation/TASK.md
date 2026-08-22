@@ -60,10 +60,9 @@ explicitly excluded.
 - Accepted: T-0217 status, end state, and integration result are stale.
 - Accepted: the completion plan contains a pre-publication prohibition that is
   now contradicted by the recorded manual snapshot publication.
-- Rejected as stated: `BUILD_PROTOCOL.md` does not require deleting every remote
-  branch. The remaining `origin/codex/t0213-release-closure` is unmerged,
-  unrelated work and must be preserved. Records will state the narrower,
-  protocol-backed cleanup result.
+- The remaining `origin/codex/t0213-release-closure` is unmerged, unrelated
+  work. The human explicitly requires preserving it, so this remediation does
+  not claim complete remote-branch cleanup or delete that branch.
 - Excluded by the human: disposable wrapper trust, checkout cleanliness, and
   signal-cleanup findings.
 
@@ -90,6 +89,7 @@ explicitly excluded.
   recorded the implementation assignment before authoring changes.
 - `2026-08-22`: RED: after the frozen install, `pnpm --config.verify-deps-before-run=false exec vitest run scripts/snapshot-artifacts.test.mjs --passWithNoTests` failed because the new `snapshot-test-command-runner.mjs` module was absent. A strengthened RED then used a descendant that installs a `SIGTERM` handler and failed because it survived the timeout. GREEN: the focused `-t "terminates a timed-out command"` test passed 1/1 after adding a detached process-group runner that sends `SIGTERM`, polls, escalates to `SIGKILL`, and fails if the group remains. The regression starts a Node parent that forks a never-ending Node child, forces a 500 ms timeout, and proves the recorded child PID no longer exists. Full tarball-consumer commands now have a realistic 60-second per-command bound and a separate 180-second Vitest aggregate bound. The full artifact-consumer tests remain deferred until their normal generated build prerequisites exist in this fresh worktree; their current failure is missing `@spine-event-engine/auth` packed `dist` targets, not timeout behavior.
 - `2026-08-22`: Export-boundary RED: the built package-export test found direct `commitFenced`, `managedServerApplicationAccess`, `serverEnvironmentAccess`, and `toExternalEvent` exports from `@spine-event-engine/server/testing`. Type RED: `pnpm typecheck:tooling` reported an unused `@ts-expect-error`, proving `BrowserBackend` accepted `{ baseUrls: [] }`. GREEN: the public testing entrypoint now retains only reset and documented integration-frame helpers; the one repository-only remote delivery fixture reads its managed-host helpers through non-published `packages/server/test-fixtures/internal.mjs`; the unrelated Proto contract no longer reaches the internal conversion helper. `BrowserBackend.baseUrls` is a non-empty tuple, and Message Board deployment configuration carries that invariant. Focused package export, Proto contract, remote Delivery fixture, and Message Board configuration tests passed 50/50; `pnpm typecheck:tooling` passed.
+- `2026-08-22`: Record correction: T-0217 now records its actual integration closure at `da40d2caf` and completed worktree cleanup. The completion plan now distinguishes the human-approved experimental Wave 14 `snapshot` publication from any future automated or `latest` release policy. `git branch -r --no-merged origin/main` identified the unrelated `origin/codex/t0213-release-closure` branch; it remains preserved under the human requirement, and this task makes no false remote-cleanup claim.
 
 ## Review Dispositions
 

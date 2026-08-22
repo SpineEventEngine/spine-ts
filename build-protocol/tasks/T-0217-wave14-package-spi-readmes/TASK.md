@@ -1,8 +1,8 @@
 # T-0217: Wave 14 Package And SPI Boundaries
 
-Status: Complete; mechanical worktree cleanup pending
+Status: Complete
 Start: `2026-08-22 Europe/Lisbon`
-End: `2026-08-22 Europe/Lisbon` (integration complete; cleanup pending)
+End: `2026-08-22 Europe/Lisbon` (integration and cleanup complete)
 Baseline commit: `e72222053d20a8828ca63aa4c76d7c13dc9216b5`
 Task log path: `build-protocol/tasks/T-0217-wave14-package-spi-readmes/TASK.md`
 Branch: `codex/wave14-review-corrections`
@@ -13,7 +13,7 @@ Reviewers: complete clean wave and affected re-reviews recorded in `REVIEW.md`
 Implementation history: `159aed14a`, `4d2c3fbd3`, `3ecc9a56d`, and `5d19572f5`
 Current review basis: `5d19572f5`; accepted review correction batch: `a4df30c2f`
 Integration merge: `2841fbf21` on `origin/main`
-Final branch HEAD: integration closure record commit pending
+Final branch HEAD: `da40d2caf` integration closure record on `origin/main`
 
 Task classification: High-risk
 Classification reason: the accepted correction narrows a published TypeScript
@@ -203,8 +203,8 @@ Final `verify:release` at `41d991152` passed: 277 files passed with 4 skipped;
 4,423 tests passed with 19 skipped; duration 180.30 seconds; statement coverage
 93.15% (22,221/23,853), branch coverage 90% (13,130/14,588), function coverage
 92.81% (5,451/5,873), and line coverage 94.36% (20,608/21,839). Implementation
-and review are ready for integration; integration, final branch HEAD, and task
-end remain pending.
+and review were subsequently integrated through merge `2841fbf21` and recorded
+at `da40d2caf` on `origin/main`.
 
 ## Review Waves And Dispositions
 
@@ -220,20 +220,17 @@ No security review is invoked: this is not final release readiness and the exter
 Complete review wave findings and clean re-reviews are recorded in `REVIEW.md`: one accepted P1
 packed-consumer facade assertion, three accepted P2 corrections for the shared
 external clean guard/self-test, meaningful testing README first success, and
-record-field drift. All corrections are complete; final release verification,
-integration, and task end remain pending. Runtime self-introspection was
+record-field drift. All corrections, final release verification, integration,
+and task closure are complete. Runtime self-introspection was
 unavailable for every reviewer; immutable configured dispatch metadata is the
 recorded evidence.
 
 ## Integration Result
 
-Pending.
-
-Post-merge fresh-worktree `pnpm install --frozen-lockfile && pnpm verify:release`
+Complete. Post-merge fresh-worktree `pnpm install --frozen-lockfile && pnpm verify:release`
 passed after merge `2841fbf21`: 277 files passed/4 skipped; 4,423 tests
 passed/19 skipped; duration 195.49 seconds; statement coverage 93.27%
 (22,250/23,853), branch coverage 90% (13,130/14,588), function coverage
 92.79% (5,450/5,873), and line coverage 94.43% (20,624/21,839). The task is
-complete except mechanical worktree cleanup. Completed clean Wave 14 worktrees
-will be removed after this closure commit; `wave14-npm-publication` is preserved
-because it has untracked planning state.
+complete. Clean completed Wave 14 worktrees were removed;
+`wave14-npm-publication` is preserved because it has untracked planning state.

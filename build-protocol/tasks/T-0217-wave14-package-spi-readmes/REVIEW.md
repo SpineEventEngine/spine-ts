@@ -5,7 +5,7 @@ Branch: `codex/wave14-review-corrections`
 Baseline commit: `e72222053d20a8828ca63aa4c76d7c13dc9216b5`
 Candidate: `5d19572f5` (review basis); accepted correction batch: `a4df30c2f`
 Worktree: `.worktrees/wave14-review-corrections`
-Status: Complete clean wave; ready for final release verification
+Status: Complete, integrated, and post-merge verified
 
 ## Scope
 
@@ -101,6 +101,5 @@ Merge `2841fbf21` is on `origin/main`. Fresh-worktree
 passed/4 skipped; 4,423 tests passed/19 skipped; duration 195.49 seconds;
 statements 93.27% (22,250/23,853), branches 90% (13,130/14,588), functions
 92.79% (5,450/5,873), and lines 94.43% (20,624/21,839). Review and integration
-are complete; only mechanical cleanup remains. Clean completed Wave 14
-worktrees will be removed after this closure commit; `wave14-npm-publication`
-remains because of untracked planning state.
+are complete. Clean completed Wave 14 worktrees were removed;
+`wave14-npm-publication` remains because of untracked planning state.

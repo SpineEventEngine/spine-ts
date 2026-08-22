@@ -256,9 +256,10 @@ integration, and documentation closure are complete. T-0113 records the
 subsequent System Context and payload-first correction that must precede Wave 7.
 Wave 7 Q&A and its dependency-ordered T-0121 through T-0128 plan were approved
 under T-0120. The complete sequence is now reviewed, release-verified,
-integrated, post-merge verified, and remotely synchronized. Do not publish
-packages to npm until all waves are complete and publication is revisited with
-the human.
+integrated, post-merge verified, and remotely synchronized. Wave 14 separately
+authorized the human-operated publication of experimental framework snapshots
+under the `snapshot` tag. That approval does not create an automated or
+unqualified `latest` release policy for later waves.
 
 Wave 8's T-0129 through T-0144 sequence is complete: the storage correction,
 delivery-policy cutover, validation upgrade, example and documentation
