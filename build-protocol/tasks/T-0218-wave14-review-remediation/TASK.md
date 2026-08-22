@@ -164,6 +164,15 @@ This task remains in progress pending final verification and integration.
   `../../test-fixtures/internal.mjs`; seam assertions plus the real managed
   fixture startup/integration behaviors passed 6/6, the package-export suite
   passed 10/10, and focused ESLint, Prettier, and `git diff --check` passed.
+- `2026-08-22`: Mandatory cheap preflight GREEN after a full restart:
+  `verify:task --no-coverage` selected 9 files and passed 87/87 tests.
+  Shared generated build/tooling, lint, cleanup, TSDoc, copyright, logging,
+  Prettier, TypeDoc, Buf, generated-clean, and release-readiness gates passed.
+  Release readiness reported 84 imports, 54 assets, and 355 links. Coverage is
+  intentionally omitted from this preflight: final `verify:release` provides
+  global coverage, while focused checks include external/process integration.
+  The task remains in progress pending final release verification and
+  integration.
 
 ## Affected Re-Review Assignments
 
