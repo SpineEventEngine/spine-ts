@@ -14,12 +14,7 @@
 
 import { ServerEnvironmentLifecycle } from "../server/server-environment.js";
 
-export { commitFenced } from "../repository/commit-fence.js";
-export { managedServerApplicationAccess } from "../server/managed-server-application.js";
-export { serverEnvironmentAccess } from "../server/server-environment.js";
-
 export {
-  toExternalEvent,
   unpackExternalEvent,
   wrapBoundedContextOnline,
   wrapExternalEvent,

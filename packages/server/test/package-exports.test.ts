@@ -18,7 +18,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import * as serverRoot from "@spine-event-engine/server";
+import * as serverTesting from "@spine-event-engine/server/testing";
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
+import type { BrowserBackend } from "@spine-event-engine/server/browser";
 import type { GeneratedHandlerRegistry } from "@spine-event-engine/server/spi/handler-registry";
 
 // @ts-expect-error Handler ingestion is server implementation, not SPI.
@@ -82,6 +84,38 @@ describe("@spine-event-engine/server package exports", () => {
     expectTypeOf<
       "resetServerEnvironmentForTest" extends keyof RootExports ? true : false
     >().toEqualTypeOf<false>();
+  });
+
+  it("keeps package-only implementation helpers out of the testing entrypoint", () => {
+    const source = readFileSync(new URL("../src/testing/index.ts", import.meta.url), "utf8");
+
+    for (const name of [
+      "commitFenced",
+      "managedServerApplicationAccess",
+      "serverEnvironmentAccess",
+      "toExternalEvent",
+    ]) {
+      expect(source).not.toMatch(new RegExp(`export\\s*\\{[^}]*\\b${name}\\b`, "u"));
+      expect(name in serverTesting).toBe(false);
+    }
+    expect(Object.keys(serverTesting).sort()).toEqual([
+      "ServerTests",
+      "resetServerEnvironmentForTest",
+      "unpackExternalEvent",
+      "wrapBoundedContextOnline",
+      "wrapExternalEvent",
+      "wrapExternalEventsWanted",
+    ]);
+    expect(Object.keys(serverTesting.ServerTests).sort()).toEqual(["resetEnvironment"]);
+  });
+
+  it("requires a non-empty backend URL set at the browser type boundary", () => {
+    // @ts-expect-error Browser backend sets must contain at least one URL.
+    const empty: BrowserBackend = { baseUrls: [] };
+    const populated: BrowserBackend = { baseUrls: ["https://backend.example.test"] };
+
+    expectTypeOf(empty).toMatchTypeOf<BrowserBackend>();
+    expectTypeOf(populated).toMatchTypeOf<BrowserBackend>();
   });
 
   it("resolves root and testing subpaths through package exports on one singleton graph", () => {

@@ -3,7 +3,7 @@ import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { CommandSchema } from "@spine-event-engine/proto";
 import { EnvironmentType, ServerEnvironment, ShardIndex } from "@spine-event-engine/server";
-import { commitFenced, serverEnvironmentAccess } from "@spine-event-engine/server/testing";
+import { commitFenced, serverEnvironmentAccess } from "../../server/test-fixtures/internal.mjs";
 import process from "node:process";
 
 const endpoint = process.env.DELIVERY_SERVER_URL;

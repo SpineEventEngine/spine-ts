@@ -5,9 +5,10 @@ This reference describes the public server contracts for coding agents.
 ## Testing entry point
 
 `@spine-event-engine/server/testing` is for framework-package tests and controlled
-in-process fixtures. It exposes test reset, integration-frame, and managed-host
-helpers; it is deliberately outside the end-user root API and may change with
-test infrastructure rather than normal server compatibility guarantees.
+in-process fixtures. It exposes test reset and integration-frame helpers; managed-host
+internals remain repository-only fixture code. This entrypoint is deliberately outside
+the end-user root API and may change with test infrastructure rather than normal server
+compatibility guarantees.
 
 ## Delivery SPI
 

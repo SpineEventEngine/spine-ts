@@ -45,7 +45,7 @@ interface CombinedConfig extends DeploymentConfig {
 }
 
 interface GatewayConfig extends CombinedConfig {
-  readonly backendUrls?: readonly string[];
+  readonly backendUrls?: readonly [string, ...string[]];
   readonly discovery?: { readonly serviceName: string; readonly port: number };
 }
 
@@ -221,14 +221,16 @@ const DeploymentValues = Object.freeze({
     return value;
   },
 
-  backendUrls(environment: NodeJS.ProcessEnv): readonly string[] {
+  backendUrls(environment: NodeJS.ProcessEnv): readonly [string, ...string[]] {
     const configured = environment.BACKEND_URLS;
     if (configured === undefined || configured.length === 0)
       return [DeploymentValues.required(environment, "BACKEND_URL")];
     const values = configured.split(",").map((value) => value.trim());
     if (values.some((value) => value.length === 0))
       throw new Error("Invalid required configuration: BACKEND_URLS.");
-    return values;
+    const [first, ...rest] = values;
+    if (first === undefined) throw new Error("Invalid required configuration: BACKEND_URLS.");
+    return [first, ...rest];
   },
 
   /**

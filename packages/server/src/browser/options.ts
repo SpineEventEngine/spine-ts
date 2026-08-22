@@ -92,7 +92,7 @@ export type BrowserBackend =
       /**
        * Supplies a non-empty ordered set of canonical HTTP(S) backend origins.
        */
-      readonly baseUrls: readonly string[];
+      readonly baseUrls: readonly [string, ...string[]];
     };
 
 /**
