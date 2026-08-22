@@ -28,8 +28,8 @@
       "default": "./dist/browser/index.js"
     },
     "./spi/handler-registry": {
-      "types": "./dist/handler/generated-handler-registry.d.ts",
-      "default": "./dist/handler/generated-handler-registry.js"
+      "types": "./dist/spi/handler-registry.d.ts",
+      "default": "./dist/spi/handler-registry.js"
     },
     "./spi/delivery": {
       "types": "./dist/spi/delivery.d.ts",

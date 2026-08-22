@@ -16,6 +16,15 @@ Delivery adapters import `conditionalPickUp` from
 conditional-pickup capability for a `DeliveryWorkRegistry`; it is not part of
 the server root API and does not create delivery work on its own.
 
+## Generated handler-registry SPI
+
+Generated model modules import only their registry data types from
+`@spine-event-engine/server/spi/handler-registry`. The stable contract is the
+version-3 `GeneratedHandlerRegistry`, its entity groups, handler records, kinds,
+arity, and optional `where` data. The subpath has no runtime values. Server-side
+ingestion, validation errors, and their error codes are implementation details;
+generated code must not depend on them.
+
 ## Integration broker and event origin
 
 Each `BoundedContext` creates and closes exactly one private integration broker.

@@ -11,6 +11,19 @@
 - Owner paths: `scripts/` policy/consumer tests and helpers, this combined
   work record, and the Wave 14 contract report.
 
+## Review-correction implementation status
+
+- Scope is now limited to the accepted publisher clean-state correction, the
+  server generated-handler-registry SPI facade, four beginner README paths,
+  and durable T-0216/T-0217 records. Production ingestion remains internal and
+  continues to use its existing implementation.
+- RED/GREEN evidence is recorded in T-0217 TASK.md. The disposable snapshot.2
+  publisher and its instructions were changed outside Git and must not be
+  included in a commit. No publication command was run.
+- Focused export and documentation policy checks are green. The mandatory cheap
+  preflight and specialist review wave remain the next actions; `verify:release`
+  is intentionally reserved for the orchestrator after review convergence.
+
 ## Contract checkpoint
 
 - Commit `a7eaf6b879831315213743192084e2d64eb0fdb2` added red acceptance tests

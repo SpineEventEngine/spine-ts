@@ -24,6 +24,8 @@ type RootExports = typeof import("@spine-event-engine/server");
 
 type BrowserExports = typeof import("@spine-event-engine/server/browser");
 
+type HandlerRegistrySpiExports = typeof import("@spine-event-engine/server/spi/handler-registry");
+
 describe("@spine-event-engine/server package exports", () => {
   it("keeps browser and durable-auth APIs out of the native root and exposes them only at browser", async () => {
     expect("BrowserServer" in serverRoot).toBe(false);
@@ -110,6 +112,24 @@ describe("@spine-event-engine/server package exports", () => {
     );
 
     expect(output).toBe("function");
+  });
+
+  it("exposes generated handler-registry data only through its SPI subpath", async () => {
+    expectTypeOf<
+      "GeneratedHandlerRegistry" extends keyof HandlerRegistrySpiExports ? true : false
+    >().toEqualTypeOf<true>();
+    expectTypeOf<
+      "HandlerRegistryIngestor" extends keyof HandlerRegistrySpiExports ? true : false
+    >().toEqualTypeOf<false>();
+    expectTypeOf<
+      "HandlerRegistryIngestionError" extends keyof HandlerRegistrySpiExports ? true : false
+    >().toEqualTypeOf<false>();
+    expectTypeOf<
+      "RegistryIngestionErrorCode" extends keyof HandlerRegistrySpiExports ? true : false
+    >().toEqualTypeOf<false>();
+
+    const registry = await import("@spine-event-engine/server/spi/handler-registry");
+    expect(Object.keys(registry)).toEqual([]);
   });
 
   it("restores local defaults after testing reset from a production-profile process", () => {

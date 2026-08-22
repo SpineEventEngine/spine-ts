@@ -8,6 +8,34 @@ implement the same storage contract for a durable provider.
 This is an experimental snapshot package. Use Node 24 or newer and generated
 Protobuf record schemas before configuring storage.
 
+## Install and write one record
+
+Install the storage contract and Protobuf-ES in the application or adapter that
+owns persistence:
+
+```sh
+pnpm add @spine-event-engine/storage@snapshot @bufbuild/protobuf
+```
+
+The following in-memory record flow is suitable for a local test:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { InMemoryStorageFactory, RecordSpec } from "@spine-event-engine/storage";
+
+const records = new InMemoryStorageFactory().createRecordStorage(
+  { name: "Users", multitenant: false },
+  new RecordSpec({
+    recordType: StringValueSchema,
+    idKind: "string",
+    extractId: (user) => user.value,
+  }),
+);
+await records.write(create(StringValueSchema, { value: "ava" }));
+console.log((await records.read("ava"))?.value);
+```
+
 For detailed query, lifecycle, and adapter notes, see
 [REFERENCE documentation for agents](REFERENCE.md).
 

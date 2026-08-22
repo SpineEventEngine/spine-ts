@@ -22,41 +22,31 @@ pnpm add -D @spine-event-engine/testing@snapshot
 - ✅ Runs on an ephemeral local server with predictable cleanup.
 - ✅ Waits for genuinely asynchronous results with bounded polling.
 
-## 🚀 Start a test
+## ✅ Run one command through a BlackBox
 
-Create a `BlackBox` from a built context or its builder. It starts an ephemeral
-local server and closes it when the test is finished.
+Create a `BlackBox` from a built application context, run a bounded asynchronous
+operation, and assert its observed value. It starts an ephemeral local server
+and closes it when the test is finished.
 
-<!-- docs-snippet-path: packages/testing/src/black-box/black-box.ts -->
+<!-- docs-snippet-path: examples/todo/test/black-box.test.ts -->
 
 ```ts
 import { BlackBox } from "@spine-event-engine/testing";
 import { BoundedContext } from "@spine-event-engine/server";
 
 const box = await BlackBox.from(BoundedContext.singleTenant("Tasks"));
-const guest = box.asGuest();
+const ready = await box.eventually(
+  async () => "ready",
+  (value) => value === "ready",
+);
+if (ready !== "ready") throw new Error("BlackBox did not observe the operation result.");
 await box.close();
-void guest;
 ```
 
 Create a named scope when a test needs to act as a particular user. Scopes send
 queries, post commands, and create subscriptions through the public client API.
 
-<!-- docs-snippet-path: examples/todo/test/black-box.test.ts -->
-
-```ts
-import { create } from "@bufbuild/protobuf";
-import { CreateTaskSchema } from "../generated/spine/examples/todo/task_commands_pb.js";
-import type { BlackBox } from "@spine-event-engine/testing";
-
-declare const box: BlackBox;
-const alice = box.onBehalfOf("alice");
-const acknowledgement = await alice.post(
-  CreateTaskSchema,
-  create(CreateTaskSchema, { id: { value: "task-42" }, title: "First task" }),
-);
-if (acknowledgement.kind !== "ok") throw new Error("CreateTask was not accepted.");
-```
+Use `box.onBehalfOf("alice")` when the command must carry a named actor.
 
 ## ⏳ Observe an asynchronous result
 
@@ -66,14 +56,16 @@ immediate command result directly instead of polling for it.
 <!-- docs-snippet-path: packages/testing/src/black-box/black-box.ts -->
 
 ```ts
-import type { BlackBox } from "@spine-event-engine/testing";
-
-declare const box: BlackBox;
-const value = await box.eventually(
-  async () => "ready",
-  (result: string) => result === "ready",
-  { timeoutMs: 500, intervalMs: 5 },
-);
+async function waitForReady(box: import("@spine-event-engine/testing").BlackBox) {
+  return box.eventually(
+    async () => "ready",
+    (result: string) => result === "ready",
+    {
+      timeoutMs: 500,
+      intervalMs: 5,
+    },
+  );
+}
 ```
 
 `BlackBox.from()` accepts fixed `tenant`, `zoneId`, `timeoutMs`, and

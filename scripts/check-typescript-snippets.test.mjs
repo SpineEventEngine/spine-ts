@@ -151,6 +151,41 @@ describe("TypeScript documentation snippets", () => {
     }
   });
 
+  it("puts each Wave 14 package install and connected first success before workspace guidance", () => {
+    for (const document of [
+      "packages/core/README.md",
+      "packages/proto/README.md",
+      "packages/storage/README.md",
+      "packages/testing/README.md",
+    ]) {
+      const source = readFileSync(resolve(root, document), "utf8");
+      const install = source.search(
+        new RegExp(`pnpm add(?: -D)? @spine-event-engine/${document.split("/")[1]}@snapshot`, "u"),
+      );
+      const workspace = source.indexOf("pnpm typecheck:build");
+      const firstSuccess = source.indexOf(
+        document === "packages/testing/README.md" ? "## ✅" : "## Install",
+      );
+
+      expect(install, `${document} needs an external install command`).toBeGreaterThan(-1);
+      expect(firstSuccess, `${document} needs a first-success section`).toBeGreaterThan(-1);
+      if (workspace >= 0) {
+        expect(install, `${document} install must precede workspace guidance`).toBeLessThan(
+          workspace,
+        );
+        expect(firstSuccess, `${document} success must precede workspace guidance`).toBeLessThan(
+          workspace,
+        );
+      }
+    }
+
+    const testing = readFileSync(resolve(root, "packages/testing/README.md"), "utf8");
+    expect(testing).toContain("const box = await BlackBox.from(");
+    expect(testing).toContain("const ready = await box.eventually(");
+    expect(testing).toContain('ready !== "ready"');
+    expect(testing).not.toContain("declare const box: BlackBox;");
+  });
+
   it("keeps source-linked beginner snippets free of source copyright headers", () => {
     const snippets = [
       [

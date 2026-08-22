@@ -1,6 +1,6 @@
 # T-0217: Wave 14 Package And SPI Boundaries
 
-Status: In progress
+Status: Implementation complete; focused verification complete; review pending
 Start: `2026-08-22 Europe/Lisbon`
 End: Pending
 Baseline commit: `e72222053d20a8828ca63aa4c76d7c13dc9216b5`
@@ -40,9 +40,9 @@ only clean merged Wave worktrees after durable integration.
 
 Selected skills read before task actions:
 
-| Skill | Source | Applicability | Instructions Applied |
-| --- | --- | --- | --- |
-| `receiving-code-review` | `~/.agents/skills/receiving-code-review/SKILL.md` | The task implements a completed review batch. | Each finding was independently checked against the current tree before acceptance. |
+| Skill                     | Source                                              | Applicability                                                                  | Instructions Applied                                                                           |
+| ------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `receiving-code-review`   | `~/.agents/skills/receiving-code-review/SKILL.md`   | The task implements a completed review batch.                                  | Each finding was independently checked against the current tree before acceptance.             |
 | `test-driven-development` | `~/.agents/skills/test-driven-development/SKILL.md` | The publisher regression and SPI boundary change require behavior-first proof. | Add focused tests first, observe the expected failures, then implement the minimum correction. |
 
 Skills passed to the implementer: both selected skills and the governing build
@@ -106,9 +106,9 @@ Out of scope:
 
 ## Assignment Gate
 
-| Existing role/function | Bounded ownership | Explicit model | Explicit reasoning | Child spawning | Runtime telemetry |
-| --- | --- | --- | --- | --- | --- |
-| `implementer` | All correction files and focused tests in this worktree, plus the two disposable snapshot.2 files outside Git | `gpt-5.6-terra` | medium | Prohibited | Desktop immutable dispatch fields are authoritative; child self-introspection may be unavailable. |
+| Existing role/function | Bounded ownership                                                                                             | Explicit model  | Explicit reasoning | Child spawning | Runtime telemetry                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------- | --------------- | ------------------ | -------------- | ------------------------------------------------------------------------------------------------- |
+| `implementer`          | All correction files and focused tests in this worktree, plus the two disposable snapshot.2 files outside Git | `gpt-5.6-terra` | medium             | Prohibited     | Desktop immutable dispatch fields are authoritative; child self-introspection may be unavailable. |
 
 ## Work Log
 
@@ -131,23 +131,28 @@ Out of scope:
 
 ## Tests Run
 
-- Pending red/green evidence from the implementation owner.
+- RED: `node /Users/armiol/development/experiments/spine-ts-wave14-publication/publish-spine-ts-2.0.0-snapshot.2.mjs --self-test` failed with `Checkout must be completely clean` after ignored `node_modules` output.
+- GREEN: the same external self-test passed, proving ignored preparation output is accepted while ordinary untracked and concealed tracked mutations remain rejected.
+- RED: `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/package-exports.test.ts --passWithNoTests` failed because the SPI runtime exported `HandlerRegistryIngestor` and `HandlerRegistryIngestionError`.
+- GREEN: `pnpm typecheck:build:generated && pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/package-exports.test.ts --passWithNoTests` passed 8/8.
+- RED: `pnpm --config.verify-deps-before-run=false exec vitest run scripts/check-typescript-snippets.test.mjs --passWithNoTests` failed because core lacked an external install-first path.
+- GREEN: the same focused policy suite passed 17/17; `node docs/check-typescript-snippets.mjs packages/core/README.md packages/proto/README.md packages/storage/README.md packages/testing/README.md` passed.
 
 ## Coverage Result
 
-- Pending focused coverage and final release evidence.
+- Focused policy/export suites pass. No focused coverage run was selected because these are export-map and documentation-policy assertions. Final release verification is explicitly pending orchestrator review convergence.
 
 ## Documentation And Public API Impact
 
-| Area | Impact |
-| --- | --- |
-| Package README impact | Four public package onboarding flows change. |
-| TypeDoc/API docs impact | The handler-registry SPI becomes contract-only and is documented. |
-| Public API additions/removals | Accidental ingestion implementation exports are removed from the SPI subpath. |
-| Framework `USER_GUIDE.md` impact | N/A; no framework workflow changes. |
-| Example `USER_GUIDE.md` impact | N/A; examples are used only as linked source context. |
-| API examples | The testing README receives one connected operation/assertion flow. |
-| Compatibility notes | Snapshot prerelease surface is narrowed to the already approved contract. |
+| Area                             | Impact                                                                        |
+| -------------------------------- | ----------------------------------------------------------------------------- |
+| Package README impact            | Four public package onboarding flows change.                                  |
+| TypeDoc/API docs impact          | The handler-registry SPI becomes contract-only and is documented.             |
+| Public API additions/removals    | Accidental ingestion implementation exports are removed from the SPI subpath. |
+| Framework `USER_GUIDE.md` impact | N/A; no framework workflow changes.                                           |
+| Example `USER_GUIDE.md` impact   | N/A; examples are used only as linked source context.                         |
+| API examples                     | The testing README receives one connected operation/assertion flow.           |
+| Compatibility notes              | Snapshot prerelease surface is narrowed to the already approved contract.     |
 
 ## Security Impact
 
@@ -164,7 +169,14 @@ boundaries, deserialization, and logging are unaffected.
 
 ## Review Waves And Dispositions
 
-- Pending implementation and focused checks.
+| Concern                    | Disposition                                                         |
+| -------------------------- | ------------------------------------------------------------------- |
+| Code style/maintainability | Pending affected review: facade and publisher guard changed.        |
+| Documentation completeness | Pending affected review: four READMEs and server reference changed. |
+| TypeScript/API docs        | Pending affected review: public SPI declaration/export narrowed.    |
+| Performance/reliability    | Pending affected review: publisher clean-state behavior changed.    |
+
+No security review is invoked: this is not final release readiness and the external publisher remains credential-free and non-publishing by default.
 
 ## Integration Result
 
