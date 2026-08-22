@@ -34,6 +34,12 @@ type RootExports = typeof import("@spine-event-engine/server");
 
 type BrowserExports = typeof import("@spine-event-engine/server/browser");
 
+type ForbiddenHandlerRegistrySpiTypes = [
+  HandlerRegistryIngestor,
+  HandlerRegistryIngestionError,
+  RegistryIngestionErrorCode,
+];
+
 describe("@spine-event-engine/server package exports", () => {
   it("keeps browser and durable-auth APIs out of the native root and exposes them only at browser", async () => {
     expect("BrowserServer" in serverRoot).toBe(false);
@@ -123,10 +129,11 @@ describe("@spine-event-engine/server package exports", () => {
   });
 
   it("exposes generated handler-registry data only through its SPI subpath", async () => {
-    expectTypeOf<GeneratedHandlerRegistry>().toMatchTypeOf<{
+    expectTypeOf<GeneratedHandlerRegistry>().toExtend<{
       readonly version: 3;
       readonly entities: readonly unknown[];
     }>();
+    expectTypeOf<ForbiddenHandlerRegistrySpiTypes>().toEqualTypeOf<ForbiddenHandlerRegistrySpiTypes>();
 
     const registry = await import("@spine-event-engine/server/spi/handler-registry");
     expect(Object.keys(registry)).toEqual([]);

@@ -34,6 +34,11 @@
   now directly asserts the allowed registry type and uses expected-error type
   imports to prove all three forbidden ingestion exports remain unavailable.
   The required ESLint-project `tsc --noEmit` and focused export suite are green.
+- The negative imports now feed a compile-time-only tuple assertion, satisfying
+  focused ESLint while retaining no runtime imports; the allowed-contract
+  assertion uses current Vitest `toExtend` rather than deprecated
+  `toMatchTypeOf`. Focused ESLint, tooling TypeScript, and the 8/8 export suite
+  are green.
 
 ## Contract checkpoint
 

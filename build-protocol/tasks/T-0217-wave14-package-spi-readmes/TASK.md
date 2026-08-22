@@ -147,6 +147,11 @@ Out of scope:
   uses a meaningful type assertion, and has `@ts-expect-error` type imports for
   each forbidden ingestion symbol. GREEN: the specified typecheck passed and
   `packages/server/test/package-exports.test.ts` passed 8/8.
+- Second diagnostic correction: ESLint required the negative imports to
+  participate in a compile-time-only tuple, and Vitest deprecated
+  `toMatchTypeOf`. The test now asserts that tuple without creating runtime
+  imports and uses `toExtend` for the allowed data-contract shape. GREEN:
+  focused ESLint, the tooling typecheck, and the export suite passed 8/8.
 
 ## Coverage Result
 
