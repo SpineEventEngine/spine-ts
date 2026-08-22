@@ -200,7 +200,13 @@ This task remains in progress pending final verification and integration.
   continues through its TERM/KILL fail-closed path rather than declaring a
   group gone. The regression passed and the real direct-ignore/descendant
   timeout tests passed 20/20 across ten independent runs. Final verification
-  and integration remain pending.
+  and integration remained pending.
+- `2026-08-22`: The mandatory cheap preflight was restarted after the POSIX
+  liveness correction and passed every shared gate plus 90/90 selected tests.
+  The converged `pnpm verify:release` then passed: 277 test files and 4,439
+  tests passed; 4 files and 19 tests were intentionally skipped. Coverage met
+  every global threshold: 93.28% statements, 90% branches, 92.81% functions,
+  and 94.44% lines. Integration remains pending.
 
 ## Affected Re-Review Assignments
 
@@ -215,7 +221,8 @@ This task remains in progress pending final verification and integration.
 | Documentation         | `documentation_reviewer`           | `gpt-5.6-luna` / medium | Public install commands and snapshot.2/snapshot.3 publication records               | Prohibited     | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
 | Style/maintainability | `style_maintainability_reviewer`   | `gpt-5.6-terra` / high  | Supervisor structure/diagnostics/test quality and non-published fixture seam        | Prohibited     | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
 
-These lanes are pending affected re-review; no clean disposition is claimed.
+These lanes were pending at dispatch; their accepted outcomes are recorded
+below.
 
 ## Final Affected Re-Review Correction Batch
 
