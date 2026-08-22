@@ -1,0 +1,171 @@
+# T-0217: Wave 14 Package And SPI Boundaries
+
+Status: In progress
+Start: `2026-08-22 Europe/Lisbon`
+End: Pending
+Baseline commit: `e72222053d20a8828ca63aa4c76d7c13dc9216b5`
+Task log path: `build-protocol/tasks/T-0217-wave14-package-spi-readmes/TASK.md`
+Branch: `codex/wave14-review-corrections`
+Worktree: `.worktrees/wave14-review-corrections`
+Authoring sub-agent: implementer dispatch pending
+Reviewer sub-agents: Pending
+Implementation commit: Pending branch commit
+Final branch HEAD: Pending branch commit
+
+Task classification: High-risk
+Classification reason: the accepted correction narrows a published TypeScript
+SPI, changes release tooling behavior, and corrects public package onboarding.
+
+## Objective
+
+Close every confirmed Wave 14 review finding: make the snapshot.2 disposable
+publisher's documented prepare-then-publish flow executable; expose only the
+stable generated-handler registry data contract at the public server SPI;
+document that SPI; make the core, proto, storage, and testing READMEs begin with
+a meaningful external-consumer success; reconcile Wave task records; and remove
+only clean merged Wave worktrees after durable integration.
+
+## Required Inputs Read
+
+- `AGENTS.md`
+- `build-protocol/BUILD_PROTOCOL.md`
+- `build-protocol/CODE_QUALITY.md`
+- `build-protocol/CONTRIBUTOR_WORKFLOW.md`
+- `build-protocol/tasks/T-0216-npm-snapshot-publication/TASK.md`
+- `.planning/2026-08-21-wave14-package-spi-readmes/task_plan.md`
+- the repository-grounded Wave 14 review against
+  `ea7ec5e8cf7f0cbcdfa78befd45a41788aee8c8c..e72222053d20a8828ca63aa4c76d7c13dc9216b5`
+
+## Skill Applicability
+
+Selected skills read before task actions:
+
+| Skill | Source | Applicability | Instructions Applied |
+| --- | --- | --- | --- |
+| `receiving-code-review` | `~/.agents/skills/receiving-code-review/SKILL.md` | The task implements a completed review batch. | Each finding was independently checked against the current tree before acceptance. |
+| `test-driven-development` | `~/.agents/skills/test-driven-development/SKILL.md` | The publisher regression and SPI boundary change require behavior-first proof. | Add focused tests first, observe the expected failures, then implement the minimum correction. |
+
+Skills passed to the implementer: both selected skills and the governing build
+protocol. No planning skill is selected because the accepted public-contract
+shape is explicit and presents no unresolved architectural choice.
+
+## Scope
+
+In scope:
+
+- focused publisher and SPI regression tests;
+- the narrow server handler-registry contract facade, export mapping, and API
+  reference;
+- beginner-flow corrections in four package READMEs;
+- snapshot.2 disposable publisher/instructions outside Git;
+- T-0216/T-0217 status, scope, evidence, review, and closure records;
+- safe cleanup of verified clean and merged Wave 14 worktrees after integration.
+
+Out of scope:
+
+- new package APIs beyond narrowing the accepted SPI;
+- snapshot.4 or another publication;
+- NPM registry mutation, credential changes, tags, or pushes to the official
+  SpineEventEngine repository;
+- deletion of dirty or unmerged worktrees.
+
+## Behavior-Focused Acceptance Criteria
+
+1. A test reproduces the snapshot.2 prepare-then-publish cleanliness failure;
+   after correction, ignored install/build outputs do not block a second
+   invocation while tracked or non-ignored untracked changes still do.
+2. The public `server/spi/handler-registry` declaration exports only the stable
+   version/registry/handler-record data-contract types and no ingestion class or
+   ingestion error implementation; its reference documentation explains the
+   contract and compatibility boundary.
+3. Each affected README gives an external installation step and one connected,
+   meaningful first success before contributor or advanced material.
+4. Durable task records accurately describe integrated Wave work and include
+   this Human-Imposed Requirements Ledger and complete review dispositions.
+5. Focused checks, relevant specialist review, and one converged
+   `verify:release` pass succeed before integration.
+6. Feature commits and integration are pushed immediately to `origin`; no NPM
+   publication or official-repository push occurs.
+7. Only clean Wave worktrees whose commits are contained in `origin/main` are
+   removed. Dirty or unmerged worktrees remain for separate assessment.
+
+## Human-Imposed Requirements Ledger
+
+- Address every finding from the repository-grounded Wave 14 review.
+- Do not rely on conversational memory; use current repository and planning
+  evidence.
+- Continue autonomously under the build protocol.
+- Preserve the exact version-commit history already established for snapshot.2
+  and snapshot.3; this correction does not bump versions.
+- Keep publication manual and never publish a package during implementation or
+  testing.
+- Keep disposable publisher files outside Git and free of credentials.
+- Push implementation only to configured `origin`; do not push to the official
+  SpineEventEngine repository.
+- Preserve unrelated user changes in the primary checkout.
+
+## Assignment Gate
+
+| Existing role/function | Bounded ownership | Explicit model | Explicit reasoning | Child spawning | Runtime telemetry |
+| --- | --- | --- | --- | --- | --- |
+| `implementer` | All correction files and focused tests in this worktree, plus the two disposable snapshot.2 files outside Git | `gpt-5.6-terra` | medium | Prohibited | Desktop immutable dispatch fields are authoritative; child self-introspection may be unavailable. |
+
+## Work Log
+
+- `2026-08-22`: The orchestrator verified all five accepted findings against
+  current files, preserved the dirty primary checkout, created this isolated
+  branch from `origin/main`, and recorded the assignment before implementation.
+
+## Decisions
+
+- Use a dedicated contract facade rather than annotations such as `@internal`,
+  because emitted TypeScript declarations remain importable without
+  `stripInternal`.
+- Ignore only Git-ignored preparation outputs in the disposable publisher's
+  cleanliness gate; tracked and ordinary untracked changes remain fatal.
+
+## Human Questions And Answers
+
+- Blocking questions: none.
+- Non-blocking questions: none.
+
+## Tests Run
+
+- Pending red/green evidence from the implementation owner.
+
+## Coverage Result
+
+- Pending focused coverage and final release evidence.
+
+## Documentation And Public API Impact
+
+| Area | Impact |
+| --- | --- |
+| Package README impact | Four public package onboarding flows change. |
+| TypeDoc/API docs impact | The handler-registry SPI becomes contract-only and is documented. |
+| Public API additions/removals | Accidental ingestion implementation exports are removed from the SPI subpath. |
+| Framework `USER_GUIDE.md` impact | N/A; no framework workflow changes. |
+| Example `USER_GUIDE.md` impact | N/A; examples are used only as linked source context. |
+| API examples | The testing README receives one connected operation/assertion flow. |
+| Compatibility notes | Snapshot prerelease surface is narrowed to the already approved contract. |
+
+## Security Impact
+
+The disposable publisher continues to expose no credentials and permits no
+registry mutation without explicit `--publish`. Dependencies, IPC, tenant
+boundaries, deserialization, and logging are unaffected.
+
+## Verification
+
+- Selected profile: `verify:release`, because this correction touches a public
+  package boundary and release tooling.
+- Mandatory cheap preflight and relevant specialist review precede the single
+  converged release run.
+
+## Review Waves And Dispositions
+
+- Pending implementation and focused checks.
+
+## Integration Result
+
+Pending.
