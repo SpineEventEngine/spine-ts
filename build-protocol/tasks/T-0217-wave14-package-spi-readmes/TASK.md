@@ -11,7 +11,7 @@ Authoring agent/function: `/root/wave14_review_corrections`, existing `implement
 Configured dispatch: `gpt-5.6-terra` / `medium` (explicit; runtime self-telemetry unavailable)
 Reviewer sub-agents: Not yet dispatched; review remains pending
 Implementation history: `159aed14a`, `4d2c3fbd3`, `3ecc9a56d`, and `5d19572f5`
-Current review basis: `5d19572f5`; correction batch commit pending
+Current review basis: `5d19572f5`; accepted review correction batch: `a4df30c2f`
 Final branch HEAD: pending final review/verification; do not infer from this task record
 
 Task classification: High-risk
