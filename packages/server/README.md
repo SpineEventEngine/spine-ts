@@ -5,12 +5,12 @@ context. Use it to assemble contexts and expose native Connect/gRPC-compatible
 services. Browser hosting is deliberately a separate entry point.
 
 > **Experimental prerelease.** Install an exact snapshot while this API evolves:
-> `2.0.0-snapshot.3` may remove earlier prerelease import paths.
+> Snapshot releases may remove earlier prerelease import paths.
 
 ## Install and prerequisites
 
 ```bash
-pnpm add @spine-event-engine/server@2.0.0-snapshot.3
+pnpm add @spine-event-engine/server@snapshot
 ```
 
 Use Node.js in ESM mode. Before adding entities, generate your application
@@ -64,7 +64,7 @@ browser-facing Gateway, install the optional auth peer and import the browser
 entry point explicitly:
 
 ```bash
-pnpm add @spine-event-engine/server@2.0.0-snapshot.3 @spine-event-engine/auth@2.0.0-snapshot.3
+pnpm add @spine-event-engine/server@snapshot @spine-event-engine/auth@snapshot
 ```
 
 ```ts

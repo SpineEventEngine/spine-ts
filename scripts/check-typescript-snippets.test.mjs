@@ -151,6 +151,17 @@ describe("TypeScript documentation snippets", () => {
     }
   });
 
+  it("does not direct public consumers to an unpublished snapshot version", () => {
+    for (const document of [
+      "README.md",
+      ...documentedPackageReadmes,
+      "docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md",
+    ]) {
+      const source = readFileSync(resolve(root, document), "utf8");
+      expect(source, document).not.toMatch(/(?:pnpm add|npm install)[^\n]*@2\.0\.0-snapshot\.3/u);
+    }
+  });
+
   it("puts each Wave 14 package install and connected first success before workspace guidance", () => {
     for (const document of [
       "packages/core/README.md",

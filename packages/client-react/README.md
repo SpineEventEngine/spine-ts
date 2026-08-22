@@ -18,7 +18,7 @@ generated Proto model. Include every direct import used by the examples:
 
 ```sh
 pnpm add react@^19.2.8 @types/react@^19.2.7
-pnpm add @bufbuild/protobuf@2.12.1 @spine-event-engine/core@2.0.0-snapshot.3 @spine-event-engine/proto@2.0.0-snapshot.3 @spine-event-engine/client-web@2.0.0-snapshot.3 @spine-event-engine/client-react@2.0.0-snapshot.3
+pnpm add @bufbuild/protobuf@2.12.1 @spine-event-engine/core@snapshot @spine-event-engine/proto@snapshot @spine-event-engine/client-web@snapshot @spine-event-engine/client-react@snapshot
 ```
 
 Generate and publish the application's model schemas using the [Proto tools

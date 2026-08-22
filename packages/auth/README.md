@@ -11,7 +11,7 @@ not perform those routines themselves.
 ## Install and prerequisites
 
 ```bash
-pnpm add @spine-event-engine/auth@2.0.0-snapshot.3
+pnpm add @spine-event-engine/auth@snapshot
 ```
 
 Use it in a Node.js application that owns its listener, credential extraction,

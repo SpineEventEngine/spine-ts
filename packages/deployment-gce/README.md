@@ -7,12 +7,12 @@ keeps application nodes, the Gateway, and the simple delivery server private;
 you provide the public TLS, authentication, and traffic-routing edge that fits
 your organisation.
 
-This experimental `2.0.0-snapshot.3` package is for operators who already own
+This experimental snapshot package is for operators who already own
 the application images and their Google Cloud environment. Install its library
 API when writing the application or Gateway entrypoints:
 
 ```bash
-pnpm add @spine-event-engine/deployment-gce@2.0.0-snapshot.3
+pnpm add @spine-event-engine/deployment-gce@snapshot
 ```
 
 Copy the packaged Terraform directory into your deployment repository only

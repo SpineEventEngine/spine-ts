@@ -9,12 +9,12 @@ storage and supplies its configuration.
 This is a guide for people deploying an application. For exact discovery API
 and lifecycle behavior, see the [deployment reference](REFERENCE.md).
 
-This experimental `2.0.0-snapshot.3` package is for operators who already own
+This experimental snapshot package is for operators who already own
 an application, images, and a GKE cluster. Install its library API when writing
 the Gateway or application entrypoint:
 
 ```bash
-pnpm add @spine-event-engine/deployment-gke@2.0.0-snapshot.3
+pnpm add @spine-event-engine/deployment-gke@snapshot
 ```
 
 Copy the packaged Terraform directory into an operator deployment repository

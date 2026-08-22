@@ -8,7 +8,7 @@ This is an experimental snapshot. Install the snapshot explicitly while its API
 and packaging continue to evolve:
 
 ```sh
-pnpm add @spine-event-engine/client-node@2.0.0-snapshot.3
+pnpm add @spine-event-engine/client-node@snapshot
 ```
 
 For detailed public contracts, lifecycle rules, and limits, read the

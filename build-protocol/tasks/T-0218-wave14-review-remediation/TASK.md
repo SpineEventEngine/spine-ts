@@ -17,6 +17,10 @@ convergence.
 
 ## Objective
 
+The registry contains `2.0.0-snapshot.2`; local workspace manifests and tested
+snapshot.3 artifacts are not registry-published. This remediation remains in
+progress.
+
 Resolve the repository findings from the fresh Wave 14 review, except findings
 that concern the disposable external publisher wrapper, which the human
 explicitly excluded.

@@ -9,7 +9,7 @@ This is an experimental snapshot. Install the snapshot explicitly while its CLI
 and generated-output contract continue to evolve:
 
 ```sh
-pnpm add -D @spine-event-engine/proto-tools@2.0.0-snapshot.3
+pnpm add -D @spine-event-engine/proto-tools@snapshot
 ```
 
 For configuration, manifest, and generated-output details, read the

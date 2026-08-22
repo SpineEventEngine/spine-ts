@@ -260,6 +260,9 @@ integrated, post-merge verified, and remotely synchronized. Wave 14 separately
 authorized the human-operated publication of experimental framework snapshots
 under the `snapshot` tag. That approval does not create an automated or
 unqualified `latest` release policy for later waves.
+The registry-published snapshot is `2.0.0-snapshot.2`; workspace
+`2.0.0-snapshot.3` remains a verified local artifact/version state and is not
+registry-published.
 
 Wave 8's T-0129 through T-0144 sequence is complete: the storage correction,
 delivery-policy cutover, validation upgrade, example and documentation
