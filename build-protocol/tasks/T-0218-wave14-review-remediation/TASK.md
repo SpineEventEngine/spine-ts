@@ -145,6 +145,10 @@ explicitly excluded.
 
 This task remains in progress pending final verification and integration.
 
+- `2026-08-22`: Cheap-preflight diagnostic: ESLint rejected deprecated
+  `toMatchTypeOf` calls in the browser backend boundary test. The equivalent
+  supported `toExtend` assertions preserve the populated backend proof.
+
 ## Affected Re-Review Assignments
 
 - Focused GREEN evidence: timeout/direct-ignore/diagnostic/descendant regressions

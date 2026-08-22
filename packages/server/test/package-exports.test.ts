@@ -114,8 +114,8 @@ describe("@spine-event-engine/server package exports", () => {
     const empty: BrowserBackend = { baseUrls: [] };
     const populated: BrowserBackend = { baseUrls: ["https://backend.example.test"] };
 
-    expectTypeOf(empty).toMatchTypeOf<BrowserBackend>();
-    expectTypeOf(populated).toMatchTypeOf<BrowserBackend>();
+    expectTypeOf(empty).toExtend<BrowserBackend>();
+    expectTypeOf(populated).toExtend<BrowserBackend>();
   });
 
   it("resolves root and testing subpaths through package exports on one singleton graph", () => {
