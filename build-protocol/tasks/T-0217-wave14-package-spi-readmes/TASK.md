@@ -190,6 +190,14 @@ create/post/acknowledgement/finally-close behavior. Cleanup, real README snippet
 compilation, focused policy, tooling TypeScript, formatting, and diff checks are
 green. The final release profile remains pending its single orchestrator rerun.
 
+The second final `verify:release` at `b049c3fc9` passed deterministic gates and
+reported 4,422 passing and 19 skipped tests, but one covered-suite timeout:
+the EntityRecord TypeDoc assertion in `scripts/check-api-docs.test.mjs` exceeded
+its 30-second hard limit while a full TypeDoc subprocess contended with parallel
+coverage work. The exact isolated file passed 3/3 in 25.41 seconds. Its timeout
+is now 60 seconds; final release verification remains pending the next single
+rerun.
+
 ## Review Waves And Dispositions
 
 | Concern                    | Disposition                                                                                                |

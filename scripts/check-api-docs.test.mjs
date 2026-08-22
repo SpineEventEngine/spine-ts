@@ -109,7 +109,7 @@ describe("storage API documentation inventory", () => {
 
   it("lists EntityRecord directly on the provider TypeDoc page", () => {
     expect(documentedModuleExports("packages/storage/src/provider")).toContain("EntityRecord");
-  }, 30_000);
+  }, 60_000);
 
   it("keeps tenant contracts in the provider module only", () => {
     const rootExports = moduleExports(resolve(repoRoot, "packages/storage/src/index.ts"));

@@ -54,6 +54,11 @@
   now the same top-level connected snippet; focused cleanup, snippet compiler,
   policy, tooling typecheck, format, and diff evidence is green. Final release
   rerun remains pending.
+- Second final release attempt at `b049c3fc9` passed deterministic gates and
+  4,422 tests (19 skipped), then timed out only in the EntityRecord TypeDoc
+  assertion's 30-second limit under parallel covered-suite contention. The exact
+  file passed 3/3 in 25.41 seconds; its hard timeout is now 60 seconds. No
+  production behavior changed; final release rerun remains pending.
 
 ## Contract checkpoint
 

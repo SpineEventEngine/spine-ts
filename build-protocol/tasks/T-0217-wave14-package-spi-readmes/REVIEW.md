@@ -69,6 +69,14 @@ necessity disposition. The correction makes it a top-level connected snippet.
 Focused cleanup, snippet compiler, policy, tooling TypeScript, formatting, and
 diff checks are green; final release verification remains pending its rerun.
 
+## Verification Stability Correction
+
+The second `verify:release` at `b049c3fc9` passed deterministic gates and
+4,422 tests with 19 skipped, then timed out only in the EntityRecord TypeDoc
+test's 30-second hard limit while the covered suite ran in parallel. The exact
+file passed 3/3 in 25.41 seconds. Its test-only timeout is 60 seconds; final
+release verification remains pending its rerun.
+
 ## Clean Results
 
 | Concern                    | Reviewer agent                                 | Result                                                                                            | Immutable configured profile / telemetry                         |
