@@ -250,3 +250,18 @@ real descendant-timeout behaviors (2 passed; unrelated cases filtered), all 13
 Message Board Gateway startup tests, `git diff --check`, and a clean status
 check. The dirty primary checkout was left untouched because it contains
 unrelated human work.
+
+## Final Integrated-Delta Review
+
+- Performance/reliability re-review: clean at integrated `origin/main`
+  `a398dc70c`. The existing role was dispatched explicitly as
+  `gpt-5.6-terra` / high. Only `ESRCH` is treated as a missing POSIX process
+  group; `EPERM` remains live and therefore continues escalation or fails
+  closed. No false-success cleanup path remains.
+- Style/maintainability re-review: clean at the same integrated ref. The
+  existing role was dispatched explicitly as `gpt-5.6-terra` / high. The
+  liveness helper is focused and testable, and the alive, gone, and
+  inaccessible outcomes are covered without duplicated lifecycle logic.
+- Runtime self-telemetry was unavailable; the immutable explicit dispatch
+  profiles above are the recorded evidence. Both reviewers were read-only and
+  spawned no children.
