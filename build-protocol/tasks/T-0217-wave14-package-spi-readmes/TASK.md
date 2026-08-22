@@ -13,7 +13,7 @@ Reviewers: complete clean wave and affected re-reviews recorded in `REVIEW.md`
 Implementation history: `159aed14a`, `4d2c3fbd3`, `3ecc9a56d`, and `5d19572f5`
 Current review basis: `5d19572f5`; accepted review correction batch: `a4df30c2f`
 Integration merge: `2841fbf21` on `origin/main`
-Final branch HEAD: `da40d2caf` integration closure record on `origin/main`
+Integration closure record: `da40d2caf` on `origin/main`
 
 Task classification: High-risk
 Classification reason: the accepted correction narrows a published TypeScript
