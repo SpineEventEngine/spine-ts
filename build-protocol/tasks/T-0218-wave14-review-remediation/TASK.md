@@ -69,9 +69,9 @@ explicitly excluded.
 
 ## Assignment Gate
 
-| Existing role/function | Bounded ownership | Explicit model | Explicit reasoning | Child spawning | Runtime metadata |
-| --- | --- | --- | --- | --- | --- |
-| `implementer` | All tests, runtime/API changes, documentation, and task records for this remediation branch | `gpt-5.6-terra` | medium | Prohibited | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
+| Existing role/function | Bounded ownership                                                                           | Explicit model  | Explicit reasoning | Child spawning | Runtime metadata                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------- | --------------- | ------------------ | -------------- | ------------------------------------------------------------------------ |
+| `implementer`          | All tests, runtime/API changes, documentation, and task records for this remediation branch | `gpt-5.6-terra` | medium             | Prohibited     | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
 
 ## Verification Plan
 
@@ -88,6 +88,7 @@ explicitly excluded.
 - `2026-08-22`: The orchestrator verified the review against `origin/main`,
   preserved the dirty primary checkout, created this isolated worktree, and
   recorded the implementation assignment before authoring changes.
+- `2026-08-22`: RED: after the frozen install, `pnpm --config.verify-deps-before-run=false exec vitest run scripts/snapshot-artifacts.test.mjs --passWithNoTests` failed because the new `snapshot-test-command-runner.mjs` module was absent. A strengthened RED then used a descendant that installs a `SIGTERM` handler and failed because it survived the timeout. GREEN: the focused `-t "terminates a timed-out command"` test passed 1/1 after adding a detached process-group runner that sends `SIGTERM`, polls, escalates to `SIGKILL`, and fails if the group remains. The regression starts a Node parent that forks a never-ending Node child, forces a 500 ms timeout, and proves the recorded child PID no longer exists. Full tarball-consumer commands now have a realistic 60-second per-command bound and a separate 180-second Vitest aggregate bound. The full artifact-consumer tests remain deferred until their normal generated build prerequisites exist in this fresh worktree; their current failure is missing `@spine-event-engine/auth` packed `dist` targets, not timeout behavior.
 
 ## Review Dispositions
 

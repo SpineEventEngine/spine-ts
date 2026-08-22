@@ -1,5 +1,4 @@
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -11,10 +10,36 @@ import {
   proveExactTarballConsumer,
   proveNativeServerTarballConsumer,
 } from "./snapshot-artifacts.mjs";
+import { runBoundedCommand } from "./snapshot-test-command-runner.mjs";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 
 describe("snapshot artifact containment", () => {
+  it("terminates a timed-out command together with its forked descendant", () => {
+    const root = mkdtempSync(join(tmpdir(), "snapshot-command-tree-"));
+    const descendantPidFile = join(root, "descendant.pid");
+    const descendantReadyFile = join(root, "descendant.ready");
+    const parent = [
+      "import { spawn } from 'node:child_process';",
+      "import { existsSync, writeFileSync } from 'node:fs';",
+      `const ready = ${JSON.stringify(descendantReadyFile)};`,
+      "const child = spawn(process.execPath, ['--eval', \"import { writeFileSync } from 'node:fs'; process.on('SIGTERM', () => {}); writeFileSync(process.argv[1], 'ready'); setInterval(() => {}, 1000)\", ready], { stdio: 'ignore' });",
+      "const started = setInterval(() => { if (!existsSync(ready)) return; clearInterval(started);",
+      `writeFileSync(${JSON.stringify(descendantPidFile)}, String(child.pid));`,
+      "setInterval(() => {}, 1000); }, 1);",
+    ].join(" ");
+    try {
+      expect(() =>
+        runBoundedCommand(process.execPath, ["--input-type=module", "--eval", parent], root, 500),
+      ).toThrow(/timed out/u);
+      const descendantPid = Number(readFileSync(descendantPidFile, "utf8"));
+      expect(descendantPid).toBeGreaterThan(0);
+      expect(waitForProcessExit(descendantPid)).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects sibling-prefix and real symlink escapes", () => {
     const consumer = mkdtempSync(join(tmpdir(), "snapshot-consumer-"));
     const outside = mkdtempSync(join(tmpdir(), "snapshot-consumer-outside-"));
@@ -63,14 +88,13 @@ describe("snapshot artifact containment", () => {
         proveNativeServerTarballConsumer({
           root: repoRoot,
           destination: root,
-          run: (command, args, cwd) =>
-            execFileSync(command, args, { cwd, stdio: "pipe", timeout: 30_000 }),
+          run: (command, args, cwd) => runBoundedCommand(command, args, cwd, 60_000),
         }),
       ).not.toThrow();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 180_000);
 
   it("installs, compiles, imports, and executes all exact framework tarballs", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-exact-tarball-consumer-"));
@@ -79,12 +103,24 @@ describe("snapshot artifact containment", () => {
         proveExactTarballConsumer({
           root: repoRoot,
           destination: root,
-          run: (command, args, cwd) =>
-            execFileSync(command, args, { cwd, stdio: "pipe", timeout: 30_000 }),
+          run: (command, args, cwd) => runBoundedCommand(command, args, cwd, 60_000),
         }),
       ).not.toThrow();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 180_000);
 });
+
+function waitForProcessExit(pid) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if (error?.code === "ESRCH") return true;
+      throw error;
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+  }
+  return false;
+}
