@@ -7,10 +7,11 @@ Baseline commit: `e72222053d20a8828ca63aa4c76d7c13dc9216b5`
 Task log path: `build-protocol/tasks/T-0217-wave14-package-spi-readmes/TASK.md`
 Branch: `codex/wave14-review-corrections`
 Worktree: `.worktrees/wave14-review-corrections`
-Authoring sub-agent: implementer dispatch pending
-Reviewer sub-agents: Pending
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Authoring agent/function: `/root/wave14_review_corrections`, existing `implementer` function
+Configured dispatch: `gpt-5.6-terra` / `medium` (explicit; runtime self-telemetry unavailable)
+Reviewer sub-agents: Not yet dispatched; review remains pending
+Implementation commit: `159aed14a Fix Wave 14 review corrections`
+Final branch HEAD: `159aed14a` before this record-only correction
 
 Task classification: High-risk
 Classification reason: the accepted correction narrows a published TypeScript
@@ -137,6 +138,8 @@ Out of scope:
 - GREEN: `pnpm typecheck:build:generated && pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/package-exports.test.ts --passWithNoTests` passed 8/8.
 - RED: `pnpm --config.verify-deps-before-run=false exec vitest run scripts/check-typescript-snippets.test.mjs --passWithNoTests` failed because core lacked an external install-first path.
 - GREEN: the same focused policy suite passed 17/17; `node docs/check-typescript-snippets.mjs packages/core/README.md packages/proto/README.md packages/storage/README.md packages/testing/README.md` passed.
+- Orchestrator-independent GREEN: the external `--self-test` passed and the
+  combined focused Vitest run passed 25/25.
 
 ## Coverage Result
 

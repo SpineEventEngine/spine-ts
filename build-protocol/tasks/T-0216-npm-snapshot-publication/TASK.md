@@ -4,7 +4,9 @@
 
 Integrated and verified at
 `origin/main@e72222053d20a8828ca63aa4c76d7c13dc9216b5`; follow-up review
-corrections are owned by T-0217. No NPM publication occurred.
+corrections are owned by T-0217. The implementation and its tests performed no
+NPM publication; the later manual snapshot.2 publication was a human operation
+outside this task's automated execution.
 
 ## Classification
 

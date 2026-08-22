@@ -2,8 +2,12 @@
 
 ## Scope and dispatch
 
-- Classification: high-risk public package, artifact, and optional-auth
-  contract checkpoint; production package sources remain out of scope.
+- Classification: high-risk public package, artifact, and generated-registry
+  SPI correction. The task owns the narrow server SPI source/export boundary,
+  its focused tests and reference documentation, four public package READMEs,
+  disposable snapshot.2 publisher/instructions outside Git, and durable task
+  records; unrelated server ingestion behavior and other Wave 14 runtime work
+  remain out of scope.
 - Existing role: bounded implementation owner.
 - Expected model/reasoning: `gpt-5.6-terra` / `medium`, explicitly selected by
   the orchestrator dispatch. Runtime self-introspection is unavailable on this
@@ -23,6 +27,8 @@
 - Focused export and documentation policy checks are green. The mandatory cheap
   preflight and specialist review wave remain the next actions; `verify:release`
   is intentionally reserved for the orchestrator after review convergence.
+- Independent orchestrator evidence also records the external publisher
+  `--self-test` green and combined focused tests green at 25/25.
 
 ## Contract checkpoint
 
