@@ -3,7 +3,7 @@
 Task log: `build-protocol/tasks/T-0217-wave14-package-spi-readmes/TASK.md`
 Branch: `codex/wave14-review-corrections`
 Baseline commit: `e72222053d20a8828ca63aa4c76d7c13dc9216b5`
-Candidate: `5d19572f5`
+Candidate: `5d19572f5` (review basis; correction commits pending)
 Worktree: `.worktrees/wave14-review-corrections`
 Status: Review wave in progress
 
@@ -35,5 +35,12 @@ spawn sub-agents.
 
 ## Findings And Dispositions
 
-Pending the complete four-concern review wave. No correction begins from a
-partial wave.
+Complete review wave received. All dispatches matched their recorded explicit
+profiles; runtime self-introspection remains unavailable as recorded.
+
+| Severity | Concern           | Finding                                                                                                          | Disposition                                                                             |
+| -------- | ----------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| P1       | TypeScript/API    | Packed handler tooling asserts the retired internal registry implementation path.                                | Accepted: assert the public SPI facade resolution.                                      |
+| P2       | Reliability/style | The external wrapper preparation callback reimplements rather than uses the tested clean guard.                  | Accepted: share the guard and execute that callback path in the external self-test.     |
+| P2       | Documentation     | Testing README first success polls a constant instead of performing a meaningful BlackBox application operation. | Accepted: add a policy RED proof and connected real-declaration snippet.                |
+| P2       | Records           | TASK candidate/head fields have drifted.                                                                         | Accepted: reconcile commits/history without claiming final verification or integration. |

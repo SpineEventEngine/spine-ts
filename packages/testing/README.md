@@ -24,23 +24,29 @@ pnpm add -D @spine-event-engine/testing@snapshot
 
 ## ✅ Run one command through a BlackBox
 
-Create a `BlackBox` from a built application context, run a bounded asynchronous
-operation, and assert its observed value. It starts an ephemeral local server
-and closes it when the test is finished.
+Create a `BlackBox` from a built application context, post one command, and
+assert its acknowledgement. It starts an ephemeral local server and closes it
+when the test is finished.
 
-<!-- docs-snippet-path: examples/todo/test/black-box.test.ts -->
+<!-- docs-snippet-path: examples/todo/src/docs/black-box-command.ts -->
 
 ```ts
+import { create } from "@bufbuild/protobuf";
 import { BlackBox } from "@spine-event-engine/testing";
-import { BoundedContext } from "@spine-event-engine/server";
+import { CreateTaskSchema } from "../../generated/spine/examples/todo/task_commands_pb.js";
+import { createTodoContext } from "../todo-app.js";
 
-const box = await BlackBox.from(BoundedContext.singleTenant("Tasks"));
-const ready = await box.eventually(
-  async () => "ready",
-  (value) => value === "ready",
-);
-if (ready !== "ready") throw new Error("BlackBox did not observe the operation result.");
-await box.close();
+const box = await BlackBox.from(await createTodoContext());
+try {
+  const scope = box.asGuest();
+  const acknowledgement = await scope.post(
+    CreateTaskSchema,
+    create(CreateTaskSchema, { id: { value: "task-42" }, title: "First task" }),
+  );
+  if (acknowledgement.kind !== "ok") throw new Error("CreateTask was not accepted.");
+} finally {
+  await box.close();
+}
 ```
 
 Create a named scope when a test needs to act as a particular user. Scopes send

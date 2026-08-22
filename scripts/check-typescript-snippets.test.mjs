@@ -181,8 +181,8 @@ describe("TypeScript documentation snippets", () => {
 
     const testing = readFileSync(resolve(root, "packages/testing/README.md"), "utf8");
     expect(testing).toContain("const box = await BlackBox.from(");
-    expect(testing).toContain("const ready = await box.eventually(");
-    expect(testing).toContain('ready !== "ready"');
+    expect(testing).toContain("const acknowledgement = await scope.post(");
+    expect(testing).toContain('acknowledgement.kind !== "ok"');
     expect(testing).not.toContain("declare const box: BlackBox;");
   });
 

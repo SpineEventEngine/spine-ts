@@ -10,8 +10,9 @@ Worktree: `.worktrees/wave14-review-corrections`
 Authoring agent/function: `/root/wave14_review_corrections`, existing `implementer` function
 Configured dispatch: `gpt-5.6-terra` / `medium` (explicit; runtime self-telemetry unavailable)
 Reviewer sub-agents: Not yet dispatched; review remains pending
-Implementation commit: `159aed14a Fix Wave 14 review corrections`
-Final branch HEAD: `159aed14a` before this record-only correction
+Implementation history: `159aed14a`, `4d2c3fbd3`, `3ecc9a56d`, and `5d19572f5`
+Current review basis: `5d19572f5`; correction batch commit pending
+Final branch HEAD: pending final review/verification; do not infer from this task record
 
 Task classification: High-risk
 Classification reason: the accepted correction narrows a published TypeScript
@@ -192,6 +193,12 @@ boundaries, deserialization, and logging are unaffected.
 | Performance/reliability    | Pending affected review: publisher clean-state behavior changed.    |
 
 No security review is invoked: this is not final release readiness and the external publisher remains credential-free and non-publishing by default.
+
+Complete review wave findings are recorded in `REVIEW.md`: one accepted P1
+packed-consumer facade assertion, three accepted P2 corrections for the shared
+external clean guard/self-test, meaningful testing README first success, and
+record-field drift. Corrections are in progress; final review, verification,
+and integration remain pending.
 
 ## Integration Result
 

@@ -39,6 +39,10 @@
   assertion uses current Vitest `toExtend` rather than deprecated
   `toMatchTypeOf`. Focused ESLint, tooling TypeScript, and the 8/8 export suite
   are green.
+- Complete review wave accepted one P1 packed-consumer facade assertion and
+  three P2 corrections: the external preparation callback must use the shared
+  guard and execute it in self-test, the testing README must post a real command
+  with cleanup, and records must distinguish review basis from final HEAD.
 
 ## Contract checkpoint
 
