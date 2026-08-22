@@ -9,6 +9,24 @@ model package rather than calling it directly.
 This is an experimental snapshot package; use generated Spine contracts and
 Node 24 or newer.
 
+## Install and create one Spine contract
+
+Install the schema package with Protobuf-ES in an application or model package:
+
+```sh
+pnpm add @spine-event-engine/proto@snapshot @bufbuild/protobuf
+```
+
+Use a generated schema immediately:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { CommandIdSchema } from "@spine-event-engine/proto";
+
+const commandId = create(CommandIdSchema, { uuid: "command-42" });
+console.log(commandId.uuid);
+```
+
 ## TypeScript interface options
 
 Use `(every_is).ts_type = "TaskEvent"` with `(every_is).generate = true` to

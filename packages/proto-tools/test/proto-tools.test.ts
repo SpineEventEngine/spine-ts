@@ -775,8 +775,8 @@ describe("spine proto model tooling", () => {
       },
     );
     const require = createRequire(join(app, "package.json"));
-    expect(require.resolve("@spine-event-engine/server/spi/handler-registry")).toContain(
-      "generated-handler-registry.js",
+    expect(basename(require.resolve("@spine-event-engine/server/spi/handler-registry"))).toBe(
+      "handler-registry.js",
     );
     expect(require.resolve("@acme/handler-model/generated/chat/v1/message_board_pb.js")).toContain(
       "message_board_pb.js",

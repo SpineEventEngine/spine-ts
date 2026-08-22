@@ -2,14 +2,68 @@
 
 ## Scope and dispatch
 
-- Classification: high-risk public package, artifact, and optional-auth
-  contract checkpoint; production package sources remain out of scope.
+- Classification: high-risk public package, artifact, and generated-registry
+  SPI correction. The task owns the narrow server SPI source/export boundary,
+  its focused tests and reference documentation, four public package READMEs,
+  disposable snapshot.2 publisher/instructions outside Git, and durable task
+  records; unrelated server ingestion behavior and other Wave 14 runtime work
+  remain out of scope.
 - Existing role: bounded implementation owner.
 - Expected model/reasoning: `gpt-5.6-terra` / `medium`, explicitly selected by
   the orchestrator dispatch. Runtime self-introspection is unavailable on this
   surface; configured dispatch is the available metadata.
 - Owner paths: `scripts/` policy/consumer tests and helpers, this combined
   work record, and the Wave 14 contract report.
+
+## Review-correction implementation status
+
+- Scope is now limited to the accepted publisher clean-state correction, the
+  server generated-handler-registry SPI facade, four beginner README paths,
+  and durable T-0216/T-0217 records. Production ingestion remains internal and
+  continues to use its existing implementation.
+- RED/GREEN evidence is recorded in T-0217 TASK.md. The disposable snapshot.2
+  publisher and its instructions were changed outside Git and must not be
+  included in a commit. No publication command was run.
+- Focused export and documentation policy checks are green. The mandatory cheap
+  preflight and specialist review wave remain the next actions; `verify:release`
+  is intentionally reserved for the orchestrator after review convergence.
+- Independent orchestrator evidence also records the external publisher
+  `--self-test` green and combined focused tests green at 25/25.
+- Cheap preflight found a test-only TypeScript assertion defect: a runtime
+  namespace type cannot prove a type-only SPI export. The focused boundary test
+  now directly asserts the allowed registry type and uses expected-error type
+  imports to prove all three forbidden ingestion exports remain unavailable.
+  The required ESLint-project `tsc --noEmit` and focused export suite are green.
+- The negative imports now feed a compile-time-only tuple assertion, satisfying
+  focused ESLint while retaining no runtime imports; the allowed-contract
+  assertion uses current Vitest `toExtend` rather than deprecated
+  `toMatchTypeOf`. Focused ESLint, tooling TypeScript, and the 8/8 export suite
+  are green.
+- Complete review wave accepted one P1 packed-consumer facade assertion and
+  three P2 corrections: the external preparation callback must use the shared
+  guard and execute it in self-test, the testing README must post a real command
+  with cleanup, and records must distinguish review basis from final HEAD.
+- All four canonical concerns and affected re-reviews are clean. Independent
+  GREEN evidence is the external `--self-test`, combined export/snippet suites
+  (25/25), and exact packed handler consumer (1/1). The task is ready for the
+  orchestrator's single final release verification; final HEAD, integration,
+  and task end remain pending.
+
+- Final release diagnostic found one cleanup-only documentation-source issue:
+  the five-component standalone helper lacked a necessity disposition. It is
+  now the same top-level connected snippet; focused cleanup, snippet compiler,
+  policy, tooling typecheck, format, and diff evidence is green. Final release
+  rerun subsequently passed.
+- Second final release attempt at `b049c3fc9` passed deterministic gates and
+  4,422 tests (19 skipped), then timed out only in the EntityRecord TypeDoc
+  assertion's 30-second limit under parallel covered-suite contention. The exact
+  file passed 3/3 in 25.41 seconds; its hard timeout is now 60 seconds. No
+  production behavior changed; the final release rerun subsequently passed.
+- Final `verify:release` at `41d991152` is green: 277 files passed/4 skipped,
+  4,423 tests passed/19 skipped, duration 180.30s; statements 93.15%
+  (22,221/23,853), branches 90% (13,130/14,588), functions 92.81%
+  (5,451/5,873), lines 94.36% (20,608/21,839). Implementation and review are
+  ready for integration; integration and task end remain pending.
 
 ## Contract checkpoint
 

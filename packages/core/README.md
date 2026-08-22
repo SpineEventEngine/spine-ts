@@ -8,6 +8,27 @@ up a generated message schema by its Spine type URL.
 This is an experimental snapshot package. Use Node 24 or newer and generated
 Spine message schemas.
 
+## Install and validate one message
+
+Install the package with the generated model schemas your application uses:
+
+```sh
+pnpm add @spine-event-engine/core@snapshot @spine-event-engine/proto@snapshot @bufbuild/protobuf
+```
+
+Then validate and pack one generated message before adding routing or server assembly:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { AnyMessages, Validate } from "@spine-event-engine/core";
+import { UserIdSchema } from "@spine-event-engine/proto";
+
+const userId = create(UserIdSchema, { value: "ava" });
+Validate.check(UserIdSchema, userId);
+const packed = AnyMessages.pack(UserIdSchema, userId);
+console.log(AnyMessages.unpack(packed, UserIdSchema)?.value);
+```
+
 ## Message-interface tokens
 
 A generated interface export has one name in two TypeScript namespaces: use it

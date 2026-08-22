@@ -2,8 +2,11 @@
 
 ## Status
 
-Verified and ready for integration from
-`origin/main@ea7ec5e8cf7f0cbcdfa78befd45a41788aee8c8c`.
+Integrated and verified at
+`origin/main@e72222053d20a8828ca63aa4c76d7c13dc9216b5`; follow-up review
+corrections are owned by T-0217. The implementation and its tests performed no
+NPM publication; the later manual snapshot.2 publication was a human operation
+outside this task's automated execution.
 
 ## Classification
 
