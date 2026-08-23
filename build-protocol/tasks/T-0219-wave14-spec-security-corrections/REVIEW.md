@@ -35,16 +35,21 @@ Status: Pending implementation convergence
   validate actual documented exports for every added SPI.
 - Deterministic correction: format this review record. Record-only formatting
   does not reopen any reviewer lane.
+- Closure: `8cca5add9` separated exact declared and documented inventories for
+  every published SPI. The first recheck found only a 60-second test timeout
+  caused by repeated TypeDoc generation; `b27ae0010` now generates the model
+  once. Independent closure passed 6/6 focused tests in 47.39 seconds,
+  `docs:api:check`, repository formatting, diff check, and clean status.
 
 ## Required Concerns
 
-| Concern                          | Planned existing role/function     | Explicit model  | Explicit reasoning | Disposition |
-| -------------------------------- | ---------------------------------- | --------------- | ------------------ | ----------- |
-| Style and maintainability        | `style_maintainability_reviewer`   | `gpt-5.6-terra` | high               | Pending     |
-| Documentation completeness       | `documentation_reviewer`           | `gpt-5.6-luna`  | medium             | Pending     |
-| TypeScript and API documentation | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` | high               | Pending     |
-| Performance and reliability      | `performance_reliability_reviewer` | `gpt-5.6-terra` | high               | Pending     |
-| Security release readiness       | `security_reviewer`                | `gpt-5.6-terra` | high               | Pending     |
+| Concern                          | Planned existing role/function     | Bounded scope                                                                                                                           | Explicit model  | Explicit reasoning | Disposition |
+| -------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------ | ----------- |
+| Style and maintainability        | `style_maintainability_reviewer`   | Generation reuse, current-output checker, artifact/API/dependency policy structure, and focused tests                                   | `gpt-5.6-terra` | high               | Pending     |
+| Documentation completeness       | `documentation_reviewer`           | Four beginner READMEs, install/first-success accuracy, SPI documentation reachability, and changed task claims                          | `gpt-5.6-luna`  | medium             | Pending     |
+| TypeScript and API documentation | `typescript_api_docs_reviewer`     | Four SPI public contracts, TypeDoc/source inventories, browser tarball consumer typing, and declaration compatibility                   | `gpt-5.6-terra` | high               | Pending     |
+| Performance and reliability      | `performance_reliability_reviewer` | Deterministic generation IDs, staged current-output comparison, bounded TypeDoc tests, tarball server lifecycle, and dependency checks  | `gpt-5.6-terra` | high               | Pending     |
+| Security release readiness       | `security_reviewer`                | Production advisory closure, lockfile/override integrity, browser-auth consumer boundary, archive policy, and credential non-regression | `gpt-5.6-terra` | high               | Pending     |
 
 All dispatches will prohibit child spawning. The orchestrator will collect one
 complete review wave before returning one consolidated accepted correction
