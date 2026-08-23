@@ -128,3 +128,20 @@ unavailable; immutable Desktop profiles are the evidence.
 These three findings form one final targeted correction batch. Re-review after
 that batch is limited to documentation, style/security lockfile policy, and
 reliability process termination.
+
+## Final Targeted Re-review Findings
+
+- Documentation P2: the replacement `terraform.tfvars` edit instruction is
+  prose inside a Bash fence and therefore fails when copied as a command.
+- Style P2: the lockfile policy behavior for unresolved direct/transitive,
+  workspace link, alias, and peer-qualified references lacks regression
+  fixtures.
+- Security P1: peer-qualified resolution checks base package metadata before
+  the exact snapshot, hiding the snapshot's transitive dependencies.
+- Reliability P2: readiness polling has no deadline or child-close/error race;
+  startup failure can strand the detached group before the normal timeout is
+  armed.
+
+The final batch moves prose outside command fences, resolves exact snapshots
+before base metadata with complete fixtures, and bounds readiness while
+terminating the group on startup failure. Only those three concerns reopen.
