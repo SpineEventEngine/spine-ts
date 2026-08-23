@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { productionDependencyProblemsFromYaml } from "./production-lockfile-policy.mjs";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -11,15 +12,7 @@ const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
  * @returns {string[]} deterministic policy violations
  */
 export function productionDependencyProblems(lockfile) {
-  const packages = /^packages:\n([\s\S]*?)^snapshots:/mu.exec(lockfile)?.[1] ?? "";
-  const snapshots = /^snapshots:\n([\s\S]*)$/mu.exec(lockfile)?.[1] ?? "";
-  const resolutions = `${packages}\n${snapshots}`;
-  const problems = [];
-  if (/^\s{2}brace-expansion@2\.1\.3:/mu.test(resolutions))
-    problems.push("Production lockfile resolves vulnerable brace-expansion@2.1.3.");
-  if (/^\s{2}uuid@9\.0\.1:/mu.test(resolutions))
-    problems.push("Production lockfile resolves vulnerable uuid@9.0.1.");
-  return problems;
+  return productionDependencyProblemsFromYaml(lockfile);
 }
 
 export function checkProductionDependencies(root = repositoryRoot) {
