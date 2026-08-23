@@ -26,7 +26,12 @@ function keyFor(name, reference, nodes) {
   );
 }
 
-/** Parses a pnpm lockfile and returns production-reachable vulnerable resolutions. */
+/**
+ * Parses a pnpm lockfile and returns production-reachable vulnerable resolutions.
+ *
+ * @param {string} lockfile pnpm lockfile source.
+ * @returns {string[]} Deterministic production-policy violations.
+ */
 export function productionDependencyProblemsFromYaml(lockfile) {
   const parsed = parse(lockfile);
   if (!parsed || typeof parsed !== "object") invalid("root must be a mapping");
