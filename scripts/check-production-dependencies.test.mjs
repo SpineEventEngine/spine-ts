@@ -111,4 +111,31 @@ describe("production dependency policy", () => {
       ),
     ).toEqual([]);
   });
+
+  it("rejects an unresolved transitive production dependency", () => {
+    expect(() =>
+      productionDependencyProblems(
+        "lockfileVersion: '9.0'\nimporters:\n  .:\n    dependencies:\n      app: 1.0.0\npackages:\n  app@1.0.0: {}\nsnapshots:\n  app@1.0.0:\n    dependencies:\n      uuid: 9.0.1",
+      ),
+    ).toThrow("unresolved production dependency uuid@9.0.1");
+  });
+
+  it("skips valid workspace links and resolves registry aliases", () => {
+    expect(
+      productionDependencyProblems(
+        "lockfileVersion: '9.0'\nimporters:\n  .:\n    dependencies:\n      local: link:../local\n      wrap-ansi-cjs: wrap-ansi@7.0.0\npackages:\n  wrap-ansi@7.0.0: {}\nsnapshots:\n  wrap-ansi@7.0.0: {}",
+      ),
+    ).toEqual([]);
+  });
+
+  it.each([
+    ["uuid: 9.0.1", "uuid@9.0.1", ["Production lockfile resolves vulnerable uuid@9.0.1."]],
+    ["uuid: 11.1.1", "uuid@11.1.1", []],
+  ])("checks peer-qualified exact snapshots", (dependency, key, expected) => {
+    expect(
+      productionDependencyProblems(
+        `lockfileVersion: '9.0'\nimporters:\n  .:\n    dependencies:\n      app: 1.0.0(peer@1.0.0)\npackages:\n  app@1.0.0: {}\n  ${key}: {}\nsnapshots:\n  app@1.0.0(peer@1.0.0):\n    dependencies:\n      ${dependency}\n  ${key}: {}`,
+      ),
+    ).toEqual(expected);
+  });
 });
