@@ -105,7 +105,7 @@ Copy the supplied variable file and replace every placeholder with values for
 your cluster and delivery pipeline:
 
 ```bash
-cp terraform.tfvars.example terraform.tfvars
+Edit the existing `terraform.tfvars` copied for the first plan; do not overwrite it.
 ```
 
 `terraform.tfvars` asks for the existing Secret names, immutable images, and

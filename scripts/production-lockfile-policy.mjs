@@ -12,6 +12,12 @@ function invalid(message) {
   throw new Error(`Invalid pnpm lockfile: ${message}`);
 }
 
+function mapping(value, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    invalid(`${label} must be a mapping`);
+  return value;
+}
+
 function version(reference) {
   if (typeof reference === "string") return reference;
   if (reference && typeof reference === "object" && typeof reference.version === "string")
@@ -21,6 +27,13 @@ function version(reference) {
 
 function keyFor(name, reference, nodes) {
   const value = version(reference);
+  if (value.startsWith("link:")) return undefined;
+  const base = value.replace(/\(.+$/u, "");
+  if (Object.hasOwn(nodes, `${name}@${base}`)) return `${name}@${base}`;
+  if (Object.hasOwn(nodes, base)) return base;
+  if (/^@?[^@]+(?:\/[^@]+)?@\d/u.test(value)) {
+    return Object.keys(nodes).find((key) => key === base || key.startsWith(`${base}(`));
+  }
   return Object.keys(nodes).find(
     (key) => key === `${name}@${value}` || key.startsWith(`${name}@${value}(`),
   );
@@ -34,32 +47,33 @@ function keyFor(name, reference, nodes) {
  */
 export function productionDependencyProblemsFromYaml(lockfile) {
   const parsed = parse(lockfile);
-  if (!parsed || typeof parsed !== "object") invalid("root must be a mapping");
+  mapping(parsed, "root");
   for (const section of ["lockfileVersion", "importers", "packages", "snapshots"])
     if (parsed[section] === undefined) invalid(`missing ${section}`);
-  if (
-    typeof parsed.importers !== "object" ||
-    typeof parsed.packages !== "object" ||
-    typeof parsed.snapshots !== "object"
-  )
-    invalid("importers, packages, and snapshots must be mappings");
+  mapping(parsed.importers, "importers");
+  mapping(parsed.packages, "packages");
+  mapping(parsed.snapshots, "snapshots");
   const nodes = { ...parsed.packages, ...parsed.snapshots };
   const queue = [];
   for (const importer of Object.values(parsed.importers)) {
-    if (!importer || typeof importer !== "object") invalid("importer must be a mapping");
+    mapping(importer, "importer");
     for (const group of ["dependencies", "optionalDependencies"])
-      for (const dependency of Object.entries(importer[group] ?? {})) queue.push(dependency);
+      for (const dependency of Object.entries(mapping(importer[group] ?? {}, `${group} group`)))
+        queue.push(dependency);
   }
   const reached = new Set();
   while (queue.length) {
     const [name, reference] = queue.pop();
+    if (version(reference).startsWith("link:")) continue;
     const key = keyFor(name, reference, nodes);
-    if (!key || reached.has(key)) continue;
+    if (!key) invalid(`unresolved production dependency ${name}@${version(reference)}`);
+    if (reached.has(key)) continue;
     reached.add(key);
     const node = nodes[key];
-    if (!node || typeof node !== "object") invalid(`invalid package ${key}`);
+    mapping(node, `package ${key}`);
     for (const group of ["dependencies", "optionalDependencies"])
-      for (const dependency of Object.entries(node[group] ?? {})) queue.push(dependency);
+      for (const dependency of Object.entries(mapping(node[group] ?? {}, `${key} ${group}`)))
+        queue.push(dependency);
   }
   return [...reached]
     .flatMap((key) => {

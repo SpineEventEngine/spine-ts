@@ -100,7 +100,7 @@ control because it identifies your network and deployment, even though it
 contains no secret values.
 
 ```bash
-cp terraform.tfvars.example terraform.tfvars
+Edit the existing `terraform.tfvars` copied for the first plan; do not overwrite it.
 ```
 
 Set the project, region, two or more application zones, VPC/subnetwork,
