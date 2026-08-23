@@ -106,3 +106,25 @@ zero-vulnerability full and production audits, formatting, ESLint, generated
 current-output comparison, two byte-identical Proto generations, diff check,
 and clean status. Affected concerns now enter re-review with their previously
 recorded explicit role/model/reasoning profiles.
+
+## Affected Re-review
+
+All affected re-review dispatches reused the previously recorded explicit
+roles, models, reasoning, and no-child rule. Runtime self-telemetry remained
+unavailable; immutable Desktop profiles are the evidence.
+
+- TypeScript/API: clean. Public SPI declarations, emitted declarations,
+  TypeDoc inventories, root containment, and bounded TypeDoc cleanup pass.
+- Documentation: one remaining P2. GCE and GKE repeat the example-values copy
+  after operators already filled the file, which would overwrite settings.
+- Style and security: one shared remaining P1/P2. The YAML policy silently
+  skips direct or transitive unresolved registry nodes and accepts arrays as
+  mappings. It must require plain objects, reject unresolved registry
+  references, and deliberately allow only supported workspace links.
+- Reliability: one remaining P2. The reused process-group test arms its timeout
+  before the child confirms startup, so it can fail on a missing PID file
+  without exercising descendant termination. Synchronize on readiness first.
+
+These three findings form one final targeted correction batch. Re-review after
+that batch is limited to documentation, style/security lockfile policy, and
+reliability process termination.
