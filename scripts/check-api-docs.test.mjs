@@ -16,10 +16,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import ts from "typescript";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 const checkerPath = new URL("./check-api-docs.mjs", import.meta.url).pathname;
+let generatedApiDocs;
+let generatedApiDocsOutput;
 
 const publishedSpiModules = [
   {
@@ -100,27 +102,32 @@ function namedChild(value, name) {
     .find((child) => child !== undefined);
 }
 
-function documentedModuleExports(moduleName) {
-  const output = mkdtempSync(join(tmpdir(), "spine-api-docs-test-"));
-  const jsonPath = join(output, "api.json");
-
-  try {
+function generatedTypeDocModel() {
+  if (generatedApiDocs === undefined) {
+    generatedApiDocsOutput = mkdtempSync(join(tmpdir(), "spine-api-docs-test-"));
+    const jsonPath = join(generatedApiDocsOutput, "api.json");
     const result = spawnSync(
       resolve(repoRoot, "node_modules/.bin/typedoc"),
       ["--options", "typedoc.json", "--json", jsonPath],
       { cwd: repoRoot, encoding: "utf8" },
     );
     if (result.status !== 0) throw new Error(result.stderr || result.stdout);
-
-    const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
-    const module = namedChild(apiDocs, moduleName);
-    return (module?.children ?? []).map((child) => child.name);
-  } finally {
-    rmSync(output, { force: true, recursive: true });
+    generatedApiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
   }
+
+  return generatedApiDocs;
+}
+
+function documentedModuleExports(moduleName) {
+  const module = namedChild(generatedTypeDocModel(), moduleName);
+  return (module?.children ?? []).map((child) => child.name);
 }
 
 describe("storage API documentation inventory", () => {
+  afterAll(() => {
+    if (generatedApiDocsOutput !== undefined)
+      rmSync(generatedApiDocsOutput, { force: true, recursive: true });
+  });
   it("documents the provider entry point separately from the storage root", () => {
     const typedoc = JSON.parse(readFileSync(resolve(repoRoot, "typedoc.json"), "utf8"));
 
