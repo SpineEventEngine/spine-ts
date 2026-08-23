@@ -160,7 +160,13 @@ describe("snapshot artifact containment", () => {
     ].join(" ");
     try {
       expect(() =>
-        runBoundedCommand(process.execPath, ["--input-type=module", "--eval", parent], root, 500),
+        runBoundedCommand(
+          process.execPath,
+          ["--input-type=module", "--eval", parent],
+          root,
+          500,
+          descendantPidFile,
+        ),
       ).toThrow(/timed out/u);
       const descendantPid = Number(readFileSync(descendantPidFile, "utf8"));
       expect(descendantPid).toBeGreaterThan(0);

@@ -2,10 +2,10 @@ import { spawnSync } from "node:child_process";
 
 const supervisor = new URL("./snapshot-test-command-supervisor.mjs", import.meta.url);
 
-export function runBoundedCommand(command, args, cwd, timeout) {
+export function runBoundedCommand(command, args, cwd, timeout, readyPath) {
   const result = spawnSync(
     process.execPath,
-    [supervisor.pathname, JSON.stringify({ command, args, cwd, timeout })],
+    [supervisor.pathname, JSON.stringify({ command, args, cwd, timeout, readyPath })],
     { cwd, encoding: "utf8", stdio: "pipe", timeout: timeout + 5_000 },
   );
   if (result.error !== undefined) throw result.error;

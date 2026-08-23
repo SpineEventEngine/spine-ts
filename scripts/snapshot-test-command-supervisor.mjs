@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import {
   processGroupLiveness,
   taskkillOutcome,
@@ -6,7 +7,7 @@ import {
   waitForChildClose,
 } from "./snapshot-process-termination.mjs";
 
-const { command, args, cwd, timeout } = JSON.parse(process.argv[2]);
+const { command, args, cwd, timeout, readyPath } = JSON.parse(process.argv[2]);
 const child = spawn(command, args, { cwd, detached: process.platform !== "win32", stdio: "pipe" });
 let stdout = "";
 let stderr = "";
@@ -14,10 +15,12 @@ child.stdout.on("data", (chunk) => (stdout = appendOutput(stdout, chunk)));
 child.stderr.on("data", (chunk) => (stderr = appendOutput(stderr, chunk)));
 let timedOut = false;
 let shutdown = Promise.resolve();
-const timer = globalThis.setTimeout(() => {
-  timedOut = true;
-  shutdown = terminateGroup();
-}, timeout);
+const startTimeout = () =>
+  globalThis.setTimeout(() => {
+    timedOut = true;
+    shutdown = terminateGroup();
+  }, timeout);
+const timer = readyPath === undefined ? startTimeout() : await readyTimer();
 const result = await new Promise((resolve, reject) => {
   child.once("error", reject);
   child.once("close", (status) => resolve({ status }));
@@ -25,6 +28,11 @@ const result = await new Promise((resolve, reject) => {
 globalThis.clearTimeout(timer);
 await shutdown;
 process.stdout.write(JSON.stringify({ ...result, timedOut, stdout, stderr }));
+
+async function readyTimer() {
+  while (!existsSync(readyPath)) await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+  return startTimeout();
+}
 
 async function signal(value) {
   if (process.platform === "win32") {
