@@ -145,3 +145,25 @@ reliability process termination.
 The final batch moves prose outside command fences, resolves exact snapshots
 before base metadata with complete fixtures, and bounds readiness while
 terminating the group on startup failure. Only those three concerns reopen.
+
+## Final Review Closure
+
+- Documentation: clean. MySQL local/production TLS guidance and GCE/GKE
+  operator workflows are sequential, executable, and do not overwrite values.
+- Style/maintainability: clean. Generated traversal is bounded; production
+  lockfile parsing is plain-object/fail-closed; all resolver forms and failure
+  branches have visible passing fixtures.
+- TypeScript/API documentation: clean. Four SPI subpaths match declarations and
+  TypeDoc, do not render internal, and do not leak into package roots.
+- Security: clean. Exact peer snapshots expose transitives; unresolved
+  references fail; dev-only paths stay excluded; frozen install, full and
+  production audits, and release enforcement pass; publisher/auth code is
+  unchanged.
+- Performance/reliability: clean. TypeDoc and tarball commands use bounded
+  process-group supervision; readiness handles ready, timeout, spawn-error, and
+  early-parent-exit paths without descendants. Windows readiness fails closed
+  before spawn because the test-only POSIX group seam has no safe Job Object
+  equivalent; ordinary Windows non-ready taskkill behavior remains.
+
+All P1/P2 findings are resolved. No P3 findings remain. Mandatory cheap
+preflight and one final `verify:release` remain before integration.
