@@ -3,6 +3,12 @@
  */
 export const generationMarkerFile: ".spine-proto-generation.json";
 
+/** Derives a stable ID from a generation manifest contract and complete generated output. */
+export function generationIdForContents(
+  manifest: Readonly<Record<string, unknown>>,
+  root: string,
+): string;
+
 /**
  * Returns the live generation ID only for coherent, bounded, symlink-free output.
  *

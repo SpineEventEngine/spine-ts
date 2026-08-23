@@ -3,7 +3,7 @@ packages:
   - "examples/*"
   - "examples/*/*"
 overrides:
-  brace-expansion@2.1.2: 2.1.3
+  brace-expansion@2.1.2: 2.1.4
 confirmModulesPurge: false
 engineStrict: true
 enableGlobalVirtualStore: false

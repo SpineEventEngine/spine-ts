@@ -73,8 +73,8 @@ export function packedManifestProblems(manifest) {
       if (typeof version === "string" && /^(?:workspace:|file:|link:)/u.test(version)) {
         problems.push(`${name} ${group} ${dependency} must not use ${version}`);
       }
-      if (version === "2.0.0-snapshot.1") {
-        problems.push(`${name} ${group} ${dependency} must not use snapshot.1`);
+      if (/^2\.0\.0-snapshot\.[12]$/u.test(version)) {
+        problems.push(`${name} ${group} ${dependency} must not use snapshot.${version.at(-1)}`);
       }
     }
   }
@@ -129,7 +129,7 @@ export function packedContentProblems(manifest, entries, texts, sourceFiles = []
       problems.push(name + " archive contains undeclared payload: " + file);
   }
   for (const value of texts) {
-    if (/workspace:|2\.0\.0-snapshot\.1/u.test(value))
+    if (/workspace:|2\.0\.0-snapshot\.[12]/u.test(value))
       problems.push(name + " archive text has prohibited specifier");
     if (/\/Users\/|\/private\/var\/|\.worktrees\//u.test(value))
       problems.push(name + " archive text has repository path");

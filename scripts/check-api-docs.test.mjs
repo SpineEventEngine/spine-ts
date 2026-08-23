@@ -107,6 +107,19 @@ describe("storage API documentation inventory", () => {
     expect(typedoc.entryPoints).toContain("packages/storage/src/provider.ts");
   });
 
+  it("includes every published SPI subpath in TypeDoc", () => {
+    const typedoc = JSON.parse(readFileSync(resolve(repoRoot, "typedoc.json"), "utf8"));
+
+    expect(typedoc.entryPoints).toEqual(
+      expect.arrayContaining([
+        "packages/core/src/spi/subscription-lifecycle.ts",
+        "packages/deployment/src/spi/backend-membership.ts",
+        "packages/server/src/spi/handler-registry.ts",
+        "packages/server/src/spi/delivery.ts",
+      ]),
+    );
+  });
+
   it("lists EntityRecord directly on the provider TypeDoc page", () => {
     expect(documentedModuleExports("packages/storage/src/provider")).toContain("EntityRecord");
   }, 60_000);

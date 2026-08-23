@@ -45,7 +45,10 @@ import {
   generatedSource,
   normalizeGeneratedTree,
 } from "../src/generation/generated-source-policy.js";
-import { reusableGenerationId } from "../src/generation/generation-reuse.mjs";
+import {
+  generationIdForContents,
+  reusableGenerationId,
+} from "../src/generation/generation-reuse.mjs";
 import { ModelGraph } from "../src/model/model-graph.js";
 
 const readConfig = (...args: Parameters<typeof ProtoConfig.read>) => ProtoConfig.read(...args);
@@ -2031,6 +2034,44 @@ describe("spine proto model tooling", () => {
           stagedRoot,
         ),
       ).toBeUndefined();
+    } finally {
+      rmSync(packageRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reuses a committed generation ID when ignored live output is absent", () => {
+    const packageRoot = mkdtempSync(join(tmpdir(), "spine-direct-marker-only-reuse-"));
+    const liveRoot = join(packageRoot, "src/generated");
+    const stagedRoot = join(packageRoot, ".generated-stage/output");
+    const manifest = { formatVersion: 2, generationId: "generation-id", generatedExports: {} };
+    try {
+      for (const root of [liveRoot, stagedRoot]) {
+        mkdirSync(root, { recursive: true });
+        writeFileSync(
+          join(root, ".spine-proto-generation.json"),
+          '{"generationId":"generation-id"}\n',
+        );
+      }
+      writeFileSync(join(stagedRoot, "model_pb.ts"), "export {};\n");
+      writeJson(packageRoot, "spine-proto-manifest.json", manifest);
+
+      const unchanged = reusableGenerationId(
+        join(packageRoot, "spine-proto-manifest.json"),
+        liveRoot,
+        manifest,
+        stagedRoot,
+      );
+      expect(unchanged).toBe(generationIdForContents(manifest, stagedRoot));
+
+      writeFileSync(join(stagedRoot, "model_pb.ts"), "export const changed = true;\n");
+      expect(
+        reusableGenerationId(
+          join(packageRoot, "spine-proto-manifest.json"),
+          liveRoot,
+          manifest,
+          stagedRoot,
+        ),
+      ).not.toBe(unchanged);
     } finally {
       rmSync(packageRoot, { recursive: true, force: true });
     }

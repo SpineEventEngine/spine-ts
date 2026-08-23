@@ -19,15 +19,19 @@ For exact query limits, entity-storage behavior, and failure handling, see
 - ✅ Rejects queries that exceed a finite reconciliation budget instead of
   returning incomplete results.
 
-## 🚀 Build it in this workspace
+## 🚀 First snapshot success
 
 ```sh
-pnpm typecheck:build
+mkdir spine-datastore-app && cd spine-datastore-app
+pnpm init
+pnpm add @spine-event-engine/storage-datastore@snapshot @spine-event-engine/storage @bufbuild/protobuf @google-cloud/datastore
 ```
 
-Run this workspace-wide TypeScript build from the repository root. For an
-experimental npm consumer, install `@spine-event-engine/storage-datastore@snapshot`.
-The snapshot tag can change before a stable release.
+Create a `storage.ts` file from the factory example below, replace `my-project`
+with a Google Cloud project that you can access, and run it with Node 24 or
+newer. A successful read of `task-42` proves the installed snapshot can create,
+write, and read a Datastore record. The snapshot tag can change before a stable
+release.
 
 ## 🔌 Create a factory
 
@@ -73,6 +77,15 @@ bound is 1,000 records. Pass the factory to the server or create record storage
 through the normal storage API. When application values contain `Any`, configure
 a `StringifierRegistry` with that application's `TypeRegistry` before building;
 the layout section below explains why that mapping must remain reversible.
+
+## Build it in this workspace
+
+Contributors changing this repository can run the workspace-wide build from its
+root:
+
+```sh
+pnpm typecheck:build
+```
 
 ## 🧭 Understand tenants and kinds
 

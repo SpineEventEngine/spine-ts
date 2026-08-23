@@ -47,6 +47,24 @@ creates their values. The application Secret holds application-selected
 settings, including storage settings when the application needs them. The
 Gateway Secret holds separate identity and session settings.
 
+## First Terraform plan
+
+Copy the packaged template into an operator-owned deployment repository, fill
+in its existing cluster, Secret names, and immutable image references, then
+validate the private topology before configuring entrypoint details:
+
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform fmt -check
+terraform validate
+terraform plan -var-file=terraform.tfvars
+```
+
+A plan showing only the Gateway, application, delivery, and private Services
+is the first success. Review it before `terraform apply`.
+
 ## What this deployment creates
 
 The Terraform module creates three private Kubernetes Deployments and three

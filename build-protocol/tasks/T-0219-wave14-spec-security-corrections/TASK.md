@@ -64,9 +64,9 @@ correction.
 
 ## Assignment Gate
 
-| Existing role/function | Bounded ownership | Explicit model | Explicit reasoning | Child spawning | Runtime metadata |
-| --- | --- | --- | --- | --- | --- |
-| `implementer` | Tests, implementation, dependency resolution, documentation, generated artifacts, and task records for this correction | `gpt-5.6-terra` | medium | Prohibited | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
+| Existing role/function | Bounded ownership                                                                                                      | Explicit model  | Explicit reasoning | Child spawning | Runtime metadata                                                         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------ | -------------- | ------------------------------------------------------------------------ |
+| `implementer`          | Tests, implementation, dependency resolution, documentation, generated artifacts, and task records for this correction | `gpt-5.6-terra` | medium             | Prohibited     | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
 
 ## Verification And Review Plan
 

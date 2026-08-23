@@ -33,7 +33,7 @@ explicitly excluded.
 2. The public `@spine-event-engine/server/testing` entrypoint does not expose
    helpers documented as package-only or `@internal`, while retained public test
    helpers remain usable by their real consumers.
-3. `BrowserClientOptions.baseUrls` requires at least one URL at compile time and
+3. `BrowserBackend.baseUrls` requires at least one URL at compile time and
    retains its runtime validation.
 4. T-0217 records and the project completion plan agree with the integrated,
    published Wave 14 state.

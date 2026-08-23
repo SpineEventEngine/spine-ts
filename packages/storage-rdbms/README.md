@@ -19,14 +19,17 @@ For database requirements, query limits, lifecycle, and error details, see
   continuations.
 - ✅ Keeps adapter tables private behind the common `RecordStorage` API.
 
-## 🚀 Build it in this workspace
+## 🚀 First snapshot success
 
 ```sh
-pnpm typecheck:build
+mkdir spine-mysql-app && cd spine-mysql-app
+pnpm init
+pnpm add @spine-event-engine/storage-rdbms@snapshot @spine-event-engine/storage @bufbuild/protobuf
 ```
 
-Run this workspace-wide TypeScript build from the repository root. For an
-experimental npm consumer, install `@spine-event-engine/storage-rdbms@snapshot`.
+Create an empty MySQL database, set an application-owned connection URL, and
+run the factory example below with Node 24 or newer. A successful read of
+`task-42` proves the installed snapshot can open its factory and store a record.
 The snapshot tag can change before a stable release.
 
 ## 🔌 Create and close a MySQL factory
@@ -95,6 +98,15 @@ const factory = await MysqlStorageFactory.newBuilder()
 Use a dedicated database account. The account must be able to create and
 inspect the adapter tables and perform normal reads and writes. Do not commit
 connection URLs or credentials.
+
+## Build it in this workspace
+
+Contributors changing this repository can run the workspace-wide build from its
+root:
+
+```sh
+pnpm typecheck:build
+```
 
 ## ✨ Supported records and queries
 

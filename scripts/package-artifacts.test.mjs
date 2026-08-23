@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   dependencyFirstOrder,
   packedArchiveProblems,
+  packedContentProblems,
   packedReadmeLinkProblems,
   packedManifestProblems,
 } from "./package-artifacts.mjs";
@@ -116,6 +117,24 @@ describe("package artifacts", () => {
       "@spine-event-engine/example dependencies linked must not use link:../linked",
       "@spine-event-engine/example dependencies local must not use file:../local",
     ]);
+  });
+
+  it("rejects stale snapshot.2 references from packed manifests and archive text", () => {
+    const manifest = {
+      name: "@spine-event-engine/example",
+      dependencies: { "@spine-event-engine/core": "2.0.0-snapshot.2" },
+    };
+
+    expect(packedManifestProblems(manifest)).toEqual([
+      "@spine-event-engine/example dependencies @spine-event-engine/core must not use snapshot.2",
+    ]);
+    expect(
+      packedContentProblems(
+        manifest,
+        ["package.json", "dist/index.js"],
+        ['export { core } from "@spine-event-engine/core@2.0.0-snapshot.2";\n'],
+      ),
+    ).toEqual(["@spine-event-engine/example archive text has prohibited specifier"]);
   });
 
   it("orders internal runtime dependencies before dependents", () => {

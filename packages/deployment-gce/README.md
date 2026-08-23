@@ -41,6 +41,25 @@ Gateway, and the in-memory simple delivery server. Use image digests such as
 image, choose Datastore, MySQL, or another storage backend, create secrets, or
 configure an identity provider.
 
+## First Terraform plan
+
+Copy the packaged template into an operator-owned deployment repository, then
+create a values file and obtain a validated plan before wiring advanced Gateway
+or registry behavior:
+
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform fmt -check
+terraform validate
+terraform plan -var-file=terraform.tfvars
+```
+
+Replace every placeholder with your existing project, network, service account,
+and immutable image digests before `plan`. A plan showing only private Spine
+resources is the first success; review it before any `terraform apply`.
+
 ## What this deployment creates
 
 The application managed instance group (MIG) is regional and distributes
