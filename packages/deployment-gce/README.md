@@ -95,13 +95,9 @@ authentication provider, or Internet firewall rule.
 
 ## Configure the template
 
-Copy the values file and replace every placeholder. Keep it outside source
+Edit the existing `terraform.tfvars` copied for the first plan and replace every placeholder. Keep it outside source
 control because it identifies your network and deployment, even though it
 contains no secret values.
-
-```bash
-Edit the existing `terraform.tfvars` copied for the first plan; do not overwrite it.
-```
 
 Set the project, region, two or more application zones, VPC/subnetwork,
 least-privilege service-account email, and the three image digests. Set

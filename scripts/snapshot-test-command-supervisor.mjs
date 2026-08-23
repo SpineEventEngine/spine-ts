@@ -30,7 +30,14 @@ await shutdown;
 process.stdout.write(JSON.stringify({ ...result, timedOut, stdout, stderr }));
 
 async function readyTimer() {
-  while (!existsSync(readyPath)) await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+  const deadline = Date.now() + 1_000;
+  while (!existsSync(readyPath)) {
+    if (child.exitCode !== null || Date.now() >= deadline) {
+      await terminateGroup();
+      throw new Error(`Timed-out command did not publish readiness signal: ${readyPath}`);
+    }
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+  }
   return startTimeout();
 }
 

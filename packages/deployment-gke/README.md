@@ -101,12 +101,8 @@ behavior and Cloud Run are outside the supported offering.
 
 ## Configure the template
 
-Copy the supplied variable file and replace every placeholder with values for
+Edit the existing `terraform.tfvars` copied for the first plan and replace every placeholder with values for
 your cluster and delivery pipeline:
-
-```bash
-Edit the existing `terraform.tfvars` copied for the first plan; do not overwrite it.
-```
 
 `terraform.tfvars` asks for the existing Secret names, immutable images, and
 the kubeconfig context selected by `gcloud`. It defaults to two application

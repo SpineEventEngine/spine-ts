@@ -28,6 +28,7 @@ function version(reference) {
 function keyFor(name, reference, nodes) {
   const value = version(reference);
   if (value.startsWith("link:")) return undefined;
+  if (Object.hasOwn(nodes, `${name}@${value}`)) return `${name}@${value}`;
   const base = value.replace(/\(.+$/u, "");
   if (Object.hasOwn(nodes, `${name}@${base}`)) return `${name}@${base}`;
   if (Object.hasOwn(nodes, base)) return base;

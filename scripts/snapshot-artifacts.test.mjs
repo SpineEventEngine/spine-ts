@@ -176,6 +176,24 @@ describe("snapshot artifact containment", () => {
     }
   });
 
+  it("terminates a command group that never publishes readiness", () => {
+    const root = mkdtempSync(join(tmpdir(), "snapshot-command-not-ready-"));
+    const ready = join(root, "never-ready");
+    try {
+      expect(() =>
+        runBoundedCommand(
+          process.execPath,
+          ["--eval", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"],
+          root,
+          100,
+          ready,
+        ),
+      ).toThrow(/did not publish readiness signal/u);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects sibling-prefix and real symlink escapes", () => {
     const consumer = mkdtempSync(join(tmpdir(), "snapshot-consumer-"));
     const outside = mkdtempSync(join(tmpdir(), "snapshot-consumer-outside-"));
