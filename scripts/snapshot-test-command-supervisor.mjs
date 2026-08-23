@@ -9,8 +9,8 @@ import {
 
 const { command, args, cwd, timeout, readyPath } = JSON.parse(process.argv[2]);
 const child = spawn(command, args, { cwd, detached: process.platform !== "win32", stdio: "pipe" });
-const childResult = new Promise((resolve, reject) => {
-  child.once("error", reject);
+const childResult = new Promise((resolve) => {
+  child.once("error", (error) => resolve({ error: error.message }));
   child.once("close", (status) => resolve({ status }));
 });
 let stdout = "";
@@ -24,17 +24,26 @@ const startTimeout = () =>
     timedOut = true;
     shutdown = terminateGroup();
   }, timeout);
-const timer = readyPath === undefined ? startTimeout() : await readyTimer();
+let readinessError;
+const timer =
+  readyPath === undefined
+    ? startTimeout()
+    : await readyTimer().catch((error) => {
+        readinessError = error instanceof Error ? error.message : String(error);
+        return undefined;
+      });
 const result = await childResult;
-globalThis.clearTimeout(timer);
+if (timer !== undefined) globalThis.clearTimeout(timer);
 await shutdown;
-process.stdout.write(JSON.stringify({ ...result, timedOut, stdout, stderr }));
+process.stdout.write(
+  JSON.stringify({ ...result, error: readinessError ?? result.error, timedOut, stdout, stderr }),
+);
 
 async function readyTimer() {
   const deadline = Date.now() + 1_000;
   while (!existsSync(readyPath)) {
     if (child.exitCode !== null || Date.now() >= deadline) {
-      await terminateGroup();
+      if (child.pid !== undefined) await terminateGroup();
       throw new Error(`Timed-out command did not publish readiness signal: ${readyPath}`);
     }
     await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
