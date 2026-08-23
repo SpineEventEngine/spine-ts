@@ -145,74 +145,92 @@ describe("snapshot artifact containment", () => {
       ),
     ).toThrow(/out.*err/u);
   });
-  it("terminates a timed-out command together with its forked descendant", () => {
-    const root = mkdtempSync(join(tmpdir(), "snapshot-command-tree-"));
-    const descendantPidFile = join(root, "descendant.pid");
-    const descendantReadyFile = join(root, "descendant.ready");
-    const parent = [
-      "import { spawn } from 'node:child_process';",
-      "import { existsSync, writeFileSync } from 'node:fs';",
-      `const ready = ${JSON.stringify(descendantReadyFile)};`,
-      "const child = spawn(process.execPath, ['--eval', \"import { writeFileSync } from 'node:fs'; process.on('SIGTERM', () => {}); writeFileSync(process.argv[1], 'ready'); setInterval(() => {}, 1000)\", ready], { stdio: 'ignore' });",
-      "const started = setInterval(() => { if (!existsSync(ready)) return; clearInterval(started);",
-      `writeFileSync(${JSON.stringify(descendantPidFile)}, String(child.pid));`,
-      "setInterval(() => {}, 1000); }, 1);",
-    ].join(" ");
-    try {
-      expect(() =>
-        runBoundedCommand(
-          process.execPath,
-          ["--input-type=module", "--eval", parent],
-          root,
-          500,
-          descendantPidFile,
-        ),
-      ).toThrow(/timed out/u);
-      const descendantPid = Number(readFileSync(descendantPidFile, "utf8"));
-      expect(descendantPid).toBeGreaterThan(0);
-      expect(waitForProcessExit(descendantPid)).toBe(true);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
+  it.skipIf(process.platform === "win32")(
+    "terminates a timed-out command together with its forked descendant",
+    () => {
+      const root = mkdtempSync(join(tmpdir(), "snapshot-command-tree-"));
+      const descendantPidFile = join(root, "descendant.pid");
+      const descendantReadyFile = join(root, "descendant.ready");
+      const parent = [
+        "import { spawn } from 'node:child_process';",
+        "import { existsSync, writeFileSync } from 'node:fs';",
+        `const ready = ${JSON.stringify(descendantReadyFile)};`,
+        "const child = spawn(process.execPath, ['--eval', \"import { writeFileSync } from 'node:fs'; process.on('SIGTERM', () => {}); writeFileSync(process.argv[1], 'ready'); setInterval(() => {}, 1000)\", ready], { stdio: 'ignore' });",
+        "const started = setInterval(() => { if (!existsSync(ready)) return; clearInterval(started);",
+        `writeFileSync(${JSON.stringify(descendantPidFile)}, String(child.pid));`,
+        "setInterval(() => {}, 1000); }, 1);",
+      ].join(" ");
+      try {
+        expect(() =>
+          runBoundedCommand(
+            process.execPath,
+            ["--input-type=module", "--eval", parent],
+            root,
+            500,
+            descendantPidFile,
+          ),
+        ).toThrow(/timed out/u);
+        const descendantPid = Number(readFileSync(descendantPidFile, "utf8"));
+        expect(descendantPid).toBeGreaterThan(0);
+        expect(waitForProcessExit(descendantPid)).toBe(true);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
 
-  it("terminates a command group that never publishes readiness", () => {
-    const root = mkdtempSync(join(tmpdir(), "snapshot-command-not-ready-"));
-    const ready = join(root, "never-ready");
-    try {
+  it.skipIf(process.platform === "win32")(
+    "terminates a command group that never publishes readiness",
+    () => {
+      const root = mkdtempSync(join(tmpdir(), "snapshot-command-not-ready-"));
+      const ready = join(root, "never-ready");
+      try {
+        expect(() =>
+          runBoundedCommand(
+            process.execPath,
+            ["--eval", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"],
+            root,
+            100,
+            ready,
+          ),
+        ).toThrow(/did not publish readiness signal/u);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "reports an immediate spawn error without waiting for readiness",
+    () => {
       expect(() =>
         runBoundedCommand(
-          process.execPath,
-          ["--eval", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"],
-          root,
+          "definitely-not-a-spine-command",
+          [],
+          process.cwd(),
           100,
-          ready,
+          "missing-ready",
         ),
-      ).toThrow(/did not publish readiness signal/u);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
+      ).toThrow(/ENOENT/u);
+    },
+  );
 
-  it("reports an immediate spawn error without waiting for readiness", () => {
-    expect(() =>
-      runBoundedCommand("definitely-not-a-spine-command", [], process.cwd(), 100, "missing-ready"),
-    ).toThrow(/ENOENT/u);
-  });
-
-  it("cleans an ignoring descendant after parent exits before readiness", () => {
-    const root = mkdtempSync(join(tmpdir(), "snapshot-early-exit-"));
-    const pidFile = join(root, "descendant.pid");
-    try {
-      const parent = `const { spawn } = require('node:child_process'); const { writeFileSync } = require('node:fs'); const child = spawn(process.execPath, ['--eval', ${JSON.stringify("process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)")}], { stdio: 'ignore' }); writeFileSync(${JSON.stringify(pidFile)}, String(child.pid)); child.unref();`;
-      expect(() =>
-        runBoundedCommand(process.execPath, ["--eval", parent], root, 100, join(root, "ready")),
-      ).toThrow(/exited before readiness/u);
-      expect(waitForProcessExit(Number(readFileSync(pidFile, "utf8")))).toBe(true);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
+  it.skipIf(process.platform === "win32")(
+    "cleans an ignoring descendant after parent exits before readiness",
+    () => {
+      const root = mkdtempSync(join(tmpdir(), "snapshot-early-exit-"));
+      const pidFile = join(root, "descendant.pid");
+      try {
+        const parent = `const { spawn } = require('node:child_process'); const { writeFileSync } = require('node:fs'); const child = spawn(process.execPath, ['--eval', ${JSON.stringify("process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)")}], { stdio: 'ignore' }); writeFileSync(${JSON.stringify(pidFile)}, String(child.pid)); child.unref();`;
+        expect(() =>
+          runBoundedCommand(process.execPath, ["--eval", parent], root, 100, join(root, "ready")),
+        ).toThrow(/exited before readiness/u);
+        expect(waitForProcessExit(Number(readFileSync(pidFile, "utf8")))).toBe(true);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("rejects sibling-prefix and real symlink escapes", () => {
     const consumer = mkdtempSync(join(tmpdir(), "snapshot-consumer-"));

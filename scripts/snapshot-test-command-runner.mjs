@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 const supervisor = new URL("./snapshot-test-command-supervisor.mjs", import.meta.url);
 
 export function runBoundedCommand(command, args, cwd, timeout, readyPath) {
+  if (process.platform === "win32" && readyPath !== undefined)
+    throw new Error("Readiness-synchronized process groups are unsupported on Windows.");
   const result = spawnSync(
     process.execPath,
     [supervisor.pathname, JSON.stringify({ command, args, cwd, timeout, readyPath })],
