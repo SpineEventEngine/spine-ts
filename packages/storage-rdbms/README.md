@@ -24,7 +24,7 @@ For database requirements, query limits, lifecycle, and error details, see
 ```sh
 mkdir spine-mysql-app && cd spine-mysql-app
 pnpm init
-pnpm add @spine-event-engine/storage-rdbms@snapshot @spine-event-engine/storage @bufbuild/protobuf
+pnpm add @spine-event-engine/storage-rdbms@snapshot @spine-event-engine/storage@snapshot @bufbuild/protobuf
 ```
 
 Create an empty MySQL database, set an application-owned connection URL, and

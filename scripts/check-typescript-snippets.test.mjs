@@ -147,6 +147,9 @@ describe("TypeScript documentation snippets", () => {
       expect(source, document).not.toMatch(/```(?:ts|typescript)\s*\n\s*\/\/ docs-snippet-path:/iu);
       expect(source, document).toMatch(/\]\(REFERENCE\.md\)/u);
       expect(source, document).toMatch(/@spine-event-engine\/[\w-]+@snapshot/u);
+      for (const line of source.match(/^pnpm add[^\n]*$/gmu) ?? [])
+        for (const token of line.match(/@spine-event-engine\/[\w-]+(?:@snapshot)?/gu) ?? [])
+          expect(token, document).toMatch(/@snapshot$/u);
       expect(source, document).toMatch(/experimental snapshot/iu);
     }
   });

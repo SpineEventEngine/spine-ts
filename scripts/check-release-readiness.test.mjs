@@ -365,6 +365,17 @@ describe("check-release-readiness", () => {
     });
   });
 
+  it("allows adapter and storage snapshot tokens on one install line", () => {
+    withTempRepository((repoRoot) => {
+      writeFileSync(
+        join(repoRoot, "README.md"),
+        "pnpm add @spine-event-engine/storage-datastore@snapshot @spine-event-engine/storage@snapshot\npnpm add @spine-event-engine/storage-rdbms@snapshot @spine-event-engine/storage@snapshot\n",
+      );
+      execFileSync("git", ["add", "README.md"], { cwd: repoRoot });
+      expect(collectUserFacingDocumentationProblems(repoRoot)).toEqual([]);
+    });
+  });
+
   it("rejects retired delivery observer and batch APIs in reader documentation", () => {
     withTempRepository((repoRoot) => {
       writeFileSync(

@@ -24,7 +24,7 @@ For exact query limits, entity-storage behavior, and failure handling, see
 ```sh
 mkdir spine-datastore-app && cd spine-datastore-app
 pnpm init
-pnpm add @spine-event-engine/storage-datastore@snapshot @spine-event-engine/storage @bufbuild/protobuf @google-cloud/datastore
+pnpm add @spine-event-engine/storage-datastore@snapshot @spine-event-engine/storage@snapshot @bufbuild/protobuf @google-cloud/datastore
 ```
 
 Create a `storage.ts` file from the factory example below, replace `my-project`
