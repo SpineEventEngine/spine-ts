@@ -200,6 +200,20 @@ describe("snapshot artifact containment", () => {
     ).toThrow(/ENOENT/u);
   });
 
+  it("cleans an ignoring descendant after parent exits before readiness", () => {
+    const root = mkdtempSync(join(tmpdir(), "snapshot-early-exit-"));
+    const pidFile = join(root, "descendant.pid");
+    try {
+      const parent = `const { spawn } = require('node:child_process'); const { writeFileSync } = require('node:fs'); const child = spawn(process.execPath, ['--eval', ${JSON.stringify("process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)")}], { stdio: 'ignore' }); writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));`;
+      expect(() =>
+        runBoundedCommand(process.execPath, ["--eval", parent], root, 100, join(root, "ready")),
+      ).toThrow(/exited before readiness/u);
+      expect(waitForProcessExit(Number(readFileSync(pidFile, "utf8")))).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects sibling-prefix and real symlink escapes", () => {
     const consumer = mkdtempSync(join(tmpdir(), "snapshot-consumer-"));
     const outside = mkdtempSync(join(tmpdir(), "snapshot-consumer-outside-"));
