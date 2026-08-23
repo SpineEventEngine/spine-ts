@@ -1,6 +1,6 @@
 # T-0219: Wave 14 Specification And Security Corrections
 
-Status: Ready for integration
+Status: Complete
 Start: `2026-08-23 Europe/Lisbon`
 Baseline commit: `ee8476f83ea76a108e2c0b9f5d5bb020cdb368f5`
 Branch: `codex/T-0219-wave14-spec-security-corrections`

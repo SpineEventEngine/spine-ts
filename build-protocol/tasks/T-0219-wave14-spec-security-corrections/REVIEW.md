@@ -1,6 +1,6 @@
 # T-0219 Review Record
 
-Status: Accepted; ready for integration
+Status: Accepted and integrated
 
 ## Implementation Acceptance Gate
 
@@ -174,4 +174,5 @@ corrections and is GREEN: every shared deterministic gate and 9 focused files /
 with 4 intentional skips, 4,463/4,482 tests passed with 19 intentional skips,
 coverage remained above all repository thresholds, and both low-threshold full
 and production audits reported no known vulnerabilities. The accepted change
-is ready for integration.
+was fast-forwarded to configured `origin/main`; no reviewer concern remains
+open.
