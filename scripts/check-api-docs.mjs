@@ -801,6 +801,60 @@ const expectedBrowserServerExports = [
   "StandaloneBrowserServerOptions",
   "isDurableSubscriptionBindings",
 ];
+const publishedSpiInventories = [
+  {
+    packageName: "@spine-event-engine/core/spi/subscription-lifecycle",
+    documentedModulePath: "packages/core/src/spi/subscription-lifecycle",
+    sourcePath: join("packages", "core", "src", "spi", "subscription-lifecycle.ts"),
+    expectedDeclaredExports: ["SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS"],
+    expectedDocumentedExports: ["SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS"],
+  },
+  {
+    packageName: "@spine-event-engine/deployment/spi/backend-membership",
+    documentedModulePath: "packages/deployment/src/spi/backend-membership",
+    sourcePath: join("packages", "deployment", "src", "spi", "backend-membership.ts"),
+    expectedDeclaredExports: [
+      "BackendMemberClient",
+      "BackendMembershipKernel",
+      "BackendMembershipKernelOptions",
+    ],
+    expectedDocumentedExports: [
+      "BackendMemberClient",
+      "BackendMembershipKernel",
+      "BackendMembershipKernelOptions",
+    ],
+  },
+  {
+    packageName: "@spine-event-engine/server/spi/handler-registry",
+    documentedModulePath: "packages/server/src/spi/handler-registry",
+    sourcePath: join("packages", "server", "src", "spi", "handler-registry.ts"),
+    expectedDeclaredExports: [
+      "GeneratedEntityHandlerGroup",
+      "GeneratedEntityHandlers",
+      "GeneratedHandlerKind",
+      "GeneratedHandlerParameterCount",
+      "GeneratedHandlerRecord",
+      "GeneratedHandlerRecordInput",
+      "GeneratedHandlerRegistry",
+    ],
+    expectedDocumentedExports: [
+      "GeneratedEntityHandlerGroup",
+      "GeneratedEntityHandlers",
+      "GeneratedHandlerKind",
+      "GeneratedHandlerParameterCount",
+      "GeneratedHandlerRecord",
+      "GeneratedHandlerRecordInput",
+      "GeneratedHandlerRegistry",
+    ],
+  },
+  {
+    packageName: "@spine-event-engine/server/spi/delivery",
+    documentedModulePath: "packages/server/src/spi/delivery",
+    sourcePath: join("packages", "server", "src", "spi", "delivery.ts"),
+    expectedDeclaredExports: ["conditionalPickUp"],
+    expectedDocumentedExports: ["conditionalPickUp"],
+  },
+];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const boundedContextProtoPath = join(
   "packages",
@@ -895,6 +949,10 @@ const datastoreStorageModuleNames = collectDirectModuleNames(
 const rdbmsStorageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage-rdbms/src");
 const testingModuleNames = collectDirectModuleNames(apiDocs, "packages/testing/src");
 const transportModuleNames = collectDirectModuleNames(apiDocs, "packages/transport/src");
+const documentedSpiExports = publishedSpiInventories.map((inventory) => ({
+  ...inventory,
+  documentedExports: collectDirectModuleNames(apiDocs, inventory.documentedModulePath),
+}));
 
 function collectNames(value) {
   if (Array.isArray(value)) {
@@ -1106,20 +1164,6 @@ const forbiddenPublicMembers = [
     reason: "follow-up scheduling authority is framework-internal",
     matches: (value) => Array.isArray(value.signatures),
   },
-  ...[
-    "GeneratedEntityHandlerGroup",
-    "GeneratedEntityHandlers",
-    "GeneratedHandlerKind",
-    "GeneratedHandlerParameterCount",
-    "GeneratedHandlerRecordInput",
-    "GeneratedHandlerRecord",
-    "GeneratedHandlerRegistry",
-  ].map((member) => ({
-    owner: undefined,
-    member,
-    reason: "generated registry contracts are internal tooling API",
-    matches: (value) => typeof value.kind === "number",
-  })),
 ];
 
 function collectForbiddenMembers(value, ownerName, matches) {
@@ -1224,6 +1268,10 @@ const declaredDatastoreStorageExports = collectNamedExports(datastoreStorageInde
 const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
 const declaredTransportExports = collectNamedExports(transportIndexPath);
+const declaredSpiExports = documentedSpiExports.map((inventory) => ({
+  ...inventory,
+  declaredExports: collectModuleExports(inventory.sourcePath),
+}));
 const declaredIntegrationProtoExports = new Set([
   ...collectNamedExports(boundedContextProtoPath),
   ...collectNamedExports(brokerProtoPath),
@@ -1640,6 +1688,41 @@ if (unexpectedDeclaredBrowserServerExports.length > 0) {
       unexpectedDeclaredBrowserServerExports.join(", "),
   );
   process.exit(1);
+}
+
+for (const inventory of declaredSpiExports) {
+  const missingDocumentedExports = inventory.expectedDocumentedExports.filter(
+    (name) => !inventory.documentedExports.has(name),
+  );
+  const unexpectedDocumentedExports = [...inventory.documentedExports].filter(
+    (name) => !inventory.expectedDocumentedExports.includes(name),
+  );
+  const missingDeclaredExports = inventory.expectedDeclaredExports.filter(
+    (name) => !inventory.declaredExports.includes(name),
+  );
+  const unexpectedDeclaredExports = inventory.declaredExports.filter(
+    (name) => !inventory.expectedDeclaredExports.includes(name),
+  );
+
+  if (missingDocumentedExports.length > 0 || unexpectedDocumentedExports.length > 0) {
+    console.error(
+      `TypeDoc JSON ${inventory.packageName} exports changed without updating docs expectations: ${[
+        ...missingDocumentedExports.map((name) => `missing ${name}`),
+        ...unexpectedDocumentedExports.map((name) => `unexpected ${name}`),
+      ].join(", ")}`,
+    );
+    process.exit(1);
+  }
+
+  if (missingDeclaredExports.length > 0 || unexpectedDeclaredExports.length > 0) {
+    console.error(
+      `${inventory.packageName} source exports changed without updating docs expectations: ${[
+        ...missingDeclaredExports.map((name) => `missing ${name}`),
+        ...unexpectedDeclaredExports.map((name) => `unexpected ${name}`),
+      ].join(", ")}`,
+    );
+    process.exit(1);
+  }
 }
 
 if (forbiddenDeclaredServerExports.length > 0 || forbiddenDocumentedServerExports.length > 0) {

@@ -19,6 +19,26 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
+const checkerPath = new URL("./check-api-docs.mjs", import.meta.url).pathname;
+
+const publishedSpiModules = [
+  {
+    documented: "packages/core/src/spi/subscription-lifecycle",
+    source: "packages/core/src/spi/subscription-lifecycle.ts",
+  },
+  {
+    documented: "packages/deployment/src/spi/backend-membership",
+    source: "packages/deployment/src/spi/backend-membership.ts",
+  },
+  {
+    documented: "packages/server/src/spi/handler-registry",
+    source: "packages/server/src/spi/handler-registry.ts",
+  },
+  {
+    documented: "packages/server/src/spi/delivery",
+    source: "packages/server/src/spi/delivery.ts",
+  },
+];
 
 const expectedStorageProviderExports = [
   "CleanupOperation",
@@ -119,6 +139,23 @@ describe("storage API documentation inventory", () => {
       ]),
     );
   });
+
+  it("keeps every published SPI TypeDoc page equal to its public source exports", () => {
+    for (const spi of publishedSpiModules) {
+      expect(documentedModuleExports(spi.documented).sort()).toEqual(
+        moduleExports(resolve(repoRoot, spi.source)),
+      );
+    }
+  }, 60_000);
+
+  it("accepts published SPI documentation without classifying it as a package-root export", () => {
+    const result = spawnSync(process.execPath, [checkerPath], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(0);
+  }, 60_000);
 
   it("lists EntityRecord directly on the provider TypeDoc page", () => {
     expect(documentedModuleExports("packages/storage/src/provider")).toContain("EntityRecord");
