@@ -204,7 +204,7 @@ describe("snapshot artifact containment", () => {
     const root = mkdtempSync(join(tmpdir(), "snapshot-early-exit-"));
     const pidFile = join(root, "descendant.pid");
     try {
-      const parent = `const { spawn } = require('node:child_process'); const { writeFileSync } = require('node:fs'); const child = spawn(process.execPath, ['--eval', ${JSON.stringify("process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)")}], { stdio: 'ignore' }); writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));`;
+      const parent = `const { spawn } = require('node:child_process'); const { writeFileSync } = require('node:fs'); const child = spawn(process.execPath, ['--eval', ${JSON.stringify("process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)")}], { stdio: 'ignore' }); writeFileSync(${JSON.stringify(pidFile)}, String(child.pid)); child.unref();`;
       expect(() =>
         runBoundedCommand(process.execPath, ["--eval", parent], root, 100, join(root, "ready")),
       ).toThrow(/exited before readiness/u);
