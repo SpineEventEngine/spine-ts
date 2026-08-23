@@ -55,3 +55,33 @@ All dispatches will prohibit child spawning. The orchestrator will collect one
 complete review wave before returning one consolidated accepted correction
 batch to the implementation owner. Only substantively affected concerns will
 be re-reviewed.
+
+## Complete Review Wave
+
+All five reviewers ran with the explicit role, model, and reasoning recorded
+above. Child spawning was prohibited. Runtime self-telemetry was unavailable;
+the Desktop surface's immutable role profiles and explicit dispatch fields are
+the acceptance evidence.
+
+- Documentation completeness (`gpt-5.6-luna` / medium): accepted P2. The MySQL
+  first-success example requires strict localhost TLS without a CA; the GCE and
+  GKE guides switch from an operator-copied `terraform/` directory to
+  repository-only package paths.
+- Style/maintainability (`gpt-5.6-terra` / high): accepted three P2 findings.
+  New generation helper TSDoc fails the enforced gate; generated-tree traversal
+  lacks depth/entry bounds; dependency policy fails open on malformed lockfile
+  layout.
+- TypeScript/API (`gpt-5.6-terra` / high): accepted P2. The public subscription
+  handshake and seven handler-registry SPI contracts retain `@internal`, so
+  TypeDoc contradicts their supported public subpaths.
+- Performance/reliability (`gpt-5.6-terra` / high): accepted P2. The TypeDoc
+  test uses unbounded synchronous execution, so a stall defeats Vitest timeout
+  and can bypass temporary-directory cleanup.
+- Security (`gpt-5.6-terra` / high): accepted two P1 findings. The full audit
+  reports patched toolchain advisories and is absent from the release gate; the
+  regex lockfile checker neither parses quoted YAML safely nor computes the
+  production importer/runtime closure, causing both fail-open and false-positive
+  behavior.
+
+The complete accepted batch returns once to the existing implementation owner.
+Re-review will cover only concerns substantively changed by the corrections.
