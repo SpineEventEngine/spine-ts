@@ -85,3 +85,24 @@ the acceptance evidence.
 
 The complete accepted batch returns once to the existing implementation owner.
 Re-review will cover only concerns substantively changed by the corrections.
+
+## Consolidated Correction Batch
+
+- `c824705c2`: runnable local MySQL and copied Terraform paths, compliant
+  generation-helper TSDoc, and iterative symlink/depth/entry-bounded generated
+  traversal with regressions.
+- `05f58078e`: public subscription and handler-registry SPI declarations no
+  longer render as internal; root and subpath inventories remain exact.
+- `16a022e92`: production and test TypeDoc execution use the existing bounded
+  process-group supervisor and clean temporary JSON output on failure/exit.
+- `3f62a840d`: parsed fail-closed production closure policy, malformed/quoted/
+  optional/dev-only/transitive fixtures, fixed toolchain resolutions, and
+  low-threshold full plus production audits in the release gate.
+- `8946934e0`: deterministic correction for the final TSDoc gate failure.
+
+Post-correction mechanical evidence is GREEN: 8 focused suites / 259 tests,
+documentation snippets and API, production policy, frozen offline install,
+zero-vulnerability full and production audits, formatting, ESLint, generated
+current-output comparison, two byte-identical Proto generations, diff check,
+and clean status. Affected concerns now enter re-review with their previously
+recorded explicit role/model/reasoning profiles.
