@@ -29,7 +29,6 @@ import { RejectionSources } from "./rejection-source.js";
 /**
  * Describes the generated handler registry module shape accepted by the framework ingestor.
  *
- * @internal
  */
 export interface GeneratedHandlerRegistry {
   // prettier-ignore
@@ -128,7 +127,6 @@ export class HandlerRegistryIngestionError extends Error {
 /**
  * Describes handler categories supported by generated registry ingestion.
  *
- * @internal
  */
 export type GeneratedHandlerKind =
   | "command-assignment"
@@ -140,14 +138,12 @@ export type GeneratedHandlerKind =
 /**
  * Describes public handler arity recorded by generated registry tooling.
  *
- * @internal
  */
 export type GeneratedHandlerParameterCount = 1 | 2;
 
 /**
  * Describes a type-erased generated entity group accepted by a top-level registry.
  *
- * @internal
  */
 export interface GeneratedEntityHandlerGroup {
   // prettier-ignore
@@ -171,7 +167,6 @@ export interface GeneratedEntityHandlerGroup {
 /**
  * Describes generated handler records for one entity class.
  *
- * @internal
  */
 export interface GeneratedEntityHandlers<
   Instance extends object = object,
@@ -198,7 +193,6 @@ export interface GeneratedEntityHandlers<
 /**
  * Describes type-erased generated metadata for one decorated handler method.
  *
- * @internal
  */
 export interface GeneratedHandlerRecordInput {
   // prettier-ignore
@@ -242,7 +236,6 @@ export interface GeneratedHandlerRecordInput {
 /**
  * Describes generated metadata for one decorated handler method on a concrete entity class.
  *
- * @internal
  */
 export interface GeneratedHandlerRecord<
   Instance extends object = object,
