@@ -9,6 +9,10 @@ import {
 
 const { command, args, cwd, timeout, readyPath } = JSON.parse(process.argv[2]);
 const child = spawn(command, args, { cwd, detached: process.platform !== "win32", stdio: "pipe" });
+const childResult = new Promise((resolve, reject) => {
+  child.once("error", reject);
+  child.once("close", (status) => resolve({ status }));
+});
 let stdout = "";
 let stderr = "";
 child.stdout.on("data", (chunk) => (stdout = appendOutput(stdout, chunk)));
@@ -21,10 +25,7 @@ const startTimeout = () =>
     shutdown = terminateGroup();
   }, timeout);
 const timer = readyPath === undefined ? startTimeout() : await readyTimer();
-const result = await new Promise((resolve, reject) => {
-  child.once("error", reject);
-  child.once("close", (status) => resolve({ status }));
-});
+const result = await childResult;
 globalThis.clearTimeout(timer);
 await shutdown;
 process.stdout.write(JSON.stringify({ ...result, timedOut, stdout, stderr }));

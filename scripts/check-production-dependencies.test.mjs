@@ -3,6 +3,20 @@ import { describe, expect, it } from "vitest";
 import { productionDependencyProblems } from "./check-production-dependencies.mjs";
 
 describe("production dependency policy", () => {
+  it.each([
+    [
+      "direct unresolved",
+      "lockfileVersion: '9.0'\nimporters:\n  .:\n    dependencies:\n      uuid: 9.0.1\npackages: {}\nsnapshots: {}",
+      "unresolved production dependency",
+    ],
+    [
+      "array importers",
+      "lockfileVersion: '9.0'\nimporters: []\npackages: {}\nsnapshots: {}",
+      "importers must be a mapping",
+    ],
+  ])("fails closed for %s", (_name, lockfile, message) => {
+    expect(() => productionDependencyProblems(lockfile)).toThrow(message);
+  });
   it("rejects vulnerable resolved brace-expansion and uuid versions", () => {
     expect(
       productionDependencyProblems(

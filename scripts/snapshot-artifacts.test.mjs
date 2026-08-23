@@ -194,6 +194,12 @@ describe("snapshot artifact containment", () => {
     }
   });
 
+  it("reports an immediate spawn error without waiting for readiness", () => {
+    expect(() =>
+      runBoundedCommand("definitely-not-a-spine-command", [], process.cwd(), 100, "missing-ready"),
+    ).toThrow();
+  });
+
   it("rejects sibling-prefix and real symlink escapes", () => {
     const consumer = mkdtempSync(join(tmpdir(), "snapshot-consumer-"));
     const outside = mkdtempSync(join(tmpdir(), "snapshot-consumer-outside-"));
