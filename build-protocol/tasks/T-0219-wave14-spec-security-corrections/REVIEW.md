@@ -167,3 +167,6 @@ terminating the group on startup failure. Only those three concerns reopen.
 
 All P1/P2 findings are resolved. No P3 findings remain. Mandatory cheap
 preflight and one final `verify:release` remain before integration.
+
+The mandatory cheap preflight is GREEN: every shared deterministic gate and 8
+focused files / 235 tests passed. One final `verify:release` remains.

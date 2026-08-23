@@ -16,6 +16,16 @@
 This log will record RED/GREEN evidence, commits, pushes, review dispositions,
 verification, and integration as they occur.
 
+- `2026-08-23`: Mandatory cheap preflight converged after two deterministic
+  corrections discovered only by the full shared gates: the new declaration
+  received its exact standalone-function necessity record, and provider install
+  commands plus release-readiness matching now require and recognize every
+  Spine dependency at `@snapshot`. The complete restarted
+  `verify:task --no-coverage` passed generated build/tooling, cleanup, TSDoc,
+  copyright, logging, formatting, documentation audience/API, Buf,
+  current-output generation, and release readiness, then passed 8 focused files
+  / 235 tests. The selected final profile remains one `verify:release`.
+
 - `2026-08-23`: RED — `pnpm --config.verify-deps-before-run=false exec vitest run packages/proto-tools/test/proto-tools.test.ts -t 'reuses a committed generation ID when ignored live output is absent' --passWithNoTests` failed 1/1: `reusableGenerationId()` returned `undefined` when the committed live generated root contained only its tracked marker and the staged generation contained ignored TypeScript output. The regression models a fresh checkout; unchanged manifest content must retain its committed generation ID while non-empty live trees remain content-compared.
 - `2026-08-23`: RED — `pnpm --config.verify-deps-before-run=false exec vitest run scripts/package-artifacts.test.mjs -t 'rejects stale snapshot.2 references' --passWithNoTests` failed 1/1 because packed-manifest policy accepted an internal `2.0.0-snapshot.2` dependency. The same focused regression also specifies archive-text rejection, preventing stale pre-publication references from escaping through generated or packaged text.
 - `2026-08-23`: RED — `pnpm --config.verify-deps-before-run=false exec vitest run scripts/check-production-dependencies.test.mjs --passWithNoTests` failed before collecting tests because the new production-lock policy module was absent. The test contract requires exact rejection of resolved `brace-expansion@2.1.3` and `uuid@9.0.1`, rather than trusting only declared overrides.
