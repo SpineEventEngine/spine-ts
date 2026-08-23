@@ -15,9 +15,26 @@ Status: Pending implementation convergence
 
 ## Mechanical Verification Assignment
 
-| Existing role/function | Bounded scope | Explicit model | Explicit reasoning | Child spawning | Runtime metadata |
-| --- | --- | --- | --- | --- | --- |
-| Orchestrator-dispatched mechanical verification | Changed-file inventory, focused tests, generated stability/current-output drift, package artifacts, API/docs policy, dependency audit, lint/format/diff classification | `gpt-5.6-luna` | low | Prohibited | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
+| Existing role/function                          | Bounded scope                                                                                                                                                          | Explicit model | Explicit reasoning | Child spawning | Runtime metadata                                                         |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ------------------ | -------------- | ------------------------------------------------------------------------ |
+| Orchestrator-dispatched mechanical verification | Changed-file inventory, focused tests, generated stability/current-output drift, package artifacts, API/docs policy, dependency audit, lint/format/diff classification | `gpt-5.6-luna` | low                | Prohibited     | Desktop dispatch fields are explicit; self-telemetry may be unavailable. |
+
+## Mechanical Verification Result
+
+- Explicit `gpt-5.6-luna` / `low` verification completed against
+  `ee8476f83..87d783d34`; runtime self-telemetry was unavailable, so immutable
+  Desktop dispatch configuration is the evidence.
+- GREEN: 39-file scope inventory, clean worktree, no publisher-wrapper change,
+  7 focused suites / 197 tests, two byte-identical Proto generations,
+  current-output validation, exact browser-with-auth and native-without-auth
+  tarball consumers, snapshot.2 rejection, SPI inventory, production dependency
+  policy, production audit, TypeScript snippets, focused ESLint, and diff check.
+- Accepted correction: `docs:api:check` misclassified seven handler-registry SPI
+  types as unexpected server-root exports after the SPI became a TypeDoc entry
+  point. The API checker must distinguish the public subpath from the root and
+  validate actual documented exports for every added SPI.
+- Deterministic correction: format this review record. Record-only formatting
+  does not reopen any reviewer lane.
 
 ## Required Concerns
 
