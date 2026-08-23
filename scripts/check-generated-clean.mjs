@@ -199,7 +199,7 @@ function printGeneratedDiff(diff) {
   }
 }
 
-export function runGeneratedClean(args = process.argv.slice(2)) {
+export function runGeneratedClean(args = process.argv.slice(2), operations = {}) {
   const { repoRoot, expectedGeneratedRoot, currentOutput } = parseArgs(args);
   if (expectedGeneratedRoot !== undefined && currentOutput) {
     throw new Error("--current-output cannot be combined with --expected-generated-root.");
@@ -210,13 +210,13 @@ export function runGeneratedClean(args = process.argv.slice(2)) {
 
   try {
     staged =
-      expectedGeneratedRoot === undefined && !currentOutput
-        ? stageGeneratedTargets({
+      expectedGeneratedRoot === undefined
+        ? (operations.stageGeneratedTargets ?? stageGeneratedTargets)({
             repoRoot,
           })
         : staged;
     if (staged.status !== 0) return staged.status;
-    if (expectedGeneratedRoot === undefined && !currentOutput)
+    if (expectedGeneratedRoot === undefined)
       targets = staged.stagedTargets.map(({ target }) => target);
     const expectedRoots = new Map(
       staged.stagedTargets.map((stagedTarget) => [
@@ -225,8 +225,8 @@ export function runGeneratedClean(args = process.argv.slice(2)) {
       ]),
     );
     messageBoardRegistry =
-      expectedGeneratedRoot === undefined && !currentOutput
-        ? stageMessageBoardRegistry(repoRoot)
+      expectedGeneratedRoot === undefined
+        ? (operations.stageMessageBoardRegistry ?? stageMessageBoardRegistry)(repoRoot)
         : undefined;
     for (const target of targets) {
       const trackedResult = runCommand(repoRoot, "tracked generated output check", "git", [
@@ -272,7 +272,7 @@ export function runGeneratedClean(args = process.argv.slice(2)) {
       const generatedDirectoryNotIgnored = ignoredResult.status !== 0;
       const expectedRoot = target.expectedGeneratedRoot ?? expectedRoots.get(target.displayPath);
 
-      if (expectedRoot === undefined && !currentOutput) {
+      if (expectedRoot === undefined) {
         throw new Error(`Missing staged generated output for ${target.displayPath}.`);
       }
 
@@ -316,10 +316,6 @@ export function runGeneratedClean(args = process.argv.slice(2)) {
         return 1;
       }
 
-      if (currentOutput) {
-        continue;
-      }
-
       const diff = compareGeneratedOutput(generatedDirectory, expectedRoot);
 
       if (diff.missing.length > 0 || diff.changed.length > 0 || diff.unexpected.length > 0) {
@@ -343,7 +339,7 @@ export function runGeneratedClean(args = process.argv.slice(2)) {
     );
     return 0;
   } finally {
-    cleanupStagedTargets(staged.stagedTargets);
+    (operations.cleanupStagedTargets ?? cleanupStagedTargets)(staged.stagedTargets);
     if (messageBoardRegistry !== undefined) {
       rmSync(messageBoardRegistry.fileStageRoot, { recursive: true, force: true });
     }

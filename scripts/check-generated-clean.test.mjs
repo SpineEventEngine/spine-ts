@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  cpSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -57,10 +58,21 @@ function runChecker(repoRoot, expectedGeneratedRoot) {
   );
 }
 
-function runCurrentOutputChecker(repoRoot) {
-  return spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot, "--current-output"], {
-    encoding: "utf8",
+function stageCurrentOutputs(repoRoot) {
+  const stageRoot = mkdtempSync(join(tmpdir(), "spine-current-generated-"));
+  const stagedTargets = generatedTargetsForCheck().map((target, index) => {
+    const currentRoot = join(repoRoot, target.displayPath);
+    const stagedOutputRoot = join(stageRoot, String(index));
+    cpSync(currentRoot, stagedOutputRoot, { recursive: true });
+
+    return { target, stagedOutputRoot };
   });
+
+  return {
+    stageGeneratedTargets: () => ({ status: 0, stagedTargets }),
+    stageMessageBoardRegistry: () => undefined,
+    cleanupStagedTargets: () => rmSync(stageRoot, { recursive: true, force: true }),
+  };
 }
 
 function createCompositionFixture(compositionSource = "process.exit(1);\n") {
@@ -111,7 +123,7 @@ writeFileSync(new URL("proof.ts", \`file://\${output}/\`), "export {};\\n");
 }
 
 describe("check-generated-clean", () => {
-  it("checks already-generated outputs without staging a second generation", () => {
+  it("compares already-generated outputs with freshly staged generation", () => {
     const repoRoot = createFixture();
     const generatedRoots = [
       "examples/todo/generated",
@@ -132,10 +144,12 @@ describe("check-generated-clean", () => {
       ].join("\n"),
     );
 
-    const result = runCurrentOutputChecker(repoRoot);
-
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("already-generated");
+    expect(
+      runGeneratedClean(
+        ["--repo-root", repoRoot, "--current-output"],
+        stageCurrentOutputs(repoRoot),
+      ),
+    ).toBe(0);
   });
 
   it("allows only the committed generation marker in an otherwise ignored generated root", () => {
@@ -162,12 +176,60 @@ describe("check-generated-clean", () => {
       ].join("\n"),
     );
 
-    const result = runCurrentOutputChecker(repoRoot);
+    expect(
+      runGeneratedClean(
+        ["--repo-root", repoRoot, "--current-output"],
+        stageCurrentOutputs(repoRoot),
+      ),
+    ).toBe(0);
+  });
 
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("already-generated");
+  it("rejects current output that differs from its freshly staged generation", () => {
+    const repoRoot = createFixture();
+    const expectedRoot = mkdtempSync(join(tmpdir(), "spine-current-generated-"));
+    try {
+      const generatedRoots = [
+        "examples/todo/generated",
+        "examples/projects/generated",
+        "examples/orders/generated",
+        "examples/message-board/model/generated",
+        "examples/message-board/app/generated",
+      ];
+      for (const generatedRoot of generatedRoots)
+        mkdirSync(join(repoRoot, generatedRoot), { recursive: true });
+      writeFileSync(
+        join(repoRoot, ".gitignore"),
+        ["packages/proto/generated/", ...generatedRoots.map((root) => `${root}/`)].join("\n"),
+      );
+      mkdirSync(join(expectedRoot, "spine/core"), { recursive: true });
+      writeFileSync(
+        join(expectedRoot, "spine/core/command_pb.ts"),
+        "export const command = 'fresh';\n",
+      );
+      writeFileSync(
+        join(repoRoot, "packages/proto/generated/spine/core/command_pb.ts"),
+        "export const command = 'stale';\n",
+      );
 
-    expect(runGeneratedClean(["--repo-root", repoRoot, "--current-output"])).toBe(0);
+      expect(
+        runGeneratedClean(["--repo-root", repoRoot, "--current-output"], {
+          stageGeneratedTargets: () => ({
+            status: 0,
+            stagedTargets: [
+              {
+                target: { displayPath: "packages/proto/generated" },
+                stagedOutputRoot: expectedRoot,
+              },
+            ],
+          }),
+          stageMessageBoardRegistry: () => undefined,
+          cleanupStagedTargets: () => undefined,
+        }),
+      ).toBe(1);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+      rmSync(expectedRoot, { recursive: true, force: true });
+    }
   });
 
   it("compares every atomic model output by default", () => {

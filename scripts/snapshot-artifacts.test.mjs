@@ -229,13 +229,21 @@ describe("snapshot artifact containment", () => {
   it("installs, compiles, imports, and executes all exact framework tarballs", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-exact-tarball-consumer-"));
     try {
+      let browserConsumerSource;
       expect(() =>
         proveExactTarballConsumer({
           root: repoRoot,
           destination: root,
-          run: (command, args, cwd) => runBoundedCommand(command, args, cwd, 60_000),
+          run: (command, args, cwd) => {
+            if (args.at(-1) === "tsconfig.json")
+              browserConsumerSource = readFileSync(join(cwd, "index.ts"), "utf8");
+            runBoundedCommand(command, args, cwd, 60_000);
+          },
         }),
       ).not.toThrow();
+      expect(browserConsumerSource).toContain('from "@spine-event-engine/server/browser"');
+      expect(browserConsumerSource).toContain('import "@spine-event-engine/auth"');
+      expect(browserConsumerSource).toContain("fetch(`${browser.baseUrl}/auth/probe`)");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

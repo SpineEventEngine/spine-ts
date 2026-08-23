@@ -197,6 +197,33 @@ describe("TypeScript documentation snippets", () => {
     expect(testing).not.toContain("declare const box: BlackBox;");
   });
 
+  it("puts Wave 14 provider and deployment first success before advanced guidance", () => {
+    for (const document of [
+      "packages/storage-datastore/README.md",
+      "packages/storage-rdbms/README.md",
+    ]) {
+      const source = readFileSync(resolve(root, document), "utf8");
+      expect(source.indexOf("## 🚀 First snapshot success"), document).toBeGreaterThan(-1);
+      expect(source.indexOf("pnpm add @spine-event-engine/"), document).toBeGreaterThan(-1);
+      expect(source.indexOf("## Build it in this workspace"), document).toBeGreaterThan(
+        source.indexOf("## 🚀 First snapshot success"),
+      );
+    }
+
+    for (const document of [
+      "packages/deployment-gce/README.md",
+      "packages/deployment-gke/README.md",
+    ]) {
+      const source = readFileSync(resolve(root, document), "utf8");
+      const firstPlan = source.indexOf("## First Terraform plan");
+      expect(firstPlan, document).toBeGreaterThan(-1);
+      expect(source.indexOf("terraform validate"), document).toBeGreaterThan(firstPlan);
+      expect(source.indexOf("## What this deployment creates"), document).toBeGreaterThan(
+        firstPlan,
+      );
+    }
+  });
+
   it("keeps source-linked beginner snippets free of source copyright headers", () => {
     const snippets = [
       [
