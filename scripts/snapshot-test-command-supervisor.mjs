@@ -42,6 +42,13 @@ process.stdout.write(
 async function readyTimer() {
   const deadline = Date.now() + 1_000;
   while (!existsSync(readyPath)) {
+    const outcome = await Promise.race([
+      childResult,
+      new Promise((resolve) => globalThis.setTimeout(() => resolve(undefined), 5)),
+    ]);
+    if (outcome?.error !== undefined) throw new Error(outcome.error);
+    if (outcome?.status !== undefined)
+      throw new Error(`Command exited before readiness with status ${outcome.status}.`);
     if (child.exitCode !== null || Date.now() >= deadline) {
       if (child.pid !== undefined) await terminateGroup();
       throw new Error(`Timed-out command did not publish readiness signal: ${readyPath}`);

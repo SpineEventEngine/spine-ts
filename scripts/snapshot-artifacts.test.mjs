@@ -197,7 +197,7 @@ describe("snapshot artifact containment", () => {
   it("reports an immediate spawn error without waiting for readiness", () => {
     expect(() =>
       runBoundedCommand("definitely-not-a-spine-command", [], process.cwd(), 100, "missing-ready"),
-    ).toThrow(/definitely-not-a-spine-command|ENOENT/u);
+    ).toThrow(/ENOENT/u);
   });
 
   it("rejects sibling-prefix and real symlink escapes", () => {
