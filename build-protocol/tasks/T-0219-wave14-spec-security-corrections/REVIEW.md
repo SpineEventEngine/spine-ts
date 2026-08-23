@@ -1,6 +1,6 @@
 # T-0219 Review Record
 
-Status: Pending implementation convergence
+Status: Accepted; ready for integration
 
 ## Implementation Acceptance Gate
 
@@ -168,5 +168,10 @@ terminating the group on startup failure. Only those three concerns reopen.
 All P1/P2 findings are resolved. No P3 findings remain. Mandatory cheap
 preflight and one final `verify:release` remain before integration.
 
-The mandatory cheap preflight is GREEN: every shared deterministic gate and 8
-focused files / 235 tests passed. One final `verify:release` remains.
+The mandatory cheap preflight was restarted after the final two focused test
+corrections and is GREEN: every shared deterministic gate and 9 focused files /
+239 tests passed. The final `verify:release` is GREEN: 278/282 test files passed
+with 4 intentional skips, 4,463/4,482 tests passed with 19 intentional skips,
+coverage remained above all repository thresholds, and both low-threshold full
+and production audits reported no known vulnerabilities. The accepted change
+is ready for integration.

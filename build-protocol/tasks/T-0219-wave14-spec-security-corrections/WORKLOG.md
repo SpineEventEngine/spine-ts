@@ -64,3 +64,18 @@ verification, and integration as they occur.
 - `2026-08-23`: Direct timeout regression correction GREEN — the SIGTERM-ignoring direct command publishes its PID as the readiness signal before its short timeout begins; the test requires timeout and confirms the PID is gone. It is POSIX-only because readiness synchronization is rejected on Windows.
 - `2026-08-23`: Snapshot regression lint correction GREEN — removed the obsolete child-process import after direct timeout synchronization; focused ESLint passes.
 - `2026-08-23`: Cleanup necessity correction GREEN — recorded the declaration-boundary necessity for `generationIdForContents()#1`; cleanup enforcement passes.
+- `2026-08-23`: The first full release run found one obsolete UUID expectation
+  after generation IDs became deterministic SHA-256 content IDs. The second
+  full run found one process-fixture timing race under four-worker load. Both
+  were corrected with focused regressions before restarting the mandatory
+  preflight; neither failure exposed a production defect.
+- `2026-08-23`: The restarted mandatory preflight passed every deterministic
+  `verify:task --no-tests` gate and 9 focused files / 239 tests. Heavy
+  subprocess suites ran with one Vitest worker to avoid machine-load timeouts;
+  their assertions and coverage were unchanged.
+- `2026-08-23`: Final `pnpm verify:release` passed: 278 test files passed and 4
+  were intentionally skipped; 4,463 tests passed and 19 were intentionally
+  skipped. Coverage was 93.28% statements, 90% branches, 92.81% functions, and
+  94.44% lines. Full and production `pnpm audit --audit-level=low` both
+  reported no known vulnerabilities. The feature worktree was clean before
+  the gate.
