@@ -17,6 +17,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import ts from "typescript";
 import { afterAll, describe, expect, it } from "vitest";
+import { runBoundedCommand } from "./snapshot-test-command-runner.mjs";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 const checkerPath = new URL("./check-api-docs.mjs", import.meta.url).pathname;
@@ -106,13 +107,19 @@ function generatedTypeDocModel() {
   if (generatedApiDocs === undefined) {
     generatedApiDocsOutput = mkdtempSync(join(tmpdir(), "spine-api-docs-test-"));
     const jsonPath = join(generatedApiDocsOutput, "api.json");
-    const result = spawnSync(
-      resolve(repoRoot, "node_modules/.bin/typedoc"),
-      ["--options", "typedoc.json", "--json", jsonPath],
-      { cwd: repoRoot, encoding: "utf8" },
-    );
-    if (result.status !== 0) throw new Error(result.stderr || result.stdout);
-    generatedApiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
+    try {
+      runBoundedCommand(
+        resolve(repoRoot, "node_modules/.bin/typedoc"),
+        ["--options", "typedoc.json", "--json", jsonPath],
+        repoRoot,
+        60_000,
+      );
+      generatedApiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
+    } catch (error) {
+      rmSync(generatedApiDocsOutput, { force: true, recursive: true });
+      generatedApiDocsOutput = undefined;
+      throw error;
+    }
   }
 
   return generatedApiDocs;

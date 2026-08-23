@@ -1,7 +1,6 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 import {
   createProgram,
   createSourceFile,
@@ -10,6 +9,7 @@ import {
   ScriptTarget,
   SyntaxKind,
 } from "typescript";
+import { runBoundedCommand } from "./snapshot-test-command-runner.mjs";
 
 const expectedProtoExports = [
   "ActorContext",
@@ -905,23 +905,18 @@ const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedo
 const typedocBin = join("node_modules", ".bin", typedocExecutable);
 const outputDir = mkdtempSync(join(tmpdir(), "spine-typedoc-json-"));
 const jsonPath = join(outputDir, "api.json");
+process.on("exit", () => rmSync(outputDir, { force: true, recursive: true }));
 
-const typedocResult = spawnSync(typedocBin, ["--options", "typedoc.json", "--json", jsonPath], {
-  stdio: "inherit",
-});
-
-if (typedocResult.error !== undefined) {
-  console.error(`Failed to start TypeDoc JSON check: ${typedocResult.error.message}`);
+try {
+  runBoundedCommand(
+    typedocBin,
+    ["--options", "typedoc.json", "--json", jsonPath],
+    process.cwd(),
+    60_000,
+  );
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
-}
-
-if (typedocResult.signal !== null) {
-  console.error(`TypeDoc JSON check terminated by signal ${typedocResult.signal}.`);
-  process.exit(1);
-}
-
-if (typedocResult.status !== 0) {
-  process.exit(typedocResult.status ?? 1);
 }
 
 const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
