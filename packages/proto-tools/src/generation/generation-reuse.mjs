@@ -62,7 +62,13 @@ function treeContents(root) {
   return files.sort(([left], [right]) => left.localeCompare(right));
 }
 
-/** Derives a stable ID from a generation manifest contract and complete generated output. */
+/**
+ * Creates a stable ID from a generation manifest contract and complete generated output.
+ *
+ * @param {Readonly<Record<string, unknown>>} manifest Generation manifest contract.
+ * @param {string} root Generated-output root.
+ * @returns {string} Stable content-derived generation identifier.
+ */
 export function generationIdForContents(manifest, root) {
   const contents = { ...manifest };
   delete contents.generationId;

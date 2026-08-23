@@ -12,6 +12,8 @@ import {
 } from "./proto-workflow.mjs";
 
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const maximumGeneratedTreeDepth = 64;
+const maximumGeneratedTreeEntries = 1_000;
 
 function parseArgs(argv) {
   const args = {
@@ -103,8 +105,20 @@ function assertGeneratedDirectorySafe(repoRoot, root, displayPath, options = {})
 
   const failures = [...ancestorFailures];
 
-  function visit(directory) {
+  const pending = [[root, 0]];
+  let entries = 0;
+  while (pending.length > 0) {
+    const [directory, depth] = pending.pop();
+    if (depth > maximumGeneratedTreeDepth) {
+      failures.push(`depth exceeds ${maximumGeneratedTreeDepth}: ${relative(root, directory)}`);
+      continue;
+    }
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      entries += 1;
+      if (entries > maximumGeneratedTreeEntries) {
+        failures.push(`entry count exceeds ${maximumGeneratedTreeEntries}`);
+        return failures;
+      }
       const path = join(directory, entry.name);
       const relativePath = relative(root, path).split(sep).join("/");
 
@@ -114,7 +128,7 @@ function assertGeneratedDirectorySafe(repoRoot, root, displayPath, options = {})
       }
 
       if (entry.isDirectory()) {
-        visit(path);
+        pending.push([path, depth + 1]);
         continue;
       }
 
@@ -124,19 +138,25 @@ function assertGeneratedDirectorySafe(repoRoot, root, displayPath, options = {})
     }
   }
 
-  visit(root);
   return failures;
 }
 
 function readFileMap(root) {
   const files = new Map();
-
-  function visit(directory) {
+  const pending = [[root, 0]];
+  let entries = 0;
+  while (pending.length > 0) {
+    const [directory, depth] = pending.pop();
+    if (depth > maximumGeneratedTreeDepth)
+      throw new Error(`Generated output depth exceeds ${maximumGeneratedTreeDepth}.`);
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      entries += 1;
+      if (entries > maximumGeneratedTreeEntries)
+        throw new Error(`Generated output entry count exceeds ${maximumGeneratedTreeEntries}.`);
       const path = join(directory, entry.name);
 
       if (entry.isDirectory()) {
-        visit(path);
+        pending.push([path, depth + 1]);
         continue;
       }
 
@@ -147,7 +167,6 @@ function readFileMap(root) {
     }
   }
 
-  visit(root);
   return files;
 }
 

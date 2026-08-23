@@ -50,7 +50,6 @@ const factory = await MysqlStorageFactory.newBuilder()
   .setOptions({
     url: "mysql://user:password@127.0.0.1:3306/spine_app",
     connectionLimit: 8,
-    tls: { rejectUnauthorized: true },
   })
   .build();
 const records = factory.createRecordStorage(
@@ -74,6 +73,10 @@ try {
   factory.close();
 }
 ```
+
+This local loopback example intentionally uses MySQL without TLS. In production,
+require TLS and provide the issuing CA explicitly; do not enable certificate
+verification without the CA material needed by your managed MySQL endpoint.
 
 For a multitenant application, assign each complete generated `TenantId` to a
 different database. The factory creates one pool per configured tenant and

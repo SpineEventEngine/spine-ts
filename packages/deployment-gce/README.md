@@ -43,12 +43,12 @@ configure an identity provider.
 
 ## First Terraform plan
 
-Copy the packaged template into an operator-owned deployment repository, then
+Copy the packaged template into an operator-owned deployment repository. The
+following commands assume its Terraform directory is your current directory;
 create a values file and obtain a validated plan before wiring advanced Gateway
 or registry behavior:
 
 ```bash
-cd terraform
 cp terraform.tfvars.example terraform.tfvars
 terraform init
 terraform fmt -check
@@ -100,7 +100,6 @@ control because it identifies your network and deployment, even though it
 contains no secret values.
 
 ```bash
-cd packages/deployment-gce/terraform
 cp terraform.tfvars.example terraform.tfvars
 ```
 

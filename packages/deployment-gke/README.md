@@ -49,12 +49,12 @@ Gateway Secret holds separate identity and session settings.
 
 ## First Terraform plan
 
-Copy the packaged template into an operator-owned deployment repository, fill
-in its existing cluster, Secret names, and immutable image references, then
-validate the private topology before configuring entrypoint details:
+Copy the packaged template into an operator-owned deployment repository. The
+following commands assume its Terraform directory is your current directory;
+fill in its existing cluster, Secret names, and immutable image references,
+then validate the private topology before configuring entrypoint details:
 
 ```bash
-cd terraform
 cp terraform.tfvars.example terraform.tfvars
 terraform init
 terraform fmt -check
@@ -105,7 +105,6 @@ Copy the supplied variable file and replace every placeholder with values for
 your cluster and delivery pipeline:
 
 ```bash
-cd packages/deployment-gke/terraform
 cp terraform.tfvars.example terraform.tfvars
 ```
 

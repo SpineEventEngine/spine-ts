@@ -428,4 +428,42 @@ describe("check-generated-clean", () => {
     expect(result.stderr).toContain("changed: spine/core/command_pb.ts");
     expect(result.stderr).toContain("unexpected: spine/core/orphan_pb.ts");
   });
+
+  it("rejects generated trees beyond the bounded traversal depth", () => {
+    const repoRoot = createFixture();
+    const expectedOutput = mkdtempSync(join(tmpdir(), "spine-expected-generated-"));
+    let nested = join(repoRoot, "packages/proto/generated");
+    for (let depth = 0; depth <= 64; depth += 1) {
+      nested = join(nested, `level-${depth}`);
+      mkdirSync(nested);
+    }
+    mkdirSync(join(expectedOutput, "spine/core"), { recursive: true });
+    writeFileSync(
+      join(expectedOutput, "spine/core/command_pb.ts"),
+      "export const command = 'fresh';\n",
+    );
+
+    const result = runChecker(repoRoot, expectedOutput);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("depth exceeds 64");
+  });
+
+  it("rejects generated trees beyond the bounded entry count", () => {
+    const repoRoot = createFixture();
+    const expectedOutput = mkdtempSync(join(tmpdir(), "spine-expected-generated-"));
+    const generatedRoot = join(repoRoot, "packages/proto/generated");
+    for (let index = 0; index <= 1_000; index += 1)
+      writeFileSync(join(generatedRoot, `entry-${index}.ts`), "export {};\n");
+    mkdirSync(join(expectedOutput, "spine/core"), { recursive: true });
+    writeFileSync(
+      join(expectedOutput, "spine/core/command_pb.ts"),
+      "export const command = 'fresh';\n",
+    );
+
+    const result = runChecker(repoRoot, expectedOutput);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("entry count exceeds 1000");
+  });
 });
