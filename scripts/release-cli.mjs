@@ -4,6 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { packFrameworkArtifacts, proveExactTarballConsumer } from "./snapshot-artifacts.mjs";
 import { expectedReleaseModel, readReleaseManifests } from "./release-policy.mjs";
@@ -152,4 +153,8 @@ export async function main({ argv = process.argv, environment = process.env } = 
       }),
   });
 }
-if (import.meta.url === new URL(process.argv[1], "file:").href) await main();
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+)
+  await main();

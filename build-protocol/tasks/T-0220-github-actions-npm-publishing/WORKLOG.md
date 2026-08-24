@@ -77,3 +77,9 @@ scripts/release-publisher.test.mjs --passWithNoTests` failed because the
   `structuredClone` in the release-artifact tampering test with a JSON test
   fixture clone. Focused artifact tests passed 12/12; focused ESLint and diff
   checks passed.
+- `2026-08-24`: Consolidated correction: direct CLI invocation uses a resolved
+  file URL; registry requests use abortable timeout/error handling and the
+  dedicated dist-tags endpoint; publication rechecks tag invariants immediately
+  before mutation. Workflows pin pnpm v6.0.9's dereferenced commit and use
+  Node 24.18.0's bundled npm 11.16.0 without installation in the OIDC job.
+  Focused release suites passed 39/39 with targeted ESLint/format/diff checks.

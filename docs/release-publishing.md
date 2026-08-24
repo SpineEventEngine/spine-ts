@@ -33,6 +33,11 @@ only, disable bypass, and leave required reviewers off by default so a merge can
 release automatically. GitHub-hosted runners use Node 24, pnpm 11.9.0, and npm
 11.16.0. Provenance remains automatic.
 
+Before activation, protect `master`: require pull requests and successful PR
+verification, prohibit direct pushes, and disable bypass. Repository code cannot
+configure this environment or the 18 npm trusted publishers; an operator must
+provide that configuration evidence before activation.
+
 On success, all packages become visible with their exact integrity and selected
 tag. After interruption, rerun the same workflow for the same commit: matching
 packages skip and missing packages resume in dependency order. A fully published

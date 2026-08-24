@@ -190,7 +190,7 @@ describe("release publisher", () => {
         publish: async () => {},
         poll: noOpPoll,
       }),
-    ).rejects.toThrow("Opposite tag moved");
+    ).rejects.toThrow(/Opposite tag (changed before publication|moved)/u);
   });
 
   it("rejects a tarball changed after preflight", async () => {

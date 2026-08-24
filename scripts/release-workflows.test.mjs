@@ -32,7 +32,8 @@ describe("release workflows", () => {
       environment: "gh-actions-environment",
       permissions: { contents: "read", "id-token": "write" },
     });
-    expect(source).toContain("npm@11.16.0");
+    expect(source).toContain("node-version: 24.18.0");
+    expect(source).toContain("npm --version | grep -Fx '11.16.0'");
     expect(source).toContain(
       "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5",
     );

@@ -15,12 +15,28 @@ export function compareReleaseVersions(left, right) {
   return Number(leftParts[4]) - Number(rightParts[4]);
 }
 
-export function createPublicRegistry({ fetch }) {
+export function createPublicRegistry({
+  fetch,
+  timeoutMs = 10000,
+  abort = globalThis.AbortSignal.timeout,
+}) {
   const request = async (path) => {
-    const response = await fetch(registryUrl + path, { headers: { accept: "application/json" } });
+    let response;
+    try {
+      response = await fetch(registryUrl + path, {
+        headers: { accept: "application/json" },
+        signal: abort(timeoutMs),
+      });
+    } catch (error) {
+      throw new Error("Registry request timed out or failed: " + error.message);
+    }
     if (response.status === 404) return undefined;
     if (!response.ok) throw new Error("Registry request failed: " + response.status);
-    return response.json();
+    try {
+      return await response.json();
+    } catch (error) {
+      throw new Error("Registry response body is invalid: " + error.message);
+    }
   };
   return async (kind, entry) => {
     const encoded = encodeURIComponent(entry.name);
@@ -34,7 +50,7 @@ export function createPublicRegistry({ fetch }) {
         throw new Error("Registry metadata is missing a valid integrity");
       return { integrity: metadata.dist.integrity };
     }
-    const metadata = await request(encoded);
+    const metadata = await request("-/package/" + encoded + "/dist-tags");
     if (metadata === undefined) return {};
     const tags = metadata["dist-tags"];
     if (tags === null || typeof tags !== "object" || Array.isArray(tags))
@@ -95,6 +111,11 @@ export async function publishRelease({ release, checksum, registry, publish, pol
   for (const entry of ordered) {
     if (checksum(entry.tarball) !== entry.integrity)
       throw new Error("Tarball changed before publication for " + entry.name);
+    const currentTags = await registry("tags", entry);
+    if (currentTags[release.tag] && currentTags[release.tag] !== release.version)
+      throw new Error("Selected tag changed before publication for " + entry.name);
+    if (currentTags[otherTag] !== initialTags.get(entry.name))
+      throw new Error("Opposite tag changed before publication for " + entry.name);
     for (const dependency of entry.dependencies) {
       const dependencyEntry = release.packages.find(({ name }) => name === dependency);
       const visible =
