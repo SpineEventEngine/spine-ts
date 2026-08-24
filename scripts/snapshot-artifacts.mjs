@@ -95,89 +95,93 @@ export function proveExactTarballConsumer({ root, destination, run, packages }) 
   const artifacts = packages ?? packFrameworkArtifacts({ root, destination, run });
   const consumer = join(destination, "consumer");
   mkdirSync(consumer);
-  const dependencies = Object.fromEntries(
-    artifacts.map(({ name, tarball }) => [name, "file:" + tarball]),
-  );
-  writeFileSync(
-    join(consumer, "package.json"),
-    JSON.stringify({
-      name: "@external/snapshot-proof",
-      private: true,
-      type: "module",
-      packageManager: "pnpm@11.9.0",
-      dependencies,
-      devDependencies: { "@types/node": "24.13.2", typescript: "6.0.3" },
-    }),
-  );
-  writeFileSync(
-    join(consumer, "pnpm-workspace.yaml"),
-    "overrides:\n" +
-      Object.entries(dependencies)
-        .map(([name, value]) => "  " + JSON.stringify(name) + ": " + JSON.stringify(value))
-        .join("\n") +
-      "\n",
-  );
-  run("pnpm", ["install", "--offline", "--ignore-scripts"], consumer);
-  assertConsumerIsolation(consumer);
-  writeFileSync(
-    join(consumer, "tsconfig.json"),
-    JSON.stringify({
-      compilerOptions: {
-        module: "NodeNext",
-        moduleResolution: "NodeNext",
-        target: "ES2024",
-        outDir: "dist",
-        strict: true,
-        types: ["node"],
-      },
-      include: ["index.ts"],
-    }),
-  );
-  writeFileSync(
-    join(consumer, "index.ts"),
-    [
-      ...frameworkPackageNames.map((name) => "import " + JSON.stringify(name) + ";"),
-      'import { Server } from "@spine-event-engine/server";',
-      'import { BrowserServer } from "@spine-event-engine/server/browser";',
-      "import { BlackBox } from '@spine-event-engine/testing';",
-      "import { resetServerEnvironmentForTest } from '@spine-event-engine/server/testing';",
-      "if (typeof BlackBox !== 'function') throw new Error('Testing path is unavailable');",
-      "if (typeof resetServerEnvironmentForTest !== 'function') " +
-        "throw new Error('Server testing path is unavailable');",
-      "await resetServerEnvironmentForTest();",
-      "const native = await Server.atPort(0).start();",
-      "const browser = await BrowserServer.open(native, {",
-      '  origins: ["http://127.0.0.1:5173"],',
-      "  sessions: { resolve: () => Promise.resolve(undefined) },",
-      "  authorize: () => Promise.resolve(false),",
-      "  contexts: {",
-      "    resolve: () => Promise.resolve({} as never),",
-      "    resolveContext: () => Promise.resolve({} as never),",
-      "  },",
-      "  clock: { now: () => ({} as never) },",
-      "  authRoutes: [{",
-      '    method: "GET", path: "/auth/probe", origins: ["http://127.0.0.1:5173"],',
-      "    allowMissingOrigin: true, maxRequestBytes: 1024, timeoutMs: 1000,",
-      '    onRequest: () => new Response("browser-auth-ok"),',
-      "  }],",
-      "});",
-      "try {",
-      "  const response = await fetch(`${browser.baseUrl}/auth/probe`);",
-      '  if (response.status !== 200 || (await response.text()) !== "browser-auth-ok")',
-      '    throw new Error("Browser auth route is unavailable");',
-      "} finally {",
-      "  await browser.close();",
-      "}",
-      "",
-    ].join("\n"),
-  );
-  run(
-    process.execPath,
-    [join("node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"],
-    consumer,
-  );
-  run(process.execPath, ["dist/index.js"], consumer);
-  return artifacts;
+  try {
+    const dependencies = Object.fromEntries(
+      artifacts.map(({ name, tarball }) => [name, "file:" + tarball]),
+    );
+    writeFileSync(
+      join(consumer, "package.json"),
+      JSON.stringify({
+        name: "@external/snapshot-proof",
+        private: true,
+        type: "module",
+        packageManager: "pnpm@11.9.0",
+        dependencies,
+        devDependencies: { "@types/node": "24.13.2", typescript: "6.0.3" },
+      }),
+    );
+    writeFileSync(
+      join(consumer, "pnpm-workspace.yaml"),
+      "overrides:\n" +
+        Object.entries(dependencies)
+          .map(([name, value]) => "  " + JSON.stringify(name) + ": " + JSON.stringify(value))
+          .join("\n") +
+        "\n",
+    );
+    run("pnpm", ["install", "--offline", "--ignore-scripts"], consumer);
+    assertConsumerIsolation(consumer);
+    writeFileSync(
+      join(consumer, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          target: "ES2024",
+          outDir: "dist",
+          strict: true,
+          types: ["node"],
+        },
+        include: ["index.ts"],
+      }),
+    );
+    writeFileSync(
+      join(consumer, "index.ts"),
+      [
+        ...frameworkPackageNames.map((name) => "import " + JSON.stringify(name) + ";"),
+        'import { Server } from "@spine-event-engine/server";',
+        'import { BrowserServer } from "@spine-event-engine/server/browser";',
+        "import { BlackBox } from '@spine-event-engine/testing';",
+        "import { resetServerEnvironmentForTest } from '@spine-event-engine/server/testing';",
+        "if (typeof BlackBox !== 'function') throw new Error('Testing path is unavailable');",
+        "if (typeof resetServerEnvironmentForTest !== 'function') " +
+          "throw new Error('Server testing path is unavailable');",
+        "await resetServerEnvironmentForTest();",
+        "const native = await Server.atPort(0).start();",
+        "const browser = await BrowserServer.open(native, {",
+        '  origins: ["http://127.0.0.1:5173"],',
+        "  sessions: { resolve: () => Promise.resolve(undefined) },",
+        "  authorize: () => Promise.resolve(false),",
+        "  contexts: {",
+        "    resolve: () => Promise.resolve({} as never),",
+        "    resolveContext: () => Promise.resolve({} as never),",
+        "  },",
+        "  clock: { now: () => ({} as never) },",
+        "  authRoutes: [{",
+        '    method: "GET", path: "/auth/probe", origins: ["http://127.0.0.1:5173"],',
+        "    allowMissingOrigin: true, maxRequestBytes: 1024, timeoutMs: 1000,",
+        '    onRequest: () => new Response("browser-auth-ok"),',
+        "  }],",
+        "});",
+        "try {",
+        "  const response = await fetch(`${browser.baseUrl}/auth/probe`);",
+        '  if (response.status !== 200 || (await response.text()) !== "browser-auth-ok")',
+        '    throw new Error("Browser auth route is unavailable");',
+        "} finally {",
+        "  await browser.close();",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    run(
+      process.execPath,
+      [join("node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"],
+      consumer,
+    );
+    run(process.execPath, ["dist/index.js"], consumer);
+    return artifacts;
+  } finally {
+    rmSync(consumer, { force: true, recursive: true });
+  }
 }
 
 /**
