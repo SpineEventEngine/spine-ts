@@ -74,6 +74,7 @@ export async function publishRelease({ release, checksum, registry, publish, pol
   if (typeof poll !== "function") throw new Error("A registry visibility poller is required");
   const otherTag = release.tag === "snapshot" ? "latest" : "snapshot";
   const initialTags = new Map();
+  const initialSelectedTags = new Map();
   const pending = [];
   for (const entry of release.packages) {
     if (checksum(entry.tarball) !== entry.integrity)
@@ -81,6 +82,7 @@ export async function publishRelease({ release, checksum, registry, publish, pol
     const artifact = await registry("artifact", entry);
     const tags = await registry("tags", entry);
     initialTags.set(entry.name, tags?.[otherTag]);
+    initialSelectedTags.set(entry.name, tags?.[release.tag]);
     if (tags?.[release.tag] && compareReleaseVersions(tags[release.tag], release.version) > 0)
       throw new Error("Selected tag rollback for " + entry.name);
     if (artifact === undefined) pending.push(entry);
@@ -113,7 +115,7 @@ export async function publishRelease({ release, checksum, registry, publish, pol
     if (checksum(entry.tarball) !== entry.integrity)
       throw new Error("Tarball changed before publication for " + entry.name);
     const currentTags = await registry("tags", entry);
-    if (currentTags[release.tag] && currentTags[release.tag] !== release.version)
+    if (currentTags[release.tag] !== initialSelectedTags.get(entry.name))
       throw new Error("Selected tag changed before publication for " + entry.name);
     if (currentTags[otherTag] !== initialTags.get(entry.name))
       throw new Error("Opposite tag changed before publication for " + entry.name);

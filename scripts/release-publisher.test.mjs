@@ -197,6 +197,22 @@ describe("release publisher", () => {
     expect(published).toEqual([]);
   });
 
+  it("rejects a selected tag disappearing before publication without mutation", async () => {
+    let tagReads = 0;
+    const published = [];
+    await expect(
+      publishRelease({
+        release: releaseOf([artifact]),
+        checksum: () => artifact.integrity,
+        registry: async (kind) =>
+          kind === "artifact" ? undefined : tagReads++ === 0 ? { snapshot: artifact.version } : {},
+        publish: async (entry) => published.push(entry.name),
+        poll: noOpPoll,
+      }),
+    ).rejects.toThrow("Selected tag changed before publication");
+    expect(published).toEqual([]);
+  });
+
   it("rejects a selected tag lost after visibility polling during finalization", async () => {
     let polled = false;
     const published = [];

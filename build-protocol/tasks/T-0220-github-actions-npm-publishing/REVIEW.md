@@ -62,3 +62,9 @@ authenticate, or push. Its result is recorded before specialist review.
   allowlist/tokenized-command tests. Focused release evidence is 46/46 tests;
   ESLint, Prettier, and diff checks are clean. Remaining specialist dispositions
   remain orchestrator-owned.
+
+- `2026-08-24`: Reliability correction preserves each preflight selected-tag
+  value and requires exact equality on the immediate pre-mutation reread. The
+  new deterministic release-version-to-absent race rejects before publish;
+  publisher evidence is 21/21 with focused ESLint, Prettier, and diff checks
+  clean.
