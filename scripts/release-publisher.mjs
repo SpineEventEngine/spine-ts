@@ -74,12 +74,25 @@ export async function publishRelease({ release, checksum, registry, publish, pol
         throw new Error("Selected tag mismatch for " + entry.name);
     }
   }
-  if (pending.length === 0) throw new Error("All 18 release artifacts are already published");
+  if (pending.length === 0) throw new Error("All release artifacts are already published");
   const skipped = release.packages
     .filter((entry) => !pending.includes(entry))
     .map(({ name }) => name);
   const published = [];
-  for (const entry of pending) {
+  const byName = new Map(pending.map((entry) => [entry.name, entry]));
+  const ordered = [];
+  const visited = new Set();
+  const visit = (entry) => {
+    if (visited.has(entry.name)) return;
+    visited.add(entry.name);
+    for (const dependency of entry.dependencies) {
+      const dependencyEntry = byName.get(dependency);
+      if (dependencyEntry !== undefined) visit(dependencyEntry);
+    }
+    ordered.push(entry);
+  };
+  for (const entry of pending) visit(entry);
+  for (const entry of ordered) {
     if (checksum(entry.tarball) !== entry.integrity)
       throw new Error("Tarball changed before publication for " + entry.name);
     for (const dependency of entry.dependencies) {
