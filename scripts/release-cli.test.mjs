@@ -9,6 +9,15 @@ describe("release CLI", () => {
     const result = spawnSync(process.execPath, ["scripts/release-cli.mjs", "publish"], {
       cwd: new URL("..", import.meta.url).pathname,
       encoding: "utf8",
+      env: {
+        ...process.env,
+        GITHUB_ACTIONS: undefined,
+        GITHUB_EVENT_NAME: undefined,
+        GITHUB_REPOSITORY: undefined,
+        GITHUB_REF: undefined,
+        GITHUB_SHA: undefined,
+        GITHUB_WORKFLOW: undefined,
+      },
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("permitted only");
@@ -113,11 +122,14 @@ describe("release CLI", () => {
           handlers.set(name, handler);
           return () => {};
         },
-        exit: (actual) => expect(actual).toBe(code),
+        exit: (actual) => {
+          expect(actual).toBe(code);
+          throw new Error("exit sentinel");
+        },
       }),
-    ).toThrow("stop");
+    ).toThrow("exit sentinel");
     expect(handlers.has(signal)).toBe(true);
-    expect(removed).toEqual(["/owned", "/owned"]);
+    expect(removed).toEqual(["/owned"]);
   });
 
   it("rejects prepare without an output mode", async () => {

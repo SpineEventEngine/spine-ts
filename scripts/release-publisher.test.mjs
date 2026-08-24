@@ -181,18 +181,59 @@ describe("release publisher", () => {
     ).rejects.toThrow("rollback");
   });
 
-  it("rejects movement of the opposite tag after publication", async () => {
+  it("rejects selected tag movement immediately before publication without mutation", async () => {
     let reads = 0;
+    const published = [];
     await expect(
       publishRelease({
         release: releaseOf([artifact]),
         checksum: () => artifact.integrity,
         registry: async (kind) =>
-          kind === "artifact" ? undefined : { latest: reads++ ? "2.0.0" : "1.0.0" },
-        publish: async () => {},
+          kind === "artifact" ? undefined : reads++ === 0 ? {} : { snapshot: "2.0.0-snapshot.3" },
+        publish: async (entry) => published.push(entry.name),
         poll: noOpPoll,
       }),
-    ).rejects.toThrow(/Opposite tag (changed before publication|moved)/u);
+    ).rejects.toThrow("Selected tag changed before publication");
+    expect(published).toEqual([]);
+  });
+
+  it("rejects a selected tag lost after visibility polling during finalization", async () => {
+    let polled = false;
+    const published = [];
+    await expect(
+      publishRelease({
+        release: releaseOf([artifact]),
+        checksum: () => artifact.integrity,
+        registry: async (kind) => (kind === "artifact" ? undefined : {}),
+        publish: async (entry) => published.push(entry.name),
+        poll: async () => {
+          polled = true;
+        },
+      }),
+    ).rejects.toThrow("Selected tag did not reach release version");
+    expect(published).toEqual([artifact.name]);
+    expect(polled).toBe(true);
+  });
+
+  it("rejects opposite tag movement after visibility polling during finalization", async () => {
+    let polled = false;
+    await expect(
+      publishRelease({
+        release: releaseOf([artifact]),
+        checksum: () => artifact.integrity,
+        registry: async (kind) =>
+          kind === "artifact"
+            ? undefined
+            : polled
+              ? { snapshot: artifact.version, latest: "2.0.0" }
+              : { latest: "1.0.0" },
+        publish: async () => {},
+        poll: async () => {
+          polled = true;
+        },
+      }),
+    ).rejects.toThrow("Opposite tag moved");
+    expect(polled).toBe(true);
   });
 
   it("rejects a tarball changed after preflight", async () => {
@@ -291,5 +332,30 @@ describe("release publisher", () => {
     expect(paths).toEqual([
       "https://registry.npmjs.org/-/package/%40spine-event-engine%2Fcore/dist-tags",
     ]);
+  });
+
+  it.each(["fetch", "body"])("fails clearly when %s never settles until abort", async (phase) => {
+    const abort = () => {
+      const controller = new globalThis.AbortController();
+      globalThis.queueMicrotask(() => controller.abort(new Error("timeout")));
+      return controller.signal;
+    };
+    const fetch = async (_url, { signal }) =>
+      phase === "fetch"
+        ? new Promise((_resolve, reject) =>
+            signal.addEventListener("abort", () => reject(signal.reason)),
+          )
+        : {
+            status: 200,
+            ok: true,
+            json: () =>
+              new Promise((_resolve, reject) =>
+                signal.aborted
+                  ? reject(signal.reason)
+                  : signal.addEventListener("abort", () => reject(signal.reason)),
+              ),
+          };
+    const registry = createPublicRegistry({ fetch, timeoutMs: 1, abort });
+    await expect(registry("artifact", artifact)).rejects.toThrow(/timed out|body is invalid/u);
   });
 });

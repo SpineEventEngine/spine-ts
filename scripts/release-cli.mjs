@@ -47,8 +47,12 @@ export function prepareRelease({
     throw new Error("Release output already exists: " + destination);
   let completed = false;
   let owned = check;
+  let cleaned = false;
   const cleanup = () => {
-    if (owned && !completed) remove(destination);
+    if (owned && !completed && !cleaned) {
+      cleaned = true;
+      remove(destination);
+    }
   };
   const unregister = ["SIGINT", "SIGTERM"].map(
     (signal) =>
@@ -78,7 +82,10 @@ export function prepareRelease({
     return manifest;
   } finally {
     for (const removeHandler of unregister) removeHandler();
-    if (owned && (check || !completed)) remove(destination);
+    if (owned && check && !cleaned) {
+      cleaned = true;
+      remove(destination);
+    } else if (owned && !completed) cleanup();
   }
 }
 

@@ -97,3 +97,13 @@ scripts/release-publisher.test.mjs --passWithNoTests` failed because the
   pnpm/action-setup v6.0.9 SHA and verifies that the OIDC job checks exact
   Node/npm versions without running a package-manager installation command.
   Focused workflow tests passed 3/3 with lint/format/diff clean.
+- `2026-08-24`: Final correction coverage: a relative child-process CLI call
+  clears GitHub context and proves the local publish gate; each pack/proof/write
+  failure and both non-returning signal exits clean only owned output. Public
+  registry fetch and body parsing are abort-aware under injected timeouts.
+  Publication rejects selected-tag movement before mutation and selected or
+  opposite-tag movement at finalization. Workflow tests collect every
+  pnpm/action-setup reference and require only reviewed v6.0.9 SHA occurrences,
+  including an option-prefixed `npm --prefix x install` recognition fixture.
+  Focused CLI/publisher/workflow/artifact tests passed 46/46, with focused
+  ESLint, Prettier, and diff checks clean.

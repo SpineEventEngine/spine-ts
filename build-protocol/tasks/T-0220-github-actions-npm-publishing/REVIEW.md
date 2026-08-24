@@ -55,3 +55,10 @@ authenticate, or push. Its result is recorded before specialist review.
   same-commit resumption from persistent/ambiguous failures and prohibits reuse
   of an integrity/tag-mismatched version; documentation disposition remains
   orchestrator-owned.
+
+- `2026-08-24`: Final accepted correction batch is covered by deterministic
+  child-process context gating, owned-output cleanup, abort-aware registry
+  timeout, selected/opposite tag-race, dedicated endpoint, and workflow
+  allowlist/tokenized-command tests. Focused release evidence is 46/46 tests;
+  ESLint, Prettier, and diff checks are clean. Remaining specialist dispositions
+  remain orchestrator-owned.
