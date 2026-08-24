@@ -36,12 +36,12 @@
     "@connectrpc/connect-node": "2.1.2",
     "@spine-event-engine/client-node": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
-    "@spine-event-engine/proto": "2.0.0-snapshot.3",
+    "@spine-event-engine/proto": "2.0.0-snapshot.4",
     "@spine-event-engine/server": "workspace:*",
     "@spine-event-engine/storage": "workspace:*",
     "@spine-event-engine/storage-datastore": "workspace:*"
   },
   "devDependencies": {
-    "@spine-event-engine/proto-tools": "2.0.0-snapshot.3"
+    "@spine-event-engine/proto-tools": "2.0.0-snapshot.4"
   }
 }
