@@ -21,3 +21,12 @@ Status: Pending implementation endpoint
 
 All review dispatches prohibit child spawning. The orchestrator collects the
 complete wave before returning one consolidated accepted correction batch.
+
+## Mechanical Verification Assignment
+
+| Existing role/function                          | Bounded scope                                                                                                                                                                                                                          | Explicit model | Explicit reasoning | Child spawning | Runtime metadata                                                                                                                       |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ------------------ | -------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Orchestrator-dispatched mechanical verification | Exact diff/history/inventory, release-policy/publisher/CLI/workflow/artifact tests, single-pack consumer proof, generated state, TypeScript/tooling, lint/format/docs/readiness, credential/provenance scan, and personal-origin state | `gpt-5.6-luna` | low                | Prohibited     | Desktop dispatch fields are explicit; immutable configured function/profile is acceptance evidence when self-telemetry is unavailable. |
+
+The verification function is read-only and may not modify files, publish,
+authenticate, or push. Its result is recorded before specialist review.
