@@ -8,7 +8,7 @@ an npm token. Never add a token fallback.
 3. A human merges the pull request.
 4. `publish.yml` runs for the `master` push and publishes through OIDC.
 
-Every merge is a release candidate. Keep one version across the root, 18 public
+Every merge may result in a release. Keep one version across the root, 18 public
 packages, and seven examples. Implementing agents use a standalone commit named
 `Bump version -> <version>`; concrete internal pins and `pnpm-lock.yaml` change
 separately. Channel metadata (`publishConfig.tag`) changes separately when moving

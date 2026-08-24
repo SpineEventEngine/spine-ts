@@ -111,3 +111,8 @@ scripts/release-publisher.test.mjs --passWithNoTests` failed because the
   `scripts/package-artifacts.mjs` and `scripts/release-policy.test.mjs`.
   Repository Prettier rewrote only their line wrapping; changed-file format and
   whitespace-diff checks passed. No semantic behavior or review scope changed.
+- `2026-08-24`: Mechanical documentation-policy preflight found the internal
+  execution-history term `candidate` in the maintainer runbook. It now says
+  that a merge may result in a release. Documentation audience and
+  release-readiness checks passed, along with formatting and diff checks; no
+  release behavior changed.
