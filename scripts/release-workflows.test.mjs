@@ -6,16 +6,23 @@ import YAML from "yaml";
 const root = new URL("..", import.meta.url).pathname;
 const read = (name) => readFileSync(join(root, ".github/workflows", name), "utf8");
 const approvedPnpmSetup = "0ebf47130e4866e96fce0953f49152a61190b271";
+const npmVersionCheck =
+  "node --version | grep -Fx 'v24.18.0' && npm --version | grep -Fx '11.16.0'";
 
-function npmSubcommand(command) {
-  const tokens = command.trim().split(/\s+/u);
-  if (tokens.shift() !== "npm") return undefined;
-  const optionsWithValues = new Set(["--prefix", "--cache", "--userconfig", "--registry"]);
-  while (tokens[0]?.startsWith("-")) {
-    const option = tokens.shift();
-    if (optionsWithValues.has(option)) tokens.shift();
-  }
-  return tokens[0];
+function publishNpmCommands(runs) {
+  return runs.flatMap((run) =>
+    run
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /(?:^|[;&|]\s*)npm(?:\s|$)/u.test(line)),
+  );
+}
+
+function assertAllowedPublishNpmCommands(runs) {
+  const commands = publishNpmCommands(runs);
+  if (commands.length !== 1 || commands[0] !== npmVersionCheck)
+    throw new Error("Unexpected npm command in publish job");
+  return commands;
 }
 
 describe("release workflows", () => {
@@ -48,11 +55,7 @@ describe("release workflows", () => {
     const publishRuns = workflow.jobs.publish.steps
       .map((step) => step.run)
       .filter((run) => typeof run === "string");
-    expect(publishRuns).toContain(
-      "node --version | grep -Fx 'v24.18.0' && npm --version | grep -Fx '11.16.0'",
-    );
-    expect(publishRuns.map(npmSubcommand)).not.toContain("install");
-    expect(publishRuns.map(npmSubcommand)).not.toContain("i");
+    expect(assertAllowedPublishNpmCommands(publishRuns)).toEqual([npmVersionCheck]);
     expect(publishRuns.join("\n")).not.toMatch(/pnpm (?:install|add)|corepack/u);
     expect(source).toContain("node-version: 24.18.0");
     expect(source).toContain("npm --version | grep -Fx '11.16.0'");
@@ -77,13 +80,20 @@ describe("release workflows", () => {
     }
   });
 
-  it("uses only the reviewed pnpm setup release and recognizes option-prefixed npm installs", () => {
+  it("uses only the reviewed pnpm setup release and rejects every extra npm command", () => {
     const setupRefs = ["build.yml", "publish.yml"].flatMap((name) =>
       [...read(name).matchAll(/uses: pnpm\/action-setup@([a-f0-9]{40})/gu)].map(
         (match) => match[1],
       ),
     );
     expect(setupRefs).toEqual([approvedPnpmSetup, approvedPnpmSetup]);
-    expect(npmSubcommand("npm --prefix x install")).toBe("install");
+    for (const command of [
+      "npm --prefix x install",
+      "npm --omit dev install",
+      "npm --workspace pkg install",
+    ])
+      expect(() => assertAllowedPublishNpmCommands([npmVersionCheck, command])).toThrow(
+        "Unexpected npm command",
+      );
   });
 });

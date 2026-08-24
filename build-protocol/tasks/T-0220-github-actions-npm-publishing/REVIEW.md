@@ -68,3 +68,9 @@ authenticate, or push. Its result is recorded before specialist review.
   new deterministic release-version-to-absent race rejects before publish;
   publisher evidence is 21/21 with focused ESLint, Prettier, and diff checks
   clean.
+
+- `2026-08-24`: Security correction replaces npm option parsing with a strict
+  publish-job shell-command allowlist: the sole permitted npm invocation is the
+  exact bundled npm 11.16.0 version check. Prefix, omit, and workspace install
+  fixtures are rejected; focused workflow evidence is 4/4 with ESLint,
+  Prettier, and diff checks clean.
