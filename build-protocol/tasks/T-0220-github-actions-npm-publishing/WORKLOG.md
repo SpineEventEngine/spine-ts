@@ -15,11 +15,11 @@ verification. No real NPM publication or official-organization push is in
 scope.
 
 - `2026-08-24`: RED: `pnpm --config.verify-deps-before-run=false exec vitest run
-  scripts/release-policy.test.mjs --passWithNoTests` failed because the permanent
+scripts/release-policy.test.mjs --passWithNoTests` failed because the permanent
   policy module did not exist. GREEN: the same focused suite passed 4/4 after
   `release-policy.mjs` implemented exact version/channel and inventory policy.
 - `2026-08-24`: RED: `pnpm --config.verify-deps-before-run=false exec vitest run
-  scripts/release-publisher.test.mjs --passWithNoTests` failed because the
+scripts/release-publisher.test.mjs --passWithNoTests` failed because the
   permanent publisher module did not exist. GREEN: policy, publisher, and
   artifact suites passed 13/13. The version-only commit `2ed14bf9b` was pushed
   immediately to verified personal `origin` (`git@github.com:armiol/spine-ts.git`).
@@ -66,3 +66,10 @@ scope.
   `ea165f8d65b6e75b540449e92b4886f43607fa02`, and download-artifact v5
   `634f93cb2916e3fdff6788551b99b062d0335ce0`. Focused structural workflow
   tests passed 3/3 without running a publication.
+- `2026-08-24`: Pushed T-0220 commits: `2ed14bf9b` version bump,
+  `f83fba7d4` internal pins/lockfile, `cc9e1e280` release modules,
+  `9affc1422`, `fb7caf934`, `c8526bcf0` publication corrections,
+  `f5efab696`, `0b300bc51`, `a1ed376e1`, `0a67ac25c` CLI/artifact seams,
+  `f56c9658d` workflows, `e1ed40ff4`/`87bc711ec` generated alignment,
+  and `8193bc7f5` consumer cleanup. All were pushed to verified personal
+  origin; no official activation or NPM publication occurred.
