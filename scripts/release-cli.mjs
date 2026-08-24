@@ -13,7 +13,7 @@ const run = (command, args, cwd = root) => {
   const result = spawnSync(command, args, { cwd, encoding: "utf8", stdio: "inherit" });
   if (result.status !== 0) throw new Error(command + " failed");
 };
-const option = (name) => process.argv[process.argv.indexOf(name) + 1];
+const option = (argv, name) => argv[argv.indexOf(name) + 1];
 
 function prepare(output) {
   const release = validateReleasePolicy(readReleaseManifests(root));
@@ -31,11 +31,11 @@ function prepare(output) {
   writeFileSync(join(destination, "release-manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 }
 
-async function main() {
-  if (process.argv[2] === "prepare") return prepare(option("--output") ?? "release");
-  if (process.argv[2] !== "publish" || process.env.GITHUB_ACTIONS !== "true" || process.env.GITHUB_EVENT_NAME !== "push" || process.env.GITHUB_REPOSITORY !== "SpineEventEngine/spine-ts" || process.env.GITHUB_REF !== "refs/heads/master")
+export async function main({ argv = process.argv, environment = process.env } = {}) {
+  if (argv[2] === "prepare") return prepare(option(argv, "--output") ?? "release");
+  if (argv[2] !== "publish" || environment.GITHUB_ACTIONS !== "true" || environment.GITHUB_EVENT_NAME !== "push" || environment.GITHUB_REPOSITORY !== "SpineEventEngine/spine-ts" || environment.GITHUB_REF !== "refs/heads/master")
     throw new Error("Publication is permitted only from the official GitHub Actions master workflow");
-  const input = resolve(option("--input"));
+  const input = resolve(option(argv, "--input"));
   const release = JSON.parse(readFileSync(join(input, "release-manifest.json"), "utf8"));
   const checksum = (tarball) => "sha512-" + createHash("sha512").update(readFileSync(join(input, tarball))).digest("base64");
   validateReleaseManifest(release, checksum);
@@ -54,4 +54,4 @@ async function main() {
       }),
   });
 }
-await main();
+if (import.meta.url === new URL(process.argv[1], "file:").href) await main();

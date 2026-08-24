@@ -51,3 +51,7 @@ scope.
   closed. Focused publisher tests pass 5/5, with targeted ESLint, Prettier, and
   diff checks clean. Coverage includes explicit-404 absence, non-404 rejection,
   semantic snapshot/stable ordering, and bounded visibility polling.
+- `2026-08-24`: CLI trust seam RED/GREEN: importing the CLI no longer executes
+  it, and an injected invocation rejects publication outside the exact official
+  Actions push context. Focused CLI/artifact tests passed 2/2 with syntax and
+  diff checks.
