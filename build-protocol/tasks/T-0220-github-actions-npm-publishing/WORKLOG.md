@@ -88,3 +88,8 @@ scripts/release-publisher.test.mjs --passWithNoTests` failed because the
   conventional exit codes. The registry test now asserts the exact dedicated
   npm dist-tags endpoint. Focused release suites passed 40/40 with ESLint,
   Prettier, and diff checks clean.
+- `2026-08-24`: Re-review correction: dist-tags endpoint responses are parsed as
+  direct tag maps; final selected-tag equality is asserted for every package;
+  a real relative subprocess CLI invocation proves the safe context gate. Fake
+  publication fixtures now model tag visibility. Focused release suites passed
+  41/41 with targeted lint/format/diff clean.

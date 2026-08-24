@@ -44,3 +44,6 @@ authenticate, or push. Its result is recorded before specialist review.
 - `2026-08-24`: Cleanup-phase and dedicated-tag-endpoint follow-up evidence is
   40/40 focused tests with targeted lint/format/diff clean; specialist review
   dispositions remain pending.
+
+- `2026-08-24`: Second re-review correction verified 41/41 focused release
+  tests; final independent specialist dispositions remain orchestrator-owned.

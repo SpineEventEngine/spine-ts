@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
 
 import { main, prepareRelease } from "./release-cli.mjs";
 import { frameworkPackageNames } from "./package-artifacts.mjs";
 
 describe("release CLI", () => {
+  it("runs the relative CLI entrypoint and rejects local publication", () => {
+    const result = spawnSync(process.execPath, ["scripts/release-cli.mjs", "publish"], {
+      cwd: new URL("..", import.meta.url).pathname,
+      encoding: "utf8",
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("permitted only");
+  });
+
   it("rejects publication outside the exact official Actions push context", async () => {
     await expect(main({ argv: ["node", "cli", "publish"], environment: {} })).rejects.toThrow(
       "permitted only",

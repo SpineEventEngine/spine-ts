@@ -117,7 +117,9 @@ describe("release publisher", () => {
       checksum: () => artifact.integrity,
       registry: async (kind, entry) =>
         kind === "tags"
-          ? {}
+          ? visible.has(entry.name)
+            ? { snapshot: artifact.version }
+            : {}
           : visible.has(entry.name)
             ? { integrity: artifact.integrity }
             : undefined,
@@ -235,13 +237,13 @@ describe("release publisher", () => {
 
   it("propagates publication interruption and resumes a now-visible first artifact", async () => {
     const second = { ...artifact, name: "@spine-event-engine/proto" };
-    let firstVisible = false;
+    const visible = new Set();
     const registry = async (kind, entry) =>
       kind === "tags"
-        ? firstVisible && entry.name === artifact.name
+        ? visible.has(entry.name)
           ? { snapshot: artifact.version }
           : {}
-        : firstVisible && entry.name === artifact.name
+        : visible.has(entry.name)
           ? { integrity: artifact.integrity }
           : undefined;
     await expect(
@@ -250,7 +252,7 @@ describe("release publisher", () => {
         checksum: () => artifact.integrity,
         registry,
         publish: async () => {
-          firstVisible = true;
+          visible.add(artifact.name);
           throw new Error("interrupted");
         },
         poll: noOpPoll,
@@ -261,7 +263,10 @@ describe("release publisher", () => {
       release: releaseOf([artifact, second]),
       checksum: () => artifact.integrity,
       registry,
-      publish: async (entry) => published.push(entry.name),
+      publish: async (entry) => {
+        visible.add(entry.name);
+        published.push(entry.name);
+      },
       poll: noOpPoll,
     });
     expect(published).toEqual([second.name]);
@@ -269,7 +274,7 @@ describe("release publisher", () => {
 
   it("rejects invalid dist-tags payloads", async () => {
     const registry = createPublicRegistry({
-      fetch: async () => response(200, { "dist-tags": [] }),
+      fetch: async () => response(200, []),
     });
     await expect(registry("tags", artifact)).rejects.toThrow("dist-tags");
   });
@@ -279,7 +284,7 @@ describe("release publisher", () => {
     const registry = createPublicRegistry({
       fetch: async (url) => {
         paths.push(url);
-        return response(200, { "dist-tags": { snapshot: artifact.version } });
+        return response(200, { snapshot: artifact.version });
       },
     });
     await expect(registry("tags", artifact)).resolves.toEqual({ snapshot: artifact.version });

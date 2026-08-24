@@ -52,10 +52,11 @@ export function createPublicRegistry({
     }
     const metadata = await request("-/package/" + encoded + "/dist-tags");
     if (metadata === undefined) return {};
-    const tags = metadata["dist-tags"];
-    if (tags === null || typeof tags !== "object" || Array.isArray(tags))
+    if (metadata === null || typeof metadata !== "object" || Array.isArray(metadata))
       throw new Error("Registry metadata has invalid dist-tags");
-    return tags;
+    if (Object.values(metadata).some((version) => typeof version !== "string"))
+      throw new Error("Registry metadata has invalid dist-tags");
+    return metadata;
   };
 }
 
@@ -129,6 +130,8 @@ export async function publishRelease({ release, checksum, registry, publish, pol
   }
   for (const entry of release.packages) {
     const tags = await registry("tags", entry);
+    if (tags[release.tag] !== release.version)
+      throw new Error("Selected tag did not reach release version for " + entry.name);
     if (tags?.[otherTag] !== initialTags.get(entry.name))
       throw new Error("Opposite tag moved for " + entry.name);
   }
