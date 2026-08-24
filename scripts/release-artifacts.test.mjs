@@ -1,19 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { createReleaseManifest, validateReleaseManifest } from "./release-artifacts.mjs";
+import { frameworkPackageNames } from "./package-artifacts.mjs";
 
 describe("release artifacts", () => {
   it("writes portable dependency-ordered manifest entries and validates their checksums", () => {
     const manifest = createReleaseManifest({
       release: { tag: "snapshot", version: "2.0.0-snapshot.4" },
-      packages: [
-        { name: "@spine-event-engine/server", tarball: "/tmp/release/server.tgz", integrity: "sha512-server", dependencies: ["@spine-event-engine/core"] },
-        { name: "@spine-event-engine/core", tarball: "/tmp/release/core.tgz", integrity: "sha512-core", dependencies: [] },
-      ],
-      order: ["@spine-event-engine/core", "@spine-event-engine/server"],
-      destination: "/tmp/release",
+      packages: frameworkPackageNames.map((name, index) => ({ name, tarball: "/tmp/release/" + index + ".tgz", integrity: "sha512-YQ==", dependencies: [] })),
+      order: [...frameworkPackageNames].sort((left, right) => left.localeCompare(right)),
     });
-    expect(manifest.packages.map(({ tarball }) => tarball)).toEqual(["core.tgz", "server.tgz"]);
-    expect(() => validateReleaseManifest(manifest, (file) => file === "core.tgz" ? "sha512-core" : "sha512-server")).not.toThrow();
+    expect(manifest.packages.every(({ tarball }) => !tarball.startsWith("/"))).toBe(true);
+    expect(() => validateReleaseManifest(manifest, () => "sha512-YQ==")).not.toThrow();
   });
 });

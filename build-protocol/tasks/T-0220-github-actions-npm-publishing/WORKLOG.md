@@ -41,3 +41,8 @@ scope.
   7/7; CLI syntax and diff checks passed. Preparation reuses the already-packed
   artifact list for the external-consumer proof; the guarded CLI uses public
   registry reads only after its official GitHub Actions context gate.
+- `2026-08-24`: Correction endpoint: release-manifest validation now rejects
+  non-exact inventory/order/version/tag/path/checksum input; publication requires
+  a supplied bounded visibility poller, and the CLI now requires the `push`
+  event claim as well as the official repository/ref claims. Focused suites
+  passed 7/7 with CLI syntax and diff checks.

@@ -32,7 +32,18 @@ export function createPublicRegistry({ fetch }) {
   };
 }
 
-export async function publishRelease({ release, checksum, registry, publish, poll = async () => {} }) {
+export async function waitForRegistryVisibility({ registry, entry, tag, sleep, attempts = 6 }) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const artifact = await registry("artifact", entry);
+    const tags = await registry("tags", entry);
+    if (artifact?.integrity === entry.integrity && tags[tag] === entry.version) return;
+    if (attempt + 1 < attempts) await sleep(1000 * (attempt + 1));
+  }
+  throw new Error("Timed out waiting for registry visibility: " + entry.name + "@" + entry.version);
+}
+
+export async function publishRelease({ release, checksum, registry, publish, poll }) {
+  if (typeof poll !== "function") throw new Error("A registry visibility poller is required");
   const otherTag = release.tag === "snapshot" ? "latest" : "snapshot";
   const initialTags = new Map();
   const pending = [];

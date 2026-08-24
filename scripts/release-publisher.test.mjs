@@ -12,6 +12,7 @@ describe("release publisher", () => {
       checksum: () => artifact.integrity,
       registry: async (request, entry) => request === "artifact" && entry.name === artifact.name ? { integrity: artifact.integrity } : request === "artifact" ? undefined : { snapshot: artifact.version, latest: "1.0.0" },
       publish: async () => calls.push("publish"),
+      poll: async () => {},
     });
     expect(report.skipped).toEqual([artifact.name]);
     expect(calls).toEqual(["publish"]);
@@ -20,7 +21,7 @@ describe("release publisher", () => {
   it("fails before mutation when the registry artifact integrity differs", async () => {
     await expect(publishRelease({
       release: { tag: "snapshot", version: artifact.version, packages: [artifact] }, checksum: () => artifact.integrity,
-      registry: async (request) => request === "artifact" ? { integrity: "sha512-other" } : { snapshot: artifact.version }, publish: async () => {},
+      registry: async (request) => request === "artifact" ? { integrity: "sha512-other" } : { snapshot: artifact.version }, publish: async () => {}, poll: async () => {},
     })).rejects.toThrow("Integrity mismatch");
   });
 });

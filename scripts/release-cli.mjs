@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { packFrameworkArtifacts, proveExactTarballConsumer } from "./snapshot-artifacts.mjs";
 import { readReleaseManifests, releaseDependencyOrder, validateReleasePolicy } from "./release-policy.mjs";
 import { createReleaseManifest, validateReleaseManifest } from "./release-artifacts.mjs";
-import { createPublicRegistry, publishRelease } from "./release-publisher.mjs";
+import { createPublicRegistry, publishRelease, waitForRegistryVisibility } from "./release-publisher.mjs";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 const run = (command, args, cwd = root) => {
@@ -33,17 +33,25 @@ function prepare(output) {
 
 async function main() {
   if (process.argv[2] === "prepare") return prepare(option("--output") ?? "release");
-  if (process.argv[2] !== "publish" || process.env.GITHUB_ACTIONS !== "true" || process.env.GITHUB_REPOSITORY !== "SpineEventEngine/spine-ts" || process.env.GITHUB_REF !== "refs/heads/master")
+  if (process.argv[2] !== "publish" || process.env.GITHUB_ACTIONS !== "true" || process.env.GITHUB_EVENT_NAME !== "push" || process.env.GITHUB_REPOSITORY !== "SpineEventEngine/spine-ts" || process.env.GITHUB_REF !== "refs/heads/master")
     throw new Error("Publication is permitted only from the official GitHub Actions master workflow");
   const input = resolve(option("--input"));
   const release = JSON.parse(readFileSync(join(input, "release-manifest.json"), "utf8"));
   const checksum = (tarball) => "sha512-" + createHash("sha512").update(readFileSync(join(input, tarball))).digest("base64");
   validateReleaseManifest(release, checksum);
+  const registry = createPublicRegistry({ fetch: globalThis.fetch });
   await publishRelease({
     release: { ...release, packages: release.packages.map((entry) => ({ ...entry, tarball: join(input, entry.tarball) })) },
     checksum: (tarball) => "sha512-" + createHash("sha512").update(readFileSync(tarball)).digest("base64"),
-    registry: createPublicRegistry({ fetch: globalThis.fetch }),
+    registry,
     publish: async (entry, args) => run("npm", ["publish", entry.tarball, ...args]),
+    poll: async (entry, tag) =>
+      waitForRegistryVisibility({
+        registry,
+        entry,
+        tag,
+        sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+      }),
   });
 }
 await main();
