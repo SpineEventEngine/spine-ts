@@ -32,7 +32,9 @@ export const releaseManifestPaths = [
   "examples/todo/package.json",
 ];
 
-export const publicPackagePaths = releaseManifestPaths.filter((path) => path.startsWith("packages/"));
+export const publicPackagePaths = releaseManifestPaths.filter((path) =>
+  path.startsWith("packages/"),
+);
 
 export function classifyReleaseVersion(version) {
   if (/^\d+\.\d+\.\d+-snapshot\.\d+$/u.test(version)) return { tag: "snapshot", version };
@@ -70,14 +72,42 @@ export function validateReleasePolicy(entries) {
       manifest.publishConfig?.tag !== release.tag
     )
       throw new Error(manifest.name + " publishConfig.tag must equal " + release.tag);
-    for (const group of ["dependencies", "optionalDependencies", "peerDependencies", "devDependencies"])
+    for (const group of [
+      "dependencies",
+      "optionalDependencies",
+      "peerDependencies",
+      "devDependencies",
+    ])
       for (const [name, version] of Object.entries(manifest[group] ?? {}))
-        if (frameworkPackageNames.includes(name) && version !== "workspace:*" && version !== release.version)
-          throw new Error(manifest.name + " " + group + " " + name + " must use " + release.version);
+        if (
+          frameworkPackageNames.includes(name) &&
+          version !== "workspace:*" &&
+          version !== release.version
+        )
+          throw new Error(
+            manifest.name + " " + group + " " + name + " must use " + release.version,
+          );
   }
   return release;
 }
 
 export function releaseDependencyOrder(entries) {
-  return dependencyFirstOrder(entries.filter(({ path }) => path.startsWith("packages/")).map(({ manifest }) => manifest));
+  return dependencyFirstOrder(
+    entries.filter(({ path }) => path.startsWith("packages/")).map(({ manifest }) => manifest),
+  );
+}
+
+export function expectedReleaseModel(entries) {
+  const release = validateReleasePolicy(entries);
+  const packages = entries
+    .filter(({ path }) => path.startsWith("packages/"))
+    .map(({ manifest }) => ({
+      name: manifest.name,
+      dependencies: ["dependencies", "optionalDependencies", "peerDependencies"]
+        .flatMap((group) => Object.keys(manifest[group] ?? {}))
+        .filter((name) => frameworkPackageNames.includes(name))
+        .sort((left, right) => left.localeCompare(right)),
+    }));
+  const byName = new Map(packages.map((entry) => [entry.name, entry]));
+  return { ...release, packages: releaseDependencyOrder(entries).map((name) => byName.get(name)) };
 }

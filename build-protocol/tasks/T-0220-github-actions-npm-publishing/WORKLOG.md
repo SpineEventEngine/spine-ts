@@ -55,3 +55,7 @@ scope.
   it, and an injected invocation rejects publication outside the exact official
   Actions push context. Focused CLI/artifact tests passed 2/2 with syntax and
   diff checks.
+- `2026-08-24`: Artifact-authority endpoint: uploaded manifests are checked
+  against a source-derived expected release model. Artifact/policy focused
+  suites passed 16/16, covering inventory, version/tag, portable path,
+  integrity/checksum, dependency, and order tampering.
