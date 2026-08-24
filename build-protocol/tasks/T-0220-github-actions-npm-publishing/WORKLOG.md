@@ -59,3 +59,10 @@ scope.
   against a source-derived expected release model. Artifact/policy focused
   suites passed 16/16, covering inventory, version/tag, portable path,
   integrity/checksum, dependency, and order tampering.
+- `2026-08-24`: Workflow endpoint: immutable action provenance is checkout v6
+  `d23441a48e516b6c34aea4fa41551a30e30af803`, setup-node v6
+  `249970729cb0ef3589644e2896645e5dc5ba9c38`, pnpm/action-setup v6
+  `0977fd99725f1db4007ccb2928dbb4e90d06cc86`, upload-artifact v4
+  `ea165f8d65b6e75b540449e92b4886f43607fa02`, and download-artifact v5
+  `634f93cb2916e3fdff6788551b99b062d0335ce0`. Focused structural workflow
+  tests passed 3/3 without running a publication.
