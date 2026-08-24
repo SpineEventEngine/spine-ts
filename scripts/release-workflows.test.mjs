@@ -32,6 +32,14 @@ describe("release workflows", () => {
       environment: "gh-actions-environment",
       permissions: { contents: "read", "id-token": "write" },
     });
+    expect(source).toContain("pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9");
+    const publishRuns = workflow.jobs.publish.steps
+      .map((step) => step.run)
+      .filter((run) => typeof run === "string");
+    expect(publishRuns).toContain(
+      "node --version | grep -Fx 'v24.18.0' && npm --version | grep -Fx '11.16.0'",
+    );
+    expect(publishRuns.join("\n")).not.toMatch(/npm (?:install|i)|pnpm (?:install|add)|corepack/u);
     expect(source).toContain("node-version: 24.18.0");
     expect(source).toContain("npm --version | grep -Fx '11.16.0'");
     expect(source).toContain(

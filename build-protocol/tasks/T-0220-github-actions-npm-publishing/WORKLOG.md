@@ -93,3 +93,7 @@ scripts/release-publisher.test.mjs --passWithNoTests` failed because the
   a real relative subprocess CLI invocation proves the safe context gate. Fake
   publication fixtures now model tag visibility. Focused release suites passed
   41/41 with targeted lint/format/diff clean.
+- `2026-08-24`: Security re-review test correction asserts the approved
+  pnpm/action-setup v6.0.9 SHA and verifies that the OIDC job checks exact
+  Node/npm versions without running a package-manager installation command.
+  Focused workflow tests passed 3/3 with lint/format/diff clean.

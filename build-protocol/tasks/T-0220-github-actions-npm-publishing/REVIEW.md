@@ -47,3 +47,6 @@ authenticate, or push. Its result is recorded before specialist review.
 
 - `2026-08-24`: Second re-review correction verified 41/41 focused release
   tests; final independent specialist dispositions remain orchestrator-owned.
+
+- `2026-08-24`: Security re-review workflow assertion passed 3/3; the
+  specialist security disposition remains orchestrator-owned.
