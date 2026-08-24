@@ -1412,6 +1412,18 @@ modes. Kubernetes remains a static cluster reference. Orders, Projects, GCE,
 and GKE received a read-only beginner audit only. The canonical ledger is in
 `build-protocol/tasks/T-0214-beginner-example-correction/TASK.md`.
 
+### T-0220: GitHub Actions NPM Publishing
+
+T-0220 is implemented, reviewed, and release-verified on the personal feature
+branch. Pull requests to `master` prove the exact package artifacts without
+publication authority; a protected `master` push prepares the same artifacts
+and publishes the exact 18-package dependency graph through NPM OIDC trusted
+publishing. Snapshot versions select `snapshot`, stable versions select
+`latest`, partial identical releases resume safely, and ambiguous registry or
+tag state fails closed. Official repository/environment activation and actual
+publication remain pending explicit human action. The canonical ledger is in
+`build-protocol/tasks/T-0220-github-actions-npm-publishing/TASK.md`.
+
 ## Parallelism Without Rework
 
 Use parallelism only where outputs do not block or overwrite each other:

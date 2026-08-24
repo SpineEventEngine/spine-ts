@@ -1,7 +1,8 @@
 # T-0220: GitHub Actions NPM Publishing
 
-Status: In progress
+Status: Implementation complete; official activation pending human authorization
 Start: `2026-08-24 Europe/Lisbon`
+Completed implementation: `2026-08-24 Europe/Lisbon`
 Baseline commit: `35e0d81dfd4fe72f93804319f7437de71279edda`
 Branch: `codex/github-actions-npm-publishing`
 Worktree: `.worktrees/github-actions-npm-publishing`

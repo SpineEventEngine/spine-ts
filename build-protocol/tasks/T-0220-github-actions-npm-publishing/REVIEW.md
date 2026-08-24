@@ -1,6 +1,6 @@
 # T-0220 Review Record
 
-Status: Pending implementation endpoint
+Status: Accepted on the feature-branch implementation endpoint
 
 ## Implementation Acceptance Gate
 
@@ -11,13 +11,13 @@ Status: Pending implementation endpoint
 
 ## Required Concerns
 
-| Concern                          | Planned existing role/function     | Bounded scope                                                                                                                 | Explicit model  | Explicit reasoning | Disposition |
-| -------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------ | ----------- |
-| Style and maintainability        | `style_maintainability_reviewer`   | Permanent release module seams, workflow structure, errors, tests, and duplication                                            | `gpt-5.6-terra` | high               | Pending     |
-| Documentation completeness       | `documentation_reviewer`           | Maintainer rollout, OIDC setup, tag/version rules, resumption, and failure recovery                                           | `gpt-5.6-luna`  | medium             | Pending     |
-| TypeScript and API documentation | `typescript_api_docs_reviewer`     | Tooling module contracts, package metadata policy, and compatibility of reused artifact mechanisms                            | `gpt-5.6-terra` | high               | Pending     |
-| Performance and reliability      | `performance_reliability_reviewer` | Queueing, sequential dependency publication, registry polling, interruption/resumption, and cleanup                           | `gpt-5.6-terra` | high               | Pending     |
-| Security release readiness       | `security_reviewer`                | OIDC scope, environment binding, immutable Actions, provenance, credential absence, artifact integrity, and command injection | `gpt-5.6-terra` | high               | Pending     |
+| Concern                          | Planned existing role/function     | Bounded scope                                                                                                                 | Explicit model  | Explicit reasoning | Disposition                    |
+| -------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------ | ------------------------------ |
+| Style and maintainability        | `style_maintainability_reviewer`   | Permanent release module seams, workflow structure, errors, tests, and duplication                                            | `gpt-5.6-terra` | high               | Clean after affected re-review |
+| Documentation completeness       | `documentation_reviewer`           | Maintainer rollout, OIDC setup, tag/version rules, resumption, and failure recovery                                           | `gpt-5.6-luna`  | medium             | Clean after affected re-review |
+| TypeScript and API documentation | `typescript_api_docs_reviewer`     | Tooling module contracts, package metadata policy, and compatibility of reused artifact mechanisms                            | `gpt-5.6-terra` | high               | Clean after affected re-review |
+| Performance and reliability      | `performance_reliability_reviewer` | Queueing, sequential dependency publication, registry polling, interruption/resumption, and cleanup                           | `gpt-5.6-terra` | high               | Clean after affected re-review |
+| Security release readiness       | `security_reviewer`                | OIDC scope, environment binding, immutable Actions, provenance, credential absence, artifact integrity, and command injection | `gpt-5.6-terra` | high               | Clean after affected re-review |
 
 All review dispatches prohibit child spawning. The orchestrator collects the
 complete wave before returning one consolidated accepted correction batch.
@@ -95,3 +95,22 @@ authenticate, or push. Its result is recorded before specialist review.
   `packages: write`, job `env`, `if`, and `container` fields are rejected.
   Focused workflow evidence is 5/5 with ESLint, Prettier, and diff checks
   clean.
+
+## Final Acceptance
+
+- Style/maintainability accepted the real-process CLI gate, non-returning signal
+  behavior, single owned-output cleanup, and phase-specific failure coverage.
+- Documentation accepted the protected-branch/environment setup, exact 18-
+  package trusted-publisher inventory, transient resumption guidance, and
+  mismatch/new-version recovery rule.
+- TypeScript/API documentation accepted the corrected artifact declaration and
+  found no new public package contract.
+- Reliability accepted bounded registry reads, direct dist-tag parsing,
+  dependency-first resumption, and pre-mutation/final selected and opposite tag
+  invariants, including the selected-tag disappearance race.
+- Final security accepted exact immutable Action pins, OIDC-only least
+  privilege, exact Node/npm checks without privileged installation, and exact
+  allowlisting of the complete publish job and all of its step objects.
+- The mandatory cheap preflight and the single final `pnpm verify:release`
+  passed. Official repository/environment configuration and actual NPM
+  publication remain deliberate human activation steps.

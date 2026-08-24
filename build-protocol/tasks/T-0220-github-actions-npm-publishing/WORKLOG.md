@@ -116,3 +116,14 @@ scripts/release-publisher.test.mjs --passWithNoTests` failed because the
   that a merge may result in a release. Documentation audience and
   release-readiness checks passed, along with formatting and diff checks; no
   release behavior changed.
+- `2026-08-24`: The complete cheap preflight passed generated-state and build
+  checks, tooling typecheck, formatting, documentation/API/TypeDoc checks, Buf
+  lint, release readiness (84 package imports, 54 package assets, and 357
+  relative Markdown links), and 52/52 focused release tests.
+- `2026-08-24`: The single final `pnpm verify:release` passed: 283 test files
+  passed and 4 were skipped; 4,515 tests passed and 19 were skipped. Global
+  coverage was 93.28% statements, 90% branches, 92.81% functions, and 94.44%
+  lines. Production-dependency policy, both release audits, generated
+  cleanliness, documentation, and release-readiness gates passed. No NPM
+  package was published and no official repository, environment, or trusted-
+  publisher setting was mutated.
