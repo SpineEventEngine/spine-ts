@@ -73,3 +73,7 @@ scripts/release-publisher.test.mjs --passWithNoTests` failed because the
   `f56c9658d` workflows, `e1ed40ff4`/`87bc711ec` generated alignment,
   and `8193bc7f5` consumer cleanup. All were pushed to verified personal
   origin; no official activation or NPM publication occurred.
+- `2026-08-24`: Mechanical ESLint correction: replaced the Node-global
+  `structuredClone` in the release-artifact tampering test with a JSON test
+  fixture clone. Focused artifact tests passed 12/12; focused ESLint and diff
+  checks passed.

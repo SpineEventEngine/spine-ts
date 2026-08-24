@@ -91,7 +91,7 @@ describe("release artifacts", () => {
     ],
     ["checksum", () => {}],
   ])("rejects %s tampering", (_name, mutate) => {
-    const value = structuredClone(manifest());
+    const value = JSON.parse(JSON.stringify(manifest()));
     mutate(value);
     expect(() => validateReleaseManifest(value, expected, () => "sha512-other")).toThrow();
   });
