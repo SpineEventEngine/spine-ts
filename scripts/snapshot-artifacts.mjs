@@ -91,12 +91,12 @@ export function inspectPackedArtifact({ root, tarball, run }) {
 /**
  * Proves the exact packed tarballs resolve in a fresh non-workspace consumer.
  */
-export function proveExactTarballConsumer({ root, destination, run }) {
-  const packages = packFrameworkArtifacts({ root, destination, run });
+export function proveExactTarballConsumer({ root, destination, run, packages }) {
+  const artifacts = packages ?? packFrameworkArtifacts({ root, destination, run });
   const consumer = join(destination, "consumer");
   mkdirSync(consumer);
   const dependencies = Object.fromEntries(
-    packages.map(({ name, tarball }) => [name, "file:" + tarball]),
+    artifacts.map(({ name, tarball }) => [name, "file:" + tarball]),
   );
   writeFileSync(
     join(consumer, "package.json"),
@@ -177,7 +177,7 @@ export function proveExactTarballConsumer({ root, destination, run }) {
     consumer,
   );
   run(process.execPath, ["dist/index.js"], consumer);
-  return packages;
+  return artifacts;
 }
 
 /**

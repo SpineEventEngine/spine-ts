@@ -43,7 +43,8 @@ export function validatePublicationInventory(root) {
     .sort((left, right) => left.localeCompare(right));
   const expected = [...frameworkPackageNames].sort((left, right) => left.localeCompare(right));
   const problems = [];
-  if (rootManifest.version !== "2.0.0-snapshot.3") problems.push("root must use snapshot.3");
+  if (!/^\d+\.\d+\.\d+(?:-snapshot\.\d+)?$/u.test(rootManifest.version))
+    problems.push("root must use a supported release version");
   if (JSON.stringify(actual) !== JSON.stringify(expected))
     problems.push("public package paths do not match exact inventory");
   for (const name of expected) {
@@ -87,7 +88,8 @@ export function publicManifestProblems(manifest) {
   const problems = [];
   if (!frameworkPackageNames.includes(name))
     problems.push(name + " is not in the public inventory");
-  if (manifest.version !== "2.0.0-snapshot.3") problems.push(name + " must use snapshot.3");
+  if (!/^\d+\.\d+\.\d+(?:-snapshot\.\d+)?$/u.test(manifest.version))
+    problems.push(name + " must use a supported release version");
   if (manifest.private === true) problems.push(name + " must not be private");
   if (manifest.license !== "Apache-2.0") problems.push(name + " must use Apache-2.0");
   if (typeof manifest.description !== "string" || !manifest.description.trim())
@@ -95,7 +97,7 @@ export function publicManifestProblems(manifest) {
   const publishConfig = JSON.stringify(manifest.publishConfig);
   if (
     publishConfig !==
-    JSON.stringify({ registry: "https://registry.npmjs.org/", access: "public", tag: "snapshot" })
+    JSON.stringify({ registry: "https://registry.npmjs.org/", access: "public", tag: releaseTag(manifest.version) })
   )
     problems.push(name + " has invalid publishConfig");
   const repository = manifest.repository;
@@ -152,13 +154,19 @@ export function internalRuntimeDependencyProblems(manifest) {
   const problems = [];
   for (const group of ["dependencies", "optionalDependencies", "peerDependencies"]) {
     for (const [dependency, version] of Object.entries(manifest[group] || {})) {
-      if (frameworkPackageNames.includes(dependency) && version !== "2.0.0-snapshot.3")
-        problems.push(name + " " + group + " " + dependency + " must use snapshot.3");
+      if (frameworkPackageNames.includes(dependency) && version !== manifest.version)
+        problems.push(name + " " + group + " " + dependency + " must use " + manifest.version);
       if (dependency === "@spine-event-engine/validation" && version !== "2.0.0-snapshot.7")
         problems.push(name + " validation must use snapshot.7");
     }
   }
   return problems.sort((left, right) => left.localeCompare(right));
+}
+
+function releaseTag(version) {
+  if (/^\d+\.\d+\.\d+-snapshot\.\d+$/u.test(version)) return "snapshot";
+  if (/^\d+\.\d+\.\d+$/u.test(version)) return "latest";
+  return "unsupported";
 }
 
 function manifestTargets(manifest) {

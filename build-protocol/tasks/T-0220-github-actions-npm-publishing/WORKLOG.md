@@ -35,3 +35,9 @@ scope.
   `pnpm install --lockfile-only`, focused package metadata tests (12/12), and
   `pnpm install --frozen-lockfile` passed. The ordinary install reported only
   pre-existing missing built-bin warnings for `spine-delivery-server`.
+- `2026-08-24`: Release-module endpoint RED/GREEN: the portable manifest test
+  first failed on a missing module, then passed after manifest creation and
+  checksum validation. Focused artifact, policy, and publisher suites passed
+  7/7; CLI syntax and diff checks passed. Preparation reuses the already-packed
+  artifact list for the external-consumer proof; the guarded CLI uses public
+  registry reads only after its official GitHub Actions context gate.
