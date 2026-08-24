@@ -88,3 +88,10 @@ authenticate, or push. Its result is recorded before specialist review.
   shell, working-directory, and `env.PATH` additions fail. Job-level needs,
   environment, and permissions checks remain exact. Focused workflow evidence
   is 4/4 with ESLint, Prettier, and diff checks clean.
+
+- `2026-08-24`: Final job-metadata correction replaces the partial publish-job
+  matcher. Exact sorted keys, `needs`, runner, environment, permissions,
+  concurrency, and full step objects are required. Fixtures prove extra
+  `packages: write`, job `env`, `if`, and `container` fields are rejected.
+  Focused workflow evidence is 5/5 with ESLint, Prettier, and diff checks
+  clean.

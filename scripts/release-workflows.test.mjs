@@ -24,6 +24,13 @@ const publishStepsAllowlist = [
   },
   { run: 'node scripts/release-cli.mjs publish --input "$RUNNER_TEMP/release"' },
 ];
+const publishJobAllowlist = {
+  needs: "prepare",
+  "runs-on": "ubuntu-24.04",
+  environment: "gh-actions-environment",
+  permissions: { contents: "read", "id-token": "write" },
+  steps: publishStepsAllowlist,
+};
 const usesAllowlist = [
   "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
   "pnpm/action-setup@" + approvedPnpmSetup,
@@ -39,6 +46,17 @@ const usesAllowlist = [
 
 function assertExactPublishSteps(steps) {
   expect(steps).toEqual(publishStepsAllowlist);
+}
+
+function assertExactPublishJob(job) {
+  expect(Object.keys(job).sort()).toEqual([
+    "environment",
+    "needs",
+    "permissions",
+    "runs-on",
+    "steps",
+  ]);
+  expect(job).toEqual(publishJobAllowlist);
 }
 
 describe("release workflows", () => {
@@ -57,18 +75,13 @@ describe("release workflows", () => {
     const source = read("publish.yml");
     const workflow = YAML.parse(source);
     expect(workflow.on.push.branches).toEqual(["master"]);
-    expect(workflow.concurrency).toMatchObject({
+    expect(workflow.concurrency).toEqual({
       group: "spine-npm-publication",
       queue: "max",
       "cancel-in-progress": false,
     });
-    expect(workflow.jobs.publish).toMatchObject({
-      needs: "prepare",
-      environment: "gh-actions-environment",
-      permissions: { contents: "read", "id-token": "write" },
-    });
+    assertExactPublishJob(workflow.jobs.publish);
     expect(source).toContain("pnpm/action-setup@" + approvedPnpmSetup + " # v6.0.9");
-    assertExactPublishSteps(workflow.jobs.publish.steps);
     expect(source).toContain("node-version: 24.18.0");
     expect(source).toContain("npm --version | grep -Fx '11.16.0'");
     expect(source).toContain(
@@ -111,5 +124,16 @@ describe("release workflows", () => {
       Object.assign(steps[2], change);
       expect(() => assertExactPublishSteps(steps)).toThrow();
     }
+  });
+
+  it("rejects unreviewed publish-job metadata", () => {
+    const job = YAML.parse(read("publish.yml")).jobs.publish;
+    for (const addition of [
+      { permissions: { ...job.permissions, packages: "write" } },
+      { env: { PATH: "/tmp" } },
+      { if: "always()" },
+      { container: "node:24" },
+    ])
+      expect(() => assertExactPublishJob({ ...job, ...addition })).toThrow();
   });
 });
