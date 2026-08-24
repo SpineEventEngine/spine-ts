@@ -273,4 +273,18 @@ describe("release publisher", () => {
     });
     await expect(registry("tags", artifact)).rejects.toThrow("dist-tags");
   });
+
+  it("reads tags from npm's dedicated dist-tags endpoint", async () => {
+    const paths = [];
+    const registry = createPublicRegistry({
+      fetch: async (url) => {
+        paths.push(url);
+        return response(200, { "dist-tags": { snapshot: artifact.version } });
+      },
+    });
+    await expect(registry("tags", artifact)).resolves.toEqual({ snapshot: artifact.version });
+    expect(paths).toEqual([
+      "https://registry.npmjs.org/-/package/%40spine-event-engine%2Fcore/dist-tags",
+    ]);
+  });
 });

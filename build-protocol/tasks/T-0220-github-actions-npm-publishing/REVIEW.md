@@ -40,3 +40,7 @@ authenticate, or push. Its result is recorded before specialist review.
 - `2026-08-24`: Accepted correction batch is partially resolved by focused
   release-suite evidence (39/39); specialist dispositions remain pending the
   orchestrator's complete review wave.
+
+- `2026-08-24`: Cleanup-phase and dedicated-tag-endpoint follow-up evidence is
+  40/40 focused tests with targeted lint/format/diff clean; specialist review
+  dispositions remain pending.

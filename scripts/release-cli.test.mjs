@@ -48,6 +48,19 @@ describe("release CLI", () => {
 
   it.each(["pack", "prove", "write"])("removes owned output when %s fails", (phase) => {
     const removed = [];
+    const expected = {
+      tag: "snapshot",
+      version: "2.0.0-snapshot.4",
+      packages: frameworkPackageNames
+        .map((name) => ({ name, dependencies: [] }))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    };
+    const packages = expected.packages.map(({ name }, index) => ({
+      name,
+      tarball: "/owned/" + index + ".tgz",
+      integrity: "sha512-YQ==",
+      dependencies: [],
+    }));
     expect(() =>
       prepareRelease({
         output: "/owned",
@@ -55,14 +68,25 @@ describe("release CLI", () => {
         mkdir: () => {},
         remove: (path) => removed.push(path),
         pack: () => {
-          throw new Error(phase);
+          if (phase === "pack") throw new Error(phase);
+          return packages;
         },
+        prove: () => {
+          if (phase === "prove") throw new Error(phase);
+        },
+        writeManifest: () => {
+          if (phase === "write") throw new Error(phase);
+        },
+        expected,
       }),
     ).toThrow(phase);
     expect(removed).toEqual(["/owned"]);
   });
 
-  it.each(["SIGINT", "SIGTERM"])("cleans owned output for %s", (signal) => {
+  it.each([
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+  ])("cleans owned output for %s", (signal, code) => {
     const handlers = new Map();
     const removed = [];
     expect(() =>
@@ -72,16 +96,18 @@ describe("release CLI", () => {
         mkdir: () => {},
         remove: (path) => removed.push(path),
         pack: () => {
+          handlers.get(signal)();
           throw new Error("stop");
         },
         registerSignal: (name, handler) => {
           handlers.set(name, handler);
           return () => {};
         },
-        exit: () => {},
+        exit: (actual) => expect(actual).toBe(code),
       }),
     ).toThrow("stop");
     expect(handlers.has(signal)).toBe(true);
+    expect(removed).toEqual(["/owned", "/owned"]);
   });
 
   it("rejects prepare without an output mode", async () => {

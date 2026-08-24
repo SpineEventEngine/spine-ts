@@ -83,3 +83,8 @@ scripts/release-publisher.test.mjs --passWithNoTests` failed because the
   before mutation. Workflows pin pnpm v6.0.9's dereferenced commit and use
   Node 24.18.0's bundled npm 11.16.0 without installation in the OIDC job.
   Focused release suites passed 39/39 with targeted ESLint/format/diff checks.
+- `2026-08-24`: Follow-up correction makes pack, proof, and manifest-write
+  cleanup failures independent and invokes both captured signal handlers with
+  conventional exit codes. The registry test now asserts the exact dedicated
+  npm dist-tags endpoint. Focused release suites passed 40/40 with ESLint,
+  Prettier, and diff checks clean.
