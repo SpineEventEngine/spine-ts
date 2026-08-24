@@ -50,3 +50,8 @@ authenticate, or push. Its result is recorded before specialist review.
 
 - `2026-08-24`: Security re-review workflow assertion passed 3/3; the
   specialist security disposition remains orchestrator-owned.
+
+- `2026-08-24`: Documentation re-review correction distinguishes safe transient
+  same-commit resumption from persistent/ambiguous failures and prohibits reuse
+  of an integrity/tag-mismatched version; documentation disposition remains
+  orchestrator-owned.

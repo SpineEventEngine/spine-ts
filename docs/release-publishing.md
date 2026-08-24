@@ -39,9 +39,12 @@ configure this environment or the 18 npm trusted publishers; an operator must
 provide that configuration evidence before activation.
 
 On success, all packages become visible with their exact integrity and selected
-tag. After interruption, rerun the same workflow for the same commit: matching
-packages skip and missing packages resume in dependency order. A fully published
-version fails deliberately. For integrity, tag, or network failures, stop and
-investigate; do not alter tarballs, unpublish, overwrite, repair tags, use
-tokens, login/whoami, or disable provenance. Pause merges if the fixed queue
-approaches GitHub's 100 pending-run ceiling.
+tag. A transient registry or network failure may be resumed by rerunning the
+same workflow for the same commit and version: matching packages skip and
+missing packages resume in dependency order. A persistent or ambiguous failure
+requires investigation. A fully published version fails deliberately.
+
+For an integrity or tag mismatch, diagnose the cause and use a new version; do
+not repack, overwrite, repair tags, unpublish, or reuse the affected version for
+same-version mutation. Do not use tokens, login/whoami, or disable provenance.
+Pause merges if the fixed queue approaches GitHub's 100 pending-run ceiling.
