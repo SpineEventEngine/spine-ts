@@ -74,3 +74,10 @@ authenticate, or push. Its result is recorded before specialist review.
   exact bundled npm 11.16.0 version check. Prefix, omit, and workspace install
   fixtures are rejected; focused workflow evidence is 4/4 with ESLint,
   Prettier, and diff checks clean.
+
+- `2026-08-24`: Final workflow scanner correction removes shell/npm parsing.
+  Tests deep-equal the complete ordered publish-job non-empty `run:` scripts
+  and all workflow `uses:` references to reviewed allowlists. Extra commands,
+  including `if npm`, `command npm`, and command substitution forms, fail by
+  structure; focused workflow evidence is 4/4 with ESLint, Prettier, and diff
+  checks clean.
