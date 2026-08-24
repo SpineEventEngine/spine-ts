@@ -43,7 +43,10 @@ describe("release policy", () => {
           : {}),
       },
     }));
-    expect(validateReleasePolicy(manifests)).toEqual({ tag: "snapshot", version: "2.0.0-snapshot.4" });
+    expect(validateReleasePolicy(manifests)).toEqual({
+      tag: "snapshot",
+      version: "2.0.0-snapshot.4",
+    });
     manifests[1].manifest.version = "2.0.0";
     expect(() => validateReleasePolicy(manifests)).toThrow("must use the root version");
   });

@@ -107,3 +107,7 @@ scripts/release-publisher.test.mjs --passWithNoTests` failed because the
   including an option-prefixed `npm --prefix x install` recognition fixture.
   Focused CLI/publisher/workflow/artifact tests passed 46/46, with focused
   ESLint, Prettier, and diff checks clean.
+- `2026-08-24`: Mechanical preflight found Prettier drift limited to
+  `scripts/package-artifacts.mjs` and `scripts/release-policy.test.mjs`.
+  Repository Prettier rewrote only their line wrapping; changed-file format and
+  whitespace-diff checks passed. No semantic behavior or review scope changed.

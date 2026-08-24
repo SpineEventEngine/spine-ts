@@ -97,7 +97,11 @@ export function publicManifestProblems(manifest) {
   const publishConfig = JSON.stringify(manifest.publishConfig);
   if (
     publishConfig !==
-    JSON.stringify({ registry: "https://registry.npmjs.org/", access: "public", tag: releaseTag(manifest.version) })
+    JSON.stringify({
+      registry: "https://registry.npmjs.org/",
+      access: "public",
+      tag: releaseTag(manifest.version),
+    })
   )
     problems.push(name + " has invalid publishConfig");
   const repository = manifest.repository;
