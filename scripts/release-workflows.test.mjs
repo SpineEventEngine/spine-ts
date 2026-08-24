@@ -8,16 +8,28 @@ const read = (name) => readFileSync(join(root, ".github/workflows", name), "utf8
 const approvedPnpmSetup = "0ebf47130e4866e96fce0953f49152a61190b271";
 const npmVersionCheck =
   "node --version | grep -Fx 'v24.18.0' && npm --version | grep -Fx '11.16.0'";
-const publishRunsAllowlist = [
-  npmVersionCheck,
-  'node scripts/release-cli.mjs publish --input "$RUNNER_TEMP/release"',
+const publishStepsAllowlist = [
+  {
+    uses: "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+    with: { ref: "${{ github.sha }}", "persist-credentials": false },
+  },
+  {
+    uses: "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
+    with: { "node-version": "24.18.0", "package-manager-cache": false },
+  },
+  { run: npmVersionCheck },
+  {
+    uses: "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0",
+    with: { name: "release", path: "${{ runner.temp }}/release" },
+  },
+  { run: 'node scripts/release-cli.mjs publish --input "$RUNNER_TEMP/release"' },
 ];
 const usesAllowlist = [
   "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
-  "pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+  "pnpm/action-setup@" + approvedPnpmSetup,
   "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
   "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
-  "pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+  "pnpm/action-setup@" + approvedPnpmSetup,
   "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
   "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
   "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
@@ -25,10 +37,8 @@ const usesAllowlist = [
   "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0",
 ];
 
-function assertExactPublishRuns(runs) {
-  if (JSON.stringify(runs) !== JSON.stringify(publishRunsAllowlist))
-    throw new Error("Unexpected run command in publish job");
-  return runs;
+function assertExactPublishSteps(steps) {
+  expect(steps).toEqual(publishStepsAllowlist);
 }
 
 describe("release workflows", () => {
@@ -58,10 +68,7 @@ describe("release workflows", () => {
       permissions: { contents: "read", "id-token": "write" },
     });
     expect(source).toContain("pnpm/action-setup@" + approvedPnpmSetup + " # v6.0.9");
-    const publishRuns = workflow.jobs.publish.steps
-      .map((step) => step.run)
-      .filter((run) => typeof run === "string" && run.trim() !== "");
-    expect(assertExactPublishRuns(publishRuns)).toEqual(publishRunsAllowlist);
+    assertExactPublishSteps(workflow.jobs.publish.steps);
     expect(source).toContain("node-version: 24.18.0");
     expect(source).toContain("npm --version | grep -Fx '11.16.0'");
     expect(source).toContain(
@@ -92,23 +99,17 @@ describe("release workflows", () => {
     expect(uses).toEqual(usesAllowlist);
   });
 
-  it("uses only the reviewed pnpm setup release and rejects every extra run command", () => {
-    const setupRefs = ["build.yml", "publish.yml"].flatMap((name) =>
-      [...read(name).matchAll(/uses: pnpm\/action-setup@([a-f0-9]{40})/gu)].map(
-        (match) => match[1],
-      ),
-    );
-    expect(setupRefs).toEqual([approvedPnpmSetup, approvedPnpmSetup]);
-    for (const command of [
-      "npm --prefix x install",
-      "npm --omit dev install",
-      "npm --workspace pkg install",
-      "if npm --version; then true; fi",
-      "command npm --version",
-      "echo $(npm --version)",
-    ])
-      expect(() => assertExactPublishRuns([...publishRunsAllowlist, command])).toThrow(
-        "Unexpected run command",
-      );
+  it("rejects step-level execution controls on an otherwise allowed run", () => {
+    const workflow = YAML.parse(read("publish.yml"));
+    const allowedSteps = workflow.jobs.publish.steps;
+    for (const change of [
+      { shell: "bash -e {0}" },
+      { "working-directory": "/tmp" },
+      { env: { PATH: "/tmp" } },
+    ]) {
+      const steps = JSON.parse(JSON.stringify(allowedSteps));
+      Object.assign(steps[2], change);
+      expect(() => assertExactPublishSteps(steps)).toThrow();
+    }
   });
 });

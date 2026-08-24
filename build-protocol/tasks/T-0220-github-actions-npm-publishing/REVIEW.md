@@ -81,3 +81,10 @@ authenticate, or push. Its result is recorded before specialist review.
   including `if npm`, `command npm`, and command substitution forms, fail by
   structure; focused workflow evidence is 4/4 with ESLint, Prettier, and diff
   checks clean.
+
+- `2026-08-24`: Structural security correction deep-equals the complete ordered
+  `jobs.publish.steps` objects, including `uses`, `with`, and `run` bodies.
+  This rejects every unexpected step key; deterministic fixtures confirm custom
+  shell, working-directory, and `env.PATH` additions fail. Job-level needs,
+  environment, and permissions checks remain exact. Focused workflow evidence
+  is 4/4 with ESLint, Prettier, and diff checks clean.
