@@ -19,7 +19,12 @@ const run = (command, args, cwd = root) => {
   const result = spawnSync(command, args, { cwd, encoding: "utf8", stdio: "inherit" });
   if (result.status !== 0) throw new Error(command + " failed");
 };
-const option = (argv, name) => argv[argv.indexOf(name) + 1];
+const option = (argv, name) => {
+  const index = argv.indexOf(name);
+  if (index === -1 || argv[index + 1] === undefined || argv[index + 1].startsWith("--"))
+    return undefined;
+  return argv[index + 1];
+};
 
 export function prepareRelease({
   root,
@@ -40,8 +45,9 @@ export function prepareRelease({
   if (!check && exists(destination))
     throw new Error("Release output already exists: " + destination);
   let completed = false;
+  let owned = check;
   const cleanup = () => {
-    if (!completed) remove(destination);
+    if (owned && !completed) remove(destination);
   };
   const unregister = ["SIGINT", "SIGTERM"].map(
     (signal) =>
@@ -51,7 +57,10 @@ export function prepareRelease({
       }) ?? (() => {}),
   );
   try {
-    mkdir(destination);
+    if (!check) {
+      mkdir(destination);
+      owned = true;
+    }
     const packages = pack({ root, destination });
     prove({ root, destination, packages });
     const manifest = createReleaseManifest({
@@ -68,7 +77,7 @@ export function prepareRelease({
     return manifest;
   } finally {
     for (const removeHandler of unregister) removeHandler();
-    if (check || !completed) remove(destination);
+    if (owned && (check || !completed)) remove(destination);
   }
 }
 
@@ -93,6 +102,11 @@ export async function main({ argv = process.argv, environment = process.env } = 
           join(destination, "release-manifest.json"),
           JSON.stringify(manifest, null, 2) + "\n",
         ),
+      registerSignal: (signal, handler) => {
+        process.once(signal, handler);
+        return () => process.off(signal, handler);
+      },
+      exit: (code) => process.exit(code),
       expected: expectedReleaseModel(readReleaseManifests(root)),
     });
   }
@@ -133,7 +147,8 @@ export async function main({ argv = process.argv, environment = process.env } = 
         registry,
         entry,
         tag,
-        sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+        sleep: (milliseconds) =>
+          new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds)),
       }),
   });
 }

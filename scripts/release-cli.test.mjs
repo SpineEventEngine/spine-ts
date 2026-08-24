@@ -45,4 +45,48 @@ describe("release CLI", () => {
       "already exists",
     );
   });
+
+  it.each(["pack", "prove", "write"])("removes owned output when %s fails", (phase) => {
+    const removed = [];
+    expect(() =>
+      prepareRelease({
+        output: "/owned",
+        exists: () => false,
+        mkdir: () => {},
+        remove: (path) => removed.push(path),
+        pack: () => {
+          throw new Error(phase);
+        },
+      }),
+    ).toThrow(phase);
+    expect(removed).toEqual(["/owned"]);
+  });
+
+  it.each(["SIGINT", "SIGTERM"])("cleans owned output for %s", (signal) => {
+    const handlers = new Map();
+    const removed = [];
+    expect(() =>
+      prepareRelease({
+        output: "/owned",
+        exists: () => false,
+        mkdir: () => {},
+        remove: (path) => removed.push(path),
+        pack: () => {
+          throw new Error("stop");
+        },
+        registerSignal: (name, handler) => {
+          handlers.set(name, handler);
+          return () => {};
+        },
+        exit: () => {},
+      }),
+    ).toThrow("stop");
+    expect(handlers.has(signal)).toBe(true);
+  });
+
+  it("rejects prepare without an output mode", async () => {
+    await expect(main({ argv: ["node", "cli", "prepare"], environment: {} })).rejects.toThrow(
+      "requires --check or --output",
+    );
+  });
 });
