@@ -5578,3 +5578,56 @@ Consequences:
   owns combined provider/runtime evidence and the final security review.
 - Wave 13 through 19 features and Cloud Run receive no provisional API or
   implementation from this decision.
+
+## D-0115: Publish Framework Packages From Merged Master Commits With OIDC
+
+Status: Accepted
+
+Date: 2026-08-24
+
+Task: T-0220 GitHub Actions NPM publishing
+
+Context:
+
+- The first public snapshot was published manually through a disposable
+  one-time mechanism. That exception is not a permanent release architecture.
+- Future official changes are pushed to feature branches, verified in pull
+  requests targeting `master`, and merged manually.
+- The 18 public framework packages form an acyclic runtime dependency graph and
+  must be published from the same verified common-version artifact set.
+- NPM package versions are immutable, while multi-package publication can be
+  interrupted between packages.
+
+Decision:
+
+- Use `build.yml` for read-only pull-request release verification and
+  `publish.yml` for OIDC-authorized publication after a push reaches official
+  `master`; do not use Git tags as triggers.
+- Give OIDC authority only to the GitHub-hosted publication job protected by
+  `gh-actions-environment`. Use no long-lived NPM publication token.
+- Derive one channel from the common version: exact `x.y.z-snapshot.N` uses
+  `snapshot`, exact `x.y.z` uses `latest`, and every other prerelease fails.
+- Prepare and externally consume exact tarballs before mutation, transfer them
+  with an integrity manifest, then publish sequentially in computed dependency
+  order.
+- Resume a partial release only when existing registry integrity and selected
+  tag state match exactly. Fail closed on ambiguity or mismatch, fail when all
+  18 packages already exist, prevent tag rollback, and preserve the opposite
+  channel.
+- Serialize publication with GitHub's maximum pending queue and no cancellation.
+  Pin Actions immutably, disable checkout credential persistence, keep automatic
+  provenance, and prohibit separate dist-tag repair or unpublication.
+- CI validates resulting package state, not implementing-agent commit messages
+  or merge strategy.
+
+Consequences:
+
+- Every official `master` merge must carry a new common release version and
+  valid package metadata before it can publish.
+- The human configures one trusted publisher per package and the protected
+  environment before official activation.
+- A failed or interrupted release is safe to rerun at the same commit; an
+  integrity/tag conflict requires human investigation rather than mutation.
+- This decision supersedes the completion plan's human-operated-only statement
+  for future publication. It does not authorize this task to push to the
+  SpineEventEngine organization or publish a real package.
