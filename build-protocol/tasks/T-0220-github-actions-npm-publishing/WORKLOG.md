@@ -46,3 +46,8 @@ scope.
   a supplied bounded visibility poller, and the CLI now requires the `push`
   event claim as well as the official repository/ref claims. Focused suites
   passed 7/7 with CLI syntax and diff checks.
+- `2026-08-24`: Publisher correction RED/GREEN: malformed public-registry
+  version metadata initially resolved with an undefined integrity; it now fails
+  closed. Focused publisher tests pass 5/5, with targeted ESLint, Prettier, and
+  diff checks clean. Coverage includes explicit-404 absence, non-404 rejection,
+  semantic snapshot/stable ordering, and bounded visibility polling.
