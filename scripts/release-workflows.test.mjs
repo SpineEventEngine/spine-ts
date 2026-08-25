@@ -71,6 +71,21 @@ describe("release workflows", () => {
     expect(source).not.toMatch(/publish|id-token|environment|secrets\./u);
   });
 
+  it("fetches history for release verification without widening the publish job", () => {
+    const build = YAML.parse(read("build.yml"));
+    const publication = YAML.parse(read("publish.yml"));
+    expect(build.jobs.verify.steps[0].with).toEqual({
+      "persist-credentials": false,
+      "fetch-depth": 0,
+    });
+    expect(publication.jobs.prepare.steps[0].with).toEqual({
+      ref: "${{ github.sha }}",
+      "persist-credentials": false,
+      "fetch-depth": 0,
+    });
+    expect(publication.jobs.publish.steps[0]).toEqual(publishStepsAllowlist[0]);
+  });
+
   it("isolates OIDC publication after exact prepared artifacts", () => {
     const source = read("publish.yml");
     const workflow = YAML.parse(source);

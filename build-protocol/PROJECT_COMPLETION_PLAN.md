@@ -229,6 +229,10 @@ durably closed.
   cross-package SPI boundaries, beginner-ready package documentation, and the
   verified `2.0.0-snapshot.3` artifact set.
 - **Wave 15:** add deliberate registry-integrity and tenant-admission controls.
+  Replace Git-history-dependent migration-baseline checks with tracked,
+  checksum-protected baseline evidence so CI can use shallow checkouts without
+  weakening the rule that new cleanup or Proto debt cannot be presented as
+  pre-existing debt.
 - **Wave 16:** implement JVM-equivalent Projection catch-up with repository-level
   targeting, durable progress, Inbox coordination, restart, and live-event
   ordering. The existing local whole-read-side reset/replay helper is not
