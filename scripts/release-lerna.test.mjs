@@ -1,5 +1,6 @@
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
+import { Buffer } from "node:buffer";
 import { createServer } from "node:http";
 import { gunzipSync } from "node:zlib";
 import { once } from "node:events";
@@ -54,6 +55,12 @@ async function localRegistry() {
   await once(server, "listening");
   const { port } = server.address();
   return { records, requests, server, url: "http://127.0.0.1:" + port };
+}
+
+async function closeServer(server) {
+  if (!server.listening) return;
+  server.close();
+  await once(server, "close");
 }
 
 describe("Lerna workspace discovery", () => {
@@ -227,7 +234,7 @@ describe("Lerna workspace discovery", () => {
       expect(rerun.stdout + rerun.stderr).toContain("No unpublished release found");
       expect(registry.requests.filter(({ method }) => method === "PUT")).toEqual([]);
     } finally {
-      registry.server.close();
+      await closeServer(registry.server);
       rmSync(fixture, { force: true, recursive: true });
     }
   }, 30_000);
