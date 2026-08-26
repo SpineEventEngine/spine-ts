@@ -11,10 +11,9 @@ Authoring sub-agent: existing `implementer` role (`gpt-5.6-terra`, medium)
 Reviewer sub-agents: performance/reliability (`gpt-5.6-terra`, high),
 style/maintainability (`gpt-5.6-terra`, high), and documentation (`gpt-5.6-luna`,
 medium) completed; final security pending
-Implementation commits: `59e957f6b`, `461ad8563`, `c1f82e540`, `ad6305205`,
-`f2b2257e9`, `88bfb936a`, `f489ad664`, `62d400926`, `c10c0b622`, `c47512859`,
-`f24bb88e9`, `fdc645517`, `69376c366`
-Current implementation HEAD: `d1d4db98e`; final branch HEAD pending final
+Implementation commits: `59e957f6b` through `9737df292`; see Git history and
+the work log for the individual correction commits.
+Current implementation HEAD: `9737df292`; final branch HEAD pending final
 security/verification record
 
 Task classification: High-risk
@@ -210,7 +209,8 @@ Out of scope:
   only exact missing package manifests and `.publish` directories; 5xx,
   timeout, malformed data, empty selection, and a fully published release fail
   closed. Residual: Lerna may re-query ambiguously but cannot widen the
-  generated inventory.
+  generated inventory. Final registry verification now also fails closed when
+  any required package is absent.
 - Style/maintainability reviewer (`gpt-5.6-terra`, high): accepted identity
   enforcement and owned-test-fixture findings. Public package names must match
   the exact framework inventory; root/examples must be private; staging tests
@@ -223,8 +223,8 @@ Out of scope:
 - Initial review findings and accepted corrections are complete. The initial
   `--scope` correction failed affected re-review because Lerna 10.0.1 does not
   support it; it is explicitly superseded by the generated workspace boundary.
-  Current affected re-review of `c47512859` through `69376c366`, final security,
-  and final `verify:release` remain pending.
+  Re-review of the final registry correction, final security, repeated cheap
+  preflight, and final `verify:release` remain pending.
 
 ## Decisions
 
@@ -266,21 +266,21 @@ Out of scope:
 
 ## Security Impact
 
-| Area                    | Impact                                                              |
-| ----------------------- | ------------------------------------------------------------------- |
-| Dependencies            | Adds exact Lerna 10.0.1 and its Nx/npm publication dependency graph |
-| Secrets and credentials | OIDC only; no token or credential configuration                     |
-| IPC                     | N/A                                                                 |
-| Validation              | Retains exact inventory/version/tag and registry-state checks       |
-| Tenant boundaries       | N/A                                                                 |
-| `Any`/deserialization   | N/A                                                                 |
-| Logging                 | Must not expose OIDC material or registry credentials               |
+| Area                    | Impact                                                           |
+| ----------------------- | ---------------------------------------------------------------- |
+| Dependencies            | Adds exact Lerna 10.0.1 and a narrow patched transitive override |
+| Secrets and credentials | OIDC only; no token or credential configuration                  |
+| IPC                     | N/A                                                              |
+| Validation              | Retains exact inventory/version/tag and registry-state checks    |
+| Tenant boundaries       | N/A                                                              |
+| `Any`/deserialization   | N/A                                                              |
+| Logging                 | Must not expose OIDC material or registry credentials            |
 
 ## Verification
 
-- Qualification, cheap preflight, focused tests, and coverage are complete.
-  Current affected re-review, final security, and one final `pnpm verify:release`
-  remain pending.
+- Qualification, focused tests, and coverage are complete. Re-review of the
+  final registry correction, final security, repeated cheap preflight, and one
+  final `pnpm verify:release` remain pending.
 
 ## Open Risks And Follow-Up Routing
 
@@ -289,12 +289,15 @@ Out of scope:
 | Exact byte identity and integrity-aware resume are lost | Human/project       | D-0117 pending       | Accepted for migration                           | Reliability and security review |
 | Old publisher deletion                                  | Future cleanup task | D-0117 pending       | Deferred until one successful live Lerna release | Post-release cleanup            |
 | NPM trusted-publisher allowed actions                   | Human               | T-0221               | Required external configuration                  | Before official merge           |
+| `brace-expansion` override removal                      | Future maintenance  | T-0221               | Remove when Lerna/Nx no longer selects 5.0.8     | Lerna dependency upgrade        |
 
 ## Review Waves And Dispositions
 
 Initial review and its accepted corrections are complete; the unsupported
-`--scope` attempt is superseded. Current affected re-review covers the isolated
-workspace, built-in registry, and audit override commits; final security remains pending.
+`--scope` attempt is superseded. Explicit review profiles were reliability and
+maintainability on `gpt-5.6-terra` high and documentation on `gpt-5.6-luna`
+medium. Re-review of the final registry correction and final security remain
+pending.
 
 ## Integration Result
 

@@ -2,111 +2,87 @@
 
 Status: DONE_WITH_CONCERNS
 
-Lerna 10.0.1 is pinned as the sole reachable publication command. The retained
-policy validates the exact inventory, common version, internal pins, metadata,
-and version-derived channel. Static manifest tags are removed. The official OIDC
-job performs read-only registry preflight, publishes staged `.publish` content
-with sequential Lerna `from-package`, and verifies final registry completeness.
-The PR workflow remains read-only.
+## Result
+
+Lerna `10.0.1` is pinned as the sole reachable publication command. The policy
+validates the exact 18-package inventory, common version, internal pins,
+metadata, and version-derived channel. Snapshot versions publish with the
+`snapshot` tag, stable versions publish with `latest`, and other prereleases
+fail. Static package tags are absent so they cannot override this choice.
+
+The official OIDC job performs a read-only registry preflight, prepares and
+validates exact package tarballs, creates a disposable non-Git workspace that
+contains only packages still missing from the registry, publishes them
+sequentially with Lerna `from-package`, and verifies that all 18 package
+versions and the selected aggregate tag are visible. The PR workflow remains
+read-only. A fully published version fails before mutation; a valid partial
+version resumes with only the missing packages.
 
 Implementation commits run from `59e957f6b` (`Bump version ->
-2.0.0-snapshot.5`) through `d1d4db98e`; current implementation HEAD is
-`d1d4db98e`. Only affected re-review, final security, cheap-preflight repeat,
-and `verify:release` are pending.
+2.0.0-snapshot.5`) through `9737df292`. Later commits update task records only.
+Affected re-review, final security review, repeated cheap preflight, and one
+final `verify:release` remain pending.
 
-Evidence: disposable Verdaccio qualification published synthetic public packages
-in dependency order while excluding a private workspace; staged content and
-explicit tags succeeded; a fully published Lerna rerun was a no-op, so the thin
-preflight deliberately rejects that case. Focused GREEN: 35 tests passed.
+## Evidence
 
-Mechanical correction evidence: `lerna.json` restricts Lerna to pnpm workspace
-discovery with external versions and `useNx: false`; 37 focused tests pass,
-Lerna reports 25 workspace packages (18 public, 7 private), and
-`release-cli.mjs prepare --check` passes. Registry reads now reject malformed
-records and time out without mutation; the privileged install ignores scripts.
+- The required version-only commit changed all 26 manifests and only their
+  top-level `version` fields. Concrete internal dependency pins and generated
+  package-version metadata were aligned in later commits.
+- Lerna discovers 25 package workspaces: exactly 18 public framework packages
+  and seven private examples. The private root remains outside publication.
+- The built-in loopback registry fixture runs real pinned Lerna against
+  synthetic packages. It proves dependency-first fresh publication, exact
+  selected inventory, partial resumption, fully published no-op behavior,
+  concrete packed dependency versions, and awaited server cleanup.
+- Complete registry verification now fails closed when any required package is
+  missing. Preflight still treats an absent version as unpublished.
+- The affected suite passes 48 tests with 94.20% statements, 94.96% branches,
+  90.19% functions, and 93.95% lines across the release CLI, policy, and
+  registry modules. Prettier, cleanup rules, targeted ESLint, both dependency
+  audits, and `git diff --check` are green.
+- The exact tarball consumer installs all 18 packages outside the workspace,
+  compiles TypeScript, imports the packages, and executes the test path without
+  workspace symlinks.
+- No public registry was mutated, no credential or token was introduced, no PR
+  was created, and no branch was pushed.
 
-Cheap-preflight correction: generated Proto package manifests were aligned from
-`2.0.0-snapshot.4` to the actual workspace version `2.0.0-snapshot.5` after
-`pnpm proto:generate` correctly rejected the mismatch. Regeneration and the
-17-test Todo startup contract then passed. This remains a separate local commit
-from the required version-only commit.
+## Review Dispositions
 
-Second cheap-preflight correction: registry read timeout primitives now use the
-lint-recognized `globalThis` namespace. The three focused registry tests and
-targeted ESLint passed without weakening lint rules.
+The completed affected review used explicit configured profiles:
 
-Third cheap-preflight correction: a local registry-record JSDoc typedef keeps
-the annotation within the repository's 120-character cleanup limit. Cleanup
-lint, targeted ESLint, and the three focused registry tests passed.
+- performance/reliability: `gpt-5.6-terra`, high;
+- style/maintainability: `gpt-5.6-terra`, high;
+- documentation/package verification: `gpt-5.6-luna`, medium.
 
-Formatting correction: the repository formatter rewrote the six files reported
-by cheap preflight. The 25-test affected release suite and diff check passed.
-The format-check process ended without usable terminal completion evidence in
-this execution surface, so final whole-repository format evidence remains with
-the continuing preflight.
+The dispatch surface exposed the immutable configured roles/profiles rather
+than runtime self-introspection. All model and reasoning fields were explicit.
+TypeScript/API documentation review is N/A because no public TypeScript
+declarations or APIs changed. Final security review remains pending.
 
-Coverage correction: behavior tests cover staged `.publish` extraction and
-cleanup, safe CLI command routing, registry outcomes, and static-tag policy
-rejection. Scoped aggregate coverage across `release-cli.mjs`,
-`release-policy.mjs`, and `release-registry.mjs` is 95.56% statements, 94.61%
-branches, 92.50% functions, and 95.65% lines. `package-artifacts.mjs` changed
-only by deleting the obsolete private `releaseTag` helper, so it is outside this
-source set. The artifact upload enables hidden files only for the validated
-`$RUNNER_TEMP/release` staging tree; workflow tests pin that exact path/option.
+The early attempt to constrain Lerna with `--scope` was rejected because Lerna
+10.0.1 does not support that publish option. It is historical only and is fully
+superseded by the strict generated-workspace boundary. Verdaccio was also
+removed: version 6.10.0 was incompatible with the resolved `js-yaml` ESM
+exports, while 6.2.2 contained vulnerable dependencies. The durable fixture now
+uses only the Node.js HTTP server on loopback.
 
-Concern: lockfile generation required updating concrete internal pins after the
-required version-only commit because pnpm otherwise attempted to resolve an
-unpublished exact workspace package. No public registry was mutated, no token
-was introduced, and no branch was pushed. Final `verify:release`, specialist
-review, security review, and live trusted-publisher configuration remain owned
-by the orchestration convergence phase.
+## Dependency Security
 
-Cleanup evidence: the qualification-only Verdaccio process (PID 3494, bound to
-`127.0.0.1:4873`) was terminated after qualification. The exact owned fixture
-directory was verified and moved recoverably to
-`/Users/armiol/.Trash/spine-verdaccio.bCMWb3-t0221`; the port no longer responds.
+Lerna's Nx dependency selected vulnerable `brace-expansion@5.0.8`. The narrow
+pnpm override `brace-expansion@5.0.8: 5.0.9` selects the compatible patched
+release without changing unrelated versions. Both `pnpm audit --audit-level=low`
+and `pnpm audit --prod --audit-level=low` report no known vulnerabilities, and
+the real-Lerna integration suite passes. Reassess and remove the override when
+the pinned Lerna/Nx graph no longer resolves `5.0.8`, or when Lerna is upgraded.
 
-Review correction evidence: strict registry selection runs immediately before
-Lerna and emits only missing names from the exact public inventory. The
-workflow writes those names to an owned `$RUNNER_TEMP` file under `set -euo
-pipefail`, rejects an empty file, constructs explicit repeated `--scope`
-arguments, and removes the file through a trap. This preserves fail-closed
-selection despite Lerna's own permissive lookup handling. The residual is
-narrow: a later Lerna re-query may be ambiguous, but it cannot expand the
-strictly selected package set. The runbook now names the four accepted losses:
-byte identity, integrity-aware resume, per-dependency visibility waits, and
-per-package tag-race checks; aggregate final version/tag verification remains
-the boundary. The current focused suite is GREEN with 45 tests; final
-specialist/security convergence and `verify:release` remain pending.
+## Accepted Losses And Remaining Concerns
 
-Latest scoped coverage is 96.00% statements, 95.23% branches, 93.18%
-functions, and 96.05% lines across `release-cli.mjs`, `release-policy.mjs`, and
-`release-registry.mjs`. Prettier, cleanup lint, targeted ESLint, Lerna discovery
-(25 packages), checked staging, and `git diff --check` are GREEN.
+The migration deliberately loses exact tarball-byte identity, integrity-aware
+resume, per-dependency registry-visibility waits, and per-package tag-race
+checks. Exact inventory/version selection and aggregate final version/tag
+verification remain enforced. The old custom publisher remains tracked but is
+unreachable from workflows and the release CLI until one real Lerna release
+succeeds; deletion belongs to a separately versioned cleanup.
 
-Affected re-review proved the previous `--scope` correction invalid because
-Lerna 10.0.1 does not support it. The workflow now creates a disposable non-Git
-workspace from only strict-selected manifests and `.publish` directories, then
-runs the pinned original-checkout Lerna binary there. A synthetic Verdaccio
-qualification published selected base then dependent and did not discover or
-publish the omitted synthetic package. Final security and `verify:release`
-remain pending.
-
-The temporary Verdaccio 6.2.2 qualification dependency was removed after audit
-found vulnerable transitive paths. The workflow still uses a uniquely allocated
-owned parent directory and `--no-git-reset` for the generated non-Git workspace;
-final security and `verify:release` remain pending.
-
-Record closure: current implementation HEAD is `69376c366`; final branch-head
-record remains pending final security and final `verify:release`. The completed
-review wave used performance/reliability Terra/high, style/maintainability
-Terra/high, and documentation Luna/medium; TypeScript/API documentation is N/A
-because no public TypeScript declarations or APIs changed. Initial scope-based
-publication was explicitly rejected by affected re-review and superseded by the
-generated workspace. Verdaccio 6.10.0 was incompatible with the resolved
-`js-yaml` ESM exports; 6.2.2 was removed for vulnerable transitive paths. The
-built-in registry is the durable replacement. Current audit has one high via
-Lerna/Nx `brace-expansion@5.0.8`, pending final-security disposition.
-
-The superseding workspace path has focused aggregate coverage of 94.20%
-statements, 94.96% branches, 90.19% functions, and 93.95% lines.
+The human must configure NPM trusted publishing for the official repository
+before merge. No local verification can prove that external account setting.

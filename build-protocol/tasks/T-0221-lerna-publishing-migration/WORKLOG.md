@@ -5,9 +5,9 @@ Branch: `automated-publishing-and-packaging-improvements`
 Worktree: `.worktrees/automated-publishing-and-packaging-improvements`
 Baseline commit: `af5c897857a85b3736a9efd7490d47faef41b4ac`
 Authoring sub-agent: existing `implementer` role (`gpt-5.6-terra`, medium)
-Implementation commits: `59e957f6b` through `d1d4db98e` (see TASK record)
-Current implementation HEAD: `d1d4db98e`; affected re-review, final security,
-cheap-preflight repeat, and verification pending
+Implementation commits: `59e957f6b` through `9737df292` (see TASK record)
+Current implementation HEAD: `9737df292`; affected re-review, final security,
+repeated cheap preflight, and verification pending
 
 ## Purpose
 
@@ -36,11 +36,20 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 
 ## Current State
 
+- `2026-08-26 17:20 WEST`: Final affected review used explicitly dispatched
+  reliability and maintainability `gpt-5.6-terra` high profiles and a
+  documentation `gpt-5.6-luna` medium profile. The surface exposes immutable
+  configured roles/profiles rather than runtime self-introspection. The
+  reliability reviewer reproduced a missing-package final-verification gap;
+  `9737df292` adds the failing regression and makes complete verification reject
+  any 404. Focused registry/release tests, ESLint, and diff check are green.
+
 - `2026-08-26 16:54 WEST`: Built-in Node local registry fixture replaced the
   temporary Verdaccio qualification path. Verdaccio 6.10.0 failed on the
-  resolved `js-yaml` ESM export; vulnerable 6.2.2 was removed. `pnpm audit`
-  now reports one high through `lerna > nx > brace-expansion@5.0.8`, pending
-  final-security disposition. The built-in fixture proves true partial rerun.
+  resolved `js-yaml` ESM export; vulnerable 6.2.2 was removed. The narrow pnpm
+  override maps only `brace-expansion@5.0.8` from Lerna/Nx to patched `5.0.9`.
+  Full and production audits report no known vulnerabilities. Remove the
+  override when a future Lerna/Nx graph no longer selects `5.0.8`.
 
 - `2026-08-26 16:34 WEST`: Affected re-review proved prior `--scope` publishing
   invalid for Lerna 10.0.1. It is superseded by a generated disposable non-Git
@@ -48,13 +57,14 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
   directories. Synthetic Verdaccio qualification published selected base then
   dependent; the omitted package was absent from Lerna discovery/publish output.
 
-- Last completed step: Affected re-review correction and local qualification;
-  cheap preflight, qualification, focused coverage, and focused mechanical
-  checks are complete.
+- Last completed step: Final registry completeness correction and focused
+  verification; qualification, focused coverage, and focused mechanical checks
+  are complete.
 - Previous correction: Unsupported `--scope` mechanism superseded; no longer a
   workflow, runtime, test, or runbook claim.
-- Next step: current affected re-review, final security, and one final
-  `verify:release`; no final release verification yet.
+- Next step: affected re-review of the final correction, final security,
+  repeated cheap preflight, and one final `verify:release`; no final release
+  verification yet.
 - Last prior focused step: Accepted specialist-review correction batch and focused
   GREEN.
 - Known risks: Lerna resume is version-based rather than integrity-based;
@@ -64,7 +74,7 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 
 ## Open Risks And Follow-Up Routing
 
-| Risk/Follow-Up                                                  | Owner                    | Linked Task/Decision | Disposition                                    | Next Review Point              |
-| --------------------------------------------------------------- | ------------------------ | -------------------- | ---------------------------------------------- | ------------------------------ |
-| Local-registry qualification may expose a Lerna incompatibility | Implementer/orchestrator | T-0221               | Stop and report rather than invent a publisher | After qualification            |
-| Old custom engine cleanup                                       | Future task              | D-0117 pending       | Deferred                                       | After first real Lerna release |
+| Risk/Follow-Up                     | Owner       | Linked Task/Decision | Disposition                                  | Next Review Point    |
+| ---------------------------------- | ----------- | -------------------- | -------------------------------------------- | -------------------- |
+| Old custom engine cleanup          | Future task | D-0117 pending       | Deferred until one real Lerna release        | Post-release cleanup |
+| `brace-expansion` override removal | Maintenance | T-0221               | Remove when Lerna/Nx no longer selects 5.0.8 | Dependency upgrade   |
