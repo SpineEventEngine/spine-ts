@@ -11,13 +11,14 @@ const npmVersionCheck =
 const isolatedLernaPublish =
   [
     "set -euo pipefail",
-    'publication_workspace="$RUNNER_TEMP/spine-lerna-publication"',
-    "trap 'rm -rf \"$publication_workspace\"' EXIT",
+    'publication_parent="$(mktemp -d "$RUNNER_TEMP/spine-lerna-publication.XXXXXX")"',
+    'publication_workspace="$publication_parent/workspace"',
+    "trap 'rm -rf \"$publication_parent\"' EXIT",
     'node scripts/release-cli.mjs prepare-publication-workspace --output "$publication_workspace"',
     'TAG="$(node scripts/release-cli.mjs tag)"',
     "(",
     '  cd "$publication_workspace"',
-    '  "$GITHUB_WORKSPACE/node_modules/.bin/lerna" publish from-package --contents .publish --concurrency 1 --ignore-scripts --dist-tag "$TAG" --registry https://registry.npmjs.org/ --git-head "$GITHUB_SHA" --summary-file "$GITHUB_STEP_SUMMARY" --yes',
+    '  "$GITHUB_WORKSPACE/node_modules/.bin/lerna" publish from-package --contents .publish --concurrency 1 --ignore-scripts --no-git-reset --dist-tag "$TAG" --registry https://registry.npmjs.org/ --git-head "$GITHUB_SHA" --summary-file "$GITHUB_STEP_SUMMARY" --yes',
     ")",
   ].join("\n") + "\n";
 const publishStepsAllowlist = [
