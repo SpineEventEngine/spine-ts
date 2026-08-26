@@ -5,8 +5,9 @@ Branch: `automated-publishing-and-packaging-improvements`
 Worktree: `.worktrees/automated-publishing-and-packaging-improvements`
 Baseline commit: `af5c897857a85b3736a9efd7490d47faef41b4ac`
 Authoring sub-agent: existing `implementer` role (`gpt-5.6-terra`, medium)
-Implementation commits: `59e957f6b` through `85e1315dd` (see TASK record)
-Current implementation HEAD: `85e1315dd`; final record/security/verification pending
+Implementation commits: `59e957f6b` through `d1d4db98e` (see TASK record)
+Current implementation HEAD: `d1d4db98e`; affected re-review, final security,
+cheap-preflight repeat, and verification pending
 
 ## Purpose
 
