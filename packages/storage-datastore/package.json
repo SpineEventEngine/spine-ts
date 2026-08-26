@@ -28,8 +28,8 @@
   ],
   "scripts": {
     "inventory:legacy": "node scripts/inventory-legacy-layout.mjs",
-    "test:emulator": "node scripts/verify-emulator-config.mjs && pnpm --config.verify-deps-before-run=false exec vitest --root ../.. run packages/storage-datastore/test/datastore-emulator.test.ts",
-    "test:cloud": "node scripts/verify-cloud-config.mjs && pnpm --config.verify-deps-before-run=false exec vitest --root ../.. run packages/storage-datastore/test/datastore-cloud.test.ts"
+    "test:emulator": "node scripts/verify-emulator-config.mjs && SPINE_TS_INBOX_PROVIDER=datastore pnpm --config.verify-deps-before-run=false exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/storage-datastore/test/datastore-emulator.test.ts packages/server/test/delivery/inbox-provider-cleanup.test.ts",
+    "test:cloud": "node scripts/verify-cloud-config.mjs && pnpm --config.verify-deps-before-run=false exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/storage-datastore/test/datastore-cloud.test.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",

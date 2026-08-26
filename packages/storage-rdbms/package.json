@@ -27,7 +27,7 @@
   ],
   "scripts": {
     "inventory:legacy": "node scripts/inventory-legacy-layout.mjs",
-    "test:mysql": "node scripts/mysql.mjs&&pnpm exec vitest --root ../.. run test/mysql-integration.test.ts"
+    "test:mysql": "node scripts/mysql.mjs && SPINE_TS_INBOX_PROVIDER=mysql pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/storage-rdbms/test/mysql-integration.test.ts packages/server/test/delivery/inbox-provider-cleanup.test.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",

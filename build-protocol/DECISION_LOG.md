@@ -5631,3 +5631,42 @@ Consequences:
 - This decision supersedes the completion plan's human-operated-only statement
   for future publication. It does not authorize this task to push to the
   SpineEventEngine organization or publish a real package.
+
+## D-0116: Keep Ordinary CI Tests Self-Contained
+
+Status: Accepted
+
+Date: 2026-08-26
+
+Task: T-0220a stable CI release suite
+
+Context:
+
+- The release gate collected provider tests that silently skipped unless live
+  Datastore, emulator, or MySQL settings appeared in the environment.
+- Self-contained loopback and child-process tests exercise required lifecycle
+  behavior, but shutdown can have more than one valid transport-level outcome.
+- Publication depends on the same release gate passing reliably on a clean
+  GitHub-hosted runner.
+
+Decision:
+
+- The ordinary CI/release suite contains only tests that provision all required
+  resources inside the test process or repository toolchain.
+- Live cloud, emulator, database, Docker, and browser acceptance use explicit
+  separate commands and never enter ordinary CI through ambient environment
+  variables.
+- Self-contained process and loopback integration tests remain in ordinary CI.
+  Their assertions express stable application behavior rather than one
+  operating-system-specific ordering of equivalent shutdown signals.
+- A deterministic policy test guards the boundary between stable and
+  infrastructure inventories.
+
+Consequences:
+
+- `verify:release` cannot unexpectedly contact configured provider
+  infrastructure.
+- Provider and deployment acceptance remains available as an explicit operator
+  action with its required facilities.
+- CI failures inside the stable inventory are defects to repair, not tests to
+  hide solely because they exercise multiple local processes.

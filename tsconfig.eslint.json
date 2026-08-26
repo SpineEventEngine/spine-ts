@@ -27,6 +27,7 @@
     "examples/*/*/test/**/*.tsx",
     "examples/*/*/vite.config.ts",
     "examples/*/playwright.config.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "vitest.infrastructure.config.ts"
   ]
 }

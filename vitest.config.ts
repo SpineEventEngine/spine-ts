@@ -12,7 +12,9 @@
  * the License.
  */
 
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
+
+import { infrastructureTestFiles } from "./scripts/test-inventory.mjs";
 
 export default defineConfig({
   test: {
@@ -29,6 +31,9 @@ export default defineConfig({
       "scripts/**/*.test.mjs",
       "compatibility-tests/jvm/**/*.test.mjs",
     ],
+    // Provider tests must be selected only by their explicit package commands;
+    // environment variables never broaden the release suite.
+    exclude: [...configDefaults.exclude, ...infrastructureTestFiles],
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
