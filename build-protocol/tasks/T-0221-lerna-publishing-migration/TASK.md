@@ -126,40 +126,40 @@ registry-completeness policies.
 
 Skill sources checked:
 
-| Source | Scope Checked | Evidence |
-| --- | --- | --- |
-| Session skill inventory | Release planning/execution, TDD, worktrees, monorepo, ADR, verification, and review skills | Desktop session inventory on 2026-08-26 |
-| Task-provided skills | No skill explicitly named by the human | Current conversation |
-| `build-protocol/skills/EXPECTED_SKILLS.md` | Complete expected manifest | Read before task implementation |
-| `~/.agents/skills/*/SKILL.md` | Full entrypoint inventory | `find ~/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` |
-| `~/.agents/.skill-lock.json` | Installed source manifest | Readable and checked |
+| Source                                     | Scope Checked                                                                              | Evidence                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Session skill inventory                    | Release planning/execution, TDD, worktrees, monorepo, ADR, verification, and review skills | Desktop session inventory on 2026-08-26                           |
+| Task-provided skills                       | No skill explicitly named by the human                                                     | Current conversation                                              |
+| `build-protocol/skills/EXPECTED_SKILLS.md` | Complete expected manifest                                                                 | Read before task implementation                                   |
+| `~/.agents/skills/*/SKILL.md`              | Full entrypoint inventory                                                                  | `find ~/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` |
+| `~/.agents/.skill-lock.json`               | Installed source manifest                                                                  | Readable and checked                                              |
 
 Selected skills read before task actions:
 
-| Skill | Source | Applicability | Instructions Applied |
-| --- | --- | --- | --- |
-| `executing-plans` | `~/.agents/skills/executing-plans/SKILL.md` | Execute the approved migration plan | Review plan first, verify each stage, stop on a real blocker |
-| `subagent-driven-development` | `~/.agents/skills/subagent-driven-development/SKILL.md` | High-risk implementation with child support | Durable briefs/reports and review gates, subordinate to the project's one-owner cycle |
-| `using-git-worktrees` | `~/.agents/skills/using-git-worktrees/SKILL.md` | Confirm isolated feature work | Existing linked worktree confirmed; no new worktree created |
-| `test-driven-development` | `~/.agents/skills/test-driven-development/SKILL.md` | New release behavior and bug prevention | RED before production behavior, focused GREEN, refactor only while green |
-| `monorepo-management` | `~/.agents/skills/monorepo-management/SKILL.md` | Multi-package publication and dependency graph | Preserve pnpm workspace ownership and test exact package scope/order |
-| `architecture-decision-records` | `~/.agents/skills/architecture-decision-records/SKILL.md` | Supersede a release-tooling choice | Record context, alternatives, decision, losses, and migration consequences |
+| Skill                           | Source                                                    | Applicability                                  | Instructions Applied                                                                  |
+| ------------------------------- | --------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `executing-plans`               | `~/.agents/skills/executing-plans/SKILL.md`               | Execute the approved migration plan            | Review plan first, verify each stage, stop on a real blocker                          |
+| `subagent-driven-development`   | `~/.agents/skills/subagent-driven-development/SKILL.md`   | High-risk implementation with child support    | Durable briefs/reports and review gates, subordinate to the project's one-owner cycle |
+| `using-git-worktrees`           | `~/.agents/skills/using-git-worktrees/SKILL.md`           | Confirm isolated feature work                  | Existing linked worktree confirmed; no new worktree created                           |
+| `test-driven-development`       | `~/.agents/skills/test-driven-development/SKILL.md`       | New release behavior and bug prevention        | RED before production behavior, focused GREEN, refactor only while green              |
+| `monorepo-management`           | `~/.agents/skills/monorepo-management/SKILL.md`           | Multi-package publication and dependency graph | Preserve pnpm workspace ownership and test exact package scope/order                  |
+| `architecture-decision-records` | `~/.agents/skills/architecture-decision-records/SKILL.md` | Supersede a release-tooling choice             | Record context, alternatives, decision, losses, and migration consequences            |
 
 Skills passed to sub-agents/reviewers:
 
-| Recipient | Skills/Instructions Passed | Notes |
-| --- | --- | --- |
+| Recipient              | Skills/Instructions Passed                        | Notes                                             |
+| ---------------------- | ------------------------------------------------- | ------------------------------------------------- |
 | Existing `implementer` | TDD, monorepo, ADR summaries and this full ledger | Explicit Terra/medium dispatch; no child spawning |
-| Reviewers | Ledger and concern-specific affected paths | Explicit repository model routing |
+| Reviewers              | Ledger and concern-specific affected paths        | Explicit repository model routing                 |
 
 Skipped relevant-looking skills:
 
-| Skill | Source | Reason Skipped |
-| --- | --- | --- |
-| `planning-with-files` | Session inventory | Planning is already complete and preserved in `.planning`; this task executes it |
-| `javascript-testing-patterns` | Session inventory | TDD plus existing Vitest conventions is sufficient; no second testing workflow needed |
-| `security-best-practices` | Session inventory | Final project security reviewer is the repository's required security gate |
-| `review` | Session inventory | Its generic two-axis diff workflow conflicts with the project's canonical specialist review cycle |
+| Skill                         | Source            | Reason Skipped                                                                                    |
+| ----------------------------- | ----------------- | ------------------------------------------------------------------------------------------------- |
+| `planning-with-files`         | Session inventory | Planning is already complete and preserved in `.planning`; this task executes it                  |
+| `javascript-testing-patterns` | Session inventory | TDD plus existing Vitest conventions is sufficient; no second testing workflow needed             |
+| `security-best-practices`     | Session inventory | Final project security reviewer is the repository's required security gate                        |
+| `review`                      | Session inventory | Its generic two-axis diff workflow conflicts with the project's canonical specialist review cycle |
 
 Conflict resolution: the project requires one continuing implementation owner
 and one complete specialist review wave, so those rules override the generic
@@ -168,9 +168,9 @@ explicit no-push rule overrides the normal immediate-push protocol.
 
 ## Assignment Gate
 
-| Existing role/function | Bounded ownership | Explicit model | Explicit reasoning | Child spawning | Runtime metadata |
-| --- | --- | --- | --- | --- | --- |
-| `implementer` | TDD qualification, dependency/configuration, policy, workflows, docs, task records, focused tests, local commits | `gpt-5.6-terra` | medium | Prohibited | Desktop explicit dispatch fields are authoritative when self-telemetry is unavailable |
+| Existing role/function | Bounded ownership                                                                                                | Explicit model  | Explicit reasoning | Child spawning | Runtime metadata                                                                      |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------- | ------------------ | -------------- | ------------------------------------------------------------------------------------- |
+| `implementer`          | TDD qualification, dependency/configuration, policy, workflows, docs, task records, focused tests, local commits | `gpt-5.6-terra` | medium             | Prohibited     | Desktop explicit dispatch fields are authoritative when self-telemetry is unavailable |
 
 ## Scope
 
@@ -222,27 +222,27 @@ Out of scope:
 
 ## Documentation And Public API Impact
 
-| Area | Impact |
-| --- | --- |
-| Package README impact | N/A: package usage does not change |
-| TypeDoc/API docs impact | N/A: no TypeScript public API changes |
-| Public API additions/removals | None |
-| Framework `USER_GUIDE.md` impact | N/A: contributor release mechanics only |
-| Example `USER_GUIDE.md` impact | N/A: examples remain private and unchanged except version/pins |
-| API examples | N/A |
-| Compatibility notes | Maintainer release documentation must explain Lerna recovery and deliberate guarantee losses |
+| Area                             | Impact                                                                                       |
+| -------------------------------- | -------------------------------------------------------------------------------------------- |
+| Package README impact            | N/A: package usage does not change                                                           |
+| TypeDoc/API docs impact          | N/A: no TypeScript public API changes                                                        |
+| Public API additions/removals    | None                                                                                         |
+| Framework `USER_GUIDE.md` impact | N/A: contributor release mechanics only                                                      |
+| Example `USER_GUIDE.md` impact   | N/A: examples remain private and unchanged except version/pins                               |
+| API examples                     | N/A                                                                                          |
+| Compatibility notes              | Maintainer release documentation must explain Lerna recovery and deliberate guarantee losses |
 
 ## Security Impact
 
-| Area | Impact |
-| --- | --- |
-| Dependencies | Adds exact Lerna 10.0.1 and its Nx/npm publication dependency graph |
-| Secrets and credentials | OIDC only; no token or credential configuration |
-| IPC | N/A |
-| Validation | Retains exact inventory/version/tag and registry-state checks |
-| Tenant boundaries | N/A |
-| `Any`/deserialization | N/A |
-| Logging | Must not expose OIDC material or registry credentials |
+| Area                    | Impact                                                              |
+| ----------------------- | ------------------------------------------------------------------- |
+| Dependencies            | Adds exact Lerna 10.0.1 and its Nx/npm publication dependency graph |
+| Secrets and credentials | OIDC only; no token or credential configuration                     |
+| IPC                     | N/A                                                                 |
+| Validation              | Retains exact inventory/version/tag and registry-state checks       |
+| Tenant boundaries       | N/A                                                                 |
+| `Any`/deserialization   | N/A                                                                 |
+| Logging                 | Must not expose OIDC material or registry credentials               |
 
 ## Verification
 
@@ -251,11 +251,11 @@ Out of scope:
 
 ## Open Risks And Follow-Up Routing
 
-| Risk/Follow-Up | Owner | Linked Task/Decision | Disposition | Next Review Point |
-| --- | --- | --- | --- | --- |
-| Exact byte identity and integrity-aware resume are lost | Human/project | D-0117 pending | Accepted for migration | Reliability and security review |
-| Old publisher deletion | Future cleanup task | D-0117 pending | Deferred until one successful live Lerna release | Post-release cleanup |
-| NPM trusted-publisher allowed actions | Human | T-0221 | Required external configuration | Before official merge |
+| Risk/Follow-Up                                          | Owner               | Linked Task/Decision | Disposition                                      | Next Review Point               |
+| ------------------------------------------------------- | ------------------- | -------------------- | ------------------------------------------------ | ------------------------------- |
+| Exact byte identity and integrity-aware resume are lost | Human/project       | D-0117 pending       | Accepted for migration                           | Reliability and security review |
+| Old publisher deletion                                  | Future cleanup task | D-0117 pending       | Deferred until one successful live Lerna release | Post-release cleanup            |
+| NPM trusted-publisher allowed actions                   | Human               | T-0221               | Required external configuration                  | Before official merge           |
 
 ## Review Waves And Dispositions
 

@@ -38,6 +38,12 @@ Third cheap-preflight correction: a local registry-record JSDoc typedef keeps
 the annotation within the repository's 120-character cleanup limit. Cleanup
 lint, targeted ESLint, and the three focused registry tests passed.
 
+Formatting correction: the repository formatter rewrote the six files reported
+by cheap preflight. The 25-test affected release suite and diff check passed.
+The format-check process ended without usable terminal completion evidence in
+this execution surface, so final whole-repository format evidence remains with
+the continuing preflight.
+
 Concern: lockfile generation required updating concrete internal pins after the
 required version-only commit because pnpm otherwise attempted to resolve an
 unpublished exact workspace package. No public registry was mutated, no token

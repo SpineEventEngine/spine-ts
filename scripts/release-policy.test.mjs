@@ -58,7 +58,13 @@ describe("release policy", () => {
         version: "2.0.0-snapshot.4",
         private: !path.startsWith("packages/"),
         ...(path.startsWith("packages/")
-          ? { publishConfig: { access: "public", registry: "https://registry.npmjs.org/", tag: "snapshot" } }
+          ? {
+              publishConfig: {
+                access: "public",
+                registry: "https://registry.npmjs.org/",
+                tag: "snapshot",
+              },
+            }
           : {}),
       },
     }));

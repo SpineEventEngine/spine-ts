@@ -21,7 +21,10 @@ describe("release registry preflight", () => {
       assertRegistryReleaseState(
         release,
         new Map(
-          release.packages.map(({ name }) => [name, { versions: { [release.version]: {} }, "dist-tags": {} }]),
+          release.packages.map(({ name }) => [
+            name,
+            { versions: { [release.version]: {} }, "dist-tags": {} },
+          ]),
         ),
       ),
     ).toThrow("already fully published");

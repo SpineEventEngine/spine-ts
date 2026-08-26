@@ -29,8 +29,7 @@ const publishStepsAllowlist = [
   },
   { run: "node scripts/release-cli.mjs preflight" },
   {
-    run:
-      'TAG="$(node scripts/release-cli.mjs tag)" && pnpm exec lerna publish from-package --contents .publish --concurrency 1 --ignore-scripts --dist-tag "$TAG" --registry https://registry.npmjs.org/ --git-head "$GITHUB_SHA" --summary-file "$GITHUB_STEP_SUMMARY" --yes',
+    run: 'TAG="$(node scripts/release-cli.mjs tag)" && pnpm exec lerna publish from-package --contents .publish --concurrency 1 --ignore-scripts --dist-tag "$TAG" --registry https://registry.npmjs.org/ --git-head "$GITHUB_SHA" --summary-file "$GITHUB_STEP_SUMMARY" --yes',
   },
   { run: "node scripts/release-cli.mjs verify-registry" },
 ];
@@ -113,7 +112,9 @@ describe("release workflows", () => {
     expect(source).toContain(
       "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5",
     );
-    expect(source).not.toMatch(/secrets\.|npm login|whoami|unpublish|provenance=false|snapshot-publisher/u);
+    expect(source).not.toMatch(
+      /secrets\.|npm login|whoami|unpublish|provenance=false|snapshot-publisher/u,
+    );
     expect(source).toContain("lerna publish from-package");
     expect(source).not.toContain("release-publisher");
     expect(readFileSync(join(root, "scripts/release-cli.mjs"), "utf8")).not.toMatch(

@@ -112,8 +112,7 @@ export async function main({ argv = process.argv } = {}) {
     process.stdout.write(release.tag + "\n");
     return;
   }
-  if (argv[2] === "preflight")
-    return verifyRegistryReleaseState(release, globalThis.fetch);
+  if (argv[2] === "preflight") return verifyRegistryReleaseState(release, globalThis.fetch);
   if (argv[2] === "verify-registry")
     return verifyRegistryReleaseState(release, globalThis.fetch, { complete: true });
   throw new Error("Supported commands are prepare, tag, preflight, and verify-registry");
