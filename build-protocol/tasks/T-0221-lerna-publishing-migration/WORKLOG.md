@@ -6,8 +6,7 @@ Worktree: `.worktrees/automated-publishing-and-packaging-improvements`
 Baseline commit: `af5c897857a85b3736a9efd7490d47faef41b4ac`
 Authoring sub-agent: existing `implementer` role (`gpt-5.6-terra`, medium)
 Implementation commits: `59e957f6b` through `9737df292` (see TASK record)
-Current implementation HEAD: `9737df292`; affected re-review, final security,
-repeated cheap preflight, and verification pending
+Current implementation HEAD: `9737df292`; final `verify:release` pending
 
 ## Purpose
 
@@ -35,6 +34,13 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 | `2026-08-26 16:24 WEST` | Implementer  | Ran scoped coverage and focused mechanical preflight                                   | 25 release CLI/policy/registry tests with V8 coverage; Prettier, cleanup lint, targeted ESLint, Lerna discovery, checked staging, and diff check                                                                                                                               | GREEN: 96.00% statements, 95.23% branches, 93.18% functions, and 96.05% lines; Lerna found 25 packages; all requested gates passed                                                                                              |
 
 ## Current State
+
+- `2026-08-26 17:26 WEST`: Affected reliability, maintainability, and
+  documentation re-reviews are clean. Final security review is also clean with
+  explicit `gpt-5.6-terra` high configuration. The repeated `verify:task` cheap
+  preflight passed every shared gate plus 48 focused tests; scoped coverage is
+  94.25% statements, 95.03% branches, 90.19% functions, and 94.02% lines.
+  Exact tarballs for all 18 packages installed and ran in the external consumer.
 
 - `2026-08-26 17:24 WEST`: Final security review assigned to the existing
   security-reviewer role with explicit `gpt-5.6-terra` and high reasoning. The
@@ -68,9 +74,7 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
   are complete.
 - Previous correction: Unsupported `--scope` mechanism superseded; no longer a
   workflow, runtime, test, or runbook claim.
-- Next step: affected re-review of the final correction, final security,
-  repeated cheap preflight, and one final `verify:release`; no final release
-  verification yet.
+- Next step: one final `verify:release`; no final release verification yet.
 - Last prior focused step: Accepted specialist-review correction batch and focused
   GREEN.
 - Known risks: Lerna resume is version-based rather than integrity-based;

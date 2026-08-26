@@ -10,8 +10,7 @@ Worktree: `.worktrees/automated-publishing-and-packaging-improvements`
 Authoring sub-agent: existing `implementer` role (`gpt-5.6-terra`, medium)
 Reviewer sub-agents: performance/reliability (`gpt-5.6-terra`, high),
 style/maintainability (`gpt-5.6-terra`, high), and documentation (`gpt-5.6-luna`,
-medium) completed; final security assigned to the existing security reviewer
-(`gpt-5.6-terra`, high)
+medium) completed; final security reviewer (`gpt-5.6-terra`, high) completed
 Implementation commits: `59e957f6b` through `9737df292`; see Git history and
 the work log for the individual correction commits.
 Current implementation HEAD: `9737df292`; final branch HEAD pending final
@@ -224,8 +223,11 @@ Out of scope:
 - Initial review findings and accepted corrections are complete. The initial
   `--scope` correction failed affected re-review because Lerna 10.0.1 does not
   support it; it is explicitly superseded by the generated workspace boundary.
-  Re-review of the final registry correction, final security, repeated cheap
-  preflight, and final `verify:release` remain pending.
+  Re-review of the final registry correction is clean.
+- Final security reviewer (`gpt-5.6-terra`, high): clean. OIDC permissions,
+  pinned actions, owned paths and cleanup, hidden-artifact isolation, exact
+  policy boundaries, HTTPS registry reads, dependency override, loopback test
+  registry, and unreachable legacy publisher were accepted.
 
 ## Decisions
 
@@ -279,9 +281,8 @@ Out of scope:
 
 ## Verification
 
-- Qualification, focused tests, and coverage are complete. Re-review of the
-  final registry correction, final security, repeated cheap preflight, and one
-  final `pnpm verify:release` remain pending.
+- Qualification, reviews, focused tests, coverage, and repeated cheap preflight
+  are complete. One final `pnpm verify:release` remains pending.
 
 ## Open Risks And Follow-Up Routing
 
@@ -295,10 +296,9 @@ Out of scope:
 ## Review Waves And Dispositions
 
 Initial review and its accepted corrections are complete; the unsupported
-`--scope` attempt is superseded. Explicit review profiles were reliability and
-maintainability on `gpt-5.6-terra` high and documentation on `gpt-5.6-luna`
-medium. Re-review of the final registry correction and final security remain
-pending.
+`--scope` attempt is superseded. Explicit review profiles were reliability,
+maintainability, and final security on `gpt-5.6-terra` high, and documentation
+on `gpt-5.6-luna` medium. All affected re-reviews and final security are clean.
 
 ## Integration Result
 

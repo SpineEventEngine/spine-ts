@@ -20,8 +20,8 @@ version resumes with only the missing packages.
 
 Implementation commits run from `59e957f6b` (`Bump version ->
 2.0.0-snapshot.5`) through `9737df292`. Later commits update task records only.
-Affected re-review, final security review, repeated cheap preflight, and one
-final `verify:release` remain pending.
+Affected re-review, final security review, and repeated cheap preflight are
+complete. One final `verify:release` remains pending.
 
 ## Evidence
 
@@ -36,10 +36,10 @@ final `verify:release` remain pending.
   concrete packed dependency versions, and awaited server cleanup.
 - Complete registry verification now fails closed when any required package is
   missing. Preflight still treats an absent version as unpublished.
-- The affected suite passes 48 tests with 94.20% statements, 94.96% branches,
-  90.19% functions, and 93.95% lines across the release CLI, policy, and
-  registry modules. Prettier, cleanup rules, targeted ESLint, both dependency
-  audits, and `git diff --check` are green.
+- The repeated cheap preflight passes 48 focused tests with 94.25% statements,
+  95.03% branches, 90.19% functions, and 94.02% lines across the release CLI,
+  policy, and registry modules. All shared build, lint, docs, Proto, and
+  release-readiness gates are green.
 - The exact tarball consumer installs all 18 packages outside the workspace,
   compiles TypeScript, imports the packages, and executes the test path without
   workspace symlinks.
@@ -57,7 +57,8 @@ The completed affected review used explicit configured profiles:
 The dispatch surface exposed the immutable configured roles/profiles rather
 than runtime self-introspection. All model and reasoning fields were explicit.
 TypeScript/API documentation review is N/A because no public TypeScript
-declarations or APIs changed. Final security review remains pending.
+declarations or APIs changed. All affected re-reviews and the final security
+review are clean.
 
 The early attempt to constrain Lerna with `--scope` was rejected because Lerna
 10.0.1 does not support that publish option. It is historical only and is fully
