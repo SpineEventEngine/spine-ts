@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { assertRegistryReleaseState } from "./release-registry.mjs";
+import { assertRegistryReleaseState, verifyRegistryReleaseState } from "./release-registry.mjs";
 
 const release = {
   tag: "snapshot",
@@ -38,5 +38,14 @@ describe("release registry preflight", () => {
       ]),
     );
     expect(() => assertRegistryReleaseState(release, complete, { complete: true })).not.toThrow();
+    expect(() => assertRegistryReleaseState(release, new Map([["@synthetic/base", []]]))).toThrow(
+      "ambiguous",
+    );
+  });
+
+  it("fails closed when a registry read does not settle before its bounded timeout", async () => {
+    await expect(
+      verifyRegistryReleaseState(release, () => new Promise(() => {}), { timeoutMs: 5 }),
+    ).rejects.toThrow("timed out");
   });
 });

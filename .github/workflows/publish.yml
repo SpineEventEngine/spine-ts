@@ -24,7 +24,7 @@ jobs:
         with:
           node-version-file: .node-version
           package-manager-cache: false
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm verify:release
       - run: node scripts/release-cli.mjs preflight
       - run: node scripts/release-cli.mjs prepare --output "$RUNNER_TEMP/release"
@@ -54,7 +54,7 @@ jobs:
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 11.9.0
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: release

@@ -5668,6 +5668,8 @@ Consequences:
   infrastructure.
 - Provider and deployment acceptance remains available as an explicit operator
   action with its required facilities.
+- CI failures inside the stable inventory are defects to repair, not tests to
+  hide solely because they exercise multiple local processes.
 
 ## D-0117: Delegate Externally Versioned Publication To Lerna
 
@@ -5695,5 +5697,3 @@ integrity-aware resume, per-dependency visibility waits, and per-package tag-rac
 checks are deliberately lost. The old publisher remains tracked but unreachable
 until one successful live Lerna release, then a separate versioned cleanup owns
 its deletion. This decision supersedes only D-0115's custom-engine details.
-- CI failures inside the stable inventory are defects to repair, not tests to
-  hide solely because they exercise multiple local processes.

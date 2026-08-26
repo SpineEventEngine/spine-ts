@@ -7,10 +7,10 @@ Baseline commit: `af5c897857a85b3736a9efd7490d47faef41b4ac`
 Task log path: `build-protocol/tasks/T-0221-lerna-publishing-migration/TASK.md`
 Branch: `automated-publishing-and-packaging-improvements`
 Worktree: `.worktrees/automated-publishing-and-packaging-improvements`
-Authoring sub-agent: existing `implementer` role, pending dispatch
+Authoring sub-agent: existing `implementer` role (`gpt-5.6-terra`, medium)
 Reviewer sub-agents: Pending
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Implementation commits: `59e957f6b`, `461ad8563`
+Final branch HEAD: Pending correction commit
 
 Task classification: High-risk
 Classification reason: This replaces the OIDC-authorized mutation engine for
@@ -208,12 +208,13 @@ Out of scope:
 
 ## Files Changed
 
-- Task records only; implementation pending.
+- Lerna configuration, policy, workflows, package metadata, lockfile, tests,
+  runbook, decision log, and task records; legacy publisher retained unreachable.
 
 ## Tests Run
 
-- Baseline uses recent verified branch evidence from T-0220a; focused affected
-  release tests will run before implementation dispatch proceeds.
+- Focused qualification and release tests passed before this correction pass;
+  final review and `verify:release` remain pending.
 
 ## Coverage Result
 

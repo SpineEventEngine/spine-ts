@@ -48,7 +48,10 @@ existing name/version pairs and publishes missing packages in dependency order.
 The read-only preflight rejects a fully published version; an ambiguous registry
 response requires investigation.
 
-For an integrity or tag mismatch, diagnose the cause and use a new version; do
-not repack, overwrite, repair tags, unpublish, or reuse the affected version for
-same-version mutation. Do not use tokens, login/whoami, or disable provenance.
-Pause merges if the fixed queue approaches GitHub's 100 pending-run ceiling.
+If final registry verification shows a missing version or selected tag, stop and
+investigate; do not overwrite, repair tags separately, unpublish, or reuse the
+affected version for same-version mutation. The migration does not compare a
+published tarball's bytes with the staged tarball, and a partial rerun resumes
+by package name/version rather than integrity. Do not use tokens, login/whoami,
+or disable provenance. Pause merges if the fixed queue approaches GitHub's 100
+pending-run ceiling.

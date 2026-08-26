@@ -13,10 +13,13 @@ export function assertRegistryReleaseState(release, records, { complete = false 
     if (
       record === null ||
       typeof record !== "object" ||
+      Array.isArray(record) ||
       record.versions === null ||
       typeof record.versions !== "object" ||
+      Array.isArray(record.versions) ||
       record["dist-tags"] === null ||
-      typeof record["dist-tags"] !== "object"
+      typeof record["dist-tags"] !== "object" ||
+      Array.isArray(record["dist-tags"])
     )
       throw new Error("ambiguous registry response for " + name);
     const exists = release.version in record.versions;
@@ -35,13 +38,35 @@ export function assertRegistryReleaseState(release, records, { complete = false 
  * @param {(url: string) => Promise<Response>} fetchResponse fetch implementation
  * @param {{ complete?: boolean }} options post-publication check options
  */
-export async function verifyRegistryReleaseState(release, fetchResponse, options) {
+export async function verifyRegistryReleaseState(
+  release,
+  fetchResponse,
+  { complete = false, timeoutMs = 10_000 } = {},
+) {
   const records = new Map();
   for (const { name } of release.packages) {
-    const response = await fetchResponse("https://registry.npmjs.org/" + encodeURIComponent(name));
-    if (response.status === 404) continue;
-    if (!response.ok) throw new Error("ambiguous registry response for " + name);
-    records.set(name, await response.json());
+    const controller = new AbortController();
+    let timeout;
+    const timed = new Promise((_, reject) => {
+      timeout = setTimeout(() => {
+        controller.abort();
+        reject(new Error("registry read timed out for " + name));
+      }, timeoutMs);
+    });
+    try {
+      const response = await Promise.race([
+        fetchResponse("https://registry.npmjs.org/" + encodeURIComponent(name), {
+          signal: controller.signal,
+        }),
+        timed,
+      ]);
+      if (response.status === 404) continue;
+      if (!response.ok) throw new Error("ambiguous registry response for " + name);
+      records.set(name, await Promise.race([response.json(), timed]));
+    } finally {
+      clearTimeout(timeout);
+      controller.abort();
+    }
   }
-  assertRegistryReleaseState(release, records, options);
+  assertRegistryReleaseState(release, records, { complete });
 }

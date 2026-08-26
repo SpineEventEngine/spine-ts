@@ -22,7 +22,7 @@ const publishStepsAllowlist = [
     uses: "pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
     with: { version: "11.9.0" },
   },
-  { run: "pnpm install --frozen-lockfile" },
+  { run: "pnpm install --frozen-lockfile --ignore-scripts" },
   {
     uses: "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0",
     with: { name: "release", path: "${{ github.workspace }}" },
@@ -115,6 +115,10 @@ describe("release workflows", () => {
     );
     expect(source).not.toMatch(/secrets\.|npm login|whoami|unpublish|provenance=false|snapshot-publisher/u);
     expect(source).toContain("lerna publish from-package");
+    expect(source).not.toContain("release-publisher");
+    expect(readFileSync(join(root, "scripts/release-cli.mjs"), "utf8")).not.toMatch(
+      /release-publisher|publishRelease|createPublicRegistry/u,
+    );
   });
 
   it("pins every action to a full immutable SHA and disables checkout credentials", () => {
