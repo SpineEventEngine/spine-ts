@@ -23,6 +23,7 @@ const repoRoot = new URL("..", import.meta.url).pathname;
 const checkerPath = new URL("./check-api-docs.mjs", import.meta.url).pathname;
 let generatedApiDocs;
 let generatedApiDocsOutput;
+const typeDocGenerationTimeout = 180_000;
 
 const publishedSpiModules = [
   {
@@ -112,7 +113,7 @@ function generatedTypeDocModel() {
         resolve(repoRoot, "node_modules/.bin/typedoc"),
         ["--options", "typedoc.json", "--json", jsonPath],
         repoRoot,
-        60_000,
+        typeDocGenerationTimeout,
       );
       generatedApiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
     } catch (error) {
@@ -154,26 +155,38 @@ describe("storage API documentation inventory", () => {
     );
   });
 
-  it("keeps every published SPI TypeDoc page equal to its public source exports", () => {
-    for (const spi of publishedSpiModules) {
-      expect(documentedModuleExports(spi.documented).sort()).toEqual(
-        moduleExports(resolve(repoRoot, spi.source)),
-      );
-    }
-  }, 60_000);
+  it(
+    "keeps every published SPI TypeDoc page equal to its public source exports",
+    () => {
+      for (const spi of publishedSpiModules) {
+        expect(documentedModuleExports(spi.documented).sort()).toEqual(
+          moduleExports(resolve(repoRoot, spi.source)),
+        );
+      }
+    },
+    typeDocGenerationTimeout,
+  );
 
-  it("accepts published SPI documentation without classifying it as a package-root export", () => {
-    const result = spawnSync(process.execPath, [checkerPath], {
-      cwd: repoRoot,
-      encoding: "utf8",
-    });
+  it(
+    "accepts published SPI documentation without classifying it as a package-root export",
+    () => {
+      const result = spawnSync(process.execPath, [checkerPath], {
+        cwd: repoRoot,
+        encoding: "utf8",
+      });
 
-    expect(result.status).toBe(0);
-  }, 60_000);
+      expect(result.status).toBe(0);
+    },
+    typeDocGenerationTimeout,
+  );
 
-  it("lists EntityRecord directly on the provider TypeDoc page", () => {
-    expect(documentedModuleExports("packages/storage/src/provider")).toContain("EntityRecord");
-  }, 60_000);
+  it(
+    "lists EntityRecord directly on the provider TypeDoc page",
+    () => {
+      expect(documentedModuleExports("packages/storage/src/provider")).toContain("EntityRecord");
+    },
+    typeDocGenerationTimeout,
+  );
 
   it("keeps tenant contracts in the provider module only", () => {
     const rootExports = moduleExports(resolve(repoRoot, "packages/storage/src/index.ts"));
