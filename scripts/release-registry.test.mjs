@@ -63,7 +63,7 @@ describe("release registry preflight", () => {
         calls.push({ url, options });
         return responses.shift();
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual(["@synthetic/base", "@synthetic/dependent"]);
     expect(calls).toHaveLength(2);
     await expect(
       verifyRegistryReleaseState(release, async () => ({ status: 500, ok: false })),
@@ -88,6 +88,6 @@ describe("release registry preflight", () => {
         }),
         { complete: true },
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual([]);
   });
 });

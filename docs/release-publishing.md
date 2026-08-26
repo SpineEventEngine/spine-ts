@@ -10,8 +10,8 @@ an npm token. Never add a token fallback.
    `10.0.1 publish from-package`.
 
 Every merge may result in a release. Keep one version across the root, 18 public
-packages, and seven examples. Implementing agents use a standalone commit named
-`Bump version -> <version>`; concrete internal pins and `pnpm-lock.yaml` change
+packages, and seven examples. Maintainers make a standalone commit named `Bump
+version -> <version>`; concrete internal pins and `pnpm-lock.yaml` change
 separately. `publishConfig.access` remains package metadata, but a static
 `publishConfig.tag` is forbidden: the validated common version is the sole
 channel source passed explicitly to Lerna.
@@ -41,17 +41,24 @@ configure this environment or the 18 npm trusted publishers; an operator must
 provide that configuration evidence before activation.
 
 The workflow verifies packed contents and a fresh external consumer before
-mutation, then publishes validated `.publish` directories. Lerna/npm repacks
-those directories, so this proves semantic contents rather than byte identity.
-A transient interruption may be resumed at the same version: Lerna skips
-existing name/version pairs and publishes missing packages in dependency order.
-The read-only preflight rejects a fully published version; an ambiguous registry
-response requires investigation.
+mutation, then publishes validated `.publish` directories. Immediately before
+Lerna, strict registry selection identifies only the missing names from the
+exact 18-package policy inventory; the publish command receives each as an
+explicit `--scope`. A 5xx response, timeout, malformed record, empty selection,
+or fully published release fails before Lerna runs. Lerna may re-query a
+registry ambiguously, but those scopes cannot widen beyond that immediately
+strict-proven missing set.
+
+This migration intentionally loses four guarantees from the former publisher:
+byte identity between staged and published tarballs, integrity-aware resume,
+per-dependency visibility waits, and per-package tag-race checks. Lerna/npm
+repack the validated directories, so the proof is semantic rather than byte
+identity, and same-version recovery is by name/version only. Final verification
+checks every one of the 18 package versions and the aggregate selected tag;
+investigate any mismatch rather than attempting same-version repair.
 
 If final registry verification shows a missing version or selected tag, stop and
 investigate; do not overwrite, repair tags separately, unpublish, or reuse the
-affected version for same-version mutation. The migration does not compare a
-published tarball's bytes with the staged tarball, and a partial rerun resumes
-by package name/version rather than integrity. Do not use tokens, login/whoami,
-or disable provenance. Pause merges if the fixed queue approaches GitHub's 100
+affected version for same-version mutation. Do not use tokens, login/whoami, or
+disable provenance. Pause merges if the fixed queue approaches GitHub's 100
 pending-run ceiling.

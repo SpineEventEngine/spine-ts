@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { frameworkPackageNames } from "./package-artifacts.mjs";
+
 const root = new URL("..", import.meta.url).pathname;
 
 describe("Lerna workspace discovery", () => {
@@ -23,6 +25,11 @@ describe("Lerna workspace discovery", () => {
     const packages = JSON.parse(result.stdout);
     expect(packages).toHaveLength(25);
     expect(packages.filter((entry) => entry.private)).toHaveLength(7);
-    expect(packages.filter((entry) => !entry.private)).toHaveLength(18);
+    expect(
+      packages
+        .filter((entry) => !entry.private)
+        .map(({ name }) => name)
+        .sort(),
+    ).toEqual([...frameworkPackageNames].sort());
   });
 });

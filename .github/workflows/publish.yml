@@ -60,6 +60,16 @@ jobs:
         with:
           name: release
           path: ${{ github.workspace }}
-      - run: node scripts/release-cli.mjs preflight
-      - run: TAG="$(node scripts/release-cli.mjs tag)" && pnpm exec lerna publish from-package --contents .publish --concurrency 1 --ignore-scripts --dist-tag "$TAG" --registry https://registry.npmjs.org/ --git-head "$GITHUB_SHA" --summary-file "$GITHUB_STEP_SUMMARY" --yes
+      - run: |
+          set -euo pipefail
+          scope_file="$RUNNER_TEMP/spine-lerna-scopes"
+          trap 'rm -f "$scope_file"' EXIT
+          node scripts/release-cli.mjs scopes > "$scope_file"
+          test -s "$scope_file"
+          mapfile -t scopes < "$scope_file"
+          test "${#scopes[@]}" -gt 0
+          scope_args=()
+          for name in "${scopes[@]}"; do scope_args+=(--scope "$name"); done
+          TAG="$(node scripts/release-cli.mjs tag)"
+          pnpm exec lerna publish from-package "${scope_args[@]}" --contents .publish --concurrency 1 --ignore-scripts --dist-tag "$TAG" --registry https://registry.npmjs.org/ --git-head "$GITHUB_SHA" --summary-file "$GITHUB_STEP_SUMMARY" --yes
       - run: node scripts/release-cli.mjs verify-registry

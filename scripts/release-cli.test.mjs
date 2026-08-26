@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { main, prepareRelease, stageReleaseContents } from "./release-cli.mjs";
 import { frameworkPackageNames } from "./package-artifacts.mjs";
@@ -36,7 +39,11 @@ describe("release CLI", () => {
   });
 
   it("routes each safe command through injected dependencies without public fetches", async () => {
-    const release = { tag: "snapshot", version: "2.0.0-snapshot.5", packages: [] };
+    const release = {
+      tag: "snapshot",
+      version: "2.0.0-snapshot.5",
+      packages: [{ name: "@synthetic/base" }],
+    };
     const calls = [];
     const dependencies = {
       expectedModel: () => release,
@@ -50,6 +57,10 @@ describe("release CLI", () => {
     };
     await main({ argv: ["node", "cli", "tag"], dependencies });
     await main({ argv: ["node", "cli", "preflight"], dependencies });
+    await main({
+      argv: ["node", "cli", "scopes"],
+      dependencies: { ...dependencies, verifyRegistry: () => ["@synthetic/base"] },
+    });
     await main({ argv: ["node", "cli", "verify-registry"], dependencies });
     await main({
       argv: ["node", "cli", "prepare", "--output", "relative-release"],
@@ -67,6 +78,47 @@ describe("release CLI", () => {
       kind: "prepare",
       options: { check: false, output: "relative-release" },
     });
+  });
+
+  it("writes only strict missing scopes and rejects empty or unknown selections", async () => {
+    const release = {
+      tag: "snapshot",
+      version: "2.0.0-snapshot.5",
+      packages: [{ name: "@synthetic/base" }],
+    };
+    const write = vi.fn();
+    const dependencies = {
+      expectedModel: () => release,
+      readManifests: () => [],
+      fetchResponse: "safe-fetch",
+      write,
+    };
+    await main({
+      argv: ["node", "cli", "scopes"],
+      dependencies: { ...dependencies, verifyRegistry: () => ["@synthetic/base"] },
+    });
+    expect(write).toHaveBeenCalledWith("@synthetic/base\n");
+    await expect(
+      main({
+        argv: ["node", "cli", "scopes"],
+        dependencies: { ...dependencies, verifyRegistry: () => [] },
+      }),
+    ).rejects.toThrow("Strict registry selection");
+    await expect(
+      main({
+        argv: ["node", "cli", "scopes"],
+        dependencies: { ...dependencies, verifyRegistry: () => ["@other/package"] },
+      }),
+    ).rejects.toThrow("Strict registry selection");
+    await expect(
+      main({
+        argv: ["node", "cli", "scopes"],
+        dependencies: {
+          ...dependencies,
+          verifyRegistry: () => ["@synthetic/base", "@synthetic/base"],
+        },
+      }),
+    ).rejects.toThrow("Strict registry selection");
   });
 
   it("routes checked preparation and rejects a missing output", async () => {
@@ -108,7 +160,6 @@ describe("release CLI", () => {
       remove: (path) => removed.push(path),
       pack: () => packages,
       prove: ({ packages: actual }) => expect(actual).toBe(packages),
-      writeManifest: () => {},
       expected,
     });
     expect(removed).toEqual(["/tmp/release"]);
@@ -122,39 +173,44 @@ describe("release CLI", () => {
 
   it("stages every packed package under its Lerna contents directory", () => {
     const runs = [];
-    stageReleaseContents({
-      destination: "/tmp/stage",
-      packages: [
-        { name: "@synthetic/base", tarball: "/tmp/base.tgz" },
-        { name: "@synthetic/dependent", tarball: "/tmp/dependent.tgz" },
-      ],
-      run: (command, args) => runs.push({ command, args }),
-    });
-    expect(runs).toEqual([
-      {
-        command: "tar",
-        args: [
-          "-xzf",
-          "/tmp/base.tgz",
-          "--strip-components=1",
-          "-C",
-          "/tmp/stage/packages/base/.publish",
+    const destination = mkdtempSync(join(tmpdir(), "spine-release-stage-test-"));
+    try {
+      stageReleaseContents({
+        destination,
+        packages: [
+          { name: "@synthetic/base", tarball: "/tmp/base.tgz" },
+          { name: "@synthetic/dependent", tarball: "/tmp/dependent.tgz" },
         ],
-      },
-      {
-        command: "tar",
-        args: [
-          "-xzf",
-          "/tmp/dependent.tgz",
-          "--strip-components=1",
-          "-C",
-          "/tmp/stage/packages/dependent/.publish",
-        ],
-      },
-    ]);
+        run: (command, args) => runs.push({ command, args }),
+      });
+      expect(runs).toEqual([
+        {
+          command: "tar",
+          args: [
+            "-xzf",
+            "/tmp/base.tgz",
+            "--strip-components=1",
+            "-C",
+            join(destination, "packages/base/.publish"),
+          ],
+        },
+        {
+          command: "tar",
+          args: [
+            "-xzf",
+            "/tmp/dependent.tgz",
+            "--strip-components=1",
+            "-C",
+            join(destination, "packages/dependent/.publish"),
+          ],
+        },
+      ]);
+    } finally {
+      rmSync(destination, { force: true, recursive: true });
+    }
   });
 
-  it.each(["pack", "prove"])("removes owned output when %s fails", (phase) => {
+  it.each(["pack", "prove", "stage"])("removes owned output when %s fails", (phase) => {
     const removed = [];
     const expected = {
       tag: "snapshot",
@@ -182,8 +238,8 @@ describe("release CLI", () => {
         prove: () => {
           if (phase === "prove") throw new Error(phase);
         },
-        writeManifest: () => {
-          if (phase === "write") throw new Error(phase);
+        stage: () => {
+          if (phase === "stage") throw new Error(phase);
         },
         expected,
       }),

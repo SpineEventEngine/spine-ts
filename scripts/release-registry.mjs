@@ -44,7 +44,7 @@ export function assertRegistryReleaseState(release, records, { complete = false 
  * @param {(url: string) => Promise<Response>} fetchResponse fetch implementation
  * @param {{ complete?: boolean }} options post-publication check options
  */
-export async function verifyRegistryReleaseState(
+export async function selectUnpublishedPackageNames(
   release,
   fetchResponse,
   { complete = false, timeoutMs = 10_000 } = {},
@@ -75,4 +75,9 @@ export async function verifyRegistryReleaseState(
     }
   }
   assertRegistryReleaseState(release, records, { complete });
+  return release.packages
+    .filter(({ name }) => !(release.version in (records.get(name)?.versions ?? {})))
+    .map(({ name }) => name);
 }
+
+export const verifyRegistryReleaseState = selectUnpublishedPackageNames;

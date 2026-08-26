@@ -65,6 +65,9 @@ export function validateReleasePolicy(entries) {
     const isPublic = path.startsWith("packages/");
     if (isPublic !== frameworkPackageNames.includes(manifest.name))
       throw new Error(path + " has an invalid public/private boundary");
+    if (isPublic && manifest.private === true)
+      throw new Error(manifest.name + " must not be private");
+    if (!isPublic && manifest.private !== true) throw new Error(path + " must be private");
     if (!isPublic) continue;
     if (
       manifest.publishConfig?.registry !== "https://registry.npmjs.org/" ||

@@ -122,9 +122,22 @@ export async function main({ argv = process.argv, dependencies = {} } = {}) {
     return;
   }
   if (argv[2] === "preflight") return verifyRegistry(release, fetchResponse);
+  if (argv[2] === "scopes") {
+    const scopes = await verifyRegistry(release, fetchResponse);
+    const packageNames = new Set(release.packages.map(({ name }) => name));
+    if (
+      !Array.isArray(scopes) ||
+      !scopes.length ||
+      new Set(scopes).size !== scopes.length ||
+      scopes.some((name) => !packageNames.has(name))
+    )
+      throw new Error("Strict registry selection did not produce exact missing package scopes");
+    write(scopes.join("\n") + "\n");
+    return;
+  }
   if (argv[2] === "verify-registry")
     return verifyRegistry(release, fetchResponse, { complete: true });
-  throw new Error("Supported commands are prepare, tag, preflight, and verify-registry");
+  throw new Error("Supported commands are prepare, tag, preflight, scopes, and verify-registry");
 }
 if (
   process.argv[1] !== undefined &&

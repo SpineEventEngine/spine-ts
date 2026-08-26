@@ -9,7 +9,8 @@ Branch: `automated-publishing-and-packaging-improvements`
 Worktree: `.worktrees/automated-publishing-and-packaging-improvements`
 Authoring sub-agent: existing `implementer` role (`gpt-5.6-terra`, medium)
 Reviewer sub-agents: Pending
-Implementation commits: `59e957f6b`, `461ad8563`
+Implementation commits: `59e957f6b`, `461ad8563`, `c1f82e540`, `ad6305205`,
+`f2b2257e9`, `88bfb936a`, `f489ad664`, `62d400926`
 Final branch HEAD: Pending correction commit
 
 Task classification: High-risk
@@ -168,9 +169,12 @@ explicit no-push rule overrides the normal immediate-push protocol.
 
 ## Assignment Gate
 
-| Existing role/function | Bounded ownership                                                                                                | Explicit model  | Explicit reasoning | Child spawning | Runtime metadata                                                                      |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------- | ------------------ | -------------- | ------------------------------------------------------------------------------------- |
-| `implementer`          | TDD qualification, dependency/configuration, policy, workflows, docs, task records, focused tests, local commits | `gpt-5.6-terra` | medium             | Prohibited     | Desktop explicit dispatch fields are authoritative when self-telemetry is unavailable |
+| Existing role/function             | Bounded ownership                                                                                                    | Explicit model  | Explicit reasoning | Child spawning | Runtime metadata                                                                      |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------ | -------------- | ------------------------------------------------------------------------------------- |
+| `implementer`                      | TDD qualification, dependency/configuration, policy, workflows, docs, task records, focused tests, local commits     | `gpt-5.6-terra` | medium             | Prohibited     | Desktop explicit dispatch fields are authoritative when self-telemetry is unavailable |
+| `performance_reliability_reviewer` | Publication ordering, staged artifacts, registry failure/recovery, workflow lifecycle, and bounded-resource behavior | `gpt-5.6-terra` | high               | Prohibited     | Desktop explicit role dispatch fixes the configured profile                           |
+| `style_maintainability_reviewer`   | Changed release scripts, tests, Lerna configuration, workflow structure, and maintainability                         | `gpt-5.6-terra` | high               | Prohibited     | Desktop explicit role dispatch fixes the configured profile                           |
+| `documentation_reviewer`           | Maintainer runbook, decision record, package/release claims, and accepted-loss wording                               | `gpt-5.6-luna`  | medium             | Prohibited     | Desktop explicit role dispatch fixes the configured profile                           |
 
 ## Scope
 
@@ -193,6 +197,25 @@ Out of scope:
 - `2026-08-26 15:23 WEST`: Recorded the task, estimate, acceptance criteria,
   human ledger, skill applicability, model routing, and no-push exception before
   implementation.
+
+## Review Dispositions
+
+- Performance/reliability reviewer (`gpt-5.6-terra`, high): accepted finding
+  that Lerna can treat a failed packument read as unpublished. Corrected by
+  making the immediately preceding strict registry selection emit only exact
+  missing policy names and passing them as explicit Lerna scopes; 5xx, timeout,
+  malformed data, empty selection, and a fully published release fail closed.
+  Residual: Lerna may re-query ambiguously, but cannot widen beyond that set.
+- Style/maintainability reviewer (`gpt-5.6-terra`, high): accepted identity
+  enforcement and owned-test-fixture findings. Public package names must match
+  the exact framework inventory; root/examples must be private; staging tests
+  now own and clean their temporary directory.
+- Documentation reviewer (`gpt-5.6-luna`, medium): accepted runbook wording
+  and loss-accounting findings. The runbook names all four accepted losses and
+  the aggregate final version/tag verification boundary.
+- TypeScript/API documentation review: N/A; this task changes no declarations
+  or public TypeScript API.
+- Final specialist/security convergence and final `verify:release`: pending.
 
 ## Decisions
 

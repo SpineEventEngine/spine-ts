@@ -9,9 +9,10 @@ job performs read-only registry preflight, publishes staged `.publish` content
 with sequential Lerna `from-package`, and verifies final registry completeness.
 The PR workflow remains read-only.
 
-Commits: `59e957f6b` (`Bump version -> 2.0.0-snapshot.5`) and `461ad8563`
-(`Migrate publishing workflow to Lerna`); the mechanical correction commit is
-pending.
+Commits through the coverage correction: `59e957f6b` (`Bump version ->
+2.0.0-snapshot.5`), `461ad8563`, `c1f82e540`, `ad6305205`, `f2b2257e9`,
+`88bfb936a`, `f489ad664`, and `62d400926`; the consolidated review-correction
+commit is pending.
 
 Evidence: disposable Verdaccio qualification published synthetic public packages
 in dependency order while excluding a private workspace; staged content and
@@ -64,3 +65,21 @@ Cleanup evidence: the qualification-only Verdaccio process (PID 3494, bound to
 `127.0.0.1:4873`) was terminated after qualification. The exact owned fixture
 directory was verified and moved recoverably to
 `/Users/armiol/.Trash/spine-verdaccio.bCMWb3-t0221`; the port no longer responds.
+
+Review correction evidence: strict registry selection runs immediately before
+Lerna and emits only missing names from the exact public inventory. The
+workflow writes those names to an owned `$RUNNER_TEMP` file under `set -euo
+pipefail`, rejects an empty file, constructs explicit repeated `--scope`
+arguments, and removes the file through a trap. This preserves fail-closed
+selection despite Lerna's own permissive lookup handling. The residual is
+narrow: a later Lerna re-query may be ambiguous, but it cannot expand the
+strictly selected package set. The runbook now names the four accepted losses:
+byte identity, integrity-aware resume, per-dependency visibility waits, and
+per-package tag-race checks; aggregate final version/tag verification remains
+the boundary. The current focused suite is GREEN with 45 tests; final
+specialist/security convergence and `verify:release` remain pending.
+
+Latest scoped coverage is 96.00% statements, 95.23% branches, 93.18%
+functions, and 96.05% lines across `release-cli.mjs`, `release-policy.mjs`, and
+`release-registry.mjs`. Prettier, cleanup lint, targeted ESLint, Lerna discovery
+(25 packages), checked staging, and `git diff --check` are GREEN.
