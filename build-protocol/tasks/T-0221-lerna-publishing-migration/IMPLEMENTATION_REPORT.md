@@ -21,9 +21,9 @@ version resumes with only the missing packages.
 Implementation commits run from `59e957f6b` (`Bump version ->
 2.0.0-snapshot.5`) through `399b323d0`. Later commits update task records only.
 Affected re-review, final security review, the Nx-denial security re-review, and
-the repeated cheap preflight are complete. The final `verify:release` rerun
-remains pending after the first full gate exposed an unacknowledged denied
-dependency build.
+the repeated cheap preflight are complete. After the first full gate exposed an
+unacknowledged denied dependency build, the corrected final `verify:release`
+rerun passed.
 
 ## Evidence
 
@@ -54,6 +54,10 @@ dependency build.
   unused postinstall must remain denied. All four affected test files pass
   together under four workers (110 tests), both audits remain clean, and the
   real-Lerna integration tests pass.
+- Final `pnpm verify:release` passes 287 test files and 4,538 tests with 93.28%
+  statement, 90% branch, 92.81% function, and 94.44% line coverage. This
+  includes all build, lint, docs, Proto, dependency-audit, package, external
+  consumer, and release-readiness gates.
 
 ## Review Dispositions
 

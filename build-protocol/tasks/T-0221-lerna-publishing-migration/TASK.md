@@ -1,8 +1,8 @@
 # T-0221: Lerna Publishing Migration
 
-Status: In progress
+Status: Complete locally; pending human review and authorized push
 Start: `2026-08-26 15:23 WEST`
-End: Pending
+End: `2026-08-26 18:00 WEST`
 Baseline commit: `af5c897857a85b3736a9efd7490d47faef41b4ac`
 Task log path: `build-protocol/tasks/T-0221-lerna-publishing-migration/TASK.md`
 Branch: `automated-publishing-and-packaging-improvements`
@@ -13,8 +13,8 @@ style/maintainability (`gpt-5.6-terra`, high), and documentation (`gpt-5.6-luna`
 medium) completed; final security reviewer (`gpt-5.6-terra`, high) completed
 Implementation commits: `59e957f6b` through `399b323d0`; see Git history and
 the work log for the individual correction commits.
-Current implementation HEAD: `399b323d0`; final branch HEAD pending final
-security/verification record
+Current implementation HEAD: `399b323d0`; later commits contain review and
+verification records only
 
 Task classification: High-risk
 Classification reason: This replaces the OIDC-authorized mutation engine for
@@ -287,8 +287,9 @@ Out of scope:
 - Qualification, reviews, focused tests, and coverage are complete. The first
   full release gate exposed an unacknowledged denied Nx postinstall in fresh
   installs; the correction passes all 110 affected tests and affected security
-  re-review. The repeated cheap preflight is green; the final
-  `pnpm verify:release` rerun remains pending.
+  re-review. The repeated cheap preflight is green. The final
+  `pnpm verify:release` rerun passed 287 files and 4,538 tests with 93.28%
+  statement, 90% branch, 92.81% function, and 94.44% line coverage.
 
 ## Open Risks And Follow-Up Routing
 
@@ -309,4 +310,4 @@ on `gpt-5.6-luna` medium. All affected re-reviews and final security are clean.
 
 ## Integration Result
 
-Pending local completion and human review. No push is authorized.
+Complete locally and ready for human review. No push is authorized or performed.
