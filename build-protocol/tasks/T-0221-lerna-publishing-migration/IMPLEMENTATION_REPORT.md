@@ -92,11 +92,10 @@ qualification published selected base then dependent and did not discover or
 publish the omitted synthetic package. Final security and `verify:release`
 remain pending.
 
-Final reliability correction adds exact development dependency `verdaccio@6.2.2`
-for ordinary-CI local-only qualification. It validates selected staged-package
-publication and a fully-published no-op without public mutation. The workflow
-uses a uniquely allocated owned parent directory and `--no-git-reset` for the
-generated non-Git workspace; final security and `verify:release` remain pending.
+The temporary Verdaccio 6.2.2 qualification dependency was removed after audit
+found vulnerable transitive paths. The workflow still uses a uniquely allocated
+owned parent directory and `--no-git-reset` for the generated non-Git workspace;
+final security and `verify:release` remain pending.
 
 The superseding workspace path has focused aggregate coverage of 94.20%
 statements, 94.96% branches, 90.19% functions, and 93.95% lines.
