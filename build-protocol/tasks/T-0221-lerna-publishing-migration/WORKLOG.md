@@ -6,8 +6,7 @@ Worktree: `.worktrees/automated-publishing-and-packaging-improvements`
 Baseline commit: `af5c897857a85b3736a9efd7490d47faef41b4ac`
 Authoring sub-agent: existing `implementer` role (`gpt-5.6-terra`, medium)
 Implementation commits: `59e957f6b` through `399b323d0` (see TASK record)
-Current implementation HEAD: `399b323d0`; repeated cheap preflight and final
-`verify:release` rerun pending
+Current implementation HEAD: `399b323d0`; final `verify:release` rerun pending
 
 ## Purpose
 
@@ -35,6 +34,11 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 | `2026-08-26 16:24 WEST` | Implementer  | Ran scoped coverage and focused mechanical preflight                                   | 25 release CLI/policy/registry tests with V8 coverage; Prettier, cleanup lint, targeted ESLint, Lerna discovery, checked staging, and diff check                                                                                                                               | GREEN: 96.00% statements, 95.23% branches, 93.18% functions, and 96.05% lines; Lerna found 25 packages; all requested gates passed                                                                                              |
 
 ## Current State
+
+- `2026-08-26 17:52 WEST`: The required post-correction cheap preflight is
+  green: all shared gates, the external 18-tarball consumer, and 48 focused
+  release tests passed with 94.25% statement coverage. The slow isolated-checkout
+  correction proof remains separately green at 110 tests with a 30-second bound.
 
 - `2026-08-26 17:42 WEST`: Affected final security re-review is clean. The
   explicit Nx denial adds no executable permission, the Buf approval remains
@@ -89,8 +93,8 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
   are complete.
 - Previous correction: Unsupported `--scope` mechanism superseded; no longer a
   workflow, runtime, test, or runbook claim.
-- Next step: repeated cheap preflight, then the final `verify:release` rerun; no
-  successful final release verification yet.
+- Next step: final `verify:release` rerun; no successful final release
+  verification yet.
 - Last prior focused step: Accepted specialist-review correction batch and focused
   GREEN.
 - Known risks: Lerna resume is version-based rather than integrity-based;

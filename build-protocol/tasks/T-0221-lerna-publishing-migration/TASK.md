@@ -287,8 +287,8 @@ Out of scope:
 - Qualification, reviews, focused tests, and coverage are complete. The first
   full release gate exposed an unacknowledged denied Nx postinstall in fresh
   installs; the correction passes all 110 affected tests and affected security
-  re-review. A repeated cheap preflight and final `pnpm verify:release` rerun
-  remain pending.
+  re-review. The repeated cheap preflight is green; the final
+  `pnpm verify:release` rerun remains pending.
 
 ## Open Risks And Follow-Up Routing
 

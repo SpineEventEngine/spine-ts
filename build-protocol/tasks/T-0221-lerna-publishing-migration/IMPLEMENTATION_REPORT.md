@@ -20,10 +20,10 @@ version resumes with only the missing packages.
 
 Implementation commits run from `59e957f6b` (`Bump version ->
 2.0.0-snapshot.5`) through `399b323d0`. Later commits update task records only.
-Affected re-review, final security review, and the Nx-denial security re-review
-are complete. A repeated cheap preflight and final `verify:release` rerun remain
-pending after the first full gate exposed an unacknowledged denied dependency
-build.
+Affected re-review, final security review, the Nx-denial security re-review, and
+the repeated cheap preflight are complete. The final `verify:release` rerun
+remains pending after the first full gate exposed an unacknowledged denied
+dependency build.
 
 ## Evidence
 
