@@ -126,6 +126,9 @@ describe("Lerna workspace discovery", () => {
     const base = "@t0221/base-" + suffix;
     const dependent = "@t0221/dependent-" + suffix;
     const omitted = "@t0221/omitted-" + suffix;
+    const freshBase = "@t0221/fresh-base-" + suffix;
+    const freshDependent = "@t0221/fresh-dependent-" + suffix;
+    const freshOmitted = "@t0221/fresh-omitted-" + suffix;
     const entries = [
       ["base", base, {}, {}],
       [
@@ -135,6 +138,14 @@ describe("Lerna workspace discovery", () => {
         { dependencies: { [base]: "1.0.0" } },
       ],
       ["omitted", omitted, {}, {}],
+      ["fresh-base", freshBase, {}, {}],
+      [
+        "fresh-dependent",
+        freshDependent,
+        { dependencies: { [freshBase]: "workspace:*" } },
+        { dependencies: { [freshBase]: "1.0.0" } },
+      ],
+      ["fresh-omitted", freshOmitted, {}, {}],
     ].map(([directory, name, rootExtra, stagedExtra]) => {
       const packageDirectory = join(source, "packages", directory);
       mkdirSync(join(packageDirectory, ".publish"), { recursive: true });
@@ -190,6 +201,13 @@ describe("Lerna workspace discovery", () => {
       });
     };
     try {
+      const fresh = await workspace(join(fixture, "fresh"), [freshBase, freshDependent]);
+      expect(fresh.status).toBe(0);
+      expect(
+        registry.requests.filter(({ method }) => method === "PUT").map(({ name }) => name),
+      ).toEqual([freshBase, freshDependent]);
+      expect(registry.requests.some(({ name }) => name === freshOmitted)).toBe(false);
+      registry.requests.length = 0;
       const first = await workspace(join(fixture, "base-only"), [base]);
       expect(first.status).toBe(0);
       registry.requests.length = 0;

@@ -9,10 +9,9 @@ job performs read-only registry preflight, publishes staged `.publish` content
 with sequential Lerna `from-package`, and verifies final registry completeness.
 The PR workflow remains read-only.
 
-Commits through the coverage correction: `59e957f6b` (`Bump version ->
-2.0.0-snapshot.5`), `461ad8563`, `c1f82e540`, `ad6305205`, `f2b2257e9`,
-`88bfb936a`, `f489ad664`, and `62d400926`; the consolidated review-correction
-commit is pending.
+Implementation commits run from `59e957f6b` (`Bump version ->
+2.0.0-snapshot.5`) through `85e1315dd`; current implementation HEAD is
+`85e1315dd`. Only the final record, security review, and `verify:release` are pending.
 
 Evidence: disposable Verdaccio qualification published synthetic public packages
 in dependency order while excluding a private workspace; staged content and

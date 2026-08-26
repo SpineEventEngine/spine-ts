@@ -14,7 +14,7 @@ medium) completed; final security pending
 Implementation commits: `59e957f6b`, `461ad8563`, `c1f82e540`, `ad6305205`,
 `f2b2257e9`, `88bfb936a`, `f489ad664`, `62d400926`, `c10c0b622`, `c47512859`,
 `f24bb88e9`, `fdc645517`, `69376c366`
-Current implementation HEAD: `69376c366`; final branch HEAD pending final
+Current implementation HEAD: `85e1315dd`; final branch HEAD pending final
 security/verification record
 
 Task classification: High-risk
@@ -278,8 +278,9 @@ Out of scope:
 
 ## Verification
 
-- Pending focused qualification, cheap preflight, reviews, and one final
-  `pnpm verify:release`.
+- Qualification, cheap preflight, focused tests, and coverage are complete.
+  Current affected re-review, final security, and one final `pnpm verify:release`
+  remain pending.
 
 ## Open Risks And Follow-Up Routing
 
@@ -291,7 +292,9 @@ Out of scope:
 
 ## Review Waves And Dispositions
 
-Pending.
+Initial review and its accepted corrections are complete; the unsupported
+`--scope` attempt is superseded. Current affected re-review covers the isolated
+workspace, built-in registry, and audit override commits; final security remains pending.
 
 ## Integration Result
 
