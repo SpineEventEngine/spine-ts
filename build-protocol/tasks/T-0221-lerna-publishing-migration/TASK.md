@@ -8,10 +8,14 @@ Task log path: `build-protocol/tasks/T-0221-lerna-publishing-migration/TASK.md`
 Branch: `automated-publishing-and-packaging-improvements`
 Worktree: `.worktrees/automated-publishing-and-packaging-improvements`
 Authoring sub-agent: existing `implementer` role (`gpt-5.6-terra`, medium)
-Reviewer sub-agents: Pending
+Reviewer sub-agents: performance/reliability (`gpt-5.6-terra`, high),
+style/maintainability (`gpt-5.6-terra`, high), and documentation (`gpt-5.6-luna`,
+medium) completed; final security pending
 Implementation commits: `59e957f6b`, `461ad8563`, `c1f82e540`, `ad6305205`,
-`f2b2257e9`, `88bfb936a`, `f489ad664`, `62d400926`
-Final branch HEAD: Pending correction commit
+`f2b2257e9`, `88bfb936a`, `f489ad664`, `62d400926`, `c10c0b622`, `c47512859`,
+`f24bb88e9`, `fdc645517`, `69376c366`
+Current implementation HEAD: `69376c366`; final branch HEAD pending final
+security/verification record
 
 Task classification: High-risk
 Classification reason: This replaces the OIDC-authorized mutation engine for
@@ -216,7 +220,11 @@ Out of scope:
   the aggregate final version/tag verification boundary.
 - TypeScript/API documentation review: N/A; this task changes no declarations
   or public TypeScript API.
-- Final specialist/security convergence and final `verify:release`: pending.
+- Initial review findings and accepted corrections are complete. The initial
+  `--scope` correction failed affected re-review because Lerna 10.0.1 does not
+  support it; it is explicitly superseded by the generated workspace boundary.
+  Current affected re-review of `c47512859` through `69376c366`, final security,
+  and final `verify:release` remain pending.
 
 ## Decisions
 

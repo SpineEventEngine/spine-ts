@@ -97,5 +97,16 @@ found vulnerable transitive paths. The workflow still uses a uniquely allocated
 owned parent directory and `--no-git-reset` for the generated non-Git workspace;
 final security and `verify:release` remain pending.
 
+Record closure: current implementation HEAD is `69376c366`; final branch-head
+record remains pending final security and final `verify:release`. The completed
+review wave used performance/reliability Terra/high, style/maintainability
+Terra/high, and documentation Luna/medium; TypeScript/API documentation is N/A
+because no public TypeScript declarations or APIs changed. Initial scope-based
+publication was explicitly rejected by affected re-review and superseded by the
+generated workspace. Verdaccio 6.10.0 was incompatible with the resolved
+`js-yaml` ESM exports; 6.2.2 was removed for vulnerable transitive paths. The
+built-in registry is the durable replacement. Current audit has one high via
+Lerna/Nx `brace-expansion@5.0.8`, pending final-security disposition.
+
 The superseding workspace path has focused aggregate coverage of 94.20%
 statements, 94.96% branches, 90.19% functions, and 93.95% lines.

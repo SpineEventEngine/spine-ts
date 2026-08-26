@@ -35,17 +35,25 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 
 ## Current State
 
+- `2026-08-26 16:54 WEST`: Built-in Node local registry fixture replaced the
+  temporary Verdaccio qualification path. Verdaccio 6.10.0 failed on the
+  resolved `js-yaml` ESM export; vulnerable 6.2.2 was removed. `pnpm audit`
+  now reports one high through `lerna > nx > brace-expansion@5.0.8`, pending
+  final-security disposition. The built-in fixture proves true partial rerun.
+
 - `2026-08-26 16:34 WEST`: Affected re-review proved prior `--scope` publishing
   invalid for Lerna 10.0.1. It is superseded by a generated disposable non-Git
   workspace containing only strict-selected package manifests and `.publish`
   directories. Synthetic Verdaccio qualification published selected base then
   dependent; the omitted package was absent from Lerna discovery/publish output.
 
-- Last completed step: Affected re-review correction and local qualification.
+- Last completed step: Affected re-review correction and local qualification;
+  cheap preflight, qualification, focused coverage, and focused mechanical
+  checks are complete.
 - Previous correction: Unsupported `--scope` mechanism superseded; no longer a
   workflow, runtime, test, or runbook claim.
-- Next step: final specialist/security convergence; no final release
-  verification yet.
+- Next step: current affected re-review, final security, and one final
+  `verify:release`; no final release verification yet.
 - Last prior focused step: Accepted specialist-review correction batch and focused
   GREEN.
 - Known risks: Lerna resume is version-based rather than integrity-based;
