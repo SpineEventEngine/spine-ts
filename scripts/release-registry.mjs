@@ -1,8 +1,14 @@
 /**
+ * Registry metadata needed to verify a release version and selected tag.
+ *
+ * @typedef {{ versions: Record<string, unknown>, "dist-tags": Record<string, string> }} RegistryRecord
+ */
+
+/**
  * Validates one registry response for every package in a release model.
  *
  * @param {{ tag: string, version: string, packages: readonly { name: string }[] }} release expected release
- * @param {ReadonlyMap<string, { versions: Record<string, unknown>, "dist-tags": Record<string, string> }>} records registry responses
+ * @param {ReadonlyMap<string, RegistryRecord>} records registry responses
  * @param {{ complete?: boolean }} options post-publication check options
  */
 export function assertRegistryReleaseState(release, records, { complete = false } = {}) {

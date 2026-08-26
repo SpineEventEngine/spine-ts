@@ -25,6 +25,7 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 | `2026-08-26 15:41 WEST` | Implementer | Mechanical correction RED/GREEN | RED: missing `lerna.json`, non-bounded registry read, privileged install without `--ignore-scripts`; GREEN: 37 focused tests; `pnpm exec lerna list --all --json` reports 25 total / 18 public / 7 private; `node scripts/release-cli.mjs prepare --check` passed | Ready for specialist review; no final `verify:release`, push, PR, or publication |
 | `2026-08-26 15:44 WEST` | Implementer | Fixed cheap-preflight generated version drift | RED: `pnpm proto:generate` rejected stale generated `packageVersion: 2.0.0-snapshot.4`; aligned five generated manifests, then reran generation and Todo startup contract | GREEN: generation passed and 17 Todo startup-contract tests passed; separate correction commit pending |
 | `2026-08-26 15:46 WEST` | Implementer | Fixed cheap-preflight ESLint globals | RED: `pnpm exec eslint scripts/release-registry.mjs` reported `AbortController`, `setTimeout`, and `clearTimeout` as undefined; changed only to `globalThis` references | GREEN: 3 registry tests, targeted ESLint, and diff check passed; separate correction commit pending |
+| `2026-08-26 15:49 WEST` | Implementer | Fixed cheap-preflight JSDoc line length | RED: cleanup lint reported a 134-character registry-record annotation; introduced a local JSDoc typedef without behavior change | GREEN: cleanup lint, targeted ESLint, 3 registry tests, and diff check passed; separate correction commit pending |
 
 ## Current State
 

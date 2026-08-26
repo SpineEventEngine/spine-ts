@@ -34,6 +34,10 @@ Second cheap-preflight correction: registry read timeout primitives now use the
 lint-recognized `globalThis` namespace. The three focused registry tests and
 targeted ESLint passed without weakening lint rules.
 
+Third cheap-preflight correction: a local registry-record JSDoc typedef keeps
+the annotation within the repository's 120-character cleanup limit. Cleanup
+lint, targeted ESLint, and the three focused registry tests passed.
+
 Concern: lockfile generation required updating concrete internal pins after the
 required version-only commit because pnpm otherwise attempted to resolve an
 unpublished exact workspace package. No public registry was mutated, no token
