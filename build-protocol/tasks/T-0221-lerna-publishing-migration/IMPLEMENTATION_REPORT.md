@@ -20,9 +20,10 @@ version resumes with only the missing packages.
 
 Implementation commits run from `59e957f6b` (`Bump version ->
 2.0.0-snapshot.5`) through `399b323d0`. Later commits update task records only.
-Affected re-review and final security review are complete. A repeated cheap
-preflight and final `verify:release` rerun remain pending after the first full
-gate exposed an unacknowledged denied dependency build.
+Affected re-review, final security review, and the Nx-denial security re-review
+are complete. A repeated cheap preflight and final `verify:release` rerun remain
+pending after the first full gate exposed an unacknowledged denied dependency
+build.
 
 ## Evidence
 
@@ -66,7 +67,8 @@ The dispatch surface exposed the immutable configured roles/profiles rather
 than runtime self-introspection. All model and reasoning fields were explicit.
 TypeScript/API documentation review is N/A because no public TypeScript
 declarations or APIs changed. All affected re-reviews and the final security
-review are clean.
+review are clean. Security also accepted the explicit Nx postinstall denial as
+fail-closed: it adds no executable permission and a fresh frozen install passes.
 
 The early attempt to constrain Lerna with `--scope` was rejected because Lerna
 10.0.1 does not support that publish option. It is historical only and is fully

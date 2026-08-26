@@ -228,6 +228,9 @@ Out of scope:
   pinned actions, owned paths and cleanup, hidden-artifact isolation, exact
   policy boundaries, HTTPS registry reads, dependency override, loopback test
   registry, and unreachable legacy publisher were accepted.
+- Affected security re-review of `allowBuilds.nx: false`: clean. The entry adds
+  no script permission, Lerna remains exact-pinned with `useNx: false`, and a
+  fresh frozen offline install succeeds without running Nx's postinstall.
 
 ## Decisions
 
@@ -283,8 +286,9 @@ Out of scope:
 
 - Qualification, reviews, focused tests, and coverage are complete. The first
   full release gate exposed an unacknowledged denied Nx postinstall in fresh
-  installs; the correction passes all 110 affected tests. A repeated cheap
-  preflight and final `pnpm verify:release` rerun remain pending.
+  installs; the correction passes all 110 affected tests and affected security
+  re-review. A repeated cheap preflight and final `pnpm verify:release` rerun
+  remain pending.
 
 ## Open Risks And Follow-Up Routing
 
