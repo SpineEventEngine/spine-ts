@@ -15,7 +15,10 @@ export function assertRegistryReleaseState(release, records, { complete = false 
   let published = 0;
   for (const { name } of release.packages) {
     const record = records.get(name);
-    if (record === undefined) continue;
+    if (record === undefined) {
+      if (complete) throw new Error("Registry is missing required package: " + name);
+      continue;
+    }
     if (
       record === null ||
       typeof record !== "object" ||

@@ -44,6 +44,9 @@ describe("release registry preflight", () => {
     expect(() => assertRegistryReleaseState(release, new Map([["@synthetic/base", []]]))).toThrow(
       "ambiguous",
     );
+    expect(() => assertRegistryReleaseState(release, new Map(), { complete: true })).toThrow(
+      "missing",
+    );
   });
 
   it("fails closed when a registry read does not settle before its bounded timeout", async () => {
