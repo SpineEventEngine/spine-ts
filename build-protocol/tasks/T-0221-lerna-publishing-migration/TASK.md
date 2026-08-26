@@ -11,9 +11,9 @@ Authoring sub-agent: existing `implementer` role (`gpt-5.6-terra`, medium)
 Reviewer sub-agents: performance/reliability (`gpt-5.6-terra`, high),
 style/maintainability (`gpt-5.6-terra`, high), and documentation (`gpt-5.6-luna`,
 medium) completed; final security reviewer (`gpt-5.6-terra`, high) completed
-Implementation commits: `59e957f6b` through `9737df292`; see Git history and
+Implementation commits: `59e957f6b` through `399b323d0`; see Git history and
 the work log for the individual correction commits.
-Current implementation HEAD: `9737df292`; final branch HEAD pending final
+Current implementation HEAD: `399b323d0`; final branch HEAD pending final
 security/verification record
 
 Task classification: High-risk
@@ -269,20 +269,22 @@ Out of scope:
 
 ## Security Impact
 
-| Area                    | Impact                                                           |
-| ----------------------- | ---------------------------------------------------------------- |
-| Dependencies            | Adds exact Lerna 10.0.1 and a narrow patched transitive override |
-| Secrets and credentials | OIDC only; no token or credential configuration                  |
-| IPC                     | N/A                                                              |
-| Validation              | Retains exact inventory/version/tag and registry-state checks    |
-| Tenant boundaries       | N/A                                                              |
-| `Any`/deserialization   | N/A                                                              |
-| Logging                 | Must not expose OIDC material or registry credentials            |
+| Area                    | Impact                                                               |
+| ----------------------- | -------------------------------------------------------------------- |
+| Dependencies            | Pins Lerna, patches one transitive, and explicitly denies Nx scripts |
+| Secrets and credentials | OIDC only; no token or credential configuration                      |
+| IPC                     | N/A                                                                  |
+| Validation              | Retains exact inventory/version/tag and registry-state checks        |
+| Tenant boundaries       | N/A                                                                  |
+| `Any`/deserialization   | N/A                                                                  |
+| Logging                 | Must not expose OIDC material or registry credentials                |
 
 ## Verification
 
-- Qualification, reviews, focused tests, coverage, and repeated cheap preflight
-  are complete. One final `pnpm verify:release` remains pending.
+- Qualification, reviews, focused tests, and coverage are complete. The first
+  full release gate exposed an unacknowledged denied Nx postinstall in fresh
+  installs; the correction passes all 110 affected tests. A repeated cheap
+  preflight and final `pnpm verify:release` rerun remain pending.
 
 ## Open Risks And Follow-Up Routing
 
@@ -292,6 +294,7 @@ Out of scope:
 | Old publisher deletion                                  | Future cleanup task | D-0117 pending       | Deferred until one successful live Lerna release | Post-release cleanup            |
 | NPM trusted-publisher allowed actions                   | Human               | T-0221               | Required external configuration                  | Before official merge           |
 | `brace-expansion` override removal                      | Future maintenance  | T-0221               | Remove when Lerna/Nx no longer selects 5.0.8     | Lerna dependency upgrade        |
+| Explicit Nx postinstall denial                          | Future maintenance  | T-0221               | Keep denied while `useNx` is false               | Lerna/Nx behavior change        |
 
 ## Review Waves And Dispositions
 

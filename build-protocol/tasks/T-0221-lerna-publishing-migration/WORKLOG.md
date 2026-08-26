@@ -5,8 +5,9 @@ Branch: `automated-publishing-and-packaging-improvements`
 Worktree: `.worktrees/automated-publishing-and-packaging-improvements`
 Baseline commit: `af5c897857a85b3736a9efd7490d47faef41b4ac`
 Authoring sub-agent: existing `implementer` role (`gpt-5.6-terra`, medium)
-Implementation commits: `59e957f6b` through `9737df292` (see TASK record)
-Current implementation HEAD: `9737df292`; final `verify:release` pending
+Implementation commits: `59e957f6b` through `399b323d0` (see TASK record)
+Current implementation HEAD: `399b323d0`; affected security re-review, repeated
+cheap preflight, and final `verify:release` rerun pending
 
 ## Purpose
 
@@ -34,6 +35,15 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 | `2026-08-26 16:24 WEST` | Implementer  | Ran scoped coverage and focused mechanical preflight                                   | 25 release CLI/policy/registry tests with V8 coverage; Prettier, cleanup lint, targeted ESLint, Lerna discovery, checked staging, and diff check                                                                                                                               | GREEN: 96.00% statements, 95.23% branches, 93.18% functions, and 96.05% lines; Lerna found 25 packages; all requested gates passed                                                                                              |
 
 ## Current State
+
+- `2026-08-26 17:38 WEST`: The first full release gate passed its build, lint,
+  docs, Proto, audit, and release-readiness stages, then five tests failed in
+  fresh offline installs with `ERR_PNPM_IGNORED_BUILDS: nx@23.1.1`. A one-worker
+  reproduction proved this was not concurrency. `399b323d0` explicitly denies
+  the unused Nx postinstall with `allowBuilds.nx: false`; it does not approve or
+  execute the script. All four affected files pass together (110 tests), the
+  four real-Lerna tests pass, both audits are clean, and formatting, cleanup,
+  and diff checks pass.
 
 - `2026-08-26 17:26 WEST`: Affected reliability, maintainability, and
   documentation re-reviews are clean. Final security review is also clean with
@@ -74,7 +84,8 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
   are complete.
 - Previous correction: Unsupported `--scope` mechanism superseded; no longer a
   workflow, runtime, test, or runbook claim.
-- Next step: one final `verify:release`; no final release verification yet.
+- Next step: affected security re-review, repeated cheap preflight, then the
+  final `verify:release` rerun; no successful final release verification yet.
 - Last prior focused step: Accepted specialist-review correction batch and focused
   GREEN.
 - Known risks: Lerna resume is version-based rather than integrity-based;
@@ -88,3 +99,4 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 | ---------------------------------- | ----------- | -------------------- | -------------------------------------------- | -------------------- |
 | Old custom engine cleanup          | Future task | D-0117 pending       | Deferred until one real Lerna release        | Post-release cleanup |
 | `brace-expansion` override removal | Maintenance | T-0221               | Remove when Lerna/Nx no longer selects 5.0.8 | Dependency upgrade   |
+| Nx postinstall denial review       | Maintenance | T-0221               | Keep denied while `useNx` remains false      | Lerna/Nx upgrade     |

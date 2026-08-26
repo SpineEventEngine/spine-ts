@@ -19,9 +19,10 @@ read-only. A fully published version fails before mutation; a valid partial
 version resumes with only the missing packages.
 
 Implementation commits run from `59e957f6b` (`Bump version ->
-2.0.0-snapshot.5`) through `9737df292`. Later commits update task records only.
-Affected re-review, final security review, and repeated cheap preflight are
-complete. One final `verify:release` remains pending.
+2.0.0-snapshot.5`) through `399b323d0`. Later commits update task records only.
+Affected re-review and final security review are complete. A repeated cheap
+preflight and final `verify:release` rerun remain pending after the first full
+gate exposed an unacknowledged denied dependency build.
 
 ## Evidence
 
@@ -45,6 +46,13 @@ complete. One final `verify:release` remains pending.
   workspace symlinks.
 - No public registry was mutated, no credential or token was introduced, no PR
   was created, and no branch was pushed.
+- The first full release gate passed all deterministic build, lint, docs, Proto,
+  dependency-audit, and release-readiness checks, then five isolated-checkout
+  tests failed because Lerna introduced Nx's postinstall without an explicit
+  pnpm build-policy disposition. `allowBuilds.nx: false` now records that the
+  unused postinstall must remain denied. All four affected test files pass
+  together under four workers (110 tests), both audits remain clean, and the
+  real-Lerna integration tests pass.
 
 ## Review Dispositions
 
@@ -75,6 +83,10 @@ release without changing unrelated versions. Both `pnpm audit --audit-level=low`
 and `pnpm audit --prod --audit-level=low` report no known vulnerabilities, and
 the real-Lerna integration suite passes. Reassess and remove the override when
 the pinned Lerna/Nx graph no longer resolves `5.0.8`, or when Lerna is upgraded.
+Nx also declares a postinstall that is unnecessary for this `useNx: false`
+release path. `allowBuilds.nx: false` makes that denial explicit so fresh frozen
+installs pass without executing new dependency code. Reassess it with any Lerna
+upgrade or if this repository later enables Nx-backed behavior.
 
 ## Accepted Losses And Remaining Concerns
 
