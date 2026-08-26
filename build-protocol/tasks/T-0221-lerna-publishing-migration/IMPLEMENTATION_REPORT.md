@@ -24,6 +24,12 @@ Lerna reports 25 workspace packages (18 public, 7 private), and
 `release-cli.mjs prepare --check` passes. Registry reads now reject malformed
 records and time out without mutation; the privileged install ignores scripts.
 
+Cheap-preflight correction: generated Proto package manifests were aligned from
+`2.0.0-snapshot.4` to the actual workspace version `2.0.0-snapshot.5` after
+`pnpm proto:generate` correctly rejected the mismatch. Regeneration and the
+17-test Todo startup contract then passed. This remains a separate local commit
+from the required version-only commit.
+
 Concern: lockfile generation required updating concrete internal pins after the
 required version-only commit because pnpm otherwise attempted to resolve an
 unpublished exact workspace package. No public registry was mutated, no token

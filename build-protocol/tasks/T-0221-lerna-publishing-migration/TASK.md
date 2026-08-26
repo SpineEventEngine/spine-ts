@@ -213,8 +213,8 @@ Out of scope:
 
 ## Tests Run
 
-- Focused qualification and release tests passed before this correction pass;
-  final review and `verify:release` remain pending.
+- Focused qualification/release tests and generated-version preflight correction
+  passed; final review and `verify:release` remain pending.
 
 ## Coverage Result
 

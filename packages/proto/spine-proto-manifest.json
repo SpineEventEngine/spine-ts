@@ -1,7 +1,7 @@
 {
   "formatVersion": 2,
   "packageName": "@spine-event-engine/proto",
-  "packageVersion": "2.0.0-snapshot.4",
+  "packageVersion": "2.0.0-snapshot.5",
   "protoFiles": [
     "grpc/health/v1/health.proto",
     "spine/auth/authenticated_subscription.proto",

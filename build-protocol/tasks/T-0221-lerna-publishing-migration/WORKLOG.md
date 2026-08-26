@@ -23,6 +23,7 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 | `2026-08-26 15:34 WEST` | Implementer | Ran focused GREEN | Same focused suite plus `pnpm exec lerna --version` | GREEN: 35 tests passed; Lerna reports 10.0.1; no push or public publication |
 | `2026-08-26 15:37 WEST` | Implementer | Cleaned disposable qualification registry | Confirmed PID 3494 command and owned `/tmp/spine-verdaccio.bCMWb3`; terminated process; verified `127.0.0.1:4873` closed; moved only owned directory to Trash | Cleanup complete; recoverable directory: `/Users/armiol/.Trash/spine-verdaccio.bCMWb3-t0221` |
 | `2026-08-26 15:41 WEST` | Implementer | Mechanical correction RED/GREEN | RED: missing `lerna.json`, non-bounded registry read, privileged install without `--ignore-scripts`; GREEN: 37 focused tests; `pnpm exec lerna list --all --json` reports 25 total / 18 public / 7 private; `node scripts/release-cli.mjs prepare --check` passed | Ready for specialist review; no final `verify:release`, push, PR, or publication |
+| `2026-08-26 15:44 WEST` | Implementer | Fixed cheap-preflight generated version drift | RED: `pnpm proto:generate` rejected stale generated `packageVersion: 2.0.0-snapshot.4`; aligned five generated manifests, then reran generation and Todo startup contract | GREEN: generation passed and 17 Todo startup-contract tests passed; separate correction commit pending |
 
 ## Current State
 
