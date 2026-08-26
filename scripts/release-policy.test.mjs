@@ -25,7 +25,7 @@ describe("release policy", () => {
     expect(releaseManifestPaths.filter((path) => path.startsWith("packages/"))).toHaveLength(18);
   });
 
-  it("requires a common version, exact public inventory, channel metadata, and concrete pins", () => {
+  it("requires a common version, exact public inventory, tag-free metadata, and concrete pins", () => {
     const manifests = releaseManifestPaths.map((path) => ({
       path,
       manifest: {
@@ -37,7 +37,6 @@ describe("release policy", () => {
               publishConfig: {
                 access: "public",
                 registry: "https://registry.npmjs.org/",
-                tag: "snapshot",
               },
             }
           : {}),
@@ -49,5 +48,20 @@ describe("release policy", () => {
     });
     manifests[1].manifest.version = "2.0.0";
     expect(() => validateReleasePolicy(manifests)).toThrow("must use the root version");
+  });
+
+  it("rejects a static manifest tag because the version classifier is authoritative", () => {
+    const manifests = releaseManifestPaths.map((path) => ({
+      path,
+      manifest: {
+        name: path === "package.json" ? "spine-ts" : "@spine-event-engine/" + path.split("/")[1],
+        version: "2.0.0-snapshot.4",
+        private: !path.startsWith("packages/"),
+        ...(path.startsWith("packages/")
+          ? { publishConfig: { access: "public", registry: "https://registry.npmjs.org/", tag: "snapshot" } }
+          : {}),
+      },
+    }));
+    expect(() => validateReleasePolicy(manifests)).toThrow("must not define publishConfig.tag");
   });
 });

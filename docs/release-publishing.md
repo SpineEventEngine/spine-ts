@@ -6,13 +6,15 @@ an npm token. Never add a token fallback.
 1. Push a feature branch and open a pull request to `master`.
 2. `build.yml` is read-only: it verifies and proves the packed artifacts.
 3. A human merges the pull request.
-4. `publish.yml` runs for the `master` push and publishes through OIDC.
+4. `publish.yml` runs for the `master` push through OIDC with pinned Lerna
+   `10.0.1 publish from-package`.
 
 Every merge may result in a release. Keep one version across the root, 18 public
 packages, and seven examples. Implementing agents use a standalone commit named
 `Bump version -> <version>`; concrete internal pins and `pnpm-lock.yaml` change
-separately. Channel metadata (`publishConfig.tag`) changes separately when moving
-between snapshot and stable releases.
+separately. `publishConfig.access` remains package metadata, but a static
+`publishConfig.tag` is forbidden: the validated common version is the sole
+channel source passed explicitly to Lerna.
 
 Exact `x.y.z-snapshot.N` uses `snapshot`; exact `x.y.z` uses `latest`; every
 other prerelease fails before mutation. The historical first published snapshot
@@ -38,11 +40,13 @@ verification, prohibit direct pushes, and disable bypass. Repository code cannot
 configure this environment or the 18 npm trusted publishers; an operator must
 provide that configuration evidence before activation.
 
-On success, all packages become visible with their exact integrity and selected
-tag. A transient registry or network failure may be resumed by rerunning the
-same workflow for the same commit and version: matching packages skip and
-missing packages resume in dependency order. A persistent or ambiguous failure
-requires investigation. A fully published version fails deliberately.
+The workflow verifies packed contents and a fresh external consumer before
+mutation, then publishes validated `.publish` directories. Lerna/npm repacks
+those directories, so this proves semantic contents rather than byte identity.
+A transient interruption may be resumed at the same version: Lerna skips
+existing name/version pairs and publishes missing packages in dependency order.
+The read-only preflight rejects a fully published version; an ambiguous registry
+response requires investigation.
 
 For an integrity or tag mismatch, diagnose the cause and use a new version; do
 not repack, overwrite, repair tags, unpublish, or reuse the affected version for

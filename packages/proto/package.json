@@ -10,8 +10,7 @@
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "public",
-    "tag": "snapshot"
+    "access": "public"
   },
   "description": "Spine TS generated Protobuf-ES schema exports.",
   "exports": {

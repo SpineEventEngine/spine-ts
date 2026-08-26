@@ -5,7 +5,7 @@ import { main, prepareRelease } from "./release-cli.mjs";
 import { frameworkPackageNames } from "./package-artifacts.mjs";
 
 describe("release CLI", () => {
-  it("runs the relative CLI entrypoint and rejects local publication", () => {
+  it("runs the relative CLI entrypoint and rejects the removed custom publish command", () => {
     const result = spawnSync(process.execPath, ["scripts/release-cli.mjs", "publish"], {
       cwd: new URL("..", import.meta.url).pathname,
       encoding: "utf8",
@@ -20,12 +20,18 @@ describe("release CLI", () => {
       },
     });
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("permitted only");
+    expect(result.stderr).toContain("Supported commands");
   });
 
-  it("rejects publication outside the exact official Actions push context", async () => {
+  it("prints the policy-derived tag without a publication capability", async () => {
+    const result = spawnSync(process.execPath, ["scripts/release-cli.mjs", "tag"], {
+      cwd: new URL("..", import.meta.url).pathname,
+      encoding: "utf8",
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("snapshot\n");
     await expect(main({ argv: ["node", "cli", "publish"], environment: {} })).rejects.toThrow(
-      "permitted only",
+      "Supported commands",
     );
   });
 
@@ -65,7 +71,7 @@ describe("release CLI", () => {
     );
   });
 
-  it.each(["pack", "prove", "write"])("removes owned output when %s fails", (phase) => {
+  it.each(["pack", "prove"])("removes owned output when %s fails", (phase) => {
     const removed = [];
     const expected = {
       tag: "snapshot",

@@ -10,8 +10,7 @@
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "public",
-    "tag": "snapshot"
+    "access": "public"
   },
   "description": "Platform-neutral application-node discovery for Spine gateways.",
   "exports": {

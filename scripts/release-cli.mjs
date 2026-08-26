@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -8,12 +7,7 @@ import { pathToFileURL } from "node:url";
 
 import { packFrameworkArtifacts, proveExactTarballConsumer } from "./snapshot-artifacts.mjs";
 import { expectedReleaseModel, readReleaseManifests } from "./release-policy.mjs";
-import { createReleaseManifest, validateReleaseManifest } from "./release-artifacts.mjs";
-import {
-  createPublicRegistry,
-  publishRelease,
-  waitForRegistryVisibility,
-} from "./release-publisher.mjs";
+import { verifyRegistryReleaseState } from "./release-registry.mjs";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 const run = (command, args, cwd = root) => {
@@ -37,10 +31,10 @@ export function prepareRelease({
   remove,
   pack,
   prove,
-  writeManifest,
   registerSignal,
   exit,
   expected,
+  stage,
 }) {
   const destination = check ? mkdtemp() : output;
   if (!check && exists(destination))
@@ -68,18 +62,9 @@ export function prepareRelease({
     }
     const packages = pack({ root, destination });
     prove({ root, destination, packages });
-    const manifest = createReleaseManifest({
-      expected,
-      packages: packages.map((entry) => ({ ...entry, version: expected.version })),
-    });
-    validateReleaseManifest(
-      manifest,
-      expected,
-      (tarball) => packages.find((entry) => entry.tarball.endsWith(tarball))?.integrity,
-    );
-    writeManifest(destination, manifest);
+    stage?.({ destination, packages });
     completed = true;
-    return manifest;
+    return { ...expected, packages };
   } finally {
     for (const removeHandler of unregister) removeHandler();
     if (owned && check && !cleaned) {
@@ -89,7 +74,15 @@ export function prepareRelease({
   }
 }
 
-export async function main({ argv = process.argv, environment = process.env } = {}) {
+export function stageReleaseContents({ destination, packages, run }) {
+  for (const { name, tarball } of packages) {
+    const directory = join(destination, "packages", name.split("/")[1], ".publish");
+    mkdirSync(directory, { recursive: true });
+    run("tar", ["-xzf", tarball, "--strip-components=1", "-C", directory]);
+  }
+}
+
+export async function main({ argv = process.argv } = {}) {
   if (argv[2] === "prepare") {
     const check = argv.includes("--check");
     const output = check ? undefined : option(argv, "--output");
@@ -105,11 +98,7 @@ export async function main({ argv = process.argv, environment = process.env } = 
       pack: ({ destination }) => packFrameworkArtifacts({ root, destination, run }),
       prove: ({ destination, packages }) =>
         proveExactTarballConsumer({ root, destination, run, packages }),
-      writeManifest: (destination, manifest) =>
-        writeFileSync(
-          join(destination, "release-manifest.json"),
-          JSON.stringify(manifest, null, 2) + "\n",
-        ),
+      stage: ({ destination, packages }) => stageReleaseContents({ destination, packages, run }),
       registerSignal: (signal, handler) => {
         process.once(signal, handler);
         return () => process.off(signal, handler);
@@ -118,47 +107,16 @@ export async function main({ argv = process.argv, environment = process.env } = 
       expected: expectedReleaseModel(readReleaseManifests(root)),
     });
   }
-  if (
-    argv[2] !== "publish" ||
-    environment.GITHUB_ACTIONS !== "true" ||
-    environment.GITHUB_EVENT_NAME !== "push" ||
-    environment.GITHUB_REPOSITORY !== "SpineEventEngine/spine-ts" ||
-    environment.GITHUB_REF !== "refs/heads/master"
-  )
-    throw new Error(
-      "Publication is permitted only from the official GitHub Actions master workflow",
-    );
-  const input = resolve(option(argv, "--input"));
-  const release = JSON.parse(readFileSync(join(input, "release-manifest.json"), "utf8"));
-  const expected = expectedReleaseModel(readReleaseManifests(root));
-  const checksum = (tarball) =>
-    "sha512-" +
-    createHash("sha512")
-      .update(readFileSync(join(input, tarball)))
-      .digest("base64");
-  validateReleaseManifest(release, expected, checksum);
-  const registry = createPublicRegistry({ fetch: globalThis.fetch });
-  await publishRelease({
-    release: {
-      ...release,
-      packages: release.packages.map((entry) => ({
-        ...entry,
-        tarball: join(input, entry.tarball),
-      })),
-    },
-    checksum: (tarball) =>
-      "sha512-" + createHash("sha512").update(readFileSync(tarball)).digest("base64"),
-    registry,
-    publish: async (entry, args) => run("npm", ["publish", entry.tarball, ...args]),
-    poll: async (entry, tag) =>
-      waitForRegistryVisibility({
-        registry,
-        entry,
-        tag,
-        sleep: (milliseconds) =>
-          new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds)),
-      }),
-  });
+  const release = expectedReleaseModel(readReleaseManifests(root));
+  if (argv[2] === "tag") {
+    process.stdout.write(release.tag + "\n");
+    return;
+  }
+  if (argv[2] === "preflight")
+    return verifyRegistryReleaseState(release, globalThis.fetch);
+  if (argv[2] === "verify-registry")
+    return verifyRegistryReleaseState(release, globalThis.fetch, { complete: true });
+  throw new Error("Supported commands are prepare, tag, preflight, and verify-registry");
 }
 if (
   process.argv[1] !== undefined &&

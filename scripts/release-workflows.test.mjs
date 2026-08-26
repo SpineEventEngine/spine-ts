@@ -19,10 +19,20 @@ const publishStepsAllowlist = [
   },
   { run: npmVersionCheck },
   {
-    uses: "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0",
-    with: { name: "release", path: "${{ runner.temp }}/release" },
+    uses: "pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+    with: { version: "11.9.0" },
   },
-  { run: 'node scripts/release-cli.mjs publish --input "$RUNNER_TEMP/release"' },
+  { run: "pnpm install --frozen-lockfile" },
+  {
+    uses: "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0",
+    with: { name: "release", path: "${{ github.workspace }}" },
+  },
+  { run: "node scripts/release-cli.mjs preflight" },
+  {
+    run:
+      'TAG="$(node scripts/release-cli.mjs tag)" && pnpm exec lerna publish from-package --contents .publish --concurrency 1 --ignore-scripts --dist-tag "$TAG" --registry https://registry.npmjs.org/ --git-head "$GITHUB_SHA" --summary-file "$GITHUB_STEP_SUMMARY" --yes',
+  },
+  { run: "node scripts/release-cli.mjs verify-registry" },
 ];
 const publishJobAllowlist = {
   needs: "prepare",
@@ -41,6 +51,7 @@ const usesAllowlist = [
   "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
   "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
   "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
+  "pnpm/action-setup@" + approvedPnpmSetup,
   "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0",
 ];
 
@@ -102,9 +113,8 @@ describe("release workflows", () => {
     expect(source).toContain(
       "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5",
     );
-    expect(source).not.toMatch(
-      /secrets\.|npm login|whoami|dist-tag|unpublish|provenance=false|snapshot-publisher/u,
-    );
+    expect(source).not.toMatch(/secrets\.|npm login|whoami|unpublish|provenance=false|snapshot-publisher/u);
+    expect(source).toContain("lerna publish from-package");
   });
 
   it("pins every action to a full immutable SHA and disables checkout credentials", () => {

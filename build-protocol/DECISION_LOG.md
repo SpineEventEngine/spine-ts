@@ -5668,5 +5668,32 @@ Consequences:
   infrastructure.
 - Provider and deployment acceptance remains available as an explicit operator
   action with its required facilities.
+
+## D-0117: Delegate Externally Versioned Publication To Lerna
+
+Status: Accepted
+
+Date: 2026-08-26
+
+Task: T-0221 Lerna publishing migration
+
+Context: D-0115 selected a custom mutation engine with tarball-byte handoff,
+integrity-aware partial resumption, and per-package registry/tag checks. Its
+release trigger, OIDC boundary, exact 18-package inventory, common-version
+policy, and PR isolation remain required, but the custom engine has proved too
+costly to maintain.
+
+Decision: Retain the D-0115 release policy and replace only its custom mutation
+engine with exactly pinned Lerna 10.0.1 `publish from-package`. Publish only
+validated `.publish` directories, use `--concurrency 1`, `--ignore-scripts`,
+the version-derived explicit tag, public registry, triggering SHA, and OIDC.
+The retained read-only policy rejects unsupported versions and a fully published
+release, permits partial resumption, and verifies final version/tag completeness.
+
+Consequences: Lerna/npm repacks staged contents, so exact byte identity,
+integrity-aware resume, per-dependency visibility waits, and per-package tag-race
+checks are deliberately lost. The old publisher remains tracked but unreachable
+until one successful live Lerna release, then a separate versioned cleanup owns
+its deletion. This decision supersedes only D-0115's custom-engine details.
 - CI failures inside the stable inventory are defects to repair, not tests to
   hide solely because they exercise multiple local processes.

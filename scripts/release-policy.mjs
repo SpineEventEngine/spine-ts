@@ -68,10 +68,11 @@ export function validateReleasePolicy(entries) {
     if (!isPublic) continue;
     if (
       manifest.publishConfig?.registry !== "https://registry.npmjs.org/" ||
-      manifest.publishConfig?.access !== "public" ||
-      manifest.publishConfig?.tag !== release.tag
+      manifest.publishConfig?.access !== "public"
     )
-      throw new Error(manifest.name + " publishConfig.tag must equal " + release.tag);
+      throw new Error(manifest.name + " has invalid publishConfig");
+    if ("tag" in manifest.publishConfig)
+      throw new Error(manifest.name + " must not define publishConfig.tag");
     for (const group of [
       "dependencies",
       "optionalDependencies",

@@ -100,7 +100,6 @@ export function publicManifestProblems(manifest) {
     JSON.stringify({
       registry: "https://registry.npmjs.org/",
       access: "public",
-      tag: releaseTag(manifest.version),
     })
   )
     problems.push(name + " has invalid publishConfig");
@@ -165,12 +164,6 @@ export function internalRuntimeDependencyProblems(manifest) {
     }
   }
   return problems.sort((left, right) => left.localeCompare(right));
-}
-
-function releaseTag(version) {
-  if (/^\d+\.\d+\.\d+-snapshot\.\d+$/u.test(version)) return "snapshot";
-  if (/^\d+\.\d+\.\d+$/u.test(version)) return "latest";
-  return "unsupported";
 }
 
 function manifestTargets(manifest) {

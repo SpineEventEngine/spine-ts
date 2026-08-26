@@ -187,12 +187,11 @@ describe("package metadata", () => {
     ).toBe(true);
   });
 
-  it("makes exactly the framework packages publishable to the snapshot registry", () => {
+  it("makes exactly the framework packages publishable without a static channel", () => {
     const frameworkPackages = productionPackagePaths(repoRoot);
     const publicationConfig = {
       registry: "https://registry.npmjs.org/",
       access: "public",
-      tag: "snapshot",
     };
 
     expect(frameworkPackages).toHaveLength(18);

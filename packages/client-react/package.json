@@ -10,8 +10,7 @@
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "public",
-    "tag": "snapshot"
+    "access": "public"
   },
   "description": "React observers for the browser-safe Spine client.",
   "exports": {
