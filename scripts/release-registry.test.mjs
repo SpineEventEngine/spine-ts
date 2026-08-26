@@ -51,4 +51,43 @@ describe("release registry preflight", () => {
       verifyRegistryReleaseState(release, () => new Promise(() => {}), { timeoutMs: 5 }),
     ).rejects.toThrow("timed out");
   });
+
+  it("handles absent, valid, failed, malformed, and complete registry reads without mutation", async () => {
+    const calls = [];
+    const responses = [
+      { status: 404, ok: false },
+      { status: 200, ok: true, json: async () => ({ versions: {}, "dist-tags": {} }) },
+    ];
+    await expect(
+      verifyRegistryReleaseState(release, async (url, options) => {
+        calls.push({ url, options });
+        return responses.shift();
+      }),
+    ).resolves.toBeUndefined();
+    expect(calls).toHaveLength(2);
+    await expect(
+      verifyRegistryReleaseState(release, async () => ({ status: 500, ok: false })),
+    ).rejects.toThrow("ambiguous");
+    await expect(
+      verifyRegistryReleaseState(release, async () => ({
+        status: 200,
+        ok: true,
+        json: async () => [],
+      })),
+    ).rejects.toThrow("ambiguous");
+    await expect(
+      verifyRegistryReleaseState(
+        release,
+        async () => ({
+          status: 200,
+          ok: true,
+          json: async () => ({
+            versions: { [release.version]: {} },
+            "dist-tags": { snapshot: release.version },
+          }),
+        }),
+        { complete: true },
+      ),
+    ).resolves.toBeUndefined();
+  });
 });

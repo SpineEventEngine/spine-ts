@@ -44,6 +44,15 @@ The format-check process ended without usable terminal completion evidence in
 this execution surface, so final whole-repository format evidence remains with
 the continuing preflight.
 
+Coverage correction: behavior tests cover staged `.publish` extraction and
+cleanup, safe CLI command routing, registry outcomes, and static-tag policy
+rejection. Scoped aggregate coverage across `release-cli.mjs`,
+`release-policy.mjs`, and `release-registry.mjs` is 95.56% statements, 94.61%
+branches, 92.50% functions, and 95.65% lines. `package-artifacts.mjs` changed
+only by deleting the obsolete private `releaseTag` helper, so it is outside this
+source set. The artifact upload enables hidden files only for the validated
+`$RUNNER_TEMP/release` staging tree; workflow tests pin that exact path/option.
+
 Concern: lockfile generation required updating concrete internal pins after the
 required version-only commit because pnpm otherwise attempted to resolve an
 unpublished exact workspace package. No public registry was mutated, no token

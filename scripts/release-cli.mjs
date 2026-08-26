@@ -82,12 +82,21 @@ export function stageReleaseContents({ destination, packages, run }) {
   }
 }
 
-export async function main({ argv = process.argv } = {}) {
+export async function main({ argv = process.argv, dependencies = {} } = {}) {
+  const {
+    expectedModel = expectedReleaseModel,
+    fetchResponse = globalThis.fetch,
+    prepare = prepareRelease,
+    readManifests = readReleaseManifests,
+    verifyRegistry = verifyRegistryReleaseState,
+    write = (text) => process.stdout.write(text),
+  } = dependencies;
   if (argv[2] === "prepare") {
     const check = argv.includes("--check");
     const output = check ? undefined : option(argv, "--output");
     if (!check && output === undefined) throw new Error("prepare requires --check or --output");
-    return prepareRelease({
+    if (dependencies.prepare !== undefined) return prepare({ check, output });
+    return prepare({
       root,
       output: check ? undefined : resolve(output),
       check,
@@ -104,17 +113,17 @@ export async function main({ argv = process.argv } = {}) {
         return () => process.off(signal, handler);
       },
       exit: (code) => process.exit(code),
-      expected: expectedReleaseModel(readReleaseManifests(root)),
+      expected: expectedModel(readManifests(root)),
     });
   }
-  const release = expectedReleaseModel(readReleaseManifests(root));
+  const release = expectedModel(readManifests(root));
   if (argv[2] === "tag") {
-    process.stdout.write(release.tag + "\n");
+    write(release.tag + "\n");
     return;
   }
-  if (argv[2] === "preflight") return verifyRegistryReleaseState(release, globalThis.fetch);
+  if (argv[2] === "preflight") return verifyRegistry(release, fetchResponse);
   if (argv[2] === "verify-registry")
-    return verifyRegistryReleaseState(release, globalThis.fetch, { complete: true });
+    return verifyRegistry(release, fetchResponse, { complete: true });
   throw new Error("Supported commands are prepare, tag, preflight, and verify-registry");
 }
 if (

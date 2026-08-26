@@ -94,6 +94,16 @@ describe("release workflows", () => {
       "fetch-depth": 0,
     });
     expect(publication.jobs.publish.steps[0]).toEqual(publishStepsAllowlist[0]);
+    expect(publication.jobs.prepare.steps.at(-1)).toEqual({
+      uses: "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+      with: {
+        name: "release",
+        path: "${{ runner.temp }}/release",
+        "if-no-files-found": "error",
+        "include-hidden-files": true,
+        "retention-days": 1,
+      },
+    });
   });
 
   it("isolates OIDC publication after exact prepared artifacts", () => {

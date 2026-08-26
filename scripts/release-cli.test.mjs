@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 
-import { main, prepareRelease } from "./release-cli.mjs";
+import { main, prepareRelease, stageReleaseContents } from "./release-cli.mjs";
 import { frameworkPackageNames } from "./package-artifacts.mjs";
 
 describe("release CLI", () => {
@@ -34,6 +34,55 @@ describe("release CLI", () => {
       "Supported commands",
     );
   });
+
+  it("routes each safe command through injected dependencies without public fetches", async () => {
+    const release = { tag: "snapshot", version: "2.0.0-snapshot.5", packages: [] };
+    const calls = [];
+    const dependencies = {
+      expectedModel: () => release,
+      readManifests: (root) => {
+        calls.push({ kind: "read", root });
+        return [];
+      },
+      fetchResponse: "safe-fetch",
+      verifyRegistry: (...args) => calls.push({ kind: "verify", args }),
+      write: (text) => calls.push({ kind: "write", text }),
+    };
+    await main({ argv: ["node", "cli", "tag"], dependencies });
+    await main({ argv: ["node", "cli", "preflight"], dependencies });
+    await main({ argv: ["node", "cli", "verify-registry"], dependencies });
+    await main({
+      argv: ["node", "cli", "prepare", "--output", "relative-release"],
+      dependencies: {
+        ...dependencies,
+        prepare: (options) => calls.push({ kind: "prepare", options }),
+      },
+    });
+    expect(calls).toContainEqual({ kind: "write", text: "snapshot\n" });
+    expect(calls.filter(({ kind }) => kind === "verify")).toEqual([
+      { kind: "verify", args: [release, "safe-fetch"] },
+      { kind: "verify", args: [release, "safe-fetch", { complete: true }] },
+    ]);
+    expect(calls).toContainEqual({
+      kind: "prepare",
+      options: { check: false, output: "relative-release" },
+    });
+  });
+
+  it("routes checked preparation and rejects a missing output", async () => {
+    const prepare = vi.fn();
+    await main({ argv: ["node", "cli", "prepare", "--check"], dependencies: { prepare } });
+    expect(prepare).toHaveBeenCalledWith({ check: true, output: undefined });
+    await expect(main({ argv: ["node", "cli", "prepare"] })).rejects.toThrow("requires");
+  });
+
+  it("prepares and cleans the real checked staged release without registry mutation", async () => {
+    const release = await main({ argv: ["node", "cli", "prepare", "--check"] });
+    expect(release).toMatchObject({ tag: "snapshot", version: "2.0.0-snapshot.5" });
+    expect(release.packages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "@spine-event-engine/core" })]),
+    );
+  }, 30_000);
 
   it("packs once, proves the exact returned list, and cleans check output", () => {
     const removed = [];
@@ -69,6 +118,40 @@ describe("release CLI", () => {
     expect(() => prepareRelease({ output: "/existing", exists: () => true })).toThrow(
       "already exists",
     );
+  });
+
+  it("stages every packed package under its Lerna contents directory", () => {
+    const runs = [];
+    stageReleaseContents({
+      destination: "/tmp/stage",
+      packages: [
+        { name: "@synthetic/base", tarball: "/tmp/base.tgz" },
+        { name: "@synthetic/dependent", tarball: "/tmp/dependent.tgz" },
+      ],
+      run: (command, args) => runs.push({ command, args }),
+    });
+    expect(runs).toEqual([
+      {
+        command: "tar",
+        args: [
+          "-xzf",
+          "/tmp/base.tgz",
+          "--strip-components=1",
+          "-C",
+          "/tmp/stage/packages/base/.publish",
+        ],
+      },
+      {
+        command: "tar",
+        args: [
+          "-xzf",
+          "/tmp/dependent.tgz",
+          "--strip-components=1",
+          "-C",
+          "/tmp/stage/packages/dependent/.publish",
+        ],
+      },
+    ]);
   });
 
   it.each(["pack", "prove"])("removes owned output when %s fails", (phase) => {

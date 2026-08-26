@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   classifyReleaseVersion,
+  readReleaseManifests,
   releaseManifestPaths,
   validateReleasePolicy,
 } from "./release-policy.mjs";
@@ -69,5 +70,22 @@ describe("release policy", () => {
       },
     }));
     expect(() => validateReleasePolicy(manifests)).toThrow("must not define publishConfig.tag");
+  });
+
+  it("fails closed for each repository policy boundary", () => {
+    const entries = readReleaseManifests(new URL("..", import.meta.url).pathname);
+    expect(() => validateReleasePolicy(entries.slice(1))).toThrow("26-path inventory");
+    const wrongPath = globalThis.structuredClone(entries);
+    wrongPath[1].path = "packages/not-auth/package.json";
+    expect(() => validateReleasePolicy(wrongPath)).toThrow("26-path inventory");
+    const wrongBoundary = globalThis.structuredClone(entries);
+    wrongBoundary[1].manifest.name = "@other/auth";
+    expect(() => validateReleasePolicy(wrongBoundary)).toThrow("public/private boundary");
+    const wrongConfig = globalThis.structuredClone(entries);
+    wrongConfig[1].manifest.publishConfig.access = "restricted";
+    expect(() => validateReleasePolicy(wrongConfig)).toThrow("invalid publishConfig");
+    const wrongPin = globalThis.structuredClone(entries);
+    wrongPin[1].manifest.dependencies = { "@spine-event-engine/core": "1.0.0" };
+    expect(() => validateReleasePolicy(wrongPin)).toThrow("must use 2.0.0-snapshot.5");
   });
 });
