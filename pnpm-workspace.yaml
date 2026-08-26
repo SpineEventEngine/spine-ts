@@ -21,4 +21,5 @@ onlyBuiltDependencies:
   - "@bufbuild/buf"
 allowBuilds:
   "@bufbuild/buf": true
+  nx: false
   protobufjs: false
