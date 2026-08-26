@@ -35,10 +35,19 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 
 ## Current State
 
-- Last completed step: Accepted specialist-review correction batch and focused
-  GREEN.
+- `2026-08-26 16:34 WEST`: Affected re-review proved prior `--scope` publishing
+  invalid for Lerna 10.0.1. It is superseded by a generated disposable non-Git
+  workspace containing only strict-selected package manifests and `.publish`
+  directories. Synthetic Verdaccio qualification published selected base then
+  dependent; the omitted package was absent from Lerna discovery/publish output.
+
+- Last completed step: Affected re-review correction and local qualification.
+- Previous correction: Unsupported `--scope` mechanism superseded; no longer a
+  workflow, runtime, test, or runbook claim.
 - Next step: final specialist/security convergence; no final release
   verification yet.
+- Last prior focused step: Accepted specialist-review correction batch and focused
+  GREEN.
 - Known risks: Lerna resume is version-based rather than integrity-based;
   static manifest tags must be removed; public NPM must never be contacted for
   mutation during tests.

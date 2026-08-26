@@ -4,7 +4,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { main, prepareRelease, stageReleaseContents } from "./release-cli.mjs";
+import {
+  createPublicationWorkspace,
+  main,
+  prepareRelease,
+  stageReleaseContents,
+} from "./release-cli.mjs";
 import { frameworkPackageNames } from "./package-artifacts.mjs";
 
 describe("release CLI", () => {
@@ -57,10 +62,6 @@ describe("release CLI", () => {
     };
     await main({ argv: ["node", "cli", "tag"], dependencies });
     await main({ argv: ["node", "cli", "preflight"], dependencies });
-    await main({
-      argv: ["node", "cli", "scopes"],
-      dependencies: { ...dependencies, verifyRegistry: () => ["@synthetic/base"] },
-    });
     await main({ argv: ["node", "cli", "verify-registry"], dependencies });
     await main({
       argv: ["node", "cli", "prepare", "--output", "relative-release"],
@@ -80,45 +81,89 @@ describe("release CLI", () => {
     });
   });
 
-  it("writes only strict missing scopes and rejects empty or unknown selections", async () => {
+  it("creates an isolated non-Git workspace from only the strict missing selection", () => {
+    const writes = [];
+    const copies = [];
+    const directories = [];
+    const entries = [
+      {
+        path: "packages/base/package.json",
+        manifest: { name: "@synthetic/base", version: "1.0.0" },
+      },
+      {
+        path: "packages/unselected/package.json",
+        manifest: { name: "@synthetic/unselected", version: "1.0.0" },
+      },
+    ];
+    createPublicationWorkspace({
+      destination: "/owned/publication",
+      entries,
+      selectedNames: ["@synthetic/base"],
+      mkdir: (path) => directories.push(path),
+      write: (path, contents) => writes.push({ path, contents }),
+      copy: (source, target) => copies.push({ source, target }),
+    });
+    expect(directories).toEqual([
+      "/owned/publication/packages",
+      "/owned/publication/packages/base",
+    ]);
+    expect(writes.map(({ path }) => path)).toEqual([
+      "/owned/publication/package.json",
+      "/owned/publication/pnpm-workspace.yaml",
+      "/owned/publication/lerna.json",
+      "/owned/publication/packages/base/package.json",
+    ]);
+    expect(copies).toEqual([
+      {
+        source: "packages/base/.publish",
+        target: "/owned/publication/packages/base/.publish",
+      },
+    ]);
+    for (const selection of [[], ["@synthetic/missing"], ["@synthetic/base", "@synthetic/base"]])
+      expect(() =>
+        createPublicationWorkspace({
+          destination: "/owned/publication",
+          entries,
+          selectedNames: selection,
+          mkdir: () => {},
+          write: () => {},
+          copy: () => {},
+        }),
+      ).toThrow("Publication workspace");
+  });
+
+  it("routes strict selection into a disposable workspace and fails closed before creation", async () => {
     const release = {
       tag: "snapshot",
       version: "2.0.0-snapshot.5",
       packages: [{ name: "@synthetic/base" }],
     };
-    const write = vi.fn();
+    const calls = [];
+    const output = join(tmpdir(), "spine-release-cli-workspace-" + Date.now());
     const dependencies = {
       expectedModel: () => release,
-      readManifests: () => [],
       fetchResponse: "safe-fetch",
-      write,
+      readManifests: () => [
+        { path: "packages/base/package.json", manifest: { name: "@synthetic/base" } },
+      ],
+      createWorkspace: (options) => calls.push(options),
     };
     await main({
-      argv: ["node", "cli", "scopes"],
+      argv: ["node", "cli", "prepare-publication-workspace", "--output", output],
       dependencies: { ...dependencies, verifyRegistry: () => ["@synthetic/base"] },
     });
-    expect(write).toHaveBeenCalledWith("@synthetic/base\n");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ selectedNames: ["@synthetic/base"] });
+    for (const selection of [[], ["@other/package"], ["@synthetic/base", "@synthetic/base"]])
+      await expect(
+        main({
+          argv: ["node", "cli", "prepare-publication-workspace", "--output", output],
+          dependencies: { ...dependencies, verifyRegistry: () => selection },
+        }),
+      ).rejects.toThrow("Strict registry selection");
     await expect(
-      main({
-        argv: ["node", "cli", "scopes"],
-        dependencies: { ...dependencies, verifyRegistry: () => [] },
-      }),
-    ).rejects.toThrow("Strict registry selection");
-    await expect(
-      main({
-        argv: ["node", "cli", "scopes"],
-        dependencies: { ...dependencies, verifyRegistry: () => ["@other/package"] },
-      }),
-    ).rejects.toThrow("Strict registry selection");
-    await expect(
-      main({
-        argv: ["node", "cli", "scopes"],
-        dependencies: {
-          ...dependencies,
-          verifyRegistry: () => ["@synthetic/base", "@synthetic/base"],
-        },
-      }),
-    ).rejects.toThrow("Strict registry selection");
+      main({ argv: ["node", "cli", "prepare-publication-workspace"], dependencies }),
+    ).rejects.toThrow("requires --output");
   });
 
   it("routes checked preparation and rejects a missing output", async () => {

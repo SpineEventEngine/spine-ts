@@ -43,11 +43,12 @@ provide that configuration evidence before activation.
 The workflow verifies packed contents and a fresh external consumer before
 mutation, then publishes validated `.publish` directories. Immediately before
 Lerna, strict registry selection identifies only the missing names from the
-exact 18-package policy inventory; the publish command receives each as an
-explicit `--scope`. A 5xx response, timeout, malformed record, empty selection,
-or fully published release fails before Lerna runs. Lerna may re-query a
-registry ambiguously, but those scopes cannot widen beyond that immediately
-strict-proven missing set.
+exact 18-package policy inventory and creates a disposable non-Git pnpm/Lerna
+workspace containing only those package root manifests and `.publish`
+directories. The pinned Lerna binary runs from that workspace. A 5xx response,
+timeout, malformed record, empty selection, or fully published release fails
+before Lerna runs. Lerna may re-query a registry ambiguously, but its package
+inventory cannot widen beyond the generated workspace.
 
 This migration intentionally loses four guarantees from the former publisher:
 byte identity between staged and published tarballs, integrity-aware resume,

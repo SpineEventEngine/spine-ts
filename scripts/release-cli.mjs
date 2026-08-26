@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -82,8 +82,45 @@ export function stageReleaseContents({ destination, packages, run }) {
   }
 }
 
+export function createPublicationWorkspace({
+  destination,
+  entries,
+  selectedNames,
+  copy,
+  mkdir,
+  write,
+}) {
+  const byName = new Map(
+    entries
+      .filter(({ path }) => path.startsWith("packages/"))
+      .map(({ path, manifest }) => [manifest.name, { manifest, path }]),
+  );
+  if (!selectedNames.length || new Set(selectedNames).size !== selectedNames.length)
+    throw new Error("Publication workspace requires a non-empty unique selection");
+  if (selectedNames.some((name) => !byName.has(name)))
+    throw new Error("Publication workspace selection is outside the release inventory");
+  mkdir(join(destination, "packages"));
+  write(
+    join(destination, "package.json"),
+    JSON.stringify({ name: "spine-lerna-publication", private: true, version: "0.0.0" }) + "\n",
+  );
+  write(join(destination, "pnpm-workspace.yaml"), "packages:\n  - packages/*\n");
+  write(
+    join(destination, "lerna.json"),
+    JSON.stringify({ version: "independent", npmClient: "pnpm", useNx: false }) + "\n",
+  );
+  for (const name of selectedNames) {
+    const { manifest, path } = byName.get(name);
+    const directory = join(destination, "packages", path.split("/")[1]);
+    mkdir(directory);
+    write(join(directory, "package.json"), JSON.stringify(manifest) + "\n");
+    copy(join(path.slice(0, -"package.json".length), ".publish"), join(directory, ".publish"));
+  }
+}
+
 export async function main({ argv = process.argv, dependencies = {} } = {}) {
   const {
+    createWorkspace = createPublicationWorkspace,
     expectedModel = expectedReleaseModel,
     fetchResponse = globalThis.fetch,
     prepare = prepareRelease,
@@ -122,7 +159,9 @@ export async function main({ argv = process.argv, dependencies = {} } = {}) {
     return;
   }
   if (argv[2] === "preflight") return verifyRegistry(release, fetchResponse);
-  if (argv[2] === "scopes") {
+  if (argv[2] === "prepare-publication-workspace") {
+    const output = option(argv, "--output");
+    if (output === undefined) throw new Error("prepare-publication-workspace requires --output");
     const scopes = await verifyRegistry(release, fetchResponse);
     const packageNames = new Set(release.packages.map(({ name }) => name));
     if (
@@ -132,12 +171,29 @@ export async function main({ argv = process.argv, dependencies = {} } = {}) {
       scopes.some((name) => !packageNames.has(name))
     )
       throw new Error("Strict registry selection did not produce exact missing package scopes");
-    write(scopes.join("\n") + "\n");
+    const destination = resolve(output);
+    if (existsSync(destination))
+      throw new Error("Publication workspace already exists: " + destination);
+    try {
+      createWorkspace({
+        destination,
+        entries: readManifests(root),
+        selectedNames: scopes,
+        copy: (source, target) => cpSync(join(root, source), target, { recursive: true }),
+        mkdir: (path) => mkdirSync(path, { recursive: true }),
+        write: writeFileSync,
+      });
+    } catch (error) {
+      rmSync(destination, { force: true, recursive: true });
+      throw error;
+    }
     return;
   }
   if (argv[2] === "verify-registry")
     return verifyRegistry(release, fetchResponse, { complete: true });
-  throw new Error("Supported commands are prepare, tag, preflight, scopes, and verify-registry");
+  throw new Error(
+    "Supported commands are prepare, tag, preflight, prepare-publication-workspace, and verify-registry",
+  );
 }
 if (
   process.argv[1] !== undefined &&

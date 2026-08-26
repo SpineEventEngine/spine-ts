@@ -200,12 +200,13 @@ Out of scope:
 
 ## Review Dispositions
 
-- Performance/reliability reviewer (`gpt-5.6-terra`, high): accepted finding
-  that Lerna can treat a failed packument read as unpublished. Corrected by
-  making the immediately preceding strict registry selection emit only exact
-  missing policy names and passing them as explicit Lerna scopes; 5xx, timeout,
-  malformed data, empty selection, and a fully published release fail closed.
-  Residual: Lerna may re-query ambiguously, but cannot widen beyond that set.
+- Performance/reliability reviewer (`gpt-5.6-terra`, high): affected re-review
+  proved Lerna 10.0.1 does not support the prior `--scope` correction. It is
+  superseded by an immediately strict-selected disposable workspace containing
+  only exact missing package manifests and `.publish` directories; 5xx,
+  timeout, malformed data, empty selection, and a fully published release fail
+  closed. Residual: Lerna may re-query ambiguously but cannot widen the
+  generated inventory.
 - Style/maintainability reviewer (`gpt-5.6-terra`, high): accepted identity
   enforcement and owned-test-fixture findings. Public package names must match
   the exact framework inventory; root/examples must be private; staging tests

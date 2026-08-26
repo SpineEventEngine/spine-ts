@@ -83,3 +83,14 @@ Latest scoped coverage is 96.00% statements, 95.23% branches, 93.18%
 functions, and 96.05% lines across `release-cli.mjs`, `release-policy.mjs`, and
 `release-registry.mjs`. Prettier, cleanup lint, targeted ESLint, Lerna discovery
 (25 packages), checked staging, and `git diff --check` are GREEN.
+
+Affected re-review proved the previous `--scope` correction invalid because
+Lerna 10.0.1 does not support it. The workflow now creates a disposable non-Git
+workspace from only strict-selected manifests and `.publish` directories, then
+runs the pinned original-checkout Lerna binary there. A synthetic Verdaccio
+qualification published selected base then dependent and did not discover or
+publish the omitted synthetic package. Final security and `verify:release`
+remain pending.
+
+The superseding workspace path has focused aggregate coverage of 94.20%
+statements, 94.96% branches, 90.19% functions, and 93.95% lines.

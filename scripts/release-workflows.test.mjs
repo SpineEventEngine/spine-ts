@@ -8,19 +8,17 @@ const read = (name) => readFileSync(join(root, ".github/workflows", name), "utf8
 const approvedPnpmSetup = "0ebf47130e4866e96fce0953f49152a61190b271";
 const npmVersionCheck =
   "node --version | grep -Fx 'v24.18.0' && npm --version | grep -Fx '11.16.0'";
-const scopedLernaPublish =
+const isolatedLernaPublish =
   [
     "set -euo pipefail",
-    'scope_file="$RUNNER_TEMP/spine-lerna-scopes"',
-    "trap 'rm -f \"$scope_file\"' EXIT",
-    'node scripts/release-cli.mjs scopes > "$scope_file"',
-    'test -s "$scope_file"',
-    'mapfile -t scopes < "$scope_file"',
-    'test "${#scopes[@]}" -gt 0',
-    "scope_args=()",
-    'for name in "${scopes[@]}"; do scope_args+=(--scope "$name"); done',
+    'publication_workspace="$RUNNER_TEMP/spine-lerna-publication"',
+    "trap 'rm -rf \"$publication_workspace\"' EXIT",
+    'node scripts/release-cli.mjs prepare-publication-workspace --output "$publication_workspace"',
     'TAG="$(node scripts/release-cli.mjs tag)"',
-    'pnpm exec lerna publish from-package "${scope_args[@]}" --contents .publish --concurrency 1 --ignore-scripts --dist-tag "$TAG" --registry https://registry.npmjs.org/ --git-head "$GITHUB_SHA" --summary-file "$GITHUB_STEP_SUMMARY" --yes',
+    "(",
+    '  cd "$publication_workspace"',
+    '  "$GITHUB_WORKSPACE/node_modules/.bin/lerna" publish from-package --contents .publish --concurrency 1 --ignore-scripts --dist-tag "$TAG" --registry https://registry.npmjs.org/ --git-head "$GITHUB_SHA" --summary-file "$GITHUB_STEP_SUMMARY" --yes',
+    ")",
   ].join("\n") + "\n";
 const publishStepsAllowlist = [
   {
@@ -41,7 +39,7 @@ const publishStepsAllowlist = [
     uses: "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0",
     with: { name: "release", path: "${{ github.workspace }}" },
   },
-  { run: scopedLernaPublish },
+  { run: isolatedLernaPublish },
   { run: "node scripts/release-cli.mjs verify-registry" },
 ];
 const publishJobAllowlist = {
@@ -136,11 +134,12 @@ describe("release workflows", () => {
     expect(source).not.toMatch(
       /secrets\.|npm login|whoami|unpublish|provenance=false|snapshot-publisher/u,
     );
-    expect(source).toContain("lerna publish from-package");
+    expect(source).toContain('node_modules/.bin/lerna" publish from-package');
     expect(source).toContain("set -euo pipefail");
-    expect(source).toContain('node scripts/release-cli.mjs scopes > "$scope_file"');
-    expect(source).toContain('"${scope_args[@]}" --contents .publish');
-    expect(source).not.toContain("lerna publish from-package --contents");
+    expect(source).toContain("prepare-publication-workspace");
+    expect(source).toContain('cd "$publication_workspace"');
+    expect(source).toContain('node_modules/.bin/lerna" publish from-package --contents');
+    expect(source).not.toContain("--scope");
     expect(source).not.toContain("release-publisher");
     expect(readFileSync(join(root, "scripts/release-cli.mjs"), "utf8")).not.toMatch(
       /release-publisher|publishRelease|createPublicRegistry/u,

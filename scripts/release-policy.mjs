@@ -58,8 +58,10 @@ export function validateReleasePolicy(entries) {
   const root = entries[0].manifest;
   const release = classifyReleaseVersion(root.version);
   const publicEntries = entries.filter(({ path }) => path.startsWith("packages/"));
-  if (publicEntries.length !== frameworkPackageNames.length)
-    throw new Error("Release packages do not match the exact 18-path inventory");
+  const publicNames = publicEntries.map(({ manifest }) => manifest.name).sort();
+  const expectedPublicNames = [...frameworkPackageNames].sort();
+  if (JSON.stringify(publicNames) !== JSON.stringify(expectedPublicNames))
+    throw new Error("Release packages do not match the exact public-name inventory");
   for (const { path, manifest } of entries) {
     if (manifest.version !== release.version) throw new Error(path + " must use the root version");
     const isPublic = path.startsWith("packages/");
