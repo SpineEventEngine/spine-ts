@@ -36,6 +36,12 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 
 ## Current State
 
+- `2026-08-26 17:24 WEST`: Final security review assigned to the existing
+  security-reviewer role with explicit `gpt-5.6-terra` and high reasoning. The
+  dispatch surface exposes the immutable configured role/profile; runtime
+  self-introspection may be unavailable and is not required by the acceptance
+  gate.
+
 - `2026-08-26 17:20 WEST`: Final affected review used explicitly dispatched
   reliability and maintainability `gpt-5.6-terra` high profiles and a
   documentation `gpt-5.6-luna` medium profile. The surface exposes immutable

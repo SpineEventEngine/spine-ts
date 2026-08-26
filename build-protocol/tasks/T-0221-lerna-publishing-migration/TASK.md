@@ -10,7 +10,8 @@ Worktree: `.worktrees/automated-publishing-and-packaging-improvements`
 Authoring sub-agent: existing `implementer` role (`gpt-5.6-terra`, medium)
 Reviewer sub-agents: performance/reliability (`gpt-5.6-terra`, high),
 style/maintainability (`gpt-5.6-terra`, high), and documentation (`gpt-5.6-luna`,
-medium) completed; final security pending
+medium) completed; final security assigned to the existing security reviewer
+(`gpt-5.6-terra`, high)
 Implementation commits: `59e957f6b` through `9737df292`; see Git history and
 the work log for the individual correction commits.
 Current implementation HEAD: `9737df292`; final branch HEAD pending final
