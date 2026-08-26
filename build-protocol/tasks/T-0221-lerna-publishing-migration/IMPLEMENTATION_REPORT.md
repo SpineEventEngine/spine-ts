@@ -30,6 +30,10 @@ Cheap-preflight correction: generated Proto package manifests were aligned from
 17-test Todo startup contract then passed. This remains a separate local commit
 from the required version-only commit.
 
+Second cheap-preflight correction: registry read timeout primitives now use the
+lint-recognized `globalThis` namespace. The three focused registry tests and
+targeted ESLint passed without weakening lint rules.
+
 Concern: lockfile generation required updating concrete internal pins after the
 required version-only commit because pnpm otherwise attempted to resolve an
 unpublished exact workspace package. No public registry was mutated, no token

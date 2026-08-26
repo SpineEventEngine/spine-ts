@@ -45,10 +45,10 @@ export async function verifyRegistryReleaseState(
 ) {
   const records = new Map();
   for (const { name } of release.packages) {
-    const controller = new AbortController();
+    const controller = new globalThis.AbortController();
     let timeout;
     const timed = new Promise((_, reject) => {
-      timeout = setTimeout(() => {
+      timeout = globalThis.setTimeout(() => {
         controller.abort();
         reject(new Error("registry read timed out for " + name));
       }, timeoutMs);
@@ -64,7 +64,7 @@ export async function verifyRegistryReleaseState(
       if (!response.ok) throw new Error("ambiguous registry response for " + name);
       records.set(name, await Promise.race([response.json(), timed]));
     } finally {
-      clearTimeout(timeout);
+      globalThis.clearTimeout(timeout);
       controller.abort();
     }
   }
