@@ -14,16 +14,35 @@ describe("release registry preflight", () => {
     expect(() =>
       assertRegistryReleaseState(
         release,
-        new Map([["@synthetic/base", { versions: { [release.version]: {} }, "dist-tags": {} }]]),
+        new Map([
+          [
+            "@synthetic/base",
+            { versions: { [release.version]: {} }, "dist-tags": { snapshot: release.version } },
+          ],
+        ]),
       ),
     ).not.toThrow();
+    expect(() =>
+      assertRegistryReleaseState(
+        release,
+        new Map([
+          [
+            "@synthetic/base",
+            { versions: { [release.version]: {} }, "dist-tags": { snapshot: "2.0.0-snapshot.4" } },
+          ],
+        ]),
+      ),
+    ).toThrow("selected tag");
     expect(() =>
       assertRegistryReleaseState(
         release,
         new Map(
           release.packages.map(({ name }) => [
             name,
-            { versions: { [release.version]: {} }, "dist-tags": {} },
+            {
+              versions: { [release.version]: {} },
+              "dist-tags": { snapshot: release.version },
+            },
           ]),
         ),
       ),
@@ -49,13 +68,31 @@ describe("release registry preflight", () => {
     );
   });
 
+  it("rejects final completeness when all versions exist but a selected tag is missing", () => {
+    expect(() =>
+      assertRegistryReleaseState(
+        release,
+        new Map(
+          release.packages.map(({ name }) => [
+            name,
+            {
+              versions: { [release.version]: {} },
+              "dist-tags": name === "@synthetic/base" ? {} : { snapshot: release.version },
+            },
+          ]),
+        ),
+        { complete: true },
+      ),
+    ).toThrow("selected tag");
+  });
+
   it("fails closed when a registry read does not settle before its bounded timeout", async () => {
     await expect(
       verifyRegistryReleaseState(release, () => new Promise(() => {}), { timeoutMs: 5 }),
     ).rejects.toThrow("timed out");
   });
 
-  it("handles absent, valid, failed, malformed, and complete registry reads without mutation", async () => {
+  it("uses default GET registry reads with no body and handles registry responses", async () => {
     const calls = [];
     const responses = [
       { status: 404, ok: false },
@@ -68,6 +105,10 @@ describe("release registry preflight", () => {
       }),
     ).resolves.toEqual(["@synthetic/base", "@synthetic/dependent"]);
     expect(calls).toHaveLength(2);
+    for (const { options } of calls) {
+      expect(options.method ?? "GET").toBe("GET");
+      expect(options.body).toBeUndefined();
+    }
     await expect(
       verifyRegistryReleaseState(release, async () => ({ status: 500, ok: false })),
     ).rejects.toThrow("ambiguous");

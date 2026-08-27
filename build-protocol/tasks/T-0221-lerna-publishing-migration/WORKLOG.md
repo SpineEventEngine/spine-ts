@@ -36,6 +36,44 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 
 ## Current State
 
+- `2026-08-26 18:12 WEST`: Human requested a fresh review of the complete branch
+  diff against baseline `af5c897857a85b3736a9efd7490d47faef41b4ac` and fixes
+  for all findings. Two independent read-only axes were assigned in parallel:
+  standards to the existing style/maintainability reviewer with explicit
+  `gpt-5.6-terra` high, and specification/correctness to the existing
+  performance/reliability reviewer with explicit `gpt-5.6-terra` high. The
+  Desktop surface exposes immutable configured roles/profiles when runtime
+  self-introspection is unavailable. Neither reviewer may edit or spawn agents.
+
+- `2026-08-26 18:22 WEST`: Both fresh review results passed the model-allocation
+  acceptance gate. The standards result came from the immutable configured
+  style/maintainability role (`gpt-5.6-terra`, high), and the specification
+  result came from the immutable configured performance/reliability role
+  (`gpt-5.6-terra`, high); the surface exposed configured profiles rather than
+  runtime self-introspection. Accepted findings are stale completion/decision
+  records and missing negative proofs for selected-tag completeness and
+  non-mutating registry reads. Orchestrator inspection also confirmed that a
+  partial release with an existing version but a wrong/missing selected tag is
+  currently accepted, so that fail-closed defect joins the single correction
+  batch.
+
+- `2026-08-26 18:25 WEST`: Focused correction checks and specification
+  re-review are green. Maintainability re-review confirmed the stale records
+  were corrected but found that the prior full-release result must not be
+  presented as covering the revised registry tree. The task now records that
+  distinction; one post-convergence `verify:release` rerun is pending. The
+  correction owner was the existing implementer role, explicitly dispatched
+  with `gpt-5.6-terra` medium; the returned work matched that immutable
+  configured profile, while runtime self-introspection was not exposed.
+
+- `2026-08-26 18:39 WEST`: Post-convergence `pnpm verify:release` passed on the
+  corrected registry tree: 287 test files, 4,539 tests, all 18 tarballs, the
+  isolated external-consumer proof, and 93.28% statement, 90% branch, 92.81%
+  function, and 94.44% line coverage. Both dependency audits reported no known
+  vulnerabilities. The first attempt stopped only because the release-readiness
+  scanner included the preserved untracked `.planning/` notes; they were moved
+  outside the checkout for the successful rerun and restored unchanged.
+
 - `2026-08-26 18:00 WEST`: Final `pnpm verify:release` rerun passed all gates:
   287 test files and 4,538 tests with 93.28% statement, 90% branch, 92.81%
   function, and 94.44% line coverage. Full and production audits reported no
@@ -95,9 +133,9 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
   directories. Synthetic Verdaccio qualification published selected base then
   dependent; the omitted package was absent from Lerna discovery/publish output.
 
-- Last completed step: Final registry completeness correction and focused
-  verification; qualification, focused coverage, and focused mechanical checks
-  are complete.
+- Last completed step: Post-convergence `pnpm verify:release` passed the
+  corrected registry tree with 287 test files, 4,539 tests, all 18 tarballs,
+  and the isolated external-consumer proof.
 - Previous correction: Unsupported `--scope` mechanism superseded; no longer a
   workflow, runtime, test, or runbook claim.
 - Next step: human review, followed only by an explicitly authorized push.
@@ -112,6 +150,6 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 
 | Risk/Follow-Up                     | Owner       | Linked Task/Decision | Disposition                                  | Next Review Point    |
 | ---------------------------------- | ----------- | -------------------- | -------------------------------------------- | -------------------- |
-| Old custom engine cleanup          | Future task | D-0117 pending       | Deferred until one real Lerna release        | Post-release cleanup |
+| Old custom engine cleanup          | Future task | D-0117               | Deferred until one real Lerna release        | Post-release cleanup |
 | `brace-expansion` override removal | Maintenance | T-0221               | Remove when Lerna/Nx no longer selects 5.0.8 | Dependency upgrade   |
 | Nx postinstall denial review       | Maintenance | T-0221               | Keep denied while `useNx` remains false      | Lerna/Nx upgrade     |

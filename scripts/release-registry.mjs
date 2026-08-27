@@ -33,7 +33,7 @@ export function assertRegistryReleaseState(release, records, { complete = false 
       throw new Error("ambiguous registry response for " + name);
     const exists = release.version in record.versions;
     if (exists) published++;
-    if (complete && (!exists || record["dist-tags"][release.tag] !== release.version))
+    if ((complete || exists) && (!exists || record["dist-tags"][release.tag] !== release.version))
       throw new Error("registry does not expose " + name + " at the selected tag");
   }
   if (!complete && published === release.packages.length)

@@ -2,7 +2,7 @@
 
 Status: Complete locally; pending human review and authorized push
 Start: `2026-08-26 15:23 WEST`
-End: `2026-08-26 18:00 WEST`
+End: `2026-08-26 18:39 WEST`
 Baseline commit: `af5c897857a85b3736a9efd7490d47faef41b4ac`
 Task log path: `build-protocol/tasks/T-0221-lerna-publishing-migration/TASK.md`
 Branch: `automated-publishing-and-packaging-improvements`
@@ -251,12 +251,15 @@ Out of scope:
 
 ## Tests Run
 
-- Focused qualification/release tests and generated-version preflight correction
-  passed; final review and `verify:release` remain pending.
+- Focused qualification/release tests, generated-version preflight correction,
+  all affected re-reviews, and final security review passed. The corrected
+  registry tree's final `pnpm verify:release` passed 287 test files and 4,539
+  tests.
 
 ## Coverage Result
 
-- Pending final `verify:release`.
+- Corrected-tree `verify:release`: 93.28% statement, 90% branch, 92.81%
+  function, and 94.44% line coverage.
 
 ## Documentation And Public API Impact
 
@@ -287,16 +290,16 @@ Out of scope:
 - Qualification, reviews, focused tests, and coverage are complete. The first
   full release gate exposed an unacknowledged denied Nx postinstall in fresh
   installs; the correction passes all 110 affected tests and affected security
-  re-review. The repeated cheap preflight is green. The final
-  `pnpm verify:release` rerun passed 287 files and 4,538 tests with 93.28%
-  statement, 90% branch, 92.81% function, and 94.44% line coverage.
+  re-review. The repeated cheap preflight is green. The corrected registry
+  tree's final `pnpm verify:release` rerun passed 287 files and 4,539 tests with
+  93.28% statement, 90% branch, 92.81% function, and 94.44% line coverage.
 
 ## Open Risks And Follow-Up Routing
 
 | Risk/Follow-Up                                          | Owner               | Linked Task/Decision | Disposition                                      | Next Review Point               |
 | ------------------------------------------------------- | ------------------- | -------------------- | ------------------------------------------------ | ------------------------------- |
-| Exact byte identity and integrity-aware resume are lost | Human/project       | D-0117 pending       | Accepted for migration                           | Reliability and security review |
-| Old publisher deletion                                  | Future cleanup task | D-0117 pending       | Deferred until one successful live Lerna release | Post-release cleanup            |
+| Exact byte identity and integrity-aware resume are lost | Human/project       | D-0117               | Accepted for migration                           | Reliability and security review |
+| Old publisher deletion                                  | Future cleanup task | D-0117               | Deferred until one successful live Lerna release | Post-release cleanup            |
 | NPM trusted-publisher allowed actions                   | Human               | T-0221               | Required external configuration                  | Before official merge           |
 | `brace-expansion` override removal                      | Future maintenance  | T-0221               | Remove when Lerna/Nx no longer selects 5.0.8     | Lerna dependency upgrade        |
 | Explicit Nx postinstall denial                          | Future maintenance  | T-0221               | Keep denied while `useNx` is false               | Lerna/Nx behavior change        |
