@@ -905,12 +905,13 @@ const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedo
 const typedocBin = join("node_modules", ".bin", typedocExecutable);
 const outputDir = mkdtempSync(join(tmpdir(), "spine-typedoc-json-"));
 const jsonPath = join(outputDir, "api.json");
+const referencePath = join(outputDir, "reference");
 process.on("exit", () => rmSync(outputDir, { force: true, recursive: true }));
 
 try {
   runBoundedCommand(
     typedocBin,
-    ["--options", "typedoc.json", "--json", jsonPath],
+    ["--options", "typedoc.json", "--json", jsonPath, "--out", referencePath],
     process.cwd(),
     60_000,
   );

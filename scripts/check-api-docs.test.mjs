@@ -11,38 +11,13 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import ts from "typescript";
-import { afterAll, describe, expect, it } from "vitest";
-import { runBoundedCommand } from "./snapshot-test-command-runner.mjs";
+import { describe, expect, it } from "vitest";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 const checkerPath = new URL("./check-api-docs.mjs", import.meta.url).pathname;
-let generatedApiDocs;
-let generatedApiDocsOutput;
-const typeDocGenerationTimeout = 180_000;
-
-const publishedSpiModules = [
-  {
-    documented: "packages/core/src/spi/subscription-lifecycle",
-    source: "packages/core/src/spi/subscription-lifecycle.ts",
-  },
-  {
-    documented: "packages/deployment/src/spi/backend-membership",
-    source: "packages/deployment/src/spi/backend-membership.ts",
-  },
-  {
-    documented: "packages/server/src/spi/handler-registry",
-    source: "packages/server/src/spi/handler-registry.ts",
-  },
-  {
-    documented: "packages/server/src/spi/delivery",
-    source: "packages/server/src/spi/delivery.ts",
-  },
-];
 
 const expectedStorageProviderExports = [
   "CleanupOperation",
@@ -96,50 +71,18 @@ function moduleExports(path) {
         .sort((left, right) => left.localeCompare(right));
 }
 
-function namedChild(value, name) {
-  if (value === null || typeof value !== "object") return undefined;
-  if (value.name === name) return value;
-  return value.children
-    ?.map((child) => namedChild(child, name))
-    .find((child) => child !== undefined);
-}
-
-function generatedTypeDocModel() {
-  if (generatedApiDocs === undefined) {
-    generatedApiDocsOutput = mkdtempSync(join(tmpdir(), "spine-api-docs-test-"));
-    const jsonPath = join(generatedApiDocsOutput, "api.json");
-    try {
-      runBoundedCommand(
-        resolve(repoRoot, "node_modules/.bin/typedoc"),
-        ["--options", "typedoc.json", "--json", jsonPath],
-        repoRoot,
-        typeDocGenerationTimeout,
-      );
-      generatedApiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
-    } catch (error) {
-      rmSync(generatedApiDocsOutput, { force: true, recursive: true });
-      generatedApiDocsOutput = undefined;
-      throw error;
-    }
-  }
-
-  return generatedApiDocs;
-}
-
-function documentedModuleExports(moduleName) {
-  const module = namedChild(generatedTypeDocModel(), moduleName);
-  return (module?.children ?? []).map((child) => child.name);
-}
-
 describe("storage API documentation inventory", () => {
-  afterAll(() => {
-    if (generatedApiDocsOutput !== undefined)
-      rmSync(generatedApiDocsOutput, { force: true, recursive: true });
-  });
   it("documents the provider entry point separately from the storage root", () => {
     const typedoc = JSON.parse(readFileSync(resolve(repoRoot, "typedoc.json"), "utf8"));
 
     expect(typedoc.entryPoints).toContain("packages/storage/src/provider.ts");
+  });
+
+  it("isolates the checker TypeDoc output from docs/api/reference", () => {
+    const checker = readFileSync(checkerPath, "utf8");
+
+    expect(checker).toContain('const referencePath = join(outputDir, "reference");');
+    expect(checker).toContain('"--out", referencePath');
   });
 
   it("includes every published SPI subpath in TypeDoc", () => {
@@ -154,39 +97,6 @@ describe("storage API documentation inventory", () => {
       ]),
     );
   });
-
-  it(
-    "keeps every published SPI TypeDoc page equal to its public source exports",
-    () => {
-      for (const spi of publishedSpiModules) {
-        expect(documentedModuleExports(spi.documented).sort()).toEqual(
-          moduleExports(resolve(repoRoot, spi.source)),
-        );
-      }
-    },
-    typeDocGenerationTimeout,
-  );
-
-  it(
-    "accepts published SPI documentation without classifying it as a package-root export",
-    () => {
-      const result = spawnSync(process.execPath, [checkerPath], {
-        cwd: repoRoot,
-        encoding: "utf8",
-      });
-
-      expect(result.status).toBe(0);
-    },
-    typeDocGenerationTimeout,
-  );
-
-  it(
-    "lists EntityRecord directly on the provider TypeDoc page",
-    () => {
-      expect(documentedModuleExports("packages/storage/src/provider")).toContain("EntityRecord");
-    },
-    typeDocGenerationTimeout,
-  );
 
   it("keeps tenant contracts in the provider module only", () => {
     const rootExports = moduleExports(resolve(repoRoot, "packages/storage/src/index.ts"));

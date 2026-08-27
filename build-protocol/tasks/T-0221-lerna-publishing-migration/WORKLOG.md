@@ -67,6 +67,43 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
   `.planning` was restored unchanged and remains untracked. No push or
   publication occurred.
 
+- `2026-08-27 17:00 WEST`: A manual rerun of PR run `33077063201`, job
+  `98569591217`, failed in `scripts/check-api-docs.test.mjs` after the preceding
+  run passed. The test discarded the child process diagnostics and exposed
+  only status 1. A systematic scan found that the release Vitest suite still
+  mixed package builds, installs, shared-output writers, and child-process
+  systems across two workers on the GitHub runner. Four concurrent API checker
+  reproductions also produced two real TypeDoc failures: separate processes
+  cleaned and wrote the same configured `docs/api/reference` directory. Direct
+  checks take about 30 seconds locally, and the Vitest file redundantly ran
+  TypeDoc twice even though the generated docs gate already invokes the
+  canonical checker.
+
+- `2026-08-27 17:05 WEST`: The correction used the existing implementer role
+  with its explicitly configured `gpt-5.6-terra` medium profile. TDD RED proved
+  that the release policy still allowed more than one worker and that JSON-only
+  TypeDoc output still targeted the shared reference tree. GREEN serializes
+  only `verify:release` with `--maxWorkers=1`, sends both TypeDoc JSON and HTML
+  to one unique temporary directory, and removes duplicate TypeDoc/checker
+  execution from Vitest while retaining the canonical SPI export validation in
+  `check-api-docs.mjs`. Sixteen focused tests passed. Two simultaneous API
+  checker processes both exited 0 and left `docs/api/reference` unchanged.
+  Explicit `gpt-5.6-terra` high reliability and maintainability re-reviews were
+  clean: every release test and coverage file remains selected, ordinary local
+  tests remain parallel, and no meaningful API verification was removed. No
+  push or publication occurred.
+
+- `2026-08-27 17:20 WEST`: Post-convergence `pnpm verify:release` passed with
+  the serialized release policy: all 287 files and 4,537 non-duplicate tests,
+  all 18 tarballs, and the isolated external consumer completed in the Vitest
+  phase without contention. Coverage remained unchanged at 93.28% statements,
+  90% branches, 92.81% functions, and 94.44% lines. Both dependency audits
+  reported no vulnerabilities. The separate CI command
+  `node scripts/release-cli.mjs prepare --check` also passed. The two removed
+  test cases were duplicate full TypeDoc/checker executions; their API/SPI
+  assertions remain in the canonical checker that passed earlier in the same
+  release gate. No push or publication occurred.
+
 - `2026-08-26 18:12 WEST`: Human requested a fresh review of the complete branch
   diff against baseline `af5c897857a85b3736a9efd7490d47faef41b4ac` and fixes
   for all findings. Two independent read-only axes were assigned in parallel:
