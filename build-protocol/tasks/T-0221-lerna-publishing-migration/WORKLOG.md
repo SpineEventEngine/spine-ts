@@ -36,6 +36,37 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
 
 ## Current State
 
+- `2026-08-27 14:12 WEST`: PR run `33074035381`, job `98523459762`, failed
+  during `pnpm verify:release` with three simultaneous timeouts: the
+  delivery-client child-process readiness fixture, the To-Do black-box import
+  hook, and the real release-CLI tarball/consumer proof. Local timing shows the
+  release-CLI proof takes about 14 seconds alone and all three affected files
+  pass together in about 15 seconds on the faster development host. The shared
+  cause is four Vitest workers competing with process-heavy tests that spawn
+  additional Node, pnpm, and TypeScript processes. The bounded correction is
+  assigned test-first to the existing implementer role with explicit
+  `gpt-5.6-terra` medium reasoning. It owns only the release worker policy and
+  its policy test; no push is authorized.
+
+- `2026-08-27 14:15 WEST`: The implementer result passed the model-allocation
+  acceptance gate using the immutable configured `gpt-5.6-terra` medium
+  profile; runtime self-introspection was not exposed. TDD RED proved the old
+  fixed `--maxWorkers=4` command violated the new adaptive-worker policy. The
+  minimal GREEN uses Vitest's supported `--maxWorkers=50%`; 12 package-policy
+  tests and all 62 originally affected tests passed. Independent orchestration
+  reran those with the policy suite: 74 tests passed in about 15 seconds.
+
+- `2026-08-27 14:24 WEST`: The affected reliability review, explicitly
+  dispatched to the existing `gpt-5.6-terra` high profile, found no issue with
+  the adaptive worker limit. Vitest supports percentage worker limits, clamps
+  the computed value to at least one worker, and preserves the full test set,
+  coverage, and timeouts. The complete `pnpm verify:release` gate then passed
+  all static and generated checks, both dependency audits, all 18 tarballs and
+  the external consumer, 287 test files, and 4,539 tests. The separate CI
+  packaging command `node scripts/release-cli.mjs prepare --check` also passed.
+  `.planning` was restored unchanged and remains untracked. No push or
+  publication occurred.
+
 - `2026-08-26 18:12 WEST`: Human requested a fresh review of the complete branch
   diff against baseline `af5c897857a85b3736a9efd7490d47faef41b4ac` and fixes
   for all findings. Two independent read-only axes were assigned in parallel:
