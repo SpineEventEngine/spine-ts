@@ -25,7 +25,7 @@ jobs:
           node-version-file: .node-version
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: pnpm verify:release
+      - run: pnpm verify:publish
       - run: node scripts/release-cli.mjs preflight
       - run: node scripts/release-cli.mjs prepare --output "$RUNNER_TEMP/release"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

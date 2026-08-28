@@ -201,12 +201,48 @@ Record resumable migration from the custom NPM mutation engine to pinned Lerna
   directories. Synthetic Verdaccio qualification published selected base then
   dependent; the omitted package was absent from Lerna discovery/publish output.
 
+- `2026-08-28 11:28 WEST`: A new live advisory made unchanged PR verification
+  fail after the previous local gate passed. TDD now pins Lerna's transitive
+  `pacote` to patched `21.5.1`, keeps `pnpm audit:release` as a live security
+  command, removes it from deterministic `verify:release`, and assigns it to a
+  daily/manual non-PR Security workflow. Twenty-four focused
+  policy/Lerna tests, both audits, Lerna discovery, and exact release
+  preparation passed.
+- `2026-08-28 11:28 WEST`: Affected review dispatched to the existing
+  performance/reliability reviewer and final security reviewer. Both use their
+  immutable configured `gpt-5.6-terra` high profiles; model and reasoning are
+  explicit in the configured roles. Documentation/API review is N/A because no
+  reader or public TypeScript contract changed. Style review is N/A because the
+  implementation is declarative workflow/dependency configuration with exact
+  deterministic policy tests.
+- `2026-08-28 11:52 WEST`: Reliability and security re-review accepted the
+  three-command split: deterministic `verify:release` for PR Build, live
+  `audit:release` for scheduled/manual Security, and fail-closed
+  `verify:publish` for publication. The first post-convergence full gate then
+  exposed the To-Do launcher test's fixed two-second readiness assumption; the
+  child needed about 3.1--3.3 seconds locally. The existing failing test is the
+  RED evidence. It now waits on the actual readiness marker with a bounded
+  ten-second `vi.waitFor`; two focused runs pass. Affected reliability re-review
+  and the final full gate are pending.
+- `2026-08-28 11:55 WEST`: Reliability re-review found that a readiness timeout
+  could skip awaiting the detached launcher. The consolidated correction puts
+  release-file creation and `await pending` in `finally`, so success and timeout
+  paths both clean the owned process group before returning. The focused verbose
+  suite passes all four launcher cases; affected re-review is pending.
+- `2026-08-28 12:12 WEST`: Affected reliability re-review and final security
+  re-review are clean. Post-convergence `CI=true pnpm verify:release` passed 287
+  test files and 4,539 tests, all static gates, all 18 tarballs, and the isolated
+  external-consumer proof with 93.28% statement coverage. The exact automation
+  follow-ups also pass: `pnpm audit:release` reports no known full-graph or
+  production vulnerabilities, and the release preparation check validates and
+  installs the 18 tarballs without publishing.
 - Last completed step: Post-convergence `pnpm verify:release` passed the
   corrected registry tree with 287 test files, 4,539 tests, all 18 tarballs,
   and the isolated external-consumer proof.
 - Previous correction: Unsupported `--scope` mechanism superseded; no longer a
   workflow, runtime, test, or runbook claim.
-- Next step: human review, followed only by an explicitly authorized push.
+- Next step: commit and perform the already authorized push to the existing
+  SpineEventEngine feature branch, then observe its PR check.
 - Last prior focused step: Accepted specialist-review correction batch and focused
   GREEN.
 - Known risks: Lerna resume is version-based rather than integrity-based;

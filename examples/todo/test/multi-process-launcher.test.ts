@@ -26,7 +26,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const roots: string[] = [];
 const script = "examples/todo/scripts/run-multi-process.sh";
@@ -124,14 +124,20 @@ describe("multi-process launcher", () => {
   it.each(["SIGINT", "SIGTERM"] as const)("gates app start and cleans on %s", async (signal) => {
     const { root, trace, release, temporary } = fixture("gated");
     const pending = run(root, trace, "gated", signal);
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      if (existsSync(trace) && readFileSync(trace, "utf8").includes("entered-readiness-gate"))
-        break;
-      await new Promise((resolve) => setTimeout(resolve, 20));
+    try {
+      await vi.waitFor(
+        () => {
+          expect(existsSync(trace) ? readFileSync(trace, "utf8") : "").toContain(
+            "entered-readiness-gate",
+          );
+        },
+        { timeout: 10_000, interval: 20 },
+      );
+      expect(existsSync(trace) ? readFileSync(trace, "utf8") : "").not.toContain("app-start");
+    } finally {
+      writeFileSync(release, "ready");
+      await pending;
     }
-    expect(readFileSync(trace, "utf8")).toContain("entered-readiness-gate");
-    expect(existsSync(trace) ? readFileSync(trace, "utf8") : "").not.toContain("app-start");
-    writeFileSync(release, "ready");
     const result = await pending;
     expect(result.code).toBe(signal === "SIGINT" ? 130 : 143);
     expect(readFileSync(trace, "utf8")).toContain("rm --force captured-container-id");

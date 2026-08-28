@@ -57,6 +57,9 @@ const usesAllowlist = [
   "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
   "pnpm/action-setup@" + approvedPnpmSetup,
   "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
+  "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+  "pnpm/action-setup@" + approvedPnpmSetup,
+  "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
   "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
   "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
   "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
@@ -80,6 +83,34 @@ function assertExactPublishJob(job) {
 }
 
 describe("release workflows", () => {
+  it("runs live dependency audits on a schedule outside deterministic PR verification", () => {
+    const build = YAML.parse(read("build.yml"));
+    const workflow = YAML.parse(read("security.yml"));
+
+    expect(build.on).toEqual({ pull_request: { branches: ["master"] } });
+    expect(Object.keys(build.jobs)).toEqual(["verify"]);
+    expect(workflow.on.schedule).toEqual([{ cron: "17 4 * * *" }]);
+    expect(workflow.on.workflow_dispatch).toBeNull();
+    expect(workflow.jobs.security).toEqual({
+      "runs-on": "ubuntu-24.04",
+      steps: [
+        {
+          uses: "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+          with: { "persist-credentials": false },
+        },
+        {
+          uses: "pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271",
+          with: { version: "11.9.0" },
+        },
+        {
+          uses: "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
+          with: { "node-version-file": ".node-version", "package-manager-cache": false },
+        },
+        { run: "pnpm audit:release" },
+      ],
+    });
+  });
+
   it("keeps PR verification read-only and non-publishing", () => {
     const source = read("build.yml");
     const workflow = YAML.parse(source);
@@ -103,6 +134,7 @@ describe("release workflows", () => {
       "persist-credentials": false,
       "fetch-depth": 0,
     });
+    expect(publication.jobs.prepare.steps).toContainEqual({ run: "pnpm verify:publish" });
     expect(publication.jobs.publish.steps[0]).toEqual(publishStepsAllowlist[0]);
     expect(publication.jobs.prepare.steps.at(-1)).toEqual({
       uses: "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
@@ -148,7 +180,7 @@ describe("release workflows", () => {
   });
 
   it("pins every action to a full immutable SHA and disables checkout credentials", () => {
-    for (const name of ["build.yml", "publish.yml"]) {
+    for (const name of ["build.yml", "security.yml", "publish.yml"]) {
       const source = read(name);
       expect(
         [...source.matchAll(/uses: [^@]+@([^\s]+)/gu)].every((match) =>
@@ -158,7 +190,7 @@ describe("release workflows", () => {
       expect(source).toContain("persist-credentials: false");
       expect(source).toContain("package-manager-cache: false");
     }
-    const uses = ["build.yml", "publish.yml"].flatMap((name) => {
+    const uses = ["build.yml", "security.yml", "publish.yml"].flatMap((name) => {
       const workflow = YAML.parse(read(name));
       return Object.values(workflow.jobs).flatMap((job) =>
         job.steps.filter((step) => typeof step.uses === "string").map((step) => step.uses),
