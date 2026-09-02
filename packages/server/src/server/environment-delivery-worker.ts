@@ -717,21 +717,21 @@ class RuntimeDeliverySupervisorGroup {
   static tenantKey(message: DeliveryEndpointMessage): string | undefined {
     if (message.signal === undefined) return undefined;
     try {
-      const event = fromBinary(EventSchema, message.signal.value);
-      const tenantId = event.context?.origin;
-      if (tenantId?.case === "importContext") {
-        const value = tenantId.value.tenantId;
+      if (message.label === "HANDLE_COMMAND") {
+        const tenantId = fromBinary(CommandSchema, message.signal.value).context?.actorContext
+          ?.tenantId;
+        return tenantId === undefined ? undefined : String(TenantBoundary.from(tenantId).key);
+      }
+
+      const origin = fromBinary(EventSchema, message.signal.value).context?.origin;
+      if (origin?.case === "importContext") {
+        const value = origin.value.tenantId;
         return value === undefined ? undefined : String(TenantBoundary.from(value).key);
       }
-      if (tenantId?.case === "pastMessage") {
-        const value = tenantId.value.actorContext?.tenantId;
+      if (origin?.case === "pastMessage") {
+        const value = origin.value.actorContext?.tenantId;
         return value === undefined ? undefined : String(TenantBoundary.from(value).key);
       }
-      const commandTenant = fromBinary(CommandSchema, message.signal.value).context?.actorContext
-        ?.tenantId;
-      return commandTenant === undefined
-        ? undefined
-        : String(TenantBoundary.from(commandTenant).key);
     } catch {
       return undefined;
     }
