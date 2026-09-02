@@ -95,6 +95,6 @@ describe("release policy", () => {
     expect(() => validateReleasePolicy(wrongConfig)).toThrow("invalid publishConfig");
     const wrongPin = globalThis.structuredClone(entries);
     wrongPin[1].manifest.dependencies = { "@spine-event-engine/core": "1.0.0" };
-    expect(() => validateReleasePolicy(wrongPin)).toThrow("must use 2.0.0-snapshot.6");
+    expect(() => validateReleasePolicy(wrongPin)).toThrow("must use 2.0.0-snapshot.7");
   });
 });
