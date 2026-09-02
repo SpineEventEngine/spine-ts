@@ -303,3 +303,44 @@
   public packages on 2026-09-02. Its required version-only commit message is
   `Bump version -> 2.0.0-snapshot.7`. No workspace manifest, dependency pin,
   or lockfile was changed in this record-only step.
+
+## 2026-09-02 — snapshot.7 alignment
+
+- Added repository-style TSDoc to the changed private tenant decoder and the
+  realistic Command/Event test-message builders. Commit `766e0cbbb` contains
+  only that documentation correction and is pushed to the feature branch.
+- Commit `4d2d47a6a` is the required version-only commit with exact message
+  `Bump version -> 2.0.0-snapshot.7`. Mechanical audit proved that it changes
+  exactly 26 workspace manifests, with exactly one top-level version
+  replacement and no other changed line in each file. It is pushed.
+- Commit `09a185f90` separately aligns 46 concrete internal dependency pins and
+  `pnpm-lock.yaml` to `2.0.0-snapshot.7`. It preserves all 49 `workspace:*`
+  references and external `@spine-event-engine/validation@2.0.0-snapshot.7`.
+  `pnpm install --frozen-lockfile --ignore-scripts` passed. The commit is pushed.
+- The `monorepo-management` skill was selected for workspace version and
+  dependency consistency; its generic tooling examples were not adopted
+  because this repository already has an established Lerna release mechanism
+  and an explicit human version-commit contract.
+- Full `verify:release` is required because the final branch changes every
+  published package version and the shared lockfile.
+- The first release-gate attempt stopped before tests because five tracked
+  `spine-proto-manifest.json` files still declared `.6`; Proto generation
+  correctly rejected the mismatch. A tracked search also found version-specific
+  expectations in the Todo startup and release CLI/policy tests.
+- Commit `195af0e74` aligns those five Proto manifests and three test files to
+  `.7`; it is pushed. `pnpm proto:generate`, the Todo startup and release-policy
+  tests (23/23), and the release-CLI integration test (17/17) pass. The latter
+  required populating pnpm's local content store with locked
+  `lru.min@1.1.5`; no repository file or dependency version changed for that
+  environment repair.
+- The mandatory cheap preflight then passed: Proto generation, release
+  readiness, the release CLI, release policy, and Todo startup tests (40/40),
+  formatting, and whitespace checks. It packed all 18 `.7` artifacts and
+  installed them into a temporary consumer outside the workspace.
+- Final `pnpm verify:release` passed at `2026-09-02T17:37:27Z`: 287 test files
+  and 4,541 tests passed. Coverage was 93.28% statements, 90% branches, 92.81%
+  functions, and 94.44% lines. The same gate passed Node, generated build,
+  TypeScript, ESLint, cleanup, TSDoc, copyright, formatting, API and reader
+  documentation, Proto, generated-clean, logging-containment, production
+  dependency, release-readiness, 18-package tarball, and isolated external
+  consumer checks.
