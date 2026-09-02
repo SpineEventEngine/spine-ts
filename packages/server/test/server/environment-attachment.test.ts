@@ -4270,6 +4270,15 @@ function message(ready: DeliveryReady, signalId: string) {
   };
 }
 
+/**
+ *
+ * Builds a realistic Command envelope with tenant, actor, timestamp, and
+ * business payload fields for tenant-routing coverage.
+ *
+ * @param ready Supplies the Command delivery endpoint.
+ * @param signalId Identifies the durable inbox row and Command.
+ * @returns The Command delivery message.
+ */
 function commandMessage(ready: DeliveryReady, signalId: string) {
   const value = create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: signalId }),
@@ -4294,6 +4303,15 @@ function commandMessage(ready: DeliveryReady, signalId: string) {
   };
 }
 
+/**
+ *
+ * Builds a realistic imported Event envelope with tenant, actor, timestamp,
+ * producer, and business payload fields for tenant-routing coverage.
+ *
+ * @param ready Supplies the Event delivery endpoint.
+ * @param signalId Identifies the durable inbox row and Event.
+ * @returns The Event delivery message.
+ */
 function eventMessage(ready: DeliveryReady, signalId: string) {
   const timestamp = create(TimestampSchema, { seconds: 1n });
   const value = create(EventSchema, {

@@ -714,6 +714,15 @@ class RuntimeDeliverySupervisorGroup {
     return routes.find((route) => route.tenantKey === tenantKey);
   }
 
+  /**
+   *
+   * Derives a tenant boundary key from the delivery label's matching envelope.
+   * `HANDLE_COMMAND` reads the Command actor tenant; Event labels read imported
+   * or past-message Event origin tenants.
+   *
+   * @param message Contains the admitted delivery message.
+   * @returns The tenant boundary key when the supported envelope carries one.
+   */
   static tenantKey(message: DeliveryEndpointMessage): string | undefined {
     if (message.signal === undefined) return undefined;
     try {
