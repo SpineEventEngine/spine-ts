@@ -290,3 +290,16 @@
   open.
 - Correction implementation and re-review converged at
   `2026-09-02T16:19:32Z`. Integration remains pending human review and merge.
+
+## 2026-09-02 — version-release invariant
+
+- Human invariant recorded in `AGENTS.md`, `CONTRIBUTING.md`, and
+  `BUILD_PROTOCOL.md`: every feature branch intended for merge into `master`
+  must include a version-only commit that updates every workspace manifest to
+  one common, unused version; the commit changes only top-level `version`
+  fields and uses the exact message `Bump version -> <version>`. Internal
+  dependency pins and the lockfile belong in a separate commit.
+- T-0223's required version is `2.0.0-snapshot.7`, verified unused for all 18
+  public packages on 2026-09-02. Its required version-only commit message is
+  `Bump version -> 2.0.0-snapshot.7`. No workspace manifest, dependency pin,
+  or lockfile was changed in this record-only step.

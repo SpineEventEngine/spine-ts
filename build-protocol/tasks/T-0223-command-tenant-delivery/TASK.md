@@ -66,5 +66,10 @@ is the acceptance evidence in that case.
   as the pending-row behavior for a tenant mismatch.
 - Preserve concurrent and human-owned changes outside this task's explicitly
   assigned files.
+- This feature branch must include a version-only commit for
+  `2.0.0-snapshot.7`, which was verified unused for all 18 public packages on
+  2026-09-02. The commit updates every workspace manifest's top-level `version`
+  field only and uses the exact message `Bump version -> 2.0.0-snapshot.7`;
+  dependency pins and the lockfile belong in a separate commit.
 - The human's “OK, start” authorizes implementation and local commits. Do not
   push this correction until the human explicitly asks for a push.

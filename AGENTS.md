@@ -136,12 +136,13 @@ Treat official `master` as protected, coordination-only history:
 - never rewrite a published feature branch or delete an organization branch or
   tag without explicit human direction.
 
-Every merge to official `master` starts NPM publication. A proposed task must
-therefore carry one unused common workspace version. A version-only commit may
-update all workspace manifests together, changes nothing except their top-level
-`version`, and uses `Bump version -> <version>`. Internal pins and the lockfile
-belong in a separate commit. After a human merges the pull request, fetch and
-verify the resulting `origin/master`; do not integrate or push it yourself.
+Every merge to official `master` starts NPM publication. Every feature branch
+intended for merge must therefore include one version-only commit that updates
+every workspace manifest to one common unused version. That commit changes only
+top-level `version` fields and uses the exact message `Bump version -> <version>`.
+Internal dependency pins and the lockfile belong in a separate commit. After a
+human merges the pull request, fetch and verify the resulting `origin/master`;
+do not integrate or push it yourself.
 
 A task is durably ready for human review when its required feature-branch pushes
 succeed and its verification and review evidence are current. Remote cleanup is

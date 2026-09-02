@@ -18,19 +18,20 @@ Do not use a personal fork as a remote or publication source.
 
 ## Versions and publication
 
-Every merge to `master` starts the NPM publishing workflow. Coordinate the next
-unused common version with the maintainer before opening a pull request.
+Every merge to `master` starts the NPM publishing workflow. Every feature
+branch intended for merge must include a version-only commit that updates every
+workspace manifest to one common unused version.
 
-A version-only commit may update all workspace manifests together. It changes
-only their top-level `version` fields and uses this message:
+That version-only commit changes only top-level `version` fields and uses this
+exact message:
 
 ```text
 Bump version -> <version>
 ```
 
 Update concrete internal dependency versions and `pnpm-lock.yaml` in a separate
-commit. See the [NPM release runbook](docs/release-publishing.md) for the complete
-release policy.
+commit. See the [NPM release runbook](docs/release-publishing.md) for the
+complete release policy.
 
 ## Verify locally
 
