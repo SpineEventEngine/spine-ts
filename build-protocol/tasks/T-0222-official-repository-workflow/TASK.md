@@ -33,7 +33,7 @@ work through task feature branches and human-managed pull requests.
 
 ## Human-Imposed Requirements Ledger
 
-- Do not use `armiol/spine-ts` again.
+- Do not use a personal fork again.
 - Treat `SpineEventEngine/spine-ts` as the primary and sole destination.
 - Never modify official `master` directly unless the human explicitly asks.
 - Create a feature branch for each task.

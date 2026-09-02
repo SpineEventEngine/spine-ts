@@ -5704,8 +5704,8 @@ Status: Accepted
 
 Date: 2026-09-02
 
-Context: The project previously used `armiol/spine-ts` and integrated completed
-work directly into its `main` branch. The framework now lives in the protected
+Context: The project previously used a personal fork and integrated completed
+work directly into its trunk branch. The framework now lives in the protected
 `SpineEventEngine/spine-ts` repository, where every `master` merge runs the NPM
 publication workflow.
 

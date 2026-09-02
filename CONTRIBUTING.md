@@ -14,7 +14,7 @@ The `master` branch is protected and must not receive direct commits or pushes.
    its checks. An agent does this only when explicitly instructed.
 6. A human reviews and merges the pull request.
 
-Do not use `armiol/spine-ts` as a remote or publication source.
+Do not use a personal fork as a remote or publication source.
 
 ## Versions and publication
 

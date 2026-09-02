@@ -362,8 +362,8 @@ avoid a gate.
 The sole canonical remote is `origin` at
 `https://github.com/SpineEventEngine/spine-ts.git` (a user-level Git URL rewrite
 may show the equivalent SSH transport). `origin/HEAD` and every new task
-baseline resolve to `origin/master`. The personal `armiol/spine-ts` repository
-is retired and must not be configured, fetched, or pushed.
+baseline resolve to `origin/master`. Retired personal forks must not be
+configured, fetched, or pushed.
 
 Feature branches are durable working state, not merge-time artifacts. Push a
 feature branch to `origin` immediately after every commit, including focused-

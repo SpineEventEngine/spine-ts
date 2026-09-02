@@ -122,7 +122,7 @@ stabilize, unless a concrete changed interface requires earlier expansion.
 ## Official Repository Workflow
 
 The only development remote is `origin`, and it must resolve to
-`SpineEventEngine/spine-ts`. Never fetch from or push to `armiol/spine-ts`.
+`SpineEventEngine/spine-ts`. Never fetch from or push to a personal fork.
 Treat official `master` as protected, coordination-only history:
 
 - start every task from a freshly fetched `origin/master` in a separate feature

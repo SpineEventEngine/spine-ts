@@ -1,8 +1,8 @@
 # T-0220 Work Log
 
 - `2026-08-24`: The orchestrator inspected the dirty primary checkout without
-  changing it, confirmed configured `origin` is `git@github.com:armiol/spine-ts.git`,
-  and created `.worktrees/github-actions-npm-publishing` from exact
+  changing it, confirmed the then-configured personal `origin`, and created
+  `.worktrees/github-actions-npm-publishing` from exact
   `origin/main@35e0d81dfd4fe72f93804319f7437de71279edda`.
 - `2026-08-24`: Frozen installation completed with pnpm `11.9.0`. The focused
   baseline passed 3 release/package test files and 47 tests with zero failures.
@@ -22,7 +22,7 @@ scripts/release-policy.test.mjs --passWithNoTests` failed because the permanent
 scripts/release-publisher.test.mjs --passWithNoTests` failed because the
   permanent publisher module did not exist. GREEN: policy, publisher, and
   artifact suites passed 13/13. The version-only commit `2ed14bf9b` was pushed
-  immediately to verified personal `origin` (`git@github.com:armiol/spine-ts.git`).
+  immediately to the verified personal `origin`.
 - `2026-08-24`: Implementation remains incomplete: concrete internal pins and
   lockfile alignment, functional npm registry adapter, structural workflow
   tests, full preparation/consumer handoff proof, and review are pending. No
