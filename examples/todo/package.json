@@ -40,14 +40,14 @@
     "@spine-event-engine/client-node": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
     "@spine-event-engine/delivery-client": "workspace:*",
-    "@spine-event-engine/proto": "2.0.0-snapshot.5",
+    "@spine-event-engine/proto": "2.0.0-snapshot.6",
     "@spine-event-engine/server": "workspace:*",
     "@spine-event-engine/storage": "workspace:*",
     "@spine-event-engine/storage-datastore": "workspace:*",
     "@google-cloud/datastore": "10.1.1"
   },
   "devDependencies": {
-    "@spine-event-engine/proto-tools": "2.0.0-snapshot.5",
+    "@spine-event-engine/proto-tools": "2.0.0-snapshot.6",
     "@spine-event-engine/testing": "workspace:*"
   }
 }
