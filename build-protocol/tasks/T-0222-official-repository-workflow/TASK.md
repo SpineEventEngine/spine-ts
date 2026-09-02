@@ -30,6 +30,8 @@ work through task feature branches and human-managed pull requests.
 8. All 26 workspaces use the next common version, snapshot.6, with internal
    pins, lockfile, Proto metadata, and current-version tests aligned separately
    from the version-only commit.
+9. Post-publication verification tolerates bounded NPM propagation delay but
+   continues to fail immediately on ambiguous registry responses.
 
 ## Human-Imposed Requirements Ledger
 

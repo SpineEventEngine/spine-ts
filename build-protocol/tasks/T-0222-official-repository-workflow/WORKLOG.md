@@ -2,7 +2,7 @@
 
 ## Scope and acceptance
 
-Classification: standard documentation and repository-policy migration. The
+Classification: high-risk repository-policy and release-mechanics migration. The
 sole remote becomes `SpineEventEngine/spine-ts`; future tasks start from
 `origin/master` on non-`codex/` feature branches; agents never modify official
 `master`, create or merge pull requests, or delete organization refs without
@@ -18,6 +18,11 @@ unused common package version accompanies this merge-triggered release.
 - Documentation: existing documentation reviewer, explicitly dispatched as
   `gpt-5.6-luna` with medium reasoning after the correction batch. Read-only;
   no subagents.
+- Activation reliability re-review: existing performance/reliability reviewer,
+  explicitly dispatched as `gpt-5.6-terra` with high reasoning. Read-only; no
+  subagents.
+- Activation security review: existing final security reviewer, explicitly
+  dispatched as `gpt-5.6-terra` with high reasoning. Read-only; no subagents.
 
 The Desktop dispatch surface exposes the immutable configured role/profile;
 runtime self-introspection may be unavailable and is not required by the model
@@ -48,3 +53,23 @@ allocation acceptance gate.
 - Final affected regression wave passed 35 tests across the Git baseline,
   package metadata, workflow, and release-policy suites. Final formatting,
   diff, and release-readiness checks are clean.
+- The official snapshot.5 run published all 18 packages successfully, then
+  failed its immediate completeness check while NPM was still propagating the
+  new version and tag. Focused TDD now proves bounded retries for only those
+  expected propagation states and immediate failure for ambiguous responses.
+- Reliability and maintainability review requested command-path retry coverage;
+  the accepted correction proves that `verify-registry` retries while
+  `preflight` does not. Security review found that attempt count did not bound
+  slow per-package reads; the accepted correction shares one five-minute
+  deadline across retries and all package reads. A focused test proves an
+  active request is aborted at expiry and no later read begins; security
+  re-review is clean.
+- The first `verify:release` attempt stopped at ESLint because the new default
+  timer used an unqualified global; `globalThis.setTimeout` corrected it and
+  focused lint plus 35 release tests passed. The rerun reached all 4,547 tests:
+  4,545 passed and two stale copyright fixtures still expected `origin/main`.
+  Those fixtures now use authoritative `origin/master` and prove fail-closed
+  behavior when it is unavailable; their focused 31-test suite passes. The
+  final `verify:release` rerun passes all 287 test files and 4,547 tests with
+  93.28% statement and 94.44% line coverage. Release readiness confirms 84
+  package imports, 54 package assets, and 361 relative Markdown links.

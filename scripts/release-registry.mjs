@@ -9,7 +9,7 @@
  *
  * @param {{ tag: string, version: string, packages: readonly { name: string }[] }} release expected release
  * @param {ReadonlyMap<string, RegistryRecord>} records registry responses
- * @param {{ complete?: boolean }} options post-publication check options
+ * @param {{ complete?: boolean, timeoutMs?: number, deadlineAt?: number, now?: () => number }} options check options
  */
 export function assertRegistryReleaseState(release, records, { complete = false } = {}) {
   let published = 0;
@@ -50,17 +50,24 @@ export function assertRegistryReleaseState(release, records, { complete = false 
 export async function selectUnpublishedPackageNames(
   release,
   fetchResponse,
-  { complete = false, timeoutMs = 10_000 } = {},
+  { complete = false, timeoutMs = 10_000, deadlineAt, now = Date.now } = {},
 ) {
   const records = new Map();
   for (const { name } of release.packages) {
+    const remainingMs = deadlineAt === undefined ? timeoutMs : deadlineAt - now();
+    if (remainingMs <= 0) throw new Error("NPM registry verification deadline was exceeded");
+    const requestTimeoutMs = Math.min(timeoutMs, remainingMs);
+    const timeoutMessage =
+      deadlineAt !== undefined && remainingMs <= timeoutMs
+        ? "NPM registry verification deadline was exceeded"
+        : "registry read timed out for " + name;
     const controller = new globalThis.AbortController();
     let timeout;
     const timed = new Promise((_, reject) => {
       timeout = globalThis.setTimeout(() => {
         controller.abort();
-        reject(new Error("registry read timed out for " + name));
-      }, timeoutMs);
+        reject(new Error(timeoutMessage));
+      }, requestTimeoutMs);
     });
     try {
       const response = await Promise.race([

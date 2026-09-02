@@ -43,9 +43,23 @@ GREEN afterward. Live build-protocol language and all 17 links are corrected.
   `/main` link remains.
 - TypeScript/API documentation: N/A; no public TypeScript declaration or API
   contract changes.
-- Security: N/A; no credential, permission, authentication, publication
-  authority, or runtime trust boundary changes. The policy removes an obsolete
-  push destination and narrows agent authority.
+- Security: applicable to the bounded post-publication registry retry. Final
+  review found that attempt count alone did not bound time spent within slow
+  registry reads. The accepted correction shares one five-minute deadline
+  across retries and package reads, aborts an active request at expiry, and
+  prevents later requests. Targeted re-review is clean.
+
+## Activation follow-up
+
+The first official `master` publication uploaded all 18 snapshot.5 packages,
+but its immediate final registry check observed incomplete NPM propagation and
+made the workflow red. The correction adds a bounded retry only to the
+post-publication completeness check. The pre-publication collision check
+remains one-shot and fail-closed. Reliability review requested command-path
+coverage and maintainability review requested the same coverage plus a JSDoc
+correction; both are applied. Security review found that an attempt count alone
+did not bound time spent inside registry reads. A shared five-minute deadline
+now bounds retries and per-package reads. Security re-review is clean.
 
 ## Verification
 
@@ -54,3 +68,17 @@ generation, TypeScript build, copyright, formatting, and diff checks pass. The
 final post-format `pnpm verify:task --no-tests` passes all applicable build,
 tooling, documentation, generated-cleanliness, and release-readiness gates: 84
 package imports, 54 package assets, and 359 relative Markdown links.
+
+The activation-follow-up tests are RED without the retry and GREEN with it: 35
+tests cover release CLI routing, bounded propagation, fail-closed ambiguous
+responses, active-request abort at the end-to-end deadline, registry policy,
+and workflow structure.
+
+The first full release gate found no product failures: 4,545 tests passed and
+two copyright-checker tests failed because their fixtures still modeled the
+retired `origin/main` fallback. The deterministic correction makes the fixtures
+use authoritative `origin/master` and prove failure when it is unavailable;
+the focused copyright and task-verifier suite passes 31 tests. This test-only
+correction does not reopen a specialist review lane. The final
+`pnpm verify:release` rerun passes all 287 test files and 4,547 tests with
+93.28% statement and 94.44% line coverage.

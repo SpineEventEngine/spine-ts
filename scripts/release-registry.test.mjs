@@ -92,6 +92,41 @@ describe("release registry preflight", () => {
     ).rejects.toThrow("timed out");
   });
 
+  it("does not start another package read after the total verification deadline", async () => {
+    let currentTime = 0;
+    const calls = [];
+    await expect(
+      verifyRegistryReleaseState(
+        release,
+        async (url) => {
+          calls.push(url);
+          currentTime = 101;
+          return { status: 404, ok: false };
+        },
+        { deadlineAt: 100, now: () => currentTime },
+      ),
+    ).rejects.toThrow("deadline");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("aborts an active package read when the total verification deadline expires", async () => {
+    const calls = [];
+    let signal;
+    await expect(
+      verifyRegistryReleaseState(
+        release,
+        async (url, options) => {
+          calls.push(url);
+          signal = options.signal;
+          return new Promise(() => {});
+        },
+        { deadlineAt: Date.now() + 5, timeoutMs: 1_000 },
+      ),
+    ).rejects.toThrow("deadline");
+    expect(calls).toHaveLength(1);
+    expect(signal.aborted).toBe(true);
+  });
+
   it("uses default GET registry reads with no body and handles registry responses", async () => {
     const calls = [];
     const responses = [
