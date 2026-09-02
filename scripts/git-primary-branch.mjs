@@ -16,13 +16,10 @@
  * Finds the merge base against the repository's primary remote branch.
  *
  * @param runGit Runs a Git command and returns its status and standard output.
- * @returns The merge-base commit, or `undefined` when neither primary branch is usable.
+ * @returns The merge-base commit, or `undefined` when official `master` is unusable.
  */
 export function findPrimaryMergeBase(runGit) {
-  for (const branch of ["origin/main", "origin/master"]) {
-    const result = runGit(["merge-base", branch, "HEAD"]);
-    const base = result.stdout.trim();
-    if (result.status === 0 && base !== "") return base;
-  }
-  return undefined;
+  const result = runGit(["merge-base", "origin/master", "HEAD"]);
+  const base = result.stdout.trim();
+  return result.status === 0 && base !== "" ? base : undefined;
 }

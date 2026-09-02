@@ -76,7 +76,7 @@ native server; `BrowserServer.run(...)` owns a standalone or combined browser
 host. Supply exact allowed origins, a session or intentional public admission,
 authorization and trusted-context resolvers, finite limits, and backend
 forwarding. Authenticated durable bindings are browser-host infrastructure,
-not native `Server` state. See the [browser/auth extension guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+not native `Server` state. See the [browser/auth extension guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 before exposing a backend to a browser.
 
 ## Limits
@@ -89,5 +89,5 @@ cluster-complete notification delivery.
 ## Next steps
 
 - [Detailed coding-agent reference](REFERENCE.md)
-- [Authentication gateway](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/auth/README.md)
-- [Message Board application](https://github.com/SpineEventEngine/spine-ts/blob/main/examples/message-board/app/README.md)
+- [Authentication gateway](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/auth/README.md)
+- [Message Board application](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/message-board/app/README.md)

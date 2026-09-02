@@ -9,10 +9,9 @@ in Codex on macOS with sub-agents and worktrees available.
 
 On `2026-07-01`, human review rejected the current implementation direction as
 over-engineered and required an aggressive cleanup before new feature work. The
-previous `T-0012` command-execution branch line is abandoned. Corrective work
-starts from the repository trunk; this repository has no local `master` ref, so
-`main` is the effective trunk unless a real `master` branch is later created by
-the human.
+previous `T-0012` command-execution branch line is abandoned. At that time,
+corrective work used the personal repository's `main` branch. D-0118 supersedes
+that historical routing: current work starts from official `origin/master`.
 
 The cleanup and replanning work is autonomous and follows this protocol. The
 human does not intend to review intermediate tasks unless they explicitly
@@ -339,27 +338,32 @@ avoid a gate.
 
 - The primary checkout is coordination-only. Keep implementation, exploratory
   scratch, and task records in task worktrees rather than the primary
-  checkout. At session startup and after every task integration, inspect the
-  primary checkout's branch and status and compare local `main` with
-  `origin/main`. After pushing `main`, synchronize the primary checkout when
-  it is safe. If unexpected dirtiness prevents that synchronization, do not
-  silently route around it: immediately create and push a rescue snapshot,
-  open a recovery task, and never stage protected files supplied by a human.
-- Use one feature branch per sub-agent coding session.
+  checkout. At session startup, inspect its branch and status, fetch `origin`,
+  and resolve the task baseline from `origin/master`. Preserve unexpected or
+  human-owned dirtiness without staging it; do not manufacture or push a rescue
+  branch unless the human explicitly requests one.
+- Use one feature branch per task. Create additional worktrees only for
+  genuinely independent writing streams whose integration remains on that task
+  branch.
 - Use worktrees to avoid sub-agents stepping on each other.
 - Do not assign the same files to concurrent writers unless the orchestrator explicitly serializes the edits.
 - Keep branch names traceable to task IDs.
-- Do not merge a branch until review rounds are complete and logs are updated.
-- After post-merge verification, remove the task worktree when Git reports the
-  branch is merged and the worktree is clean. Do not force-remove a worktree
-  with modified or untracked files unless the human explicitly approves that
-  cleanup.
+- Never use the `codex/` branch prefix.
+- Do not commit, merge, or push directly to `master` unless the human explicitly
+  instructs that exact action. Do not create or merge a pull request unless the
+  human explicitly asks.
+- After the human merges a reviewed branch, fetch `origin/master` and verify the
+  exact merged commit. Remove the task worktree only when Git reports the branch
+  is merged and the worktree is clean. Do not force-remove a worktree with
+  modified or untracked files unless the human explicitly approves that cleanup.
 
 ## Remote Synchronization
 
-The canonical remote is `origin`, currently
-`https://github.com/armiol/spine-ts.git` (a user-level Git URL rewrite may show
-the equivalent SSH transport).
+The sole canonical remote is `origin` at
+`https://github.com/SpineEventEngine/spine-ts.git` (a user-level Git URL rewrite
+may show the equivalent SSH transport). `origin/HEAD` and every new task
+baseline resolve to `origin/master`. The personal `armiol/spine-ts` repository
+is retired and must not be configured, fetched, or pushed.
 
 Feature branches are durable working state, not merge-time artifacts. Push a
 feature branch to `origin` immediately after every commit, including focused-
@@ -368,31 +372,23 @@ completion or merge. Never rewrite or force-push already published task history
 unless the human explicitly requests it. A push failure is reported and
 diagnosed immediately, while local work remains preserved.
 
-After each task is complete, reviewed, merged into `main`, and post-merge
-verified:
+After implementation and review converge:
 
-1. push the completed task branch and updated `main` to `origin` so the
-   integration is durable before cleanup;
-2. fetch or inspect every remote branch and tag, and prove that each completed
-   task ref is contained in `origin/main`;
-3. reconcile any remote branch that is not contained in `origin/main` before
-   deleting it: classify every unique path, preserve all confirmed work in
-   `main`, retain newer `main` behavior where it supersedes the branch, and
-   record the disposition;
-4. delete the completed remote task branch and every remote tag; tags are not
-   release artifacts retained by this repository;
-5. at task and Wave closure, prove with a fresh remote-ref query that `origin`
-   exposes exactly one branch, `main`, and no tags; and
-6. record remote state in the existing closure update when one is already
-   required. Otherwise the verified remote refs and Git history are the
-   durable evidence; do not create a commit solely to make a log name the
-   commit or push that immediately preceded it.
+1. push the completed feature branch to `origin` and verify its exact remote
+   SHA;
+2. provide the human with a concise pull-request title and description when
+   requested, but do not create or merge the pull request without explicit
+   instruction;
+3. after the human reports the merge, fetch official `origin/master`, identify
+   the exact merged commit, and run the required post-merge verification when
+   requested or required by the task;
+4. leave organization branch and tag retention to repository policy unless the
+   human explicitly authorizes a specific deletion; and
+5. record the official feature-branch and merged `master` SHAs in existing task
+   evidence without creating a self-referential record-only commit.
 
-A task or Wave is not complete while `origin` contains any branch other than
-`main` or any tag. A leftover unmerged branch is unresolved work, not disposable
-remote clutter: inspect and reconcile it without loss, then delete it. Only
-after the one-branch/no-tag audit passes may remote synchronization and closure
-be marked complete.
+Other remote branches and tags are shared repository state, not task failures.
+Never reconcile, rewrite, or delete them merely to make the remote look clean.
 
 A push failure is handled like other tooling failures: diagnose credentials,
 network, remote policy, or non-fast-forward state without rewriting or losing
@@ -634,7 +630,8 @@ A task cannot be marked complete until:
 - implementation goal is achieved;
 - applicable tests pass;
 - coverage remains at or above 90% for runtime or test changes; recent verified
-  `main` evidence is sufficient for documentation-only and record-only tasks;
+  `origin/master` evidence is sufficient for documentation-only and record-only
+  tasks;
 - affected docs are updated;
 - TypeDoc/API docs are updated for public API changes;
 - framework or example `USER_GUIDE.md` is updated when user workflow changes;
@@ -642,8 +639,9 @@ A task cannot be marked complete until:
 - all participating sub-agents are closed.
 
 Use focused tests and task-relevant checks during inner fix loops. Do not run a
-baseline full gate when recent verified `main` evidence exists, unless the task
-changes shared build/test infrastructure or must reproduce a baseline failure.
+baseline full gate when recent verified `origin/master` evidence exists, unless
+the task changes shared build/test infrastructure or must reproduce a baseline
+failure.
 
 The mandatory cheap preflight in Development Efficiency must be clean before
 either verification profile runs. Deterministic corrections after a failed
@@ -658,8 +656,8 @@ snippet/API-prohibition, formatting, generated-cleanliness where applicable,
 and `git diff --check` gates. Standard bounded-package and example tasks use
 `verify:task` unless their recorded impact requires the release profile.
 
-After merge, rerun the full gate only when `main` moved after the task's last
-synchronization, conflict resolution changed the verified tree, shared
+After merge, rerun the full gate only when `origin/master` moved after the
+task's last synchronization, conflict resolution changed the verified tree, shared
 build/dependency/generated infrastructure changed, or high-risk integration
 behavior warrants it. When the verified task tree is byte-identical to the
 merged tree, prove tree/ref equality and run focused checks; do not duplicate a

@@ -3,7 +3,7 @@
 NPM trusted publishing uses a short-lived GitHub Actions OIDC identity instead of
 an npm token. Never add a token fallback.
 
-1. Push a feature branch and open a pull request to `master`.
+1. Push a feature branch; a human maintainer opens a pull request to `master`.
 2. `build.yml` is read-only: it verifies and proves the packed artifacts.
 3. A human merges the pull request.
 4. `publish.yml` runs for the `master` push through OIDC with pinned Lerna
@@ -18,8 +18,9 @@ channel source passed explicitly to Lerna.
 
 Exact `x.y.z-snapshot.N` uses `snapshot`; exact `x.y.z` uses `latest`; every
 other prerelease fails before mutation. The historical first published snapshot
-is `2.0.0-snapshot.2`; `2.0.0-snapshot.4` remains unpublished until an
-authorized official merge occurs.
+is `2.0.0-snapshot.2`. Never reuse a version that was published or used by an
+interrupted publication attempt; every later `master` merge carries the next
+unused common version.
 
 In npm's UI, configure one trusted publisher for each package. Use organization
 `SpineEventEngine`, repository `spine-ts`, filename `publish.yml` only,

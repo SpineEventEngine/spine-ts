@@ -76,5 +76,5 @@ Discovery is not a domain repository, a Stand subscription registry, or a
 routing cap; an expected node count is only an operational expectation. The
 registry does not provide a public deployment API or select storage settings
 for you. Read the [reference](REFERENCE.md) for expiry, cleanup, TLS-origin,
-and reconciliation rules, then choose [Datastore](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-datastore/README.md)
-or [MySQL](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-rdbms/README.md) when durable leases are required.
+and reconciliation rules, then choose [Datastore](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-datastore/README.md)
+or [MySQL](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-rdbms/README.md) when durable leases are required.

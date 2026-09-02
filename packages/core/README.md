@@ -35,7 +35,7 @@ A generated interface export has one name in two TypeScript namespaces: use it
 as a type for message shape and as a value token in a repository `.route(...)`
 call. The To-Do `TaskEvent` token groups task events; its authored
 `TaskAssignmentEvent` counterpart groups assignment events. Start with the
-[To-Do walkthrough](https://github.com/SpineEventEngine/spine-ts/blob/main/examples/todo/USER_GUIDE.md) for the complete path.
+[To-Do walkthrough](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/todo/USER_GUIDE.md) for the complete path.
 
 For the detailed contract and integration notes, see
 [REFERENCE documentation for agents](REFERENCE.md).
@@ -169,7 +169,7 @@ by hand.
 
 ## 🔗 Learn more
 
-- [Protobuf package](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/proto/README.md)
-- [Model-generation tools](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/proto-tools/README.md)
-- [Server](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/server/README.md)
+- [Protobuf package](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/proto/README.md)
+- [Model-generation tools](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/proto-tools/README.md)
+- [Server](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/README.md)
 - [Reference for coding agents](REFERENCE.md)

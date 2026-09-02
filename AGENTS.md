@@ -119,14 +119,33 @@ Keep narrow TSDoc and behavior claims current in each runtime slice. Defer broad
 documentation and all-example execution until the affected runtime interfaces
 stabilize, unless a concrete changed interface requires earlier expansion.
 
-Push every feature-branch commit to `origin` immediately, including checkpoint
-and review-correction commits. After each task is complete, reviewed, merged,
-and post-merge verified, push updated `main`, inspect every remote branch and
-tag, reconcile any unmerged work into `main`, then delete completed task
-branches and every tag. Closure requires `origin` to expose exactly one branch,
-`main`, and no tags. Never rewrite a published task branch without explicit
-human direction. A task is not durably closed until the required pushes and
-remote cleanup succeed or a real remote/authentication blocker is recorded.
+## Official Repository Workflow
+
+The only development remote is `origin`, and it must resolve to
+`SpineEventEngine/spine-ts`. Never fetch from or push to `armiol/spine-ts`.
+Treat official `master` as protected, coordination-only history:
+
+- start every task from a freshly fetched `origin/master` in a separate feature
+  branch and worktree;
+- never create a branch whose name begins with `codex/`;
+- push every feature-branch commit to `origin` immediately, including
+  checkpoint and review-correction commits;
+- never commit, merge, or push directly to `master` unless the human explicitly
+  instructs that exact action;
+- never create or merge a pull request unless the human explicitly asks;
+- never rewrite a published feature branch or delete an organization branch or
+  tag without explicit human direction.
+
+Every merge to official `master` starts NPM publication. A proposed task must
+therefore carry one unused common workspace version. A version-only commit may
+update all workspace manifests together, changes nothing except their top-level
+`version`, and uses `Bump version -> <version>`. Internal pins and the lockfile
+belong in a separate commit. After a human merges the pull request, fetch and
+verify the resulting `origin/master`; do not integrate or push it yourself.
+
+A task is durably ready for human review when its required feature-branch pushes
+succeed and its verification and review evidence are current. Remote cleanup is
+not a task-completion invariant in the shared organization repository.
 
 Do not pause for routine implementation choices. Stop only for the blockers
 listed in `build-protocol/BUILD_PROTOCOL.md` and the completion plan.

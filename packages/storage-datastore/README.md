@@ -149,7 +149,7 @@ mapping is used for writes, key lookups, filters, ordering continuations, and
 reads. Primitive values use their native Datastore representation. There is no
 `_scope`, copied ID, storage revision, fingerprint, marker, or compatibility
 entity. The runnable configuration is in the
-[Message Board deployment](https://github.com/SpineEventEngine/spine-ts/blob/main/examples/message-board/app/src/deployment-config.ts).
+[Message Board deployment](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/message-board/app/src/deployment-config.ts).
 
 When a user queries `board == BoardId("board-7")`, Spine converts that generated
 `BoardId` with the same stringifier and sends a Datastore property filter for
@@ -257,6 +257,6 @@ kind, and key. The runtime never chooses a winner.
 
 ## 🔗 Learn more
 
-- [Storage API](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage/README.md)
-- [Datastore guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/USER_GUIDE.md#6-persist-application-data)
+- [Storage API](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage/README.md)
+- [Datastore guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/USER_GUIDE.md#6-persist-application-data)
 - [Reference for coding agents](REFERENCE.md)

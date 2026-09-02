@@ -7,7 +7,7 @@ in `@spine-event-engine/client-react`.
 For protocol, browser-session, reconnect, and security limits, read the
 [reference](REFERENCE.md).
 
-The [browser client and gateway guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+The [browser client and gateway guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explains application sign-in and gateway composition.
 
 ## Install and prepare an application
@@ -21,7 +21,7 @@ pnpm add @bufbuild/protobuf@2.12.1 @spine-event-engine/core@snapshot @spine-even
 ```
 
 Generate your application's model from its authored Proto sources with the
-[Proto tools guide](https://github.com/SpineEventEngine/spine-ts/tree/main/packages/proto-tools#readme), then import its published
+[Proto tools guide](https://github.com/SpineEventEngine/spine-ts/tree/master/packages/proto-tools#readme), then import its published
 schemas from your own model package. The Message Board schema used below is a
 repository example of that application-owned output, not a package to install.
 
@@ -136,7 +136,7 @@ may be duplicated, reordered, or missed while disconnected.
 
 ## 🔗 Learn more
 
-- [React adapter](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/client-react/README.md)
-- [Authentication package](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/auth/README.md)
-- [Browser authentication and extension guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+- [React adapter](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/client-react/README.md)
+- [Authentication package](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/auth/README.md)
+- [Browser authentication and extension guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 - [Detailed coding-agent reference](REFERENCE.md)

@@ -125,8 +125,8 @@ The storage API clones data at its boundaries. For the base factory and the
 in-memory implementation, closing a factory prevents new record handles while
 existing handles remain usable. Closing a record handle invalidates that
 handle's later operations. Other adapters can close live handles; see their
-[Datastore reference](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-datastore/REFERENCE.md) and
-[MySQL reference](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-rdbms/REFERENCE.md) before choosing shutdown
+[Datastore reference](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-datastore/REFERENCE.md) and
+[MySQL reference](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-rdbms/REFERENCE.md) before choosing shutdown
 behavior.
 
 ## 🧩 Keep compatible record families separate
@@ -169,11 +169,11 @@ storage. `@spine-event-engine/storage-rdbms` provides MySQL storage. Configure
 those packages in application code and pass the resulting factory to the Spine
 server; this package does not choose a database.
 
-| Need                        | Adapter                                                                                                                                |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Local development and tests | `InMemoryStorageFactory` in this package                                                                                               |
-| Google Cloud Datastore      | [`@spine-event-engine/storage-datastore`](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-datastore/README.md) |
-| MySQL                       | [`@spine-event-engine/storage-rdbms`](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-rdbms/README.md)         |
+| Need                        | Adapter                                                                                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Local development and tests | `InMemoryStorageFactory` in this package                                                                                                 |
+| Google Cloud Datastore      | [`@spine-event-engine/storage-datastore`](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-datastore/README.md) |
+| MySQL                       | [`@spine-event-engine/storage-rdbms`](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-rdbms/README.md)         |
 
 ## ⚠️ Lifecycle differences
 
@@ -184,7 +184,7 @@ shutdown and queries.
 
 ## 🔗 Learn more
 
-- [Datastore adapter](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-datastore/README.md)
-- [MySQL adapter](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-rdbms/README.md)
-- [Server](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/server/README.md)
+- [Datastore adapter](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-datastore/README.md)
+- [MySQL adapter](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-rdbms/README.md)
+- [Server](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/README.md)
 - [Reference for coding agents](REFERENCE.md)

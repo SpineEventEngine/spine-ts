@@ -5697,3 +5697,27 @@ integrity-aware resume, per-dependency visibility waits, and per-package tag-rac
 checks are deliberately lost. The old publisher remains tracked but unreachable
 until one successful live Lerna release, then a separate versioned cleanup owns
 its deletion. This decision supersedes only D-0115's custom-engine details.
+
+## D-0118: Develop Only Through Official Feature Branches
+
+Status: Accepted
+
+Date: 2026-09-02
+
+Context: The project previously used `armiol/spine-ts` and integrated completed
+work directly into its `main` branch. The framework now lives in the protected
+`SpineEventEngine/spine-ts` repository, where every `master` merge runs the NPM
+publication workflow.
+
+Decision: Retire the personal fork completely. Configure only `origin` pointing
+to `SpineEventEngine/spine-ts`, start each task from fresh `origin/master`, and
+publish task commits only on a clearly named non-`codex/` feature branch. The
+human owns pull-request creation and merging. Agents do not commit, merge, or
+push directly to `master`, create or merge pull requests, or delete organization
+branches or tags without explicit human instruction.
+
+Consequences: Historical `origin/main` records remain evidence rather than live
+instructions. Task closure proves the feature branch is pushed and ready for
+human review; it no longer requires a one-branch/no-tag remote. Every proposed
+merge carries the next unused common package version because `master` merges
+are release events under D-0115.
