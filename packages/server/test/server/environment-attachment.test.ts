@@ -21,6 +21,7 @@ import {
   CommandIdSchema,
   CommandSchema,
   EventContextSchema,
+  EventIdSchema,
   EventSchema,
   type TenantId,
   UserIdSchema,
@@ -784,6 +785,64 @@ describe("EnvironmentDeliveryWorker", () => {
     worker.notify(foreignScope);
     await until(() => matching.replayed.includes("command-match"));
     expect(foreign.replayed).not.toContain("command-match");
+    expect(matching.replayTenants).toEqual(["match"]);
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
+  it("routes a shared remote REACT_UPON_EVENT row to its matching multitenant runtime", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const foreign = descriptor("ReactionForeign", "type.example.dev/Reaction", storageFactory);
+    const matching = descriptor("ReactionMatching", "type.example.dev/Reaction", storageFactory);
+    const foreignReady = Object.freeze({
+      ...foreign.ready,
+      label: "REACT_UPON_EVENT" as const,
+      tenantId: tenant("foreign"),
+    });
+    const matchingReady = Object.freeze({
+      ...matching.ready,
+      label: "REACT_UPON_EVENT" as const,
+      tenantId: tenant("match"),
+    });
+    const foreignScope = runScope("reaction-foreign", foreignReady);
+    const matchingScope = runScope("reaction-matching", matchingReady);
+    const delivery = new Delivery({ context: foreign.context, storageFactory });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: typeof delivery.shards;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: delivery.shards,
+        source: inertDeliverySource(),
+      },
+    });
+    worker.add({
+      owner: foreignScope.owner,
+      descriptor: foreign.value,
+      storageFactory,
+      tenant: { tenantId: foreignReady.tenantId },
+      context: foreign.context,
+      scopes: [foreignScope],
+    });
+    worker.add({
+      owner: matchingScope.owner,
+      descriptor: matching.value,
+      storageFactory,
+      tenant: { tenantId: matchingReady.tenantId },
+      context: foreign.context,
+      scopes: [matchingScope],
+    });
+    await worker.start({ scopes: [foreignScope] }, [foreignScope.ready.shard]);
+    await delivery.inbox.receive(eventMessage(matchingReady, "reaction-match"));
+    worker.notify(foreignScope);
+    await until(() => matching.replayed.includes("reaction-match"));
+    expect(foreign.replayed).not.toContain("reaction-match");
     expect(matching.replayTenants).toEqual(["match"]);
     worker.stop();
     await worker.awaitSettled();
@@ -4231,6 +4290,36 @@ function commandMessage(ready: DeliveryReady, signalId: string) {
     signal: create(AnySchema, {
       typeUrl: "type.spine.io/spine.core.Command",
       value: toBinary(CommandSchema, value),
+    }),
+  };
+}
+
+function eventMessage(ready: DeliveryReady, signalId: string) {
+  const timestamp = create(TimestampSchema, { seconds: 1n });
+  const value = create(EventSchema, {
+    id: create(EventIdSchema, { value: signalId }),
+    message: create(AnySchema, {
+      typeUrl: "type.googleapis.com/google.protobuf.StringValue",
+      value: toBinary(StringValueSchema, create(StringValueSchema, { value: "business event" })),
+    }),
+    context: create(EventContextSchema, {
+      timestamp,
+      producerId: Identifiers.pack("string", "event-producer"),
+      origin: {
+        case: "importContext",
+        value: create(ActorContextSchema, {
+          tenantId: ready.tenantId,
+          actor: create(UserIdSchema, { value: "event-actor" }),
+          timestamp,
+        }),
+      },
+    }),
+  });
+  return {
+    ...message(ready, signalId),
+    signal: create(AnySchema, {
+      typeUrl: "type.spine.io/spine.core.Event",
+      value: toBinary(EventSchema, value),
     }),
   };
 }
