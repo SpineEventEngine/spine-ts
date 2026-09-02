@@ -9,13 +9,12 @@ import {
   main,
   prepareRelease,
   stageReleaseContents,
-  verifyCompleteRegistryRelease,
 } from "./release-cli.mjs";
 import { frameworkPackageNames } from "./package-artifacts.mjs";
 
 describe("release CLI", () => {
-  it("runs the relative CLI entrypoint and rejects the removed custom publish command", () => {
-    const result = spawnSync(process.execPath, ["scripts/release-cli.mjs", "publish"], {
+  it.each(["publish", "verify-registry"])("rejects the removed %s command", (command) => {
+    const result = spawnSync(process.execPath, ["scripts/release-cli.mjs", command], {
       cwd: new URL("..", import.meta.url).pathname,
       encoding: "utf8",
       env: {
@@ -63,7 +62,6 @@ describe("release CLI", () => {
     };
     await main({ argv: ["node", "cli", "tag"], dependencies });
     await main({ argv: ["node", "cli", "preflight"], dependencies });
-    await main({ argv: ["node", "cli", "verify-registry"], dependencies });
     await main({
       argv: ["node", "cli", "prepare", "--output", "relative-release"],
       dependencies: {
@@ -74,163 +72,11 @@ describe("release CLI", () => {
     expect(calls).toContainEqual({ kind: "write", text: "snapshot\n" });
     expect(calls.filter(({ kind }) => kind === "verify")).toEqual([
       { kind: "verify", args: [release, "safe-fetch"] },
-      {
-        kind: "verify",
-        args: [
-          release,
-          "safe-fetch",
-          expect.objectContaining({
-            complete: true,
-            deadlineAt: expect.any(Number),
-            now: expect.any(Function),
-          }),
-        ],
-      },
     ]);
     expect(calls).toContainEqual({
       kind: "prepare",
       options: { check: false, output: "relative-release" },
     });
-  });
-
-  it("waits for a newly published release to become visible", async () => {
-    const release = {
-      tag: "snapshot",
-      version: "2.0.0-snapshot.6",
-      packages: [{ name: "@synthetic/base" }],
-    };
-    const verifyRegistry = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("Registry is missing required package: @synthetic/base"))
-      .mockRejectedValueOnce(
-        new Error("registry does not expose @synthetic/base at the selected tag"),
-      )
-      .mockResolvedValueOnce([]);
-    const wait = vi.fn();
-
-    await expect(
-      verifyCompleteRegistryRelease({
-        release,
-        fetchResponse: "safe-fetch",
-        verifyRegistry,
-        wait,
-        attempts: 3,
-        delayMs: 25,
-      }),
-    ).resolves.toEqual([]);
-    expect(verifyRegistry).toHaveBeenCalledTimes(3);
-    expect(verifyRegistry).toHaveBeenCalledWith(
-      release,
-      "safe-fetch",
-      expect.objectContaining({
-        complete: true,
-        deadlineAt: expect.any(Number),
-        now: expect.any(Function),
-      }),
-    );
-    expect(wait).toHaveBeenCalledTimes(2);
-    expect(wait).toHaveBeenCalledWith(25);
-  });
-
-  it("stops waiting after the bounded registry propagation window", async () => {
-    const error = new Error("Registry is missing required package: @synthetic/base");
-    const verifyRegistry = vi.fn().mockRejectedValue(error);
-    const wait = vi.fn();
-
-    await expect(
-      verifyCompleteRegistryRelease({
-        release: { tag: "snapshot", version: "1.0.0-snapshot.1", packages: [] },
-        fetchResponse: "safe-fetch",
-        verifyRegistry,
-        wait,
-        attempts: 3,
-        delayMs: 25,
-      }),
-    ).rejects.toBe(error);
-    expect(verifyRegistry).toHaveBeenCalledTimes(3);
-    expect(wait).toHaveBeenCalledTimes(2);
-  });
-
-  it("does not start another attempt after the total verification deadline", async () => {
-    let currentTime = 0;
-    const verifyRegistry = vi.fn().mockImplementation(async () => {
-      currentTime = 301_000;
-      throw new Error("Registry is missing required package: @synthetic/base");
-    });
-    const wait = vi.fn();
-
-    await expect(
-      verifyCompleteRegistryRelease({
-        release: { tag: "snapshot", version: "1.0.0-snapshot.1", packages: [] },
-        fetchResponse: "safe-fetch",
-        verifyRegistry,
-        wait,
-        now: () => currentTime,
-        totalTimeoutMs: 300_000,
-      }),
-    ).rejects.toThrow("deadline");
-    expect(verifyRegistry).toHaveBeenCalledOnce();
-    expect(wait).not.toHaveBeenCalled();
-  });
-
-  it("does not retry an ambiguous registry response", async () => {
-    const error = new Error("ambiguous registry response for @synthetic/base");
-    const verifyRegistry = vi.fn().mockRejectedValue(error);
-    const wait = vi.fn();
-
-    await expect(
-      verifyCompleteRegistryRelease({
-        release: { tag: "snapshot", version: "1.0.0-snapshot.1", packages: [] },
-        fetchResponse: "safe-fetch",
-        verifyRegistry,
-        wait,
-      }),
-    ).rejects.toBe(error);
-    expect(verifyRegistry).toHaveBeenCalledOnce();
-    expect(wait).not.toHaveBeenCalled();
-  });
-
-  it("retries only the complete command while preflight remains one-shot", async () => {
-    const release = {
-      tag: "snapshot",
-      version: "2.0.0-snapshot.6",
-      packages: [{ name: "@synthetic/base" }],
-    };
-    const propagationError = new Error("Registry is missing required package: @synthetic/base");
-    const verifyComplete = vi.fn().mockRejectedValueOnce(propagationError).mockResolvedValue([]);
-    const wait = vi.fn();
-    const write = vi.fn();
-    await expect(
-      main({
-        argv: ["node", "cli", "verify-registry"],
-        dependencies: {
-          expectedModel: () => release,
-          readManifests: () => [],
-          fetchResponse: "safe-fetch",
-          verifyRegistry: verifyComplete,
-          wait,
-          write,
-        },
-      }),
-    ).resolves.toEqual([]);
-    expect(verifyComplete).toHaveBeenCalledTimes(2);
-    expect(wait).toHaveBeenCalledWith(15_000);
-    expect(write).toHaveBeenCalledWith("NPM registry is still updating; retrying (1/20)\n");
-
-    const verifyPreflight = vi.fn().mockRejectedValue(propagationError);
-    await expect(
-      main({
-        argv: ["node", "cli", "preflight"],
-        dependencies: {
-          expectedModel: () => release,
-          readManifests: () => [],
-          fetchResponse: "safe-fetch",
-          verifyRegistry: verifyPreflight,
-          wait,
-        },
-      }),
-    ).rejects.toBe(propagationError);
-    expect(verifyPreflight).toHaveBeenCalledOnce();
   });
 
   it("creates an isolated non-Git workspace from only the strict missing selection", () => {

@@ -118,50 +118,6 @@ export function createPublicationWorkspace({
   }
 }
 
-const registryPropagationErrors = [
-  "Registry is missing required package:",
-  "registry does not expose ",
-];
-
-/**
- * Waits for an already published release to become consistent across the NPM registry.
- *
- * Only an absent version or lagging distribution tag is retried. Ambiguous responses,
- * authentication failures, and other errors remain immediate failures.
- *
- * @param {object} options verification dependencies and retry policy
- * @returns {Promise<string[]>} the verifier's successful result (normally an empty list)
- */
-export async function verifyCompleteRegistryRelease({
-  release,
-  fetchResponse,
-  verifyRegistry,
-  wait,
-  attempts = 20,
-  delayMs = 15_000,
-  totalTimeoutMs = 300_000,
-  now = Date.now,
-  announce = () => {},
-}) {
-  const deadlineAt = now() + totalTimeoutMs;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    if (now() >= deadlineAt) throw new Error("NPM registry verification deadline was exceeded");
-    try {
-      return await verifyRegistry(release, fetchResponse, { complete: true, deadlineAt, now });
-    } catch (error) {
-      const isPropagationDelay =
-        error instanceof Error &&
-        registryPropagationErrors.some((prefix) => error.message.startsWith(prefix));
-      if (!isPropagationDelay || attempt === attempts) throw error;
-      if (now() + delayMs >= deadlineAt)
-        throw new Error("NPM registry verification deadline was exceeded", { cause: error });
-      announce(`NPM registry is still updating; retrying (${attempt}/${attempts})\n`);
-      await wait(delayMs);
-    }
-  }
-  throw new Error("Registry verification exhausted its retry policy");
-}
-
 export async function main({ argv = process.argv, dependencies = {} } = {}) {
   const {
     createWorkspace = createPublicationWorkspace,
@@ -170,7 +126,6 @@ export async function main({ argv = process.argv, dependencies = {} } = {}) {
     prepare = prepareRelease,
     readManifests = readReleaseManifests,
     verifyRegistry = verifyRegistryReleaseState,
-    wait = (delayMs) => new Promise((resolveWait) => globalThis.setTimeout(resolveWait, delayMs)),
     write = (text) => process.stdout.write(text),
   } = dependencies;
   if (argv[2] === "prepare") {
@@ -234,16 +189,8 @@ export async function main({ argv = process.argv, dependencies = {} } = {}) {
     }
     return;
   }
-  if (argv[2] === "verify-registry")
-    return verifyCompleteRegistryRelease({
-      release,
-      fetchResponse,
-      verifyRegistry,
-      wait,
-      announce: write,
-    });
   throw new Error(
-    "Supported commands are prepare, tag, preflight, prepare-publication-workspace, and verify-registry",
+    "Supported commands are prepare, tag, preflight, and prepare-publication-workspace",
   );
 }
 if (

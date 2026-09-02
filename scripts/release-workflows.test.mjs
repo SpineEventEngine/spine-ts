@@ -41,7 +41,6 @@ const publishStepsAllowlist = [
     with: { name: "release", path: "${{ github.workspace }}" },
   },
   { run: isolatedLernaPublish },
-  { run: "node scripts/release-cli.mjs verify-registry" },
 ];
 const publishJobAllowlist = {
   needs: "prepare",
