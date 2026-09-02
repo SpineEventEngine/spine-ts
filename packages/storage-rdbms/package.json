@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/storage-rdbms",
-  "version": "2.0.0-snapshot.2",
+  "version": "2.0.0-snapshot.5",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
@@ -10,8 +10,7 @@
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "public",
-    "tag": "snapshot"
+    "access": "public"
   },
   "description": "MySQL-backed implementation of the Spine TS storage port.",
   "exports": {
@@ -27,7 +26,7 @@
   ],
   "scripts": {
     "inventory:legacy": "node scripts/inventory-legacy-layout.mjs",
-    "test:mysql": "node scripts/mysql.mjs&&pnpm exec vitest --root ../.. run test/mysql-integration.test.ts"
+    "test:mysql": "node scripts/mysql.mjs && SPINE_TS_INBOX_PROVIDER=mysql pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/storage-rdbms/test/mysql-integration.test.ts packages/server/test/delivery/inbox-provider-cleanup.test.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",

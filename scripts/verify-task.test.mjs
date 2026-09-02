@@ -98,11 +98,31 @@ describe("verify-task", () => {
     expect(classifyTaskChanges(paths)).toEqual({ proto: true, typeDoc: true });
   });
 
+  it("falls back to origin/master when origin/main is unavailable", () => {
+    const { runGit, calls } = gitRunner([
+      { status: 128, stdout: "" },
+      result("base\n"),
+      result("docs/changed.md\n"),
+      result(""),
+      result(""),
+      result(""),
+    ]);
+
+    expect(changedPaths(runGit)).toEqual(["docs/changed.md"]);
+    expect(calls.slice(0, 2)).toEqual([
+      ["merge-base", "origin/main", "HEAD"],
+      ["merge-base", "origin/master", "HEAD"],
+    ]);
+  });
+
   it("fails closed when Git cannot classify paths or finds none", () => {
     const empty = gitRunner([result("base\n"), result(""), result(""), result(""), result("")]);
     expect(classifyTaskChanges(changedPaths(empty.runGit))).toEqual({ proto: true, typeDoc: true });
 
-    const failed = gitRunner([{ status: 1, stdout: "" }]);
+    const failed = gitRunner([
+      { status: 1, stdout: "" },
+      { status: 1, stdout: "" },
+    ]);
     expect(classifyTaskChanges(changedPaths(failed.runGit))).toEqual({
       proto: true,
       typeDoc: true,

@@ -93,7 +93,7 @@ import {
 } from "@spine-event-engine/proto/client";
 import type { Ack } from "@spine-event-engine/proto";
 import type { Response } from "@spine-event-engine/proto";
-import * as EntityLog from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
+import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import {
   EventStore,
   InMemoryStorageFactory,

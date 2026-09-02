@@ -74,6 +74,8 @@ const allowedFlatPackageSourceFiles = new Set([
   "packages/proto/src/index.ts",
   "packages/server/src/index.ts",
   "packages/storage/src/index.ts",
+  // Published `@spine-event-engine/storage/provider` SPI entrypoint.
+  "packages/storage/src/provider.ts",
   "packages/testing/src/index.ts",
   "packages/transport/src/index.ts",
 ]);

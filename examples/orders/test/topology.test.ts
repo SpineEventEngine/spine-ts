@@ -26,7 +26,7 @@ import { TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { SignalMetadata } from "@spine-event-engine/server";
-import { Datastore } from "@google-cloud/datastore";
+import type { Datastore } from "@google-cloud/datastore";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -139,9 +139,7 @@ describe("datastore orders test app", () => {
 
   it("builds a Datastore-backed server from the caller-owned client", async () => {
     const { startOrdersDatastoreServer } = await import("../dist/src/index.js");
-    const server = await startOrdersDatastoreServer(
-      new Datastore({ projectId: "orders-coverage" }),
-    );
+    const server = await startOrdersDatastoreServer(disconnectedDatastore());
     await server.close();
   });
 
@@ -227,6 +225,27 @@ function manager(type: { readonly prototype: object }, id: string) {
     },
   });
   return instance;
+}
+
+function disconnectedDatastore(): Datastore {
+  const query = {
+    filter() {
+      return this;
+    },
+    limit() {
+      return this;
+    },
+    order() {
+      return this;
+    },
+    select() {
+      return this;
+    },
+  };
+  return {
+    createQuery: () => query,
+    runQuery: () => Promise.resolve([[]]),
+  } as unknown as Datastore;
 }
 
 function createOrderCreated(id: string, skuId: string) {

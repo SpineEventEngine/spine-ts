@@ -17,7 +17,7 @@
  * It owns browser requests and subscriptions, but no Bounded Context or Delivery worker.
  */
 
-import { Server } from "@spine-event-engine/server";
+import { BrowserServer } from "@spine-event-engine/server/browser";
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
 import { Datastore } from "@google-cloud/datastore";
 
@@ -32,23 +32,28 @@ const logger = MessageBoardDeployment.logger(config.projectId, process.env);
 const storage = MessageBoardDeployment.storage(client);
 MessageBoardDeployment.configureGatewayServer(config, storage, logger);
 const policy = new BoardAccessPolicy();
-const server = await Server.atPort(config.port, {
-  host: config.host,
-  browser: {
-    ...(config.discovery === undefined
-      ? { backend: { baseUrls: config.backendUrls ?? [] } }
-      : {
-          discovery: new GkeNodeDiscovery({
-            ...config.discovery,
-            ...(logger === undefined ? {} : { logger }),
-          }),
+const { discovery, backendUrls } = config;
+const topology =
+  discovery === undefined
+    ? backendUrls === undefined
+      ? undefined
+      : { backend: { baseUrls: backendUrls } }
+    : {
+        discovery: new GkeNodeDiscovery({
+          ...discovery,
+          ...(logger === undefined ? {} : { logger }),
         }),
-    origins: [config.webOrigin],
-    registry: typeRegistry,
-    publicAccess: true,
-    authorize: policy.authorize.bind(policy),
-    contexts: new BoardContextResolver(),
-    clock: new SystemClock(),
-  },
-}).run();
+      };
+if (topology === undefined) throw new Error("Gateway requires a fixed backend URL or discovery.");
+const server = await BrowserServer.run({
+  host: config.host,
+  port: config.port,
+  ...topology,
+  origins: [config.webOrigin],
+  registry: typeRegistry,
+  publicAccess: true,
+  authorize: policy.authorize.bind(policy),
+  contexts: new BoardContextResolver(),
+  clock: new SystemClock(),
+});
 console.log(`MessageBoard gateway ready at ${server.baseUrl}`);

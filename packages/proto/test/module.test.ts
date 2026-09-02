@@ -105,9 +105,7 @@ describe("spineProtoModule", () => {
       moduleExport: "spineProtoModule",
     });
     expect(manifest.protoFiles).toHaveLength(50);
-    expect(manifest.generationId).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu,
-    );
+    expect(manifest.generationId).toMatch(/^[0-9a-f]{64}$/u);
     expect(
       JSON.parse(
         readFileSync(new URL("../generated/.spine-proto-generation.json", import.meta.url), "utf8"),

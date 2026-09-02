@@ -54,6 +54,15 @@ import { BoundedContext, Server } from "@spine-event-engine/server";
 import { EventStore, InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
 
+const browserHost = vi.hoisted(() => ({ open: vi.fn(), run: vi.fn() }));
+
+vi.mock("@spine-event-engine/server/browser", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@spine-event-engine/server/browser")>();
+  browserHost.open.mockImplementation(actual.BrowserServer.open);
+  browserHost.run.mockImplementation(actual.BrowserServer.run);
+  return { ...actual, BrowserServer: { open: browserHost.open, run: browserHost.run } };
+});
+
 import { MessageBoardApplication, BoardMessageAggregate, typeRegistry } from "../dist/src/index.js";
 
 describe("MessageBoard Projection backend", () => {
@@ -89,7 +98,11 @@ describe("MessageBoard Projection backend", () => {
   });
 
   it("assembles every supported application server mode", async () => {
-    const start = vi.fn().mockResolvedValue({ baseUrl: "http://started" });
+    const start = vi.fn().mockResolvedValue({
+      host: "127.0.0.1",
+      baseUrl: "http://started",
+      close: () => Promise.resolve(),
+    });
     const run = vi.fn().mockResolvedValue({ baseUrl: "http://running" });
     const add = vi.fn(function (this: unknown) {
       return this;
@@ -97,6 +110,13 @@ describe("MessageBoard Projection backend", () => {
     const atPort = vi.spyOn(Server, "atPort").mockReturnValue({ add, run, start } as never);
     const storage = new InMemoryStorageFactory();
     try {
+      browserHost.open.mockResolvedValueOnce({ baseUrl: "http://started" });
+      browserHost.run.mockImplementationOnce(
+        async (native: { run(): Promise<unknown> }) => await native.run(),
+      );
+      browserHost.run.mockImplementationOnce(
+        async (native: { run(): Promise<unknown> }) => await native.run(),
+      );
       await expect(application.start({ host: "127.0.0.2", port: 1 })).resolves.toEqual({
         baseUrl: "http://started",
       });

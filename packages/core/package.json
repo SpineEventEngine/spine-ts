@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/core",
-  "version": "2.0.0-snapshot.2",
+  "version": "2.0.0-snapshot.5",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
@@ -10,8 +10,7 @@
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "public",
-    "tag": "snapshot"
+    "access": "public"
   },
   "description": "Spine TS core runtime metadata and registry package.",
   "exports": {
@@ -19,9 +18,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./internal/subscription-lifecycle": {
-      "types": "./dist/internal/subscription-lifecycle.d.ts",
-      "default": "./dist/internal/subscription-lifecycle.js"
+    "./spi/subscription-lifecycle": {
+      "types": "./dist/spi/subscription-lifecycle.d.ts",
+      "default": "./dist/spi/subscription-lifecycle.js"
     }
   },
   "files": [
@@ -32,6 +31,6 @@
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
     "@spine-event-engine/validation": "2.0.0-snapshot.7",
-    "@spine-event-engine/proto": "2.0.0-snapshot.2"
+    "@spine-event-engine/proto": "2.0.0-snapshot.5"
   }
 }

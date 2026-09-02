@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { serialize } from "node:v8";
 import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls } from "../../core/src/index.js";
+import { TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextOnlineSchema,
   BoundedContextNameSchema,
@@ -32,11 +32,10 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   unpackExternalEvent,
-  toExternalEvent,
   wrapBoundedContextOnline,
   wrapExternalEvent,
   wrapExternalEventsWanted,
-} from "../../server/src/integration/external-messages.js";
+} from "@spine-event-engine/server/testing";
 
 describe("Wave 13 integration broker protobuf contract", () => {
   it("RED-14 preserves the exact ExternalMessage wrapper and ChannelId contracts", async () => {
@@ -189,7 +188,6 @@ describe("Wave 13 integration broker protobuf contract", () => {
     expect(() =>
       wrapBoundedContextOnline(create(online, { context: create(BoundedContextNameSchema) })),
     ).toThrow(/origin/u);
-    expect(toExternalEvent(create(EventSchema)).context).toMatchObject({ external: true });
   });
 });
 

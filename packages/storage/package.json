@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/storage",
-  "version": "2.0.0-snapshot.2",
+  "version": "2.0.0-snapshot.5",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
@@ -10,8 +10,7 @@
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "public",
-    "tag": "snapshot"
+    "access": "public"
   },
   "description": "Spine TS JVM-like record storage package.",
   "exports": {
@@ -19,29 +18,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./internal/entity-history": {
-      "types": "./dist/internal/entity-history.d.ts",
-      "default": "./dist/internal/entity-history.js"
-    },
-    "./internal/entity-commit": {
-      "types": "./dist/internal/entity-commit.d.ts",
-      "default": "./dist/internal/entity-commit.js"
-    },
-    "./internal/delivery-cleanup": {
-      "types": "./dist/internal/delivery-cleanup.d.ts",
-      "default": "./dist/internal/delivery-cleanup.js"
-    },
-    "./internal/event-store": {
-      "types": "./dist/internal/event-store.d.ts",
-      "default": "./dist/internal/event-store.js"
-    },
-    "./internal/tenancy": {
-      "types": "./dist/internal/tenancy.d.ts",
-      "default": "./dist/internal/tenancy.js"
-    },
-    "./internal/query-values": {
-      "types": "./dist/internal/query-values.d.ts",
-      "default": "./dist/internal/query-values.js"
+    "./provider": {
+      "types": "./dist/provider.d.ts",
+      "default": "./dist/provider.js"
     }
   },
   "files": [
@@ -51,6 +30,6 @@
   ],
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
-    "@spine-event-engine/proto": "2.0.0-snapshot.2"
+    "@spine-event-engine/proto": "2.0.0-snapshot.5"
   }
 }

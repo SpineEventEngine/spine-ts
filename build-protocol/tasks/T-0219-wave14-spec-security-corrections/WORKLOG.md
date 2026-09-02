@@ -1,0 +1,87 @@
+# T-0219 Work Log
+
+- `2026-08-23`: The orchestrator verified `origin/main` at
+  `ee8476f83ea76a108e2c0b9f5d5bb020cdb368f5`, preserved the dirty primary
+  checkout, created an isolated worktree, installed the frozen workspace, and
+  recorded the accepted scope before production changes.
+- `2026-08-23`: Estimated remaining effort at 4–7 uninterrupted orchestrated
+  hours for behavior-first corrections, dependency remediation, focused
+  verification, the complete relevant review wave, one correction batch, one
+  final release gate, integration, and reporting.
+- `2026-08-23`: The implementation assignment is the existing `implementer`
+  role with explicit `gpt-5.6-terra` / `medium` dispatch. Child spawning is
+  prohibited. Desktop exposes immutable dispatch configuration but may not
+  expose runtime self-telemetry.
+
+This log will record RED/GREEN evidence, commits, pushes, review dispositions,
+verification, and integration as they occur.
+
+- `2026-08-23`: Mandatory cheap preflight converged after two deterministic
+  corrections discovered only by the full shared gates: the new declaration
+  received its exact standalone-function necessity record, and provider install
+  commands plus release-readiness matching now require and recognize every
+  Spine dependency at `@snapshot`. The complete restarted
+  `verify:task --no-coverage` passed generated build/tooling, cleanup, TSDoc,
+  copyright, logging, formatting, documentation audience/API, Buf,
+  current-output generation, and release readiness, then passed 8 focused files
+  / 235 tests. The selected final profile remains one `verify:release`.
+
+- `2026-08-23`: RED — `pnpm --config.verify-deps-before-run=false exec vitest run packages/proto-tools/test/proto-tools.test.ts -t 'reuses a committed generation ID when ignored live output is absent' --passWithNoTests` failed 1/1: `reusableGenerationId()` returned `undefined` when the committed live generated root contained only its tracked marker and the staged generation contained ignored TypeScript output. The regression models a fresh checkout; unchanged manifest content must retain its committed generation ID while non-empty live trees remain content-compared.
+- `2026-08-23`: RED — `pnpm --config.verify-deps-before-run=false exec vitest run scripts/package-artifacts.test.mjs -t 'rejects stale snapshot.2 references' --passWithNoTests` failed 1/1 because packed-manifest policy accepted an internal `2.0.0-snapshot.2` dependency. The same focused regression also specifies archive-text rejection, preventing stale pre-publication references from escaping through generated or packaged text.
+- `2026-08-23`: RED — `pnpm --config.verify-deps-before-run=false exec vitest run scripts/check-production-dependencies.test.mjs --passWithNoTests` failed before collecting tests because the new production-lock policy module was absent. The test contract requires exact rejection of resolved `brace-expansion@2.1.3` and `uuid@9.0.1`, rather than trusting only declared overrides.
+- `2026-08-23`: GREEN — marker-only generation reuse now derives an SHA-256 ID from canonical manifest content and the complete staged generated tree; the focused regression passed after confirming that changing staged TypeScript changes the derived ID. Non-empty committed generated trees still require exact content equality before reusing their existing ID.
+- `2026-08-23`: GREEN — packed-artifact policy rejects both snapshot.2 manifest and archive-text references; focused package-artifact and generation-reuse tests passed.
+- `2026-08-23`: GREEN — `scripts/check-production-dependencies.mjs` rejects resolved vulnerable package/snapshot entries. The established `brace-expansion@2.1.2` override now targets `2.1.4`; Message Board's direct `@google-cloud/logging` dependency is updated from `12.0.0` to `12.0.1`, allowing its supported graph to remove `uuid@9.0.1` without a forced transitive major override. Focused policy tests, `pnpm check:production-dependencies`, and `pnpm audit --prod --audit-level=high` passed with no known production vulnerabilities.
+- `2026-08-23`: RED — `pnpm --config.verify-deps-before-run=false exec vitest run scripts/check-api-docs.test.mjs -t 'includes every published SPI subpath' --passWithNoTests` failed 1/1 because TypeDoc entry points omitted the four published SPI modules. The configuration now includes subscription lifecycle, backend membership, handler registry, and delivery; GREEN validation follows after generated build prerequisites.
+- `2026-08-23`: GREEN — after `pnpm typecheck:build:generated`, focused TypeDoc inventory tests passed 4/4, including all four SPI subpaths. The packed-artifact policy tests passed 3/3, and tarball consumer proofs passed 2/2: a native server installs without auth/compiler packages, and a consumer installs, compiles, imports, and executes the exact framework tarballs (including the Browser server with auth present).
+- `2026-08-23`: Generated artifact evidence — `pnpm proto:generate` succeeded twice consecutively; the second run left the tracked diff byte-identical to the first. `pnpm proto:check-generated:current` passed after both runs. The committed marker/manifest IDs were refreshed once to deterministic staged-content hashes.
+- `2026-08-23`: Documentation correction — Datastore and RDBMS guides now start with snapshot installation and the first factory read/write success before contributor build instructions. GCE and GKE guides now lead deployment operators to a validated private Terraform plan before topology and entrypoint detail. T-0218 now names the actual `BrowserBackend.baseUrls` contract.
+- `2026-08-23`: Focused quality checks — changed-path Prettier checks, focused ESLint, and `git diff --check` passed. The broad direct Vitest command that skipped the required generated build was diagnostic-only and failed package resolution; after the prescribed generated build, the focused relevant suites passed.
+- `2026-08-23`: Correction RED — `pnpm --config.verify-deps-before-run=false exec vitest run scripts/snapshot-artifacts.test.mjs -t 'all exact framework tarballs' --passWithNoTests` failed 1/1. The exact-consumer source imported only package roots and server testing; it had no `@spine-event-engine/server/browser` import or authenticated BrowserServer route execution.
+- `2026-08-23`: Correction RED — `pnpm --config.verify-deps-before-run=false exec vitest run scripts/check-generated-clean.test.mjs -t 'rejects current output' --passWithNoTests` failed 1/1: a current generated output with changed TypeScript returned success because `--current-output` skipped staged generation and comparison.
+- `2026-08-23`: Correction RED — `pnpm --config.verify-deps-before-run=false exec vitest run scripts/check-typescript-snippets.test.mjs -t 'Wave 14 provider and deployment first success' --passWithNoTests` failed 1/1 after deliberately moving the beginner heading: the ordering policy correctly rejected a provider README with no first-success section.
+- `2026-08-23`: Correction GREEN — the exact tarball consumer now imports `@spine-event-engine/server/browser`, imports `@spine-event-engine/auth`, opens a `BrowserServer`, and verifies an auth-present route response while the separate native-without-auth consumer proof remains intact. `scripts/check-generated-clean.test.mjs` passed 11/11, including stable current output and changed staged TypeScript rejection; the real `pnpm proto:check-generated:current` staged and compared every generated target successfully. The README ordering policy test passed after restoring the required four first-success sections.
+- `2026-08-23`: API-documentation correction RED — `pnpm docs:api:check` failed after the SPI entry points were added: the global server forbidden-name scan misclassified seven public `server/spi/handler-registry` exports as root exports (`GeneratedEntityHandlerGroup`, `GeneratedEntityHandlers`, `GeneratedHandlerKind`, `GeneratedHandlerParameterCount`, `GeneratedHandlerRecord`, `GeneratedHandlerRecordInput`, and `GeneratedHandlerRegistry`). The focused acceptance test also failed with checker status 1.
+- `2026-08-23`: API-documentation correction GREEN — the checker now has explicit declared/source and documented/TypeDoc inventories for `core/spi/subscription-lifecycle`, `deployment/spi/backend-membership`, `server/spi/handler-registry`, and `server/spi/delivery`, rejecting both missing and unexpected exports on each page independently of package roots. The focused API acceptance test passed and `pnpm docs:api:check` passed.
+- `2026-08-23`: API-documentation test reliability RED — the complete `scripts/check-api-docs.test.mjs` file timed out its SPI page test at 60 seconds after about 90 seconds because `documentedModuleExports()` regenerated the complete TypeDoc model once for each of four SPI pages.
+- `2026-08-23`: API-documentation test reliability GREEN — the focused test suite now generates and parses one temporary TypeDoc model per suite, reuses it for every SPI and storage/provider page assertion, and removes that temporary output in `afterAll`. The complete focused file completed within its existing timeout.
+- `2026-08-23`: Review-correction RED/GREEN — recursive generated-tree walking had no explicit bounds. Added depth (64) and entry-count (1,000) regressions; `scripts/check-generated-clean.test.mjs` passed 13/13 with bounded iterative traversal, while preserving symlink rejection and staging cleanup. The local RDBMS first-success snippet now uses a runnable non-TLS loopback connection and documents production TLS/CA requirements; GCE/GKE operator instructions keep one copied-template working-directory convention. `pnpm lint:tsdoc` initially rejected the new declaration summary verb and then passed after correction; the focused README ordering policy also passed.
+- `2026-08-23`: SPI visibility correction GREEN — removed `@internal` from the public subscription-lifecycle constant and seven public generated handler-registry contracts. `pnpm docs:api:check` passed with the existing root and SPI inventories intact.
+- `2026-08-23`: Dependency-policy correction GREEN — production dependency policy now parses and validates pnpm YAML fail-closed, starts from every importer production/optional dependency, and follows production dependency/snapshot edges only. Focused fixtures cover malformed schema, quoted keys, optional dependencies, dev-only exclusion, and direct/transitive reachable vulnerabilities (5/5 passed). Narrow workspace overrides raise `js-yaml` to 4.3.1, `nanoid` to 3.3.18, and `postcss` to 8.5.23. Frozen install, policy check, and both low-threshold full and production audits passed with no known vulnerabilities. `audit:release` is part of `verify:generated-gates`.
+- `2026-08-23`: Dependency-policy documentation correction GREEN — converted the YAML closure helper summary to repository-compliant multiline TSDoc with parameter and return contracts; `pnpm lint:tsdoc` passed.
+- `2026-08-23`: Re-review correction GREEN — deployment configuration sections now reuse the first-plan `terraform.tfvars`; production lockfile traversal rejects array mappings and unresolved registry edges while accepting evidenced workspace links, aliases, and peer-suffixed references. Focused policy tests and the real workspace policy passed.
+- `2026-08-23`: Process-group regression GREEN — the bounded-command supervisor now waits for an explicit ready/PID signal before starting its timeout. The SIGTERM-ignoring descendant termination regression passed five consecutive focused runs.
+- `2026-08-23`: Final re-review GREEN — readiness is bounded and terminates a detached command group if no marker arrives; both ready and missing-ready group regressions passed five consecutive focused runs. Deployment edit prose is outside shell fences, and peer-qualified lock references prefer exact snapshots before base metadata.
+- `2026-08-23`: Final closure tests — lockfile fail-closed fixtures include direct unresolved and array importer mappings; immediate spawn-error, missing-ready, and ready descendant process-group paths passed focused execution.
+- `2026-08-23`: Lockfile branch coverage GREEN — visible fixtures now cover transitive unresolved registry edges, valid workspace links, registry alias resolution, and exact peer-qualified snapshots with both vulnerable and fixed transitive UUID versions. The full policy file passed 11/11 and the real workspace policy passed.
+- `2026-08-23`: Supervisor spawn-error correction GREEN — child error is a resolved structured outcome before readiness waiting; the runner reports command/ENOENT context without attempting an invalid process-group signal. Ready, missing-ready, and immediate spawn-error paths passed focused execution.
+- `2026-08-23`: Readiness race correction GREEN — readiness now races marker/deadline with the child outcome, reporting spawn errors and early exits before fallback readiness failure. The ENOENT-only spawn assertion and ready/missing-ready paths passed five consecutive focused runs.
+- `2026-08-23`: Early-exit cleanup correction GREEN — an early parent exit now terminates its detached process group before reporting readiness failure. A PID-synchronized SIGTERM-ignoring descendant regression passed and confirmed the descendant is gone.
+- `2026-08-23`: Early-exit fixture correction GREEN — the parent explicitly unrefs its SIGTERM-ignoring descendant after persisting its PID, proving the parent exits before readiness. The early-exit, spawn-error, and ready paths passed five consecutive focused runs.
+- `2026-08-23`: Windows readiness safety GREEN — readiness synchronization is internal POSIX process-group test machinery only. The runner rejects readiness mode before spawning on Windows; the POSIX-only readiness regressions are skipped there while ordinary taskkill and non-ready command coverage remains available.
+- `2026-08-23`: Release-readiness correction GREEN — storage package tokens in reader install commands are explicitly `@snapshot`. The stale-package matcher now orders adapter names and observes package-token boundaries; paired adapter/storage snapshot installs pass while unqualified tokens remain rejected. Focused docs/readiness tests passed 41/41 and the real readiness check passed.
+- `2026-08-23`: Deterministic generation-ID test correction GREEN — the Proto manifest test now requires the committed 64-character lowercase SHA-256 content ID rather than a UUID. The focused module suite passed 4/4 while retaining manifest/marker semantic checks.
+- `2026-08-23`: Direct timeout regression correction GREEN — the SIGTERM-ignoring direct command publishes its PID as the readiness signal before its short timeout begins; the test requires timeout and confirms the PID is gone. It is POSIX-only because readiness synchronization is rejected on Windows.
+- `2026-08-23`: Snapshot regression lint correction GREEN — removed the obsolete child-process import after direct timeout synchronization; focused ESLint passes.
+- `2026-08-23`: Cleanup necessity correction GREEN — recorded the declaration-boundary necessity for `generationIdForContents()#1`; cleanup enforcement passes.
+- `2026-08-23`: The first full release run found one obsolete UUID expectation
+  after generation IDs became deterministic SHA-256 content IDs. The second
+  full run found one process-fixture timing race under four-worker load. Both
+  were corrected with focused regressions before restarting the mandatory
+  preflight; neither failure exposed a production defect.
+- `2026-08-23`: The restarted mandatory preflight passed every deterministic
+  `verify:task --no-tests` gate and 9 focused files / 239 tests. Heavy
+  subprocess suites ran with one Vitest worker to avoid machine-load timeouts;
+  their assertions and coverage were unchanged.
+- `2026-08-23`: Final `pnpm verify:release` passed: 278 test files passed and 4
+  were intentionally skipped; 4,463 tests passed and 19 were intentionally
+  skipped. Coverage was 93.28% statements, 90% branches, 92.81% functions, and
+  94.44% lines. Full and production `pnpm audit --audit-level=low` both
+  reported no known vulnerabilities. The feature worktree was clean before
+  the gate.
+- `2026-08-23`: After fetching the configured `origin`, its `main` remained at
+  the recorded baseline and was an ancestor of the verified feature HEAD.
+  `origin/main` fast-forwarded without conflict through verified commit
+  `1f1874a23fcdae95e0566ea9803aef3741b10bf3`. No tag, NPM publication, or
+  SpineEventEngine organization remote was touched. This final status update
+  is record-only and does not reopen verification or review.

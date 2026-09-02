@@ -16,13 +16,10 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
-import { Datastore } from "../../../storage-datastore/node_modules/@google-cloud/datastore/build/src/index.js";
-import { DatastoreStorageFactory } from "../../../storage-datastore/src/datastore/storage-factory.js";
-import { MysqlStorageFactory } from "../../../storage-rdbms/src/mysql/storage-factory.js";
-import {
-  createConnection,
-  type RowDataPacket,
-} from "../../../storage-rdbms/node_modules/mysql2/promise.js";
+import { Datastore } from "@google-cloud/datastore";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
+import { createConnection, type RowDataPacket } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Inbox } from "../../src/delivery/inbox.js";
@@ -31,92 +28,103 @@ import { InboxRecords, inboxRecordSpec } from "../../src/delivery/inbox-records.
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { createMessage } from "./inbox-message-fixture.js";
+import { providerEnabled } from "./inbox-provider-selection.js";
 
 const mysqlUrl = process.env.SPINE_TS_MYSQL_URL;
 const datastoreHost = process.env.DATASTORE_EMULATOR_HOST;
 const datastoreProject = process.env.DATASTORE_PROJECT_ID ?? "spine-wave12";
+const inboxProvider = process.env.SPINE_TS_INBOX_PROVIDER;
 
-describe.skipIf(mysqlUrl === undefined)("MySQL Inbox cleanup", () => {
-  let factory: MysqlStorageFactory;
-  let secondFactory: MysqlStorageFactory;
+describe.skipIf(!providerEnabled(inboxProvider, "mysql", mysqlUrl !== undefined))(
+  "MySQL Inbox cleanup",
+  () => {
+    let factory: MysqlStorageFactory;
+    let secondFactory: MysqlStorageFactory;
 
-  beforeAll(async () => {
-    if (mysqlUrl === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
-    const stringifiers = new StringifierRegistry();
-    stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
-    factory = await MysqlStorageFactory.newBuilder()
-      .setOptions({ url: mysqlUrl })
-      .setStringifierRegistry(stringifiers)
-      .build();
-    secondFactory = await MysqlStorageFactory.newBuilder()
-      .setOptions({ url: mysqlUrl })
-      .setStringifierRegistry(stringifiers)
-      .build();
-  });
-  afterAll(() => {
-    factory.close();
-    secondFactory.close();
-  });
-
-  it("deletes only the exact delivered snapshot under the current leased session", async () => {
-    const context = { name: `t0191_mysql_${String(Date.now())}`, multitenant: false } as const;
-    await expect(removeExact(factory, context)).resolves.toBeUndefined();
-  });
-
-  it("preserves a physically present row for a stale owner across independently opened factories", async () => {
-    const context = {
-      name: `t0191_mysql_two_owner_${String(Date.now())}`,
-      multitenant: false,
-    } as const;
-    await expect(
-      removeAcrossFactories(factory, secondFactory, context, () => mysqlCount(factory, context)),
-    ).resolves.toBeUndefined();
-  });
-});
-
-describe.skipIf(datastoreHost === undefined)("Datastore Inbox cleanup", () => {
-  it("deletes only the exact delivered snapshot under the current leased session", async () => {
-    const stringifiers = new StringifierRegistry();
-    stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
-    const factory = DatastoreStorageFactory.newBuilder()
-      .setClient(new Datastore({ projectId: datastoreProject }))
-      .setStringifierRegistry(stringifiers)
-      .build();
-    const context = { name: `t0191_datastore_${String(Date.now())}`, multitenant: false } as const;
-    try {
-      await expect(removeExact(factory, context)).resolves.toBeUndefined();
-    } finally {
+    beforeAll(async () => {
+      if (mysqlUrl === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
+      const stringifiers = new StringifierRegistry();
+      stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+      factory = await MysqlStorageFactory.newBuilder()
+        .setOptions({ url: mysqlUrl })
+        .setStringifierRegistry(stringifiers)
+        .build();
+      secondFactory = await MysqlStorageFactory.newBuilder()
+        .setOptions({ url: mysqlUrl })
+        .setStringifierRegistry(stringifiers)
+        .build();
+    });
+    afterAll(() => {
       factory.close();
-    }
-  });
-
-  it("preserves a physically present row for a stale owner across independently opened factories", async () => {
-    const stringifiers = new StringifierRegistry();
-    stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
-    const firstFactory = DatastoreStorageFactory.newBuilder()
-      .setClient(new Datastore({ projectId: datastoreProject }))
-      .setStringifierRegistry(stringifiers)
-      .build();
-    const secondFactory = DatastoreStorageFactory.newBuilder()
-      .setClient(new Datastore({ projectId: datastoreProject }))
-      .setStringifierRegistry(stringifiers)
-      .build();
-    const context = {
-      name: `t0191_datastore_two_owner_${String(Date.now())}`,
-      multitenant: false,
-    } as const;
-    try {
-      await expect(
-        removeAcrossFactories(firstFactory, secondFactory, context, (message) =>
-          datastoreCount(firstFactory, context, message),
-        ),
-      ).resolves.toBeUndefined();
-    } finally {
-      firstFactory.close();
       secondFactory.close();
-    }
-  });
-});
+    });
+
+    it("deletes only the exact delivered snapshot under the current leased session", async () => {
+      const context = { name: `t0191_mysql_${String(Date.now())}`, multitenant: false } as const;
+      await expect(removeExact(factory, context)).resolves.toBeUndefined();
+    });
+
+    it("preserves a physically present row for a stale owner across independently opened factories", async () => {
+      const context = {
+        name: `t0191_mysql_two_owner_${String(Date.now())}`,
+        multitenant: false,
+      } as const;
+      await expect(
+        removeAcrossFactories(factory, secondFactory, context, () => mysqlCount(factory, context)),
+      ).resolves.toBeUndefined();
+    });
+  },
+);
+
+describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== undefined))(
+  "Datastore Inbox cleanup",
+  () => {
+    it("deletes only the exact delivered snapshot under the current leased session", async () => {
+      const stringifiers = new StringifierRegistry();
+      stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+      const factory = DatastoreStorageFactory.newBuilder()
+        .setClient(new Datastore({ projectId: datastoreProject }))
+        .setStringifierRegistry(stringifiers)
+        .build();
+      const context = {
+        name: `t0191_datastore_${String(Date.now())}`,
+        multitenant: false,
+      } as const;
+      try {
+        await expect(removeExact(factory, context)).resolves.toBeUndefined();
+      } finally {
+        factory.close();
+      }
+    });
+
+    it("preserves a physically present row for a stale owner across independently opened factories", async () => {
+      const stringifiers = new StringifierRegistry();
+      stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+      const firstFactory = DatastoreStorageFactory.newBuilder()
+        .setClient(new Datastore({ projectId: datastoreProject }))
+        .setStringifierRegistry(stringifiers)
+        .build();
+      const secondFactory = DatastoreStorageFactory.newBuilder()
+        .setClient(new Datastore({ projectId: datastoreProject }))
+        .setStringifierRegistry(stringifiers)
+        .build();
+      const context = {
+        name: `t0191_datastore_two_owner_${String(Date.now())}`,
+        multitenant: false,
+      } as const;
+      try {
+        await expect(
+          removeAcrossFactories(firstFactory, secondFactory, context, (message) =>
+            datastoreCount(firstFactory, context, message),
+          ),
+        ).resolves.toBeUndefined();
+      } finally {
+        firstFactory.close();
+        secondFactory.close();
+      }
+    });
+  },
+);
 
 async function removeExact(
   factory: Parameters<typeof open>[0],

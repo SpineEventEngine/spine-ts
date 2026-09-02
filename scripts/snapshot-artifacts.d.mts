@@ -17,7 +17,6 @@ export interface SnapshotArtifact {
   readonly tarball: string;
   readonly integrity: string;
   readonly dependencies: readonly string[];
-  readonly manifest: Readonly<Record<string, unknown>>;
 }
 
 export function packFrameworkArtifacts(options: {

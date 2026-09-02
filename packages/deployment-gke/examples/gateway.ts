@@ -18,7 +18,7 @@
  */
 
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
-import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
+import { BrowserServer, type BrowserServerOptions } from "@spine-event-engine/server/browser";
 
 import { DeploymentSettings, type DeploymentEnvironment } from "./deployment-settings.js";
 
@@ -63,13 +63,11 @@ export const GatewayEntrypoint = Object.freeze({
       serviceName: DeploymentSettings.serviceName(environment),
       port: DeploymentSettings.port(environment, "BACKEND_DISCOVERY_PORT"),
     });
-    const server = Server.atPort(DeploymentSettings.port(environment, "PORT"), {
+    await BrowserServer.run({
       host: "0.0.0.0",
-      browser: {
-        ...options.browser,
-        discovery,
-      },
+      port: DeploymentSettings.port(environment, "PORT"),
+      ...options.browser,
+      discovery,
     });
-    await server.run();
   },
 });

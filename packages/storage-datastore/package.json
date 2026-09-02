@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/storage-datastore",
-  "version": "2.0.0-snapshot.2",
+  "version": "2.0.0-snapshot.5",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
@@ -10,8 +10,7 @@
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "public",
-    "tag": "snapshot"
+    "access": "public"
   },
   "description": "Google Cloud Datastore adapter for Spine TS storage.",
   "exports": {
@@ -28,14 +27,14 @@
   ],
   "scripts": {
     "inventory:legacy": "node scripts/inventory-legacy-layout.mjs",
-    "test:emulator": "node scripts/verify-emulator-config.mjs && pnpm --config.verify-deps-before-run=false exec vitest --root ../.. run packages/storage-datastore/test/datastore-emulator.test.ts",
-    "test:cloud": "node scripts/verify-cloud-config.mjs && pnpm --config.verify-deps-before-run=false exec vitest --root ../.. run packages/storage-datastore/test/datastore-cloud.test.ts"
+    "test:emulator": "node scripts/verify-emulator-config.mjs && SPINE_TS_INBOX_PROVIDER=datastore pnpm --config.verify-deps-before-run=false exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/storage-datastore/test/datastore-emulator.test.ts packages/server/test/delivery/inbox-provider-cleanup.test.ts",
+    "test:cloud": "node scripts/verify-cloud-config.mjs && pnpm --config.verify-deps-before-run=false exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/storage-datastore/test/datastore-cloud.test.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
     "@google-cloud/datastore": "10.1.1",
-    "@spine-event-engine/core": "2.0.0-snapshot.2",
-    "@spine-event-engine/proto": "2.0.0-snapshot.2",
-    "@spine-event-engine/storage": "2.0.0-snapshot.2"
+    "@spine-event-engine/core": "2.0.0-snapshot.5",
+    "@spine-event-engine/proto": "2.0.0-snapshot.5",
+    "@spine-event-engine/storage": "2.0.0-snapshot.5"
   }
 }

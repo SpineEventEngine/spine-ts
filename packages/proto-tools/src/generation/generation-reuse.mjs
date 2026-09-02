@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
@@ -61,11 +62,30 @@ function treeContents(root) {
   return files.sort(([left], [right]) => left.localeCompare(right));
 }
 
+/**
+ * Creates a stable ID from a generation manifest contract and complete generated output.
+ *
+ * @param {Readonly<Record<string, unknown>>} manifest Generation manifest contract.
+ * @param {string} root Generated-output root.
+ * @returns {string} Stable content-derived generation identifier.
+ */
+export function generationIdForContents(manifest, root) {
+  const contents = { ...manifest };
+  delete contents.generationId;
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalJson(contents)))
+    .update("\n")
+    .update(JSON.stringify(treeContents(root)))
+    .digest("hex");
+}
+
 export function reusableGenerationId(liveManifestPath, liveRoot, stagedManifest, stagedRoot) {
   try {
     const liveManifest = JSON.parse(readFileSync(liveManifestPath, "utf8"));
     const { generationId: liveGenerationId, ...liveContents } = liveManifest;
     const { generationId: stagedGenerationId, ...stagedContents } = stagedManifest;
+    const liveTree = treeContents(liveRoot);
+    const stagedTree = treeContents(stagedRoot);
     if (
       liveManifest.formatVersion !== 2 ||
       typeof liveGenerationId !== "string" ||
@@ -74,10 +94,12 @@ export function reusableGenerationId(liveManifestPath, liveRoot, stagedManifest,
       markerId(stagedRoot) !== stagedGenerationId ||
       JSON.stringify(canonicalJson(liveContents)) !==
         JSON.stringify(canonicalJson(stagedContents)) ||
-      JSON.stringify(treeContents(liveRoot)) !== JSON.stringify(treeContents(stagedRoot))
+      (liveTree.length > 0 && JSON.stringify(liveTree) !== JSON.stringify(stagedTree))
     )
       return undefined;
-    return liveGenerationId;
+    return liveTree.length === 0
+      ? generationIdForContents(stagedManifest, stagedRoot)
+      : liveGenerationId;
   } catch {
     return undefined;
   }

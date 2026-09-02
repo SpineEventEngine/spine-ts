@@ -19,7 +19,7 @@ import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
+import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
 import {
   disabledEventHistoryPort,
   disabledStateHistoryPort,
@@ -32,8 +32,9 @@ import {
   type EntityRecordStorage,
   type EntityStateHistoryPort,
   type EntityStorageInput,
-} from "@spine-event-engine/storage/internal/entity-history";
-import { RecordSpec, TenantBoundary, type RecordStorage } from "@spine-event-engine/storage";
+} from "@spine-event-engine/storage/provider";
+import { RecordSpec, type RecordStorage } from "@spine-event-engine/storage";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import { Datastore } from "@google-cloud/datastore";
 
 import { DatastoreRecordStorage, type DatastorePageCursor } from "./record-storage.js";

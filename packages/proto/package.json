@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/proto",
-  "version": "2.0.0-snapshot.2",
+  "version": "2.0.0-snapshot.5",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
@@ -10,8 +10,7 @@
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "public",
-    "tag": "snapshot"
+    "access": "public"
   },
   "description": "Spine TS generated Protobuf-ES schema exports.",
   "exports": {
@@ -57,5 +56,9 @@
   ],
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1"
+  },
+  "devDependencies": {
+    "@spine-event-engine/core": "workspace:*",
+    "@spine-event-engine/server": "workspace:*"
   }
 }

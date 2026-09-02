@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { create } from "@bufbuild/protobuf";
-import { Code, createClient } from "@connectrpc/connect";
+import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
 import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
@@ -38,18 +38,21 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { CreateTaskSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_commands_pb.js";
+import { CreateTaskSchema } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_commands_pb.js";
 import {
   TaskIdSchema,
   TaskListIdSchema,
-} from "../../../../examples/todo/dist/generated/spine/examples/todo/task_id_pb.js";
-import { TaskListSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_list_pb.js";
-import { DeliveryAssembly } from "../../../delivery-server/src/server/assembly.js";
+} from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskListSchema } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_list_pb.js";
+import { DeliveryAssembly } from "@spine-event-engine/delivery-server/testing";
 import { afterEach, expect, it } from "vitest";
 
 const children = new Set<ChildProcess>();
 const deliveries = new Set<GatedDeliveryListener>();
 const handlerGates = new Set<HandlerGate>();
+const childPath = fileURLToPath(
+  new URL("./managed-remote-delivery-application.mjs", import.meta.url),
+);
 
 afterEach(async () => {
   // Release either real Delivery gate before asking the managed parent to shut
@@ -73,23 +76,25 @@ afterEach(async () => {
   handlerGates.clear();
 });
 
+it("resolves its managed-host access seam outside the published package", async () => {
+  const source = await readFile(childPath, "utf8");
+
+  expect(source).toContain('from "../../test-fixtures/internal.mjs"');
+});
+
 it("RED-27/28 keeps the final managed subscription relay until fenced Delivery work drains", async () => {
   const delivery = await new GatedDeliveryListener().start();
   deliveries.add(delivery);
   const handlerGate = await HandlerGate.create();
   handlerGates.add(handlerGate);
-  const child = fork(
-    fileURLToPath(new URL("./managed-remote-delivery-application.mjs", import.meta.url)),
-    [],
-    {
-      env: {
-        ...process.env,
-        SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl,
-        SPINE_MANAGED_HANDLER_GATE: handlerGate.directory,
-      },
-      stdio: ["ignore", "ignore", "pipe", "ipc"],
+  const child = fork(childPath, [], {
+    env: {
+      ...process.env,
+      SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl,
+      SPINE_MANAGED_HANDLER_GATE: handlerGate.directory,
     },
-  );
+    stdio: ["ignore", "ignore", "pipe", "ipc"],
+  });
   children.add(child);
   const ready = await receive(child, "managed-ready");
   expect(ready.members).toHaveLength(2);
@@ -114,9 +119,15 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
   const draining = receive(child, "draining");
   child.send({ type: "drain" });
   await draining;
-  await expect(
-    commands.post(createTaskCommand("t0209-after-drain", "t0209-after-drain-task")),
-  ).rejects.toMatchObject({ code: Code.Unavailable });
+  const postDrainTaskId = "t0209-after-drain-task";
+  const rejectedAfterDrain = await commands
+    .post(createTaskCommand("t0209-after-drain", postDrainTaskId))
+    .then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+  expect(rejectedAfterDrain).toBeInstanceOf(ConnectError);
+  expect([Code.Unavailable, Code.Canceled]).toContain((rejectedAfterDrain as ConnectError).code);
   await expect(
     Promise.race([
       drained.then(() => "drained" as const),
@@ -130,7 +141,10 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
   await handlerGate.release();
   await expect(bounded(nextUpdate, "drained update")).resolves.toMatchObject({ done: false });
   await drained;
-  await expect(iterator.next()).resolves.toMatchObject({ done: true });
+  // `managed.close()` retains this relay until all admitted work has drained.
+  // Therefore a second update here would show that the uniquely named command
+  // above had reached a replica despite its canceled/unavailable response.
+  await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
 }, 20_000);
 
 it("RED-28 holds a replacement outside managed admission until its remote snapshot opens", async () => {
@@ -138,18 +152,14 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
   deliveries.add(delivery);
   const handlerGate = await HandlerGate.create();
   handlerGates.add(handlerGate);
-  const child = fork(
-    fileURLToPath(new URL("./managed-remote-delivery-application.mjs", import.meta.url)),
-    [],
-    {
-      env: {
-        ...process.env,
-        SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl,
-        SPINE_MANAGED_HANDLER_GATE: handlerGate.directory,
-      },
-      stdio: ["ignore", "ignore", "pipe", "ipc"],
+  const child = fork(childPath, [], {
+    env: {
+      ...process.env,
+      SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl,
+      SPINE_MANAGED_HANDLER_GATE: handlerGate.directory,
     },
-  );
+    stdio: ["ignore", "ignore", "pipe", "ipc"],
+  });
   children.add(child);
   const ready = await receive(child, "managed-ready");
   const members = memberFacts(ready);

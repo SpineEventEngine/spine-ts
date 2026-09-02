@@ -37,12 +37,12 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { CreateTaskSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_commands_pb.js";
+import { CreateTaskSchema } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_commands_pb.js";
 import {
   TaskIdSchema,
   TaskListIdSchema,
-} from "../../../../examples/todo/dist/generated/spine/examples/todo/task_id_pb.js";
-import { DeliveryAssembly } from "../../../delivery-server/src/server/assembly.js";
+} from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_id_pb.js";
+import { DeliveryAssembly } from "@spine-event-engine/delivery-server/testing";
 import { SignalMetadata } from "../../src/index.js";
 import { afterEach, expect, it } from "vitest";
 
@@ -63,6 +63,12 @@ afterEach(async () => {
     [...triggerDirectories].map((directory) => rm(directory, { recursive: true, force: true })),
   );
   triggerDirectories.clear();
+});
+
+it("resolves its managed-host access seam outside the published package", async () => {
+  const source = await readFile(childPath, "utf8");
+
+  expect(source).toContain('from "../../test-fixtures/internal.mjs"');
 });
 
 it(

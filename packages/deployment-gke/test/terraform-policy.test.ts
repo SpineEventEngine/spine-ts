@@ -175,12 +175,14 @@ describe("the GKE deployment guide", () => {
     const gateway = await readFile(new URL("examples/gateway.ts", packageRoot), "utf8");
 
     expect(guide).toContain(
-      "// docs-snippet-path: packages/deployment-gke/examples/deployment-settings.ts",
+      "<!-- docs-snippet-path: packages/deployment-gke/examples/deployment-settings.ts -->",
     );
     expect(guide).toContain(
-      "// docs-snippet-path: packages/deployment-gke/examples/application.ts",
+      "<!-- docs-snippet-path: packages/deployment-gke/examples/application.ts -->",
     );
-    expect(guide).toContain("// docs-snippet-path: packages/deployment-gke/examples/gateway.ts");
+    expect(guide).toContain(
+      "<!-- docs-snippet-path: packages/deployment-gke/examples/gateway.ts -->",
+    );
     expect(settings).toContain("DeploymentSettings");
     expect(application).toContain('from "./deployment-settings.js"');
     expect(application).toContain("process.env");

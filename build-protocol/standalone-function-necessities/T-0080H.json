@@ -1,6 +1,24 @@
 [
   {
     "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/handler-codegen.ts",
+    "kind": "function-declaration",
+    "identity": "generateHandlerRegistry()#1",
+    "name": "generateHandlerRegistry",
+    "disposition": "necessity",
+    "reason": "TypeScript generation boundary: generateHandlerRegistry atomically publishes generated handler metadata from one application compiler analysis."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generation-reuse.d.mts",
+    "kind": "function-declaration",
+    "identity": "generationIdForContents()#1",
+    "name": "generationIdForContents",
+    "disposition": "necessity",
+    "reason": "TypeScript declaration boundary: generationIdForContents preserves the content-derived generation ID callable contract across JavaScript."
+  },
+  {
+    "rule": "standalone-function",
     "file": "packages/proto-tools/src/generation/generation-reuse.d.mts",
     "kind": "function-declaration",
     "identity": "reusableGenerationId()#1",

@@ -23,6 +23,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 
@@ -172,6 +173,12 @@ function withWorkspaceFixture(callback) {
 }
 
 describe("package metadata", () => {
+  it("overrides Lerna's vulnerable pacote dependency with the patched release", () => {
+    const workspace = parse(readFileSync(join(repoRoot, "pnpm-workspace.yaml"), "utf8"));
+
+    expect(workspace.overrides?.pacote).toBe("21.5.1");
+  });
+
   it("declares Apache-2.0 for every framework package without classifying examples as publishable", () => {
     const frameworkPackages = productionPackagePaths(repoRoot);
 
@@ -187,12 +194,11 @@ describe("package metadata", () => {
     ).toBe(true);
   });
 
-  it("makes exactly the framework packages publishable to the snapshot registry", () => {
+  it("makes exactly the framework packages publishable without a static channel", () => {
     const frameworkPackages = productionPackagePaths(repoRoot);
     const publicationConfig = {
       registry: "https://registry.npmjs.org/",
       access: "public",
-      tag: "snapshot",
     };
 
     expect(frameworkPackages).toHaveLength(18);
@@ -384,7 +390,7 @@ describe("package metadata", () => {
     expect(release).toContain("pnpm verify:release:generated");
     expect(releaseGenerated.match(/pnpm verify:generated-gates/gu)).toHaveLength(1);
     expect(releaseGenerated.match(/vitest run --coverage/gu)).toHaveLength(1);
-    expect(releaseGenerated).toContain("--maxWorkers=4");
+    expect(releaseGenerated).toContain("--maxWorkers=1");
     expect(releaseGenerated).not.toContain(
       "packages/server/test/server/server-integration-broker-cross-process.test.ts",
     );
@@ -396,6 +402,11 @@ describe("package metadata", () => {
     expect(generatedGates).toContain("pnpm lint:copyright");
     expect(generatedGates).toContain("pnpm proto:lint:generated");
     expect(generatedGates).toContain("pnpm proto:check-generated:current");
+    expect(generatedGates).not.toContain("pnpm audit:release");
+    expect(rootPackage.scripts["audit:release"]).toBe(
+      "pnpm audit --audit-level=low && pnpm audit --prod --audit-level=low",
+    );
+    expect(rootPackage.scripts["verify:publish"]).toBe("pnpm verify:release && pnpm audit:release");
     expect(release).not.toContain("pnpm verify:generated");
     expect(rootPackage.scripts["docs:api:check"]).toBe("node scripts/check-api-docs.mjs");
     expect(rootPackage.scripts["docs:audience:check"]).toBe("node scripts/check-doc-audience.mjs");

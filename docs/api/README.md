@@ -702,11 +702,12 @@ least one emitted schema; `@React` records may return generated event messages
 or explicit `void` with no emitted schemas. `@Subscribe` records return
 explicit `void` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
-The root server export is the generated-registry v3 application contract. The
-exported `@spine-event-engine/server/internal/generated-handler-registry` subpath
-exists only to give generated registry implementation source its required type-only
-`GeneratedHandlerRegistry` import. It is a generated-artifact/package-internal
-entry point, not an application import, package-root API, or TypeDoc entry.
+The public `@spine-event-engine/server/spi/handler-registry` subpath is the
+generated-registry v3 tooling SPI. Generated registry source uses it for the
+type-only `GeneratedHandlerRegistry` contract; ordinary application code should
+use the package-root server APIs and context assembly rather than importing this
+tooling SPI directly. It remains a public, documented contract rather than a
+package-internal entry point.
 `HandlerRegistryIngestor` preserves generated arity in canonical metadata, and
 `GeneratedRegistryDiscovery` loads explicit registry paths or clean `file:`
 URLs for framework/tooling paths. Application package builds run registry

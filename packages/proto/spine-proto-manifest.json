@@ -1,7 +1,7 @@
 {
   "formatVersion": 2,
   "packageName": "@spine-event-engine/proto",
-  "packageVersion": "2.0.0-snapshot.2",
+  "packageVersion": "2.0.0-snapshot.5",
   "protoFiles": [
     "grpc/health/v1/health.proto",
     "spine/auth/authenticated_subscription.proto",
@@ -108,5 +108,5 @@
   },
   "dependencies": [],
   "moduleExport": "spineProtoModule",
-  "generationId": "ff918da2-4274-423b-976c-bc035ba0169f"
+  "generationId": "8eaaf640ec617e5cbda28ee1f2ee67791174e3640344719fbac910f6f9f04a2b"
 }

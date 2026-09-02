@@ -19,9 +19,10 @@ membership until its deadline, then publish one empty snapshot while retries
 continue. `close()` cancels timers and resolver work, waits for admitted work,
 and prevents later snapshots.
 
-Supplying discovery through `ServerOptions.browser` selects standalone Gateway
-hosting. The Server does not build or attach local contexts in that mode, and
-closing the Gateway stops discovery. When an application supplies both fixed
+Supplying discovery to `BrowserServer.run(...)` from
+`@spine-event-engine/server/browser` selects standalone Gateway hosting. It
+does not build or attach local contexts, and closing the Gateway stops
+discovery. When an application supplies both fixed
 `backend` URLs and discovery, discovery is the active membership source; fixed
 URLs are not reconciled.
 
@@ -39,7 +40,8 @@ operator-created application and Gateway Secrets. It selects no storage engine,
 identity provider, public load balancer, TLS certificate, Cloud Run service, or
 application command. The topology has exactly one Gateway; Multiple-Gateway
 behavior is outside its contract. Application code configures
-`GkeNodeDiscovery`, storage, identity, and public-edge integration.
+`GkeNodeDiscovery`, storage, identity, public-edge integration, and any session
+or secret resolution.
 
 `autoscaling_enabled` defaults to `false`. When true, the module creates one
 external-metric HPA with a minimum of one and the operator's metric, target,

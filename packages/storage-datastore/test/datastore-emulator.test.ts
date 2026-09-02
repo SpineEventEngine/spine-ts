@@ -27,7 +27,7 @@ import {
   StorageGroup,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
+import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
 
 import { DatastoreQueryLimitError, DatastoreStorageFactory } from "../src/index.js";

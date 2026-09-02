@@ -63,8 +63,3 @@ export { StorageGroup } from "./record/storage-group.js";
 export type { RecordEntry } from "./record/record-storage.js";
 export type { Storage, StorageContext, StorageMode } from "./storage/storage.js";
 export { StorageFactory } from "./storage/storage-factory.js";
-export {
-  TenantBoundary,
-  type TenantCatalog,
-  type TenantCatalogProvider,
-} from "./internal/tenancy.js";

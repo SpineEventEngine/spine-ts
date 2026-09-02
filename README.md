@@ -116,6 +116,7 @@ Start with these packages:
 - [Browser authentication and extension guide](docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 - [Generated API documentation](docs/api/README.md)
 - [Reference for coding agents](REFERENCE.md)
+- [NPM release runbook](docs/release-publishing.md)
 
 The coding-agent reference is deliberately separate from this beginner guide.
 It records repository boundaries, verification commands, and detailed
@@ -124,6 +125,9 @@ implementation constraints.
 ## 🛠️ Development
 
 Spine TS requires Node.js 24 LTS or newer and `pnpm@11.9.0`.
+
+Maintainers publishing framework packages follow the
+[NPM release runbook](docs/release-publishing.md).
 
 | Command                | Purpose                                             |
 | ---------------------- | --------------------------------------------------- |
@@ -136,16 +140,14 @@ Spine TS requires Node.js 24 LTS or newer and `pnpm@11.9.0`.
 
 ## ⚠️ Experimental npm snapshots
 
-Framework packages are available as experimental snapshots. Install an exact
-version, for example:
+Framework packages are available as experimental snapshots. Use the explicit
+snapshot tag:
 
 ```sh
-pnpm add @spine-event-engine/server@2.0.0-snapshot.2
+pnpm add @spine-event-engine/server@snapshot
 ```
 
-Or select the explicit snapshot tag with
-`pnpm add @spine-event-engine/server@snapshot`. Do not use an unqualified
-install, which would select npm's `latest` tag.
+Do not use an unqualified install, which would select npm's `latest` tag.
 
 ## 📄 License
 

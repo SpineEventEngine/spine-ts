@@ -16,7 +16,7 @@ import {
   EntityHistoryConformance,
   eventHistorySpec,
   stateHistorySpec,
-} from "../../src/internal/entity-history.js";
+} from "../../src/provider.js";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { StringValue } from "@bufbuild/protobuf/wkt";
 import type {
@@ -25,7 +25,7 @@ import type {
   EntityStateHistoryPort,
   EntityStorageConformance,
   EntityStorageInput,
-} from "../../src/internal/entity-history.js";
+} from "../../src/provider.js";
 import { expect, it } from "vitest";
 
 it("exposes the narrow provider-only entity history SPI", () => {

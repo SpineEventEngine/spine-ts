@@ -28,7 +28,7 @@ import {
   type EntityRecordStorage,
   type EntityStateHistoryPort,
   type EntityStorageInput,
-} from "@spine-event-engine/storage/internal/entity-history";
+} from "@spine-event-engine/storage/provider";
 import type { NormalizedQueryEntry, NormalizedQueryPlan } from "@spine-event-engine/storage";
 import { MysqlRecordStorage } from "./record-storage.js";
 

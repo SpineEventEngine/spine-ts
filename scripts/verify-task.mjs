@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { findPrimaryMergeBase } from "./git-primary-branch.mjs";
 
 export function parseTaskVerificationArgs(args) {
   const values = args[0] === "--" ? args.slice(1) : args;
@@ -82,9 +83,8 @@ export function taskGateCommands(classification) {
  * @returns Changed paths, or an empty list when Git cannot classify them.
  */
 export function changedPaths(runGit = git) {
-  const base = runGit(["merge-base", "origin/main", "HEAD"]);
-  if (base.status !== 0) return [];
-  const baseRef = base.stdout.trim();
+  const baseRef = findPrimaryMergeBase(runGit);
+  if (baseRef === undefined) return [];
   const ranges = [`${baseRef}...HEAD`, undefined, "--cached"];
   const paths = new Set();
   for (const range of ranges) {

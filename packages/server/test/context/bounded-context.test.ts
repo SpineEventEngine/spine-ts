@@ -48,7 +48,7 @@ import {
   type StorageContext,
   StorageFactory,
 } from "@spine-event-engine/storage";
-import type { EntityRecordStorage } from "@spine-event-engine/storage/internal/entity-history";
+import type { EntityRecordStorage } from "@spine-event-engine/storage/provider";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
@@ -76,7 +76,7 @@ import { serverEnvironmentAccess } from "../../src/server/server-environment.js"
 import { ServerEnvironment } from "../../src/server/server-environment.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 import { Stand } from "../../src/stand/stand.js";
-import * as EntityLog from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
+import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 import { tenant } from "../tenant-fixture.js";
 

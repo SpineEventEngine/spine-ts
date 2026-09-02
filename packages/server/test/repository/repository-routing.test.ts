@@ -82,13 +82,13 @@ import {
   type RecordSpec,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
+import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import type {
   EntityCommitInput,
   EntityCommitResult,
   EntityCommitStorage,
-} from "@spine-event-engine/storage/internal/entity-commit";
+} from "@spine-event-engine/storage/provider";
 import {
   CommandDispatchedToHandlerSchema,
   EntityArchivedSchema,
@@ -99,7 +99,7 @@ import {
   EntityUnarchivedSchema,
   EventDispatchedToSubscriberSchema,
   EventDispatchedToReactorSchema,
-} from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
+} from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import type { ILogLayer } from "loglayer";
 

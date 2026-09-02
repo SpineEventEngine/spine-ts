@@ -6,13 +6,34 @@ schemas, validation messages, options, and schemas needed by the supported
 client and delivery packages. Most applications use it as a dependency of their
 model package rather than calling it directly.
 
+This is an experimental snapshot package; use generated Spine contracts and
+Node 24 or newer.
+
+## Install and create one Spine contract
+
+Install the schema package with Protobuf-ES in an application or model package:
+
+```sh
+pnpm add @spine-event-engine/proto@snapshot @bufbuild/protobuf
+```
+
+Use a generated schema immediately:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { CommandIdSchema } from "@spine-event-engine/proto";
+
+const commandId = create(CommandIdSchema, { uuid: "command-42" });
+console.log(commandId.uuid);
+```
+
 ## TypeScript interface options
 
 Use `(every_is).ts_type = "TaskEvent"` with `(every_is).generate = true` to
 generate a shared interface/token for a Proto file. Use
 `(is).ts_type = "TaskAssignmentEvent"` when the model module authors that
 interface. Run `pnpm proto:generate` after changing either declaration. The
-[To-Do model](../../examples/todo/proto/spine/examples/todo/task_events.proto)
+[To-Do model](https://github.com/SpineEventEngine/spine-ts/blob/main/examples/todo/proto/spine/examples/todo/task_events.proto)
 uses both forms.
 
 For the complete export map and model-package contract, see
@@ -32,9 +53,8 @@ pnpm typecheck:build
 ```
 
 Run this workspace-wide TypeScript build from the repository root. For an
-experimental npm consumer, install
-`@spine-event-engine/proto@2.0.0-snapshot.2` or the explicit
-`@spine-event-engine/proto@snapshot` tag.
+experimental npm consumer, install `@spine-event-engine/proto@snapshot`.
+The snapshot tag can change before a stable release.
 
 ## 🧱 Use a Spine schema
 
@@ -92,8 +112,8 @@ Spine definitions preserve their original versioned Proto packages.
 
 ## 🔗 Learn more
 
-- [Model-generation tools](../proto-tools/README.md)
-- [Core message tools](../core/README.md)
+- [Model-generation tools](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/proto-tools/README.md)
+- [Core message tools](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/core/README.md)
 - [Reference for coding agents](REFERENCE.md)
 
 ## Integration wire contracts

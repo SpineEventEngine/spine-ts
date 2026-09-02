@@ -357,10 +357,21 @@ describe("check-release-readiness", () => {
     withTempRepository((repoRoot) => {
       writeFileSync(
         join(repoRoot, "README.md"),
-        "Run pnpm add @spine-event-engine/core@2.0.0-snapshot.2.\n",
+        "Run pnpm add @spine-event-engine/core@2.0.0-snapshot.3.\n",
       );
       execFileSync("git", ["add", "README.md"], { cwd: repoRoot });
 
+      expect(collectUserFacingDocumentationProblems(repoRoot)).toEqual([]);
+    });
+  });
+
+  it("allows adapter and storage snapshot tokens on one install line", () => {
+    withTempRepository((repoRoot) => {
+      writeFileSync(
+        join(repoRoot, "README.md"),
+        "pnpm add @spine-event-engine/storage-datastore@snapshot @spine-event-engine/storage@snapshot\npnpm add @spine-event-engine/storage-rdbms@snapshot @spine-event-engine/storage@snapshot\n",
+      );
+      execFileSync("git", ["add", "README.md"], { cwd: repoRoot });
       expect(collectUserFacingDocumentationProblems(repoRoot)).toEqual([]);
     });
   });

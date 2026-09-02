@@ -5,6 +5,37 @@ includes an in-memory implementation for local development and tests. Use it
 when an application needs a small record store, or when an adapter needs to
 implement the same storage contract for a durable provider.
 
+This is an experimental snapshot package. Use Node 24 or newer and generated
+Protobuf record schemas before configuring storage.
+
+## Install and write one record
+
+Install the storage contract and Protobuf-ES in the application or adapter that
+owns persistence:
+
+```sh
+pnpm add @spine-event-engine/storage@snapshot @bufbuild/protobuf
+```
+
+The following in-memory record flow is suitable for a local test:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { InMemoryStorageFactory, RecordSpec } from "@spine-event-engine/storage";
+
+const records = new InMemoryStorageFactory().createRecordStorage(
+  { name: "Users", multitenant: false },
+  new RecordSpec({
+    recordType: StringValueSchema,
+    idKind: "string",
+    extractId: (user) => user.value,
+  }),
+);
+await records.write(create(StringValueSchema, { value: "ava" }));
+console.log((await records.read("ava"))?.value);
+```
+
 For detailed query, lifecycle, and adapter notes, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
@@ -22,9 +53,8 @@ pnpm typecheck:build
 ```
 
 Run this workspace-wide TypeScript build from the repository root. For an
-experimental npm consumer, install
-`@spine-event-engine/storage@2.0.0-snapshot.2` or the explicit
-`@spine-event-engine/storage@snapshot` tag.
+experimental npm consumer, install `@spine-event-engine/storage@snapshot`.
+The snapshot tag can change before a stable release.
 
 ## 🧪 Start with the Proto fields people may query
 
@@ -95,8 +125,8 @@ The storage API clones data at its boundaries. For the base factory and the
 in-memory implementation, closing a factory prevents new record handles while
 existing handles remain usable. Closing a record handle invalidates that
 handle's later operations. Other adapters can close live handles; see their
-[Datastore reference](../storage-datastore/REFERENCE.md) and
-[MySQL reference](../storage-rdbms/REFERENCE.md) before choosing shutdown
+[Datastore reference](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-datastore/REFERENCE.md) and
+[MySQL reference](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-rdbms/REFERENCE.md) before choosing shutdown
 behavior.
 
 ## 🧩 Keep compatible record families separate
@@ -139,11 +169,11 @@ storage. `@spine-event-engine/storage-rdbms` provides MySQL storage. Configure
 those packages in application code and pass the resulting factory to the Spine
 server; this package does not choose a database.
 
-| Need                        | Adapter                                                                   |
-| --------------------------- | ------------------------------------------------------------------------- |
-| Local development and tests | `InMemoryStorageFactory` in this package                                  |
-| Google Cloud Datastore      | [`@spine-event-engine/storage-datastore`](../storage-datastore/README.md) |
-| MySQL                       | [`@spine-event-engine/storage-rdbms`](../storage-rdbms/README.md)         |
+| Need                        | Adapter                                                                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Local development and tests | `InMemoryStorageFactory` in this package                                                                                               |
+| Google Cloud Datastore      | [`@spine-event-engine/storage-datastore`](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-datastore/README.md) |
+| MySQL                       | [`@spine-event-engine/storage-rdbms`](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-rdbms/README.md)         |
 
 ## ⚠️ Lifecycle differences
 
@@ -154,7 +184,7 @@ shutdown and queries.
 
 ## 🔗 Learn more
 
-- [Datastore adapter](../storage-datastore/README.md)
-- [MySQL adapter](../storage-rdbms/README.md)
-- [Server](../server/README.md)
+- [Datastore adapter](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-datastore/README.md)
+- [MySQL adapter](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/storage-rdbms/README.md)
+- [Server](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/server/README.md)
 - [Reference for coding agents](REFERENCE.md)

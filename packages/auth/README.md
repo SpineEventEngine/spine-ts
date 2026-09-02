@@ -1,112 +1,71 @@
-# Authentication for Spine applications
+# Authentication gateway contracts
 
-Use this package to build an application gateway that authenticates a request,
-authorizes it, resolves a trusted actor context, and forwards approved Spine
-traffic. Spine bounded contexts do not perform these routines themselves.
+`@spine-event-engine/auth` supplies provider-neutral building blocks for an
+application gateway. It authenticates a request, authorizes it, resolves a
+trusted actor context, and forwards approved Spine traffic. Bounded contexts do
+not perform those routines themselves.
 
-For gateway, session, OIDC, subscription, and native-transport details, read
-the [reference](REFERENCE.md).
+> **Experimental prerelease.** Use the exact snapshot below; prerelease import
+> paths and contracts can change.
 
-## 💡 Why use it?
+## Install and prerequisites
 
-- ✅ Keeps credentials outside bounded contexts.
-- ✅ Turns a verified session into a trusted actor and optional tenant.
-- ✅ Supports bearer sessions, CSRF-protected opaque cookies, and application
-  adapters for Google, GitHub, or another OpenID Connect provider.
-- ✅ Applies the same authorization boundary to commands, queries, and
-  subscriptions.
-
-The [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
-explains how an application composes these extension points.
-
-## 🚀 Build a unary gateway
-
-Supply application session, authorization, context, and forwarding
-collaborators. The gateway replaces a matching caller context with a freshly
-resolved trusted `ActorContext`; it never forwards the credential.
-
-```ts
-import { type SessionResolver, UnaryGateway } from "@spine-event-engine/auth";
-
-const gateway = new UnaryGateway({
-  maxRequestBytes: 1_048_576,
-  sessions: applicationSessions,
-  authorize: applicationPolicy.authorize,
-  contexts: applicationContexts,
-  clock: applicationClock,
-  forward: applicationBackend.forward,
-});
-
-declare const applicationSessions: SessionResolver;
-declare const applicationPolicy: {
-  authorize: ConstructorParameters<typeof UnaryGateway>[0]["authorize"];
-};
-declare const applicationContexts: ConstructorParameters<typeof UnaryGateway>[0]["contexts"];
-declare const applicationClock: ConstructorParameters<typeof UnaryGateway>[0]["clock"];
-declare const applicationBackend: {
-  forward: ConstructorParameters<typeof UnaryGateway>[0]["forward"];
-};
-void gateway;
+```bash
+pnpm add @spine-event-engine/auth@snapshot
 ```
 
-For an intentionally public endpoint, replace `sessions` with
-`publicAccess: true`. The two admission modes are mutually exclusive. Public
-mode has no login session or synthetic expiry; the application still authorizes
-every operation and rebuilds trusted context.
+Use it in a Node.js application that owns its listener, credential extraction,
+authorization rules, actor/tenant resolution, and backend forwarding. Browser
+hosting additionally uses `@spine-event-engine/server/browser`; the server root
+is native-only and treats auth as an optional peer.
 
-The package gives applications extension points, not a deployment mandate or an
-identity-provider configuration. Applications choose their listener, routes,
-session persistence, identity provider, authorization rules, and backend.
+## First success: create and resolve a local session
 
-## 🧪 Use a local session store in development
-
-`OpaqueSessions` is a process-local store. It is useful for a local gateway or
-a single process, not for a shared production deployment.
+`OpaqueSessions` is a bounded, process-local store for local development or a
+single process. This creates a credential, resolves it, and closes the store.
 
 ```ts
 import { OpaqueSessions } from "@spine-event-engine/auth";
 
-const sessions = new OpaqueSessions({
-  ttlMilliseconds: 60 * 60 * 1_000,
-  maxSessions: 1_000,
-});
-
-await sessions.close();
+const sessions = new OpaqueSessions({ ttlMilliseconds: 60 * 60 * 1_000, maxSessions: 100 });
+try {
+  const created = await sessions.create({ id: "local-user" });
+  if (created.kind !== "created") throw new Error(`Session creation failed: ${created.reason}`);
+  const resolved = await sessions.resolve(created.credential);
+  if (resolved === undefined) throw new Error("New local session was not resolvable");
+  console.log(resolved.principal.id);
+} finally {
+  await sessions.close();
+}
 ```
 
-For browser clients, use an application sign-in route and exchange its result
-for an application cookie or bearer session. Do not put provider access tokens
-in client-side storage.
+For a real gateway, construct `UnaryGateway` with exactly one admission mode:
+`sessions`, or deliberate `publicAccess: true`. It requires a finite request
+limit, policy, trusted-context resolver, clock, and forwarder. Every approved
+operation is independently admitted and authorized; forwarded data excludes
+credentials and untrusted transport headers.
 
-## 🔐 Configure an external sign-in provider
+## Browser and OIDC extensions
 
-An application can create a Google or GitHub provider adapter, then give its
-verified identity result to an `OidcFlow` and application session issuer. The
-[OIDC composition section](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md#external-provider-sign-in)
-shows the complete start, callback, and one-time session-exchange flow. These
-helpers configure bounded provider calls; they do not create browser routes,
-users, permissions, or a session issuer.
+The package does not provide HTTP routes, browser pages, users, permissions,
+TLS, or a production session database. An application can compose
+`OidcFlow` with Google, GitHub, or another verified provider, but it must own
+the start, callback, exchange, identity mapping, and session issuance routes.
+Keep provider access, refresh, and ID tokens server-side.
 
-```ts
-import { createGitHubProvider, createGoogleProvider } from "@spine-event-engine/auth";
+For browser-facing hosting, install the server browser entry point and use
+`BrowserServer` and `DurableSubscriptionBindings` from
+`@spine-event-engine/server/browser`. That boundary requires exact origins,
+finite request limits, authorization and trusted-context collaborators, and
+durable authenticated bindings when applicable.
 
-const google = await createGoogleProvider({ clientId: "google-client-id" });
-const github = createGitHubProvider({
-  clientId: "github-client-id",
-  clientSecret: "server-only-secret",
-});
-if (google === undefined) throw new Error("Google provider discovery failed");
-void github;
-```
+## Limits and next steps
 
-## ⚠️ What the package does not do
+`OpaqueSessions` is not shared or durable. Signed-session revocation and OIDC
+identity provisioning are application responsibilities. A gateway protects
+only traffic that operators route through it; do not expose a backend route
+around that boundary.
 
-It does not create sign-in pages, application users, permissions, HTTP routes,
-TLS, or a production session database. Applications select those pieces and
-deploy the gateway at the appropriate trust boundary.
-
-## 🔗 Learn more
-
-- [Browser authentication and extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
-- [Server package](../server/README.md)
 - [Detailed coding-agent reference](REFERENCE.md)
+- [Browser authentication and extension guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+- [Native server package](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/server/README.md)

@@ -21,7 +21,7 @@ import type {
 import { InboxMessageIdSchema } from "@spine-event-engine/proto/delivery";
 import { ShardIndexSchema, ShardSessionRecordSchema } from "@spine-event-engine/proto/delivery";
 import type { RecordStorage, StorageContext, StorageFactory } from "@spine-event-engine/storage";
-import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/internal/delivery-cleanup";
+import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/provider";
 
 import {
   InboxMessageError,

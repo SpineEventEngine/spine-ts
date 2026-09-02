@@ -14,6 +14,13 @@
 
 import { ServerEnvironmentLifecycle } from "../server/server-environment.js";
 
+export {
+  unpackExternalEvent,
+  wrapBoundedContextOnline,
+  wrapExternalEvent,
+  wrapExternalEventsWanted,
+} from "../integration/external-messages.js";
+
 /**
  * Provides deterministic server-environment cleanup for package tests.
  */
@@ -29,9 +36,7 @@ export const ServerTests: { readonly resetEnvironment: () => Promise<void> } = O
 });
 
 /**
- * Supplies the package-testing reset operation as an explicit short value.
- *
- * @internal
+ * Resets shared server facilities before the next test creates a server.
  */
 const serverTestReset: () => Promise<void> = ServerTests.resetEnvironment;
 

@@ -29,8 +29,8 @@ import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
-import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
+import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
 import {
   ColumnTypes,
   EventStore,

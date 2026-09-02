@@ -12,18 +12,18 @@
  * the License.
  */
 
-import { RemoteDelivery } from "../../../delivery-client/dist/index.js";
-import { InMemoryStorageFactory } from "../../../storage/dist/index.js";
-import { createTodoContext } from "../../../../examples/todo/dist/src/index.js";
-import { TaskListSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_list_pb.js";
+import { RemoteDelivery } from "@spine-event-engine/delivery-client";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { createTodoContext } from "@spine-event-engine/example-todo";
+import { TaskListSchema } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_list_pb.js";
 import {
   EnvironmentType,
   ManagedServerApplication,
   Server,
   ServerEnvironment,
   UniformAcrossAllShards,
-} from "../../dist/index.js";
-import { managedServerApplicationAccess } from "../../dist/server/managed-server-application.js";
+} from "@spine-event-engine/server";
+import { managedServerApplicationAccess } from "../../test-fixtures/internal.mjs";
 import process from "node:process";
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -95,7 +95,7 @@ const managed = await ManagedServerApplication.run({
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => {
     const server = Server.atPort(port, { host });
-    const { InMemorySubscriptionRegistry } = await import("../../dist/index.js");
+    const { InMemorySubscriptionRegistry } = await import("@spine-event-engine/server");
     server.add(
       await createTodoContext({
         deliveryStrategy: strategy,

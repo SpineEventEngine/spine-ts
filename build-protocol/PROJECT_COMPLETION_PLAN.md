@@ -224,9 +224,15 @@ durably closed.
   [real two-process proof](tasks/T-0201-wave13-cross-process-acceptance/TASK.md).
   T-0202 owns documentation, final reviews/security, release verification,
   integration, and remote closure.
-- **Wave 14:** establish publishable runtime/tooling/auth and cross-package SPI
-  boundaries.
+- **Wave 14 (complete):** T-0216 published the first public snapshot package
+  metadata and T-0217 completed the runtime/tooling/auth split, deliberate
+  cross-package SPI boundaries, beginner-ready package documentation, and the
+  verified `2.0.0-snapshot.3` artifact set.
 - **Wave 15:** add deliberate registry-integrity and tenant-admission controls.
+  Replace Git-history-dependent migration-baseline checks with tracked,
+  checksum-protected baseline evidence so CI can use shallow checkouts without
+  weakening the rule that new cleanup or Proto debt cannot be presented as
+  pre-existing debt.
 - **Wave 16:** implement JVM-equivalent Projection catch-up with repository-level
   targeting, durable progress, Inbox coordination, restart, and live-event
   ordering. The existing local whole-read-side reset/replay helper is not
@@ -254,9 +260,13 @@ integration, and documentation closure are complete. T-0113 records the
 subsequent System Context and payload-first correction that must precede Wave 7.
 Wave 7 Q&A and its dependency-ordered T-0121 through T-0128 plan were approved
 under T-0120. The complete sequence is now reviewed, release-verified,
-integrated, post-merge verified, and remotely synchronized. Do not publish
-packages to npm until all waves are complete and publication is revisited with
-the human.
+integrated, post-merge verified, and remotely synchronized. Wave 14 authorized
+the first experimental snapshot. T-0220 supersedes human-operated-only
+publication with OIDC publication from merged `master`: snapshots use
+`snapshot`, stable releases use `latest`, and all other prereleases fail closed.
+The registry-published snapshot is `2.0.0-snapshot.2`; workspace
+`2.0.0-snapshot.4` is the current release-automation version and is not
+registry-published; official activation has not occurred.
 
 Wave 8's T-0129 through T-0144 sequence is complete: the storage correction,
 delivery-policy cutover, validation upgrade, example and documentation
@@ -1405,6 +1415,18 @@ through every documented browser route, and verifies all locally advertised
 modes. Kubernetes remains a static cluster reference. Orders, Projects, GCE,
 and GKE received a read-only beginner audit only. The canonical ledger is in
 `build-protocol/tasks/T-0214-beginner-example-correction/TASK.md`.
+
+### T-0220: GitHub Actions NPM Publishing
+
+T-0220 is implemented, reviewed, and release-verified on the personal feature
+branch. Pull requests to `master` prove the exact package artifacts without
+publication authority; a protected `master` push prepares the same artifacts
+and publishes the exact 18-package dependency graph through NPM OIDC trusted
+publishing. Snapshot versions select `snapshot`, stable versions select
+`latest`, partial identical releases resume safely, and ambiguous registry or
+tag state fails closed. Official repository/environment activation and actual
+publication remain pending explicit human action. The canonical ledger is in
+`build-protocol/tasks/T-0220-github-actions-npm-publishing/TASK.md`.
 
 ## Parallelism Without Rework
 

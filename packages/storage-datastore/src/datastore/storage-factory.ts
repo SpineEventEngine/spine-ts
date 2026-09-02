@@ -19,21 +19,23 @@ import { StringifierRegistry } from "@spine-event-engine/core";
 import {
   RecordStorage,
   StorageFactory,
-  type TenantCatalog,
-  type TenantCatalogProvider,
   type RecordSpec,
   type StorageContext,
   type StorageGroup,
 } from "@spine-event-engine/storage";
+import {
+  type TenantCatalog,
+  type TenantCatalogProvider,
+} from "@spine-event-engine/storage/provider";
 import type {
   EntityCommitStorage,
   EntityEventHistoryPort,
   EntityRecordStorage,
   EntityStateHistoryPort,
   EntityStorageInput,
-} from "@spine-event-engine/storage/internal/entity-history";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
-import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/internal/delivery-cleanup";
+} from "@spine-event-engine/storage/provider";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
+import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/provider";
 
 import {
   DatastoreEntityCommitStorage,

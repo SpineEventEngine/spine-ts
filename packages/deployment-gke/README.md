@@ -9,10 +9,24 @@ storage and supplies its configuration.
 This is a guide for people deploying an application. For exact discovery API
 and lifecycle behavior, see the [deployment reference](REFERENCE.md).
 
+This experimental snapshot package is for operators who already own
+an application, images, and a GKE cluster. Install its library API when writing
+the Gateway or application entrypoint:
+
+```bash
+pnpm add @spine-event-engine/deployment-gke@snapshot
+```
+
+Copy the packaged Terraform directory into an operator deployment repository
+only when you want its private reference topology. Installing this library, or
+copying Terraform, does not create the cluster, public Gateway policy,
+authentication/session implementation, application secrets, or storage.
+
 ## Before you begin
 
 You need an existing GKE cluster, `gcloud`, `kubectl`, Terraform 1.6 or newer,
-and images for three processes:
+an existing Kubernetes ServiceAccount with the image-pull and configuration
+access required by your workload, and images for three processes:
 
 - your Spine TS application-node image;
 - your standalone Gateway image; and
@@ -32,6 +46,24 @@ running Terraform. Terraform receives only their names; it never receives or
 creates their values. The application Secret holds application-selected
 settings, including storage settings when the application needs them. The
 Gateway Secret holds separate identity and session settings.
+
+## First Terraform plan
+
+Copy the packaged template into an operator-owned deployment repository. The
+following commands assume its Terraform directory is your current directory;
+fill in its existing cluster, Secret names, and immutable image references,
+then validate the private topology before configuring entrypoint details:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform fmt -check
+terraform validate
+terraform plan -var-file=terraform.tfvars
+```
+
+A plan showing only the Gateway, application, delivery, and private Services
+is the first success. Review it before `terraform apply`.
 
 ## What this deployment creates
 
@@ -69,13 +101,8 @@ behavior and Cloud Run are outside the supported offering.
 
 ## Configure the template
 
-Copy the supplied variable file and replace every placeholder with values for
+Edit the existing `terraform.tfvars` copied for the first plan and replace every placeholder with values for
 your cluster and delivery pipeline:
-
-```bash
-cd packages/deployment-gke/terraform
-cp terraform.tfvars.example terraform.tfvars
-```
 
 `terraform.tfvars` asks for the existing Secret names, immutable images, and
 the kubeconfig context selected by `gcloud`. It defaults to two application
@@ -92,8 +119,9 @@ hard-coding the Terraform defaults:
 Both supplied entrypoints bind `host: "0.0.0.0"` so the Kubernetes Service can
 reach their listeners.
 
+<!-- docs-snippet-path: packages/deployment-gke/examples/deployment-settings.ts -->
+
 ```ts
-// docs-snippet-path: packages/deployment-gke/examples/deployment-settings.ts
 export type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
 
 export const DeploymentSettings = Object.freeze({
@@ -125,14 +153,15 @@ sessions and may supply named durable subscription bindings; public mode
 supplies `publicAccess: true`, and the framework owns process-local bindings.
 Both modes supply authorization, trusted actor-context resolution, allowed
 origins, a clock, and a type registry. The complete
-[server browser guide](../server/README.md#serve-browser-clients) and
-[browser authentication guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+[server browser guide](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/server/README.md#browser-gateway-migration) and
+[browser authentication guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explain those application integration points.
 
+<!-- docs-snippet-path: packages/deployment-gke/examples/gateway.ts -->
+
 ```ts
-// docs-snippet-path: packages/deployment-gke/examples/gateway.ts
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
-import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
+import { BrowserServer, type BrowserServerOptions } from "@spine-event-engine/server/browser";
 
 type GatewayBrowserOptions = BrowserServerOptions extends infer Options
   ? Options extends BrowserServerOptions
@@ -155,14 +184,12 @@ export const GatewayEntrypoint = Object.freeze({
       serviceName: DeploymentSettings.serviceName(environment),
       port: DeploymentSettings.port(environment, "BACKEND_DISCOVERY_PORT"),
     });
-    const server = Server.atPort(DeploymentSettings.port(environment, "PORT"), {
+    await BrowserServer.run({
       host: "0.0.0.0",
-      browser: {
-        ...options.browser,
-        discovery,
-      },
+      port: DeploymentSettings.port(environment, "PORT"),
+      ...options.browser,
+      discovery,
     });
-    await server.run();
   },
 });
 ```
@@ -179,8 +206,9 @@ Coordinator. Set `application_process_count` and `delivery_shard_count`
 explicitly in Terraform. The former starts complete local replicas; the latter
 is passed to your context assembly and is not inferred from hardware:
 
+<!-- docs-snippet-path: packages/deployment-gke/examples/application.ts -->
+
 ```ts
-// docs-snippet-path: packages/deployment-gke/examples/application.ts
 import {
   ManagedServerApplication,
   type ManagedServerApplicationHandle,
@@ -300,8 +328,9 @@ capacity, disable autoscaling and set `application_replicas` in the same apply.
 CPU alone cannot wake an application Deployment from zero because no Pod is
 running to report CPU. On Standard GKE, Google documents KEDA as the scale from
 zero path. For that policy, set `autoscaling_enabled = false` and let
-operator-managed KEDA be the sole autoscaler for the Deployment. Never run the
-module HPA and a KEDA-managed HPA together. Add the KEDA configuration
+operator-managed KEDA be the sole autoscaler for the Deployment. HPA and KEDA
+are mutually exclusive: never run the module HPA and a KEDA-managed HPA
+together. Add the KEDA configuration
 separately; this editable template does not install CRDs or assume a metric
 provider.
 

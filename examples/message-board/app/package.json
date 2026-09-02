@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/example-message-board-app",
-  "version": "2.0.0-snapshot.2",
+  "version": "2.0.0-snapshot.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -27,21 +27,21 @@
     "@connectrpc/connect": "2.1.2",
     "@connectrpc/connect-node": "2.1.2",
     "@google-cloud/datastore": "10.1.1",
-    "@google-cloud/logging": "12.0.0",
+    "@google-cloud/logging": "12.0.1",
     "@loglayer/transport-google-cloud-logging": "3.3.0",
-    "@spine-event-engine/auth": "2.0.0-snapshot.2",
-    "@spine-event-engine/client-node": "2.0.0-snapshot.2",
-    "@spine-event-engine/core": "2.0.0-snapshot.2",
-    "@spine-event-engine/delivery-client": "2.0.0-snapshot.2",
-    "@spine-event-engine/deployment-gke": "2.0.0-snapshot.2",
-    "@spine-event-engine/example-message-board-model": "2.0.0-snapshot.2",
-    "@spine-event-engine/proto": "2.0.0-snapshot.2",
-    "@spine-event-engine/server": "2.0.0-snapshot.2",
-    "@spine-event-engine/storage": "2.0.0-snapshot.2",
-    "@spine-event-engine/storage-datastore": "2.0.0-snapshot.2",
+    "@spine-event-engine/auth": "2.0.0-snapshot.5",
+    "@spine-event-engine/client-node": "2.0.0-snapshot.5",
+    "@spine-event-engine/core": "2.0.0-snapshot.5",
+    "@spine-event-engine/delivery-client": "2.0.0-snapshot.5",
+    "@spine-event-engine/deployment-gke": "2.0.0-snapshot.5",
+    "@spine-event-engine/example-message-board-model": "2.0.0-snapshot.5",
+    "@spine-event-engine/proto": "2.0.0-snapshot.5",
+    "@spine-event-engine/server": "2.0.0-snapshot.5",
+    "@spine-event-engine/storage": "2.0.0-snapshot.5",
+    "@spine-event-engine/storage-datastore": "2.0.0-snapshot.5",
     "loglayer": "9.4.0"
   },
   "devDependencies": {
-    "@spine-event-engine/proto-tools": "2.0.0-snapshot.2"
+    "@spine-event-engine/proto-tools": "2.0.0-snapshot.5"
   }
 }

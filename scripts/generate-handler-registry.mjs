@@ -6,8 +6,8 @@ import ts from "typescript";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const tempParent = join(repoRoot, "node_modules/.cache");
 const toolSources = [
-  "packages/server/src/handler/build-time-handler-analyzer.ts",
-  "packages/server/src/handler/generated-registry-writer.ts",
+  "packages/proto-tools/src/generation/build-time-handler-analyzer.ts",
+  "packages/proto-tools/src/generation/generated-registry-writer.ts",
 ];
 
 async function main(argv = process.argv.slice(2)) {

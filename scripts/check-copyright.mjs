@@ -21,6 +21,7 @@ import {
   separateCopyrightHeader,
 } from "./copyright-header.mjs";
 import { isGeneratedTypeScriptPath } from "./generated-source-policy.mjs";
+import { findPrimaryMergeBase } from "./git-primary-branch.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = "packages/proto/proto/spine-sources.json";
@@ -197,8 +198,8 @@ function renameMap(runGit, base) {
 
 /* Creates deterministic Git-backed current-year comparison operations. */
 export function gitComparison(runGit = git) {
-  const base = gitOutput(runGit, ["merge-base", "origin/main", "HEAD"], "merge-base").trim();
-  if (base === "") throw new Error("copyright merge-base failed");
+  const base = findPrimaryMergeBase(runGit);
+  if (base === undefined) throw new Error("copyright merge-base failed");
   const renames = renameMap(runGit, base);
   const deleted = new Set();
   for (const args of [

@@ -5578,3 +5578,122 @@ Consequences:
   owns combined provider/runtime evidence and the final security review.
 - Wave 13 through 19 features and Cloud Run receive no provisional API or
   implementation from this decision.
+
+## D-0115: Publish Framework Packages From Merged Master Commits With OIDC
+
+Status: Accepted
+
+Date: 2026-08-24
+
+Task: T-0220 GitHub Actions NPM publishing
+
+Context:
+
+- The first public snapshot was published manually through a disposable
+  one-time mechanism. That exception is not a permanent release architecture.
+- Future official changes are pushed to feature branches, verified in pull
+  requests targeting `master`, and merged manually.
+- The 18 public framework packages form an acyclic runtime dependency graph and
+  must be published from the same verified common-version artifact set.
+- NPM package versions are immutable, while multi-package publication can be
+  interrupted between packages.
+
+Decision:
+
+- Use `build.yml` for read-only pull-request release verification and
+  `publish.yml` for OIDC-authorized publication after a push reaches official
+  `master`; do not use Git tags as triggers.
+- Give OIDC authority only to the GitHub-hosted publication job protected by
+  `gh-actions-environment`. Use no long-lived NPM publication token.
+- Derive one channel from the common version: exact `x.y.z-snapshot.N` uses
+  `snapshot`, exact `x.y.z` uses `latest`, and every other prerelease fails.
+- Prepare and externally consume exact tarballs before mutation, transfer them
+  with an integrity manifest, then publish sequentially in computed dependency
+  order.
+- Resume a partial release only when existing registry integrity and selected
+  tag state match exactly. Fail closed on ambiguity or mismatch, fail when all
+  18 packages already exist, prevent tag rollback, and preserve the opposite
+  channel.
+- Serialize publication with GitHub's maximum pending queue and no cancellation.
+  Pin Actions immutably, disable checkout credential persistence, keep automatic
+  provenance, and prohibit separate dist-tag repair or unpublication.
+- CI validates resulting package state, not implementing-agent commit messages
+  or merge strategy.
+
+Consequences:
+
+- Every official `master` merge must carry a new common release version and
+  valid package metadata before it can publish.
+- The human configures one trusted publisher per package and the protected
+  environment before official activation.
+- A failed or interrupted release is safe to rerun at the same commit; an
+  integrity/tag conflict requires human investigation rather than mutation.
+- This decision supersedes the completion plan's human-operated-only statement
+  for future publication. It does not authorize this task to push to the
+  SpineEventEngine organization or publish a real package.
+
+## D-0116: Keep Ordinary CI Tests Self-Contained
+
+Status: Accepted
+
+Date: 2026-08-26
+
+Task: T-0220a stable CI release suite
+
+Context:
+
+- The release gate collected provider tests that silently skipped unless live
+  Datastore, emulator, or MySQL settings appeared in the environment.
+- Self-contained loopback and child-process tests exercise required lifecycle
+  behavior, but shutdown can have more than one valid transport-level outcome.
+- Publication depends on the same release gate passing reliably on a clean
+  GitHub-hosted runner.
+
+Decision:
+
+- The ordinary CI/release suite contains only tests that provision all required
+  resources inside the test process or repository toolchain.
+- Live cloud, emulator, database, Docker, and browser acceptance use explicit
+  separate commands and never enter ordinary CI through ambient environment
+  variables.
+- Self-contained process and loopback integration tests remain in ordinary CI.
+  Their assertions express stable application behavior rather than one
+  operating-system-specific ordering of equivalent shutdown signals.
+- A deterministic policy test guards the boundary between stable and
+  infrastructure inventories.
+
+Consequences:
+
+- `verify:release` cannot unexpectedly contact configured provider
+  infrastructure.
+- Provider and deployment acceptance remains available as an explicit operator
+  action with its required facilities.
+- CI failures inside the stable inventory are defects to repair, not tests to
+  hide solely because they exercise multiple local processes.
+
+## D-0117: Delegate Externally Versioned Publication To Lerna
+
+Status: Accepted
+
+Date: 2026-08-26
+
+Task: T-0221 Lerna publishing migration
+
+Context: D-0115 selected a custom mutation engine with tarball-byte handoff,
+integrity-aware partial resumption, and per-package registry/tag checks. Its
+release trigger, OIDC boundary, exact 18-package inventory, common-version
+policy, and PR isolation remain required, but the custom engine has proved too
+costly to maintain.
+
+Decision: Retain the D-0115 release policy and replace only its custom mutation
+engine with exactly pinned Lerna 10.0.1 `publish from-package`. Publish only
+validated `.publish` directories, use `--concurrency 1`, `--ignore-scripts`,
+the version-derived explicit tag, public registry, triggering SHA, and OIDC.
+The retained read-only policy rejects unsupported versions and a fully published
+release, permits partial resumption, and verifies final version/tag completeness.
+
+Consequences: Lerna/npm repacks staged contents, so exact byte identity,
+integrity-aware resume, per-dependency visibility waits, and per-package tag-race
+checks are deliberately lost. The old publisher remains tracked but unreachable
+until one successful live Lerna release, then a separate versioned cleanup owns
+its deletion. This decision supersedes only D-0115's custom-engine details.

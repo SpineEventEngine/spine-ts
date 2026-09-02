@@ -7,6 +7,19 @@ keeps application nodes, the Gateway, and the simple delivery server private;
 you provide the public TLS, authentication, and traffic-routing edge that fits
 your organisation.
 
+This experimental snapshot package is for operators who already own
+the application images and their Google Cloud environment. Install its library
+API when writing the application or Gateway entrypoints:
+
+```bash
+pnpm add @spine-event-engine/deployment-gce@snapshot
+```
+
+Copy the packaged Terraform directory into your deployment repository only
+when you want its GCE reference topology; installing the library neither
+creates cloud resources nor configures your application Gateway, authentication,
+sessions, secrets, or storage.
+
 For exact discovery, lease, and lifecycle behavior, read the
 [deployment reference](REFERENCE.md).
 
@@ -27,6 +40,25 @@ Gateway, and the in-memory simple delivery server. Use image digests such as
 `@sha256:...`, not mutable tags. The template deliberately does not publish an
 image, choose Datastore, MySQL, or another storage backend, create secrets, or
 configure an identity provider.
+
+## First Terraform plan
+
+Copy the packaged template into an operator-owned deployment repository. The
+following commands assume its Terraform directory is your current directory;
+create a values file and obtain a validated plan before wiring advanced Gateway
+or registry behavior:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform fmt -check
+terraform validate
+terraform plan -var-file=terraform.tfvars
+```
+
+Replace every placeholder with your existing project, network, service account,
+and immutable image digests before `plan`. A plan showing only private Spine
+resources is the first success; review it before any `terraform apply`.
 
 ## What this deployment creates
 
@@ -63,14 +95,9 @@ authentication provider, or Internet firewall rule.
 
 ## Configure the template
 
-Copy the values file and replace every placeholder. Keep it outside source
+Edit the existing `terraform.tfvars` copied for the first plan and replace every placeholder. Keep it outside source
 control because it identifies your network and deployment, even though it
 contains no secret values.
-
-```bash
-cd packages/deployment-gce/terraform
-cp terraform.tfvars.example terraform.tfvars
-```
 
 Set the project, region, two or more application zones, VPC/subnetwork,
 least-privilege service-account email, and the three image digests. Set
@@ -125,11 +152,12 @@ supplies `sessions` and may supply named durable subscription bindings; public
 mode supplies `publicAccess: true`, and the framework owns process-local
 bindings. Public mode cannot supply bindings.
 
+<!-- docs-snippet-path: packages/deployment-gce/examples/gateway.ts -->
+
 ```ts
-// docs-snippet-path: packages/deployment-gce/examples/gateway.ts
 import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { GceNodeDiscovery } from "@spine-event-engine/deployment-gce";
-import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
+import { BrowserServer, type BrowserServerOptions } from "@spine-event-engine/server/browser";
 
 type GatewayBrowserOptions = BrowserServerOptions extends infer Options
   ? Options extends BrowserServerOptions
@@ -160,11 +188,12 @@ export const GceGatewayEntrypoint = Object.freeze({
       namespace: GceDeploymentSettings.registryNamespace(environment),
     });
     const discovery = new GceNodeDiscovery({ registry });
-    const server = Server.atPort(GceDeploymentSettings.port(environment, "PORT"), {
+    await BrowserServer.run({
       host: "0.0.0.0",
-      browser: { ...options.browser, discovery },
+      port: GceDeploymentSettings.port(environment, "PORT"),
+      ...options.browser,
+      discovery,
     });
-    await server.run();
   },
 });
 ```
@@ -181,13 +210,21 @@ creating a competing VM lease.
 
 ## Deploy
 
-Initialize the provider, inspect the exact resources, then apply them.
+Initialize the provider, then make the first safe success a formatting,
+validation, and plan review. Apply only the reviewed plan.
 
 ```bash
 terraform init
+terraform fmt -check
+terraform validate
 terraform plan -out=tfplan
 terraform apply tfplan
 ```
+
+The plan should contain one application MIG, one Gateway MIG, one delivery MIG,
+and private load balancers only. The [reference](REFERENCE.md) records scaling,
+replacement, rollback, registry, and image-pull limits before you change those
+operations.
 
 The first VM can take several minutes to start. Autohealing waits for the
 configured startup delay (120 seconds by default) before treating a failed
