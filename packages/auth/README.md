@@ -67,5 +67,5 @@ only traffic that operators route through it; do not expose a backend route
 around that boundary.
 
 - [Detailed coding-agent reference](REFERENCE.md)
-- [Browser authentication and extension guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
-- [Native server package](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/server/README.md)
+- [Browser authentication and extension guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+- [Native server package](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/README.md)

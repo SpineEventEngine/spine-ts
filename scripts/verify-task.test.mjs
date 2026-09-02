@@ -6,6 +6,7 @@ import {
   taskGateCommands,
   vitestArgs,
 } from "./verify-task.mjs";
+import { findPrimaryMergeBase } from "./git-primary-branch.mjs";
 
 describe("verify-task", () => {
   it("requires an explicit focused coverage choice and test paths", () => {
@@ -98,9 +99,15 @@ describe("verify-task", () => {
     expect(classifyTaskChanges(paths)).toEqual({ proto: true, typeDoc: true });
   });
 
-  it("falls back to origin/master when origin/main is unavailable", () => {
+  it("uses origin/master even when origin/main would be usable", () => {
+    const { runGit, calls } = gitRunner([result("master-base\n"), result("stale-main-base\n")]);
+
+    expect(findPrimaryMergeBase(runGit)).toBe("master-base");
+    expect(calls).toEqual([["merge-base", "origin/master", "HEAD"]]);
+  });
+
+  it("classifies changes from origin/master", () => {
     const { runGit, calls } = gitRunner([
-      { status: 128, stdout: "" },
       result("base\n"),
       result("docs/changed.md\n"),
       result(""),
@@ -109,10 +116,7 @@ describe("verify-task", () => {
     ]);
 
     expect(changedPaths(runGit)).toEqual(["docs/changed.md"]);
-    expect(calls.slice(0, 2)).toEqual([
-      ["merge-base", "origin/main", "HEAD"],
-      ["merge-base", "origin/master", "HEAD"],
-    ]);
+    expect(calls[0]).toEqual(["merge-base", "origin/master", "HEAD"]);
   });
 
   it("fails closed when Git cannot classify paths or finds none", () => {

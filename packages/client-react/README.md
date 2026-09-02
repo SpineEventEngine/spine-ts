@@ -7,7 +7,7 @@ system.
 
 For detailed hook lifecycles and error behavior, read the [reference](REFERENCE.md).
 
-The [browser client and gateway guide](https://github.com/SpineEventEngine/spine-ts/blob/main/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+The [browser client and gateway guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explains the subscription and authentication limits inherited from the browser client.
 
 ## Install and prepare an application
@@ -22,7 +22,7 @@ pnpm add @bufbuild/protobuf@2.12.1 @spine-event-engine/core@snapshot @spine-even
 ```
 
 Generate and publish the application's model schemas using the [Proto tools
-guide](https://github.com/SpineEventEngine/spine-ts/tree/main/packages/proto-tools#readme). The Message Board schema in this guide is a
+guide](https://github.com/SpineEventEngine/spine-ts/tree/master/packages/proto-tools#readme). The Message Board schema in this guide is a
 repository example of such output; it is not a public dependency to install.
 
 The application, not React, creates the authenticated Gateway connection and
@@ -136,6 +136,6 @@ a possible gap.
 
 ## 🔗 Learn more
 
-- [Browser client](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/client-web/README.md)
-- [Message Board web example](https://github.com/SpineEventEngine/spine-ts/blob/main/examples/message-board/web/README.md)
+- [Browser client](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/client-web/README.md)
+- [Message Board web example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/message-board/web/README.md)
 - [Detailed coding-agent reference](REFERENCE.md)

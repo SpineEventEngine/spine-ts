@@ -101,6 +101,6 @@ belongs only on an application-managed trusted network.
 
 ## 🔗 Learn more
 
-- [Delivery client](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/delivery-client/README.md)
-- [Server](https://github.com/SpineEventEngine/spine-ts/blob/main/packages/server/README.md)
+- [Delivery client](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/delivery-client/README.md)
+- [Server](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/README.md)
 - [Detailed delivery reference](REFERENCE.md)

@@ -116,6 +116,7 @@ Start with these packages:
 - [Browser authentication and extension guide](docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 - [Generated API documentation](docs/api/README.md)
 - [Reference for coding agents](REFERENCE.md)
+- [Contributing](CONTRIBUTING.md)
 - [NPM release runbook](docs/release-publishing.md)
 
 The coding-agent reference is deliberately separate from this beginner guide.
@@ -125,6 +126,9 @@ implementation constraints.
 ## 🛠️ Development
 
 Spine TS requires Node.js 24 LTS or newer and `pnpm@11.9.0`.
+
+Development uses feature branches and human-reviewed pull requests targeting
+the protected `master` branch. See the [contributor guide](CONTRIBUTING.md).
 
 Maintainers publishing framework packages follow the
 [NPM release runbook](docs/release-publishing.md).

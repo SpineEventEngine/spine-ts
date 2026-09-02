@@ -13,8 +13,8 @@ import {
 import { frameworkPackageNames } from "./package-artifacts.mjs";
 
 describe("release CLI", () => {
-  it("runs the relative CLI entrypoint and rejects the removed custom publish command", () => {
-    const result = spawnSync(process.execPath, ["scripts/release-cli.mjs", "publish"], {
+  it.each(["publish", "verify-registry"])("rejects the removed %s command", (command) => {
+    const result = spawnSync(process.execPath, ["scripts/release-cli.mjs", command], {
       cwd: new URL("..", import.meta.url).pathname,
       encoding: "utf8",
       env: {
@@ -62,7 +62,6 @@ describe("release CLI", () => {
     };
     await main({ argv: ["node", "cli", "tag"], dependencies });
     await main({ argv: ["node", "cli", "preflight"], dependencies });
-    await main({ argv: ["node", "cli", "verify-registry"], dependencies });
     await main({
       argv: ["node", "cli", "prepare", "--output", "relative-release"],
       dependencies: {
@@ -73,7 +72,6 @@ describe("release CLI", () => {
     expect(calls).toContainEqual({ kind: "write", text: "snapshot\n" });
     expect(calls.filter(({ kind }) => kind === "verify")).toEqual([
       { kind: "verify", args: [release, "safe-fetch"] },
-      { kind: "verify", args: [release, "safe-fetch", { complete: true }] },
     ]);
     expect(calls).toContainEqual({
       kind: "prepare",
@@ -175,7 +173,7 @@ describe("release CLI", () => {
 
   it("prepares and cleans the real checked staged release without registry mutation", async () => {
     const release = await main({ argv: ["node", "cli", "prepare", "--check"] });
-    expect(release).toMatchObject({ tag: "snapshot", version: "2.0.0-snapshot.5" });
+    expect(release).toMatchObject({ tag: "snapshot", version: "2.0.0-snapshot.6" });
     expect(release.packages).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "@spine-event-engine/core" })]),
     );

@@ -73,13 +73,13 @@ describe("MessageBoard app manifest", () => {
     };
 
     expect(manifest.dependencies["@spine-event-engine/example-message-board-model"]).toBe(
-      "2.0.0-snapshot.5",
+      "2.0.0-snapshot.6",
     );
     expect(manifest.dependencies["@connectrpc/connect-node"]).toBe("2.1.2");
-    expect(manifest.dependencies["@spine-event-engine/core"]).toBe("2.0.0-snapshot.5");
-    expect(manifest.dependencies["@spine-event-engine/proto"]).toBe("2.0.0-snapshot.5");
-    expect(manifest.dependencies["@spine-event-engine/server"]).toBe("2.0.0-snapshot.5");
-    expect(manifest.devDependencies?.["@spine-event-engine/proto-tools"]).toBe("2.0.0-snapshot.5");
+    expect(manifest.dependencies["@spine-event-engine/core"]).toBe("2.0.0-snapshot.6");
+    expect(manifest.dependencies["@spine-event-engine/proto"]).toBe("2.0.0-snapshot.6");
+    expect(manifest.dependencies["@spine-event-engine/server"]).toBe("2.0.0-snapshot.6");
+    expect(manifest.devDependencies?.["@spine-event-engine/proto-tools"]).toBe("2.0.0-snapshot.6");
     expect(manifest.scripts.start).toBe("node dist/src/local-application-server.js");
   });
 

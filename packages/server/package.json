@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/server",
-  "version": "2.0.0-snapshot.5",
+  "version": "2.0.0-snapshot.6",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
@@ -44,15 +44,15 @@
     "@bufbuild/protobuf": "2.12.1",
     "@connectrpc/connect": "2.1.2",
     "@connectrpc/connect-node": "2.1.2",
-    "@spine-event-engine/core": "2.0.0-snapshot.5",
-    "@spine-event-engine/deployment": "2.0.0-snapshot.5",
-    "@spine-event-engine/proto": "2.0.0-snapshot.5",
-    "@spine-event-engine/storage": "2.0.0-snapshot.5",
-    "@spine-event-engine/transport": "2.0.0-snapshot.5",
+    "@spine-event-engine/core": "2.0.0-snapshot.6",
+    "@spine-event-engine/deployment": "2.0.0-snapshot.6",
+    "@spine-event-engine/proto": "2.0.0-snapshot.6",
+    "@spine-event-engine/storage": "2.0.0-snapshot.6",
+    "@spine-event-engine/transport": "2.0.0-snapshot.6",
     "loglayer": "9.4.0"
   },
   "peerDependencies": {
-    "@spine-event-engine/auth": "2.0.0-snapshot.5"
+    "@spine-event-engine/auth": "2.0.0-snapshot.6"
   },
   "peerDependenciesMeta": {
     "@spine-event-engine/auth": {
@@ -60,8 +60,8 @@
     }
   },
   "devDependencies": {
-    "@spine-event-engine/storage-datastore": "2.0.0-snapshot.5",
-    "@spine-event-engine/storage-rdbms": "2.0.0-snapshot.5",
+    "@spine-event-engine/storage-datastore": "2.0.0-snapshot.6",
+    "@spine-event-engine/storage-rdbms": "2.0.0-snapshot.6",
     "@connectrpc/connect-web": "2.1.2",
     "@spine-event-engine/delivery-server": "workspace:*",
     "@spine-event-engine/delivery-client": "workspace:*",

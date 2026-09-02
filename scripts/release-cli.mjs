@@ -189,10 +189,8 @@ export async function main({ argv = process.argv, dependencies = {} } = {}) {
     }
     return;
   }
-  if (argv[2] === "verify-registry")
-    return verifyRegistry(release, fetchResponse, { complete: true });
   throw new Error(
-    "Supported commands are prepare, tag, preflight, prepare-publication-workspace, and verify-registry",
+    "Supported commands are prepare, tag, preflight, and prepare-publication-workspace",
   );
 }
 if (

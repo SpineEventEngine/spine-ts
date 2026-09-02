@@ -1,5 +1,19 @@
 # Spine TS Project Completion Plan
 
+## Current Repository Workflow
+
+`https://github.com/SpineEventEngine/spine-ts` is the sole development
+destination. Its protected primary branch is `master`. Future work starts from
+a freshly fetched `origin/master`, proceeds on a non-`codex/` feature branch,
+and reaches `master` only through a human-managed pull request and merge. Agents
+must not commit, merge, or push directly to `master`, create or merge a pull
+request, or delete organization refs without explicit human instruction.
+
+Historical `origin/main`, personal-fork, branch, and merge records below remain
+evidence of completed work and are not current operating instructions. Every
+future `master` merge triggers NPM publication and therefore carries a new
+common workspace version under D-0115.
+
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
 remotely closed. The complete-replica deployment correction is closed through
 T-0213. The subsequent beginner-example and public-subscription corrections are
@@ -742,18 +756,21 @@ Before spawning reviewers, perform a lightweight local audit and record it:
    work, review, or combined-micro record.
 3. Commit the reconciled task records with the accepted task endpoint. Do not
    create a separate record-only commit merely to name that commit.
-4. Merge into root `main` without staging unrelated files.
-5. Prove whether the merged tree equals the verified task tree. Run post-merge
-   focused checks; repeat full `pnpm verify` only when mainline movement,
-   conflict resolution, shared infrastructure, tree differences, or high-risk
-   integration requires it.
-6. Record post-merge evidence in one mainline closure update when durable
-   project state must change. Never create a second follow-up solely to name
-   the closure commit itself.
-7. Push the completed task branch and updated `main` to `origin`, inspect and
-   reconcile every remote ref, then delete the completed branch and every tag;
-   closure requires exactly `origin/main` and no remote tags.
-8. Remove the completed worktree only when Git reports it clean.
+4. Push the verified feature branch and confirm its exact SHA on official
+   `origin`. Prepare pull-request text when requested, but leave pull-request
+   creation and merging to the human unless explicitly instructed otherwise.
+5. After the human merges, fetch `origin/master` and prove whether the merged
+   tree equals the verified task tree. Run post-merge focused checks; repeat
+   full `pnpm verify` only when primary-branch movement, conflict resolution,
+   shared infrastructure, tree differences, or high-risk integration requires
+   it.
+6. Record post-merge evidence in an already-required future task update. Never
+   push a closure commit directly to `master` or create a follow-up solely to
+   name the merge commit itself.
+7. Do not delete organization branches or tags without explicit human
+   authorization. Shared remote refs are not a task-completion failure.
+8. Remove the completed worktree only when Git reports the feature branch
+   merged and the worktree clean.
 
 ## Runtime Execution Packets
 
@@ -1418,15 +1435,18 @@ and GKE received a read-only beginner audit only. The canonical ledger is in
 
 ### T-0220: GitHub Actions NPM Publishing
 
-T-0220 is implemented, reviewed, and release-verified on the personal feature
-branch. Pull requests to `master` prove the exact package artifacts without
+T-0220 and its T-0221 Lerna migration are implemented, reviewed,
+release-verified, and merged into official `master` through pull request #1.
+Pull requests to `master` prove the exact package artifacts without
 publication authority; a protected `master` push prepares the same artifacts
 and publishes the exact 18-package dependency graph through NPM OIDC trusted
 publishing. Snapshot versions select `snapshot`, stable versions select
 `latest`, partial identical releases resume safely, and ambiguous registry or
-tag state fails closed. Official repository/environment activation and actual
-publication remain pending explicit human action. The canonical ledger is in
-`build-protocol/tasks/T-0220-github-actions-npm-publishing/TASK.md`.
+tag state fails closed. Official repository activation is complete; GitHub's
+Publish workflow history is the source of truth for individual live release
+outcomes. The canonical ledgers are in
+`build-protocol/tasks/T-0220-github-actions-npm-publishing/TASK.md` and
+`build-protocol/tasks/T-0221-lerna-publishing-migration/WORKLOG.md`.
 
 ## Parallelism Without Rework
 

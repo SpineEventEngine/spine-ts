@@ -94,9 +94,9 @@ handler metadata.
     initial offering.
 19. Do not build or modify Spine JVM. Inspect current local JVM source and
     official library documentation only.
-20. Push only to `origin` (`armiol/spine-ts`). Never push to the
-    `spine-event-engine` remote unless the human explicitly authorizes that
-    exact one-time operation. Do not publish packages to npm.
+20. Push only to the then-configured `origin`. Never push to an additional
+    remote unless the human explicitly authorizes that exact one-time
+    operation. Do not publish packages to npm.
 21. Preserve every user-owned or unrelated dirty file in the primary checkout,
     including both human-review files. Do not create `.superpowers` or other
     scratch ledgers; use `build-protocol/work-logs`.

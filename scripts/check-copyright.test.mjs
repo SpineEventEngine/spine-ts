@@ -286,7 +286,7 @@ describe("copyright checker", () => {
   it("combines committed, staged, and unstaged rename/deletion Git inputs", () => {
     const old = `${compliantHeader}${body}`;
     const responses = new Map([
-      ["merge-base origin/main HEAD", "base\n"],
+      ["merge-base origin/master HEAD", "base\n"],
       ["diff --name-status -M base...HEAD", "R100\told-committed.ts\tnew-committed.ts\n"],
       ["diff --name-status -M", "R100\told-unstaged.ts\tnew-unstaged.ts\n"],
       ["diff --cached --name-status -M", "R100\told-staged.ts\tnew-staged.ts\n"],
@@ -308,21 +308,16 @@ describe("copyright checker", () => {
     ).toEqual([]);
   });
 
-  it("falls back to origin/master when origin/main is unavailable", () => {
+  it("fails closed when origin/master is unavailable", () => {
     const calls = [];
-    const comparison = gitComparison((args) => {
-      calls.push(args);
-      if (args.join(" ") === "merge-base origin/main HEAD") return { status: 128, stdout: "" };
-      if (args.join(" ") === "merge-base origin/master HEAD")
-        return { status: 0, stdout: "base\n" };
-      return { status: 0, stdout: "" };
-    });
+    expect(() =>
+      gitComparison((args) => {
+        calls.push(args);
+        return { status: 128, stdout: "" };
+      }),
+    ).toThrow("copyright merge-base failed");
 
-    expect(comparison.deletedBasePaths()).toEqual([]);
-    expect(calls.slice(0, 2)).toEqual([
-      ["merge-base", "origin/main", "HEAD"],
-      ["merge-base", "origin/master", "HEAD"],
-    ]);
+    expect(calls).toEqual([["merge-base", "origin/master", "HEAD"]]);
   });
 
   it("does not make a single rename ambiguous when Git reports it in multiple comparisons", () => {

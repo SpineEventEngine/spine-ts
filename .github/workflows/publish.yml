@@ -71,4 +71,3 @@ jobs:
             cd "$publication_workspace"
             "$GITHUB_WORKSPACE/node_modules/.bin/lerna" publish from-package --contents .publish --concurrency 1 --ignore-scripts --no-git-reset --dist-tag "$TAG" --registry https://registry.npmjs.org/ --git-head "$GITHUB_SHA" --summary-file "$GITHUB_STEP_SUMMARY" --yes
           )
-      - run: node scripts/release-cli.mjs verify-registry
