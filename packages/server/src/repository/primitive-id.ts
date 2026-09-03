@@ -74,7 +74,9 @@ export interface PrimitiveIdCodec {
  * The message is validated against the Entity state ID-field schema at the
  * routing boundary. Its complete declared field set is the identifier.
  */
-export type MessageId = Message;
+export interface MessageId extends Message {
+  readonly $typeName: string;
+}
 
 /**
  * Internal compatibility shape for the legacy scalar-wrapper adapter.
@@ -82,10 +84,10 @@ export type MessageId = Message;
  * This is intentionally separate from {@link MessageId}: general message
  * identifiers need not, and must not, expose a `value` field.
  */
-type LegacyScalarMessageWrapper = {
+interface LegacyScalarMessageWrapper {
   readonly $typeName: string;
   readonly value: unknown;
-};
+}
 
 /**
  * Reads message-shaped entity identifiers and legacy scalar wrappers.

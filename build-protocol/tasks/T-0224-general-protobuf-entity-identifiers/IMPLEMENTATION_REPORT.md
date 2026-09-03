@@ -128,6 +128,28 @@ pnpm exec vitest run packages/server/test/repository/primitive-id.test.ts \
 2 files passed, 256 tests passed
 ```
 
+## Lint declaration correction
+
+The third explicit `gpt-5.6-luna` / low gate reported the repository's
+interface-declaration rule at the general identifier contract. `MessageId` is
+now a public interface extending Buf `Message` and explicitly requiring its
+generated `$typeName`; it still exposes no `value` member. The private legacy
+wrapper declaration also uses the repository-required interface form.
+
+```text
+pnpm exec eslint packages/server/src/repository/primitive-id.ts \
+  packages/server/src/repository/repository.ts \
+  packages/server/test/repository/primitive-id.test.ts \
+  packages/server/test/repository/repository-routing.test.ts
+exit 0
+
+pnpm typecheck:tooling
+exit 0
+
+focused repository tests
+2 files passed, 256 tests passed
+```
+
 ## Mechanical typecheck correction
 
 The earlier explicit `gpt-5.6-luna` / low mechanical gate found `TS2339` in
