@@ -55,19 +55,19 @@ describe("primitive aggregate IDs", () => {
     expect(MessageIds.read(compositeMessage)).toBe(composite);
   });
 
-  it("recognizes a message ID with a field named value without scalar semantics", () => {
-    expect(MessageIds.read({ $typeName: "example.TaskId", value: "task-1" })).toEqual({
+  it("recognizes a structurally valid message ID", () => {
+    expect(MessageIds.read({ $typeName: "example.TaskId", uuid: "task-1" })).toEqual({
       $typeName: "example.TaskId",
-      value: "task-1",
+      uuid: "task-1",
     });
-    expect(MessageIds.read({ $typeName: 1, value: "task-1" })).toBeUndefined();
+    expect(MessageIds.read({ $typeName: 1, uuid: "task-1" })).toBeUndefined();
   });
 
   it("rejects inherited message type names", () => {
     const inheritedTypeName = Object.create({ $typeName: "example.TaskId" }) as {
-      value: string;
+      uuid: string;
     };
-    inheritedTypeName.value = "task-1";
+    inheritedTypeName.uuid = "task-1";
 
     expect(MessageIds.read(inheritedTypeName)).toBeUndefined();
   });

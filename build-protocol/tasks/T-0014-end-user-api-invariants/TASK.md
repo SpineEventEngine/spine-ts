@@ -313,8 +313,8 @@ examples/todo/src/index.test.ts packages/server/test/repository/repository-routi
   localhost binding failed with `listen EPERM 127.0.0.1`. Full coverage passed
   734/734 with 95.14% statements and 90.47% branches.
 - `2026-07-07 17:44 WEST`: Round-17 JVM-alignment findings fixed. Default
-  command/event first-field routing rejects blank string IDs before handler
-  invocation, including message-ID wrappers with blank string values. The
+  Command/Event first-field routing rejects blank primitive IDs before handler
+  invocation, while generated message IDs follow schema validation. The
   cleanup guard rejects end-user `rollbackTransaction()` calls in addition to
   `startTransaction()` and `commitTransaction()`.
 - `2026-07-07 17:45 WEST`: Round-17 JVM-alignment verification passed. Static

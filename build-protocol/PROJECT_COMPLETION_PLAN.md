@@ -1455,12 +1455,12 @@ T-0224 is implemented, reviewed, and release-verified on the
 now be complete generated Protobuf messages with arbitrary field names, nested
 messages, and multiple fields. Command, Event, state-update, Entity Inbox,
 persistence, canonical-key, and duplicate-delivery paths retain the complete
-typed value. A message candidate requires an explicit custom route to become a
-primitive Entity ID; no implicit wrapper conversion exists. Schema validation
-is authoritative at route admission and no registry or storage migration was
-introduced. The final gate passed 287 test files and 4,557 tests with 90.01%
-branch coverage, including all 18 packed artifacts and the isolated external
-consumer. The canonical ledger is in
+typed value. When the selected route candidate is a message but the Entity ID
+type is primitive, an explicit custom route returns the intended primitive ID.
+Schema validation is authoritative at route admission and no registry or
+storage migration was introduced. The final gate passed 287 test files and
+4,557 tests with 90.01% branch coverage, including all 18 packed artifacts and
+the isolated external consumer. The canonical ledger is in
 `build-protocol/tasks/T-0224-general-protobuf-entity-identifiers/TASK.md`.
 
 ## Parallelism Without Rework

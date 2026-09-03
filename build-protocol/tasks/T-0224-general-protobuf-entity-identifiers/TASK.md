@@ -7,13 +7,14 @@ Worktree: `.worktrees/general-protobuf-entity-identifiers`
 
 ## Objective
 
-Remove Spine TS's invented requirement that a message-valued Entity ID contain
-exactly one primitive field named `value`. Route, deliver, persist, and compare
-the complete message described by the Entity state's ID-field schema.
+Support complete generated Protobuf messages as Entity IDs. Route, deliver,
+persist, and compare the message described by the Entity state's ID-field
+schema, including nested and multi-field identifiers.
 
 ## Acceptance criteria
 
-1. A message ID may have one field with any valid Protobuf name.
+1. A message ID follows its declared Protobuf schema without field-name
+   restrictions.
 2. A message ID may contain message-valued fields.
 3. A message ID may contain several fields.
 4. Command, event-producer, event-fallback, and state-update routing retain the
@@ -22,12 +23,11 @@ the complete message described by the Entity state's ID-field schema.
    guards retain and distinguish complete message IDs.
 6. Equivalent copies of one ID have the same canonical key; distinct composite
    IDs do not collide.
-7. A message-valued candidate is rejected for a primitive Entity target unless
-   an explicit custom route converts it; no automatic legacy-wrapper
-   compatibility is retained.
+7. A primitive Entity target accepts a compatible primitive selected by default
+   routing or returned by an explicit custom route.
 8. Wrong message types and malformed packed IDs continue to fail clearly.
 9. The public `MessageId` declaration and TSDoc describe a general Protobuf
-   message instead of the obsolete `{ $typeName, value }` shape.
+   message.
 10. No new type registry, durable-key format, or storage migration is added.
 
 ## Classification and estimate
@@ -86,8 +86,8 @@ dispatch fields and immutable role profile are the recorded evidence.
 
 ## Human-imposed requirements
 
-- Structured Protobuf identifiers are a supported Spine concept; do not impose
-  a field named `value`, primitive-only fields, or a single-field limit.
+- Structured Protobuf identifiers are a supported Spine concept. Their complete
+  schema-declared value forms the Entity identity.
 - Do not invent special Command/Event/message registries for this correction.
 - Work from current official `origin/master` on a regular feature branch with
   no `codex/` prefix.

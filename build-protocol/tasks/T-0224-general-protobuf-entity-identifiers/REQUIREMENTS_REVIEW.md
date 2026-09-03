@@ -1,260 +1,152 @@
 # T-0224 Requirements Review
 
-Status: accepted with contract corrections below; implementation-ready.
+Status: accepted and implemented.
 
 ## Decision
 
 A message-valued Entity identifier is the complete generated Protobuf message
-declared by the Entity state's ID field. The repository must validate it against
-that exact descriptor, preserve it as the routed ID, and use the existing
-descriptor-aware `Identifiers.pack()` / `Identifiers.unpack()` path at every
-serialized boundary.
+declared by the Entity state's ID field. The repository validates it against
+that descriptor, preserves it as the routed ID, and uses the existing
+descriptor-aware `Identifiers.pack()` and `Identifiers.unpack()` facilities at
+serialized boundaries.
 
-### Human-superseding compatibility decision
+Primitive Entity targets accept primitive IDs. When an application needs to
+derive such an ID from a message, it declares a custom route that returns the
+primitive value.
 
-The human explicitly superseded the earlier scalar-wrapper compatibility
-decision. A message-valued route candidate must be rejected for a primitive
-Entity target unless a custom route deliberately returns a primitive field.
-No backward compatibility for implicit message-to-primitive conversion was
-requested or retained.
+## Grounded design
 
-The implementation must not broaden the old shape test from “exactly
-`$typeName` plus `value`” into another schema-free structural convention. A
-`$typeName` string alone proves neither that all fields are encodable by the
-declared ID schema nor that a lookalike is the expected generated message.
-`readMessageRouteId()` therefore needs the target message schema (not only its
-type name) and must:
-
-1. reject a non-message candidate or a candidate whose `$typeName` differs;
-2. encode it with the existing target schema and existing `Identifiers` /
-   `AnyMessages` facilities, surfacing an intelligible routing error if it is
-   not encodable;
-3. retain the complete message as `RoutableId.id`; and
-4. never extract a field merely because it is named `value`.
-
-No new registry is needed because `DescriptorFieldMetadata` already owns the
-authoritative ID schema.
-
-## Evidence And Corrected Assumptions
-
+- `DescriptorFieldMetadata` provides the authoritative Entity ID schema.
 - `EntityIds.pack()`, `entityStorageDescriptor()`, `canonicalEntityIdKey()`,
-  `InboxMessages.inboxTargetId()`, and `InboxMessages.targetEntityId()` already
-  pack, key, and unpack the full ID through the Entity state ID-field schema.
-  `InboxTargets.key()` keys the complete typed `Any` (type URL and bytes).
-- The actual restriction is shared route admission/replay code:
-  `MessageIds.read()` admits only the exact `{ $typeName, value }` shape,
-  `readMessageRouteId()` returns only that shape, and `RoutableId.value` encodes
-  the obsolete primitive-only assumption. The replay path calls the same
-  validator after descriptor-aware `Any` unpacking, so changing only live
-  command/event routing would be incomplete.
-- `MessageIds.key()` is unused by production routing/storage and encodes only
-  one primitive `value`. It must not become a competing durable or
-  deduplication-key format. Remove it or narrow it out of the general message-ID
-  contract; canonical identity remains the existing packed-`Any` key.
-- A present message ID is not blank merely because one
-  nested scalar is default/blank. Its generated validation rules, if any, own
-  field validity. Missing/null declaration-first message fields remain invalid.
-- Scalar-ID repositories accept only primitive candidates. A custom route is
-  the sole explicit mechanism for converting a message field to a scalar Entity
-  ID.
-- The verified local Spine JVM source archive at revision
-  `461a8281e484c12636d8cf660a1d6c929fbbd7ec` contains
-  `server/src/testFixtures/proto/spine/test/commandservice/customer/customer.proto`.
-  It declares aggregate `Customer` with `CustomerId id`, where `CustomerId`
-  consists of nested `time.LocalDate registration_date` plus `int32 number`.
-  Its sibling `commands.proto` routes `CreateCustomer` by declaration-first
-  `CustomerId customer_id`, and `events.proto` carries the same complete ID.
-  The same archive contains many valid one-field IDs named `id`, `uuid`,
-  `code`, and `reader`, including message-valued `LibraryCardId.reader`.
-  `server/src/main/java/io/spine/server/entity/IdField.java` compares the state
-  first-field runtime class with the Entity ID class and assigns the complete
-  ID object; it contains no `value`-field or primitive-only rule.
+  `InboxMessages.inboxTargetId()`, and `InboxMessages.targetEntityId()` preserve
+  the complete ID through the state schema.
+- `InboxTargets.key()` keys the complete typed `Any`, including its type URL and
+  bytes.
+- Generated validation rules govern message-field validity at route admission.
+- Missing or null declaration-first fields remain invalid.
+- Scalar-ID repositories accept only compatible primitive candidates.
+- The verified Spine JVM model includes structured identifiers containing
+  nested messages and scalar discriminators. JVM routing assigns the complete
+  ID object after comparing its runtime type with the Entity state ID type.
 
-The task statement that existing descriptor-aware storage can carry complete
-messages is correct. The phrase “only legacy route-value validation” must be
-read to include durable replay and the exported `MessageId`/codec declaration,
-not just first-pass route calls.
+No additional registry is needed because the target field descriptor already
+provides the required schema.
 
-## Public Contract
+## Public contract
 
-- Keep the package-root export named `MessageId`, but define/document it as a
-  general Buf-generated Protobuf `Message` contract. It must require
-  `$typeName` and must not declare a `value` member.
-- Do not expose the repository's descriptor, registry, packed `Any`, canonical
-  key, or route-validation internals through `MessageId`.
+- The package-root `MessageId` type represents a generated Protobuf `Message`.
+- The public type exposes no repository descriptor, registry, packed `Any`,
+  canonical key, or route-validation implementation detail.
 - `CommandRouting<Id>`, `EventRouting<Id>`, `StateUpdateRouting<Id>`, and the
-  repository route result types retain their existing generic signatures.
-- The identity represented by “complete message” is the set of fields declared
-  by the authoritative schema. Existing `AnyMessages.pack()` deliberately omits
-  unknown fields, so unknown-field wire baggage is not a distinct Entity ID and
-  must not be documented as one.
+  repository route results retain their existing generic signatures.
+- Identity consists of fields declared by the authoritative schema. Unknown
+  wire fields are not a distinct Entity identity because the existing packing
+  path serializes the declared schema.
 
-## Ordered Behavioral Slices
+## Required behavior
 
-### 1. General-message admission and public declaration
+### Route admission
 
-Owner: implementation owner; expected files
-`packages/server/src/repository/primitive-id.ts`,
-`packages/server/src/repository/repository.ts`, and focused server tests.
+`readMessageRouteId()` receives the target message schema and:
 
-RED/GREEN acceptance:
+1. accepts only a message with the expected generated type name;
+2. validates it with the generated schema rules;
+3. verifies that the existing identifier facilities can serialize it;
+4. retains the complete message as the route ID; and
+5. reports the signal kind and expected ID type when admission fails.
 
-- A generated one-field ID named `uuid` is assignable to public `MessageId` and
-  routes without a `value` property.
-- A generated composite ID modeled after JVM `CustomerId` (nested message plus
-  scalar discriminator) is assignable and retained unchanged by a Command's
-  declaration-first route and by a custom Command route.
-- A present default message instance is not rejected by generic “blank” logic;
-  schema validation options remain authoritative.
-- A primitive, array, null, wrong `$typeName`, and an object not encodable by
-  the target ID schema fail before route acceptance with the signal kind and
-  expected ID type in the diagnostic.
-- A message-valued candidate, including generated `TaskId`, is rejected for a
-  primitive target unless an explicit custom route returns a primitive value.
+A present default message instance is governed by its generated validation
+rules rather than a generic recursive blank-value policy.
 
-### 2. All default and custom route sources preserve the whole value
+### Default and custom routing
 
-Owner: implementation owner; expected test file
-`packages/server/test/repository/repository-routing.test.ts`.
+- Default Command routing reads the Command's declared first field.
+- Event routing uses a compatible packed producer ID when available and
+  otherwise reads the Event's declared first field.
+- Built-in state-update routing selects the first state field compatible with
+  the target Entity ID field.
+- Custom Command, Event, and state-update routes retain complete message IDs.
+- Multi-target routes deduplicate equivalent generated copies while preserving
+  first-seen order and distinct composite IDs.
 
-Use two composite IDs that share their nested/date component and differ only in
-the second scalar field. Require:
+### Inbox and persistence
 
-- default Command first-field routing returns the exact composite ID;
-- a compatible packed Event producer wins and returns the full unpacked ID;
-- an incompatible producer falls back to the Event's declaration-first full
-  composite ID;
-- built-in state-update routing selects and returns a compatible full composite
-  ID; and
-- custom Event and custom state-update routes retain full IDs, stable-deduplicate
-  an ID and its generated clone, and do not merge the second distinct ID.
+- Command handoff stores the exact typed `Any` for a composite target.
+- Projection and Process Manager Event handoff preserve the same complete ID.
+- Replay reconstructs the stored target without rerunning custom routing.
+- Rehydration over the same storage factory distinguishes composite IDs that
+  differ in any declared field.
+- Produced Entity and System Event contexts carry the descriptor-typed complete
+  producer ID.
+- Wrong type URLs and malformed packed target bytes fail before handler
+  invocation.
 
-These are separate assertions over the four route sources named by acceptance
-criterion 4; a single custom-Event test is not sufficient.
+### Canonical identity and dispatch guards
 
-### 3. Typed Inbox and persistence/reload
+- A generated ID and its generated clone produce the same canonical key.
+- Composite IDs that differ in a declared field produce distinct keys and
+  storage records.
+- Guard identities remain independent for distinct composite targets.
+- Replaying one source Event suppresses each true duplicate without suppressing
+  a different target.
 
-Owner: implementation owner; reuse existing in-memory storage and repository
-test helpers. No delivery/storage production owner is required.
+## Verification requirements
 
-RED/GREEN acceptance:
+- Compile-time package-root coverage proves generated messages satisfy
+  `MessageId` without a deep import.
+- Focused tests cover Command, Event-producer, Event-fallback, state-update,
+  Inbox replay, persistence, canonical keys, guards, wrong types, malformed
+  bytes, and primitive targets.
+- Generated validation rejects an invalid message before handler invocation or
+  persistence.
+- The complete server routing suite and changed-source coverage pass before
+  review.
+- `verify:release` runs after review convergence because this is shared server
+  runtime and public-contract work.
 
-- Command handoff stores the exact `Any` for the composite target; replay
-  reconstructs the complete ID without rerunning the custom route and commits
-  state under that ID.
-- Projection or Process Manager Event handoff does the same through its durable
-  Inbox path; replay uses the stored target.
-- Current Entity state can be closed/reopened (or rehydrated through a fresh
-  handle over the same factory) and read independently under both composite IDs.
-- Produced Entity/System Event contexts contain the descriptor-typed complete
-  ID, not one nested field.
-- A stored target with the wrong type URL and a stored target with the correct
-  type URL but malformed bytes fail before handler invocation.
+## Risks
 
-Direct `EntityRecords.pack()` assertions alone do not satisfy reload or Inbox
-replay.
+- **Schema-free acceptance:** a type-name string alone does not prove that a
+  candidate is encodable by the declared ID schema. Admission stays bound to the
+  target descriptor.
+- **Default-message policy:** generic recursive blank checks can invent rules
+  that are absent from the schema. Generated validation remains authoritative.
+- **Partial routing coverage:** live admission can pass while durable replay is
+  wrong. Stored-target replay is tested directly.
+- **Competing key formats:** text or JSON keys are unsuitable for general
+  Protobuf values. Canonical identity continues to use the existing packed
+  `Any` path.
+- **Overstated canonicality:** the guaranteed proof covers generated copies and
+  declared composite fields. It does not add semantic normalization for maps or
+  unknown wire fields.
 
-### 4. Canonical identity and dispatch guards
+## Exclusions
 
-Owner: implementation owner; expected tests in repository routing plus the
-existing descriptor/Inbox helpers.
+- No Protobuf source, generated schema, manifest, package dependency, storage
+  provider, durable-key format, or migration change.
+- No additional type registry.
+- No Delivery wire-envelope or Inbox-record schema change.
+- No Query or Subscription contract change.
+- No routing declaration API, first-field precedence, cardinality, or route
+  invocation timing change.
+- No generalized enum-ID or additional primitive-ID support.
 
-RED/GREEN acceptance:
+## Completion evidence
 
-- `descriptor.id.key(id)` equals the key for a generated clone of `id`.
-- IDs differing only in the second composite field produce different packed
-  `Any` keys and different storage records.
-- A custom multi-target route returning `[idA, clone(idA), idB]` yields
-  `[idA, idB]` in first-seen order.
-- For a guarded Process Manager/Aggregate event path, `idA` and `idB` acquire
-  independent guard identities; replaying the same source Event suppresses each
-  duplicate without suppressing the other target.
+The implementation and focused tests cover arbitrary field names, nested and
+composite message IDs, generated validation, all route sources, durable Inbox
+handoff and replay, persistence, producer contexts, canonical keys, and guard
+isolation. Reader documentation explains the state ID declaration and default
+routing sources.
 
-Do not assert a new text key or snapshot raw base64 as a new format. The proof
-is equality/non-collision through the existing key functions.
+The final `pnpm verify:release` run passed 287 test files and 4,557 tests.
+Coverage passed at 93.28% statements, 90.01% branches, 92.82% functions, and
+94.45% lines. All 18 package tarballs and the isolated external consumer also
+passed.
 
-### 5. Focused regressions and declaration evidence
+## Dispatch metadata
 
-Owner: implementation owner.
-
-- Retain existing one-field `TaskId`, int64 message ID, primitive int32/int64,
-  wrong-message-type, malformed producer, route-once/replay, and message-ID
-  query/subscription tests.
-- Add a compile-time public-import assertion for `MessageId` through
-  `packages/server/src/index.ts`, not a deep import.
-- Record RED evidence before production changes, then run the task's focused
-  server tests/coverage and prescribed `verify:release` only after review
-  convergence.
-
-## Compatibility Traps And Risks
-
-- **Schema-free acceptance:** checking only `$typeName` would allow a forged or
-  structurally incompatible candidate to pass direct `routeCommand()` /
-  `routeEvent()` before later serialization. Bind validation to the known ID
-  schema.
-- **Implicit conversion regression:** a message with a `value` field must not
-  become a primitive Entity ID without an explicit custom route.
-- **Default-message regression:** recursively treating blank/default nested
-  fields as an empty ID reintroduces invented policy. Presence and generated
-  schema validation are the boundary.
-- **Partial fix:** live routing may pass while Inbox replay still calls the old
-  restrictive validator. Exercise stored replay explicitly.
-- **Competing key formats:** `MessageIds.key()` JSON is neither used nor safe for
-  general Protobuf values such as `bigint`, bytes, nested messages, or maps.
-  Reuse packed `Any` identity everywhere.
-- **Overstated canonicality:** required proof is stable identity for ordinary
-  generated copies/clones and distinction of declared composite fields. Do not
-  silently promise semantic canonicalization of arbitrary map insertion order
-  or unknown fields without separate evidence and a storage-format decision.
-
-## Explicit Exclusions
-
-- No Protobuf source/generation change, registry, schema manifest, dependency,
-  package manifest, lockfile, storage provider, durable-key format, or migration.
-- No changes to Delivery wire envelopes, Inbox record schemas, Query/Subscription
-  contracts, routing declaration APIs, first-field routing precedence, route
-  cardinality, or route invocation timing.
-- No generalized support for enum Entity IDs or additional primitive Entity ID
-  kinds; JVM parity outside message-valued IDs remains separate work.
-- No reader-documentation expansion unless implementation changes user-facing
-  usage beyond correcting the exported `MessageId` declaration/TSDoc.
-
-## Completion Gate
-
-There is no architectural blocker. Implementation is accepted only if the
-schema-aware route boundary, no-implicit-conversion primitive boundary,
-complete-value Inbox replay, canonical-key/guard distinctions, and public type
-correction all land together.
-
-## Dispatch Metadata
-
-The existing requirements-splitter/architecture role was explicitly dispatched
-with `gpt-5.6-sol` and high reasoning. Runtime self-introspection was unavailable;
-the immutable configured role/profile is the actual evidence, with no visible
-fallback or mismatch.
-
-## Fresh-review two-axis disposition
-
-The fresh review correctly identified proof and reader-documentation gaps, not
-a need to broaden the public `MessageId` contract or modify production routing.
-The existing implementation owner was explicitly dispatched as
-`gpt-5.6-terra` / high; runtime self-introspection is unavailable on this
-surface.
-
-- A generated one-field `CommandId` with `uuid` is assigned through the
-  package-root `MessageId` import and routed with no `value` field.
-- A custom Command route returns and preserves the whole generated composite
-  ID, independently of declaration-first routing.
-- A Process Manager command handoff persists the exact composite typed `Any`,
-  replay does not rerun custom routing, and the state lookup uses the complete
-  ID. The initial Projection-path test was RED because Projections do not own
-  Entity Inbox command rows; the corrected Process Manager path passed with no
-  production change.
-- README and REFERENCE now describe complete generated Protobuf IDs, their
-  state declaration, authoritative validation, and the explicit custom-route
-  conversion required for a primitive target.
-
-Verification after the correction passed the selected three regressions, the
-two focused files (262 tests), focused coverage, `typecheck:tooling`, generated
-documentation checks, affected-file ESLint, TSDoc, cleanup, formatting, and
-`git diff --check`. No fresh-review finding remains open.
+The requirements splitter used `gpt-5.6-sol` with high reasoning. The
+implementation and specialist review functions used their explicitly assigned
+profiles recorded in the task work log. Runtime self-introspection was not
+available; the configured immutable profiles supplied the dispatch evidence.

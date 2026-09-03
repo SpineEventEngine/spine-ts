@@ -3848,13 +3848,13 @@ describe("repository signal routing", () => {
     expect(() => BoundedContext.singleTenant("Tasks").add(repository).build()).not.toThrow();
   });
 
-  it("routes a generated UUID message ID without a value field", () => {
+  it("routes a generated UUID message ID", () => {
     const id = create(CommandIdSchema, { uuid: "uuid-message-id" });
     const publicMessageId: MessageId = id;
     const repository = createUuidMessageIdRepository();
 
     expect(publicMessageId).toBe(id);
-    expect("value" in id).toBe(false);
+    expect(id).toEqual({ $typeName: CommandIdSchema.typeName, uuid: "uuid-message-id" });
     expect(
       repository.routeCommand(
         SignalEnvelopes.command({

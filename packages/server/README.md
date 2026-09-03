@@ -61,8 +61,8 @@ for local development and tests.
 
 An Entity ID can be a primitive value or a complete generated Protobuf message.
 For a message-valued ID, the Entity state message declares that ID message as
-its first field. The field is not required to be named `value`: nested and
-multiple fields are part of the identity.
+its first field. Every field declared by the ID message, including nested
+messages, is part of the identity.
 
 ```proto
 message WorkItemId {
@@ -77,7 +77,7 @@ message WorkItem {
 ```
 
 Generated messages can have any declared identifier fields. For example,
-`CommandId` is a generated one-field ID with `uuid`, not `value`:
+`CommandId` is a generated message ID:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
@@ -89,11 +89,14 @@ const entityId: MessageId = id;
 ```
 
 At routing, the generated ID is checked against the state field's declared
-schema and its generated validation rules before durable use. A message is
-never converted automatically to a primitive Entity ID, including when it has
-a field named `value`. To make that conversion intentionally, define a custom
-route that returns the desired primitive field, such as
-`message => message.id.value`.
+schema and its generated validation rules before durable use. When default
+routing finds a message but the Entity ID type is primitive, define a custom
+route that returns the intended primitive ID.
+
+Without a custom route, Command routing uses the Command's declared first
+field. Event routing uses a compatible producer ID when available and otherwise
+uses the Event's declared first field. State-update routing selects the first
+state field compatible with the Entity ID.
 
 ## Browser gateway migration
 

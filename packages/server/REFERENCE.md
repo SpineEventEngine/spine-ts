@@ -130,8 +130,7 @@ the whole local read side, and is not Projection catch-up.
 
 The first state field determines the Entity ID type. It can be a primitive or
 a generated Protobuf message; for a message ID, all declared fields form the
-identifier. Neither routing nor persistence requires a field named `value`, so
-nested and composite IDs are supported.
+identifier. Nested and composite IDs are supported.
 
 ```proto
 message ShipmentId {
@@ -145,8 +144,7 @@ message Shipment {
 }
 ```
 
-The root `MessageId` type accepts generated messages such as the one-field
-`CommandId` (`uuid` is its only declared field):
+The root `MessageId` type accepts generated messages such as `CommandId`:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
@@ -158,10 +156,13 @@ const id: MessageId = create(CommandIdSchema, { uuid: "shipment-7" });
 
 Admission validates a message ID against the schema declared by the state
 field, including generated validation rules, before it is stored or replayed.
-A message is never converted automatically to a primitive Entity ID, including
-when it has a field named `value`. A custom route can deliberately make that
-conversion by returning the needed field, for example
-`message => message.id.value`.
+When default routing finds a message but the Entity ID type is primitive, a
+custom route returns the intended primitive ID.
+
+Without a custom route, Command routing uses the Command's declared first
+field. Event routing uses a compatible producer ID when available and otherwise
+uses the Event's declared first field. State-update routing selects the first
+state field compatible with the Entity ID.
 
 ## Handler routing and operations
 

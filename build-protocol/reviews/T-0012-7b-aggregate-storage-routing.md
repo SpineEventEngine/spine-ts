@@ -520,8 +520,8 @@ Findings addressed in the round-18 fix pass:
 - EventBus docs described dispatcher `accept()` as the first pre-store
   validation step and overpromised that append failure means no accept hooks ran;
 - user and implementation docs had stale storage-sharing wording; and
-- `AggregateStorage` accepted any compile-time ID type even though runtime
-  storage currently supports only primitive aggregate IDs.
+- `AggregateStorage` needed runtime validation for the Entity ID type declared
+  by the state schema.
 
 All five round-18 reviewers were closed after their reports were collected.
 

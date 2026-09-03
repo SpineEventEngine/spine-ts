@@ -1,92 +1,88 @@
-# T-0224 Review Log
+# T-0224 Review Record
 
-Status: Accepted after correction
-Baseline: `5b7c6d1e55706363fef52162b0d0d995f504a3e2`
+## Scope
 
-## Canonical concerns
+The review compares `origin/master@5b7c6d1e55706363fef52162b0d0d995f504a3e2`
+with the complete `general-protobuf-entity-identifiers` feature branch.
 
-- Specification and DDD/JVM compatibility: clean after correction.
-- Routing, persistence, and canonical-ID correctness: clean after correction.
-- Style and maintainability: clean after correction.
-- TypeScript/public API documentation: clean after correction.
-- Performance and reliability: clean after correction.
-- Reader documentation: clean after fresh-review correction.
-- Security: N/A as a separate per-task lane; malformed external data remains in
-  correctness scope and the final project security gate remains unchanged.
+The reviewed contract supports complete generated Protobuf messages as Entity
+IDs. The Entity state ID field supplies the authoritative type. Primitive
+Entity targets accept primitive IDs returned by default or custom routing.
 
-## Review waves
+## Reviewer profiles
 
-The frozen review endpoint was `5465277ed`. All reviewers received explicit
-existing roles or concern functions and the required model profiles.
+- Correctness and compatibility: `gpt-5.6-terra`, high.
+- Style and maintainability: `gpt-5.6-terra`, high.
+- TypeScript and API documentation: `gpt-5.6-terra`, high.
+- Performance and reliability: `gpt-5.6-terra`, high.
 
-- Correctness found that an inherited `$typeName` could pass shallow message
-  recognition.
-- Reliability found that `Identifiers.pack()` deliberately skips schema
-  validation, so routing had to call the established `Validate.check()` first.
-- Maintainability found an obsolete one-field route-result wrapper and brittle
-  numeric descriptor positions in the composite test fixture.
-- TypeScript/API documentation found that the codec documentation did not
-  distinguish shallow message recognition from the legacy scalar adapter.
+The dispatch surface did not expose runtime self-introspection. Explicit
+dispatch configuration and the immutable role profiles supplied the available
+metadata; no visible fallback occurred.
 
-The existing implementation owner applied one consolidated correction in
-`2693e120b`. The focused re-review endpoint was that commit. Correctness,
-reliability, and API-documentation re-reviews were clean. Maintainability found
-one redundant own-property check; deterministic cleanup `61695d43c` removed it
-without changing behavior. Its narrow tests, ESLint, TSDoc, tooling typecheck,
-formatting, and diff checks passed, so it did not reopen a semantic lane.
+## Correctness
 
-Runtime self-introspection was unavailable. The explicitly dispatched profiles
-and immutable specialist role profiles are the accepted metadata:
+Clean after correction. Route admission validates complete message IDs against
+the target descriptor and generated validation rules. Command, Event,
+state-update, Inbox replay, persistence, producer contexts, canonical keys, and
+dispatch guards retain the complete typed ID. Primitive targets pass through
+the scalar compatibility boundary and may use an explicit custom route.
 
-- correctness/compatibility: `gpt-5.6-terra`, high;
-- style/maintainability: `gpt-5.6-terra`, high;
-- TypeScript/API documentation: `gpt-5.6-terra`, high;
-- performance/reliability: `gpt-5.6-terra`, high.
+## Standards and maintainability
 
-## Release gate
+Clean after correction. The implementation uses existing schema and identifier
+facilities, introduces no competing registry or key format, and keeps routing
+sources converged at one validation boundary. Test descriptors resolve fields
+by name, and test names describe current behavior.
 
-After version alignment, the first release run exposed two stale snapshot.7
-test assertions and no implementation finding. Their focused correction passed
-23 tests. The complete rerun passed 287 test files and 4,552 tests with 90.01%
-branch coverage; all other global coverage measures exceeded 92%.
+## TypeScript and API documentation
 
-## Fresh two-axis review
+Clean after correction. The public package-root `MessageId` type represents a
+generated Protobuf `Message` and does not expose repository internals. README,
+REFERENCE, TSDoc, task records, and decision records consistently describe the
+current complete-message contract and default routing sources.
 
-The fresh comparison used the fixed branch baseline
-`5b7c6d1e55706363fef52162b0d0d995f504a3e2` and reviewed the actual complete
-diff without relying on prior review conclusions.
+## Performance and reliability
 
-### Standards
+Clean. Canonical identity continues through the existing descriptor-aware
+packed `Any` path. Equivalent generated copies share a key, distinct composite
+IDs remain separate, multi-target routing preserves first-seen order, and
+per-target guards remain independent.
 
-The Standards reviewer found that the public `MessageId` behavior was absent
-from the server package README and REFERENCE. Commit `f0d8c2aa8` adds concise
-beginner guidance and detailed contract documentation. Re-review was clean.
+## Behavioral proof
 
-### Specification
+Tests cover:
 
-The Specification reviewer found three missing explicit proofs: generated
-one-field `uuid` routing, custom composite Command routing, and composite
-Command Entity Inbox handoff/replay. Commit `f0d8c2aa8` adds all three; the
-focused suite passes 262 tests. Re-review confirmed all three requirements are
-satisfied.
+- generated UUID and nested composite message IDs;
+- default and custom Command routes;
+- compatible-producer and fallback Event routes;
+- built-in and custom state-update routes;
+- Command and Event Inbox handoff and replay;
+- persistence and rehydration;
+- complete producer contexts;
+- canonical-key equality and non-collision;
+- route deduplication and dispatch guards;
+- generated validation;
+- wrong message types and malformed packed targets; and
+- explicit custom primitive routes.
 
-The reviewer initially questioned whether the reader documentation exceeded
-scope, then withdrew that finding after rechecking the full branch. Runtime
-routing now accepts complete message IDs that were previously rejected, which
-satisfies the requirements review's documentation exception; `CODE_QUALITY.md`
-also requires current package documentation for changed public behavior.
+## Final gate
 
-Both fresh review axes are clean and no finding remains open.
+The final `pnpm verify:release` run passed 287 test files and 4,557 tests.
+Coverage passed at 93.28% statements, 90.01% branches, 92.82% functions, and
+94.45% lines. All 18 package tarballs and the isolated external consumer also
+passed.
 
-## Human-superseding compatibility correction
+No finding remains open.
 
-The human superseded the prior exact scalar-wrapper compatibility decision: no
-message candidate is converted automatically to a primitive Entity ID. The
-implementation removes the adapter and proves that generated `TaskId` is
-rejected for a primitive target unless a custom route deliberately returns
-`message.id.value`. No backward compatibility was requested.
+## Final documentation re-review
 
-Affected correctness and standards re-review is clean after the superseding
-correction. The final release gate passed 287 test files and 4,557 tests with
-90.01% branch coverage; artifact inspection and the isolated external consumer
-also passed.
+A fresh repository-wide audit confirmed one Entity-ID contract across current
+and historical records. The documents describe complete generated message IDs
+and the actual default routing sources. They also explain that a custom route is
+needed when routing selects a message for an Entity whose ID type is primitive;
+compatible primitive fields continue to work through default routing.
+
+Documentation/API and standards re-review returned clean. Mechanical scans
+confirmed the complete-message contract. The package README and REFERENCE
+contain no unnecessary `own` verb.

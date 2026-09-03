@@ -5730,34 +5730,19 @@ Date: 2026-09-03
 
 Task: T-0224 general Protobuf Entity identifiers
 
-Context: Spine TS routing restricted a message-valued Entity identifier to
-exactly one primitive field named `value`. That restriction is absent from
-Spine's domain model and Spine JVM, which support structured identifiers with
-arbitrary field names, nested messages, and multiple fields. The server already
-stores, delivers, and canonicalizes complete IDs using the Entity state's
-declared ID-field schema; only legacy route-value validation retained the
-restriction.
+Context: Spine's domain model and Spine JVM support structured Entity
+identifiers with arbitrary field names, nested messages, and multiple fields.
+Spine TS uses the Entity state's declared ID-field schema as the authoritative
+type for routing, storage, delivery, and canonical identity.
 
 Decision: A message-valued Entity ID is the complete Protobuf message of the
 type declared by the Entity state's ID field. Routing validates and serializes
 that complete message through the existing descriptor-aware identifier
-facilities. It must not infer validity from a field named `value`, limit message
-IDs to one field, or introduce a separate type registry.
+facilities. If default routing selects a message for a primitive Entity target,
+the application supplies a custom route that returns the intended primitive ID.
+No separate type registry is introduced.
 
 Consequences: Command, Event, state-update, Inbox, persistence, and duplicate-
-delivery paths preserve the same complete typed ID. Valid one-field message
-identifiers remain message identifiers; they are not converted automatically to
-primitive targets. Wrong message types and malformed packed data remain
-rejected. Existing durable encoding is retained, so this decision requires no
-storage migration.
-
-### Human supersession: no automatic message-to-primitive conversion
-
-Date: 2026-09-03
-
-The human superseded the prior compatibility interpretation. A message-valued
-route candidate, including a one-field message with `value`, is not compatible
-with a primitive Entity target unless an explicit custom route returns a
-primitive value. No backward compatibility for the removed implicit adapter was
-requested. This preserves complete-message semantics without adding a registry,
-storage migration, or another special-case adapter.
+delivery paths preserve the same complete typed ID. Wrong message types and
+malformed packed data remain rejected. Existing durable encoding is retained,
+so this decision requires no storage migration.
