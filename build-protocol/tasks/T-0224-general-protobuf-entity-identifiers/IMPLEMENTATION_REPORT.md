@@ -53,9 +53,20 @@ storage, and Inbox paths; it introduces no registry, generated proto change,
 storage format, manifest, version, or lockfile change. The route boundary now
 uses the target schema rather than a field-name convention.
 
-This is not a completion claim. Generated composite-ID routing across all route
-sources, Inbox replay/persistence, key and guard distinction assertions, and
-the specialist review wave remain outstanding. In particular, the present test
-adds one-field non-`value`, nested, and composite public message coverage at
-the codec boundary, but it does not yet exercise all required generated-schema
-end-to-end cases.
+## Generated-schema routing follow-up
+
+An in-test generated descriptor fixture now models `CompositeRouteId` with a
+nested `spine.core.UserId reader` plus an `int32 number`. It proves complete-ID
+preservation through default Command, compatible Event-producer,
+incompatible-producer Event fallback, and built-in state-update routing. Custom
+Event and state-update routes stably deduplicate an `idA` clone while retaining
+`idB` whose second scalar differs. Descriptor key tests prove clone equality
+and `idA`/`idB` distinction. `RoutableId.value` was removed as obsolete.
+
+Focused coverage used explicit zero global thresholds so the source run could
+complete: 252 tests passed. Relevant line coverage remains `primitive-id.ts`
+96.42% and `repository.ts` 89.49%.
+
+This is not a completion claim. Durable Inbox replay/persistence/reload,
+complete produced-event producer IDs, malformed stored-target rejection, guard
+isolation, and the specialist review wave remain outstanding.

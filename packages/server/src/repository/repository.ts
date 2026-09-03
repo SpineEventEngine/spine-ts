@@ -3035,7 +3035,6 @@ interface RepositoryEntityStorage<I, S extends Message> {
 
 interface RoutableId {
   readonly id: unknown;
-  readonly value: unknown;
 }
 
 /**
@@ -4870,7 +4869,6 @@ const RepositoryRoutes = {
 
     return Object.freeze({
       id,
-      value: id,
     });
   },
 
@@ -4890,7 +4888,6 @@ const RepositoryRoutes = {
 
     return Object.freeze({
       id,
-      value: id,
     });
   },
 

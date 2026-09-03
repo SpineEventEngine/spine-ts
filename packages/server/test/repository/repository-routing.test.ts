@@ -20,7 +20,9 @@ import {
   AnySchema,
   BoolValueSchema,
   DoubleValueSchema,
+  DescriptorProtoSchema,
   FieldDescriptorProto_Label,
+  FieldDescriptorProtoSchema,
   FieldDescriptorProto_Type,
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
@@ -243,6 +245,26 @@ type Int64MessageIdProjectionEvent = Message<"Int64MessageIdProjectionEvent"> & 
   name: string;
 };
 
+type CompositeRouteId = Message<"CompositeRouteId"> & {
+  reader?: UserId;
+  number: number;
+};
+
+type CompositeRouteState = Message<"CompositeRouteState"> & {
+  id?: CompositeRouteId;
+  name: string;
+};
+
+type CompositeRouteEvent = Message<"CompositeRouteEvent"> & {
+  id?: CompositeRouteId;
+  name: string;
+};
+
+type CompositeRouteSourceState = Message<"CompositeRouteSourceState"> & {
+  id?: CompositeRouteId;
+  name: string;
+};
+
 type NumberRouteEvent = Message<"spine_ts.test.NumberRouteEvent"> & {
   id: number;
 };
@@ -411,6 +433,56 @@ const fileInt64MessageIdSourceFixture = (() => {
     fileInt64MessageIdFixture,
   ]);
 })();
+const fileCompositeRouteFixture = (() => {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
+  );
+  const source = descriptorSet.file[0];
+  if (source === undefined) throw new Error("Entity metadata fixture descriptor set is empty.");
+  const descriptor = clone(FileDescriptorProtoSchema, source);
+  const id = descriptor.messageType[8];
+  const state = descriptor.messageType[9];
+  if (id === undefined || state === undefined) {
+    throw new Error("Composite message-ID fixture declarations are missing.");
+  }
+  const originalIdField = id.field[0];
+  if (originalIdField === undefined) throw new Error("Composite ID field is missing.");
+  id.name = "CompositeRouteId";
+  id.field = [
+    create(FieldDescriptorProtoSchema, {
+      ...clone(FieldDescriptorProtoSchema, originalIdField),
+      name: "reader",
+      number: 1,
+      label: FieldDescriptorProto_Label.OPTIONAL,
+      type: FieldDescriptorProto_Type.MESSAGE,
+      typeName: ".spine.core.UserId",
+      jsonName: "reader",
+    }),
+    create(FieldDescriptorProtoSchema, {
+      name: "number",
+      number: 2,
+      label: FieldDescriptorProto_Label.OPTIONAL,
+      type: FieldDescriptorProto_Type.INT32,
+      jsonName: "number",
+    }),
+  ];
+  state.name = "CompositeRouteState";
+  const stateId = state.field[0];
+  if (stateId === undefined) throw new Error("Composite state ID field is missing.");
+  stateId.typeName = ".CompositeRouteId";
+  const event = clone(DescriptorProtoSchema, state);
+  event.name = "CompositeRouteEvent";
+  event.options = undefined;
+  const sourceState = clone(DescriptorProtoSchema, state);
+  sourceState.name = "CompositeRouteSourceState";
+  descriptor.messageType.push(event, sourceState);
+  descriptor.dependency.push(UserIdSchema.file.proto.name);
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+    UserIdSchema.file,
+  ]);
+})();
 const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
@@ -551,6 +623,19 @@ const Int64MessageIdProjectionEventSchema = messageDesc(
   fileInt64MessageIdEventFixture,
   1,
 ) as GenMessage<Int64MessageIdProjectionEvent>;
+const CompositeRouteIdSchema = messageDesc(fileCompositeRouteFixture, 8) as GenMessage<CompositeRouteId>;
+const CompositeRouteStateSchema = messageDesc(
+  fileCompositeRouteFixture,
+  9,
+) as GenMessage<CompositeRouteState>;
+const CompositeRouteEventSchema = messageDesc(
+  fileCompositeRouteFixture,
+  14,
+) as GenMessage<CompositeRouteEvent>;
+const CompositeRouteSourceStateSchema = messageDesc(
+  fileCompositeRouteFixture,
+  15,
+) as GenMessage<CompositeRouteSourceState>;
 
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState): void {
@@ -622,6 +707,20 @@ class Int64MessageIdProjection extends Projection<
   subscribeState(event: Int64MessageIdProjectionEvent): void {
     void event;
     Int64MessageIdProjection.calls += 1;
+  }
+}
+
+class CompositeRouteProjection extends Projection<
+  CompositeRouteId,
+  typeof CompositeRouteStateSchema,
+  number
+> {
+  assign(command: CompositeRouteEvent): void {
+    this.update((draft) => Object.assign(draft, command));
+  }
+
+  subscribe(event: CompositeRouteEvent | CompositeRouteSourceState): void {
+    this.update((draft) => Object.assign(draft, event));
   }
 }
 
@@ -3565,6 +3664,119 @@ describe("repository signal routing", () => {
     expectTypeOf(route.entityId).toEqualTypeOf<string>();
 
     expect(() => BoundedContext.singleTenant("Tasks").add(repository).build()).not.toThrow();
+  });
+
+  it("routes generated nested composite IDs through command, event, and state sources", () => {
+    const idA = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "reader" }),
+      number: 1,
+    });
+    const idB = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "reader" }),
+      number: 2,
+    });
+    const repository = createCompositeRouteRepository();
+    const message = create(CompositeRouteEventSchema, { id: idA, name: "Composite" });
+
+    expect(
+      repository.routeCommand(
+        SignalEnvelopes.command({
+          id: create(CommandIdSchema, { uuid: "composite-command" }),
+          schema: CompositeRouteEventSchema,
+          message,
+        }),
+      ).entityId,
+    ).toEqual(idA);
+    expect(
+      repository.routeEvent(
+        SignalEnvelopes.event({
+          id: create(EventIdSchema, { value: "composite-producer" }),
+          context: create(EventContextSchema, { producerId: Identifiers.pack(CompositeRouteIdSchema, idA) }),
+          schema: CompositeRouteEventSchema,
+          message: create(CompositeRouteEventSchema, { id: idB, name: "Producer" }),
+        }),
+      ).entityIds,
+    ).toEqual([idA]);
+    expect(
+      repository.routeEvent(
+        SignalEnvelopes.event({
+          id: create(EventIdSchema, { value: "composite-fallback" }),
+          context: create(EventContextSchema, {
+            producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "other" })),
+          }),
+          schema: CompositeRouteEventSchema,
+          message: create(CompositeRouteEventSchema, { id: idB, name: "Fallback" }),
+        }),
+      ).entityIds,
+    ).toEqual([idB]);
+    expect(
+      repositoryAccess.routeStateUpdate(
+        repository,
+        createStateChangedEvent(
+          "composite-state",
+          create(CompositeRouteSourceStateSchema, { id: idA, name: "State" }),
+        ),
+      )?.entityIds,
+    ).toEqual([idA]);
+  });
+
+  it("deduplicates generated composite route clones without merging their scalar discriminator", () => {
+    const idA = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "reader" }),
+      number: 1,
+    });
+    const idB = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "reader" }),
+      number: 2,
+    });
+    const eventRouting = EventRouting.create<CompositeRouteId>().route(
+      CompositeRouteEventSchema,
+      () => [idA, clone(CompositeRouteIdSchema, idA), idB],
+    );
+    const stateUpdateRouting = StateUpdateRouting.create<CompositeRouteId>().route(
+      CompositeRouteSourceStateSchema,
+      () => [idA, clone(CompositeRouteIdSchema, idA), idB],
+    );
+    const repository = createCompositeRouteRepository(eventRouting, stateUpdateRouting);
+
+    expect(
+      repository.routeEvent(
+        SignalEnvelopes.event({
+          id: create(EventIdSchema, { value: "composite-custom" }),
+          context: create(EventContextSchema, {
+            producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "other" })),
+          }),
+          schema: CompositeRouteEventSchema,
+          message: create(CompositeRouteEventSchema, { id: idA, name: "Custom" }),
+        }),
+      ).entityIds,
+    ).toEqual([idA, idB]);
+    expect(
+      repositoryAccess.routeStateUpdate(
+        repository,
+        createStateChangedEvent(
+          "composite-custom-state",
+          create(CompositeRouteSourceStateSchema, { id: idA, name: "State" }),
+        ),
+      )?.entityIds,
+    ).toEqual([idA, idB]);
+  });
+
+  it("uses packed descriptor identity for generated composite ID clones", () => {
+    const idA = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "reader" }),
+      number: 1,
+    });
+    const idB = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "reader" }),
+      number: 2,
+    });
+    new Repository({ entityType: CompositeRouteProjection, schema: CompositeRouteStateSchema });
+    const spec = SpecScanner.scan(CompositeRouteProjection as never);
+    const descriptor = entityStorageDescriptor({ name: "Composite", multitenant: false }, spec);
+
+    expect(descriptor.id.key(idA)).toBe(descriptor.id.key(clone(CompositeRouteIdSchema, idA)));
+    expect(descriptor.id.key(idA)).not.toBe(descriptor.id.key(idB));
   });
 
   it("uses an exact Command route instead of the declaration-first field", () => {
@@ -9456,6 +9668,28 @@ function createInt64MessageIdProjectionRepository(
   });
 }
 
+function createCompositeRouteRepository(
+  eventRouting?: EventRouting<CompositeRouteId>,
+  stateUpdateRouting?: StateUpdateRouting<CompositeRouteId>,
+): Repository<typeof CompositeRouteProjection> {
+  const handlers = EntityHandlers.define(
+    CompositeRouteProjection,
+    CompositeRouteStateSchema,
+    (builder) => [
+      builder.assign(CompositeRouteEventSchema, "assign"),
+      builder.subscribe(CompositeRouteEventSchema, "subscribe"),
+      builder.subscribe(CompositeRouteSourceStateSchema, "subscribe"),
+    ],
+  );
+  return new Repository({
+    entityType: CompositeRouteProjection,
+    schema: CompositeRouteStateSchema,
+    handlers,
+    ...(eventRouting === undefined ? {} : { eventRouting }),
+    ...(stateUpdateRouting === undefined ? {} : { stateUpdateRouting }),
+  });
+}
+
 function createManagedProjection(): Repository<typeof ManagedTaskProjection> {
   const handlers = EntityHandlers.define(
     ManagedTaskProjection,
@@ -12192,6 +12426,8 @@ function createStateChangedEvent(
       ? AggregateStateSchema
       : state.$typeName === Int64MessageIdSourceStateSchema.typeName
         ? Int64MessageIdSourceStateSchema
+        : state.$typeName === CompositeRouteSourceStateSchema.typeName
+          ? CompositeRouteSourceStateSchema
         : ProjectionStateSchema;
   const origin =
     tenantId === undefined ? undefined : projectionEventOrigin({ pastMessageTenantId: tenantId });
