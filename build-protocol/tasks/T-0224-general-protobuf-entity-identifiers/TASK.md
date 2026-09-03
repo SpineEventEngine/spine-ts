@@ -22,7 +22,9 @@ the complete message described by the Entity state's ID-field schema.
    guards retain and distinguish complete message IDs.
 6. Equivalent copies of one ID have the same canonical key; distinct composite
    IDs do not collide.
-7. Existing primitive IDs and legacy one-field message IDs remain compatible.
+7. A message-valued candidate is rejected for a primitive Entity target unless
+   an explicit custom route converts it; no automatic legacy-wrapper
+   compatibility is retained.
 8. Wrong message types and malformed packed IDs continue to fail clearly.
 9. The public `MessageId` declaration and TSDoc describe a general Protobuf
    message instead of the obsolete `{ $typeName, value }` shape.

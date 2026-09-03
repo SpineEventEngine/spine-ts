@@ -211,9 +211,8 @@ focused repository tests
 ## Cleanup naming correction
 
 The fourth explicit `gpt-5.6-luna` / low cleanup gate rejected the five-part
-private helper name `isLegacyScalarMessageWrapper`. It is now the compliant
-four-part `isLegacyScalarWrapper`; behavior and the public identifier contract
-are unchanged.
+name of a then-existing private helper. That helper was subsequently removed
+under the human-superseding no-implicit-conversion decision.
 
 ```text
 pnpm lint:cleanup
@@ -232,10 +231,10 @@ focused repository tests
 ## Mechanical typecheck correction
 
 The earlier explicit `gpt-5.6-luna` / low mechanical gate found `TS2339` in
-`primitive-id.ts`: after general-message admission, the legacy scalar wrapper
-reader still accessed `MessageId.value`. The fix adds a private exact
-`{ $typeName, value }` narrowing used only by `readValue()`; the exported
-`MessageId` remains Buf's general `Message` contract and has no `value` member.
+`primitive-id.ts`: a then-existing scalar wrapper reader accessed
+`MessageId.value`. That reader was subsequently removed under the
+human-superseding no-implicit-conversion decision; the exported `MessageId`
+remains Buf's general `Message` contract and has no `value` member.
 
 The focused legacy-wrapper test now also rejects a wrapper with an extra field.
 The correction was made by the existing senior TypeScript implementation
@@ -365,3 +364,13 @@ CLI thresholds only for reporting; no coverage configuration changed. The
 result included 96.77% statements / 97.29% branches for `primitive-id.ts` and
 88.70% statements / 79.95% branches for `repository.ts`. No unresolved runtime
 or documentation concern remains.
+
+## Human-superseding primitive-route correction
+
+The human superseded the earlier compatibility interpretation: no message,
+including `{ $typeName, value }`, is converted automatically to a primitive
+Entity ID. No backward compatibility for that adapter was requested. The
+adapter types, codec method, helper, and primitive-route unwrapping were
+removed. A generated `TaskId` now rejects at a primitive target before routing;
+an explicit custom Command route returning `message.id.value` remains the
+deliberate opt-in mechanism.

@@ -89,10 +89,11 @@ const entityId: MessageId = id;
 ```
 
 At routing, the generated ID is checked against the state field's declared
-schema and its generated validation rules before durable use. Primitive IDs
-continue to work. The only message-to-primitive compatibility behavior is the
-exact legacy scalar wrapper (`{ $typeName, value }`); ordinary message IDs are
-never reduced to a `value` field.
+schema and its generated validation rules before durable use. A message is
+never converted automatically to a primitive Entity ID, including when it has
+a field named `value`. To make that conversion intentionally, define a custom
+route that returns the desired primitive field, such as
+`message => message.id.value`.
 
 ## Browser gateway migration
 

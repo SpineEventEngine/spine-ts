@@ -1895,6 +1895,12 @@ class TaskCreatedScalarProjection extends Projection<string, typeof ProjectionSt
   }
 }
 
+class TaskCreatedScalarAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignTaskCreated(command: TaskCreated): void {
+    void command;
+  }
+}
+
 class MissingSubscriberMethodProjection extends Projection<
   string,
   typeof ProjectionStateSchema,
@@ -2784,7 +2790,14 @@ describe("repository signal routing", () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createMessageIdRejectingRepository())
-      .add(createRejectionObservingRepository())
+      .add(
+        createRejectionObservingRepository(
+          EventRouting.create<string>().route(TaskAlreadyDoneSchema, (message) => {
+            if (message.id === undefined) throw new Error("Expected a Task ID.");
+            return [message.id.value];
+          }),
+        ),
+      )
       .withStorageFactory(factory)
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
@@ -4747,6 +4760,54 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("rejects a generated TaskId for a primitive Entity target without a custom route", () => {
+    const repository = createTaskCreatedScalarProjectionRepository();
+    const id = create(TaskIdSchema, { value: "implicit-scalar-task" });
+
+    expect(() =>
+      repository.routeEvent(
+        SignalEnvelopes.event({
+          id: create(EventIdSchema, { value: "event-implicit-scalar-task" }),
+          context: create(EventContextSchema, {
+            producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "producer" })),
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          schema: TaskCreatedSchema,
+          message: create(TaskCreatedSchema, {
+            id,
+            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
+            title: "Implicit scalar task",
+          }),
+        }),
+      ),
+    ).toThrow(/compatible with the Entity state/);
+  });
+
+  it("routes a generated TaskId to a primitive Entity target through an explicit custom route", () => {
+    const repository = createTaskCreatedScalarAggregateRepository(
+      CommandRouting.create<string>().route(TaskCreatedSchema, (message) => {
+        if (message.id === undefined) throw new Error("Expected a Task ID.");
+        return message.id.value;
+      }),
+    );
+    const id = create(TaskIdSchema, { value: "explicit-scalar-task" });
+
+    expect(
+      repository.routeCommand(
+        SignalEnvelopes.command({
+          id: create(CommandIdSchema, { uuid: "command-explicit-scalar-task" }),
+          context: create(CommandContextSchema),
+          schema: TaskCreatedSchema,
+          message: create(TaskCreatedSchema, {
+            id,
+            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
+            title: "Explicit scalar task",
+          }),
+        }),
+      ).entityId,
+    ).toBe(id.value);
+  });
+
   it("routes message-valued event IDs as messages when the entity ID field is a message", () => {
     const repository = createMessageIdTaskRepository();
     const taskId = create(TaskIdSchema, { value: "message-id-task" });
@@ -4844,11 +4905,11 @@ describe("repository signal routing", () => {
     ).toThrow(/readable compatible producer ID/);
   });
 
-  it("falls back to a scalar first field for an incompatible message producer type", () => {
+  it("rejects an incompatible message producer for a scalar Entity target", () => {
     const repository = createTaskCreatedScalarProjectionRepository();
     const targetId = create(TaskIdSchema, { value: "scalar-target" });
 
-    expect(
+    expect(() =>
       repository.routeEvent(
         SignalEnvelopes.event({
           id: create(EventIdSchema, { value: "event-scalar-producer-mismatch" }),
@@ -4866,15 +4927,15 @@ describe("repository signal routing", () => {
             title: "Mismatched scalar producer task",
           }),
         }),
-      ).entityIds,
-    ).toEqual([targetId.value]);
+      ),
+    ).toThrow(/compatible with the Entity state/);
   });
 
-  it("falls back from a message producer to its matching scalar first field", () => {
+  it("rejects a matching message producer for a scalar Entity target", () => {
     const repository = createTaskCreatedScalarProjectionRepository();
     const id = create(TaskIdSchema, { value: "matching-scalar-target" });
 
-    expect(
+    expect(() =>
       repository.routeEvent(
         SignalEnvelopes.event({
           id: create(EventIdSchema, { value: "event-scalar-producer-match" }),
@@ -4889,8 +4950,8 @@ describe("repository signal routing", () => {
             title: "Matching scalar producer task",
           }),
         }),
-      ).entityIds,
-    ).toEqual([id.value]);
+      ),
+    ).toThrow(/compatible with the Entity state/);
   });
 
   it("rejects message-valued event IDs with the wrong message type", () => {
@@ -10404,7 +10465,9 @@ function createGeneratedTwoArgProjectionRepository(
   });
 }
 
-function createRejectionObservingRepository(): Repository<typeof RejectionObservingProjection> {
+function createRejectionObservingRepository(
+  eventRouting?: EventRouting<string>,
+): Repository<typeof RejectionObservingProjection> {
   const handlers = new HandlerRegistryIngestor().ingest({
     version: 3,
     entities: [
@@ -10437,6 +10500,7 @@ function createRejectionObservingRepository(): Repository<typeof RejectionObserv
     entityType: RejectionObservingProjection,
     schema: ProjectionStateSchema,
     handlers,
+    ...(eventRouting === undefined ? {} : { eventRouting }),
   });
 }
 
@@ -10597,6 +10661,23 @@ function createTaskCreatedScalarProjectionRepository(): Repository<
     entityType: TaskCreatedScalarProjection,
     schema: ProjectionStateSchema,
     handlers,
+  });
+}
+
+function createTaskCreatedScalarAggregateRepository(
+  commandRouting?: CommandRouting<string>,
+): Repository<typeof TaskCreatedScalarAggregate> {
+  const handlers = EntityHandlers.define(
+    TaskCreatedScalarAggregate,
+    AggregateStateSchema,
+    (builder) => [builder.assign(TaskCreatedSchema, "assignTaskCreated")],
+  );
+
+  return new Repository({
+    entityType: TaskCreatedScalarAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+    ...(commandRouting === undefined ? {} : { commandRouting }),
   });
 }
 

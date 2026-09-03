@@ -10,6 +10,14 @@ that exact descriptor, preserve it as the routed ID, and use the existing
 descriptor-aware `Identifiers.pack()` / `Identifiers.unpack()` path at every
 serialized boundary.
 
+### Human-superseding compatibility decision
+
+The human explicitly superseded the earlier scalar-wrapper compatibility
+decision. A message-valued route candidate must be rejected for a primitive
+Entity target unless a custom route deliberately returns a primitive field.
+No backward compatibility for implicit message-to-primitive conversion was
+requested or retained.
+
 The implementation must not broaden the old shape test from “exactly
 `$typeName` plus `value`” into another schema-free structural convention. A
 `$typeName` string alone proves neither that all fields are encodable by the
@@ -43,15 +51,12 @@ authoritative ID schema.
   one primitive `value`. It must not become a competing durable or
   deduplication-key format. Remove it or narrow it out of the general message-ID
   contract; canonical identity remains the existing packed-`Any` key.
-- `isBlankRouteId()` currently looks through `MessageIds.readValue()`. That is
-  also field-name policy. A present message ID is not blank merely because one
+- A present message ID is not blank merely because one
   nested scalar is default/blank. Its generated validation rules, if any, own
   field validity. Missing/null declaration-first message fields remain invalid.
-- Scalar-ID repositories are a separate compatibility case:
-  `readPrimitiveRouteId()` currently accepts legacy wrapper-shaped messages by
-  extracting their primitive `value`. Preserve that exact legacy adapter for
-  scalar targets. Do not make arbitrary general message fields unwrap into a
-  scalar Entity ID.
+- Scalar-ID repositories accept only primitive candidates. A custom route is
+  the sole explicit mechanism for converting a message field to a scalar Entity
+  ID.
 - The verified local Spine JVM source archive at revision
   `461a8281e484c12636d8cf660a1d6c929fbbd7ec` contains
   `server/src/testFixtures/proto/spine/test/commandservice/customer/customer.proto`.
@@ -104,8 +109,8 @@ RED/GREEN acceptance:
 - A primitive, array, null, wrong `$typeName`, and an object not encodable by
   the target ID schema fail before route acceptance with the signal kind and
   expected ID type in the diagnostic.
-- Existing primitive routes and legacy `{ $typeName, value }` message IDs stay
-  green, including legacy message-wrapper-to-scalar routing.
+- A message-valued candidate, including generated `TaskId`, is rejected for a
+  primitive target unless an explicit custom route returns a primitive value.
 
 ### 2. All default and custom route sources preserve the whole value
 
@@ -187,9 +192,8 @@ Owner: implementation owner.
   structurally incompatible candidate to pass direct `routeCommand()` /
   `routeEvent()` before later serialization. Bind validation to the known ID
   schema.
-- **Scalar regression:** removing `readValue()` indiscriminately breaks the
-  existing message-wrapper-to-scalar fallback. Keep it as an explicitly legacy
-  scalar-target adapter only.
+- **Implicit conversion regression:** a message with a `value` field must not
+  become a primitive Entity ID without an explicit custom route.
 - **Default-message regression:** recursively treating blank/default nested
   fields as an empty ID reintroduces invented policy. Presence and generated
   schema validation are the boundary.
@@ -218,8 +222,9 @@ Owner: implementation owner.
 ## Completion Gate
 
 There is no architectural blocker. Implementation is accepted only if the
-schema-aware route boundary, legacy scalar adapter, complete-value Inbox replay,
-canonical-key/guard distinctions, and public type correction all land together.
+schema-aware route boundary, no-implicit-conversion primitive boundary,
+complete-value Inbox replay, canonical-key/guard distinctions, and public type
+correction all land together.
 
 ## Dispatch Metadata
 
@@ -246,8 +251,8 @@ surface.
   Entity Inbox command rows; the corrected Process Manager path passed with no
   production change.
 - README and REFERENCE now describe complete generated Protobuf IDs, their
-  state declaration, authoritative validation, primitive compatibility, and
-  the exact legacy scalar-wrapper adapter with small Proto/TypeScript examples.
+  state declaration, authoritative validation, and the explicit custom-route
+  conversion required for a primitive target.
 
 Verification after the correction passed the selected three regressions, the
 two focused files (262 tests), focused coverage, `typecheck:tooling`, generated

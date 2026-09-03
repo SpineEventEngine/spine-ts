@@ -55,18 +55,11 @@ describe("primitive aggregate IDs", () => {
     expect(MessageIds.read(compositeMessage)).toBe(composite);
   });
 
-  it("retains the legacy scalar message wrapper validation", () => {
+  it("recognizes a message ID with a field named value without scalar semantics", () => {
     expect(MessageIds.read({ $typeName: "example.TaskId", value: "task-1" })).toEqual({
       $typeName: "example.TaskId",
       value: "task-1",
     });
-    expect(
-      MessageIds.readValue({ $typeName: "example.TaskId", value: Number.POSITIVE_INFINITY }),
-    ).toBeUndefined();
-    expect(
-      MessageIds.readValue({ $typeName: "example.TaskId", value: "task-1", extra: true }),
-    ).toBeUndefined();
-    expect(MessageIds.readValue({ $typeName: "example.TaskId" })).toBeUndefined();
     expect(MessageIds.read({ $typeName: 1, value: "task-1" })).toBeUndefined();
   });
 
@@ -77,6 +70,5 @@ describe("primitive aggregate IDs", () => {
     inheritedTypeName.value = "task-1";
 
     expect(MessageIds.read(inheritedTypeName)).toBeUndefined();
-    expect(MessageIds.readValue(inheritedTypeName)).toBeUndefined();
   });
 });

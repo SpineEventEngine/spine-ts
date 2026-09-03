@@ -4879,9 +4879,7 @@ const RepositoryRoutes = {
     targetType: ScalarType,
     signalKind: "command" | "event" | "state update",
   ): string | number | bigint {
-    const messageValue = MessageIds.readValue(value);
-    const candidate = messageValue ?? value;
-    const id = RepositoryRoutes.readCompatiblePrimitiveId(candidate, targetType);
+    const id = RepositoryRoutes.readCompatiblePrimitiveId(value, targetType);
     if (id === undefined) {
       throw new Error(
         `Repository ${signalKind} routing requires an ID compatible with the Entity state.`,

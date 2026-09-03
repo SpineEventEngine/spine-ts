@@ -84,18 +84,7 @@ export interface MessageId extends Message {
 }
 
 /**
- * Internal compatibility shape for the legacy scalar-wrapper adapter.
- *
- * This is intentionally separate from {@link MessageId}: general message
- * identifiers need not, and must not, expose a `value` field.
- */
-interface LegacyScalarMessageWrapper {
-  readonly $typeName: string;
-  readonly value: unknown;
-}
-
-/**
- * Reads message-shaped entity identifiers and legacy scalar wrappers.
+ * Reads message-shaped entity identifiers.
  */
 export interface MessageIdCodec {
   // prettier-ignore
@@ -110,16 +99,6 @@ export interface MessageIdCodec {
    * @returns Identifier, or `undefined` when the value is malformed.
    */
   read(value: unknown): MessageId | undefined;
-
-  /**
-   * Reads the scalar value through the exact legacy scalar-wrapper adapter.
-   *
-   * General message identifiers are not interpreted as scalar wrappers.
-   *
-   * @param value Value to inspect.
-   * @returns Scalar identifier, or `undefined` when the value is malformed.
-   */
-  readValue(value: unknown): PrimitiveId | undefined;
 }
 
 /**
@@ -172,10 +151,6 @@ export const MessageIds: MessageIdCodec = Object.freeze({
   read(value: unknown): MessageId | undefined {
     return IdValues.message(value);
   },
-
-  readValue(value: unknown): PrimitiveId | undefined {
-    return IdValues.messageValue(value);
-  },
 });
 
 /**
@@ -208,17 +183,5 @@ const IdValues = Object.freeze({
 
   message(value: unknown): MessageId | undefined {
     return IdValues.isMessage(value) ? value : undefined;
-  },
-
-  messageValue(value: unknown): PrimitiveId | undefined {
-    if (!IdValues.isLegacyScalarWrapper(value)) return undefined;
-    const id = PrimitiveIds.readFinite(value.value);
-    return id;
-  },
-
-  isLegacyScalarWrapper(value: unknown): value is LegacyScalarMessageWrapper {
-    if (!IdValues.isMessage(value)) return false;
-    const keys = Object.keys(value);
-    return keys.length === 2 && keys.includes("value");
   },
 });

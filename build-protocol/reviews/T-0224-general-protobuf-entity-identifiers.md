@@ -77,3 +77,11 @@ satisfies the requirements review's documentation exception; `CODE_QUALITY.md`
 also requires current package documentation for changed public behavior.
 
 Both fresh review axes are clean and no finding remains open.
+
+## Human-superseding compatibility correction
+
+The human superseded the prior exact scalar-wrapper compatibility decision: no
+message candidate is converted automatically to a primitive Entity ID. The
+implementation removes the adapter and proves that generated `TaskId` is
+rejected for a primitive target unless a custom route deliberately returns
+`message.id.value`. No backward compatibility was requested.

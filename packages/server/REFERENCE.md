@@ -158,9 +158,10 @@ const id: MessageId = create(CommandIdSchema, { uuid: "shipment-7" });
 
 Admission validates a message ID against the schema declared by the state
 field, including generated validation rules, before it is stored or replayed.
-Primitive IDs remain supported. For compatibility with historical scalar
-targets only, the exact `{ $typeName, value }` wrapper may be read as a scalar;
-ordinary message IDs are not treated as wrappers.
+A message is never converted automatically to a primitive Entity ID, including
+when it has a field named `value`. A custom route can deliberately make that
+conversion by returning the needed field, for example
+`message => message.id.value`.
 
 ## Handler routing and operations
 
