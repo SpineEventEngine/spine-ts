@@ -67,6 +67,8 @@ Focused coverage used explicit zero global thresholds so the source run could
 complete: 252 tests passed. Relevant line coverage remains `primitive-id.ts`
 96.42% and `repository.ts` 89.49%.
 
+`pnpm typecheck` passed after the generated composite fixture addition.
+
 This is not a completion claim. Durable Inbox replay/persistence/reload,
 complete produced-event producer IDs, malformed stored-target rejection, guard
 isolation, and the specialist review wave remain outstanding.
