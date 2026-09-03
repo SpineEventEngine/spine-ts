@@ -3957,6 +3957,16 @@ describe("repository signal routing", () => {
     ).toThrow(/ID compatible with the Entity state/);
   });
 
+  it("rejects a non-message custom Command ID before dispatch", () => {
+    const repository = createMessageIdProducingRepository(
+      CommandRouting.create<TaskId>().route(TaskSchema, () => undefined as never),
+    );
+
+    expect(() =>
+      repository.routeCommand(createTaskCommand("command-missing-message-id", "task")),
+    ).toThrow(`Repository command routing requires a "${TaskIdSchema.typeName}" ID.`);
+  });
+
   it("supplies a default Command context to custom routing", () => {
     let observed: CommandContext | undefined;
     const repository = createRoutingRepository(
