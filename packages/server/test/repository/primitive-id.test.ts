@@ -18,6 +18,7 @@ import { AnyMessages } from "@spine-event-engine/core";
 import { describe, expect, it } from "vitest";
 
 import { MessageIds, PrimitiveIds } from "../../src/repository/primitive-id.js";
+import type { MessageId } from "../../src/index.js";
 
 describe("primitive aggregate IDs", () => {
   it("packs and unpacks primitive ID values directly", () => {
@@ -34,15 +35,32 @@ describe("primitive aggregate IDs", () => {
     expect(PrimitiveIds.unpack(producerId)).toBe(42);
   });
 
-  it("reads only finite primitive message ID values", () => {
+  it("reads message IDs with arbitrary declared fields", () => {
+    const oneField: MessageId = { $typeName: "example.UuidId", uuid: "task-1" };
+    const nested: MessageId = {
+      $typeName: "example.LibraryCardId",
+      reader: { $typeName: "example.Reader", email: "reader@example.com" },
+    };
+    const composite: MessageId = {
+      $typeName: "example.CustomerId",
+      registrationDate: { $typeName: "google.protobuf.Timestamp", seconds: 42n, nanos: 0 },
+      number: 7,
+    };
+
+    expect(MessageIds.read(oneField)).toBe(oneField);
+    expect(MessageIds.read(nested)).toBe(nested);
+    expect(MessageIds.read(composite)).toBe(composite);
+  });
+
+  it("retains the legacy scalar message wrapper validation", () => {
     expect(MessageIds.read({ $typeName: "example.TaskId", value: "task-1" })).toEqual({
       $typeName: "example.TaskId",
       value: "task-1",
     });
     expect(
-      MessageIds.read({ $typeName: "example.TaskId", value: Number.POSITIVE_INFINITY }),
+      MessageIds.readValue({ $typeName: "example.TaskId", value: Number.POSITIVE_INFINITY }),
     ).toBeUndefined();
-    expect(MessageIds.read({ $typeName: "example.TaskId" })).toBeUndefined();
+    expect(MessageIds.readValue({ $typeName: "example.TaskId" })).toBeUndefined();
     expect(MessageIds.read({ $typeName: 1, value: "task-1" })).toBeUndefined();
   });
 });

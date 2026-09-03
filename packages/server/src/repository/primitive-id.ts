@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
   DoubleValueSchema,
@@ -69,24 +69,15 @@ export interface PrimitiveIdCodec {
 }
 
 /**
- * Describes the type name and scalar value of a message-shaped identifier.
+ * A generated Protobuf message that identifies an entity.
+ *
+ * The message is validated against the Entity state ID-field schema at the
+ * routing boundary. Its complete declared field set is the identifier.
  */
-export interface MessageId {
-  // prettier-ignore
-
-  /**
-   * Declares the fully-qualified Protobuf message type name.
-   */
-  readonly $typeName: string;
-
-  /**
-   * Holds the scalar identifier value.
-   */
-  readonly value: PrimitiveId;
-}
+export type MessageId = Message;
 
 /**
- * Reads and keys message-shaped entity identifiers.
+ * Reads message-shaped entity identifiers and legacy scalar wrappers.
  */
 export interface MessageIdCodec {
   // prettier-ignore
@@ -107,13 +98,6 @@ export interface MessageIdCodec {
    */
   readValue(value: unknown): PrimitiveId | undefined;
 
-  /**
-   * Creates a stable storage key for a message-shaped identifier.
-   *
-   * @param id Identifier to encode.
-   * @returns Stable key that distinguishes message type and scalar value type.
-   */
-  key(id: MessageId): string;
 }
 
 /**
@@ -168,19 +152,9 @@ export const MessageIds: MessageIdCodec = Object.freeze({
   },
 
   readValue(value: unknown): PrimitiveId | undefined {
-    return IdValues.message(value)?.value;
+    return IdValues.messageValue(value);
   },
 
-  key(id: MessageId): string {
-    return JSON.stringify({
-      type: "message",
-      typeName: id.$typeName,
-      value: {
-        type: typeof id.value,
-        value: id.value,
-      },
-    });
-  },
 });
 
 /**
@@ -205,26 +179,18 @@ const IdValues = Object.freeze({
       return false;
     }
 
-    const keys = Object.keys(value);
-    return (
-      keys.length === 2 &&
-      keys.includes("$typeName") &&
-      keys.includes("value") &&
-      typeof (value as { readonly $typeName?: unknown }).$typeName === "string"
-    );
+    return typeof (value as { readonly $typeName?: unknown }).$typeName === "string";
   },
 
   message(value: unknown): MessageId | undefined {
-    if (!IdValues.isMessage(value)) {
-      return undefined;
-    }
+    return IdValues.isMessage(value) ? value : undefined;
+  },
 
+  messageValue(value: unknown): PrimitiveId | undefined {
+    if (!IdValues.isMessage(value)) return undefined;
+    const keys = Object.keys(value);
+    if (keys.length !== 2 || !keys.includes("value")) return undefined;
     const id = PrimitiveIds.readFinite(value.value);
-    return id === undefined
-      ? undefined
-      : {
-          $typeName: value.$typeName,
-          value: id,
-        };
+    return id;
   },
 });

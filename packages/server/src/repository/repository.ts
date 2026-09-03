@@ -3035,7 +3035,7 @@ interface RepositoryEntityStorage<I, S extends Message> {
 
 interface RoutableId {
   readonly id: unknown;
-  readonly value: string | number | bigint | boolean;
+  readonly value: unknown;
 }
 
 /**
@@ -4748,7 +4748,7 @@ const RepositoryRoutes = {
   },
 
   isBlankRouteId(value: unknown): boolean {
-    const id = PrimitiveIds.readFinite(value) ?? MessageIds.readValue(value);
+    const id = PrimitiveIds.readFinite(value);
 
     return typeof id === "string" && id.trim().length === 0;
   },
@@ -4835,7 +4835,11 @@ const RepositoryRoutes = {
   ): RoutableId {
     const descriptor = targetIdField.descriptor;
     if (descriptor.fieldKind === "message") {
-      return RepositoryRoutes.readMessageRouteId(value, descriptor.message.typeName, signalKind);
+      return RepositoryRoutes.readMessageRouteId(
+        value,
+        descriptor.message as MessageSchema,
+        signalKind,
+      );
     }
     if (descriptor.fieldKind === "scalar") {
       return RepositoryRoutes.readPrimitiveRouteId(value, descriptor.scalar, signalKind);
@@ -4845,20 +4849,28 @@ const RepositoryRoutes = {
 
   readMessageRouteId(
     value: unknown,
-    targetTypeName: string,
+    targetSchema: MessageSchema,
     signalKind: "command" | "event" | "state update",
   ): RoutableId {
     const id = MessageIds.read(value);
     if (id === undefined) {
-      throw new Error(`Repository ${signalKind} routing requires a single-field message ID.`);
+      throw new Error(`Repository ${signalKind} routing requires a "${targetSchema.typeName}" ID.`);
     }
-    if (id.$typeName !== targetTypeName) {
-      throw new Error(`Repository ${signalKind} routing requires a "${targetTypeName}" ID.`);
+    if (id.$typeName !== targetSchema.typeName) {
+      throw new Error(`Repository ${signalKind} routing requires a "${targetSchema.typeName}" ID.`);
+    }
+    try {
+      Identifiers.pack(targetSchema, id as never);
+    } catch (error) {
+      throw new Error(
+        `Repository ${signalKind} routing requires an encodable "${targetSchema.typeName}" ID.`,
+        { cause: error },
+      );
     }
 
     return Object.freeze({
       id,
-      value: id.value,
+      value: id,
     });
   },
 
