@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "generationId": "14bdd4de58f23e122f0cdf6105b1c0553de6970a8b144f1487ed2725882d5830",
   "packageName": "@spine-event-engine/example-message-board-model",
-  "packageVersion": "2.0.0-snapshot.6",
+  "packageVersion": "2.0.0-snapshot.7",
   "protoFiles": [
     "spine/examples/messageboard/commands.proto",
     "spine/examples/messageboard/events.proto",

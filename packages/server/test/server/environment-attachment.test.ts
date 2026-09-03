@@ -14,13 +14,17 @@
 
 import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
+  CommandContextSchema,
+  CommandIdSchema,
   CommandSchema,
   EventContextSchema,
+  EventIdSchema,
   EventSchema,
   type TenantId,
+  UserIdSchema,
 } from "@spine-event-engine/proto";
 import { Identifiers } from "@spine-event-engine/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -727,14 +731,25 @@ describe("EnvironmentDeliveryWorker", () => {
 
   it("routes a shared remote HANDLE_COMMAND row to its matching multitenant runtime", async () => {
     const storageFactory = new InMemoryStorageFactory();
-    const target = descriptor("CommandTenant", "type.example.dev/CommandTenant", storageFactory);
-    const ready = Object.freeze({
-      ...target.ready,
+    const foreign = descriptor("CommandForeign", "type.example.dev/CommandTenant", storageFactory);
+    const matching = descriptor(
+      "CommandMatching",
+      "type.example.dev/CommandTenant",
+      storageFactory,
+    );
+    const foreignReady = Object.freeze({
+      ...foreign.ready,
+      label: "HANDLE_COMMAND" as const,
+      tenantId: tenant("foreign"),
+    });
+    const matchingReady = Object.freeze({
+      ...matching.ready,
       label: "HANDLE_COMMAND" as const,
       tenantId: tenant("match"),
     });
-    const scope = runScope("command-tenant", ready);
-    const delivery = new Delivery({ context: target.context, storageFactory });
+    const foreignScope = runScope("command-foreign", foreignReady);
+    const matchingScope = runScope("command-matching", matchingReady);
+    const delivery = new Delivery({ context: foreign.context, storageFactory });
     const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
       readonly ports: {
         readonly inbox: typeof delivery.inbox;
@@ -750,17 +765,85 @@ describe("EnvironmentDeliveryWorker", () => {
       },
     });
     worker.add({
-      owner: scope.owner,
-      descriptor: target.value,
+      owner: foreignScope.owner,
+      descriptor: foreign.value,
       storageFactory,
-      tenant: { tenantId: ready.tenantId },
-      context: target.context,
-      scopes: [scope],
+      tenant: { tenantId: foreignReady.tenantId },
+      context: foreign.context,
+      scopes: [foreignScope],
     });
-    await worker.start({ scopes: [scope] }, [scope.ready.shard]);
-    await delivery.inbox.receive(commandMessage(ready, "command-match"));
-    worker.notify(scope);
-    await until(() => target.replayed.includes("command-match"));
+    worker.add({
+      owner: matchingScope.owner,
+      descriptor: matching.value,
+      storageFactory,
+      tenant: { tenantId: matchingReady.tenantId },
+      context: foreign.context,
+      scopes: [matchingScope],
+    });
+    await worker.start({ scopes: [foreignScope] }, [foreignScope.ready.shard]);
+    await delivery.inbox.receive(commandMessage(matchingReady, "command-match"));
+    worker.notify(foreignScope);
+    await until(() => matching.replayed.includes("command-match"));
+    expect(foreign.replayed).not.toContain("command-match");
+    expect(matching.replayTenants).toEqual(["match"]);
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
+  it("routes a shared remote REACT_UPON_EVENT row to its matching multitenant runtime", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const foreign = descriptor("ReactionForeign", "type.example.dev/Reaction", storageFactory);
+    const matching = descriptor("ReactionMatching", "type.example.dev/Reaction", storageFactory);
+    const foreignReady = Object.freeze({
+      ...foreign.ready,
+      label: "REACT_UPON_EVENT" as const,
+      tenantId: tenant("foreign"),
+    });
+    const matchingReady = Object.freeze({
+      ...matching.ready,
+      label: "REACT_UPON_EVENT" as const,
+      tenantId: tenant("match"),
+    });
+    const foreignScope = runScope("reaction-foreign", foreignReady);
+    const matchingScope = runScope("reaction-matching", matchingReady);
+    const delivery = new Delivery({ context: foreign.context, storageFactory });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: typeof delivery.shards;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: delivery.shards,
+        source: inertDeliverySource(),
+      },
+    });
+    worker.add({
+      owner: foreignScope.owner,
+      descriptor: foreign.value,
+      storageFactory,
+      tenant: { tenantId: foreignReady.tenantId },
+      context: foreign.context,
+      scopes: [foreignScope],
+    });
+    worker.add({
+      owner: matchingScope.owner,
+      descriptor: matching.value,
+      storageFactory,
+      tenant: { tenantId: matchingReady.tenantId },
+      context: foreign.context,
+      scopes: [matchingScope],
+    });
+    await worker.start({ scopes: [foreignScope] }, [foreignScope.ready.shard]);
+    await delivery.inbox.receive(eventMessage(matchingReady, "reaction-match"));
+    worker.notify(foreignScope);
+    await until(() => matching.replayed.includes("reaction-match"));
+    expect(foreign.replayed).not.toContain("reaction-match");
+    expect(matching.replayTenants).toEqual(["match"]);
     worker.stop();
     await worker.awaitSettled();
     await worker.retire();
@@ -4187,13 +4270,74 @@ function message(ready: DeliveryReady, signalId: string) {
   };
 }
 
+/**
+ *
+ * Builds a realistic Command envelope with tenant, actor, timestamp, and
+ * business payload fields for tenant-routing coverage.
+ *
+ * @param ready Supplies the Command delivery endpoint.
+ * @param signalId Identifies the durable inbox row and Command.
+ * @returns The Command delivery message.
+ */
 function commandMessage(ready: DeliveryReady, signalId: string) {
-  const value = create(CommandSchema, { context: { actorContext: { tenantId: ready.tenantId } } });
+  const value = create(CommandSchema, {
+    id: create(CommandIdSchema, { uuid: signalId }),
+    message: create(AnySchema, {
+      typeUrl: "type.googleapis.com/google.protobuf.StringValue",
+      value: toBinary(StringValueSchema, create(StringValueSchema, { value: "business command" })),
+    }),
+    context: create(CommandContextSchema, {
+      actorContext: create(ActorContextSchema, {
+        tenantId: ready.tenantId,
+        actor: create(UserIdSchema, { value: "command-actor" }),
+        timestamp: create(TimestampSchema, { seconds: 1n }),
+      }),
+    }),
+  });
   return {
     ...message(ready, signalId),
     signal: create(AnySchema, {
       typeUrl: "type.spine.io/spine.core.Command",
       value: toBinary(CommandSchema, value),
+    }),
+  };
+}
+
+/**
+ *
+ * Builds a realistic imported Event envelope with tenant, actor, timestamp,
+ * producer, and business payload fields for tenant-routing coverage.
+ *
+ * @param ready Supplies the Event delivery endpoint.
+ * @param signalId Identifies the durable inbox row and Event.
+ * @returns The Event delivery message.
+ */
+function eventMessage(ready: DeliveryReady, signalId: string) {
+  const timestamp = create(TimestampSchema, { seconds: 1n });
+  const value = create(EventSchema, {
+    id: create(EventIdSchema, { value: signalId }),
+    message: create(AnySchema, {
+      typeUrl: "type.googleapis.com/google.protobuf.StringValue",
+      value: toBinary(StringValueSchema, create(StringValueSchema, { value: "business event" })),
+    }),
+    context: create(EventContextSchema, {
+      timestamp,
+      producerId: Identifiers.pack("string", "event-producer"),
+      origin: {
+        case: "importContext",
+        value: create(ActorContextSchema, {
+          tenantId: ready.tenantId,
+          actor: create(UserIdSchema, { value: "event-actor" }),
+          timestamp,
+        }),
+      },
+    }),
+  });
+  return {
+    ...message(ready, signalId),
+    signal: create(AnySchema, {
+      typeUrl: "type.spine.io/spine.core.Event",
+      value: toBinary(EventSchema, value),
     }),
   };
 }

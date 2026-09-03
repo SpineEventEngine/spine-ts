@@ -173,7 +173,7 @@ describe("release CLI", () => {
 
   it("prepares and cleans the real checked staged release without registry mutation", async () => {
     const release = await main({ argv: ["node", "cli", "prepare", "--check"] });
-    expect(release).toMatchObject({ tag: "snapshot", version: "2.0.0-snapshot.6" });
+    expect(release).toMatchObject({ tag: "snapshot", version: "2.0.0-snapshot.7" });
     expect(release.packages).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "@spine-event-engine/core" })]),
     );

@@ -349,6 +349,11 @@ avoid a gate.
 - Do not assign the same files to concurrent writers unless the orchestrator explicitly serializes the edits.
 - Keep branch names traceable to task IDs.
 - Never use the `codex/` branch prefix.
+- Every feature branch intended for merge into `master` must include one
+  version-only commit that updates every workspace manifest to one common,
+  unused version. It changes only top-level `version` fields and uses the exact
+  message `Bump version -> <version>`. Internal dependency pins and the lockfile
+  belong in a separate commit.
 - Do not commit, merge, or push directly to `master` unless the human explicitly
   instructs that exact action. Do not create or merge a pull request unless the
   human explicitly asks.
