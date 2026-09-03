@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "generationId": "88cf5a32dbf4c24233008fc5c3669fc47647ddf7200f867216b37b82f7043095",
   "packageName": "@spine-event-engine/example-datastore-orders",
-  "packageVersion": "2.0.0-snapshot.7",
+  "packageVersion": "2.0.0-snapshot.8",
   "protoFiles": [
     "spine/examples/orders/commands.proto",
     "spine/examples/orders/entities.proto",
