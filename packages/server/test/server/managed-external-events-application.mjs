@@ -78,7 +78,7 @@ if (isManagedChild) {
 
 const managed = await ManagedServerApplication.run({
   processCount: 2,
-  port: 50_054,
+  port: 0,
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => {
     const registry = await generatedRegistryRoot();

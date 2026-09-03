@@ -71,6 +71,14 @@ it("resolves its managed-host access seam outside the published package", async 
   expect(source).toContain('from "../../test-fixtures/internal.mjs"');
 });
 
+it("starts concurrent managed fixtures on independent Coordinator ports", async () => {
+  const [first, second] = await Promise.all([start(), start()]);
+
+  expect(first.endpoint).not.toBe(second.endpoint);
+  expect(first.child.connected).toBe(true);
+  expect(second.child.connected).toBe(true);
+}, 20_000);
+
 it(
   "RED-17/18/29 delivers domestic Todo Events through local brokers and " +
     "Delivery-backed external state subscriptions",

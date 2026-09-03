@@ -1464,7 +1464,7 @@ distinct custom-routed Process Manager and Projection IDs, producer-ID default
 routing, a real follow-up Command, persisted-state assertions, and an
 additional public BlackBox scenario. It does so without changing the
 18-package publication set.
-The final gate passed 288 test files and 4,560 tests with 90.01% branch
+The final gate passed 288 test files and 4,561 tests with 90.01% branch
 coverage, including all 18 packed artifacts and the isolated external
 consumer. The canonical ledger is in
 `build-protocol/tasks/T-0224-general-protobuf-entity-identifiers/TASK.md`.
