@@ -42,3 +42,10 @@ and immutable specialist role profiles are the accepted metadata:
 - style/maintainability: `gpt-5.6-terra`, high;
 - TypeScript/API documentation: `gpt-5.6-terra`, high;
 - performance/reliability: `gpt-5.6-terra`, high.
+
+## Release gate
+
+After version alignment, the first release run exposed two stale snapshot.7
+test assertions and no implementation finding. Their focused correction passed
+23 tests. The complete rerun passed 287 test files and 4,552 tests with 90.01%
+branch coverage; all other global coverage measures exceeded 92%.

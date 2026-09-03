@@ -73,6 +73,19 @@ standalone commit `956e570b4`. Forty-six concrete internal dependency pins and
 their lockfile importers are aligned in separate commits; the external
 `@spine-event-engine/validation@2.0.0-snapshot.7` dependency is unchanged.
 
+## Final verification
+
+The first full release gate correctly rejected two release tests that still
+expected snapshot.7 after all actual snapshot.8 artifacts had prepared and
+installed successfully. Commit `53b4f44f1` aligns those test expectations; its
+focused release suite passed 23 tests.
+
+The complete rerun then passed 287 test files and 4,552 tests. Global coverage
+was 93.29% statements, 90.01% branches, 92.83% functions, and 94.45% lines.
+The same gate passed generated builds, lint and documentation policy, Proto
+checks, production-dependency policy, release readiness, all 18 snapshot.8
+tarballs, and the isolated external consumer.
+
 ## Generated-schema routing follow-up
 
 An in-test generated descriptor fixture now models `CompositeRouteId` with a

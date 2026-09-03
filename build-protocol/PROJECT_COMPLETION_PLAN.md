@@ -1450,7 +1450,7 @@ outcomes. The canonical ledgers are in
 
 ### T-0224: General Protobuf Entity Identifiers
 
-T-0224 is implemented and reviewed on the
+T-0224 is implemented, reviewed, and release-verified on the
 `general-protobuf-entity-identifiers` feature branch. Entity identifiers may
 now be complete generated Protobuf messages with arbitrary field names, nested
 messages, and multiple fields. Command, Event, state-update, Entity Inbox,
