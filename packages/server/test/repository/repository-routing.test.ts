@@ -4739,7 +4739,7 @@ describe("repository signal routing", () => {
     ).toEqual([0n]);
   });
 
-  it("routes message-valued event IDs by their primitive value field", () => {
+  it("routes a primitive first field from a message signal to a primitive Entity target", () => {
     const repository = createUserIdProjectionRepository();
     const route = repository.routeEvent(
       SignalEnvelopes.event({

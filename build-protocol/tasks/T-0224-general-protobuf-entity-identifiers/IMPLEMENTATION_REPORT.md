@@ -8,9 +8,10 @@
 - General message route admission now requires the declared target type and
   verifies packability through the existing descriptor-aware `Identifiers.pack`
   path before retaining the complete message.
-- Kept the legacy exact `{ $typeName, value }` adapter only for scalar targets.
-  Removed the unused message JSON key codec so it cannot become a competing
-  identity format.
+- The prior scalar adapter was removed by the human-superseding decision: a
+  message candidate cannot become a primitive Entity ID without an explicit
+  application route. The unused message JSON key codec is also removed so it
+  cannot become a competing identity format.
 
 ## Files
 
@@ -59,8 +60,8 @@ The complete specialist wave found and corrected four substantive concerns.
 Message admission now requires an own `$typeName`; generated constraint
 validation runs through `Validate.check()` before canonical identifier packing;
 route readers return IDs directly; and composite test descriptors are resolved
-by name rather than unrelated numeric positions. Codec TSDoc now distinguishes
-shallow recognition from the exact legacy scalar wrapper.
+by name rather than unrelated numeric positions. Codec TSDoc describes shallow
+message recognition; its prior scalar-adapter wording is superseded and removed.
 
 The corrected focused suite passes 259 tests. Coverage proves both successful
 validation and rejection before handler invocation or persistence, including
@@ -333,9 +334,23 @@ routing again, and commits state under the full ID.
 Reader-facing server documentation now explains complete generated
 message-valued Entity IDs, including nested/composite fields and the
 state-first-field declaration; it also distinguishes authoritative generated
-validation, primitive IDs, and the exact legacy scalar-wrapper compatibility
-adapter. README and REFERENCE each include a concise Proto and TypeScript
-example without internal documentation markers.
+validation from the explicit application route required to convert to a
+primitive target. README and REFERENCE each include a concise Proto and
+TypeScript example without internal documentation markers.
+
+## Default-route matrix correction
+
+Fresh review initially treated the `UserId` event test as implicit message-to-
+primitive conversion. Inspection shows its signal's first declared field is the
+primitive `string` `value`, so it is valid primitive-first-field routing rather
+than message unwrapping. The routing matrix is now explicit: primitive first
+field to primitive target is valid; message first field to matching message
+target is valid; and message first field to primitive target rejects unless a
+custom route deliberately returns a primitive. Command and Event default routes
+share `readFirstFieldId()` and then `readRouteId()`; state-update routing calls
+`readRouteId()` directly on its selected compatible field, so none unwraps a
+message. Release verification is pending the final post-review correction; it
+must not be inferred from the earlier historical release result.
 
 ```text
 selected new regressions
