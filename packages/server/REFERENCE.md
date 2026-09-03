@@ -126,6 +126,42 @@ validated typed targets are stored and reused for retries. The legacy-named
 local `catchUpReadSide()` helper is unrelated to retry: it resets and replays
 the whole local read side, and is not Projection catch-up.
 
+## Message-valued Entity IDs
+
+The first state field determines the Entity ID type. It can be a primitive or
+a generated Protobuf message; for a message ID, all declared fields form the
+identifier. Neither routing nor persistence requires a field named `value`, so
+nested and composite IDs are supported.
+
+```proto
+message ShipmentId {
+  spine.core.UserId owner = 1;
+  int32 number = 2;
+}
+
+message Shipment {
+  ShipmentId id = 1;
+  string status = 2;
+}
+```
+
+The root `MessageId` type accepts generated messages such as the one-field
+`CommandId` (`uuid` is its only declared field):
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { type MessageId } from "@spine-event-engine/server";
+import { CommandIdSchema } from "@spine-event-engine/proto";
+
+const id: MessageId = create(CommandIdSchema, { uuid: "shipment-7" });
+```
+
+Admission validates a message ID against the schema declared by the state
+field, including generated validation rules, before it is stored or replayed.
+Primitive IDs remain supported. For compatibility with historical scalar
+targets only, the exact `{ $typeName, value }` wrapper may be read as a scalar;
+ordinary message IDs are not treated as wrappers.
+
 ## Handler routing and operations
 
 Generated handler metadata routes a command, event, or state update by its

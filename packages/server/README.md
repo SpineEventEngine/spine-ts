@@ -57,6 +57,43 @@ reconnect or a possible gap. Configure a storage provider for durable
 application state and generated repository assembly; in-memory choices are
 for local development and tests.
 
+## Entity identifiers
+
+An Entity ID can be a primitive value or a complete generated Protobuf message.
+For a message-valued ID, the Entity state message declares that ID message as
+its first field. The field is not required to be named `value`: nested and
+multiple fields are part of the identity.
+
+```proto
+message WorkItemId {
+  spine.core.UserId owner = 1;
+  int32 sequence = 2;
+}
+
+message WorkItem {
+  WorkItemId id = 1;
+  string title = 2;
+}
+```
+
+Generated messages can have any declared identifier fields. For example,
+`CommandId` is a generated one-field ID with `uuid`, not `value`:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { type MessageId } from "@spine-event-engine/server";
+import { CommandIdSchema } from "@spine-event-engine/proto";
+
+const id = create(CommandIdSchema, { uuid: "task-42" });
+const entityId: MessageId = id;
+```
+
+At routing, the generated ID is checked against the state field's declared
+schema and its generated validation rules before durable use. Primitive IDs
+continue to work. The only message-to-primitive compatibility behavior is the
+exact legacy scalar wrapper (`{ $typeName, value }`); ordinary message IDs are
+never reduced to a `value` field.
+
 ## Browser gateway migration
 
 The server root has no browser options and does not load auth. To host a

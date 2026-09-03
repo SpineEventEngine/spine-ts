@@ -307,3 +307,61 @@ times (line 4866). The own-property and exact-wrapper paths in
 `primitive-id.ts` were both exercised. Focused source coverage was 96.77%
 statements / 97.43% branches for `primitive-id.ts` and 88.70% / 79.95% for
 `repository.ts`.
+
+## Fresh-review behavior and reader-documentation correction
+
+The existing implementation owner was explicitly dispatched as
+`gpt-5.6-terra` with high reasoning. This surface does not expose runtime model
+self-introspection; no visible profile fallback occurred.
+
+Fresh review found missing behavioral proof on two axes: (1) a generated,
+one-field `uuid` message identifier must be assignable through the package-root
+`MessageId` export and route without a `value` field, and (2) composite IDs
+need independent custom Command-routing and durable command-Inbox replay
+proofs. The first two new tests passed on their first execution, so their RED
+state was missing-test evidence rather than a runtime defect. The first Inbox
+test was deliberately scoped to a Projection command path and failed because
+that path does not create an Entity Inbox row. The proof was moved to the
+existing Process Manager command-Inbox path; it then passed without a production
+change.
+
+The final regressions prove that a generated `CommandId` (`uuid` only) is a
+public `MessageId` and routes directly, that a custom Command route returns the
+complete nested-plus-scalar composite ID, and that a Process Manager command
+handoff stores the exact typed composite `Any`, replays without calling custom
+routing again, and commits state under the full ID.
+
+Reader-facing server documentation now explains complete generated
+message-valued Entity IDs, including nested/composite fields and the
+state-first-field declaration; it also distinguishes authoritative generated
+validation, primitive IDs, and the exact legacy scalar-wrapper compatibility
+adapter. README and REFERENCE each include a concise Proto and TypeScript
+example without internal documentation markers.
+
+```text
+selected new regressions
+1 file passed, 3 tests passed (254 skipped)
+
+pnpm exec vitest run packages/server/test/repository/primitive-id.test.ts \\
+  packages/server/test/repository/repository-routing.test.ts \\
+  --testTimeout=15000 --maxWorkers=1
+2 files passed, 262 tests passed
+
+pnpm typecheck:tooling
+exit 0
+
+pnpm docs:check:generated
+API, audience, and generated TypeScript snippet checks passed
+
+pnpm exec eslint packages/server/test/repository/repository-routing.test.ts
+pnpm lint:tsdoc
+pnpm lint:cleanup
+git diff --check
+all passed
+```
+
+Focused V8 coverage passed for the two affected test files using temporary zero
+CLI thresholds only for reporting; no coverage configuration changed. The
+result included 96.77% statements / 97.29% branches for `primitive-id.ts` and
+88.70% statements / 79.95% branches for `repository.ts`. No unresolved runtime
+or documentation concern remains.

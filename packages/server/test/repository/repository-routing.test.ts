@@ -41,6 +41,7 @@ import {
 } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
+  type CommandId,
   type Command as SpineCommand,
   type CommandContext,
   CommandSchema,
@@ -121,6 +122,7 @@ import {
   type EntityHandlersMetadata,
   type EventDispatcher,
   type InboxMessage,
+  type MessageId,
   SpecScanner,
   StateUpdateRouting,
 } from "../../src/index.js";
@@ -188,6 +190,12 @@ type RepeatedIdCommand = Message<"RepeatedIdCommand"> & {
 
 type MapIdCommand = Message<"MapIdCommand"> & {
   id: Record<string, string>;
+};
+
+type UuidMessageIdState = Message<"UuidMessageIdState"> & {
+  id?: CommandId;
+  name: string;
+  priority: number;
 };
 
 type ProcessManagerState = Message<"ProcessManagerState"> & {
@@ -312,6 +320,23 @@ function fixtureMessageSchema<T extends Message>(
 const fileEntityMetadataFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.main.descriptorSetBase64,
 );
+const fileUuidMessageIdFixture = (() => {
+  const descriptor = clone(FileDescriptorProtoSchema, fileEntityMetadataFixture.proto);
+  const state = descriptor.messageType.find((message) => message.name === "ProjectionState");
+  const stateId = state?.field.find((field) => field.name === "id");
+  if (state === undefined || stateId === undefined) {
+    throw new Error("UUID message-ID state declaration is missing.");
+  }
+  descriptor.name = "uuid_message_id_state.proto";
+  descriptor.dependency.push(CommandIdSchema.file.proto.name);
+  state.name = "UuidMessageIdState";
+  stateId.type = FieldDescriptorProto_Type.MESSAGE;
+  stateId.typeName = ".spine.core.CommandId";
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+    CommandIdSchema.file,
+  ]);
+})();
 const fileProjectionEventFixture = (() => {
   const descriptorSet = fromBinary(
     FileDescriptorSetSchema,
@@ -514,6 +539,10 @@ const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
 ) as GenMessage<ProjectionState>;
+const UuidMessageIdStateSchema = fixtureMessageSchema<UuidMessageIdState>(
+  fileUuidMessageIdFixture,
+  "UuidMessageIdState",
+);
 const NeutralProjectionStateSchema = messageDesc(
   fileNeutralProjectionStateFixture,
   0,
@@ -777,6 +806,16 @@ class Int64MessageIdProjection extends Projection<
   subscribeState(event: Int64MessageIdProjectionEvent): void {
     void event;
     Int64MessageIdProjection.calls += 1;
+  }
+}
+
+class UuidMessageIdProjection extends Projection<
+  CommandId,
+  typeof UuidMessageIdStateSchema,
+  number
+> {
+  assign(command: UuidMessageIdState): void {
+    this.update((draft) => Object.assign(draft, command));
   }
 }
 
@@ -3796,6 +3835,25 @@ describe("repository signal routing", () => {
     expect(() => BoundedContext.singleTenant("Tasks").add(repository).build()).not.toThrow();
   });
 
+  it("routes a generated UUID message ID without a value field", () => {
+    const id = create(CommandIdSchema, { uuid: "uuid-message-id" });
+    const publicMessageId: MessageId = id;
+    const repository = createUuidMessageIdRepository();
+
+    expect(publicMessageId).toBe(id);
+    expect("value" in id).toBe(false);
+    expect(
+      repository.routeCommand(
+        SignalEnvelopes.command({
+          id: create(CommandIdSchema, { uuid: "command-uuid-message-id" }),
+          context: create(CommandContextSchema),
+          schema: UuidMessageIdStateSchema,
+          message: create(UuidMessageIdStateSchema, { id, name: "UUID", priority: 1 }),
+        }),
+      ).entityId,
+    ).toEqual(id);
+  });
+
   it("routes generated nested composite IDs through command, event, and state sources", () => {
     const idA = create(CompositeRouteIdSchema, {
       reader: create(UserIdSchema, { value: "reader" }),
@@ -3851,6 +3909,38 @@ describe("repository signal routing", () => {
         ),
       )?.entityIds,
     ).toEqual([idA]);
+  });
+
+  it("uses the complete composite ID returned by a custom Command route", () => {
+    const declarationId = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "declaration" }),
+      number: 1,
+    });
+    const routedId = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "custom" }),
+      number: 2,
+    });
+    let routeCalls = 0;
+    const repository = createCompositeRouteRepository(
+      undefined,
+      undefined,
+      CommandRouting.create<CompositeRouteId>().route(CompositeRouteEventSchema, () => {
+        routeCalls += 1;
+        return routedId;
+      }),
+    );
+
+    expect(
+      repository.routeCommand(
+        SignalEnvelopes.command({
+          id: create(CommandIdSchema, { uuid: "command-composite-custom" }),
+          context: create(CommandContextSchema),
+          schema: CompositeRouteEventSchema,
+          message: create(CompositeRouteEventSchema, { id: declarationId, name: "Custom" }),
+        }),
+      ).entityId,
+    ).toEqual(routedId);
+    expect(routeCalls).toBe(1);
   });
 
   it("deduplicates generated composite route clones without merging their scalar discriminator", () => {
@@ -5512,6 +5602,67 @@ describe("repository signal routing", () => {
       await expect(target.replay(received)).resolves.toBeDefined();
 
       expect(routeCalls).toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("hands off and replays a composite Command target without rerouting", async () => {
+    const id = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "command-reader" }),
+      number: 42,
+    });
+    let routeCalls = 0;
+    const commandRouting = CommandRouting.create<CompositeRouteId>().route(
+      CompositeRouteEventSchema,
+      (message) => {
+        routeCalls += 1;
+        if (message.id === undefined) throw new Error("Expected a composite Command ID.");
+        return message.id;
+      },
+    );
+    const factory = new InMemoryStorageFactory();
+    const repository = createCompositeRouteProcessManagerRepository(
+      undefined,
+      { produces: true },
+      commandRouting,
+    );
+    const context = BoundedContext.singleTenant("Composite command")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const command = SignalEnvelopes.command({
+      id: create(CommandIdSchema, { uuid: "command-composite-handoff" }),
+      context: create(CommandContextSchema),
+      schema: CompositeRouteEventSchema,
+      message: create(CompositeRouteEventSchema, { id, name: "Composite command" }),
+    });
+    try {
+      await context.commandBus().post(command);
+
+      const delivery = new Delivery({
+        context: { name: "Composite command", multitenant: false },
+        storageFactory: factory,
+      });
+      const rows = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
+      const stored = rows.find((row) => row.signalId === "command-composite-handoff");
+      if (stored === undefined)
+        throw new Error("Expected a delivered composite Command inbox row.");
+
+      expect(stored.inboxId.targetTypeUrl).toBe(
+        TypeUrls.derive(CompositeRouteProcessManagerStateSchema),
+      );
+      expect(stored.inboxId.targetId).toEqual(Identifiers.pack(CompositeRouteIdSchema, id));
+      expect(routeCalls).toBe(1);
+
+      await expect(requireEntityInboxTarget(repository).replay(stored)).resolves.toBeUndefined();
+
+      expect(routeCalls).toBe(1);
+      await expect(
+        context.stand().read(CompositeRouteProcessManagerStateSchema, id),
+      ).resolves.toEqual(
+        create(CompositeRouteProcessManagerStateSchema, { id, queue: "Composite command" }),
+      );
     } finally {
       await context.close();
     }
@@ -10087,6 +10238,7 @@ function createInt64MessageIdProjectionRepository(
 function createCompositeRouteRepository(
   eventRouting?: EventRouting<CompositeRouteId>,
   stateUpdateRouting?: StateUpdateRouting<CompositeRouteId>,
+  commandRouting?: CommandRouting<CompositeRouteId>,
 ): Repository<typeof CompositeRouteProjection> {
   const handlers = EntityHandlers.define(
     CompositeRouteProjection,
@@ -10103,12 +10255,28 @@ function createCompositeRouteRepository(
     handlers,
     ...(eventRouting === undefined ? {} : { eventRouting }),
     ...(stateUpdateRouting === undefined ? {} : { stateUpdateRouting }),
+    ...(commandRouting === undefined ? {} : { commandRouting }),
+  });
+}
+
+function createUuidMessageIdRepository(): Repository<typeof UuidMessageIdProjection> {
+  const handlers = EntityHandlers.define(
+    UuidMessageIdProjection,
+    UuidMessageIdStateSchema,
+    (builder) => [builder.assign(UuidMessageIdStateSchema, "assign")],
+  );
+
+  return new Repository({
+    entityType: UuidMessageIdProjection,
+    schema: UuidMessageIdStateSchema,
+    handlers,
   });
 }
 
 function createCompositeRouteProcessManagerRepository(
   eventRouting?: EventRouting<CompositeRouteId>,
   options: { readonly doubleDispatchGuard?: boolean; readonly produces?: boolean } = {},
+  commandRouting?: CommandRouting<CompositeRouteId>,
 ): Repository<typeof CompositeRouteProcessManager> {
   const handlers = HandlerMetadataValues.defineArity(
     CompositeRouteProcessManager,
@@ -10151,6 +10319,7 @@ function createCompositeRouteProcessManagerRepository(
     schema: CompositeRouteProcessManagerStateSchema,
     handlers,
     ...(eventRouting === undefined ? {} : { eventRouting }),
+    ...(commandRouting === undefined ? {} : { commandRouting }),
     ...(options.doubleDispatchGuard === true
       ? { processManagerEventHistory: true, doubleDispatchGuard: true }
       : {}),

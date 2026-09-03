@@ -227,3 +227,29 @@ The existing requirements-splitter/architecture role was explicitly dispatched
 with `gpt-5.6-sol` and high reasoning. Runtime self-introspection was unavailable;
 the immutable configured role/profile is the actual evidence, with no visible
 fallback or mismatch.
+
+## Fresh-review two-axis disposition
+
+The fresh review correctly identified proof and reader-documentation gaps, not
+a need to broaden the public `MessageId` contract or modify production routing.
+The existing implementation owner was explicitly dispatched as
+`gpt-5.6-terra` / high; runtime self-introspection is unavailable on this
+surface.
+
+- A generated one-field `CommandId` with `uuid` is assigned through the
+  package-root `MessageId` import and routed with no `value` field.
+- A custom Command route returns and preserves the whole generated composite
+  ID, independently of declaration-first routing.
+- A Process Manager command handoff persists the exact composite typed `Any`,
+  replay does not rerun custom routing, and the state lookup uses the complete
+  ID. The initial Projection-path test was RED because Projections do not own
+  Entity Inbox command rows; the corrected Process Manager path passed with no
+  production change.
+- README and REFERENCE now describe complete generated Protobuf IDs, their
+  state declaration, authoritative validation, primitive compatibility, and
+  the exact legacy scalar-wrapper adapter with small Proto/TypeScript examples.
+
+Verification after the correction passed the selected three regressions, the
+two focused files (262 tests), focused coverage, `typecheck:tooling`, generated
+documentation checks, affected-file ESLint, TSDoc, cleanup, formatting, and
+`git diff --check`. No fresh-review finding remains open.
