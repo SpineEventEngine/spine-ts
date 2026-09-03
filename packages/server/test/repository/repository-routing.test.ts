@@ -205,6 +205,11 @@ type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCom
   name: string;
 };
 
+type ValidatedMessageIdState = Message<"example.validation_refusal.ValidatedMessageIdState"> & {
+  id?: ValidatedTaskCommand;
+  name: string;
+};
+
 type TaskId = Message<"spine.examples.todo.TaskId"> & {
   value: string;
 };
@@ -295,6 +300,15 @@ function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [fil
   );
 }
 
+function fixtureMessageSchema<T extends Message>(
+  file: Parameters<typeof messageDesc>[0],
+  name: string,
+): GenMessage<T> {
+  const index = file.proto.messageType.findIndex((message) => message.name === name);
+  if (index === -1) throw new Error(`Fixture message declaration "${name}" is missing.`);
+  return messageDesc(file, index);
+}
+
 const fileEntityMetadataFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.main.descriptorSetBase64,
 );
@@ -372,9 +386,11 @@ const fileInt64MessageIdFixture = (() => {
   const source = descriptorSet.file[0];
   if (source === undefined) throw new Error("Entity metadata fixture descriptor set is empty.");
   const descriptor = clone(FileDescriptorProtoSchema, source);
-  const id = descriptor.messageType[8];
+  const id = descriptor.messageType.find((message) => message.name === "ProjectionId");
   const value = id?.field[0];
-  const state = descriptor.messageType[9];
+  const state = descriptor.messageType.find(
+    (message) => message.name === "MessageIdProjectionState",
+  );
   if (id === undefined || value === undefined || state === undefined) {
     throw new Error("Entity metadata fixture message-ID declarations are missing.");
   }
@@ -396,9 +412,11 @@ const fileInt64MessageIdEventFixture = (() => {
   const source = descriptorSet.file[0];
   if (source === undefined) throw new Error("Entity metadata fixture descriptor set is empty.");
   const descriptor = clone(FileDescriptorProtoSchema, source);
-  const id = descriptor.messageType[8];
+  const id = descriptor.messageType.find((message) => message.name === "ProjectionId");
   const value = id?.field[0];
-  const event = descriptor.messageType[9];
+  const event = descriptor.messageType.find(
+    (message) => message.name === "MessageIdProjectionState",
+  );
   if (id === undefined || value === undefined || event === undefined) {
     throw new Error("Message-ID Event fixture declarations are missing.");
   }
@@ -425,7 +443,9 @@ const fileInt64MessageIdSourceFixture = (() => {
   const source = descriptorSet.file[0];
   if (source === undefined) throw new Error("Entity metadata fixture descriptor set is empty.");
   const descriptor = clone(FileDescriptorProtoSchema, source);
-  const state = descriptor.messageType[9];
+  const state = descriptor.messageType.find(
+    (message) => message.name === "MessageIdProjectionState",
+  );
   if (state === undefined) throw new Error("Message-ID source state declaration is missing.");
   descriptor.name = "int64_message_id_source.proto";
   descriptor.dependency = [source.name];
@@ -446,8 +466,10 @@ const fileCompositeRouteFixture = (() => {
   const source = descriptorSet.file[0];
   if (source === undefined) throw new Error("Entity metadata fixture descriptor set is empty.");
   const descriptor = clone(FileDescriptorProtoSchema, source);
-  const id = descriptor.messageType[8];
-  const state = descriptor.messageType[9];
+  const id = descriptor.messageType.find((message) => message.name === "ProjectionId");
+  const state = descriptor.messageType.find(
+    (message) => message.name === "MessageIdProjectionState",
+  );
   if (id === undefined || state === undefined) {
     throw new Error("Composite message-ID fixture declarations are missing.");
   }
@@ -564,6 +586,26 @@ const ValidatedTaskCommandSchema = messageDesc(
   fileValidationRefusalFixture,
   1,
 ) as GenMessage<ValidatedTaskCommand>;
+const fileValidatedMessageIdFixture = (() => {
+  const descriptor = clone(FileDescriptorProtoSchema, fileValidationRefusalFixture.proto);
+  const state = descriptor.messageType.find(
+    (message) => message.name === "ValidatedAggregateState",
+  );
+  const stateId = state?.field.find((field) => field.name === "id");
+  if (state === undefined || stateId === undefined) {
+    throw new Error("Validated message-ID state declaration is missing.");
+  }
+  state.name = "ValidatedMessageIdState";
+  stateId.type = FieldDescriptorProto_Type.MESSAGE;
+  stateId.typeName = ".example.validation_refusal.ValidatedTaskCommand";
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+})();
+const ValidatedMessageIdStateSchema = messageDesc(
+  fileValidatedMessageIdFixture,
+  0,
+) as GenMessage<ValidatedMessageIdState>;
 const fileTaskIdFixture = TodoIdSchema.file;
 const fileTaskFixture = TodoTaskSchema.file;
 const fileTaskEventsFixture = TodoEvents.TaskCreatedSchema.file;
@@ -648,22 +690,22 @@ const Int64MessageIdProjectionEventSchema = messageDesc(
   fileInt64MessageIdEventFixture,
   1,
 ) as GenMessage<Int64MessageIdProjectionEvent>;
-const CompositeRouteIdSchema = messageDesc(
+const CompositeRouteIdSchema = fixtureMessageSchema<CompositeRouteId>(
   fileCompositeRouteFixture,
-  8,
-) as GenMessage<CompositeRouteId>;
-const CompositeRouteStateSchema = messageDesc(
+  "CompositeRouteId",
+);
+const CompositeRouteStateSchema = fixtureMessageSchema<CompositeRouteState>(
   fileCompositeRouteFixture,
-  9,
-) as GenMessage<CompositeRouteState>;
-const CompositeRouteEventSchema = messageDesc(
+  "CompositeRouteState",
+);
+const CompositeRouteEventSchema = fixtureMessageSchema<CompositeRouteEvent>(
   fileCompositeRouteFixture,
-  14,
-) as GenMessage<CompositeRouteEvent>;
-const CompositeRouteSourceStateSchema = messageDesc(
+  "CompositeRouteEvent",
+);
+const CompositeRouteSourceStateSchema = fixtureMessageSchema<CompositeRouteSourceState>(
   fileCompositeRouteFixture,
-  15,
-) as GenMessage<CompositeRouteSourceState>;
+  "CompositeRouteSourceState",
+);
 
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState): void {
@@ -1221,6 +1263,22 @@ class ValidatingTaskAggregate extends Aggregate<
       ),
     );
     this.commitTransaction();
+  }
+}
+
+class ValidatedMessageIdRouteAggregate extends Aggregate<
+  ValidatedTaskCommand,
+  typeof ValidatedMessageIdStateSchema,
+  bigint
+> {
+  static calls = 0;
+
+  static reset(): void {
+    this.calls = 0;
+  }
+
+  assignTask(): void {
+    ValidatedMessageIdRouteAggregate.calls += 1;
   }
 }
 
@@ -3965,6 +4023,37 @@ describe("repository signal routing", () => {
     expect(() =>
       repository.routeCommand(createTaskCommand("command-missing-message-id", "task")),
     ).toThrow(`Repository command routing requires a "${TaskIdSchema.typeName}" ID.`);
+  });
+
+  it("rejects a validation-invalid custom message Command ID before durable dispatch", async () => {
+    ValidatedMessageIdRouteAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Validated message ID")
+      .add(
+        createValidatedMessageIdRouteRepository(
+          CommandRouting.create<ValidatedTaskCommand>().route(ValidatedTaskCommandSchema, () =>
+            create(ValidatedTaskCommandSchema, { id: "route-id", name: "" }),
+          ),
+        ),
+      )
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore(
+      { name: "Validated message ID", multitenant: false },
+      factory,
+    );
+    try {
+      await expect(
+        context
+          .commandBus()
+          .post(createValidatedCommand("command-invalid-route-id", "task", "Valid")),
+      ).rejects.toThrow(/valid.*ID/i);
+
+      expect(ValidatedMessageIdRouteAggregate.calls).toBe(0);
+      await expect(eventStore.read()).resolves.toEqual([]);
+    } finally {
+      await context.close();
+    }
   });
 
   it("supplies a default Command context to custom routing", () => {
@@ -10632,6 +10721,23 @@ function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate
     entityType: ValidatingTaskAggregate,
     schema: ValidatedAggregateStateSchema,
     handlers,
+  });
+}
+
+function createValidatedMessageIdRouteRepository(
+  commandRouting?: CommandRouting<ValidatedTaskCommand>,
+): Repository<typeof ValidatedMessageIdRouteAggregate> {
+  const handlers = EntityHandlers.define(
+    ValidatedMessageIdRouteAggregate,
+    ValidatedMessageIdStateSchema,
+    (builder) => [builder.assign(ValidatedTaskCommandSchema, "assignTask")],
+  );
+
+  return new Repository({
+    entityType: ValidatedMessageIdRouteAggregate,
+    schema: ValidatedMessageIdStateSchema,
+    handlers,
+    ...(commandRouting === undefined ? {} : { commandRouting }),
   });
 }
 

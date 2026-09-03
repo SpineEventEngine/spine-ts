@@ -69,4 +69,14 @@ describe("primitive aggregate IDs", () => {
     expect(MessageIds.readValue({ $typeName: "example.TaskId" })).toBeUndefined();
     expect(MessageIds.read({ $typeName: 1, value: "task-1" })).toBeUndefined();
   });
+
+  it("rejects inherited message type names", () => {
+    const inheritedTypeName = Object.create({ $typeName: "example.TaskId" }) as {
+      value: string;
+    };
+    inheritedTypeName.value = "task-1";
+
+    expect(MessageIds.read(inheritedTypeName)).toBeUndefined();
+    expect(MessageIds.readValue(inheritedTypeName)).toBeUndefined();
+  });
 });

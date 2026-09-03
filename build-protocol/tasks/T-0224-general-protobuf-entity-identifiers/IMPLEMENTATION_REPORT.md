@@ -224,3 +224,53 @@ pnpm exec vitest run packages/server/test/repository/primitive-id.test.ts \
 pnpm typecheck
 exit 0
 ```
+
+## Accepted routing-admission correction batch
+
+The existing TypeScript implementation owner was explicitly dispatched as
+`gpt-5.6-terra` / high reasoning; this surface does not expose runtime model
+self-introspection. The correction applies the repository's established
+`Validate.check()` schema facility to message-valued route IDs before their
+canonical `Identifiers.pack()` durability check. It has no registry,
+generated-Protobuf, schema, storage-format, manifest, version, or lockfile
+change.
+
+The focused regression supplies a custom Command route with the correct
+generated type name but an empty field that violates the generated validation
+rule. It rejects before handler invocation and durable persistence. A separate
+prototype-pollution regression confirms that both general recognition and the
+legacy scalar adapter reject inherited `$typeName` values. Route readers now
+return the validated ID itself instead of allocating a one-field wrapper, and
+the composite fixture resolves source and exposed declarations by name rather
+than mutable descriptor indexes.
+
+```text
+pnpm exec vitest run packages/server/test/repository/primitive-id.test.ts \
+  packages/server/test/repository/repository-routing.test.ts \
+  --testTimeout=15000 --maxWorkers=1
+2 files passed, 259 tests passed
+
+pnpm exec eslint packages/server/src/repository/primitive-id.ts \
+  packages/server/src/repository/repository.ts \
+  packages/server/test/repository/primitive-id.test.ts \
+  packages/server/test/repository/repository-routing.test.ts
+exit 0
+
+pnpm lint:tsdoc
+TSDoc enforcement checks passed
+
+pnpm typecheck:tooling
+exit 0
+
+pnpm typecheck
+exit 0
+```
+
+Focused V8 coverage also passed with temporary zero global thresholds solely
+to report the selected files; no coverage configuration or ignore was changed.
+It recorded `Validate.check()` at route admission 57 times and its new rejection
+catch once (`repository.ts` lines 4858 and 4860); packing followed only 56
+times (line 4866). The own-property and exact-wrapper paths in
+`primitive-id.ts` were both exercised. Focused source coverage was 96.77%
+statements / 97.43% branches for `primitive-id.ts` and 88.70% / 79.95% for
+`repository.ts`.

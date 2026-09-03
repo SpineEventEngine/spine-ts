@@ -3033,10 +3033,6 @@ interface RepositoryEntityStorage<I, S extends Message> {
   close(): void;
 }
 
-interface RoutableId {
-  readonly id: unknown;
-}
-
 /**
  * Internal repository identity operations.
  */
@@ -4419,7 +4415,7 @@ const RepositoryRoutes = {
         : RepositoryRoutes.callCommandRoute(customRoute, message, schema, command.context);
 
     return Object.freeze({
-      entityId: RepositoryRoutes.readRouteId(candidateId, targetIdField, "command").id as Id,
+      entityId: RepositoryRoutes.readRouteId(candidateId, targetIdField, "command") as Id,
       messageFullTypeName: schema.typeName,
       invocation: "deferred",
     });
@@ -4636,7 +4632,7 @@ const RepositoryRoutes = {
       throw new Error("Repository state-update routing accepts at most 1,000 Entity IDs.");
     const unique = new Map<string, Id>();
     for (const candidate of candidates) {
-      const id = RepositoryRoutes.readRouteId(candidate, targetIdField, "state update").id as Id;
+      const id = RepositoryRoutes.readRouteId(candidate, targetIdField, "state update") as Id;
       const key = InboxTargets.key(InboxMessages.inboxTargetId(id, targetIdField));
       if (!unique.has(key)) unique.set(key, structuredClone(id));
     }
@@ -4664,7 +4660,7 @@ const RepositoryRoutes = {
 
     const unique = new Map<string, Id>();
     for (const candidate of candidates) {
-      const id = RepositoryRoutes.readRouteId(candidate, targetIdField, "event").id as Id;
+      const id = RepositoryRoutes.readRouteId(candidate, targetIdField, "event") as Id;
       const key = InboxTargets.key(InboxMessages.inboxTargetId(id, targetIdField));
       if (!unique.has(key)) unique.set(key, structuredClone(id));
     }
@@ -4724,7 +4720,7 @@ const RepositoryRoutes = {
     if (field === undefined)
       throw new Error("Repository state-update routing requires a compatible state field.");
     const value = (state as Record<string, unknown>)[field.localName];
-    return RepositoryRoutes.readRouteId(value, targetIdField, signalKind).id;
+    return RepositoryRoutes.readRouteId(value, targetIdField, signalKind);
   },
 
   compatibleStateIdField(
@@ -4764,13 +4760,13 @@ const RepositoryRoutes = {
     }
     const compatibleProducer = RepositoryRoutes.compatibleProducerId(producerId, targetIdField);
     if (compatibleProducer.compatible) {
-      return RepositoryRoutes.readRouteId(compatibleProducer.id, targetIdField, "event").id;
+      return RepositoryRoutes.readRouteId(compatibleProducer.id, targetIdField, "event");
     }
     return RepositoryRoutes.readRouteId(
       RepositoryRoutes.readFirstFieldId(message, schema, "event"),
       targetIdField,
       "event",
-    ).id;
+    );
   },
 
   compatibleProducerId(
@@ -4831,7 +4827,7 @@ const RepositoryRoutes = {
     value: unknown,
     targetIdField: DescriptorFieldMetadata,
     signalKind: "command" | "event" | "state update",
-  ): RoutableId {
+  ): unknown {
     const descriptor = targetIdField.descriptor;
     if (descriptor.fieldKind === "message") {
       return RepositoryRoutes.readMessageRouteId(
@@ -4850,13 +4846,21 @@ const RepositoryRoutes = {
     value: unknown,
     targetSchema: MessageSchema,
     signalKind: "command" | "event" | "state update",
-  ): RoutableId {
+  ): Message {
     const id = MessageIds.read(value);
     if (id === undefined) {
       throw new Error(`Repository ${signalKind} routing requires a "${targetSchema.typeName}" ID.`);
     }
     if (id.$typeName !== targetSchema.typeName) {
       throw new Error(`Repository ${signalKind} routing requires a "${targetSchema.typeName}" ID.`);
+    }
+    try {
+      Validate.check(targetSchema, id);
+    } catch (error) {
+      throw new Error(
+        `Repository ${signalKind} routing requires a valid "${targetSchema.typeName}" ID.`,
+        { cause: error },
+      );
     }
     try {
       Identifiers.pack(targetSchema, id as never);
@@ -4867,16 +4871,14 @@ const RepositoryRoutes = {
       );
     }
 
-    return Object.freeze({
-      id,
-    });
+    return id;
   },
 
   readPrimitiveRouteId(
     value: unknown,
     targetType: ScalarType,
     signalKind: "command" | "event" | "state update",
-  ): RoutableId {
+  ): string | number | bigint {
     const messageValue = MessageIds.readValue(value);
     const candidate = messageValue ?? value;
     const id = RepositoryRoutes.readCompatiblePrimitiveId(candidate, targetType);
@@ -4886,9 +4888,7 @@ const RepositoryRoutes = {
       );
     }
 
-    return Object.freeze({
-      id,
-    });
+    return id;
   },
 
   readCompatiblePrimitiveId(
@@ -5342,7 +5342,7 @@ const InboxMessages = {
     if (entityId === undefined) {
       throw new Error("Entity Inbox replay stored target ID is incompatible with the repository.");
     }
-    return RepositoryRoutes.readRouteId(entityId, idField, "command").id;
+    return RepositoryRoutes.readRouteId(entityId, idField, "command");
   },
 
   readInboxCommand(message: InboxMessage): Command {

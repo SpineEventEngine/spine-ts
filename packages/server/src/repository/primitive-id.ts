@@ -101,7 +101,10 @@ export interface MessageIdCodec {
   // prettier-ignore
 
   /**
-   * Reads a message-shaped identifier from an unknown value.
+   * Performs shallow message-shape recognition for an unknown identifier.
+   *
+   * Repository routing validates the recognized message against its target
+   * schema before durable use.
    *
    * @param value Value to inspect.
    * @returns Identifier, or `undefined` when the value is malformed.
@@ -109,7 +112,9 @@ export interface MessageIdCodec {
   read(value: unknown): MessageId | undefined;
 
   /**
-   * Reads the scalar value from a message-shaped identifier.
+   * Reads the scalar value through the exact legacy scalar-wrapper adapter.
+   *
+   * General message identifiers are not interpreted as scalar wrappers.
    *
    * @param value Value to inspect.
    * @returns Scalar identifier, or `undefined` when the value is malformed.
@@ -195,7 +200,10 @@ const IdValues = Object.freeze({
       return false;
     }
 
-    return typeof (value as { readonly $typeName?: unknown }).$typeName === "string";
+    return (
+      Object.hasOwn(value, "$typeName") &&
+      typeof (value as { readonly $typeName?: unknown }).$typeName === "string"
+    );
   },
 
   message(value: unknown): MessageId | undefined {
@@ -209,7 +217,7 @@ const IdValues = Object.freeze({
   },
 
   isLegacyScalarWrapper(value: unknown): value is LegacyScalarMessageWrapper {
-    if (!IdValues.isMessage(value)) return false;
+    if (!IdValues.isMessage(value) || !Object.hasOwn(value, "$typeName")) return false;
     const keys = Object.keys(value);
     return keys.length === 2 && keys.includes("value");
   },
