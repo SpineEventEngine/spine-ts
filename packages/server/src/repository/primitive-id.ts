@@ -198,12 +198,12 @@ const IdValues = Object.freeze({
   },
 
   messageValue(value: unknown): PrimitiveId | undefined {
-    if (!IdValues.isLegacyScalarMessageWrapper(value)) return undefined;
+    if (!IdValues.isLegacyScalarWrapper(value)) return undefined;
     const id = PrimitiveIds.readFinite(value.value);
     return id;
   },
 
-  isLegacyScalarMessageWrapper(value: unknown): value is LegacyScalarMessageWrapper {
+  isLegacyScalarWrapper(value: unknown): value is LegacyScalarMessageWrapper {
     if (!IdValues.isMessage(value)) return false;
     const keys = Object.keys(value);
     return keys.length === 2 && keys.includes("value");

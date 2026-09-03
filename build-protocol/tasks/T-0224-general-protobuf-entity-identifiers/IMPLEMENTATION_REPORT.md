@@ -150,6 +150,27 @@ focused repository tests
 2 files passed, 256 tests passed
 ```
 
+## Cleanup naming correction
+
+The fourth explicit `gpt-5.6-luna` / low cleanup gate rejected the five-part
+private helper name `isLegacyScalarMessageWrapper`. It is now the compliant
+four-part `isLegacyScalarWrapper`; behavior and the public identifier contract
+are unchanged.
+
+```text
+pnpm lint:cleanup
+Cleanup enforcement checks passed
+
+pnpm exec eslint ...
+exit 0
+
+pnpm typecheck:tooling
+exit 0
+
+focused repository tests
+2 files passed, 256 tests passed
+```
+
 ## Mechanical typecheck correction
 
 The earlier explicit `gpt-5.6-luna` / low mechanical gate found `TS2339` in
