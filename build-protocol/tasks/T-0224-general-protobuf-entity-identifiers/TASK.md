@@ -1,6 +1,6 @@
 # T-0224: General Protobuf Entity Identifiers
 
-Status: In progress
+Status: Final verification
 Baseline: `origin/master@5b7c6d1e55706363fef52162b0d0d995f504a3e2`
 Branch: `general-protobuf-entity-identifiers`
 Worktree: `.worktrees/general-protobuf-entity-identifiers`

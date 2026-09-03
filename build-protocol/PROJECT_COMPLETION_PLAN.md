@@ -1448,6 +1448,18 @@ outcomes. The canonical ledgers are in
 `build-protocol/tasks/T-0220-github-actions-npm-publishing/TASK.md` and
 `build-protocol/tasks/T-0221-lerna-publishing-migration/WORKLOG.md`.
 
+### T-0224: General Protobuf Entity Identifiers
+
+T-0224 is implemented and reviewed on the
+`general-protobuf-entity-identifiers` feature branch. Entity identifiers may
+now be complete generated Protobuf messages with arbitrary field names, nested
+messages, and multiple fields. Command, Event, state-update, Entity Inbox,
+persistence, canonical-key, and duplicate-delivery paths retain the complete
+typed value; primitive and legacy scalar-wrapper routes remain compatible.
+Schema validation is authoritative at route admission and no registry or
+storage migration was introduced. The canonical ledger is in
+`build-protocol/tasks/T-0224-general-protobuf-entity-identifiers/TASK.md`.
+
 ## Parallelism Without Rework
 
 Use parallelism only where outputs do not block or overwrite each other:

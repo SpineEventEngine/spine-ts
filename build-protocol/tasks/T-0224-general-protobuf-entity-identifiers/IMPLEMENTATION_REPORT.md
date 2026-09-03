@@ -46,12 +46,32 @@ lines and `repository.ts` 89.49% lines. Vitest reported a non-zero exit because
 the focused run is evaluated against the workspace-wide 90% global coverage
 threshold (19.85% global lines); no test failed.
 
-## Self-review and remaining concerns
+## Self-review
 
 The implementation preserves the established packed-`Any` canonical identity,
-storage, and Inbox paths; it introduces no registry, generated proto change,
-storage format, manifest, version, or lockfile change. The route boundary now
-uses the target schema rather than a field-name convention.
+storage, and Inbox paths; it introduces no registry, generated proto change, or
+storage format. The route boundary now uses the target schema rather than a
+field-name convention.
+
+## Review correction and release alignment
+
+The complete specialist wave found and corrected four substantive concerns.
+Message admission now requires an own `$typeName`; generated constraint
+validation runs through `Validate.check()` before canonical identifier packing;
+route readers return IDs directly; and composite test descriptors are resolved
+by name rather than unrelated numeric positions. Codec TSDoc now distinguishes
+shallow recognition from the exact legacy scalar wrapper.
+
+The corrected focused suite passes 259 tests. Coverage proves both successful
+validation and rejection before handler invocation or persistence, including
+the previously uncovered undefined route result. ESLint, cleanup, TSDoc,
+tooling typecheck, and full TypeScript typecheck pass. All affected review lanes
+are clean after correction.
+
+All 26 workspace versions are aligned at `2.0.0-snapshot.8` in the required
+standalone commit `956e570b4`. Forty-six concrete internal dependency pins and
+their lockfile importers are aligned in separate commits; the external
+`@spine-event-engine/validation@2.0.0-snapshot.7` dependency is unchanged.
 
 ## Generated-schema routing follow-up
 
