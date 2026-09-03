@@ -150,6 +150,31 @@ focused repository tests
 2 files passed, 256 tests passed
 ```
 
+## TSDoc property correction
+
+The fifth explicit `gpt-5.6-luna` / low gate required a summary for the public
+`MessageId.$typeName` property signature. Its TSDoc now states that it is the
+fully qualified Protobuf message type name. The established formatting guard
+preserves the blank line required by repository TSDoc checks; no API or runtime
+behavior changed.
+
+```text
+pnpm lint:cleanup
+Cleanup enforcement checks passed
+
+pnpm lint:tsdoc
+TSDoc enforcement checks passed
+
+pnpm exec eslint ...
+exit 0
+
+pnpm typecheck:tooling
+exit 0
+
+focused repository tests
+2 files passed, 256 tests passed
+```
+
 ## Cleanup naming correction
 
 The fourth explicit `gpt-5.6-luna` / low cleanup gate rejected the five-part

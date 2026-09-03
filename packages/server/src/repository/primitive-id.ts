@@ -75,6 +75,11 @@ export interface PrimitiveIdCodec {
  * routing boundary. Its complete declared field set is the identifier.
  */
 export interface MessageId extends Message {
+  // prettier-ignore
+
+  /**
+   * Fully qualified Protobuf message type name.
+   */
   readonly $typeName: string;
 }
 
