@@ -108,6 +108,26 @@ pnpm typecheck
 exit 0
 ```
 
+## Tooling test-type correction
+
+The second explicit `gpt-5.6-luna` / low mechanical gate found two test-only
+type errors. Direct object literals annotated as `MessageId` were subject to
+TypeScript excess-property checks, so the test now infers each concrete
+message first and separately proves it is assignable to imported `MessageId`.
+This preserves the general public type rather than adding arbitrary fields to
+it. The composite command-route fixture now supplies the existing empty
+generated `CommandContext` value required by `SignalEnvelopes.command()`.
+
+```text
+pnpm typecheck:tooling
+exit 0
+
+pnpm exec vitest run packages/server/test/repository/primitive-id.test.ts \
+  packages/server/test/repository/repository-routing.test.ts \
+  --testTimeout=15000 --maxWorkers=1
+2 files passed, 256 tests passed
+```
+
 ## Mechanical typecheck correction
 
 The earlier explicit `gpt-5.6-luna` / low mechanical gate found `TS2339` in

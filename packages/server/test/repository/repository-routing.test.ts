@@ -3754,6 +3754,7 @@ describe("repository signal routing", () => {
       repository.routeCommand(
         SignalEnvelopes.command({
           id: create(CommandIdSchema, { uuid: "composite-command" }),
+          context: create(CommandContextSchema),
           schema: CompositeRouteEventSchema,
           message,
         }),

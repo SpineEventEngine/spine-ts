@@ -36,20 +36,23 @@ describe("primitive aggregate IDs", () => {
   });
 
   it("reads message IDs with arbitrary declared fields", () => {
-    const oneField: MessageId = { $typeName: "example.UuidId", uuid: "task-1" };
-    const nested: MessageId = {
+    const oneField = { $typeName: "example.UuidId", uuid: "task-1" };
+    const nested = {
       $typeName: "example.LibraryCardId",
       reader: { $typeName: "example.Reader", email: "reader@example.com" },
     };
-    const composite: MessageId = {
+    const composite = {
       $typeName: "example.CustomerId",
       registrationDate: { $typeName: "google.protobuf.Timestamp", seconds: 42n, nanos: 0 },
       number: 7,
     };
+    const oneFieldMessage: MessageId = oneField;
+    const nestedMessage: MessageId = nested;
+    const compositeMessage: MessageId = composite;
 
-    expect(MessageIds.read(oneField)).toBe(oneField);
-    expect(MessageIds.read(nested)).toBe(nested);
-    expect(MessageIds.read(composite)).toBe(composite);
+    expect(MessageIds.read(oneFieldMessage)).toBe(oneField);
+    expect(MessageIds.read(nestedMessage)).toBe(nested);
+    expect(MessageIds.read(compositeMessage)).toBe(composite);
   });
 
   it("retains the legacy scalar message wrapper validation", () => {
