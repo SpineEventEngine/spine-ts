@@ -34,12 +34,20 @@ export const frameworkPackageNames = [
  */
 export function validatePublicationInventory(root) {
   const rootManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-  const actual = readdirSync(join(root, "packages"), { withFileTypes: true })
+  const packageManifests = readdirSync(join(root, "packages"), { withFileTypes: true })
     .filter(
       (entry) =>
         entry.isDirectory() && existsSync(join(root, "packages", entry.name, "package.json")),
     )
-    .map((entry) => "@spine-event-engine/" + entry.name)
+    .map((entry) => ({
+      name: "@spine-event-engine/" + entry.name,
+      manifest: JSON.parse(
+        readFileSync(join(root, "packages", entry.name, "package.json"), "utf8"),
+      ),
+    }));
+  const actual = packageManifests
+    .filter(({ manifest }) => manifest.private !== true)
+    .map(({ name }) => name)
     .sort((left, right) => left.localeCompare(right));
   const expected = [...frameworkPackageNames].sort((left, right) => left.localeCompare(right));
   const problems = [];
@@ -47,6 +55,15 @@ export function validatePublicationInventory(root) {
     problems.push("root must use a supported release version");
   if (JSON.stringify(actual) !== JSON.stringify(expected))
     problems.push("public package paths do not match exact inventory");
+  const privatePackages = packageManifests
+    .filter(({ manifest }) => manifest.private === true)
+    .map(({ name }) => name)
+    .sort((left, right) => left.localeCompare(right));
+  if (
+    JSON.stringify(privatePackages) !==
+    JSON.stringify(["@spine-event-engine/server-blackbox-tests"])
+  )
+    problems.push("private package paths do not match exact inventory");
   for (const name of expected) {
     const directory = join(root, "packages", name.split("/")[1]);
     if (!existsSync(join(directory, "package.json"))) continue;

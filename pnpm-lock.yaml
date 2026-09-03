@@ -642,6 +642,24 @@ importers:
         specifier: 3.23.1
         version: 3.23.1(@types/node@24.13.2)
 
+  packages/server-blackbox-tests:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/core':
+        specifier: workspace:*
+        version: link:../core
+      '@spine-event-engine/proto':
+        specifier: workspace:*
+        version: link:../proto
+      '@spine-event-engine/server':
+        specifier: workspace:*
+        version: link:../server
+      '@spine-event-engine/testing':
+        specifier: workspace:*
+        version: link:../testing
+
   packages/storage:
     dependencies:
       '@bufbuild/protobuf':

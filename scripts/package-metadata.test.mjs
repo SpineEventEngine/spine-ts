@@ -37,6 +37,11 @@ function productionPackagePaths(root) {
       (entry) =>
         entry.isDirectory() && existsSync(join(root, "packages", entry.name, "package.json")),
     )
+    .filter(
+      (entry) =>
+        JSON.parse(readFileSync(join(root, "packages", entry.name, "package.json"), "utf8"))
+          .private !== true,
+    )
     .map((entry) => `packages/${entry.name}`)
     .sort((left, right) => left.localeCompare(right));
 }
@@ -217,6 +222,10 @@ describe("package metadata", () => {
     }
 
     expect(readJson("package.json").private).toBe(true);
+    expect(readJson("packages/server-blackbox-tests/package.json")).toMatchObject({
+      name: "@spine-event-engine/server-blackbox-tests",
+      private: true,
+    });
     for (const workspacePackage of readWorkspacePackages(repoRoot).filter((workspacePackage) =>
       workspacePackage.path.startsWith("examples/"),
     )) {
@@ -250,6 +259,7 @@ describe("package metadata", () => {
       "packages/proto",
       "packages/proto-tools",
       "packages/server",
+      "packages/server-blackbox-tests",
       "packages/storage",
       "packages/storage-datastore",
       "packages/storage-rdbms",

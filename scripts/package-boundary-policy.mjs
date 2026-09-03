@@ -108,7 +108,7 @@ function packageGraphProblems(manifests) {
  * Returns package-surface and graph violations for the final Wave 14 boundary.
  */
 export function finalPublicSurfaceProblems(root) {
-  const manifests = packageManifests(root);
+  const manifests = packageManifests(root).filter(({ manifest }) => manifest.private !== true);
   const byName = new Map(manifests.map(({ manifest }) => [manifest.name, manifest]));
   const problems = packageGraphProblems(manifests);
   for (const [name, surfaces] of finalPublicSurfaces) {
