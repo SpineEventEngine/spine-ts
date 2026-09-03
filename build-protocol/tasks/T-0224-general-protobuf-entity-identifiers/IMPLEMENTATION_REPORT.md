@@ -72,3 +72,38 @@ complete: 252 tests passed. Relevant line coverage remains `primitive-id.ts`
 This is not a completion claim. Durable Inbox replay/persistence/reload,
 complete produced-event producer IDs, malformed stored-target rejection, guard
 isolation, and the specialist review wave remain outstanding.
+
+## Escalated integration proof
+
+`repository-routing.test.ts` now derives a composite Process Manager state
+descriptor from the existing Process Manager fixture. Its ID has the generated
+`CompositeRouteId` shape: nested `spine.core.UserId reader` plus `int32
+number`; the two test IDs differ only in `number`.
+
+- Entity Inbox event handoff persists one typed target for each ID. Replaying
+  those delivered rows does not invoke the custom route again, and a freshly
+  bound context rehydrates the two states independently.
+- A Process Manager command-produced event packs the complete composite ID in
+  `EventContext.producerId`.
+- Stored inbox targets with a different packed-ID type URL, and targets whose
+  matching type URL contains malformed bytes, reject before the handler runs.
+- A guarded multi-target route collapses a generated clone of `idA`, keeps
+  `idB`, suppresses a true duplicate event independently per target, and
+  accepts a distinct event. The persisted event fixtures include the required
+  composite producer ID, version, and timestamp.
+
+No production code, generated Protobuf, schema, storage format, manifest,
+version, or lockfile changed. The first narrow guard run exposed missing event
+history metadata in the test fixture (producer ID, version, timestamp), not a
+runtime identity defect; after correcting that fixture, the guard proof passed.
+
+Verification:
+
+```text
+pnpm exec vitest run packages/server/test/repository/repository-routing.test.ts \
+  --testTimeout=15000 --maxWorkers=1
+1 file passed, 252 tests passed
+
+pnpm typecheck
+exit 0
+```

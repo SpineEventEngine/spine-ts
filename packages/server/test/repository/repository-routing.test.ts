@@ -265,6 +265,11 @@ type CompositeRouteSourceState = Message<"CompositeRouteSourceState"> & {
   name: string;
 };
 
+type CompositeRouteProcessManagerState = Message<"CompositeRouteProcessManagerState"> & {
+  id?: CompositeRouteId;
+  queue: string;
+};
+
 type NumberRouteEvent = Message<"spine_ts.test.NumberRouteEvent"> & {
   id: number;
 };
@@ -523,6 +528,26 @@ const ProcessManagerStateSchema = messageDesc(
   fileEntityVisibilityFixture,
   0,
 ) as GenMessage<ProcessManagerState>;
+const fileCompositeRouteProcessManagerFixture = (() => {
+  const descriptor = clone(FileDescriptorProtoSchema, ProcessManagerStateSchema.file.proto);
+  const state = descriptor.messageType[0];
+  if (state === undefined) throw new Error("Process-manager state declaration is missing.");
+  const stateId = state.field[0];
+  if (stateId === undefined) throw new Error("Process-manager state ID field is missing.");
+  descriptor.name = "composite_route_process_manager.proto";
+  descriptor.dependency.push(fileCompositeRouteFixture.proto.name);
+  state.name = "CompositeRouteProcessManagerState";
+  stateId.type = FieldDescriptorProto_Type.MESSAGE;
+  stateId.typeName = ".CompositeRouteId";
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+    fileCompositeRouteFixture,
+  ]);
+})();
+const CompositeRouteProcessManagerStateSchema = messageDesc(
+  fileCompositeRouteProcessManagerFixture,
+  0,
+) as GenMessage<CompositeRouteProcessManagerState>;
 const fileValidationRefusalFixture = fileDesc(
   "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
     "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
@@ -623,7 +648,10 @@ const Int64MessageIdProjectionEventSchema = messageDesc(
   fileInt64MessageIdEventFixture,
   1,
 ) as GenMessage<Int64MessageIdProjectionEvent>;
-const CompositeRouteIdSchema = messageDesc(fileCompositeRouteFixture, 8) as GenMessage<CompositeRouteId>;
+const CompositeRouteIdSchema = messageDesc(
+  fileCompositeRouteFixture,
+  8,
+) as GenMessage<CompositeRouteId>;
 const CompositeRouteStateSchema = messageDesc(
   fileCompositeRouteFixture,
   9,
@@ -721,6 +749,50 @@ class CompositeRouteProjection extends Projection<
 
   subscribe(event: CompositeRouteEvent | CompositeRouteSourceState): void {
     this.update((draft) => Object.assign(draft, event));
+  }
+}
+
+class CompositeRouteProcessManager extends ProcessManager<
+  CompositeRouteId,
+  typeof CompositeRouteProcessManagerStateSchema,
+  number
+> {
+  static calls = 0;
+  static ids: CompositeRouteId[] = [];
+
+  static reset(): void {
+    this.calls = 0;
+    this.ids = [];
+  }
+
+  react(event: CompositeRouteEvent): void {
+    CompositeRouteProcessManager.calls += 1;
+    CompositeRouteProcessManager.ids.push(this.id);
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(CompositeRouteProcessManagerStateSchema, {
+          id: this.id,
+          queue: event.name,
+        }),
+      ),
+    );
+  }
+
+  assignAndProduce(command: CompositeRouteEvent): CompositeRouteEvent {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(CompositeRouteProcessManagerStateSchema, {
+          id: this.id,
+          queue: command.name,
+        }),
+      ),
+    );
+    return create(CompositeRouteEventSchema, {
+      id: this.id,
+      name: `${command.name} produced`,
+    });
   }
 }
 
@@ -3691,7 +3763,9 @@ describe("repository signal routing", () => {
       repository.routeEvent(
         SignalEnvelopes.event({
           id: create(EventIdSchema, { value: "composite-producer" }),
-          context: create(EventContextSchema, { producerId: Identifiers.pack(CompositeRouteIdSchema, idA) }),
+          context: create(EventContextSchema, {
+            producerId: Identifiers.pack(CompositeRouteIdSchema, idA),
+          }),
           schema: CompositeRouteEventSchema,
           message: create(CompositeRouteEventSchema, { id: idB, name: "Producer" }),
         }),
@@ -4029,6 +4103,248 @@ describe("repository signal routing", () => {
       await requireProjectionInboxTarget(repository).replay(stored);
       expect(routeCalls).toBe(2);
       expect(Int64MessageIdProjection.calls).toBe(2);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("hands off, replays, and rehydrates composite Process Manager IDs without rerouting", async () => {
+    CompositeRouteProcessManager.reset();
+    let routeCalls = 0;
+    const routing = EventRouting.create<CompositeRouteId>().route(
+      CompositeRouteEventSchema,
+      (message) => {
+        routeCalls += 1;
+        if (message.id === undefined) throw new Error("Expected a composite route ID.");
+        return [message.id];
+      },
+    );
+    const factory = new InMemoryStorageFactory();
+    const repository = createCompositeRouteProcessManagerRepository(routing);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const idA = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "reader" }),
+      number: 1,
+    });
+    const idB = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "reader" }),
+      number: 2,
+    });
+    const eventA = SignalEnvelopes.event({
+      id: create(EventIdSchema, { value: "event-composite-inbox-a" }),
+      context: create(EventContextSchema),
+      schema: CompositeRouteEventSchema,
+      message: create(CompositeRouteEventSchema, { id: idA, name: "A delivered" }),
+    });
+    const eventB = SignalEnvelopes.event({
+      id: create(EventIdSchema, { value: "event-composite-inbox-b" }),
+      context: create(EventContextSchema),
+      schema: CompositeRouteEventSchema,
+      message: create(CompositeRouteEventSchema, { id: idB, name: "B delivered" }),
+    });
+
+    try {
+      await context.eventBus().post(eventA);
+      await context.eventBus().post(eventB);
+
+      const delivery = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: factory,
+      });
+      const rows = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
+      const rowA = rows.find((row) => row.signalId === "event-composite-inbox-a");
+      const rowB = rows.find((row) => row.signalId === "event-composite-inbox-b");
+      if (rowA === undefined || rowB === undefined) {
+        throw new Error("Expected delivered composite Process Manager inbox rows.");
+      }
+
+      expect(Identifiers.unpack(CompositeRouteIdSchema, rowA.inboxId.targetId)).toEqual(idA);
+      expect(Identifiers.unpack(CompositeRouteIdSchema, rowB.inboxId.targetId)).toEqual(idB);
+      expect(routeCalls).toBe(2);
+
+      const target = requireEntityInboxTarget(repository);
+      await target.replay(rowA);
+      await target.replay(rowB);
+
+      expect(routeCalls).toBe(2);
+      expect(CompositeRouteProcessManager.ids).toEqual([idA, idB, idA, idB]);
+      await expect(
+        context.stand().read(CompositeRouteProcessManagerStateSchema, idA),
+      ).resolves.toEqual(
+        create(CompositeRouteProcessManagerStateSchema, { id: idA, queue: "A delivered" }),
+      );
+      await expect(
+        context.stand().read(CompositeRouteProcessManagerStateSchema, idB),
+      ).resolves.toEqual(
+        create(CompositeRouteProcessManagerStateSchema, { id: idB, queue: "B delivered" }),
+      );
+    } finally {
+      await context.close();
+    }
+
+    const rehydrated = BoundedContext.singleTenant("Tasks")
+      .add(createCompositeRouteProcessManagerRepository(routing))
+      .withStorageFactory(factory)
+      .build();
+    try {
+      await expect(
+        rehydrated.stand().read(CompositeRouteProcessManagerStateSchema, idA),
+      ).resolves.toMatchObject({ id: idA, queue: "A delivered" });
+      await expect(
+        rehydrated.stand().read(CompositeRouteProcessManagerStateSchema, idB),
+      ).resolves.toMatchObject({ id: idB, queue: "B delivered" });
+    } finally {
+      await rehydrated.close();
+    }
+  });
+
+  it("packs the complete composite Process Manager ID into produced event context", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createCompositeRouteProcessManagerRepository(undefined, { produces: true }))
+      .withStorageFactory(factory)
+      .build();
+    const id = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "producer" }),
+      number: 7,
+    });
+    const command = SignalEnvelopes.command({
+      id: create(CommandIdSchema, { uuid: "command-composite-producer" }),
+      context: create(CommandContextSchema),
+      schema: CompositeRouteEventSchema,
+      message: create(CompositeRouteEventSchema, { id, name: "Produce" }),
+    });
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    try {
+      await context.commandBus().post(command);
+
+      const [produced] = await waitForStoredEvents(eventStore, 1);
+      expect(
+        AnyMessages.unpack(produced?.context?.producerId as never, CompositeRouteIdSchema),
+      ).toEqual(id);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("rejects malformed composite Entity Inbox targets before invoking the Process Manager", async () => {
+    CompositeRouteProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createCompositeRouteProcessManagerRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const event = SignalEnvelopes.event({
+      id: create(EventIdSchema, { value: "event-composite-inbox-invalid" }),
+      context: create(EventContextSchema),
+      schema: CompositeRouteEventSchema,
+      message: create(CompositeRouteEventSchema, {
+        id: create(CompositeRouteIdSchema, {
+          reader: create(UserIdSchema, { value: "valid" }),
+          number: 3,
+        }),
+        name: "Invalid target",
+      }),
+    });
+
+    try {
+      const wrongType = await storePmInboxEvent(
+        delivery,
+        event,
+        new Date("2026-09-03T10:00:00.000Z"),
+        1n,
+        {
+          packedTargetId: Identifiers.pack(UserIdSchema, create(UserIdSchema, { value: "wrong" })),
+          targetTypeUrl: TypeUrls.derive(CompositeRouteProcessManagerStateSchema),
+        },
+      );
+      const malformed = await storePmInboxEvent(
+        delivery,
+        event,
+        new Date("2026-09-03T10:00:01.000Z"),
+        2n,
+        {
+          signalId: "event-composite-inbox-malformed",
+          packedTargetId: create(AnySchema, {
+            typeUrl: TypeUrls.derive(CompositeRouteIdSchema),
+            value: new Uint8Array([0xff]),
+          }),
+          targetTypeUrl: TypeUrls.derive(CompositeRouteProcessManagerStateSchema),
+        },
+      );
+      const target = requireEntityInboxTarget(repository);
+
+      await expect(target.replay(wrongType)).rejects.toThrow(/target ID is incompatible/);
+      await expect(target.replay(malformed)).rejects.toThrow(/target ID is incompatible/);
+      expect(CompositeRouteProcessManager.calls).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("guards multi-target composite Process Manager delivery by complete ID", async () => {
+    CompositeRouteProcessManager.reset();
+    let routeCalls = 0;
+    const idA = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "guarded" }),
+      number: 1,
+    });
+    const idB = create(CompositeRouteIdSchema, {
+      reader: create(UserIdSchema, { value: "guarded" }),
+      number: 2,
+    });
+    const repository = createCompositeRouteProcessManagerRepository(
+      EventRouting.create<CompositeRouteId>().route(CompositeRouteEventSchema, () => {
+        routeCalls += 1;
+        return [idA, clone(CompositeRouteIdSchema, idA), idB];
+      }),
+      { doubleDispatchGuard: true },
+    );
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined)
+      throw new Error("Expected a composite Process Manager dispatcher.");
+    const duplicate = SignalEnvelopes.event({
+      id: create(EventIdSchema, { value: "event-composite-guarded" }),
+      context: create(EventContextSchema, {
+        producerId: Identifiers.pack(CompositeRouteIdSchema, idA),
+        version: create(VersionSchema, { number: 1 }),
+        timestamp: create(TimestampSchema, { seconds: 1n }),
+      }),
+      schema: CompositeRouteEventSchema,
+      message: create(CompositeRouteEventSchema, { id: idA, name: "Guarded" }),
+    });
+    const distinct = SignalEnvelopes.event({
+      id: create(EventIdSchema, { value: "event-composite-guarded-distinct" }),
+      context: create(EventContextSchema, {
+        producerId: Identifiers.pack(CompositeRouteIdSchema, idA),
+        version: create(VersionSchema, { number: 2 }),
+        timestamp: create(TimestampSchema, { seconds: 2n }),
+      }),
+      schema: CompositeRouteEventSchema,
+      message: create(CompositeRouteEventSchema, { id: idA, name: "Distinct" }),
+    });
+
+    try {
+      await dispatcher.dispatch(duplicate);
+      await dispatcher.dispatch(duplicate);
+      await dispatcher.dispatch(distinct);
+
+      expect(routeCalls).toBe(3);
+      expect(CompositeRouteProcessManager.ids).toEqual([idA, idB, idA, idB]);
     } finally {
       await context.close();
     }
@@ -9690,6 +10006,57 @@ function createCompositeRouteRepository(
   });
 }
 
+function createCompositeRouteProcessManagerRepository(
+  eventRouting?: EventRouting<CompositeRouteId>,
+  options: { readonly doubleDispatchGuard?: boolean; readonly produces?: boolean } = {},
+): Repository<typeof CompositeRouteProcessManager> {
+  const handlers = HandlerMetadataValues.defineArity(
+    CompositeRouteProcessManager,
+    CompositeRouteProcessManagerStateSchema,
+    (builder) =>
+      options.produces === true
+        ? [
+            builder.assign(CompositeRouteEventSchema, "assignAndProduce"),
+            builder.react(CompositeRouteEventSchema, "react"),
+          ]
+        : [builder.react(CompositeRouteEventSchema, "react")],
+    options.produces === true
+      ? [
+          {
+            kind: "command-assignment",
+            methodName: "assignAndProduce",
+            parameterCount: 1,
+            origin: "domestic",
+            emittedSchemas: [CompositeRouteEventSchema],
+          },
+          {
+            kind: "event-reaction",
+            methodName: "react",
+            parameterCount: 1,
+            origin: "domestic",
+          },
+        ]
+      : [
+          {
+            kind: "event-reaction",
+            methodName: "react",
+            parameterCount: 1,
+            origin: "domestic",
+          },
+        ],
+  );
+
+  return new Repository({
+    entityType: CompositeRouteProcessManager,
+    schema: CompositeRouteProcessManagerStateSchema,
+    handlers,
+    ...(eventRouting === undefined ? {} : { eventRouting }),
+    ...(options.doubleDispatchGuard === true
+      ? { processManagerEventHistory: true, doubleDispatchGuard: true }
+      : {}),
+  });
+}
+
 function createManagedProjection(): Repository<typeof ManagedTaskProjection> {
   const handlers = EntityHandlers.define(
     ManagedTaskProjection,
@@ -10997,6 +11364,7 @@ async function storePmInboxEvent(
   overrides: {
     readonly signalId?: string;
     readonly targetId?: string;
+    readonly packedTargetId?: Any;
     readonly targetTypeUrl?: string;
     readonly label?: InboxMessage["label"];
     readonly signal?: NonNullable<InboxMessage["signal"]>;
@@ -11004,7 +11372,9 @@ async function storePmInboxEvent(
 ) {
   const message = await delivery.inbox.receive({
     inboxId: {
-      targetId: Identifiers.pack("string", overrides.targetId ?? readProjectionId(event)),
+      targetId:
+        overrides.packedTargetId ??
+        Identifiers.pack("string", overrides.targetId ?? readProjectionId(event)),
       targetTypeUrl: overrides.targetTypeUrl ?? TypeUrls.derive(ProcessManagerStateSchema),
     },
     signalId: overrides.signalId ?? event.id?.value ?? "missing-event-id",
@@ -12428,7 +12798,7 @@ function createStateChangedEvent(
         ? Int64MessageIdSourceStateSchema
         : state.$typeName === CompositeRouteSourceStateSchema.typeName
           ? CompositeRouteSourceStateSchema
-        : ProjectionStateSchema;
+          : ProjectionStateSchema;
   const origin =
     tenantId === undefined ? undefined : projectionEventOrigin({ pastMessageTenantId: tenantId });
   if (tenantId !== undefined && origin === undefined) {
