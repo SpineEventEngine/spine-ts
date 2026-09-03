@@ -1458,9 +1458,12 @@ persistence, canonical-key, and duplicate-delivery paths retain the complete
 typed value. When the selected route candidate is a message but the Entity ID
 type is primitive, an explicit custom route returns the intended primitive ID.
 Schema validation is authoritative at route admission and no registry or
-storage migration was introduced. The final gate passed 287 test files and
-4,557 tests with 90.01% branch coverage, including all 18 packed artifacts and
-the isolated external consumer. The canonical ledger is in
+storage migration was introduced. A private `server-blackbox-tests` workspace
+now proves cross-repository Event fan-out through both direct repository calls
+and the public BlackBox API without changing the 18-package publication set.
+The final gate passed 288 test files and 4,560 tests with 90.01% branch
+coverage, including all 18 packed artifacts and the isolated external
+consumer. The canonical ledger is in
 `build-protocol/tasks/T-0224-general-protobuf-entity-identifiers/TASK.md`.
 
 ## Parallelism Without Rework

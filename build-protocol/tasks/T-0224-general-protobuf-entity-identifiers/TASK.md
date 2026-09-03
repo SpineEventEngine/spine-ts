@@ -29,6 +29,28 @@ schema, including nested and multi-field identifiers.
 9. The public `MessageId` declaration and TSDoc describe a general Protobuf
    message.
 10. No new type registry, durable-key format, or storage migration is added.
+11. One repository-level integration scenario starts with a real Command to an
+    Aggregate and proves that its single produced Event updates two custom-
+    routed reacting Process Managers, drives one default producer-routed
+    commanding Process Manager to post a Command, and updates custom- and
+    default-routed subscribing Projections. Every Entity uses a typed composite
+    Protobuf ID with at least two fields.
+12. The integration assertions observe the resulting persisted Entity states,
+    not Delivery Inbox implementation records.
+13. A negative repository-level scenario proves that an exact empty custom
+    route suppresses only its intended receiver while the other Process
+    Managers and Projection still reach their expected states and the
+    commanding Process Manager still posts its Command.
+14. A new private `packages/server-blackbox-tests` workspace package contains
+    the shared cross-package test application. It depends on the public server
+    and testing packages without making either production package depend
+    backwards on the other. Publication policy must distinguish this private
+    test workspace from the existing 18 publishable framework packages.
+15. An additional positive test in that private package exercises the same
+    A-through-F topology through the public `BlackBox` API: it posts A's Command
+    through a BlackBox scope and reads the B-through-F states through public
+    Query operations with composite ID filters. This test supplements rather
+    than replaces the direct repository-level positive and negative tests.
 
 ## Classification and estimate
 
@@ -46,6 +68,9 @@ release gate, commits, pushes, and reporting.
 - Reuse the Entity state ID-field descriptor plus existing `Identifiers` and
   `EntityIds` facilities. Do not add another Protobuf registry.
 - Run the affected server tests and changed-source coverage before review.
+- Run the private server BlackBox package tests and prove that its BlackBox
+  scenario uses only the public BlackBox/client surface for commands and state
+  observation.
 - Run one complete relevant review wave after mechanical convergence.
 - Run `verify:release` once after review convergence because this is shared
   server runtime and public-contract work.
