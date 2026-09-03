@@ -502,14 +502,13 @@ describe("Server lifecycle integration", () => {
         closeContext.mockRestore();
       };
       createHttp2Server.mockImplementationOnce((httpServer) => {
-        network = trackNetworkClose(httpServer);
+        network = trackNetworkClose(httpServer, [], () => events.push("network"));
       });
       running = await Server.atPort(0).add(context).addResource({ close: closeResource }).start();
       session = http2.connect(running.baseUrl);
       session.on("error", () => undefined);
       session.on("close", () => {
         sessionClosed = true;
-        events.push("session");
       });
       await once(session, "remoteSettings");
       releaseActive = worker.holdNextStart("STOPPED");
@@ -523,10 +522,11 @@ describe("Server lifecycle integration", () => {
 
       expect(concurrentClose).toBe(firstClose);
       expect(network?.calls()).toBe(1);
+      await waitFor(() => sessionClosed);
       expect(sessionClosed).toBe(true);
-      expect(events).toContain("session");
+      expect(events).toContain("network");
       expect(events).toContain("stop");
-      expect(events.indexOf("session")).toBeLessThan(events.indexOf("stop"));
+      expect(events.indexOf("network")).toBeLessThan(events.indexOf("stop"));
       expect(worker.starts).toBe(2);
       expect(worker.awaitCalls).toBe(0);
       expect(worker.retireCalls).toBe(0);
@@ -3499,6 +3499,7 @@ interface NetworkCloseProbe {
 function trackNetworkClose(
   server: http2.Http2Server,
   closeFailures: readonly Error[] = [],
+  onClosed: () => void = () => undefined,
 ): NetworkCloseProbe {
   const failures = [...closeFailures];
   const close = server.close.bind(server);
@@ -3512,7 +3513,10 @@ function trackNetworkClose(
         setImmediate(() => callback?.(failure));
         return server;
       }
-      return close(callback);
+      return close((error) => {
+        if (error === undefined) onClosed();
+        callback?.(error);
+      });
     },
   });
   return Object.freeze({ calls: () => calls });
