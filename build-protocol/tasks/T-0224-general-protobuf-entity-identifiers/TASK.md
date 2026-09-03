@@ -29,28 +29,32 @@ schema, including nested and multi-field identifiers.
 9. The public `MessageId` declaration and TSDoc describe a general Protobuf
    message.
 10. No new type registry, durable-key format, or storage migration is added.
-11. One repository-level integration scenario starts with a real Command to an
-    Aggregate and proves that its single produced Event updates two custom-
-    routed reacting Process Managers, drives one default producer-routed
-    commanding Process Manager to post a Command, and updates custom- and
-    default-routed subscribing Projections. Every Entity uses a typed composite
-    Protobuf ID with at least two fields.
+11. One repository-level project-management scenario starts with
+    `CreateProject` and proves that `ProjectCreated` updates the independently
+    routed `ProjectPlanning` and `ProjectStaffing` Process Managers, drives the
+    producer-routed `ProjectCoordinator` Process Manager to post
+    `ScheduleProject`, and updates the independently routed `Portfolio` and
+    producer-routed `ProjectProjection` Projections. Every Entity uses a typed
+    composite Protobuf ID with at least two fields. Only the two Entities that
+    intentionally use default producer routing share `ProjectId` with the
+    producer; every custom-routed Entity has its own domain-specific ID type.
 12. The integration assertions observe the resulting persisted Entity states,
     not Delivery Inbox implementation records.
-13. A negative repository-level scenario proves that an exact empty custom
-    route suppresses only its intended receiver while the other Process
-    Managers and Projection still reach their expected states and the
-    commanding Process Manager still posts its Command.
+13. A negative repository-level scenario proves that an exact empty
+    `Portfolio` route suppresses only that Projection while the Project,
+    Process Managers, and other Projection still reach their expected states
+    and `ProjectCoordinator` still posts `ScheduleProject`.
 14. A new private `packages/server-blackbox-tests` workspace package contains
     the shared cross-package test application. It depends on the public server
     and testing packages without making either production package depend
     backwards on the other. Publication policy must distinguish this private
     test workspace from the existing 18 publishable framework packages.
 15. An additional positive test in that private package exercises the same
-    A-through-F topology through the public `BlackBox` API: it posts A's Command
-    through a BlackBox scope and reads the B-through-F states through public
-    Query operations with composite ID filters. This test supplements rather
-    than replaces the direct repository-level positive and negative tests.
+    project-management workflow through the public `BlackBox` API: it posts a
+    real `CreateProject` Command through a BlackBox scope and reads all six
+    Entity states through public Query operations with their correctly typed
+    composite ID filters. This test supplements rather than replaces the direct
+    repository-level positive and negative tests.
 
 ## Classification and estimate
 

@@ -13,6 +13,16 @@ workflow. `build-protocol/PROJECT_COMPLETION_PLAN.md` is the current completion
 sequence. Preserve all accepted DDD, Protobuf, public API, testing,
 documentation, logging, review, and worktree requirements in those files.
 
+## Domain-Correct Protobuf Fixtures
+
+Do not reuse a logically different Protobuf message merely because its fields
+or wire shape happen to fit. Commands, Events, Entity states, identifiers,
+queries, and responses in production code and tests must use message types that
+represent their actual domain concepts. A fixture that posts an Entity state as
+a Command, treats a Command as an Event, or substitutes one identifier type for
+another is invalid because it hides contract mistakes and teaches the wrong
+API.
+
 ## Model Allocation
 
 Use Standard speed. Do not enable Fast/boost mode. Do not use Max or Ultra in
