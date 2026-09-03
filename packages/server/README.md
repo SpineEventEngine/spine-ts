@@ -22,7 +22,7 @@ assembly, listener startup, and cleanup work locally.
 
 Build one context, start a loopback listener on an ephemeral port, and close
 the returned running server. `start()` installs no signal handlers, which makes
-this shape appropriate for tests and hosts that own shutdown themselves.
+this shape appropriate for tests and hosts that manage shutdown themselves.
 
 <!-- docs-snippet-path: packages/server/test/server/server-environment.test.ts -->
 
@@ -45,7 +45,7 @@ before registering application handlers and storage.
 
 ## Native lifecycle and routing
 
-`Server.run()` is the standalone process form: it owns `SIGINT`/`SIGTERM`
+`Server.run()` is the standalone process form: it handles `SIGINT`/`SIGTERM`
 cleanup. `Server.start()` returns a `RunningServer` for an embedding host to
 close. `ManagedServerApplication` is the Node-only complete-replica entrypoint;
 it does not infer process or Delivery-shard counts.
@@ -110,11 +110,11 @@ import { BrowserServer, DurableSubscriptionBindings } from "@spine-event-engine/
 ```
 
 `BrowserServer.open(...)` composes a browser listener around a caller-managed
-native server; `BrowserServer.run(...)` owns a standalone or combined browser
-host. Supply exact allowed origins, a session or intentional public admission,
-authorization and trusted-context resolvers, finite limits, and backend
-forwarding. Authenticated durable bindings are browser-host infrastructure,
-not native `Server` state. See the [browser/auth extension guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+native server; `BrowserServer.run(...)` starts and manages a standalone or
+combined browser host. Supply exact allowed origins, a session or intentional
+public admission, authorization and trusted-context resolvers, finite limits,
+and backend forwarding. Authenticated durable bindings are browser-host
+infrastructure, not native `Server` state. See the [browser/auth extension guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 before exposing a backend to a browser.
 
 ## Limits

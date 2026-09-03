@@ -349,8 +349,12 @@ target is valid; and message first field to primitive target rejects unless a
 custom route deliberately returns a primitive. Command and Event default routes
 share `readFirstFieldId()` and then `readRouteId()`; state-update routing calls
 `readRouteId()` directly on its selected compatible field, so none unwraps a
-message. Release verification is pending the final post-review correction; it
-must not be inferred from the earlier historical release result.
+message.
+
+The converged `pnpm verify:release` run passed all 287 test files and 4,557
+tests. Coverage passed at 93.28% statements, 90.01% branches, 92.82% functions,
+and 94.45% lines. The gate also rebuilt and inspected all 18 snapshot.8
+tarballs and installed them together in the isolated external consumer.
 
 ```text
 selected new regressions

@@ -149,10 +149,12 @@ tooling uses multi-line blocks: an opener line containing only `/**`, a blank
 line before each block, and `@param name Description` without a hyphen. The
 only opening exception is a block at byte zero; files must not start with a
 blank line. Summaries explain behavior or domain meaning rather than using
-placeholders or vague verbs such as `Owns` and `Consists`. Public production
-and example declarations require semantic TSDoc coverage; tests and tooling
-are subject to layout rules only. Generated, distribution, dependency, and
-frozen sources are excluded.
+placeholders or vague verbs such as `Consists`. Do not use `own` as a verb unless
+no precise alternative exists; name the actual responsibility with verbs such
+as `creates`, `starts`, `closes`, `configures`, `selects`, or `manages`. Public
+production and example declarations require semantic TSDoc coverage; tests and
+tooling are subject to layout rules only. Generated, distribution, dependency,
+and frozen sources are excluded.
 
 Authored example Proto uses meaningful domain documentation with a blank line
 between a field or declaration and its following documentation block. Its

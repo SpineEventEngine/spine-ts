@@ -85,3 +85,8 @@ message candidate is converted automatically to a primitive Entity ID. The
 implementation removes the adapter and proves that generated `TaskId` is
 rejected for a primitive target unless a custom route deliberately returns
 `message.id.value`. No backward compatibility was requested.
+
+Affected correctness and standards re-review is clean after the superseding
+correction. The final release gate passed 287 test files and 4,557 tests with
+90.01% branch coverage; artifact inspection and the isolated external consumer
+also passed.
