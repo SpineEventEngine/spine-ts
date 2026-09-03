@@ -77,6 +77,17 @@ export interface PrimitiveIdCodec {
 export type MessageId = Message;
 
 /**
+ * Internal compatibility shape for the legacy scalar-wrapper adapter.
+ *
+ * This is intentionally separate from {@link MessageId}: general message
+ * identifiers need not, and must not, expose a `value` field.
+ */
+type LegacyScalarMessageWrapper = {
+  readonly $typeName: string;
+  readonly value: unknown;
+};
+
+/**
  * Reads message-shaped entity identifiers and legacy scalar wrappers.
  */
 export interface MessageIdCodec {
@@ -97,7 +108,6 @@ export interface MessageIdCodec {
    * @returns Scalar identifier, or `undefined` when the value is malformed.
    */
   readValue(value: unknown): PrimitiveId | undefined;
-
 }
 
 /**
@@ -154,7 +164,6 @@ export const MessageIds: MessageIdCodec = Object.freeze({
   readValue(value: unknown): PrimitiveId | undefined {
     return IdValues.messageValue(value);
   },
-
 });
 
 /**
@@ -187,10 +196,14 @@ const IdValues = Object.freeze({
   },
 
   messageValue(value: unknown): PrimitiveId | undefined {
-    if (!IdValues.isMessage(value)) return undefined;
-    const keys = Object.keys(value);
-    if (keys.length !== 2 || !keys.includes("value")) return undefined;
+    if (!IdValues.isLegacyScalarMessageWrapper(value)) return undefined;
     const id = PrimitiveIds.readFinite(value.value);
     return id;
+  },
+
+  isLegacyScalarMessageWrapper(value: unknown): value is LegacyScalarMessageWrapper {
+    if (!IdValues.isMessage(value)) return false;
+    const keys = Object.keys(value);
+    return keys.length === 2 && keys.includes("value");
   },
 });

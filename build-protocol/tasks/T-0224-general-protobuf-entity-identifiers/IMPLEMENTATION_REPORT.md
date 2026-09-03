@@ -107,3 +107,32 @@ pnpm exec vitest run packages/server/test/repository/repository-routing.test.ts 
 pnpm typecheck
 exit 0
 ```
+
+## Mechanical typecheck correction
+
+The earlier explicit `gpt-5.6-luna` / low mechanical gate found `TS2339` in
+`primitive-id.ts`: after general-message admission, the legacy scalar wrapper
+reader still accessed `MessageId.value`. The fix adds a private exact
+`{ $typeName, value }` narrowing used only by `readValue()`; the exported
+`MessageId` remains Buf's general `Message` contract and has no `value` member.
+
+The focused legacy-wrapper test now also rejects a wrapper with an extra field.
+The correction was made by the existing senior TypeScript implementation
+function with explicit `gpt-5.6-terra` / high reasoning; runtime
+self-introspection is unavailable on this surface.
+
+```text
+pnpm exec vitest run packages/server/test/repository/primitive-id.test.ts
+1 file passed, 4 tests passed
+
+pnpm exec tsc --noEmit -p packages/server/tsconfig.json
+exit 0
+
+pnpm exec vitest run packages/server/test/repository/primitive-id.test.ts \
+  packages/server/test/repository/repository-routing.test.ts \
+  --testTimeout=15000 --maxWorkers=1
+2 files passed, 256 tests passed
+
+pnpm typecheck
+exit 0
+```
