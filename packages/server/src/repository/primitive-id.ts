@@ -217,7 +217,7 @@ const IdValues = Object.freeze({
   },
 
   isLegacyScalarWrapper(value: unknown): value is LegacyScalarMessageWrapper {
-    if (!IdValues.isMessage(value) || !Object.hasOwn(value, "$typeName")) return false;
+    if (!IdValues.isMessage(value)) return false;
     const keys = Object.keys(value);
     return keys.length === 2 && keys.includes("value");
   },
