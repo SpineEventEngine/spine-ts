@@ -40,6 +40,11 @@ export const generatedTargets = [
 ];
 export const modelAtomicTargets = [
   {
+    displayPath: "packages/server-blackbox-tests/generated",
+    packagePath: "packages/server-blackbox-tests",
+    moduleName: "ServerBlackBoxTests",
+  },
+  {
     displayPath: "examples/todo/generated",
     packagePath: "examples/todo",
     moduleName: "Todo",

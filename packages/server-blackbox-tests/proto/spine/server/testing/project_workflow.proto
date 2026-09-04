@@ -1,0 +1,172 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.server.testing;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.server.testing";
+
+// Identifies an organization that runs projects.
+message OrganizationId {
+  // Stores the organization's short code.
+  string code = 1 [(required) = true];
+}
+
+// Identifies a project inside an organization.
+message ProjectId {
+  // Identifies the organization that runs the project.
+  OrganizationId organization = 1 [(required) = true, (validate) = true];
+
+  // Distinguishes the project inside the organization.
+  int32 number = 2;
+}
+
+// Identifies a planning process inside an organization.
+message PlanningId {
+  // Identifies the organization served by the planning process.
+  OrganizationId organization = 1 [(required) = true, (validate) = true];
+
+  // Distinguishes the planning process inside the organization.
+  int32 number = 2;
+}
+
+// Identifies a staffing process inside an organization.
+message StaffingId {
+  // Identifies the organization served by the staffing process.
+  OrganizationId organization = 1 [(required) = true, (validate) = true];
+
+  // Distinguishes the staffing process inside the organization.
+  int32 number = 2;
+}
+
+// Identifies a portfolio view inside an organization.
+message PortfolioId {
+  // Identifies the organization represented by the portfolio.
+  OrganizationId organization = 1 [(required) = true, (validate) = true];
+
+  // Distinguishes the portfolio inside the organization.
+  int32 number = 2;
+}
+
+// Requests creation of a project.
+message CreateProject {
+  // Identifies the project to create.
+  ProjectId project = 1 [(required) = true, (validate) = true];
+
+  // Provides the project name.
+  string name = 2 [(required) = true];
+}
+
+// Requests a change to the project schedule.
+message ScheduleProject {
+  // Identifies the project to schedule.
+  ProjectId project = 1 [(required) = true, (validate) = true];
+
+  // Provides the new scheduling status.
+  string status = 2 [(required) = true];
+}
+
+// Stores a project and its current schedule.
+message ProjectState {
+  option (entity).kind = AGGREGATE;
+
+  // Identifies this project.
+  ProjectId id = 1 [(required) = true, (validate) = true, (set_once) = true];
+
+  // Stores the project name.
+  string name = 2 [(required) = true];
+
+  // Stores the current scheduling status.
+  string status = 3 [(required) = true];
+}
+
+// Records creation of a project.
+message ProjectCreated {
+  // Identifies the organization in which the project was created.
+  OrganizationId organization = 1 [(required) = true, (validate) = true];
+
+  // Identifies the created project.
+  ProjectId project = 2 [(required) = true, (validate) = true];
+
+  // Stores the project name.
+  string name = 3 [(required) = true];
+}
+
+// Records a change to the project schedule.
+message ProjectScheduled {
+  // Identifies the scheduled project.
+  ProjectId project = 1 [(required) = true, (validate) = true];
+
+  // Stores the new scheduling status.
+  string status = 2 [(required) = true];
+}
+
+// Tracks project-planning work.
+message PlanningState {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies this planning process.
+  PlanningId id = 1 [(required) = true, (validate) = true, (set_once) = true];
+
+  // Stores the project name observed by the process.
+  string project_name = 2;
+}
+
+// Tracks project-staffing work.
+message StaffingState {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies this staffing process.
+  StaffingId id = 1 [(required) = true, (validate) = true, (set_once) = true];
+
+  // Stores the project name observed by the process.
+  string project_name = 2;
+}
+
+// Coordinates follow-up commands for a project.
+message CoordinationState {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies the project whose work is coordinated.
+  ProjectId id = 1 [(required) = true, (validate) = true, (set_once) = true];
+
+  // Stores the project name observed by the process.
+  string project_name = 2;
+}
+
+// Presents one portfolio's project information.
+message PortfolioState {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies this portfolio view.
+  PortfolioId id = 1 [(required) = true, (validate) = true, (set_once) = true];
+
+  // Stores the latest project name.
+  string name = 2;
+}
+
+// Presents one project's information.
+message ProjectProjectionState {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the represented project.
+  ProjectId id = 1 [(required) = true, (validate) = true, (set_once) = true];
+
+  // Stores the project name.
+  string name = 2;
+}

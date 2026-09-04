@@ -1462,8 +1462,10 @@ storage migration was introduced. A private `server-blackbox-tests` workspace
 now proves cross-repository Event fan-out with a project-management workflow:
 distinct custom-routed Process Manager and Projection IDs, producer-ID default
 routing, a real follow-up Command, persisted-state assertions, and an
-additional public BlackBox scenario. It does so without changing the
-18-package publication set.
+additional public BlackBox scenario. The private package defines this model in
+canonical `.proto` source and consumes schemas produced by the repository's
+normal Proto generation workflow. It does so without changing the 18-package
+publication set.
 The final gate passed 288 test files and 4,561 tests with 90.01% branch
 coverage, including all 18 packed artifacts and the isolated external
 consumer. The canonical ledger is in

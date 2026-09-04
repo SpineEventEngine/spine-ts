@@ -55,6 +55,9 @@ schema, including nested and multi-field identifiers.
     Entity states through public Query operations with their correctly typed
     composite ID filters. This test supplements rather than replaces the direct
     repository-level positive and negative tests.
+16. The private test package declares the project-management model in canonical
+    `.proto` source and imports generated schemas. It contains no hand-written
+    descriptor assembly or embedded descriptor binaries.
 
 ## Classification and estimate
 

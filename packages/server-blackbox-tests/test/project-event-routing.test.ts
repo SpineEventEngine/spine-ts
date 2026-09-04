@@ -12,30 +12,10 @@
  * the License.
  */
 
-import {
-  clone,
-  create,
-  fromBinary,
-  toBinary,
-  type Message,
-  type MessageShape,
-} from "@bufbuild/protobuf";
+import { create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import {
-  DescriptorProtoSchema,
-  FieldDescriptorProto_Label,
-  FieldDescriptorProto_Type,
-  FieldDescriptorProtoSchema,
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
-} from "@bufbuild/protobuf/wkt";
 import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
-import {
-  CommandContextSchema,
-  CommandIdSchema,
-  file_spine_options,
-} from "@spine-event-engine/proto";
+import { CommandContextSchema, CommandIdSchema } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
   type QueryResponse,
@@ -57,230 +37,44 @@ import type { GeneratedHandlerRegistry } from "@spine-event-engine/server/spi/ha
 import { describe, expect, it } from "vitest";
 
 import { BlackBox } from "@spine-event-engine/testing";
-import { processManagerDescriptorBase64 } from "../test-fixtures/entity-metadata-fixtures.js";
-import { testingDescriptorSetBase64 } from "../src/fixtures/main-descriptor.js";
-
-type OrganizationId = Message<"OrganizationId"> & { code: string };
-type ProjectId = Message<"ProjectId"> & { organization?: OrganizationId; number: number };
-type PlanningId = Message<"PlanningId"> & { organization?: OrganizationId; number: number };
-type StaffingId = Message<"StaffingId"> & { organization?: OrganizationId; number: number };
-type PortfolioId = Message<"PortfolioId"> & { organization?: OrganizationId; number: number };
-type CreateProject = Message<"CreateProject"> & { project?: ProjectId; name: string };
-type ScheduleProject = Message<"ScheduleProject"> & { project?: ProjectId; status: string };
-type ProjectCreated = Message<"ProjectCreated"> & {
-  sourceProject?: ProjectId;
-  project?: ProjectId;
-  name: string;
-};
-type ProjectScheduled = Message<"ProjectScheduled"> & { project?: ProjectId; status: string };
-type ProjectState = Message<"ProjectState"> & { id?: ProjectId; name: string; status: string };
-type PlanningState = Message<"PlanningState"> & { id?: PlanningId; projectName: string };
-type StaffingState = Message<"StaffingState"> & { id?: StaffingId; projectName: string };
-type CoordinationState = Message<"CoordinationState"> & { id?: ProjectId; projectName: string };
-type PortfolioState = Message<"PortfolioState"> & { id?: PortfolioId; name: string };
-type ProjectProjectionState = Message<"ProjectProjectionState"> & { id?: ProjectId; name: string };
-
-const sourceFile = (() => {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(testingDescriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-  if (descriptor === undefined) throw new Error("Testing descriptor fixture is empty.");
-  return descriptor;
-})();
-const processManagerSource = (() => {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(processManagerDescriptorBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0]?.messageType.find(
-    (message) => message.name === "ProcessManagerState",
-  );
-  if (descriptor === undefined) throw new Error("Process Manager fixture is missing.");
-  return descriptor;
-})();
-
-function schema<T extends Message>(
-  file: Parameters<typeof messageDesc>[0],
-  name: string,
-): GenMessage<T> {
-  const index = file.proto.messageType.findIndex((message) => message.name === name);
-  if (index < 0) throw new Error(`Fixture message declaration "${name}" is missing.`);
-  return messageDesc(file, index);
-}
-
-const projectFile = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, sourceFile);
-  const aggregate = descriptor.messageType.find((message) => message.name === "AggregateState");
-  const projection = descriptor.messageType.find((message) => message.name === "ProjectionState");
-  const originalId = projection?.field.find((field) => field.name === "id");
-  if (aggregate === undefined || projection === undefined || originalId === undefined) {
-    throw new Error("Project workflow source declarations are missing.");
-  }
-  descriptor.name = "project_event_routing.proto";
-  const organizationId = clone(DescriptorProtoSchema, projection);
-  organizationId.name = "OrganizationId";
-  organizationId.options = undefined;
-  organizationId.field = [
-    create(FieldDescriptorProtoSchema, {
-      name: "code",
-      number: 1,
-      label: FieldDescriptorProto_Label.OPTIONAL,
-      type: FieldDescriptorProto_Type.STRING,
-      jsonName: "code",
-    }),
-  ];
-  const compositeId = (name: string) => {
-    const id = clone(DescriptorProtoSchema, projection);
-    id.name = name;
-    id.options = undefined;
-    id.field = [
-      create(FieldDescriptorProtoSchema, {
-        ...clone(FieldDescriptorProtoSchema, originalId),
-        name: "organization",
-        number: 1,
-        label: FieldDescriptorProto_Label.OPTIONAL,
-        type: FieldDescriptorProto_Type.MESSAGE,
-        typeName: ".OrganizationId",
-        jsonName: "organization",
-      }),
-      create(FieldDescriptorProtoSchema, {
-        name: "number",
-        number: 2,
-        label: FieldDescriptorProto_Label.OPTIONAL,
-        type: FieldDescriptorProto_Type.INT32,
-        jsonName: "number",
-      }),
-    ];
-    return id;
-  };
-  const withId = (source: typeof projection, name: string, idName: string) => {
-    const message = clone(DescriptorProtoSchema, source);
-    message.name = name;
-    const id = message.field.find((field) => field.name === "id");
-    if (id === undefined) throw new Error(`${name} has no ID field.`);
-    id.type = FieldDescriptorProto_Type.MESSAGE;
-    id.typeName = `.${idName}`;
-    return message;
-  };
-  const withProject = (name: string) => {
-    const message = withId(projection, name, "ProjectId");
-    const project = message.field.find((field) => field.name === "id");
-    if (project === undefined) throw new Error(`${name} has no project field.`);
-    project.name = "project";
-    project.jsonName = "project";
-    return message;
-  };
-  const withProjectStatus = (name: string) => {
-    const message = withProject(name);
-    const status = message.field.find((field) => field.name === "name");
-    if (status === undefined) throw new Error(`${name} has no status field.`);
-    status.name = "status";
-    status.jsonName = "status";
-    return message;
-  };
-  const projectCreated = () => {
-    const message = clone(DescriptorProtoSchema, projection);
-    message.name = "ProjectCreated";
-    message.options = undefined;
-    const name = message.field.find((field) => field.name === "name");
-    if (name === undefined) throw new Error("ProjectCreated has no name field.");
-    name.number = 3;
-    message.field = [
-      create(FieldDescriptorProtoSchema, {
-        ...clone(FieldDescriptorProtoSchema, originalId),
-        name: "source_project",
-        number: 1,
-        label: FieldDescriptorProto_Label.OPTIONAL,
-        type: FieldDescriptorProto_Type.MESSAGE,
-        typeName: ".ProjectId",
-        jsonName: "sourceProject",
-      }),
-      create(FieldDescriptorProtoSchema, {
-        ...clone(FieldDescriptorProtoSchema, originalId),
-        name: "project",
-        number: 2,
-        label: FieldDescriptorProto_Label.OPTIONAL,
-        type: FieldDescriptorProto_Type.MESSAGE,
-        typeName: ".ProjectId",
-        jsonName: "project",
-      }),
-      name,
-    ];
-    return message;
-  };
-  const projectState = withId(aggregate, "ProjectState", "ProjectId");
-  const stateStatus = projectState.field.find((field) => field.name === "archived");
-  if (stateStatus === undefined) throw new Error("ProjectState has no status field.");
-  stateStatus.name = "status";
-  stateStatus.jsonName = "status";
-  stateStatus.type = FieldDescriptorProto_Type.STRING;
-  const processManagerState = (name: string, idName: string) => {
-    const state = withId(processManagerSource, name, idName);
-    const projectName = state.field.find((field) => field.name === "queue");
-    if (projectName === undefined) throw new Error(`${name} has no project name field.`);
-    projectName.name = "project_name";
-    projectName.jsonName = "projectName";
-    return state;
-  };
-  const event = projectCreated();
-  const scheduled = withProjectStatus("ProjectScheduled");
-  scheduled.options = undefined;
-  const createProject = withProject("CreateProject");
-  createProject.options = undefined;
-  const scheduleProject = withProjectStatus("ScheduleProject");
-  scheduleProject.options = undefined;
-  descriptor.messageType = [
-    organizationId,
-    compositeId("ProjectId"),
-    compositeId("PlanningId"),
-    compositeId("StaffingId"),
-    compositeId("PortfolioId"),
-    createProject,
-    scheduleProject,
-    projectState,
-    event,
-    scheduled,
-    processManagerState("PlanningState", "PlanningId"),
-    processManagerState("StaffingState", "StaffingId"),
-    processManagerState("CoordinationState", "ProjectId"),
-    withId(projection, "PortfolioState", "PortfolioId"),
-    withId(projection, "ProjectProjectionState", "ProjectId"),
-  ];
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-
-const OrganizationIdSchema = schema<OrganizationId>(projectFile, "OrganizationId");
-const ProjectIdSchema = schema<ProjectId>(projectFile, "ProjectId");
-const PlanningIdSchema = schema<PlanningId>(projectFile, "PlanningId");
-const StaffingIdSchema = schema<StaffingId>(projectFile, "StaffingId");
-const PortfolioIdSchema = schema<PortfolioId>(projectFile, "PortfolioId");
-const CreateProjectSchema = schema<CreateProject>(projectFile, "CreateProject");
-const ScheduleProjectSchema = schema<ScheduleProject>(projectFile, "ScheduleProject");
-const ProjectCreatedSchema = schema<ProjectCreated>(projectFile, "ProjectCreated");
-const ProjectScheduledSchema = schema<ProjectScheduled>(projectFile, "ProjectScheduled");
-const ProjectStateSchema = schema<ProjectState>(projectFile, "ProjectState");
-const PlanningStateSchema = schema<PlanningState>(projectFile, "PlanningState");
-const StaffingStateSchema = schema<StaffingState>(projectFile, "StaffingState");
-const CoordinationStateSchema = schema<CoordinationState>(projectFile, "CoordinationState");
-const PortfolioStateSchema = schema<PortfolioState>(projectFile, "PortfolioState");
-const ProjectProjectionStateSchema = schema<ProjectProjectionState>(
-  projectFile,
-  "ProjectProjectionState",
-);
+import {
+  CoordinationStateSchema,
+  CreateProjectSchema,
+  OrganizationIdSchema,
+  PlanningIdSchema,
+  PlanningStateSchema,
+  PortfolioIdSchema,
+  PortfolioStateSchema,
+  ProjectCreatedSchema,
+  ProjectIdSchema,
+  ProjectProjectionStateSchema,
+  ProjectScheduledSchema,
+  ProjectStateSchema,
+  ScheduleProjectSchema,
+  StaffingIdSchema,
+  StaffingStateSchema,
+  type CreateProject,
+  type OrganizationId,
+  type PlanningId,
+  type PortfolioId,
+  type ProjectCreated,
+  type ProjectId,
+  type ProjectScheduled,
+  type ScheduleProject,
+  type StaffingId,
+} from "../generated/spine/server/testing/project_workflow_pb.js";
 
 class Project extends Aggregate<ProjectId, typeof ProjectStateSchema, bigint> {
   create(command: CreateProject): ProjectCreated {
     const project = command.project;
     if (project === undefined) throw new Error("CreateProject requires a project.");
+    const organization = project.organization;
+    if (organization === undefined) throw new Error("ProjectId requires an organization.");
     this.update((draft) =>
       Object.assign(draft, { id: project, name: command.name, status: "created" }),
     );
     return create(ProjectCreatedSchema, {
-      sourceProject: projectId("other-project", 999),
+      organization,
       project,
       name: command.name,
     });
@@ -625,7 +419,8 @@ function expectProjectWorkflowIds(
   expect(staffing.$typeName).not.toBe(portfolio.$typeName);
   expect(CreateProjectSchema.typeName).not.toBe(ProjectStateSchema.typeName);
   expect(ScheduleProjectSchema.typeName).not.toBe(ProjectStateSchema.typeName);
-  expect(ProjectCreatedSchema.fields[0]?.localName).toBe("sourceProject");
+  expect(ProjectCreatedSchema.fields[0]?.localName).toBe("organization");
+  expect(ProjectCreatedSchema.fields[0]?.message?.typeName).toBe(OrganizationIdSchema.typeName);
   expect(ProjectCreatedSchema.fields[1]?.localName).toBe("project");
   for (const schema of [ProjectIdSchema, PlanningIdSchema, StaffingIdSchema, PortfolioIdSchema]) {
     expect(schema.fields[0]?.localName).toBe("organization");

@@ -651,7 +651,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.8
         version: link:../proto
       '@spine-event-engine/server':
         specifier: workspace:*
