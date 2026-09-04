@@ -1680,6 +1680,22 @@ describe("ManagedServerApplication", () => {
     }
   }, 20_000);
 
+  it("binds the Coordinator to an operating-system-selected port when configured with zero", async () => {
+    const managed = await ManagedServerApplication.run({
+      processCount: 1,
+      port: 0,
+      moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
+      createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
+    });
+    try {
+      const endpoint = managedServerApplicationAccess.coordinatorEndpoint(managed);
+      expect(endpoint).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+      expect(new URL(endpoint ?? "http://127.0.0.1:0").port).not.toBe("0");
+    } finally {
+      await managed.close();
+    }
+  }, 20_000);
+
   it("reports each child's actual local listener only after that child is ready", async () => {
     const managed = await ManagedServerApplication.run({
       processCount: 1,
@@ -1800,7 +1816,7 @@ describe("ManagedServerApplication", () => {
     },
   );
 
-  it.each([undefined, 0, -1, 65_536, 1.5, Number.POSITIVE_INFINITY])(
+  it.each([undefined, -1, 65_536, 1.5, Number.POSITIVE_INFINITY])(
     "rejects an unusable Coordinator port %s before local child assembly",
     async (port) => {
       const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;

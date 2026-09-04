@@ -140,6 +140,8 @@ Requirements:
   when registered in one bounded context;
 - default entity route by the first command field in Protobuf declaration
   order, not by numeric field index;
+- Entity state declares the target ID type in its first field; complete
+  generated message IDs retain every declared field, including nested fields;
 - commands handled by the default route whose first-field target ID is absent,
   blank, or not assignable to the repository ID type must be rejected by the
   default route before handler invocation;

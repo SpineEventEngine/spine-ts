@@ -1448,6 +1448,29 @@ outcomes. The canonical ledgers are in
 `build-protocol/tasks/T-0220-github-actions-npm-publishing/TASK.md` and
 `build-protocol/tasks/T-0221-lerna-publishing-migration/WORKLOG.md`.
 
+### T-0224: General Protobuf Entity Identifiers
+
+T-0224 is implemented, reviewed, and release-verified on the
+`general-protobuf-entity-identifiers` feature branch. Entity identifiers may
+now be complete generated Protobuf messages with arbitrary field names, nested
+messages, and multiple fields. Command, Event, state-update, Entity Inbox,
+persistence, canonical-key, and duplicate-delivery paths retain the complete
+typed value. When the selected route candidate is a message but the Entity ID
+type is primitive, an explicit custom route returns the intended primitive ID.
+Schema validation is authoritative at route admission and no registry or
+storage migration was introduced. A private `server-blackbox-tests` workspace
+now proves cross-repository Event fan-out with a project-management workflow:
+distinct custom-routed Process Manager and Projection IDs, producer-ID default
+routing, a real follow-up Command, persisted-state assertions, and an
+additional public BlackBox scenario. The private package defines this model in
+canonical `.proto` source and consumes schemas produced by the repository's
+normal Proto generation workflow. It does so without changing the 18-package
+publication set.
+The final gate passed 288 test files and 4,561 tests with 90.01% branch
+coverage, including all 18 packed artifacts and the isolated external
+consumer. The canonical ledger is in
+`build-protocol/tasks/T-0224-general-protobuf-entity-identifiers/TASK.md`.
+
 ## Parallelism Without Rework
 
 Use parallelism only where outputs do not block or overwrite each other:

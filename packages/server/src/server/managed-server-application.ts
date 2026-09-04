@@ -100,7 +100,10 @@ export interface ManagedServerApplicationOptions {
 
   /**
    *
-   * Selects the known front-facing Coordinator listener port.
+   * Selects the front-facing Coordinator listener port.
+   *
+   * Use zero to request an available port from the operating system. The
+   * resulting endpoint is available from the started application handle.
    */
   readonly port: number;
 
@@ -1105,9 +1108,9 @@ const ManagedServerCoordinatorValues = Object.freeze({
     return { promise, resolve, reject };
   },
   coordinatorPort(value: number): number {
-    if (!Number.isSafeInteger(value) || value < 1 || value > 65_535)
+    if (!Number.isSafeInteger(value) || value < 0 || value > 65_535)
       throw new Error(
-        "Managed server Coordinator port must be a safe integer between 1 and 65535.",
+        "Managed server Coordinator port must be a safe integer between 0 and 65535.",
       );
     return value;
   },

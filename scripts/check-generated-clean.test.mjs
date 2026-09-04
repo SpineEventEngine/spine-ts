@@ -75,6 +75,12 @@ function stageCurrentOutputs(repoRoot) {
   };
 }
 
+function fixtureGeneratedRoots() {
+  return generatedTargetsForCheck()
+    .map((target) => target.displayPath)
+    .filter((path) => path !== "packages/proto/generated");
+}
+
 function createCompositionFixture(compositionSource = "process.exit(1);\n") {
   const repoRoot = mkdtempSync(join(tmpdir(), "spine-check-generated-clean-"));
   run("git", ["init"], repoRoot);
@@ -125,13 +131,7 @@ writeFileSync(new URL("proof.ts", \`file://\${output}/\`), "export {};\\n");
 describe("check-generated-clean", () => {
   it("compares already-generated outputs with freshly staged generation", () => {
     const repoRoot = createFixture();
-    const generatedRoots = [
-      "examples/todo/generated",
-      "examples/projects/generated",
-      "examples/orders/generated",
-      "examples/message-board/model/generated",
-      "examples/message-board/app/generated",
-    ];
+    const generatedRoots = fixtureGeneratedRoots();
 
     for (const generatedRoot of generatedRoots) {
       mkdirSync(join(repoRoot, generatedRoot), { recursive: true });
@@ -158,13 +158,7 @@ describe("check-generated-clean", () => {
     writeFileSync(marker, '{"generationId":"fixture-generation"}\n');
     run("git", ["add", "-f", marker], repoRoot);
     run("git", ["commit", "-m", "generation marker"], repoRoot);
-    const generatedRoots = [
-      "examples/todo/generated",
-      "examples/projects/generated",
-      "examples/orders/generated",
-      "examples/message-board/model/generated",
-      "examples/message-board/app/generated",
-    ];
+    const generatedRoots = fixtureGeneratedRoots();
     for (const generatedRoot of generatedRoots) {
       mkdirSync(join(repoRoot, generatedRoot), { recursive: true });
     }
@@ -188,13 +182,7 @@ describe("check-generated-clean", () => {
     const repoRoot = createFixture();
     const expectedRoot = mkdtempSync(join(tmpdir(), "spine-current-generated-"));
     try {
-      const generatedRoots = [
-        "examples/todo/generated",
-        "examples/projects/generated",
-        "examples/orders/generated",
-        "examples/message-board/model/generated",
-        "examples/message-board/app/generated",
-      ];
+      const generatedRoots = fixtureGeneratedRoots();
       for (const generatedRoot of generatedRoots)
         mkdirSync(join(repoRoot, generatedRoot), { recursive: true });
       writeFileSync(
@@ -235,6 +223,7 @@ describe("check-generated-clean", () => {
   it("compares every atomic model output by default", () => {
     expect(generatedTargetsForCheck().map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
+      "packages/server-blackbox-tests/generated",
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",

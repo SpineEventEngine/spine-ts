@@ -18,6 +18,7 @@ import { AnyMessages } from "@spine-event-engine/core";
 import { describe, expect, it } from "vitest";
 
 import { MessageIds, PrimitiveIds } from "../../src/repository/primitive-id.js";
+import type { MessageId } from "../../src/index.js";
 
 describe("primitive aggregate IDs", () => {
   it("packs and unpacks primitive ID values directly", () => {
@@ -34,15 +35,40 @@ describe("primitive aggregate IDs", () => {
     expect(PrimitiveIds.unpack(producerId)).toBe(42);
   });
 
-  it("reads only finite primitive message ID values", () => {
-    expect(MessageIds.read({ $typeName: "example.TaskId", value: "task-1" })).toEqual({
+  it("reads message IDs with arbitrary declared fields", () => {
+    const oneField = { $typeName: "example.UuidId", uuid: "task-1" };
+    const nested = {
+      $typeName: "example.LibraryCardId",
+      reader: { $typeName: "example.Reader", email: "reader@example.com" },
+    };
+    const composite = {
+      $typeName: "example.CustomerId",
+      registrationDate: { $typeName: "google.protobuf.Timestamp", seconds: 42n, nanos: 0 },
+      number: 7,
+    };
+    const oneFieldMessage: MessageId = oneField;
+    const nestedMessage: MessageId = nested;
+    const compositeMessage: MessageId = composite;
+
+    expect(MessageIds.read(oneFieldMessage)).toBe(oneField);
+    expect(MessageIds.read(nestedMessage)).toBe(nested);
+    expect(MessageIds.read(compositeMessage)).toBe(composite);
+  });
+
+  it("recognizes a structurally valid message ID", () => {
+    expect(MessageIds.read({ $typeName: "example.TaskId", uuid: "task-1" })).toEqual({
       $typeName: "example.TaskId",
-      value: "task-1",
+      uuid: "task-1",
     });
-    expect(
-      MessageIds.read({ $typeName: "example.TaskId", value: Number.POSITIVE_INFINITY }),
-    ).toBeUndefined();
-    expect(MessageIds.read({ $typeName: "example.TaskId" })).toBeUndefined();
-    expect(MessageIds.read({ $typeName: 1, value: "task-1" })).toBeUndefined();
+    expect(MessageIds.read({ $typeName: 1, uuid: "task-1" })).toBeUndefined();
+  });
+
+  it("rejects inherited message type names", () => {
+    const inheritedTypeName = Object.create({ $typeName: "example.TaskId" }) as {
+      uuid: string;
+    };
+    inheritedTypeName.uuid = "task-1";
+
+    expect(MessageIds.read(inheritedTypeName)).toBeUndefined();
   });
 });

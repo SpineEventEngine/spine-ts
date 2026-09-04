@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
   DoubleValueSchema,
@@ -69,51 +69,36 @@ export interface PrimitiveIdCodec {
 }
 
 /**
- * Describes the type name and scalar value of a message-shaped identifier.
+ * A generated Protobuf message that identifies an entity.
+ *
+ * The message is validated against the Entity state ID-field schema at the
+ * routing boundary. Its complete declared field set is the identifier.
  */
-export interface MessageId {
+export interface MessageId extends Message {
   // prettier-ignore
 
   /**
-   * Declares the fully-qualified Protobuf message type name.
+   * Fully qualified Protobuf message type name.
    */
   readonly $typeName: string;
-
-  /**
-   * Holds the scalar identifier value.
-   */
-  readonly value: PrimitiveId;
 }
 
 /**
- * Reads and keys message-shaped entity identifiers.
+ * Reads message-shaped entity identifiers.
  */
 export interface MessageIdCodec {
   // prettier-ignore
 
   /**
-   * Reads a message-shaped identifier from an unknown value.
+   * Performs shallow message-shape recognition for an unknown identifier.
+   *
+   * Repository routing validates the recognized message against its target
+   * schema before durable use.
    *
    * @param value Value to inspect.
    * @returns Identifier, or `undefined` when the value is malformed.
    */
   read(value: unknown): MessageId | undefined;
-
-  /**
-   * Reads the scalar value from a message-shaped identifier.
-   *
-   * @param value Value to inspect.
-   * @returns Scalar identifier, or `undefined` when the value is malformed.
-   */
-  readValue(value: unknown): PrimitiveId | undefined;
-
-  /**
-   * Creates a stable storage key for a message-shaped identifier.
-   *
-   * @param id Identifier to encode.
-   * @returns Stable key that distinguishes message type and scalar value type.
-   */
-  key(id: MessageId): string;
 }
 
 /**
@@ -166,21 +151,6 @@ export const MessageIds: MessageIdCodec = Object.freeze({
   read(value: unknown): MessageId | undefined {
     return IdValues.message(value);
   },
-
-  readValue(value: unknown): PrimitiveId | undefined {
-    return IdValues.message(value)?.value;
-  },
-
-  key(id: MessageId): string {
-    return JSON.stringify({
-      type: "message",
-      typeName: id.$typeName,
-      value: {
-        type: typeof id.value,
-        value: id.value,
-      },
-    });
-  },
 });
 
 /**
@@ -205,26 +175,13 @@ const IdValues = Object.freeze({
       return false;
     }
 
-    const keys = Object.keys(value);
     return (
-      keys.length === 2 &&
-      keys.includes("$typeName") &&
-      keys.includes("value") &&
+      Object.hasOwn(value, "$typeName") &&
       typeof (value as { readonly $typeName?: unknown }).$typeName === "string"
     );
   },
 
   message(value: unknown): MessageId | undefined {
-    if (!IdValues.isMessage(value)) {
-      return undefined;
-    }
-
-    const id = PrimitiveIds.readFinite(value.value);
-    return id === undefined
-      ? undefined
-      : {
-          $typeName: value.$typeName,
-          value: id,
-        };
+    return IdValues.isMessage(value) ? value : undefined;
   },
 });

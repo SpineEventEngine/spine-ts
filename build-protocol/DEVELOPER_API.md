@@ -195,6 +195,19 @@ and must be explicit. A custom route replaces the default first-field route, so
 the framework must not enforce the first-field requirement for commands handled
 by that custom route unless the route explicitly does so.
 
+An Entity ID may be a supported primitive or a complete generated Protobuf
+message. The Entity state's first field declares the ID type. When that field is
+a message, every declared field in the ID message participates in the identity,
+including nested messages. Route admission validates the complete message
+against the declared schema and its generated validation rules. When the
+selected route candidate is a message but the Entity ID type is primitive, use
+a custom route that returns a compatible primitive value.
+
+Without a custom route, Command routing reads the Command's declared first
+field. Event routing uses a compatible producer ID when available and otherwise
+reads the Event's declared first field. State-update routing selects the first
+state field compatible with the Entity ID.
+
 ## Entity Transactions
 
 Entities mutate state only inside framework-controlled handling transactions:

@@ -32,15 +32,14 @@ Status: complete; final review round clean
 
 Findings:
 
-- Public docs still described `AggregateStorage` as primitive-ID-only even
-  after the task added message-valued ID support.
+- Public docs needed to describe complete generated message IDs consistently.
 - Task and work logs still said the implementation commit and review state were
   pending.
 - `AggregateId` accepted arbitrary Protobuf `Message` objects and keyed them by
   broad `JSON.stringify()`, which made IDs non-canonical and too broad for a
   public storage seam.
-- Repository event routing unwrapped any object with a primitive `value`, which
-  could collapse distinct message IDs and ignore extra fields.
+- Repository event routing needed to validate IDs against the Entity state
+  schema and preserve complete generated message IDs.
 - Example tests imported `examples/todo/dist` without making the build-output
   dependency explicit.
 - `TaskListProjection` writes one row per task, so docs and tests needed to make
@@ -50,12 +49,10 @@ Findings:
 
 Planned fixes:
 
-- Restrict supported message aggregate IDs to the existing single-field
-  generated ID shape: `$typeName` plus a finite primitive `value`.
-- Preserve message identity in aggregate storage keys with `$typeName`,
-  primitive kind, and primitive value.
-- Use the same single-field message-ID reader for repository event routing.
-- Add negative tests for non-finite numbers and extra-field message IDs.
+- Accept supported primitive IDs and complete generated message IDs.
+- Preserve descriptor-typed message identity in aggregate storage keys.
+- Use the Entity state ID schema for repository Event routing.
+- Add negative tests for non-finite primitive IDs and wrong message types.
 - Make the focused example test assert fresh built output exists before dynamic
   import.
 - Update public docs, example docs, task logs, and TypeDoc tag config before
@@ -75,9 +72,8 @@ Findings:
 
 - Documentation: task, implementation, review, and work logs still described
   the committed `2753627` review-fix pass as in progress.
-- TypeScript/API: message-valued repository event routes still returned a
-  primitive value, so a repository with a message ID type could expose
-  `RepositoryEventRoute<TaskId>` while returning a string at runtime.
+- TypeScript/API: repository Event routes needed to return the complete ID type
+  declared by the Entity state schema.
 - TypeScript/API: exported `AggregateId` referenced `PrimitiveId` and
   `MessageId`, but those constituent types were not package-root exports.
 - Security: snapshot writes persisted the caller-provided aggregate ID object
@@ -91,7 +87,7 @@ Planned fixes:
 - Normalize snapshot aggregate IDs before writing snapshot records.
 - Normalize repository command/event IDs against the repository state's ID field:
   scalar-ID repositories receive finite primitive IDs, while message-ID
-  repositories receive normalized single-field message IDs.
+  repositories receive validated complete generated message IDs.
 - Reject non-finite producer IDs and first-field route IDs.
 - Export `PrimitiveId` and `MessageId` from `@spine-ts/server` and update the
   API export guard.
@@ -115,11 +111,9 @@ Findings:
   files from `examples/todo/generated`.
 - Maintainability: `readEventFieldId()` was a one-use wrapper around route ID
   normalization.
-- Maintainability: message-target route errors said primitives were accepted
-  even though message-ID routes require message IDs.
-- Reliability: message-target route normalization accepted any single-field
-  message ID without checking that its `$typeName` matched the repository state
-  ID field.
+- Maintainability: route errors needed to describe the target ID type precisely.
+- Reliability: message-target route normalization needed to require the
+  generated type declared by the repository state ID field.
 
 Planned fixes:
 

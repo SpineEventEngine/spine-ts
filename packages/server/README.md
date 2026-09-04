@@ -22,7 +22,7 @@ assembly, listener startup, and cleanup work locally.
 
 Build one context, start a loopback listener on an ephemeral port, and close
 the returned running server. `start()` installs no signal handlers, which makes
-this shape appropriate for tests and hosts that own shutdown themselves.
+this shape appropriate for tests and hosts that manage shutdown themselves.
 
 <!-- docs-snippet-path: packages/server/test/server/server-environment.test.ts -->
 
@@ -45,7 +45,7 @@ before registering application handlers and storage.
 
 ## Native lifecycle and routing
 
-`Server.run()` is the standalone process form: it owns `SIGINT`/`SIGTERM`
+`Server.run()` is the standalone process form: it handles `SIGINT`/`SIGTERM`
 cleanup. `Server.start()` returns a `RunningServer` for an embedding host to
 close. `ManagedServerApplication` is the Node-only complete-replica entrypoint;
 it does not infer process or Delivery-shard counts.
@@ -56,6 +56,47 @@ subscriptions are live, best-effort notifications, so clients re-query after a
 reconnect or a possible gap. Configure a storage provider for durable
 application state and generated repository assembly; in-memory choices are
 for local development and tests.
+
+## Entity identifiers
+
+An Entity ID can be a primitive value or a complete generated Protobuf message.
+For a message-valued ID, the Entity state message declares that ID message as
+its first field. Every field declared by the ID message, including nested
+messages, is part of the identity.
+
+```proto
+message WorkItemId {
+  spine.core.UserId owner = 1;
+  int32 sequence = 2;
+}
+
+message WorkItem {
+  WorkItemId id = 1;
+  string title = 2;
+}
+```
+
+Generated messages can have any declared identifier fields. For example,
+`CommandId` is a generated message ID:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { type MessageId } from "@spine-event-engine/server";
+import { CommandIdSchema } from "@spine-event-engine/proto";
+
+const id = create(CommandIdSchema, { uuid: "task-42" });
+const entityId: MessageId = id;
+```
+
+At routing, the generated ID is checked against the state field's declared
+schema and its generated validation rules before durable use. When default
+routing finds a message but the Entity ID type is primitive, define a custom
+route that returns the intended primitive ID.
+
+Without a custom route, Command routing uses the Command's declared first
+field. Event routing uses a compatible producer ID when available and otherwise
+uses the Event's declared first field. State-update routing selects the first
+state field compatible with the Entity ID.
 
 ## Browser gateway migration
 
@@ -72,11 +113,11 @@ import { BrowserServer, DurableSubscriptionBindings } from "@spine-event-engine/
 ```
 
 `BrowserServer.open(...)` composes a browser listener around a caller-managed
-native server; `BrowserServer.run(...)` owns a standalone or combined browser
-host. Supply exact allowed origins, a session or intentional public admission,
-authorization and trusted-context resolvers, finite limits, and backend
-forwarding. Authenticated durable bindings are browser-host infrastructure,
-not native `Server` state. See the [browser/auth extension guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+native server; `BrowserServer.run(...)` starts and manages a standalone or
+combined browser host. Supply exact allowed origins, a session or intentional
+public admission, authorization and trusted-context resolvers, finite limits,
+and backend forwarding. Authenticated durable bindings are browser-host
+infrastructure, not native `Server` state. See the [browser/auth extension guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 before exposing a backend to a browser.
 
 ## Limits

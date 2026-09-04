@@ -15,7 +15,7 @@ compatibility guarantees.
 Delivery adapters import `conditionalPickUp` from
 `@spine-event-engine/server/spi/delivery`. It registers or looks up an optional
 conditional-pickup capability for a `DeliveryWorkRegistry`; it is not part of
-the server root API and does not create delivery work on its own.
+the server root API and does not independently create delivery work.
 
 ## Generated handler-registry SPI
 
@@ -126,6 +126,44 @@ validated typed targets are stored and reused for retries. The legacy-named
 local `catchUpReadSide()` helper is unrelated to retry: it resets and replays
 the whole local read side, and is not Projection catch-up.
 
+## Message-valued Entity IDs
+
+The first state field determines the Entity ID type. It can be a primitive or
+a generated Protobuf message; for a message ID, all declared fields form the
+identifier. Nested and composite IDs are supported.
+
+```proto
+message ShipmentId {
+  spine.core.UserId owner = 1;
+  int32 number = 2;
+}
+
+message Shipment {
+  ShipmentId id = 1;
+  string status = 2;
+}
+```
+
+The root `MessageId` type accepts generated messages such as `CommandId`:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { type MessageId } from "@spine-event-engine/server";
+import { CommandIdSchema } from "@spine-event-engine/proto";
+
+const id: MessageId = create(CommandIdSchema, { uuid: "shipment-7" });
+```
+
+Admission validates a message ID against the schema declared by the state
+field, including generated validation rules, before it is stored or replayed.
+When default routing finds a message but the Entity ID type is primitive, a
+custom route returns the intended primitive ID.
+
+Without a custom route, Command routing uses the Command's declared first
+field. Event routing uses a compatible producer ID when available and otherwise
+uses the Event's declared first field. State-update routing selects the first
+state field compatible with the Entity ID.
+
 ## Handler routing and operations
 
 Generated handler metadata routes a command, event, or state update by its
@@ -168,8 +206,8 @@ the builder on the first build attempt.
 
 `SubscriptionService` streams are live best-effort notifications, not replay,
 ordering, or completeness contracts. A standalone Server defaults to the
-persistent registry. In a managed complete-replica cohort, the framework owns
-each child Server and accepts only every context's actual
+persistent registry. In a managed complete-replica cohort, the framework starts
+and closes each child Server and accepts only every context's actual
 `InMemorySubscriptionRegistry`; a persistent or custom registry is rejected
 and the assembled child is closed before READY. Durable logical bindings remain
 Gateway-only. The Coordinator fans each logical definition to ready children,
@@ -180,8 +218,8 @@ child streams before admission; subscribed but inactive definitions do not
 block readiness. Each child observes application-configured remote/shared
 Delivery directly. During DRAINING, new unary and shard admission stops while
 active Delivery and its subscription updates finish before child close. The
-application owns Delivery facility and shard-strategy selection; managed mode
-does not infer or certify configuration provenance.
+application configures the Delivery facility and selects the shard strategy;
+managed mode does not infer or certify configuration provenance.
 
 Create records begin `pending` and expire after 30 seconds unless activated.
 Active records have no framework TTL. Cancellation physically deletes the
@@ -297,15 +335,15 @@ signal or explicit-close retry, and sets `process.exitCode` to `1` after a
 signal-driven failure.
 
 `ManagedServerApplication.run()` is the Node-only deployment entrypoint for a
-complete-replica process cohort when the framework owns process shutdown.
+complete-replica process cohort when the framework handles process shutdown.
 `ManagedServerApplication.start()` starts the same cohort for an embedding host
 and installs no process signal handlers; that host closes the returned handle.
 Both require a positive safe-integer
 `processCount` and an ESM `moduleUrl`; it never derives a process count from
 the machine. Its optional `host` and required nonzero `port` bind the public
-Coordinator listener. Every child executes that same module and calls its own
-`createServer({ host: "127.0.0.1", port: 0 })`. The child reports its actual
-loopback endpoint only after its local readiness gates settle. The parent
+Coordinator listener. Every child executes that same module and calls the
+module's `createServer({ host: "127.0.0.1", port: 0 })`. The child reports its
+actual loopback endpoint only after its local readiness gates settle. The parent
 initially waits until every configured child is ready. Afterwards it is ready
 while at least one child is ready; it remains alive and keeps replacing while
 degraded, and reports unready if no child is ready. It replaces an unexpected
@@ -390,8 +428,8 @@ Browser subscription bindings are separate from service subscription records.
 `sessions` and may supply `BrowserServerOptions.bindings`; production then
 requires `DurableSubscriptionBindings` from `@spine-event-engine/server/browser` and rejects a
 missing or in-memory binding store before listener open. Public mode supplies
-`publicAccess: true`, cannot supply bindings, and uses framework-owned
-process-local bindings. The durable registry receives an explicit application
+`publicAccess: true`, cannot supply bindings, and uses process-local bindings
+managed by the framework. The durable registry receives an explicit application
 namespace, storage factory, identifier source, and cleanup callback. It closes
 only its independently opened record-storage handle, not the application
 storage factory or a Spine JVM/TS backend. It stores canonical public

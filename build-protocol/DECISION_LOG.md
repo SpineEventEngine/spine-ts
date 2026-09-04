@@ -5721,3 +5721,28 @@ instructions. Task closure proves the feature branch is pushed and ready for
 human review; it no longer requires a one-branch/no-tag remote. Every proposed
 merge carries the next unused common package version because `master` merges
 are release events under D-0115.
+
+## D-0119: Treat Entity Message IDs As Complete Protobuf Values
+
+Status: Accepted
+
+Date: 2026-09-03
+
+Task: T-0224 general Protobuf Entity identifiers
+
+Context: Spine's domain model and Spine JVM support structured Entity
+identifiers with arbitrary field names, nested messages, and multiple fields.
+Spine TS uses the Entity state's declared ID-field schema as the authoritative
+type for routing, storage, delivery, and canonical identity.
+
+Decision: A message-valued Entity ID is the complete Protobuf message of the
+type declared by the Entity state's ID field. Routing validates and serializes
+that complete message through the existing descriptor-aware identifier
+facilities. If default routing selects a message for a primitive Entity target,
+the application supplies a custom route that returns the intended primitive ID.
+No separate type registry is introduced.
+
+Consequences: Command, Event, state-update, Inbox, persistence, and duplicate-
+delivery paths preserve the same complete typed ID. Wrong message types and
+malformed packed data remain rejected. Existing durable encoding is retained,
+so this decision requires no storage migration.

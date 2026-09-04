@@ -768,6 +768,7 @@ describe("proto-workflow", () => {
       "packages/proto/generated",
     ]);
     expect(modelAtomicTargets.map((target) => target.displayPath)).toEqual([
+      "packages/server-blackbox-tests/generated",
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",
@@ -775,12 +776,33 @@ describe("proto-workflow", () => {
     ]);
     expect(atomicGeneratedTargets.map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
+      "packages/server-blackbox-tests/generated",
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",
       "examples/message-board/model/generated",
       "examples/message-board/app/generated",
     ]);
+  });
+
+  it("generates server BlackBox fixtures from canonical Proto sources", () => {
+    expect(
+      modelAtomicTargets.find((target) => target.packagePath === "packages/server-blackbox-tests"),
+    ).toMatchObject({
+      displayPath: "packages/server-blackbox-tests/generated",
+      moduleName: "ServerBlackBoxTests",
+    });
+    expect(
+      existsSync(
+        "packages/server-blackbox-tests/proto/spine/server/testing/project_workflow.proto",
+      ),
+    ).toBe(true);
+    expect(existsSync("packages/server-blackbox-tests/src/fixtures/main-descriptor.ts")).toBe(
+      false,
+    );
+    expect(
+      existsSync("packages/server-blackbox-tests/test-fixtures/entity-metadata-fixtures.ts"),
+    ).toBe(false);
   });
 
   it("stages the MessageBoard handler registry with its model output", () => {
@@ -898,44 +920,45 @@ describe("proto-workflow", () => {
     }
   });
 
-  it.each(modelAtomicTargets.filter((target) => target.packagePath !== "examples/todo"))(
-    "preserves $moduleName output and manifest when its handler post-step fails",
-    (target) => {
-      const root = applicationModelTransactionFixture(target);
-      const packageRoot = join(root, target.packagePath);
+  it.each(
+    modelAtomicTargets.filter(
+      (target) => target.packagePath !== "examples/todo" && target.handlerProjectPath !== undefined,
+    ),
+  )("preserves $moduleName output and manifest when its handler post-step fails", (target) => {
+    const root = applicationModelTransactionFixture(target);
+    const packageRoot = join(root, target.packagePath);
 
+    expect(
+      generateTargets({
+        repoRoot: root,
+        runCommand: rootStageCommand,
+        runModelCommand: applicationModelStageCommand(
+          `${target.moduleName} handler registry post-step`,
+        ),
+      }),
+    ).toBe(1);
+    expect(readFileSync(join(root, target.displayPath, "previous.txt"), "utf8")).toBe(
+      "previous model output\n",
+    );
+    expect(readFileSync(join(packageRoot, "spine-proto-manifest.json"), "utf8")).toBe(
+      "previous model manifest\n",
+    );
+    expect(readFileSync(join(root, "packages/proto/generated/previous.txt"), "utf8")).toBe(
+      "previous root output\n",
+    );
+    if (target.handlerGeneratedPath !== undefined) {
+      expect(readFileSync(join(root, target.handlerGeneratedPath, "previous.txt"), "utf8")).toBe(
+        "previous handler output\n",
+      );
       expect(
-        generateTargets({
-          repoRoot: root,
-          runCommand: rootStageCommand,
-          runModelCommand: applicationModelStageCommand(
-            `${target.moduleName} handler registry post-step`,
-          ),
-        }),
-      ).toBe(1);
-      expect(readFileSync(join(root, target.displayPath, "previous.txt"), "utf8")).toBe(
-        "previous model output\n",
-      );
-      expect(readFileSync(join(packageRoot, "spine-proto-manifest.json"), "utf8")).toBe(
-        "previous model manifest\n",
-      );
-      expect(readFileSync(join(root, "packages/proto/generated/previous.txt"), "utf8")).toBe(
-        "previous root output\n",
-      );
-      if (target.handlerGeneratedPath !== undefined) {
-        expect(readFileSync(join(root, target.handlerGeneratedPath, "previous.txt"), "utf8")).toBe(
-          "previous handler output\n",
-        );
-        expect(
-          readdirSync(dirname(join(root, target.handlerGeneratedPath))).some((name) =>
-            name.startsWith(".generated-"),
-          ),
-        ).toBe(false);
-      }
-      expect(readdirSync(packageRoot).some((name) => name.startsWith(".generated-"))).toBe(false);
-      expect(readdirSync(root).some((name) => name.startsWith(".spine-proto-"))).toBe(false);
-    },
-  );
+        readdirSync(dirname(join(root, target.handlerGeneratedPath))).some((name) =>
+          name.startsWith(".generated-"),
+        ),
+      ).toBe(false);
+    }
+    expect(readdirSync(packageRoot).some((name) => name.startsWith(".generated-"))).toBe(false);
+    expect(readdirSync(root).some((name) => name.startsWith(".spine-proto-"))).toBe(false);
+  });
 
   it("fails closed and cleans staging when per-model provenance exceeds the depth bound", () => {
     const target = modelAtomicTargets.find((candidate) => candidate.moduleName === "Projects");

@@ -25,9 +25,9 @@ branches 90.48%, functions 97.63%, and lines 95.20%.
   task-list projection row for each created task.
 - `createTodoContext()` assembles a single-tenant `Tasks` bounded context with
   direct repositories and the framework's default in-memory storage.
-- Aggregate storage/routing now accepts finite primitive or single-field
-  message-valued aggregate IDs so the generated `TaskId` contract can be used
-  directly.
+- Aggregate storage/routing now accepts supported primitive or complete
+  generated message-valued aggregate IDs so the generated `TaskId` contract can
+  be used directly.
 - Generated output remains ignored and untracked.
 
 ## Sub-Agent Note
@@ -75,9 +75,9 @@ updated.
 ## Reviewer Risks
 
 - Keep the example small; do not introduce a broad client DSL or server facade.
-- Review the message-ID aggregate storage change carefully. It is intentionally
-  restricted to finite primitives and single-field message IDs, but it changes
-  a formerly primitive-only internal assumption.
+- Review the message-ID aggregate storage change carefully. It accepts finite
+  primitives and complete generated message IDs and changes an internal ID
+  assumption.
 - Raw Vitest imports of decorated source fail before `tsc` lowering. The focused
   example test uses built output and the user guide records `pnpm typecheck:build`
   as the prerequisite.
@@ -87,11 +87,10 @@ updated.
 
 ## Round-One Review Fix Plan
 
-- Narrow aggregate IDs to finite primitive values or single-field generated
-  message IDs.
-- Preserve message `$typeName` in aggregate ID storage keys and repository event
-  routing.
-- Add negative coverage for non-finite numeric IDs and extra-field message IDs.
+- Accept finite primitive values or complete generated message IDs.
+- Preserve descriptor-typed message identity in aggregate storage keys and
+  repository Event routing.
+- Add negative coverage for non-finite numeric IDs and wrong message types.
 - Make the focused example test fail clearly when `examples/todo/dist` is stale
   or absent.
 - Document that this slice exposes per-task `TaskList` projection rows.
@@ -121,7 +120,7 @@ updated.
   encoding never sees caller-provided ID objects.
 - Route repository IDs according to the repository state's ID field: scalar
   state IDs receive finite primitives, message state IDs receive normalized
-  single-field message IDs.
+  complete generated message IDs.
 - Reject non-finite producer IDs and first-field route IDs before Stand/storage.
 - Export `PrimitiveId` and `MessageId` from `@spine-ts/server` and update the
   API docs guard.

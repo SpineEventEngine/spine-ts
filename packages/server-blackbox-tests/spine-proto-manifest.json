@@ -1,0 +1,16 @@
+{
+  "formatVersion": 2,
+  "generationId": "ce2851d6-352e-47a4-a394-c13a1c0471e2",
+  "packageName": "@spine-event-engine/server-blackbox-tests",
+  "packageVersion": "2.0.0-snapshot.8",
+  "protoFiles": [
+    "spine/server/testing/project_workflow.proto"
+  ],
+  "generatedExports": {
+    "spine/server/testing/project_workflow.proto": "generated/spine/server/testing/project_workflow_pb.js"
+  },
+  "dependencies": [
+    "@spine-event-engine/proto"
+  ],
+  "moduleExport": "serverBlackBoxTestsProtoModule"
+}

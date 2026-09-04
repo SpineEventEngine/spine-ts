@@ -117,11 +117,10 @@ Out of scope:
   `pnpm proto:check-generated`, `git diff --check`, and escalated coverage
   (45 files / 634 tests; statements 95.19%, branches 90.52%, functions 97.63%,
   lines 95.21%).
-- `2026-07-05 15:17 WEST`: Round-two re-review of `2753627` found stale
-  post-commit docs/log status, a message-ID repository route type/runtime
-  mismatch, missing package-root exports for `PrimitiveId`/`MessageId`, snapshot
-  ID persistence before normalization, and non-finite repository route IDs. A
-  second fix pass is in progress.
+- `2026-07-05 15:17 WEST`: Round-two re-review of `2753627` requested current
+  docs/log status, package-root exports for `PrimitiveId`/`MessageId`, normalized
+  snapshot IDs, typed repository routes, and finite primitive route IDs. A
+  second fix pass began.
 - `2026-07-05 15:20 WEST`: Second-fix verification passed: focused storage,
   routing, and example tests (3 files / 89 tests), `pnpm typecheck`, serial
   `pnpm lint`, `pnpm format:check`, `pnpm docs:check`,
@@ -143,11 +142,9 @@ Out of scope:
 ## Decisions
 
 - Reuse existing framework APIs and generated Protobuf-ES messages directly.
-- The todo contract's `TaskId` is a Protobuf message. Existing aggregate
-  command execution/storage only accepted primitive aggregate IDs, which
-  blocked the real create flow. This slice includes the smallest internal
-  framework adjustment and focused storage regression coverage for finite
-  primitive IDs and single-field Protobuf message IDs.
+- The todo contract's `TaskId` is a Protobuf message. Aggregate command
+  execution and storage preserve finite primitive IDs and complete generated
+  Protobuf message IDs.
 - No broad client DSL, server facade, or production storage API is added.
 
 ## Human Questions And Answers
