@@ -174,16 +174,9 @@ type AggregateState = Message<"AggregateState"> & {
   archived: boolean;
 };
 
-type CommandTransformationInput = Message<"CommandTransformationInput"> & {
+type TransformedTaskCommand = Message<"example.validation_refusal.TransformedTaskCommand"> & {
   id: string;
   name: string;
-  archived: boolean;
-};
-
-type CommandTransformationOutput = Message<"CommandTransformationOutput"> & {
-  id: string;
-  name: string;
-  archived: boolean;
 };
 
 type Int32AggregateState = Message<"Int32AggregateState"> & {
@@ -571,26 +564,6 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
-const fileCommandTransformationFixture = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, fileEntityMetadataFixture.proto);
-  const command = descriptor.messageType.find((message) => message.name === "AggregateState");
-  if (command === undefined) throw new Error("Command transformation fixture message is missing.");
-  command.name = "CommandTransformationInput";
-  const output = clone(DescriptorProtoSchema, command);
-  output.name = "CommandTransformationOutput";
-  descriptor.messageType.push(output);
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const CommandTransformationInputSchema = fixtureMessageSchema<CommandTransformationInput>(
-  fileCommandTransformationFixture,
-  "CommandTransformationInput",
-);
-const CommandTransformationOutputSchema = fixtureMessageSchema<CommandTransformationOutput>(
-  fileCommandTransformationFixture,
-  "CommandTransformationOutput",
-);
 const Int32AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   10,
@@ -647,6 +620,21 @@ const ValidatedTaskCommandSchema = messageDesc(
   fileValidationRefusalFixture,
   1,
 ) as GenMessage<ValidatedTaskCommand>;
+const fileCommandTransformationFixture = (() => {
+  const descriptor = clone(FileDescriptorProtoSchema, fileValidationRefusalFixture.proto);
+  const command = descriptor.messageType.find((message) => message.name === "ValidatedTaskCommand");
+  if (command === undefined) throw new Error("Command transformation input fixture is missing.");
+  const output = clone(DescriptorProtoSchema, command);
+  output.name = "TransformedTaskCommand";
+  descriptor.messageType.push(output);
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+})();
+const TransformedTaskCommandSchema = fixtureMessageSchema<TransformedTaskCommand>(
+  fileCommandTransformationFixture,
+  "TransformedTaskCommand",
+);
 const fileValidatedMessageIdFixture = (() => {
   const descriptor = clone(FileDescriptorProtoSchema, fileValidationRefusalFixture.proto);
   const state = descriptor.messageType.find(
@@ -2066,9 +2054,9 @@ class CommandTransformingProcessManager extends ProcessManager<
   }
 
   transform(
-    command: CommandTransformationInput,
+    command: ValidatedTaskCommand,
     context: CommandContext,
-  ): CommandTransformationOutput | readonly CommandTransformationOutput[] {
+  ): TransformedTaskCommand | readonly TransformedTaskCommand[] {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -2078,16 +2066,12 @@ class CommandTransformingProcessManager extends ProcessManager<
         }),
       ),
     );
-    const first = create(CommandTransformationOutputSchema, {
+    const first = create(TransformedTaskCommandSchema, {
       id: command.id,
       name: `${command.name} follow-up`,
-      archived: false,
     });
     return CommandTransformingProcessManager.siblingOutputs
-      ? [
-          first,
-          create(CommandTransformationOutputSchema, { ...first, name: `${command.name} sibling` }),
-        ]
+      ? [first, create(TransformedTaskCommandSchema, { ...first, name: `${command.name} sibling` })]
       : first;
   }
 }
@@ -3908,7 +3892,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.multitenant("Command transformations")
       .add(createCommandTransformingProcessManagerRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [CommandTransformationOutputSchema],
+        messageSchemas: () => [TransformedTaskCommandSchema],
         dispatch: (command) => {
           produced.push(command);
           return Promise.resolve();
@@ -3923,18 +3907,17 @@ describe("repository signal routing", () => {
     const grandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "grandparent" })),
-        typeUrl: TypeUrls.derive(CommandTransformationInputSchema),
+        typeUrl: TypeUrls.derive(ValidatedTaskCommandSchema),
       }),
       actorContext,
     });
     const source = SignalEnvelopes.command({
       id: create(CommandIdSchema, { uuid: "transform-source" }),
       context: create(CommandContextSchema, { actorContext, origin: grandOrigin }),
-      schema: CommandTransformationInputSchema,
-      message: create(CommandTransformationInputSchema, {
+      schema: ValidatedTaskCommandSchema,
+      message: create(ValidatedTaskCommandSchema, {
         id: "declared-source-id",
         name: "Transform",
-        archived: false,
       }),
     });
 
@@ -3968,7 +3951,7 @@ describe("repository signal routing", () => {
               CommandIdSchema,
               create(CommandIdSchema, { uuid: "transform-source" }),
             ),
-            typeUrl: TypeUrls.derive(CommandTransformationInputSchema),
+            typeUrl: TypeUrls.derive(ValidatedTaskCommandSchema),
           }),
           actorContext,
           grandOrigin,
@@ -3976,11 +3959,10 @@ describe("repository signal routing", () => {
       }),
     });
     if (producedCommand.message === undefined) throw new Error("Expected a transformed payload.");
-    expect(AnyMessages.unpack(producedCommand.message, CommandTransformationOutputSchema)).toEqual(
-      create(CommandTransformationOutputSchema, {
+    expect(AnyMessages.unpack(producedCommand.message, TransformedTaskCommandSchema)).toEqual(
+      create(TransformedTaskCommandSchema, {
         id: "declared-source-id",
         name: "Transform follow-up",
-        archived: false,
       }),
     );
   });
@@ -3991,13 +3973,10 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Command transformation siblings")
       .add(createCommandTransformingProcessManagerRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [CommandTransformationOutputSchema],
+        messageSchemas: () => [TransformedTaskCommandSchema],
         dispatch: (command) => {
           if (command.message === undefined) throw new Error("Expected a transformed payload.");
-          const message = AnyMessages.unpack(
-            command.message,
-            CommandTransformationOutputSchema,
-          );
+          const message = AnyMessages.unpack(command.message, TransformedTaskCommandSchema);
           observed.push(message.name);
           if (message.name === "Siblings follow-up") throw new Error("first child failed");
           return Promise.resolve();
@@ -4009,11 +3988,10 @@ describe("repository signal routing", () => {
         SignalEnvelopes.command({
           id: create(CommandIdSchema, { uuid: "siblings-source" }),
           context: create(CommandContextSchema),
-          schema: CommandTransformationInputSchema,
-          message: create(CommandTransformationInputSchema, {
+          schema: ValidatedTaskCommandSchema,
+          message: create(ValidatedTaskCommandSchema, {
             id: "source",
             name: "Siblings",
-            archived: false,
           }),
         }),
       );
@@ -11581,14 +11559,14 @@ function createCommandTransformingProcessManagerRepository(): Repository<
   const handlers = HandlerMetadataValues.defineArity(
     CommandTransformingProcessManager,
     ProcessManagerStateSchema,
-    (builder) => [builder.transform(CommandTransformationInputSchema, "transform")],
+    (builder) => [builder.transform(ValidatedTaskCommandSchema, "transform")],
     [
       {
         kind: "command-transformation",
         methodName: "transform",
         parameterCount: 2,
         origin: "domestic",
-        emittedSchemas: [CommandTransformationOutputSchema],
+        emittedSchemas: [TransformedTaskCommandSchema],
       },
     ],
   );
@@ -11598,7 +11576,7 @@ function createCommandTransformingProcessManagerRepository(): Repository<
     schema: ProcessManagerStateSchema,
     handlers,
     commandRouting: CommandRouting.create<string>().route(
-      CommandTransformationInputSchema,
+      ValidatedTaskCommandSchema,
       () => "transform-target",
     ),
   });

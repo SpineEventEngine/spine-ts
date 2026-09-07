@@ -30,19 +30,30 @@ import { RejectionSources } from "./rejection-source.js";
  * Describes the generated handler registry module shape accepted by the framework ingestor.
  *
  */
-export interface GeneratedHandlerRegistry {
+type GeneratedHandlerRegistryVersion = 3 | 4;
+type GeneratedHandlerKindV3 = Exclude<GeneratedHandlerKind, "command-transformation">;
+type GeneratedHandlerKindFor<V extends GeneratedHandlerRegistryVersion> = V extends 3
+  ? GeneratedHandlerKindV3
+  : GeneratedHandlerKind;
+
+interface GeneratedHandlerRegistryShape<V extends GeneratedHandlerRegistryVersion> {
   // prettier-ignore
 
   /**
    * Generated registry contract version.
    */
-  readonly version: 3 | 4;
+  readonly version: V;
 
   /**
    * Entity handler groups declared by the generated module.
    */
-  readonly entities: readonly GeneratedEntityHandlerGroup[];
+  readonly entities: readonly GeneratedEntityHandlerGroup<V>[];
 }
+
+/** Generated handler registry metadata for a supported serialized version. */
+export type GeneratedHandlerRegistry<
+  V extends GeneratedHandlerRegistryVersion = GeneratedHandlerRegistryVersion,
+> = V extends 3 ? GeneratedHandlerRegistryShape<3> : GeneratedHandlerRegistryShape<4>;
 
 /**
  * Framework-owned ingestion adapter for generated handler registries.
@@ -58,11 +69,13 @@ export class HandlerRegistryIngestor {
    */
   ingest(registry: unknown): readonly EntityHandlersMetadata[] {
     GeneratedRegistry.assert(registry);
-    GeneratedRegistry.validateVersion(registry);
 
-    return Object.freeze(
-      registry.entities.map((entity) => GeneratedRegistry.materialize(entity, registry.version)),
-    );
+    switch (registry.version) {
+      case 3:
+        return GeneratedRegistry.materializeAll(registry);
+      case 4:
+        return GeneratedRegistry.materializeAll(registry);
+    }
   }
 
   /**
@@ -148,7 +161,9 @@ export type GeneratedHandlerParameterCount = 1 | 2;
  * Describes a type-erased generated entity group accepted by a top-level registry.
  *
  */
-export interface GeneratedEntityHandlerGroup {
+export interface GeneratedEntityHandlerGroup<
+  V extends GeneratedHandlerRegistryVersion = GeneratedHandlerRegistryVersion,
+> {
   // prettier-ignore
 
   /**
@@ -164,7 +179,7 @@ export interface GeneratedEntityHandlerGroup {
   /**
    * Generated handler records in declaration order.
    */
-  readonly handlers: readonly GeneratedHandlerRecordInput[];
+  readonly handlers: readonly GeneratedHandlerRecordInput<V>[];
 }
 
 /**
@@ -174,7 +189,8 @@ export interface GeneratedEntityHandlerGroup {
 export interface GeneratedEntityHandlers<
   Instance extends object = object,
   StateSchema extends DescriptorMessageSchema = DescriptorMessageSchema,
-> extends GeneratedEntityHandlerGroup {
+  V extends GeneratedHandlerRegistryVersion = GeneratedHandlerRegistryVersion,
+> extends GeneratedEntityHandlerGroup<V> {
   // prettier-ignore
 
   /**
@@ -190,20 +206,22 @@ export interface GeneratedEntityHandlers<
   /**
    * Generated handler records in declaration order.
    */
-  readonly handlers: readonly GeneratedHandlerRecord<Instance>[];
+  readonly handlers: readonly GeneratedHandlerRecord<Instance, V>[];
 }
 
 /**
  * Describes type-erased generated metadata for one decorated handler method.
  *
  */
-export interface GeneratedHandlerRecordInput {
+export interface GeneratedHandlerRecordInput<
+  V extends GeneratedHandlerRegistryVersion = GeneratedHandlerRegistryVersion,
+> {
   // prettier-ignore
 
   /**
    * Handler role inferred from the bare decorator.
    */
-  readonly kind: GeneratedHandlerKind;
+  readonly kind: GeneratedHandlerKindFor<V>;
 
   /**
    * Entity instance method name selected by generated metadata.
@@ -242,7 +260,8 @@ export interface GeneratedHandlerRecordInput {
  */
 export interface GeneratedHandlerRecord<
   Instance extends object = object,
-> extends GeneratedHandlerRecordInput {
+  V extends GeneratedHandlerRegistryVersion = GeneratedHandlerRegistryVersion,
+> extends GeneratedHandlerRecordInput<V> {
   // prettier-ignore
 
   /**
@@ -251,17 +270,23 @@ export interface GeneratedHandlerRecord<
   readonly methodName: HandlerMethodName<Instance>;
 }
 
-const registryVersion = 4;
-
 interface GeneratedRegistryOperations {
   assert(registry: unknown): asserts registry is GeneratedHandlerRegistry;
-  validateVersion(registry: GeneratedHandlerRegistry): void;
-  materialize(entity: GeneratedEntityHandlerGroup, version: number): EntityHandlersMetadata;
+  materializeAll<V extends GeneratedHandlerRegistryVersion>(
+    registry: GeneratedHandlerRegistry<V>,
+  ): readonly EntityHandlersMetadata[];
+  materialize<V extends GeneratedHandlerRegistryVersion>(
+    entity: GeneratedEntityHandlerGroup<V>,
+    version: V,
+  ): EntityHandlersMetadata;
   build<Instance extends object>(
     builder: HandlerRegistrationBuilder<Instance>,
     handler: GeneratedHandlerRecordInput,
   ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>;
-  validateHandler(handler: GeneratedHandlerRecordInput, version: number): void;
+  validateHandler(
+    handler: GeneratedHandlerRecordInput,
+    version: GeneratedHandlerRegistryVersion,
+  ): void;
   validateSchema(schema: DescriptorMessageSchema, label: string): void;
   validateEmits(handler: GeneratedHandlerRecordInput): void;
   validateSubscription(handler: GeneratedHandlerRecordInput): void;
@@ -278,22 +303,28 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
         "Generated handler registry must be an object.",
       );
     }
+
+    const version = (registry as { readonly version?: unknown }).version;
+    if (version !== 3 && version !== 4) {
+      throw new HandlerRegistryIngestionError(
+        "UNSUPPORTED_REGISTRY_VERSION",
+        `Generated handler registry version ${String(version)} is not supported.`,
+      );
+    }
   },
 
-  validateVersion(registry: GeneratedHandlerRegistry): void {
-    const version: number = registry.version;
-
-    if (version === 3 || version === registryVersion) {
-      return;
-    }
-
-    throw new HandlerRegistryIngestionError(
-      "UNSUPPORTED_REGISTRY_VERSION",
-      `Generated handler registry version ${String(version)} is not supported.`,
+  materializeAll<V extends GeneratedHandlerRegistryVersion>(
+    registry: GeneratedHandlerRegistry<V>,
+  ): readonly EntityHandlersMetadata[] {
+    return Object.freeze(
+      registry.entities.map((entity) => GeneratedRegistry.materialize(entity, registry.version)),
     );
   },
 
-  materialize(entity: GeneratedEntityHandlerGroup, version: number): EntityHandlersMetadata {
+  materialize<V extends GeneratedHandlerRegistryVersion>(
+    entity: GeneratedEntityHandlerGroup<V>,
+    version: V,
+  ): EntityHandlersMetadata {
     GeneratedRegistry.validateSchema(entity.stateSchema, "entity state schema");
     entity.handlers.forEach((handler) => {
       GeneratedRegistry.validateHandler(handler, version);
@@ -359,7 +390,10 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
-  validateHandler(handler: GeneratedHandlerRecordInput, version: number): void {
+  validateHandler(
+    handler: GeneratedHandlerRecordInput,
+    version: GeneratedHandlerRegistryVersion,
+  ): void {
     if (!GeneratedRegistry.isKind(handler.kind)) {
       throw new HandlerRegistryIngestionError(
         "UNSUPPORTED_HANDLER_KIND",

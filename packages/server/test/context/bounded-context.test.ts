@@ -1454,6 +1454,26 @@ describe("BoundedContext assembly", () => {
     ).resolves.toBeInstanceOf(BoundedContext);
   });
 
+  it("discovers version-4 generated registries", async () => {
+    const registryRoot = createGeneratedRegistryRoot(
+      [
+        {
+          entityType: GeneratedTaskAggregate,
+          stateSchema: AggregateStateSchema,
+          handlers: [],
+        },
+      ],
+      4,
+    );
+
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot(registryRoot)
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).resolves.toBeInstanceOf(BoundedContext);
+  });
+
   it("rejects malformed generated registry root URLs", async () => {
     await expect(
       BoundedContext.singleTenant("Tasks")
@@ -2485,6 +2505,7 @@ function createGeneratedRegistryFixture(
       readonly origin: "domestic" | "external";
     }[];
   }[],
+  version: 3 | 4 = 3,
 ): { readonly root: URL; readonly registryPath: string } {
   const slot = `__spineContextGeneratedRegistry_${Math.random().toString(36).slice(2)}`;
   const root = mkdtempSync(join(tmpdir(), "spine-context-generated-registry-"));
@@ -2493,7 +2514,7 @@ function createGeneratedRegistryFixture(
   const values = globalThis as Record<string, unknown>;
 
   mkdirSync(moduleDir, { recursive: true });
-  values[slot] = Object.freeze({ version: 3, entities });
+  values[slot] = Object.freeze({ version, entities });
   writeFileSync(
     registryPath,
     `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
@@ -2508,8 +2529,9 @@ function createGeneratedRegistryFixture(
 
 function createGeneratedRegistryRoot(
   entities: Parameters<typeof createGeneratedRegistryFixture>[0],
+  version?: 3 | 4,
 ): URL {
-  return createGeneratedRegistryFixture(entities).root;
+  return createGeneratedRegistryFixture(entities, version).root;
 }
 
 function processManagerRegistry(

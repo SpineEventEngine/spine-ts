@@ -21,8 +21,10 @@ the server root API and does not independently create delivery work.
 
 Generated model modules import only their registry data types from
 `@spine-event-engine/server/spi/handler-registry`. The stable contract is the
-version-3 `GeneratedHandlerRegistry`, its entity groups, handler records, kinds,
-arity, and optional `where` data. The subpath has no runtime values. Server-side
+versioned `GeneratedHandlerRegistry` contract, its entity groups, handler records,
+kinds, arity, and optional `where` data. `GeneratedHandlerRegistry<3>` excludes
+command transformations at compile time; generated output uses
+`GeneratedHandlerRegistry<4>`. The subpath has no runtime values. Server-side
 ingestion, validation errors, and their error codes are implementation details;
 generated code must not depend on them.
 

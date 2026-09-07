@@ -102,6 +102,7 @@ describe("Wave 13 external receptor origin", () => {
     const generated = new GeneratedRegistryWriter().render(result, {
       outputFile: "/tmp/wave13/generated/handler/generated-handler-registry.ts",
     });
+    expect(generated).toContain("GeneratedHandlerRegistry<4>");
     expect(generated).toContain("version: 4");
     expect(generated).toContain('origin: "external"');
     expect(generated).toContain('origin: "domestic"');
@@ -249,6 +250,12 @@ const publicOriginContract = `
   type CanonicalOriginIsRequired = Assert<
     Equal<IsRequired<BaseHandlerMetadata, "origin">, true>
   >;
+  type V3HandlerKindExcludesCommandTransformation = Assert<
+    Equal<GeneratedHandlerRecordInput<3>["kind"], Exclude<GeneratedHandlerRecordInput["kind"], "command-transformation">>
+  >;
+  type V4HandlerKindIncludesCommandTransformation = Assert<
+    Equal<Extract<GeneratedHandlerRecordInput<4>["kind"], "command-transformation">, "command-transformation">
+  >;
 
   declare const message: Message;
   declare const external: External<Message>;
@@ -262,15 +269,22 @@ const publicOriginContract = `
   const registryVersion: GeneratedHandlerRegistry["version"] = 3;
   const generatedOrigin: GeneratedHandlerRecordInput["origin"] = "external";
   const canonicalOrigin: BaseHandlerMetadata["origin"] = "domestic";
+  const v4Transformation: GeneratedHandlerRecordInput<4>["kind"] = "command-transformation";
+  // @ts-expect-error Registry version 3 does not serialize command transformations.
+  const v3Transformation: GeneratedHandlerRecordInput<3>["kind"] = "command-transformation";
   void transparentForward;
   void transparentBackward;
   void dispatcher.externalEventSchemas?.();
   void registryVersion;
   void generatedOrigin;
   void canonicalOrigin;
+  void v4Transformation;
+  void v3Transformation;
   void (undefined as unknown as RegistryVersionIsThreeOrFour);
   void (undefined as unknown as GeneratedOriginIsExact);
   void (undefined as unknown as CanonicalOriginIsExact);
   void (undefined as unknown as GeneratedOriginIsRequired);
   void (undefined as unknown as CanonicalOriginIsRequired);
+  void (undefined as unknown as V3HandlerKindExcludesCommandTransformation);
+  void (undefined as unknown as V4HandlerKindIncludesCommandTransformation);
 `;

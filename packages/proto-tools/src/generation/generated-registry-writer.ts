@@ -267,7 +267,7 @@ const RegistrySource = Object.freeze({
     refs: RenderRefs,
   ): readonly string[] {
     const lines = [
-      `export const ${registryName}: GeneratedHandlerRegistry = {`,
+      `export const ${registryName}: GeneratedHandlerRegistry<4> = {`,
       "  version: 4,",
       "  entities: [",
     ];
