@@ -174,6 +174,18 @@ type AggregateState = Message<"AggregateState"> & {
   archived: boolean;
 };
 
+type CommandTransformationInput = Message<"CommandTransformationInput"> & {
+  id: string;
+  name: string;
+  archived: boolean;
+};
+
+type CommandTransformationOutput = Message<"CommandTransformationOutput"> & {
+  id: string;
+  name: string;
+  archived: boolean;
+};
+
 type Int32AggregateState = Message<"Int32AggregateState"> & {
   id: number;
   name: string;
@@ -559,6 +571,26 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
+const fileCommandTransformationFixture = (() => {
+  const descriptor = clone(FileDescriptorProtoSchema, fileEntityMetadataFixture.proto);
+  const command = descriptor.messageType.find((message) => message.name === "AggregateState");
+  if (command === undefined) throw new Error("Command transformation fixture message is missing.");
+  command.name = "CommandTransformationInput";
+  const output = clone(DescriptorProtoSchema, command);
+  output.name = "CommandTransformationOutput";
+  descriptor.messageType.push(output);
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+})();
+const CommandTransformationInputSchema = fixtureMessageSchema<CommandTransformationInput>(
+  fileCommandTransformationFixture,
+  "CommandTransformationInput",
+);
+const CommandTransformationOutputSchema = fixtureMessageSchema<CommandTransformationOutput>(
+  fileCommandTransformationFixture,
+  "CommandTransformationOutput",
+);
 const Int32AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   10,
@@ -2017,6 +2049,29 @@ class RoutingProcessManager extends ProcessManager<
     return create(AggregateStateSchema, {
       id: event.id,
       name: `${event.name} produced event`,
+      archived: false,
+    });
+  }
+}
+
+class CommandTransformingProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  transform(command: CommandTransformationInput, context: CommandContext): CommandTransformationOutput {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: this.id,
+          queue: `${command.name}:${context.actorContext?.actor?.value ?? "anonymous"}`,
+        }),
+      ),
+    );
+    return create(CommandTransformationOutputSchema, {
+      id: command.id,
+      name: `${command.name} follow-up`,
       archived: false,
     });
   }
@@ -3831,6 +3886,78 @@ describe("repository signal routing", () => {
 
     const [stored] = await eventStore.read();
     expect(AnyMessages.unpack(stored?.context?.producerId as never, TaskIdSchema)).toEqual(taskId);
+  });
+
+  it("routes command transformations within their tenant and preserves command lineage", async () => {
+    const produced: SpineCommand[] = [];
+    const context = BoundedContext.multitenant("Command transformations")
+      .add(createCommandTransformingProcessManagerRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [CommandTransformationOutputSchema],
+        dispatch: async (command) => {
+          produced.push(command);
+        },
+      })
+      .build();
+    const tenant = createTenantId("tenant-transform");
+    const actorContext = create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: "transformer" }),
+      tenantId: tenant,
+    });
+    const grandOrigin = create(OriginSchema, {
+      message: create(MessageIdSchema, {
+        id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "grandparent" })),
+        typeUrl: TypeUrls.derive(CommandTransformationInputSchema),
+      }),
+      actorContext,
+    });
+    const source = SignalEnvelopes.command({
+      id: create(CommandIdSchema, { uuid: "transform-source" }),
+      context: create(CommandContextSchema, { actorContext, origin: grandOrigin }),
+      schema: CommandTransformationInputSchema,
+      message: create(CommandTransformationInputSchema, {
+        id: "declared-source-id",
+        name: "Transform",
+        archived: false,
+      }),
+    });
+
+    await context.commandBus().post(source);
+    await waitForCondition(() => produced.length === 1);
+
+    expect(await context.stand().read(ProcessManagerStateSchema, "transform-target", { tenantId: tenant }))
+      .toEqual(
+        create(ProcessManagerStateSchema, {
+          id: "transform-target",
+          queue: "Transform:transformer",
+        }),
+      );
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "transform-target", {
+        tenantId: createTenantId("tenant-other"),
+      }),
+    ).resolves.toBeUndefined();
+    expect(produced[0]).toMatchObject({
+      id: create(CommandIdSchema, { uuid: "transform-source-1" }),
+      context: create(CommandContextSchema, {
+        actorContext,
+        origin: create(OriginSchema, {
+          message: create(MessageIdSchema, {
+            id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "transform-source" })),
+            typeUrl: TypeUrls.derive(CommandTransformationInputSchema),
+          }),
+          actorContext,
+          grandOrigin,
+        }),
+      }),
+    });
+    expect(AnyMessages.unpack(produced[0]?.message as Any, CommandTransformationOutputSchema)).toEqual(
+      create(CommandTransformationOutputSchema, {
+        id: "declared-source-id",
+        name: "Transform follow-up",
+        archived: false,
+      }),
+    );
   });
 
   it("routes commands to one aggregate ID by the first command field", () => {
@@ -11381,6 +11508,35 @@ function createProcessManagerCommandOnlyRepository(): Repository<typeof RoutingP
     entityType: RoutingProcessManager,
     schema: ProcessManagerStateSchema,
     handlers,
+  });
+}
+
+function createCommandTransformingProcessManagerRepository(): Repository<
+  typeof CommandTransformingProcessManager
+> {
+  const handlers = HandlerMetadataValues.defineArity(
+    CommandTransformingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.transform(CommandTransformationInputSchema, "transform")],
+    [
+      {
+        kind: "command-transformation",
+        methodName: "transform",
+        parameterCount: 2,
+        origin: "domestic",
+        emittedSchemas: [CommandTransformationOutputSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: CommandTransformingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+    commandRouting: CommandRouting.create<string>().route(
+      CommandTransformationInputSchema,
+      () => "transform-target",
+    ),
   });
 }
 
