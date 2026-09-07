@@ -3909,8 +3909,9 @@ describe("repository signal routing", () => {
       .add(createCommandTransformingProcessManagerRepository())
       .addCommandDispatcher({
         messageSchemas: () => [CommandTransformationOutputSchema],
-        dispatch: async (command) => {
+        dispatch: (command) => {
           produced.push(command);
+          return Promise.resolve();
         },
       })
       .build();
@@ -3955,7 +3956,9 @@ describe("repository signal routing", () => {
         tenantId: createTenantId("tenant-other"),
       }),
     ).resolves.toBeUndefined();
-    expect(produced[0]).toMatchObject({
+    const producedCommand = produced.at(0);
+    if (producedCommand === undefined) throw new Error("Expected a transformed command.");
+    expect(producedCommand).toMatchObject({
       id: create(CommandIdSchema, { uuid: "transform-source-1" }),
       context: create(CommandContextSchema, {
         actorContext,
@@ -3972,9 +3975,8 @@ describe("repository signal routing", () => {
         }),
       }),
     });
-    expect(
-      AnyMessages.unpack(produced[0]?.message as Any, CommandTransformationOutputSchema),
-    ).toEqual(
+    if (producedCommand.message === undefined) throw new Error("Expected a transformed payload.");
+    expect(AnyMessages.unpack(producedCommand.message, CommandTransformationOutputSchema)).toEqual(
       create(CommandTransformationOutputSchema, {
         id: "declared-source-id",
         name: "Transform follow-up",
@@ -3990,13 +3992,15 @@ describe("repository signal routing", () => {
       .add(createCommandTransformingProcessManagerRepository())
       .addCommandDispatcher({
         messageSchemas: () => [CommandTransformationOutputSchema],
-        dispatch: async (command) => {
+        dispatch: (command) => {
+          if (command.message === undefined) throw new Error("Expected a transformed payload.");
           const message = AnyMessages.unpack(
-            command.message as Any,
+            command.message,
             CommandTransformationOutputSchema,
           );
           observed.push(message.name);
           if (message.name === "Siblings follow-up") throw new Error("first child failed");
+          return Promise.resolve();
         },
       })
       .build();

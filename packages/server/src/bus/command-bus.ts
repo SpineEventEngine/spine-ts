@@ -27,7 +27,7 @@ import { CommandDispatcherRegistry } from "./command-dispatcher-registry.js";
 import type { CommandDispatcher } from "./command-dispatcher.js";
 
 const internalCommandPosters = new WeakMap<CommandBus, (command: Command) => Promise<void>>();
-const internalCommandFollowUpPosters = new WeakMap<
+const commandFollowUpPosters = new WeakMap<
   CommandBus,
   (command: Command) => Promise<void>
 >();
@@ -69,7 +69,7 @@ export class CommandBus {
   constructor(dispatchers: Iterable<CommandDispatcher> = []) {
     this.#started = this.#runtime.start();
     internalCommandPosters.set(this, (command) => this.#postInternal(command));
-    internalCommandFollowUpPosters.set(this, (command) => this.#postInternalFollowUp(command));
+    commandFollowUpPosters.set(this, (command) => this.#postInternalFollowUp(command));
     commandBusCloseStarters.set(this, () => {
       this.#beginClose();
     });
@@ -233,7 +233,7 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
   },
 
   postInternalFollowUp(commandBus: CommandBus, command: Command): Promise<void> {
-    const post = internalCommandFollowUpPosters.get(commandBus);
+    const post = commandFollowUpPosters.get(commandBus);
     if (post === undefined) {
       throw new TypeError("Internal command follow-up requires a CommandBus instance.");
     }

@@ -183,7 +183,9 @@ export type CommandReactionHandlerMetadata<
   MethodName extends string = string,
 > = BaseHandlerMetadata<"command-reaction", Schema, MethodName>;
 
-/** Command-input `@Command` metadata that produces Commands after commit. */
+/**
+ * Command-input `@Command` metadata that produces Commands after commit.
+ */
 export type CommandTransformationHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
   MethodName extends string = string,
@@ -276,7 +278,13 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
     methodName: HandlerMethodName<Instance>,
   ): CommandAssignmentHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 
-  /** Registers a command-input `@Command` transformation method. */
+  /**
+   * Registers a command-input `@Command` transformation method.
+   *
+   * @param schema Command schema accepted by the method.
+   * @param methodName Entity method name.
+   * @returns The registered command-transformation metadata.
+   */
   transform<Schema extends DescriptorMessageSchema>(
     schema: Schema,
     methodName: HandlerMethodName<Instance>,
@@ -365,6 +373,10 @@ export interface EntityHandlersMetadata<
    * Command assignees in declaration order.
    */
   readonly commandAssignments: readonly CommandAssignmentHandlerMetadata[];
+
+  /**
+   * Command transformations in declaration order.
+   */
   readonly commandTransformations: readonly CommandTransformationHandlerMetadata[];
 
   /**
@@ -697,7 +709,12 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     return this.#commandAssignments.get(commandTypeName);
   }
 
-  /** Finds the effective command assignment or transformation receptor. */
+  /**
+   * Finds the effective command assignment or transformation receptor.
+   *
+   * @param commandTypeName Fully qualified command type name.
+   * @returns The receptor when registered.
+   */
   findCommandReceptor(
     commandTypeName: string,
   ):
