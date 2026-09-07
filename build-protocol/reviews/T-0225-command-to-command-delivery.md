@@ -133,3 +133,40 @@ profiles are the acceptance evidence.
 - Existing `documentation_reviewer`: reader-facing REFERENCE and architecture
   claims, especially best-effort post-commit semantics; immutable configured
   `gpt-5.6-luna`, reasoning `medium`.
+
+The first documentation dispatch omitted the explicit tool fields despite
+naming them in its prompt. It was interrupted before acceptance and replaced by
+a fresh `documentation_reviewer` dispatch with explicit `gpt-5.6-luna` and
+`medium` fields. No result from the invalid dispatch was used.
+
+## Complete review wave findings
+
+All five valid reviews completed. Runtime self-introspection was unavailable;
+the explicit dispatches, immutable profiles, and absence of visible fallback are
+the accepted metadata evidence. The complete accepted correction batch is:
+
+1. Reject an empty normalized runtime transformation result before Aggregate or
+   Process Manager persistence. Registry-declared emitted schemas do not prove
+   that a handler's returned array is non-empty.
+2. Replace the repository-routing test's cloned Entity-state descriptor with
+   distinct domain-correct Command input and output messages.
+3. Model generated registry v3/v4 as a version-discriminated TypeScript union so
+   a v3 registry cannot type-check with a v4-only transformation record; retain
+   runtime compatibility tests.
+4. Export `CommandTransformationHandlerMetadata` from the supported server
+   package root and cover the export.
+5. Update public decorator TSDoc and the SPI reference's stale version-3 claim.
+6. Preserve post-commit failure containment but report transformed-child failure
+   through an existing bounded diagnostic/logging seam with useful source/child
+   identity. Do not leave a silent catch, claim source-command failure
+   propagation, or add an atomic-outbox promise.
+7. Add direct Aggregate multi-child proof for FIFO sibling admission, rejection
+   observation/diagnosis, committed source state, and immediate-close drain.
+8. Correct reader/reference and work-log claims: transformation output is
+   non-empty; accepted follow-ups drain on close; detached enqueue is in-process
+   best-effort and can be lost in the commit-to-enqueue crash window; it is not
+   atomic outbox or durable exactly-once delivery.
+
+No separate security finding was raised. The task adds no new authentication,
+authorization, credential, or external trust boundary; remote-input rejection
+remains covered by correctness and public-service tests.
