@@ -308,7 +308,7 @@ describe("CommandBus", () => {
   it("rejects nested posts from active command dispatch", async () => {
     const observed: string[] = [];
     const context: { bus?: CommandBus } = {};
-    const dispatcher = createCommandDispatcher([ProjectionStateSchema], async (command) => {
+    const dispatcher = createCommandDispatcher([ProjectionStateSchema], (command) => {
       observed.push(`outer:${command.id?.uuid ?? "missing"}`);
       await expect(context.bus?.post(createProjectionCommand("command-nested"))).rejects.toThrow(
         "Cannot enqueue runtime work from an active runtime work item.",
@@ -330,7 +330,7 @@ describe("CommandBus", () => {
       observed.push(command.id?.uuid ?? "missing");
       if (command.id?.uuid === "command-outer") {
         void commandBusAccess.postInternalFollowUp(
-          context.bus as CommandBus,
+          context.bus!,
           createProjectionCommand("command-follow-up"),
         );
       }

@@ -3997,6 +3997,7 @@ describe("repository signal routing", () => {
         dispatch: (command) => {
           if (command.message === undefined) throw new Error("Expected a transformed payload.");
           const message = AnyMessages.unpack(command.message, TransformedTaskCommandSchema);
+          if (message === undefined) throw new Error("Expected a transformed command.");
           observed.push(message.name);
           if (message.name === "Siblings follow-up") throw new Error("first child failed");
           return Promise.resolve();
@@ -4051,6 +4052,7 @@ describe("repository signal routing", () => {
           if (command.message === undefined)
             throw new Error("Expected transformed command payload.");
           const message = AnyMessages.unpack(command.message, TransformedTaskCommandSchema);
+          if (message === undefined) throw new Error("Expected transformed command.");
           admitted.push(message.name);
           if (message.name === "Aggregate first") throw new Error("aggregate first child failed");
           return Promise.resolve();

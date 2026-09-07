@@ -823,7 +823,7 @@ describe("LocalEntityInbox", () => {
         seen.push(message);
         startReplay();
         await replayReleased;
-        return async () => {
+        return () => {
           followUps++;
         };
       },

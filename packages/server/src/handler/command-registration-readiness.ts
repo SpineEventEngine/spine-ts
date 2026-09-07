@@ -15,7 +15,6 @@
 import {
   HandlerMetadataRegistry,
   type CommandAssignmentHandlerMetadata,
-  type CommandReactionHandlerMetadata,
   type CommandTransformationHandlerMetadata,
   type EntityClass,
   type EntityHandlersMetadata,

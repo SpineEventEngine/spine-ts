@@ -251,7 +251,10 @@ const publicOriginContract = `
     Equal<IsRequired<BaseHandlerMetadata, "origin">, true>
   >;
   type V3HandlerKindExcludesCommandTransformation = Assert<
-    Equal<GeneratedHandlerRecordInput<3>["kind"], Exclude<GeneratedHandlerRecordInput["kind"], "command-transformation">>
+    Equal<
+      GeneratedHandlerRecordInput<3>["kind"],
+      Exclude<GeneratedHandlerRecordInput["kind"], "command-transformation">
+    >
   >;
   type V4HandlerKindIncludesCommandTransformation = Assert<
     Equal<Extract<GeneratedHandlerRecordInput<4>["kind"], "command-transformation">, "command-transformation">

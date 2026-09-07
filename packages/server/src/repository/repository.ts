@@ -1264,7 +1264,7 @@ interface RepositoryRuntime {
   readonly postSystemFollowUp: (event: Event) => Promise<void>;
   readonly registerSystemEventSchema: (schema: MessageSchema) => void;
   readonly onPostCommand: (command: Command) => Promise<void>;
-  readonly recordCommandFollowUpFailure: (source: Command, child: Command, error: unknown) => void;
+  readonly recordFollowUpFailure: (source: Command, child: Command, error: unknown) => void;
   readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
@@ -1644,7 +1644,7 @@ class AggregateCommandExecution {
             try {
               await this.#runtime.onPostCommand(command);
             } catch (error) {
-              this.#runtime.recordCommandFollowUpFailure(this.#command, command, error);
+              this.#runtime.recordFollowUpFailure(this.#command, command, error);
               throw error;
             }
           }),
@@ -2814,7 +2814,7 @@ class ProcessManagerCommandExecution {
         try {
           await this.#runtime.onPostCommand(command);
         } catch (error) {
-          this.#runtime.recordCommandFollowUpFailure(source, command, error);
+          this.#runtime.recordFollowUpFailure(source, command, error);
           throw error;
         }
       }),

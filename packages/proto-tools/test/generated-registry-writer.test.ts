@@ -930,13 +930,17 @@ function createCompileFixture(): string {
   writeFileSync(
     join(repoRoot, "node_modules/@spine-event-engine/server/spi/handler-registry.d.ts"),
     [
+      "export type GeneratedHandlerKind<V extends 3 | 4> = V extends 3 ? " +
+        '"command-assignment" | "command-reaction" | "event-subscription" | "event-reaction" : ' +
+        '"command-assignment" | "command-transformation" | "command-reaction" | ' +
+        '"event-subscription" | "event-reaction";',
       "export type GeneratedHandlerRegistry<V extends 3 | 4 = 3 | 4> = {",
       "  readonly version: V;",
       "  readonly entities: readonly {",
       "    readonly entityType: new (...args: never[]) => object;",
       "    readonly stateSchema: object;",
       "    readonly handlers: readonly {",
-      '      readonly kind: V extends 3 ? "command-assignment" | "command-reaction" | "event-subscription" | "event-reaction" : "command-assignment" | "command-transformation" | "command-reaction" | "event-subscription" | "event-reaction";',
+      "      readonly kind: GeneratedHandlerKind<V>;",
       "      readonly methodName: string;",
       "      readonly signalSchema: object;",
       "      readonly emittedSchemas: readonly object[];",

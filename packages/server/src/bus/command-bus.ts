@@ -27,10 +27,7 @@ import { CommandDispatcherRegistry } from "./command-dispatcher-registry.js";
 import type { CommandDispatcher } from "./command-dispatcher.js";
 
 const internalCommandPosters = new WeakMap<CommandBus, (command: Command) => Promise<void>>();
-const commandFollowUpPosters = new WeakMap<
-  CommandBus,
-  (command: Command) => Promise<void>
->();
+const commandFollowUpPosters = new WeakMap<CommandBus, (command: Command) => Promise<void>>();
 const commandBusCloseStarters = new WeakMap<CommandBus, () => void>();
 const commandBusDrainers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusCloseFinishers = new WeakMap<CommandBus, () => Promise<void>>();
