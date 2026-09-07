@@ -524,8 +524,10 @@ the normal generated services and their Buses; the integration channel factory
 does not provide another application-signal ingress path.
 
 The server root exports `External<T>` (a type-only alias), `HandlerOrigin`,
-`CommandTransformationHandlerMetadata`, `ThirdPartyContext`, and the generated
-registry v4 writer contract (with v3 read compatibility). The canonical
+`CommandTransformationHandlerMetadata`, `ThirdPartyContext`,
+`HandlerRegistryIngestor`, and `GeneratedRegistryDiscovery`. Generated registry
+data contracts remain on the `server/spi/handler-registry` SPI; the v4 writer
+continues to read legacy v3 registries. The canonical
 `External<T>` marker is recognized on a receptor's first parameter and produces
 external metadata; unmarked handlers are domestic. `EventDispatcher` retains
 the complete `messageSchemas()` set and may provide `externalEventSchemas()` as
@@ -654,9 +656,10 @@ transaction only for accepted commits; rejected commits return violations and
 leave the transaction active. `rollback()` closes the transaction and returns
 the discarded draft evidence.
 Server handler metadata exports include
-`EntityHandlers.define()`, `HandlerRegistrationBuilder`, the five handler
-metadata roles for command assignment, command reaction, event subscription,
-event reaction, and legacy event application, `HandlerParameterCount` for
+`EntityHandlers.define()`, `HandlerRegistrationBuilder`, the six handler
+metadata roles for command assignment, command transformation, command
+reaction, event subscription, event reaction, and legacy event application,
+`HandlerParameterCount` for
 canonical arity metadata, and `HandlerMetadataError` for registration-time
 structural failures. Handler names must refer to prototype data methods
 declared with normal class method syntax. `EntityHandlers.define()` remains
@@ -698,13 +701,18 @@ descriptors before writing those registry records. A rejection role requires a
 top-level message declared in a source file ending `rejections.proto`.
 Rejections are accepted as inputs by `@Subscribe`, `@React`, and
 event-to-command `@Command`, but not by `@Assign`; they cannot be normal emitted
-values. Generated `@Assign` and `@Command` producer records must declare at
-least one emitted schema; `@React` records may return generated event messages
+values. Generated `@Assign` and command-input `@Command` producer records must
+declare at least one emitted schema. A command-input `@Command` is the unique
+command receptor/transformation for its input and may receive an optional
+`CommandContext`; event- and rejection-input `@Command` handlers are EventBus
+reactions. `@React` records may return generated event messages
 or explicit `void` with no emitted schemas. `@Subscribe` records return
 explicit `void` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
 The public `@spine-event-engine/server/spi/handler-registry` subpath is the
-generated-registry v3 tooling SPI. Generated registry source uses it for the
+generated-registry data-contract SPI. Generated source writes v4 and the
+runtime reads legacy v3 registries for compatibility. Generated registry source
+uses it for the
 type-only `GeneratedHandlerRegistry` contract; ordinary application code should
 use the package-root server APIs and context assembly rather than importing this
 tooling SPI directly. It remains a public, documented contract rather than a
@@ -731,7 +739,10 @@ stack while preserving the typed payload and other event metadata. Generated
 producer handlers return
 domain messages; the framework wraps returned commands/events internally and
 dispatches produced signals only after the current storage/transactional work
-succeeds.
+succeeds. Command transformations commit source work before detached,
+in-process follow-up enqueue: it is best-effort, has a commit-to-enqueue crash
+window, is not an atomic outbox or exactly-once guarantee, and does not
+durably retry a failed child.
 Command registration readiness exports include
 `CommandRegistrationReadiness`, `CommandRegistrationReadinessLookup`, and
 `CommandRegistrationAssigneeMetadata`. The readiness view is built from an

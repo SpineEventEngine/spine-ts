@@ -4310,6 +4310,13 @@ const RepositoryHandlers = {
           `Repository entity type "${entityType.name}" does not match the supplied handler metadata.`,
         );
       }
+
+      if (metadata.kind === "projection" && handlersMetadata.commandTransformations.length > 0) {
+        throw new RepositoryIdentityError(
+          "UNSUPPORTED_ENTITY_TYPE",
+          "Projection repositories do not support command transformations.",
+        );
+      }
     }
   },
 

@@ -136,8 +136,9 @@ assignee/reactor endpoints.
 
 Requirements:
 
-- command assignees and command reactors may both observe the same command type
-  when registered in one bounded context;
+- one command input has one receptor: either an `@Assign` assignee or a
+  command-input `@Command` transformation; event- and rejection-input
+  `@Command` handlers remain EventBus reactions;
 - default entity route by the first command field in Protobuf declaration
   order, not by numeric field index;
 - Entity state declares the target ID type in its first field; complete

@@ -81,7 +81,8 @@ runtime support.
 Generated registry modules are build artifacts under ignored `generated/`
 directories. T-0015c implements the build-time analyzer that extracts
 structured handler records. T-0015d adds the internal writer that turns those
-records into deterministic version-1 TypeScript source and writes files only
+records into deterministic version-4 TypeScript source (while runtime readers
+retain legacy version-3 compatibility) and writes files only
 when explicitly invoked into a caller-configured generated root that stays
 under Git ignore. T-0015e adds `GeneratedRegistryDiscovery` as the small
 runtime loader for these artifacts. Callers provide explicit filesystem paths

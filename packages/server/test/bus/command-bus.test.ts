@@ -326,17 +326,20 @@ describe("CommandBus", () => {
   it("queues an internal follow-up command after active command dispatch", async () => {
     const observed: string[] = [];
     const context: { bus?: CommandBus } = {};
-    const dispatcher = createCommandDispatcher([ProjectionStateSchema], (command) => {
-      observed.push(command.id?.uuid ?? "missing");
-      if (command.id?.uuid === "command-outer") {
-        const bus = context.bus;
-        if (bus === undefined) throw new Error("Expected command bus.");
-        void commandBusAccess.postInternalFollowUp(
-          bus,
-          createProjectionCommand("command-follow-up"),
-        );
-      }
-    });
+    const dispatcher = createCommandDispatcher(
+      [ProjectionStateSchema, ValidatedTaskCommandSchema],
+      (command) => {
+        observed.push(command.id?.uuid ?? "missing");
+        if (command.id?.uuid === "command-outer") {
+          const bus = context.bus;
+          if (bus === undefined) throw new Error("Expected command bus.");
+          void commandBusAccess.postInternalFollowUp(
+            bus,
+            createValidatedCommand("command-follow-up", "task-follow-up", "Follow up"),
+          );
+        }
+      },
+    );
     const bus = new CommandBus([dispatcher]);
     context.bus = bus;
 
@@ -361,7 +364,7 @@ describe("CommandBus", () => {
     await expect(
       commandBusAccess.postInternalFollowUp(
         bus,
-        createProjectionCommand("command-follow-up-after-close"),
+        createValidatedCommand("command-follow-up-after-close", "task-follow-up", "Follow up"),
       ),
     ).rejects.toThrow(/closed/);
   });
@@ -373,7 +376,10 @@ describe("CommandBus", () => {
       commandBusAccess.postInternal(bus, createProjectionCommand("command-internal")),
     ).toThrow(/CommandBus instance/);
     expect(() =>
-      commandBusAccess.postInternalFollowUp(bus, createProjectionCommand("command-follow-up")),
+      commandBusAccess.postInternalFollowUp(
+        bus,
+        createValidatedCommand("command-follow-up", "task-follow-up", "Follow up"),
+      ),
     ).toThrow(/CommandBus instance/);
     expect(() => {
       commandBusAccess.beginClose(bus);

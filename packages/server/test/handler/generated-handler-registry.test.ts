@@ -30,6 +30,9 @@ import {
   HandlerMetadataRegistryError,
   HandlerRegistryIngestionError,
   HandlerRegistryIngestor,
+  Aggregate,
+  Projection,
+  Repository,
   type CommandAssignmentHandlerMetadata,
   type CommandReactionHandlerMetadata,
   type EventReactionHandlerMetadata,
@@ -53,13 +56,18 @@ type AggregateState = Message<"AggregateState"> & {
   archived: boolean;
 };
 
-class GeneratedProjection {
+type TransformTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
+  id: string;
+  name: string;
+};
+
+class GeneratedProjection extends Projection<string, GenMessage<ProjectionState>, number> {
   assignCreate(command: Message<"spine.core.Command">): void {
     void command;
   }
 
-  commandFromCommand(command: Message<"spine.core.Command">): void {
-    void command;
+  commandFromCommand(command: TransformTaskCommand): TransformTaskCommand {
+    return command;
   }
 
   subscribeCreated(event: Message<"spine.core.Event">): void {
@@ -74,6 +82,12 @@ class GeneratedProjection {
 class OtherGeneratedProjection {
   assignCreate(command: Message<"spine.core.Command">): void {
     void command;
+  }
+}
+
+class GeneratedAggregate extends Aggregate<string, GenMessage<AggregateState>, number> {
+  commandFromCommand(command: TransformTaskCommand): TransformTaskCommand {
+    return command;
   }
 }
 
@@ -105,6 +119,18 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
+const fileTransformCommandFixture = fileDesc(
+  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
+    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
+    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
+    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
+    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
+  [file_spine_options],
+);
+const TransformTaskCommandSchema = messageDesc(
+  fileTransformCommandFixture,
+  1,
+) as GenMessage<TransformTaskCommand>;
 
 describe("generated handler registry ingestion", () => {
   it("ingests version-2 state subscriptions separately from Event subscriptions", () => {
@@ -147,17 +173,22 @@ describe("generated handler registry ingestion", () => {
   });
 
   it("accepts command transformations only from registry version 4 while retaining version 3", () => {
-    const transformation = record("command-transformation", "commandFromCommand", CommandSchema, [
-      CommandSchema,
-    ]);
+    const transformation: GeneratedHandlerRecord<GeneratedAggregate, 4> = {
+      kind: "command-transformation",
+      methodName: "commandFromCommand",
+      signalSchema: TransformTaskCommandSchema,
+      emittedSchemas: [TransformTaskCommandSchema],
+      parameterCount: 1,
+      origin: "domestic",
+    };
 
     expect(() =>
       new HandlerRegistryIngestor().ingest({
         version: 3,
         entities: [
           {
-            entityType: GeneratedProjection,
-            stateSchema: ProjectionStateSchema,
+            entityType: GeneratedAggregate,
+            stateSchema: AggregateStateSchema,
             handlers: [transformation],
           },
         ],
@@ -168,13 +199,43 @@ describe("generated handler registry ingestion", () => {
         version: 4,
         entities: [
           {
-            entityType: GeneratedProjection,
-            stateSchema: ProjectionStateSchema,
+            entityType: GeneratedAggregate,
+            stateSchema: AggregateStateSchema,
             handlers: [transformation],
           },
         ],
       })[0]?.commandTransformations,
     ).toHaveLength(1);
+  });
+
+  it("rejects generated command transformations when the owner is a projection", () => {
+    const transformation: GeneratedHandlerRecord<GeneratedProjection, 4> = {
+      kind: "command-transformation",
+      methodName: "commandFromCommand",
+      signalSchema: TransformTaskCommandSchema,
+      emittedSchemas: [TransformTaskCommandSchema],
+      parameterCount: 1,
+      origin: "domestic",
+    };
+    const handlers = new HandlerRegistryIngestor().ingest({
+      version: 4,
+      entities: [
+        {
+          entityType: GeneratedProjection,
+          stateSchema: ProjectionStateSchema,
+          handlers: [transformation],
+        },
+      ],
+    });
+
+    expect(
+      () =>
+        new Repository({
+          entityType: GeneratedProjection,
+          schema: ProjectionStateSchema,
+          handlers,
+        }),
+    ).toThrow(/Projection repositories do not support command transformations/);
   });
 
   it("rejects an Event subscription record that declares an Entity-state schema", () => {

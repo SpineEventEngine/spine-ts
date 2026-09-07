@@ -74,6 +74,11 @@ type ProcessManagerState = Message<"ProcessManagerState"> & {
   queue: string;
 };
 
+type TransformTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
+  id: string;
+  name: string;
+};
+
 function createFixtureFileDescriptor(descriptorSetBase64: string) {
   const descriptorSet = fromBinary(
     FileDescriptorSetSchema,
@@ -102,6 +107,19 @@ const AggregateStateSchema = messageDesc(
   1,
 ) as GenMessage<AggregateState>;
 const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
+
+const fileTransformCommandFixture = fileDesc(
+  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
+    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
+    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
+    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
+    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
+  [file_spine_options],
+);
+const TransformTaskCommandSchema = messageDesc(
+  fileTransformCommandFixture,
+  1,
+) as GenMessage<TransformTaskCommand>;
 
 const fileEntityVisibilityFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
@@ -143,6 +161,15 @@ class HandlerBackedBigintProjection extends Projection<
     void event;
   }
 }
+class CommandTransformingProjection extends Projection<
+  string,
+  typeof ProjectionStateSchema,
+  number
+> {
+  transformTask(command: TransformTaskCommand): TransformTaskCommand {
+    return command;
+  }
+}
 const DomainEntityBase = {
   Aggregate,
 };
@@ -160,6 +187,23 @@ class PlainEntityClass {
 }
 
 describe("repository identity", () => {
+  it("rejects command transformations on projections before command readiness is exposed", () => {
+    const handlers = EntityHandlers.define(
+      CommandTransformingProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.transform(TransformTaskCommandSchema, "transformTask")],
+    );
+
+    expect(
+      () =>
+        new Repository({
+          entityType: CommandTransformingProjection,
+          schema: ProjectionStateSchema,
+          handlers,
+        }),
+    ).toThrow(/Projection repositories do not support command transformations/);
+  });
+
   it("constructs metadata-only identity for aggregate, projection, and process-manager entities", () => {
     const aggregate = new Repository({
       entityType: TaskAggregate,
