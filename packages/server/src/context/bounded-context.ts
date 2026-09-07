@@ -251,7 +251,9 @@ interface RepositoryRegistration {
    */
   readonly onPostCommand: (command: Command) => Promise<void>;
 
-  /** Records a contained transformed-command follow-up failure for diagnostics. */
+  /**
+   * Records a contained transformed-command follow-up failure for diagnostics.
+   */
   readonly recordCommandFollowUpFailure: (source: Command, child: Command, error: unknown) => void;
 
   /**

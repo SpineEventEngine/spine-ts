@@ -176,10 +176,15 @@ route registration API.
 
 A command-input `@Command` method is a command transformation receptor: it is
 the one effective receptor for that Command type (instead of an `@Assign`),
-commits its Entity state before its returned Command or Commands are queued, and
-receives an optional `CommandContext`. Event- and rejection-input `@Command`
-methods remain Event Bus reactions. Produced commands retain the source actor,
-tenant, origin, and causal lineage.
+commits its Entity state before its one-or-more returned Commands are detached
+for in-process follow-up enqueue, and receives an optional `CommandContext`.
+Event- and rejection-input `@Command` methods remain Event Bus reactions.
+Produced commands retain the source actor, tenant, origin, and causal lineage.
+The enqueue is post-commit best effort, not an atomic outbox or exactly-once
+delivery: a process crash between commit and enqueue can lose a child. Accepted
+follow-ups drain during context close. A contained child failure is diagnosed,
+but does not retroactively fail an already accepted source command or durably
+retry that child.
 
 One `@Where({ eventField, equals })` equality filter may narrow an event- or
 rejection-consuming `@Subscribe`, `@React`, or `@Command` handler after type
@@ -203,9 +208,10 @@ handler registry for classes registered with `add(EntityClass)`;
 explicit `Repository` registration. A built context contains `CommandBus`,
 `EventBus`, `Stand`, repositories, and its storage lifecycle.
 
-Generated registry version 4 records command transformations explicitly. The
-ingestor continues to accept version 3 registries that use its older handler
-kinds, but rejects a command-transformation record under version 3.
+Generated writer output is registry version 4 and records command
+transformations explicitly. The ingestor remains read-compatible with version 3
+registries using their older handler kinds, but rejects a command-transformation
+record under version 3.
 
 ### Stand subscription registry
 

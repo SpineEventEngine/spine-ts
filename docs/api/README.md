@@ -524,7 +524,8 @@ the normal generated services and their Buses; the integration channel factory
 does not provide another application-signal ingress path.
 
 The server root exports `External<T>` (a type-only alias), `HandlerOrigin`,
-`ThirdPartyContext`, and the generated registry v3 contract. The canonical
+`CommandTransformationHandlerMetadata`, `ThirdPartyContext`, and the generated
+registry v4 writer contract (with v3 read compatibility). The canonical
 `External<T>` marker is recognized on a receptor's first parameter and produces
 external metadata; unmarked handlers are domestic. `EventDispatcher` retains
 the complete `messageSchemas()` set and may provide `externalEventSchemas()` as

@@ -560,6 +560,7 @@ const expectedServerExports = [
   "CommandEndpoint",
   "CommandDispatcher",
   "CommandAssignmentHandlerMetadata",
+  "CommandTransformationHandlerMetadata",
   "CommandRegistrationAssigneeMetadata",
   "CommandRegistrationReadiness",
   "CommandRegistrationReadinessLookup",

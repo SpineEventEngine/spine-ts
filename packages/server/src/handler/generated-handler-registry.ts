@@ -50,7 +50,9 @@ interface GeneratedHandlerRegistryShape<V extends GeneratedHandlerRegistryVersio
   readonly entities: readonly GeneratedEntityHandlerGroup<V>[];
 }
 
-/** Generated handler registry metadata for a supported serialized version. */
+/**
+ * Generated handler registry metadata for a supported serialized version.
+ */
 export type GeneratedHandlerRegistry<
   V extends GeneratedHandlerRegistryVersion = GeneratedHandlerRegistryVersion,
 > = V extends 3 ? GeneratedHandlerRegistryShape<3> : GeneratedHandlerRegistryShape<4>;

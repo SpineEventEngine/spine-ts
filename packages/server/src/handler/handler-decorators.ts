@@ -112,13 +112,12 @@ export function Assign(
 }
 
 /**
- * Creates a command-reacting declaration.
+ * Creates a command handler declaration.
  *
- * Bare `@Command` is the ordinary application form. Generated registries accept
- * command inputs; event-to-command handlers also accept event or rejection
- * inputs. Normal outputs are commands, while rejections are thrown, not
- * returned. Command reactors may fan out in `HandlerMetadataRegistry`; this
- * decorator only records the declaration.
+ * Bare `@Command` accepts a generated Command, Event, or rejection input.
+ * A Command input is the unique command receptor for its type and transforms it
+ * into one or more Commands. Event and rejection inputs are Event Bus reactions
+ * that may return Commands. Rejections are thrown, not returned.
  *
  * @typeParam This - Entity instance that owns the method.
  * @typeParam Parameters - Parameters accepted by the method.
@@ -132,7 +131,7 @@ export function Command<This extends object, Parameters extends readonly unknown
 ): void;
 
 /**
- * Creates command-reaction decorator metadata or a schema-bearing decorator.
+ * Creates command-handler decorator metadata or a schema-bearing decorator.
  *
  * @param schemaOrValue Command schema or decorated method implementation.
  * @param context Standard decorator context for bare usage.
