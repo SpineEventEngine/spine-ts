@@ -800,9 +800,18 @@ describe("generated handler registry ingestion", () => {
         version: 4,
         entities: [
           {
-            entityType: GeneratedProjection,
-            stateSchema: ProjectionStateSchema,
-            handlers: [record("command-transformation", "commandFromCommand", CommandSchema, [])],
+            entityType: GeneratedAggregate,
+            stateSchema: AggregateStateSchema,
+            handlers: [
+              {
+                kind: "command-transformation",
+                methodName: "commandFromCommand",
+                signalSchema: TransformTaskCommandSchema,
+                emittedSchemas: [],
+                parameterCount: 1,
+                origin: "domestic",
+              } satisfies GeneratedHandlerRecord<GeneratedAggregate, 4>,
+            ],
           },
         ],
       }),
