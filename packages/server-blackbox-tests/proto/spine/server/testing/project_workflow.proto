@@ -88,6 +88,12 @@ message ApproveProject {
   string status = 2 [(required) = true];
 }
 
+// Requests an Aggregate-owned scheduling transformation.
+message ReviewProject {
+  ProjectId project = 1 [(required) = true, (validate) = true];
+  string status = 2 [(required) = true];
+}
+
 // Stores a project and its current schedule.
 message ProjectState {
   option (entity).kind = AGGREGATE;
