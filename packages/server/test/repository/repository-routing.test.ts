@@ -2059,7 +2059,16 @@ class CommandTransformingProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  transform(command: CommandTransformationInput, context: CommandContext): CommandTransformationOutput {
+  static siblingOutputs = false;
+
+  static reset(): void {
+    this.siblingOutputs = false;
+  }
+
+  transform(
+    command: CommandTransformationInput,
+    context: CommandContext,
+  ): CommandTransformationOutput | readonly CommandTransformationOutput[] {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -2069,11 +2078,14 @@ class CommandTransformingProcessManager extends ProcessManager<
         }),
       ),
     );
-    return create(CommandTransformationOutputSchema, {
+    const first = create(CommandTransformationOutputSchema, {
       id: command.id,
       name: `${command.name} follow-up`,
       archived: false,
     });
+    return CommandTransformingProcessManager.siblingOutputs
+      ? [first, create(CommandTransformationOutputSchema, { ...first, name: `${command.name} sibling` })]
+      : first;
   }
 }
 
@@ -3958,6 +3970,43 @@ describe("repository signal routing", () => {
         archived: false,
       }),
     );
+  });
+
+  it("starts every sibling transformed command in declaration order when one child rejects", async () => {
+    CommandTransformingProcessManager.siblingOutputs = true;
+    const observed: string[] = [];
+    const context = BoundedContext.singleTenant("Command transformation siblings")
+      .add(createCommandTransformingProcessManagerRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [CommandTransformationOutputSchema],
+        dispatch: async (command) => {
+          const message = AnyMessages.unpack(
+            command.message as Any,
+            CommandTransformationOutputSchema,
+          );
+          observed.push(message.name);
+          if (message.name === "Siblings follow-up") throw new Error("first child failed");
+        },
+      })
+      .build();
+    try {
+      await context.commandBus().post(
+        SignalEnvelopes.command({
+          id: create(CommandIdSchema, { uuid: "siblings-source" }),
+          context: create(CommandContextSchema),
+          schema: CommandTransformationInputSchema,
+          message: create(CommandTransformationInputSchema, {
+            id: "source",
+            name: "Siblings",
+            archived: false,
+          }),
+        }),
+      );
+      await context.close();
+      expect(observed).toEqual(["Siblings follow-up", "Siblings sibling"]);
+    } finally {
+      CommandTransformingProcessManager.reset();
+    }
   });
 
   it("routes commands to one aggregate ID by the first command field", () => {
