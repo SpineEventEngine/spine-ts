@@ -251,6 +251,9 @@ interface RepositoryRegistration {
    */
   readonly onPostCommand: (command: Command) => Promise<void>;
 
+  /** Records a contained transformed-command follow-up failure for diagnostics. */
+  readonly recordCommandFollowUpFailure: (source: Command, child: Command, error: unknown) => void;
+
   /**
    * Records asynchronous event follow-up failures for diagnostics.
    */
@@ -808,6 +811,9 @@ export class BoundedContext {
       },
       postSystemFollowUp: (event) => eventBusAccess.postFollowUp(this.#systemEventBus, event),
       onPostCommand: (command) => commandBusAccess.postInternalFollowUp(this.#commandBus, command),
+      recordCommandFollowUpFailure: (source, child, error) => {
+        this.#recordCommandFollowUpFailure(source, child, error);
+      },
       recordDispatchFailure: (event, error) => {
         this.#recordDispatchFailure(event, error);
       },
@@ -1099,6 +1105,32 @@ export class BoundedContext {
         reasonCode: "dispatch_failed",
       });
     }
+  }
+
+  #recordCommandFollowUpFailure(source: Command, child: Command, error: unknown): void {
+    void error;
+    const logger = contextLoggers.get(this);
+    const sourceCommandId = source.id?.uuid;
+    const sourceCommandType = source.message?.typeUrl;
+    const childCommandId = child.id?.uuid;
+    const childCommandType = child.message?.typeUrl;
+    if (
+      logger === undefined ||
+      sourceCommandId === undefined ||
+      sourceCommandType === undefined ||
+      childCommandId === undefined ||
+      childCommandType === undefined
+    ) {
+      return;
+    }
+    emitServerError(logger, "Repository transformed command follow-up failed.", {
+      operation: "repository.command_follow_up",
+      reasonCode: "dispatch_failed",
+      sourceCommandId,
+      sourceCommandType,
+      childCommandId,
+      childCommandType,
+    });
   }
 }
 
@@ -2612,6 +2644,7 @@ const ContextParts = Object.freeze({
       registerSystemEventSchema: registration.registerSystemEventSchema,
       postSystemFollowUp: registration.postSystemFollowUp,
       onPostCommand: registration.onPostCommand,
+      recordCommandFollowUpFailure: registration.recordCommandFollowUpFailure,
       recordDispatchFailure: registration.recordDispatchFailure,
     });
 

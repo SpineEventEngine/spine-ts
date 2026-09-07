@@ -3970,6 +3970,7 @@ describe("repository signal routing", () => {
   it("starts every sibling transformed command in declaration order when one child rejects", async () => {
     CommandTransformingProcessManager.siblingOutputs = true;
     const observed: string[] = [];
+    const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
     const context = BoundedContext.singleTenant("Command transformation siblings")
       .add(createCommandTransformingProcessManagerRepository())
       .addCommandDispatcher({
@@ -3983,6 +3984,11 @@ describe("repository signal routing", () => {
         },
       })
       .build();
+    boundedContextAccess.installLogger(context, {
+      withMetadata: (facts: Record<string, unknown>) => ({
+        error: (message: string) => errors.push({ message, facts }),
+      }),
+    } as unknown as ILogLayer);
     try {
       await context.commandBus().post(
         SignalEnvelopes.command({
@@ -3997,6 +4003,19 @@ describe("repository signal routing", () => {
       );
       await context.close();
       expect(observed).toEqual(["Siblings follow-up", "Siblings sibling"]);
+      expect(errors).toEqual([
+        {
+          message: "Repository transformed command follow-up failed.",
+          facts: {
+            operation: "repository.command_follow_up",
+            reasonCode: "dispatch_failed",
+            sourceCommandId: "siblings-source",
+            sourceCommandType: TypeUrls.derive(ValidatedTaskCommandSchema),
+            childCommandId: "siblings-source-1",
+            childCommandType: TypeUrls.derive(TransformedTaskCommandSchema),
+          },
+        },
+      ]);
     } finally {
       CommandTransformingProcessManager.reset();
     }

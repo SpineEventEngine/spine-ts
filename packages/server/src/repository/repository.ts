@@ -1264,6 +1264,7 @@ interface RepositoryRuntime {
   readonly postSystemFollowUp: (event: Event) => Promise<void>;
   readonly registerSystemEventSchema: (schema: MessageSchema) => void;
   readonly onPostCommand: (command: Command) => Promise<void>;
+  readonly recordCommandFollowUpFailure: (source: Command, child: Command, error: unknown) => void;
   readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
@@ -1638,7 +1639,16 @@ class AggregateCommandExecution {
       );
       return async () => {
         await dispatch();
-        await Promise.all(commands.map((command) => this.#runtime.onPostCommand(command)));
+        await Promise.all(
+          commands.map(async (command) => {
+            try {
+              await this.#runtime.onPostCommand(command);
+            } catch (error) {
+              this.#runtime.recordCommandFollowUpFailure(this.#command, command, error);
+              throw error;
+            }
+          }),
+        );
       };
     }
     const events = this.#bindProducedEvents(
@@ -2704,7 +2714,9 @@ class ProcessManagerCommandExecution {
       );
     }
     this.#postEvents(events);
-    return commands.length === 0 ? undefined : async () => this.#postCommands(commands);
+    return commands.length === 0
+      ? undefined
+      : async () => this.#postCommands(commands, this.#command);
   }
 
   async #invoke(
@@ -2796,8 +2808,17 @@ class ProcessManagerCommandExecution {
     );
   }
 
-  async #postCommands(commands: readonly Command[]): Promise<void> {
-    await Promise.all(commands.map((command) => this.#runtime.onPostCommand(command)));
+  async #postCommands(commands: readonly Command[], source: Command): Promise<void> {
+    await Promise.all(
+      commands.map(async (command) => {
+        try {
+          await this.#runtime.onPostCommand(command);
+        } catch (error) {
+          this.#runtime.recordCommandFollowUpFailure(source, command, error);
+          throw error;
+        }
+      }),
+    );
   }
 
   #postEvents(events: readonly Event[]): void {
