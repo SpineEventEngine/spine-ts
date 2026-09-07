@@ -323,6 +323,27 @@ describe("CommandBus", () => {
     expect(observed).toEqual(["outer:command-3", "after-rejection"]);
   });
 
+  it("queues an internal follow-up command after active command dispatch", async () => {
+    const observed: string[] = [];
+    const context: { bus?: CommandBus } = {};
+    const dispatcher = createCommandDispatcher([ProjectionStateSchema], async (command) => {
+      observed.push(command.id?.uuid ?? "missing");
+      if (command.id?.uuid === "command-outer") {
+        void commandBusAccess.postInternalFollowUp(
+          context.bus as CommandBus,
+          createProjectionCommand("command-follow-up"),
+        );
+      }
+    });
+    const bus = new CommandBus([dispatcher]);
+    context.bus = bus;
+
+    await bus.post(createProjectionCommand("command-outer"));
+    await commandBusAccess.drain(bus);
+
+    expect(observed).toEqual(["command-outer", "command-follow-up"]);
+  });
+
   it("rejects public and internal command intake after close", async () => {
     const bus = new CommandBus();
 

@@ -35,6 +35,7 @@ export interface EntityClass<Instance extends object = object> {
  */
 export type HandlerKind =
   | "command-assignment"
+  | "command-transformation"
   | "command-reaction"
   | "event-subscription"
   | "state-subscription"
@@ -50,6 +51,29 @@ export type HandlerParameterCount = 1 | 2;
  * Origin declared by a generated receptor's first parameter.
  */
 export type HandlerOrigin = "domestic" | "external";
+
+/**
+ * Determines whether a generated schema represents an Event or Rejection input.
+ *
+ * Command-input `@Command` methods remain command reactions in generated metadata,
+ * but are effective Command receptors rather than Event Bus subscribers.
+ *
+ * @param schema Generated Protobuf-ES message schema.
+ * @returns `true` when the schema is an Event or Rejection input.
+ */
+export function isEventInputSchema(schema: DescriptorMessageSchema): boolean {
+  const fileName = schema.file.name.split(/[\\/]/u).at(-1);
+  return (
+    fileName === "events" ||
+    fileName === "events.proto" ||
+    fileName?.endsWith("_events") === true ||
+    fileName?.endsWith("_events.proto") === true ||
+    fileName === "rejections" ||
+    fileName?.endsWith("_rejections") === true ||
+    fileName?.endsWith("_rejections.proto") === true ||
+    schema.typeName === "spine.core.Event"
+  );
+}
 
 /**
  * Compile-time approximation of entity callable member names.
@@ -182,6 +206,12 @@ export type CommandReactionHandlerMetadata<
   MethodName extends string = string,
 > = BaseHandlerMetadata<"command-reaction", Schema, MethodName>;
 
+/** Command-input `@Command` metadata that produces Commands after commit. */
+export type CommandTransformationHandlerMetadata<
+  Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
+  MethodName extends string = string,
+> = BaseHandlerMetadata<"command-transformation", Schema, MethodName>;
+
 /**
  * Metadata for an event subscription method.
  */
@@ -241,6 +271,7 @@ export type HandlerMetadata<
   MethodName extends string = string,
 > =
   | CommandAssignmentHandlerMetadata<Schema, MethodName>
+  | CommandTransformationHandlerMetadata<Schema, MethodName>
   | CommandReactionHandlerMetadata<Schema, MethodName>
   | EventSubscriptionHandlerMetadata<Schema, MethodName>
   | StateSubscriptionHandlerMetadata<Schema, MethodName>
@@ -267,6 +298,12 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
     schema: Schema,
     methodName: HandlerMethodName<Instance>,
   ): CommandAssignmentHandlerMetadata<Schema, HandlerMethodName<Instance>>;
+
+  /** Registers a command-input `@Command` transformation method. */
+  transform<Schema extends DescriptorMessageSchema>(
+    schema: Schema,
+    methodName: HandlerMethodName<Instance>,
+  ): CommandTransformationHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 
   /**
    * Registers a command reactor method.
@@ -351,6 +388,7 @@ export interface EntityHandlersMetadata<
    * Command assignees in declaration order.
    */
   readonly commandAssignments: readonly CommandAssignmentHandlerMetadata[];
+  readonly commandTransformations: readonly CommandTransformationHandlerMetadata[];
 
   /**
    * Command reactors in declaration order.
@@ -490,7 +528,9 @@ export interface HandlerMetadataRegistryLookup {
    */
   findCommandAssignment(
     commandTypeName: string,
-  ): RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined;
+  ):
+    | RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>
+    | undefined;
 
   /**
    * Finds the unique event applier for a state and event type.
@@ -516,7 +556,7 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   readonly #byMessage = new Map<string, RegisteredHandlerMetadata[]>();
   readonly #commandAssignments = new Map<
     string,
-    RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>
+    RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>
   >();
   readonly #eventApplications = new Map<
     string,
@@ -544,7 +584,7 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     const entries = metadata.handlers.map((handler) => this.#entry(metadata, handler));
     const commandAssignments = new Map<
       string,
-      RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>
+      RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>
     >();
     const eventApplications = new Map<
       string,
@@ -552,8 +592,10 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     >();
 
     for (const entry of entries) {
-      if (entry.handler.kind === "command-assignment") {
-        const commandEntry = entry as RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>;
+      if (entry.handler.kind === "command-assignment" || entry.handler.kind === "command-transformation") {
+        const commandEntry = entry as RegisteredHandlerMetadata<
+          CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+        >;
         this.#validateAssignment(
           commandEntry,
           this.#commandAssignments.get(entry.handler.messageFullTypeName) ??
@@ -659,7 +701,9 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
    */
   findCommandAssignment(
     commandTypeName: string,
-  ): RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined {
+  ):
+    | RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>
+    | undefined {
     return this.#commandAssignments.get(commandTypeName);
   }
 
@@ -690,8 +734,10 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   }
 
   #validateAssignment(
-    entry: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>,
-    duplicate: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined,
+    entry: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>,
+    duplicate:
+      | RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>
+      | undefined,
   ): void {
     if (duplicate !== undefined) {
       throw new HandlerMetadataRegistryError(
@@ -868,6 +914,7 @@ class EntityHandlersOwner {
       entity: describeEntityMetadata(stateSchema),
       handlers,
       commandAssignments: this.#ofKind(handlers, "command-assignment"),
+      commandTransformations: this.#ofKind(handlers, "command-transformation"),
       commandReactions: this.#ofKind(handlers, "command-reaction"),
       eventSubscriptions: this.#ofKind(handlers, "event-subscription"),
       stateSubscriptions: this.#ofKind(handlers, "state-subscription"),
@@ -888,6 +935,10 @@ class EntityHandlersOwner {
         schema: Schema,
         methodName: HandlerMethodName<Instance>,
       ) => this.#handler(entityType, "command-assignment", schema, methodName, built, arities),
+      transform: <Schema extends DescriptorMessageSchema>(
+        schema: Schema,
+        methodName: HandlerMethodName<Instance>,
+      ) => this.#handler(entityType, "command-transformation", schema, methodName, built, arities),
       command: <Schema extends DescriptorMessageSchema>(
         schema: Schema,
         methodName: HandlerMethodName<Instance>,

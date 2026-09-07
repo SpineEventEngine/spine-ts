@@ -79,6 +79,15 @@ message ScheduleProject {
   string status = 2 [(required) = true];
 }
 
+// Requests approval before a project is scheduled.
+message ApproveProject {
+  // Identifies the project to approve.
+  ProjectId project = 1 [(required) = true, (validate) = true];
+
+  // Provides the scheduling status to apply after approval.
+  string status = 2 [(required) = true];
+}
+
 // Stores a project and its current schedule.
 message ProjectState {
   option (entity).kind = AGGREGATE;

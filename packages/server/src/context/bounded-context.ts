@@ -807,7 +807,7 @@ export class BoundedContext {
         eventBusAccess.registerSchemas(this.#systemEventBus, [schema]);
       },
       postSystemFollowUp: (event) => eventBusAccess.postFollowUp(this.#systemEventBus, event),
-      onPostCommand: (command) => commandBusAccess.postInternal(this.#commandBus, command),
+      onPostCommand: (command) => commandBusAccess.postInternalFollowUp(this.#commandBus, command),
       recordDispatchFailure: (event, error) => {
         this.#recordDispatchFailure(event, error);
       },

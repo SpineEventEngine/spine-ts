@@ -1603,6 +1603,39 @@ class AggregateCommandExecution {
         error,
       );
     }
+    if (assignee.handler.kind === "command-transformation") {
+      const commands = this.#bindProducedCommands(this.#support.normalizeProducedSignals(produced));
+      const dispatch = await this.#support.persistAggregateAndDispatch(
+        loaded,
+        route.entityId,
+        loaded.version,
+        [],
+        (event) => this.#runtime.dispatchStored(event),
+        () => {
+          if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
+          EntityStateChangePublisher.command(
+            this.#runtime,
+            this.#repository,
+            this.#command,
+            route.entityId,
+            loaded.oldState,
+            loaded.current === undefined
+              ? undefined
+              : {
+                  archived: loaded.current.lifecycleFlags?.archived ?? false,
+                  deleted: loaded.current.lifecycleFlags?.deleted ?? false,
+                },
+            RepositoryEntities.repositoryState(loaded.entity) as Message,
+            RepositoryEntities.repositoryLifecycle(loaded.entity),
+            RepositorySignals.eventVersionNumber(loaded.version),
+          );
+        },
+      );
+      return async () => {
+        await dispatch();
+        for (const command of commands) void this.#runtime.onPostCommand(command);
+      };
+    }
     const events = this.#bindProducedEvents(
       this.#support.normalizeProducedSignals(produced),
       route.entityId,
@@ -1731,6 +1764,28 @@ class AggregateCommandExecution {
       message: AnyMessages.pack(schema, message as never),
       context: metadata.context,
     });
+  }
+
+  #bindProducedCommands(produced: readonly unknown[]): readonly Command[] {
+    let sequence = 0;
+    return Object.freeze(
+      produced.map((signal) => {
+        sequence += 1;
+        const typeName = EntityInvocation.messageTypeName(signal);
+        const schema = this.#routing.producedCommandSchemas.find(
+          (candidate) => candidate.typeName === typeName,
+        );
+        if (schema === undefined) {
+          throw new Error(`Repository aggregate execution cannot pack command message "${typeName}".`);
+        }
+        const metadata = this.#runtime.signalMetadata.commandFromCommand(this.#command, sequence);
+        return create(CommandSchema, {
+          id: metadata.id,
+          message: AnyMessages.pack(schema, signal as never),
+          context: metadata.context,
+        });
+      }),
+    );
   }
 }
 
@@ -2585,9 +2640,9 @@ class ProcessManagerCommandExecution {
       this.#command,
       route.entityId,
     );
-    let eventSignals: readonly unknown[];
+    let producedSignals: readonly unknown[];
     try {
-      eventSignals = await this.#invoke(loaded.entity, assignee, message);
+      producedSignals = await this.#invoke(loaded.entity, assignee, message);
     } catch (error) {
       if (!RejectionThrowable.is(error)) {
         throw error;
@@ -2601,7 +2656,14 @@ class ProcessManagerCommandExecution {
       );
     }
 
-    const events = this.#bindProducedEvents(eventSignals, route.entityId);
+    const commands =
+      assignee.handler.kind === "command-transformation"
+        ? this.#bindProducedCommands(producedSignals)
+        : Object.freeze([]);
+    const events =
+      assignee.handler.kind === "command-assignment"
+        ? this.#bindProducedEvents(producedSignals, route.entityId)
+        : Object.freeze([]);
     const committed = await this.#support.commit(
       loaded,
       tenantOptions,
@@ -2630,7 +2692,7 @@ class ProcessManagerCommandExecution {
       );
     }
     this.#postEvents(events);
-    return undefined;
+    return commands.length === 0 ? undefined : async () => this.#postCommands(commands);
   }
 
   async #invoke(
@@ -2696,6 +2758,34 @@ class ProcessManagerCommandExecution {
         entityId,
       ),
     });
+  }
+
+  #bindProducedCommands(produced: readonly unknown[]): readonly Command[] {
+    let sequence = 0;
+    return Object.freeze(
+      produced.map((signal) => {
+        sequence += 1;
+        const typeName = EntityInvocation.messageTypeName(signal);
+        const schema = this.#routing.producedCommandSchemas.find(
+          (candidate) => candidate.typeName === typeName,
+        );
+        if (schema === undefined) {
+          throw new Error(
+            `Repository process-manager execution cannot pack command message "${typeName}".`,
+          );
+        }
+        const metadata = this.#runtime.signalMetadata.commandFromCommand(this.#command, sequence);
+        return create(CommandSchema, {
+          id: metadata.id,
+          message: AnyMessages.pack(schema, signal as never),
+          context: metadata.context,
+        });
+      }),
+    );
+  }
+
+  async #postCommands(commands: readonly Command[]): Promise<void> {
+    for (const command of commands) void this.#runtime.onPostCommand(command);
   }
 
   #postEvents(events: readonly Event[]): void {
@@ -4160,6 +4250,7 @@ const RepositoryHandlers = {
   handlerEmittedSchemas(
     handler:
       | CommandAssignmentHandlerMetadata
+      | import("../handler/handler-metadata.js").CommandTransformationHandlerMetadata
       | CommandReactionHandlerMetadata
       | EventReactionHandlerMetadata,
   ): readonly DescriptorMessageSchema[] {
@@ -4234,9 +4325,10 @@ const RepositoryRoutes = {
     const eventReadiness =
       handlers.length === 0 ? undefined : EventRegistrationReadiness.fromEntityHandlers(handlers);
     const commandSchemas = RepositoryHandlers.uniqueSchemas(
-      handlers.flatMap((handler) =>
-        handler.commandAssignments.map((assignment) => assignment.schema),
-      ),
+      handlers.flatMap((handler) => [
+        ...handler.commandAssignments.map((assignment) => assignment.schema),
+        ...handler.commandTransformations.map((transformation) => transformation.schema),
+      ]),
     );
     const eventSchemas = RepositoryHandlers.uniqueSchemas(
       handlers.flatMap((handler) => [
@@ -4302,9 +4394,14 @@ const RepositoryRoutes = {
     ]);
     const producedCommandSchemas = RepositoryHandlers.uniqueSchemas(
       handlers.flatMap((handler) =>
-        handler.commandReactions.flatMap((reaction) =>
-          RepositoryHandlers.handlerEmittedSchemas(reaction),
-        ),
+        [
+          ...handler.commandTransformations.flatMap((transformation) =>
+            RepositoryHandlers.handlerEmittedSchemas(transformation),
+          ),
+          ...handler.commandReactions.flatMap((reaction) =>
+            RepositoryHandlers.handlerEmittedSchemas(reaction),
+          ),
+        ],
       ),
     );
     const commandReactions = RepositoryHandlers.createCommandReactionMap(handlers);

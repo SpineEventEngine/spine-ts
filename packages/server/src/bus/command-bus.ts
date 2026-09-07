@@ -27,6 +27,7 @@ import { CommandDispatcherRegistry } from "./command-dispatcher-registry.js";
 import type { CommandDispatcher } from "./command-dispatcher.js";
 
 const internalCommandPosters = new WeakMap<CommandBus, (command: Command) => Promise<void>>();
+const internalCommandFollowUpPosters = new WeakMap<CommandBus, (command: Command) => Promise<void>>();
 const commandBusCloseStarters = new WeakMap<CommandBus, () => void>();
 const commandBusDrainers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusCloseFinishers = new WeakMap<CommandBus, () => Promise<void>>();
@@ -34,6 +35,7 @@ const commandBusWorkCounters = new WeakMap<CommandBus, () => number>();
 
 interface CommandBusAccess {
   postInternal(commandBus: CommandBus, command: Command): Promise<void>;
+  postInternalFollowUp(commandBus: CommandBus, command: Command): Promise<void>;
   beginClose(commandBus: CommandBus): void;
   drain(commandBus: CommandBus): Promise<void>;
   finishClose(commandBus: CommandBus): Promise<void>;
@@ -64,6 +66,7 @@ export class CommandBus {
   constructor(dispatchers: Iterable<CommandDispatcher> = []) {
     this.#started = this.#runtime.start();
     internalCommandPosters.set(this, (command) => this.#postInternal(command));
+    internalCommandFollowUpPosters.set(this, (command) => this.#postInternalFollowUp(command));
     commandBusCloseStarters.set(this, () => {
       this.#beginClose();
     });
@@ -133,6 +136,17 @@ export class CommandBus {
     }
 
     return this.#enqueueAccepted(accepted);
+  }
+
+  #postInternalFollowUp(command: Command): Promise<void> {
+    const accepted = clone(CommandSchema, command);
+    if (this.#intakeState === "closed") {
+      return Promise.reject(new ServerRuntimeStateError("enqueue", "closed"));
+    }
+    this.#acceptedWorkCount++;
+    return this.#started.then(() =>
+      runtimeAccess.enqueueFollowUp(this.#runtime, () => this.#dispatch(accepted)),
+    );
   }
 
   #enqueueAccepted(command: Command): Promise<void> {
@@ -213,6 +227,14 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
     }
 
     return postInternal(command);
+  },
+
+  postInternalFollowUp(commandBus: CommandBus, command: Command): Promise<void> {
+    const post = internalCommandFollowUpPosters.get(commandBus);
+    if (post === undefined) {
+      throw new TypeError("Internal command follow-up requires a CommandBus instance.");
+    }
+    return post(command);
   },
 
   beginClose(commandBus: CommandBus): void {

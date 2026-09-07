@@ -15,7 +15,11 @@
 import { create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
-import { CommandContextSchema, CommandIdSchema } from "@spine-event-engine/proto";
+import {
+  CommandContextSchema,
+  CommandIdSchema,
+  type CommandContext,
+} from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
   type QueryResponse,
@@ -39,6 +43,7 @@ import { describe, expect, it } from "vitest";
 import { BlackBox } from "@spine-event-engine/testing";
 import {
   CoordinationStateSchema,
+  ApproveProjectSchema,
   CreateProjectSchema,
   OrganizationIdSchema,
   PlanningIdSchema,
@@ -54,6 +59,7 @@ import {
   StaffingIdSchema,
   StaffingStateSchema,
   type CreateProject,
+  type ApproveProject,
   type OrganizationId,
   type PlanningId,
   type PortfolioId,
@@ -100,6 +106,12 @@ class ProjectCoordinator extends ProcessManager<ProjectId, typeof CoordinationSt
   command(event: ProjectCreated): ScheduleProject {
     this.update((draft) => Object.assign(draft, { id: this.id, projectName: event.name }));
     return create(ScheduleProjectSchema, { project: this.id, status: "scheduled" });
+  }
+
+  approve(command: ApproveProject, context: CommandContext): ScheduleProject {
+    this.update((draft) => Object.assign(draft, { id: this.id, projectName: command.status }));
+    expect(context.$typeName).toBe(CommandContextSchema.typeName);
+    return create(ScheduleProjectSchema, { project: command.project, status: command.status });
   }
 }
 class Portfolio extends Projection<PortfolioId, typeof PortfolioStateSchema, number> {
@@ -176,6 +188,14 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
           signalSchema: ProjectCreatedSchema,
           emittedSchemas: [ScheduleProjectSchema],
           parameterCount: 1,
+          origin: "domestic",
+        },
+        {
+          kind: "command-transformation",
+          methodName: "approve",
+          signalSchema: ApproveProjectSchema,
+          emittedSchemas: [ScheduleProjectSchema],
+          parameterCount: 2,
           origin: "domestic",
         },
       ],
@@ -353,7 +373,10 @@ async function awaitProjectWorkflowStates(
   planning: PlanningId,
   staffing: StaffingId,
   portfolio: PortfolioId,
-  options: { readonly portfolioExpected: boolean } = { portfolioExpected: true },
+  options: { readonly portfolioExpected: boolean; readonly projectStatus?: string } = {
+    portfolioExpected: true,
+    projectStatus: "scheduled",
+  },
 ): Promise<void> {
   const deadline = Date.now() + 1_000;
   while (Date.now() < deadline) {
@@ -374,7 +397,7 @@ async function awaitProjectWorkflowStates(
     ]);
     if (
       projectState?.name === "roadmap" &&
-      projectState.status === "scheduled" &&
+      projectState.status === (options.projectStatus ?? "scheduled") &&
       planningState !== undefined &&
       staffingState !== undefined &&
       coordinationState !== undefined &&
@@ -394,6 +417,16 @@ async function createProject(boundedContext: BoundedContext, id: ProjectId): Pro
       context: create(CommandContextSchema),
       schema: CreateProjectSchema,
       message: create(CreateProjectSchema, { project: id, name: "roadmap" }),
+    }),
+  );
+}
+async function approveProject(boundedContext: BoundedContext, id: ProjectId): Promise<void> {
+  await boundedContext.commandBus().post(
+    SignalEnvelopes.command({
+      id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
+      context: create(CommandContextSchema),
+      schema: ApproveProjectSchema,
+      message: create(ApproveProjectSchema, { project: id, status: "approved" }),
     }),
   );
 }
@@ -431,6 +464,31 @@ function expectProjectWorkflowIds(
 }
 
 describe("project workflow Event routing", () => {
+  it("delivers a client and server-context Command through a command-transforming Process Manager", async () => {
+    const { project, planning, staffing, portfolio } = ids();
+    const boundedContext = context(routeTo(portfolio), planning, staffing);
+    try {
+      await createProject(boundedContext, project);
+      await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
+      await approveProject(boundedContext, project);
+      await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio, {
+        portfolioExpected: true,
+        projectStatus: "approved",
+      });
+      await expect(boundedContext.stand().read(ProjectStateSchema, project)).resolves.toMatchObject({
+        id: project,
+        name: "roadmap",
+        status: "approved",
+      });
+      await expect(boundedContext.stand().read(CoordinationStateSchema, project)).resolves.toMatchObject({
+        id: project,
+        projectName: "approved",
+      });
+    } finally {
+      await boundedContext.close();
+    }
+  });
+
   it("updates custom- and producer-ID-routed persisted Entity states", async () => {
     const { project, planning, staffing, portfolio } = ids();
     expectProjectWorkflowIds(project, planning, staffing, portfolio);

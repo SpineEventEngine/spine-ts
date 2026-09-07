@@ -294,6 +294,8 @@ export function materializeDecoratedEntityHandlers<
         switch (handler.kind) {
           case "command-assignment":
             return builder.assign(DecoratorMetadata.schema(handler), methodName);
+          case "command-transformation":
+            return builder.transform(DecoratorMetadata.schema(handler), methodName);
           case "command-reaction":
             return builder.command(DecoratorMetadata.schema(handler), methodName);
           case "event-subscription":

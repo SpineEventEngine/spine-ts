@@ -15,6 +15,8 @@
 import {
   HandlerMetadataRegistry,
   type CommandAssignmentHandlerMetadata,
+  type CommandReactionHandlerMetadata,
+  type CommandTransformationHandlerMetadata,
   type EntityClass,
   type EntityHandlersMetadata,
   type HandlerMetadataRegistryLookup,
@@ -27,7 +29,7 @@ const commandRegistrationReadinessToken = Symbol("commandRegistrationReadinessTo
 const authenticCommandRegistrationReadiness = new WeakSet<object>();
 
 /**
- * Command assignment entry exposed by command registration readiness lookups.
+ * Effective command receptor exposed by command registration readiness lookups.
  */
 export interface CommandRegistrationAssigneeMetadata {
   // prettier-ignore
@@ -38,7 +40,7 @@ export interface CommandRegistrationAssigneeMetadata {
   readonly commandFullTypeName: string;
 
   /**
-   * Entity handler metadata object that declared the command assignment.
+   * Entity handler metadata object that declared the command receptor.
    */
   readonly entityHandlers: EntityHandlersMetadata;
 
@@ -53,14 +55,16 @@ export interface CommandRegistrationAssigneeMetadata {
   readonly entity: EntityMetadata;
 
   /**
-   * Command assignment handler metadata declared by the entity.
+   * Command assignment or command-transforming handler metadata declared by the entity.
    */
-  readonly handler: CommandAssignmentHandlerMetadata;
+  readonly handler: CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata;
 
   /**
    * Original registered handler entry from the handler metadata registry.
    */
-  readonly registeredHandler: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>;
+  readonly registeredHandler: RegisteredHandlerMetadata<
+    CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+  >;
 }
 
 /**
@@ -125,7 +129,12 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
     const commandFullTypeNames = [
       ...new Set(
         validatedRegistry
-          .findHandlersByKind("command-assignment")
+          .listHandlers()
+          .filter(
+            (entry) =>
+              entry.handler.kind === "command-assignment" ||
+              entry.handler.kind === "command-transformation",
+          )
           .map((entry) => entry.handler.messageFullTypeName),
       ),
     ].sort((left, right) => ReadinessMetadata.compareTypeNames(left, right));
@@ -205,7 +214,9 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
 
   static #createAssignee(
     commandFullTypeName: string,
-    registeredHandler: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>,
+    registeredHandler: RegisteredHandlerMetadata<
+      CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+    >,
   ): CommandRegistrationAssigneeMetadata {
     const fields = ReadinessMetadata.create(registeredHandler);
 

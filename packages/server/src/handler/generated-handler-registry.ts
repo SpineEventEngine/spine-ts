@@ -130,6 +130,7 @@ export class HandlerRegistryIngestionError extends Error {
  */
 export type GeneratedHandlerKind =
   | "command-assignment"
+  | "command-transformation"
   | "command-reaction"
   | "event-subscription"
   | "state-subscription"
@@ -323,6 +324,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
           handler.signalSchema,
           handler.methodName as HandlerMethodName<Instance>,
         );
+      case "command-transformation":
+        return builder.transform(
+          handler.signalSchema,
+          handler.methodName as HandlerMethodName<Instance>,
+        );
       case "command-reaction":
         return builder.command(
           handler.signalSchema,
@@ -417,7 +423,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       return;
     }
 
-    if (handler.kind === "command-assignment" || handler.kind === "command-reaction") {
+    if (
+      handler.kind === "command-assignment" ||
+      handler.kind === "command-transformation" ||
+      handler.kind === "command-reaction"
+    ) {
       GeneratedRegistry.validateEmits(handler);
     }
   },
@@ -518,6 +528,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   isKind(kind: string): kind is GeneratedHandlerKind {
     return (
       kind === "command-assignment" ||
+      kind === "command-transformation" ||
       kind === "command-reaction" ||
       kind === "event-subscription" ||
       kind === "state-subscription" ||
