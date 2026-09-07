@@ -100,3 +100,36 @@ behavior tests passed 435/435, but the preflight is not accepted yet:
 Proto generation changed six tracked random generation IDs under the orders,
 projects, and todo examples. These are setup artifacts, not accepted task
 changes, and must be restored before the corrected preflight.
+
+## Corrected preflight
+
+After correction, the canonical generated-state task preflight passed every
+static, documentation, generated-output, and release-readiness gate. The
+expanded focused run passed 574 tests with zero failures. Source-scoped evidence
+covered the new transformation helpers and branches; the complete release gate
+remains responsible for the repository-wide 90% threshold because shared
+`repository.ts` and bounded-context files contain substantial unrelated runtime
+code.
+
+## Specialist review wave assignments
+
+All reviews are read-only over
+`origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede..bd0e66549b285207bd187193eac381b122809ed4`.
+Reviewers must not edit files or spawn subagents. Actual runtime metadata will be
+recorded if exposed; otherwise explicit dispatch fields and immutable role
+profiles are the acceptance evidence.
+
+- Correctness/compatibility verification function: command registration,
+  execution, routing, JVM parity, registry v3/v4 compatibility, and behavior
+  tests; model explicitly `gpt-5.6-terra`, reasoning explicitly `high`.
+- Existing `style_maintainability_reviewer`: changed runtime, generator, and
+  tests; immutable configured `gpt-5.6-terra`, reasoning `high`.
+- Existing `performance_reliability_reviewer`: queueing, transaction boundary,
+  failure observation, drain, retry, and bounded-resource behavior; immutable
+  configured `gpt-5.6-terra`, reasoning `high`.
+- Existing `typescript_api_docs_reviewer`: public decorator/metadata contracts,
+  serialized registry version, declarations, and compatibility; immutable
+  configured `gpt-5.6-terra`, reasoning `high`.
+- Existing `documentation_reviewer`: reader-facing REFERENCE and architecture
+  claims, especially best-effort post-commit semantics; immutable configured
+  `gpt-5.6-luna`, reasoning `medium`.
