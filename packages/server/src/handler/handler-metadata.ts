@@ -53,29 +53,6 @@ export type HandlerParameterCount = 1 | 2;
 export type HandlerOrigin = "domestic" | "external";
 
 /**
- * Determines whether a generated schema represents an Event or Rejection input.
- *
- * Command-input `@Command` methods remain command reactions in generated metadata,
- * but are effective Command receptors rather than Event Bus subscribers.
- *
- * @param schema Generated Protobuf-ES message schema.
- * @returns `true` when the schema is an Event or Rejection input.
- */
-export function isEventInputSchema(schema: DescriptorMessageSchema): boolean {
-  const fileName = schema.file.name.split(/[\\/]/u).at(-1);
-  return (
-    fileName === "events" ||
-    fileName === "events.proto" ||
-    fileName?.endsWith("_events") === true ||
-    fileName?.endsWith("_events.proto") === true ||
-    fileName === "rejections" ||
-    fileName?.endsWith("_rejections") === true ||
-    fileName?.endsWith("_rejections.proto") === true ||
-    schema.typeName === "spine.core.Event"
-  );
-}
-
-/**
  * Compile-time approximation of entity callable member names.
  *
  * TypeScript cannot distinguish normal class prototype methods from accessors

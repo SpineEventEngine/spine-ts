@@ -453,6 +453,16 @@ describe("handler metadata registry", () => {
     expect(registry.findByMessage("spine.core.Event")).toHaveLength(4);
   });
 
+  it("keeps event-input command methods on the event side instead of command receptor lookup", () => {
+    const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.command(EventSchema, "commandFromCommand"),
+    ]);
+    const registry = new HandlerMetadataRegistry([handlers]);
+
+    expect(registry.findCommandReceptor("spine.core.Event")).toBeUndefined();
+    expect(registry.findHandlersByKind("command-reaction")).toHaveLength(1);
+  });
+
   it("keeps registries caller-owned and does not instantiate or invoke handlers", () => {
     PassiveProjection.constructorCount = 0;
     PassiveProjection.invocationCount = 0;

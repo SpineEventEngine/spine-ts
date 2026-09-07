@@ -737,6 +737,18 @@ describe("generated handler registry ingestion", () => {
         }),
       ).toThrow(/must declare at least one emitted schema/);
     }
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        version: 4,
+        entities: [
+          {
+            entityType: GeneratedProjection,
+            stateSchema: ProjectionStateSchema,
+            handlers: [record("command-transformation", "commandFromCommand", CommandSchema, [])],
+          },
+        ],
+      }),
+    ).toThrow(/must declare at least one emitted schema/);
   });
 
   it("rejects emitted schemas on generated event subscriptions", () => {

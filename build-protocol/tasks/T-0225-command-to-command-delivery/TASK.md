@@ -18,8 +18,8 @@ reactions on the Event Bus.
 2. A client-posted Command reaches that method instead of returning
    `UNSUPPORTED_COMMAND`.
 3. A Command posted by server context reaches the same method.
-4. The method may return one Command, several Commands, or no Commands using the
-   existing supported return shapes.
+4. The method returns one or more Commands using the existing supported return
+   shapes; zero output remains invalid.
 5. Aggregate and Process Manager command transformation both work, including an
    optional `CommandContext` parameter.
 6. The Entity state commit succeeds before transformed Commands are posted.
