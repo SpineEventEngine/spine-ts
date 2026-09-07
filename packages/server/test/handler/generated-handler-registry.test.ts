@@ -146,6 +146,40 @@ describe("generated handler registry ingestion", () => {
     );
   });
 
+  it("accepts command transformations only from registry version 4 while retaining version 3", () => {
+    const transformation = record(
+      "command-transformation",
+      "commandFromCommand",
+      CommandSchema,
+      [CommandSchema],
+    );
+
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        version: 3,
+        entities: [
+          {
+            entityType: GeneratedProjection,
+            stateSchema: ProjectionStateSchema,
+            handlers: [transformation],
+          },
+        ],
+      }),
+    ).toThrow(/version 4/);
+    expect(
+      new HandlerRegistryIngestor().ingest({
+        version: 4,
+        entities: [
+          {
+            entityType: GeneratedProjection,
+            stateSchema: ProjectionStateSchema,
+            handlers: [transformation],
+          },
+        ],
+      })[0]?.commandTransformations,
+    ).toHaveLength(1);
+  });
+
   it("rejects an Event subscription record that declares an Entity-state schema", () => {
     expect(() =>
       new HandlerRegistryIngestor().ingest({
@@ -588,10 +622,10 @@ describe("generated handler registry ingestion", () => {
     ).toThrow(HandlerRegistryIngestionError);
     expect(() =>
       new HandlerRegistryIngestor().ingest({
-        version: 4,
+        version: 5,
         entities: [],
       }),
-    ).toThrow(/version 4 is not supported/);
+    ).toThrow(/version 5 is not supported/);
   });
 
   it("rejects event-application records", () => {

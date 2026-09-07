@@ -102,7 +102,7 @@ describe("Wave 13 external receptor origin", () => {
     const generated = new GeneratedRegistryWriter().render(result, {
       outputFile: "/tmp/wave13/generated/handler/generated-handler-registry.ts",
     });
-    expect(generated).toContain("version: 3");
+    expect(generated).toContain("version: 4");
     expect(generated).toContain('origin: "external"');
     expect(generated).toContain('origin: "domestic"');
     void EventIdSchema;
@@ -234,8 +234,8 @@ const publicOriginContract = `
   type Assert<Value extends true> = Value;
   type IsRequired<Value, Key extends keyof Value> =
     {} extends Pick<Value, Key> ? false : true;
-  type RegistryVersionIsExactlyThree = Assert<
-    Equal<GeneratedHandlerRegistry["version"], 3>
+  type RegistryVersionIsThreeOrFour = Assert<
+    Equal<GeneratedHandlerRegistry["version"], 3 | 4>
   >;
   type GeneratedOriginIsExact = Assert<
     Equal<GeneratedHandlerRecordInput["origin"], "domestic" | "external">
@@ -268,7 +268,7 @@ const publicOriginContract = `
   void registryVersion;
   void generatedOrigin;
   void canonicalOrigin;
-  void (undefined as unknown as RegistryVersionIsExactlyThree);
+  void (undefined as unknown as RegistryVersionIsThreeOrFour);
   void (undefined as unknown as GeneratedOriginIsExact);
   void (undefined as unknown as CanonicalOriginIsExact);
   void (undefined as unknown as GeneratedOriginIsRequired);

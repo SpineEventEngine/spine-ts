@@ -201,6 +201,10 @@ handler registry for classes registered with `add(EntityClass)`;
 explicit `Repository` registration. A built context contains `CommandBus`,
 `EventBus`, `Stand`, repositories, and its storage lifecycle.
 
+Generated registry version 4 records command transformations explicitly. The
+ingestor continues to accept version 3 registries that use its older handler
+kinds, but rejects a command-transformation record under version 3.
+
 ### Stand subscription registry
 
 Each built context also has one `StandSubscriptionRegistry`. By default the

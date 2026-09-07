@@ -54,7 +54,7 @@ describe("generated registry writer", () => {
         'import { TaskSchema } from "../spine/examples/todo/tasks_pb.js";',
         "",
         "export const generatedHandlerRegistry: GeneratedHandlerRegistry = {",
-        "  version: 3,",
+        "  version: 4,",
         "  entities: [",
         "    {",
         "      entityType: TaskAggregate,",
@@ -931,7 +931,7 @@ function createCompileFixture(): string {
     join(repoRoot, "node_modules/@spine-event-engine/server/spi/handler-registry.d.ts"),
     [
       "export interface GeneratedHandlerRegistry {",
-      "  readonly version: 3;",
+      "  readonly version: 3 | 4;",
       "  readonly entities: readonly {",
       "    readonly entityType: new (...args: never[]) => object;",
       "    readonly stateSchema: object;",

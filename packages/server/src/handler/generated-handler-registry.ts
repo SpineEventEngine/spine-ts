@@ -36,7 +36,7 @@ export interface GeneratedHandlerRegistry {
   /**
    * Generated registry contract version.
    */
-  readonly version: 3;
+  readonly version: 3 | 4;
 
   /**
    * Entity handler groups declared by the generated module.
@@ -60,7 +60,9 @@ export class HandlerRegistryIngestor {
     GeneratedRegistry.assert(registry);
     GeneratedRegistry.validateVersion(registry);
 
-    return Object.freeze(registry.entities.map((entity) => GeneratedRegistry.materialize(entity)));
+    return Object.freeze(
+      registry.entities.map((entity) => GeneratedRegistry.materialize(entity, registry.version)),
+    );
   }
 
   /**
@@ -249,22 +251,22 @@ export interface GeneratedHandlerRecord<
   readonly methodName: HandlerMethodName<Instance>;
 }
 
-const registryVersion = 3;
+const registryVersion = 4;
 
 interface GeneratedRegistryOperations {
   assert(registry: unknown): asserts registry is GeneratedHandlerRegistry;
   validateVersion(registry: GeneratedHandlerRegistry): void;
-  materialize(entity: GeneratedEntityHandlerGroup): EntityHandlersMetadata;
+  materialize(entity: GeneratedEntityHandlerGroup, version: number): EntityHandlersMetadata;
   build<Instance extends object>(
     builder: HandlerRegistrationBuilder<Instance>,
     handler: GeneratedHandlerRecordInput,
   ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>;
-  validateHandler(handler: GeneratedHandlerRecordInput): void;
+  validateHandler(handler: GeneratedHandlerRecordInput, version: number): void;
   validateSchema(schema: DescriptorMessageSchema, label: string): void;
   validateEmits(handler: GeneratedHandlerRecordInput): void;
   validateSubscription(handler: GeneratedHandlerRecordInput): void;
   validateWhere(handler: GeneratedHandlerRecordInput): void;
-  isEventInputSchema(schema: DescriptorMessageSchema): boolean;
+  isLegacyEventSchema(schema: DescriptorMessageSchema): boolean;
   isKind(kind: string): kind is GeneratedHandlerKind;
 }
 
@@ -281,7 +283,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   validateVersion(registry: GeneratedHandlerRegistry): void {
     const version: number = registry.version;
 
-    if (version === registryVersion) {
+    if (version === 3 || version === registryVersion) {
       return;
     }
 
@@ -291,10 +293,10 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     );
   },
 
-  materialize(entity: GeneratedEntityHandlerGroup): EntityHandlersMetadata {
+  materialize(entity: GeneratedEntityHandlerGroup, version: number): EntityHandlersMetadata {
     GeneratedRegistry.validateSchema(entity.stateSchema, "entity state schema");
     entity.handlers.forEach((handler) => {
-      GeneratedRegistry.validateHandler(handler);
+      GeneratedRegistry.validateHandler(handler, version);
     });
 
     return HandlerMetadataValues.defineArity(
@@ -357,7 +359,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
-  validateHandler(handler: GeneratedHandlerRecordInput): void {
+  validateHandler(handler: GeneratedHandlerRecordInput, version: number): void {
     if (!GeneratedRegistry.isKind(handler.kind)) {
       throw new HandlerRegistryIngestionError(
         "UNSUPPORTED_HANDLER_KIND",
@@ -374,13 +376,18 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
     if (
       handler.origin === "external" &&
-      (handler.kind === "command-assignment" ||
-        (handler.kind === "command-reaction" &&
-          !GeneratedRegistry.isEventInputSchema(handler.signalSchema)))
+      (handler.kind === "command-assignment" || handler.kind === "command-transformation")
     ) {
       throw new HandlerRegistryIngestionError(
         "EXTERNAL_COMMAND_RECEIVER",
         `Generated command receiver "${handler.methodName}" cannot accept external commands.`,
+      );
+    }
+
+    if (version === 3 && handler.kind === "command-transformation") {
+      throw new HandlerRegistryIngestionError(
+        "UNSUPPORTED_HANDLER_KIND",
+        `Generated command transformation "${handler.methodName}" requires registry version 4.`,
       );
     }
 
@@ -499,7 +506,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       typeof filter.eventField !== "string" ||
       filter.eventField.trim().length === 0 ||
       typeof filter.equals !== "string" ||
-      !GeneratedRegistry.isEventInputSchema(handler.signalSchema) ||
+      !GeneratedRegistry.isLegacyEventSchema(handler.signalSchema) ||
       (handler.kind !== "event-subscription" &&
         handler.kind !== "event-reaction" &&
         handler.kind !== "command-reaction")
@@ -511,7 +518,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
-  isEventInputSchema(schema: DescriptorMessageSchema): boolean {
+  isLegacyEventSchema(schema: DescriptorMessageSchema): boolean {
     const fileName = schema.file.name.split(/[\\/]/u).at(-1);
     return (
       fileName === "events" ||
