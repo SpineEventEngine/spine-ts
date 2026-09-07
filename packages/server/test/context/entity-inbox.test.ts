@@ -825,6 +825,7 @@ describe("LocalEntityInbox", () => {
         await replayReleased;
         return () => {
           followUps++;
+          return Promise.resolve();
         };
       },
     });
