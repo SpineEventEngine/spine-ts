@@ -93,6 +93,12 @@ const AggregateStateSchema = messageDesc(
 ) as GenMessage<AggregateState>;
 
 describe("command registration readiness", () => {
+  it("rejects non-readiness values as inauthentic", () => {
+    expect(CommandRegistrationReadiness.isAuthentic(null)).toBe(false);
+    expect(CommandRegistrationReadiness.isAuthentic("readiness")).toBe(false);
+    expect(CommandRegistrationReadiness.isAuthentic({})).toBe(false);
+  });
+
   it("treats an empty handler registry as valid command readiness", () => {
     const readiness = CommandRegistrationReadiness.fromRegistry(new HandlerMetadataRegistry());
 

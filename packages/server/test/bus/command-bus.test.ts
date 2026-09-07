@@ -358,6 +358,12 @@ describe("CommandBus", () => {
     await expect(
       commandBusAccess.postInternal(bus, createProjectionCommand("command-internal-after-close")),
     ).rejects.toThrow(/closed/);
+    await expect(
+      commandBusAccess.postInternalFollowUp(
+        bus,
+        createProjectionCommand("command-follow-up-after-close"),
+      ),
+    ).rejects.toThrow(/closed/);
   });
 
   it("rejects internal command-bus access for non-command-bus values", () => {
@@ -365,6 +371,9 @@ describe("CommandBus", () => {
 
     expect(() =>
       commandBusAccess.postInternal(bus, createProjectionCommand("command-internal")),
+    ).toThrow(/CommandBus instance/);
+    expect(() =>
+      commandBusAccess.postInternalFollowUp(bus, createProjectionCommand("command-follow-up")),
     ).toThrow(/CommandBus instance/);
     expect(() => {
       commandBusAccess.beginClose(bus);
