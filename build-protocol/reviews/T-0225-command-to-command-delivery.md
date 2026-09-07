@@ -200,3 +200,26 @@ profiles remain unchanged: correctness function, style/maintainability, and
 performance/reliability use `gpt-5.6-terra`/high; TypeScript/API docs uses
 `gpt-5.6-terra`/high; reader documentation uses `gpt-5.6-luna`/medium. All are
 read-only and may not spawn subagents.
+
+## Review convergence
+
+- Correctness/compatibility: clean after empty runtime output was rejected
+  before Aggregate and Process Manager persistence; 304 focused tests passed.
+- Style/maintainability: clean after domain Command fixtures, discriminated
+  registry types, and the package-root metadata export were corrected.
+- TypeScript/API documentation: clean after SPI typing, generated writer,
+  package exports, decorator TSDoc, registry docs, and API output converged; 322
+  focused tests passed.
+- Reader documentation: clean after one-or-more output, diagnosed containment,
+  close drain, registry compatibility, and the post-commit best-effort crash
+  window were documented.
+- Performance/reliability: the first re-review found that a later lint edit had
+  removed `async` from a Command Bus test callback, preventing that file from
+  parsing. Commit `54def610e` restored the callback, reproduced the zero-test RED,
+  and passed all 16 Command Bus tests plus 595 tests in the expanded focused
+  matrix. The final bounded reliability re-review was clean.
+
+All canonical review concerns now have a clean or justified N/A disposition.
+No reviewer edited files or spawned subagents. Runtime self-introspection was
+unavailable for every review; explicit dispatch fields, immutable profiles, and
+the absence of visible fallback provide the accepted metadata evidence.
