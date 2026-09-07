@@ -73,6 +73,11 @@ import {
 } from "../generated/spine/server/testing/project_workflow_pb.js";
 
 class Project extends Aggregate<ProjectId, typeof ProjectStateSchema, bigint> {
+  static scheduledStatuses: string[] = [];
+
+  static reset(): void {
+    this.scheduledStatuses = [];
+  }
   create(command: CreateProject): ProjectCreated {
     const project = command.project;
     if (project === undefined) throw new Error("CreateProject requires a project.");
@@ -89,6 +94,7 @@ class Project extends Aggregate<ProjectId, typeof ProjectStateSchema, bigint> {
   }
 
   schedule(command: ScheduleProject): ProjectScheduled {
+    Project.scheduledStatuses.push(command.status);
     this.update((draft) => Object.assign(draft, { status: command.status }));
     return create(ProjectScheduledSchema, { project: this.id, status: command.status });
   }
@@ -135,7 +141,7 @@ class ProjectProjection extends Projection<ProjectId, typeof ProjectProjectionSt
 }
 
 const generatedHandlerRegistry: GeneratedHandlerRegistry = {
-  version: 3,
+  version: 4,
   entities: [
     {
       entityType: Project,
@@ -561,6 +567,17 @@ describe("project workflow Event routing", () => {
     }
   });
 
+  it("drains a command transformation follow-up when the context closes immediately", async () => {
+    const { project, planning, staffing, portfolio } = ids();
+    const boundedContext = context(routeTo(portfolio), planning, staffing);
+    Project.reset();
+    await createProject(boundedContext, project);
+    await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
+    await approveProject(boundedContext, project);
+    await boundedContext.close();
+    expect(Project.scheduledStatuses).toContain("approved");
+  });
+
   it("updates custom- and producer-ID-routed persisted Entity states", async () => {
     const { project, planning, staffing, portfolio } = ids();
     expectProjectWorkflowIds(project, planning, staffing, portfolio);
@@ -663,6 +680,11 @@ describe("project workflow Event routing", () => {
         create(CreateProjectSchema, { project, name: "roadmap" }),
       );
       expect(posted.kind).toBe("ok");
+      const approved = await scope.post(
+        ApproveProjectSchema,
+        create(ApproveProjectSchema, { project, status: "approved" }),
+      );
+      expect(approved.kind).toBe("ok");
       const results = await blackBox.eventually(
         () =>
           Promise.all([
@@ -678,14 +700,14 @@ describe("project workflow Event routing", () => {
           return (
             candidate.every((response) => response.message.length === 1) &&
             state !== undefined &&
-            AnyMessages.unpack(state, ProjectStateSchema)?.status === "scheduled"
+            AnyMessages.unpack(state, ProjectStateSchema)?.status === "approved"
           );
         },
       );
       expect(queryState(results[0], ProjectStateSchema)).toMatchObject({
         id: project,
         name: "roadmap",
-        status: "scheduled",
+        status: "approved",
       });
       expect(queryState(results[1], PlanningStateSchema)).toMatchObject({
         id: planning,
@@ -697,7 +719,7 @@ describe("project workflow Event routing", () => {
       });
       expect(queryState(results[3], CoordinationStateSchema)).toMatchObject({
         id: project,
-        projectName: "roadmap",
+        projectName: "approved",
       });
       expect(queryState(results[4], PortfolioStateSchema)).toMatchObject({
         id: portfolio,
