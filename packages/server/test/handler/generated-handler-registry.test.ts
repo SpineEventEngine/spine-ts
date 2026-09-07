@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
@@ -73,7 +73,7 @@ class GeneratedProjection extends Projection<string, GenMessage<ProjectionState>
   }
 
   commandFromCommand(command: TransformTaskCommand): TransformedTaskCommand {
-    return command as unknown as TransformedTaskCommand;
+    return createTransformedTaskCommand(command);
   }
 
   subscribeCreated(event: Message<"spine.core.Event">): void {
@@ -93,7 +93,7 @@ class OtherGeneratedProjection {
 
 class GeneratedAggregate extends Aggregate<string, GenMessage<AggregateState>, number> {
   commandFromCommand(command: TransformTaskCommand): TransformedTaskCommand {
-    return command as unknown as TransformedTaskCommand;
+    return createTransformedTaskCommand(command);
   }
 }
 
@@ -152,6 +152,10 @@ const TransformedTaskCommandSchema = messageDesc(
   fileTransformedTaskCommandFixture,
   2,
 ) as GenMessage<TransformedTaskCommand>;
+
+function createTransformedTaskCommand(command: TransformTaskCommand): TransformedTaskCommand {
+  return create(TransformedTaskCommandSchema, { id: command.id, name: command.name });
+}
 
 describe("generated handler registry ingestion", () => {
   it("ingests version-2 state subscriptions separately from Event subscriptions", () => {
