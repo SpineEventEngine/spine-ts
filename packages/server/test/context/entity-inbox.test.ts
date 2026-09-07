@@ -790,7 +790,7 @@ describe("LocalEntityInbox", () => {
     ).resolves.toEqual([]);
   });
 
-  it("waits for a concurrent duplicate while the original command replay is in flight", async () => {
+  it("waits for a concurrent duplicate without replaying its command follow-up", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -799,6 +799,7 @@ describe("LocalEntityInbox", () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const shard = ShardIndex.single();
     const seen: InboxMessage[] = [];
+    let followUps = 0;
     let startReplay!: () => void;
     let releaseReplay!: () => void;
     const replayStarted = new Promise<void>((resolve) => {
@@ -822,6 +823,9 @@ describe("LocalEntityInbox", () => {
         seen.push(message);
         startReplay();
         await replayReleased;
+        return async () => {
+          followUps++;
+        };
       },
     });
 
@@ -836,6 +840,7 @@ describe("LocalEntityInbox", () => {
 
     expect(duplicateMessage.id).toEqual(firstMessage.id);
     expect(seen).toHaveLength(1);
+    expect(followUps).toBe(1);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
