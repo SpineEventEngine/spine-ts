@@ -36,6 +36,7 @@ import {
   Repository,
   type CommandAssignmentHandlerMetadata,
   type CommandReactionHandlerMetadata,
+  type EntityHandlersMetadata,
   type EventReactionHandlerMetadata,
 } from "../../src/index.js";
 import type {
@@ -153,6 +154,22 @@ const TransformedTaskCommandSchema = messageDesc(
   2,
 ) as GenMessage<TransformedTaskCommand>;
 
+function assertGeneratedProjectionHandlers(
+  handlers: readonly EntityHandlersMetadata[],
+): asserts handlers is readonly EntityHandlersMetadata<
+  GeneratedProjection,
+  typeof ProjectionStateSchema
+>[] {
+  const [metadata] = handlers;
+  if (
+    handlers.length !== 1 ||
+    metadata?.entityType !== GeneratedProjection ||
+    metadata.entity.fullTypeName !== ProjectionStateSchema.typeName
+  ) {
+    throw new Error("Expected generated Projection handler metadata.");
+  }
+}
+
 function createTransformedTaskCommand(command: ValidatedTaskCommand): TransformedTaskCommand {
   return create(TransformedTaskCommandSchema, { id: command.id, name: command.name });
 }
@@ -252,6 +269,7 @@ describe("generated handler registry ingestion", () => {
         },
       ],
     });
+    assertGeneratedProjectionHandlers(handlers);
 
     expect(
       () =>
