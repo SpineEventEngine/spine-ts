@@ -72,11 +72,16 @@ Generated registry ingestion preserves each handler record's public arity in
 canonical metadata. Existing explicit/schema-bearing handler registration
 continues to default to one-argument invocation. Repository execution calls
 generated one-argument handlers as `handler(signal)` and generated
-two-argument command assignees/event subscribers as `handler(signal, context)`,
-where `context` is the generated `CommandContext` or `EventContext` from the
-incoming envelope. If the envelope omits context, the framework passes an empty
-generated context message of the proper schema. `@Apply` has no two-argument
-runtime support.
+two-argument command assignees/command transformations/event subscribers as
+`handler(signal, context)`, where transformations receive `CommandContext` and
+event handlers receive `EventContext` from the incoming envelope. If the
+envelope omits context, the framework passes an empty generated context message
+of the proper schema. `@Apply` has no two-argument runtime support.
+
+Command-input transformations are supported only by Aggregate and Process
+Manager repositories. Projection repositories reject transformation metadata
+during repository construction; registry and handler-registration types remain
+generic and do not provide compile-time rejection.
 
 Generated registry modules are build artifacts under ignored `generated/`
 directories. T-0015c implements the build-time analyzer that extracts

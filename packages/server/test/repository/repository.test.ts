@@ -74,7 +74,7 @@ type ProcessManagerState = Message<"ProcessManagerState"> & {
   queue: string;
 };
 
-type TransformTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
+type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
   id: string;
   name: string;
 };
@@ -108,7 +108,7 @@ const AggregateStateSchema = messageDesc(
 ) as GenMessage<AggregateState>;
 const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
 
-const fileTransformCommandFixture = fileDesc(
+const fileValidatedTaskCommandFixture = fileDesc(
   "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
     "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
     "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
@@ -116,10 +116,10 @@ const fileTransformCommandFixture = fileDesc(
     "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
   [file_spine_options],
 );
-const TransformTaskCommandSchema = messageDesc(
-  fileTransformCommandFixture,
+const ValidatedTaskCommandSchema = messageDesc(
+  fileValidatedTaskCommandFixture,
   1,
-) as GenMessage<TransformTaskCommand>;
+) as GenMessage<ValidatedTaskCommand>;
 
 const fileEntityVisibilityFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
@@ -166,7 +166,7 @@ class CommandTransformingProjection extends Projection<
   typeof ProjectionStateSchema,
   number
 > {
-  transformTask(command: TransformTaskCommand): TransformTaskCommand {
+  transformTask(command: ValidatedTaskCommand): ValidatedTaskCommand {
     return command;
   }
 }
@@ -191,7 +191,7 @@ describe("repository identity", () => {
     const handlers = EntityHandlers.define(
       CommandTransformingProjection,
       ProjectionStateSchema,
-      (builder) => [builder.transform(TransformTaskCommandSchema, "transformTask")],
+      (builder) => [builder.transform(ValidatedTaskCommandSchema, "transformTask")],
     );
 
     expect(

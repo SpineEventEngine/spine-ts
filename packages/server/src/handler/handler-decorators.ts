@@ -116,8 +116,10 @@ export function Assign(
  *
  * Bare `@Command` accepts a generated Command, Event, or rejection input.
  * A Command input is the unique command receptor for its type and transforms it
- * into one or more Commands. Event and rejection inputs are Event Bus reactions
- * that may return Commands. Rejections are thrown, not returned.
+ * into one or more Commands. Command-input transformations are supported by
+ * Aggregate and Process Manager repositories; Projection repositories reject
+ * them during repository construction. Event and rejection inputs are Event Bus
+ * reactions that may return Commands. Rejections are thrown, not returned.
  *
  * @typeParam This - Entity instance that owns the method.
  * @typeParam Parameters - Parameters accepted by the method.

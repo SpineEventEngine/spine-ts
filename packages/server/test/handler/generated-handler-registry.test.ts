@@ -57,7 +57,7 @@ type AggregateState = Message<"AggregateState"> & {
   archived: boolean;
 };
 
-type TransformTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
+type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
   id: string;
   name: string;
 };
@@ -72,7 +72,7 @@ class GeneratedProjection extends Projection<string, GenMessage<ProjectionState>
     void command;
   }
 
-  commandFromCommand(command: TransformTaskCommand): TransformedTaskCommand {
+  commandFromCommand(command: ValidatedTaskCommand): TransformedTaskCommand {
     return createTransformedTaskCommand(command);
   }
 
@@ -92,7 +92,7 @@ class OtherGeneratedProjection {
 }
 
 class GeneratedAggregate extends Aggregate<string, GenMessage<AggregateState>, number> {
-  commandFromCommand(command: TransformTaskCommand): TransformedTaskCommand {
+  commandFromCommand(command: ValidatedTaskCommand): TransformedTaskCommand {
     return createTransformedTaskCommand(command);
   }
 }
@@ -125,7 +125,7 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
-const fileTransformCommandFixture = fileDesc(
+const fileValidatedTaskCommandFixture = fileDesc(
   "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
     "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
     "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
@@ -133,12 +133,12 @@ const fileTransformCommandFixture = fileDesc(
     "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
   [file_spine_options],
 );
-const TransformTaskCommandSchema = messageDesc(
-  fileTransformCommandFixture,
+const ValidatedTaskCommandSchema = messageDesc(
+  fileValidatedTaskCommandFixture,
   1,
-) as GenMessage<TransformTaskCommand>;
+) as GenMessage<ValidatedTaskCommand>;
 const fileTransformedTaskCommandFixture = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, fileTransformCommandFixture.proto);
+  const descriptor = clone(FileDescriptorProtoSchema, fileValidatedTaskCommandFixture.proto);
   const input = descriptor.messageType.find((message) => message.name === "ValidatedTaskCommand");
   if (input === undefined) throw new Error("Generated transformation input fixture is missing.");
   const output = clone(DescriptorProtoSchema, input);
@@ -153,7 +153,7 @@ const TransformedTaskCommandSchema = messageDesc(
   2,
 ) as GenMessage<TransformedTaskCommand>;
 
-function createTransformedTaskCommand(command: TransformTaskCommand): TransformedTaskCommand {
+function createTransformedTaskCommand(command: ValidatedTaskCommand): TransformedTaskCommand {
   return create(TransformedTaskCommandSchema, { id: command.id, name: command.name });
 }
 
@@ -201,7 +201,7 @@ describe("generated handler registry ingestion", () => {
     const transformation: GeneratedHandlerRecord<GeneratedAggregate, 4> = {
       kind: "command-transformation",
       methodName: "commandFromCommand",
-      signalSchema: TransformTaskCommandSchema,
+      signalSchema: ValidatedTaskCommandSchema,
       emittedSchemas: [TransformedTaskCommandSchema],
       parameterCount: 1,
       origin: "domestic",
@@ -237,7 +237,7 @@ describe("generated handler registry ingestion", () => {
     const transformation: GeneratedHandlerRecord<GeneratedProjection, 4> = {
       kind: "command-transformation",
       methodName: "commandFromCommand",
-      signalSchema: TransformTaskCommandSchema,
+      signalSchema: ValidatedTaskCommandSchema,
       emittedSchemas: [TransformedTaskCommandSchema],
       parameterCount: 1,
       origin: "domestic",
@@ -831,7 +831,7 @@ describe("generated handler registry ingestion", () => {
               {
                 kind: "command-transformation",
                 methodName: "commandFromCommand",
-                signalSchema: TransformTaskCommandSchema,
+                signalSchema: ValidatedTaskCommandSchema,
                 emittedSchemas: [],
                 parameterCount: 1,
                 origin: "domestic",

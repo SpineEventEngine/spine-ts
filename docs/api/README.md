@@ -706,7 +706,9 @@ values. Generated `@Assign` and command-input `@Command` producer records must
 declare at least one emitted schema. A command-input `@Command` is the unique
 command receptor/transformation for its input and may receive an optional
 `CommandContext`; event- and rejection-input `@Command` handlers are EventBus
-reactions. `@React` records may return generated event messages
+reactions. Command-input transformations are supported by Aggregate and Process
+Manager repositories; Projection repositories reject them during repository
+construction. `@React` records may return generated event messages
 or explicit `void` with no emitted schemas. `@Subscribe` records return
 explicit `void` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
@@ -724,8 +726,8 @@ URLs for framework/tooling paths. Application package builds run registry
 generation after Protobuf-ES generation and before `tsc`; normal context
 assembly lets `buildAsync()` load the compiled registry module from the explicit
 trusted package output tree passed to `withGeneratedRegistryRoot(root)`.
-Repository execution calls generated two-argument command assignees, event
-subscribers, command reactions, and event reactors with generated
+Repository execution calls generated two-argument command assignees, command
+transformations, event subscribers, command reactions, and event reactors with generated
 `CommandContext` or `EventContext` values from the incoming envelope; if the
 envelope omits context, execution supplies an empty generated context message
 of the proper schema. Rejection subscribers receive the typed rejection payload
