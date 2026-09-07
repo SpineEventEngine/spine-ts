@@ -141,7 +141,7 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
     const assigneesByTypeName = new Map<string, CommandRegistrationAssigneeMetadata>();
 
     for (const commandFullTypeName of commandFullTypeNames) {
-      const assignment = validatedRegistry.findCommandAssignment(commandFullTypeName);
+      const assignment = validatedRegistry.findCommandReceptor(commandFullTypeName);
 
       if (assignment !== undefined) {
         assigneesByTypeName.set(

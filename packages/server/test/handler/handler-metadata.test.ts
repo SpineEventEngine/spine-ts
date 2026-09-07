@@ -386,6 +386,36 @@ describe("handler metadata registry", () => {
     );
   });
 
+  it("rejects assignment and transformation receptors for the same command across entities", () => {
+    const assignment = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.assign(CommandSchema, "assignCreate"),
+    ]);
+    const transformation = EntityHandlers.define(
+      OtherProjection,
+      AggregateStateSchema,
+      (builder) => [builder.transform(CommandSchema, "assignCreate")],
+    );
+
+    expect(() => new HandlerMetadataRegistry([assignment, transformation])).toThrow(
+      /Duplicate command assignment for "spine\.core\.Command"/,
+    );
+  });
+
+  it("rejects transformation receptors duplicated across entities and keeps assignment lookup narrow", () => {
+    const first = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.transform(CommandSchema, "commandFromCommand"),
+    ]);
+    const second = EntityHandlers.define(OtherProjection, AggregateStateSchema, (builder) => [
+      builder.transform(CommandSchema, "assignCreate"),
+    ]);
+    const registry = new HandlerMetadataRegistry([first]);
+
+    expect(registry.findCommandAssignment("spine.core.Command")).toBeUndefined();
+    expect(() => new HandlerMetadataRegistry([first, second])).toThrow(
+      /Duplicate command assignment for "spine\.core\.Command"/,
+    );
+  });
+
   it("rejects duplicate event applications for the same entity state and event type", () => {
     const first = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.apply(EventSchema, "applyCreated"),

@@ -528,9 +528,7 @@ export interface HandlerMetadataRegistryLookup {
    */
   findCommandAssignment(
     commandTypeName: string,
-  ):
-    | RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>
-    | undefined;
+  ): RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined;
 
   /**
    * Finds the unique event applier for a state and event type.
@@ -555,6 +553,10 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   readonly #byKind = new Map<HandlerKind, RegisteredHandlerMetadata[]>();
   readonly #byMessage = new Map<string, RegisteredHandlerMetadata[]>();
   readonly #commandAssignments = new Map<
+    string,
+    RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>
+  >();
+  readonly #commandReceptors = new Map<
     string,
     RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>
   >();
@@ -582,7 +584,7 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
    */
   register<Metadata extends EntityHandlersMetadata>(metadata: Metadata): Metadata {
     const entries = metadata.handlers.map((handler) => this.#entry(metadata, handler));
-    const commandAssignments = new Map<
+    const commandReceptors = new Map<
       string,
       RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>
     >();
@@ -598,10 +600,10 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
         >;
         this.#validateAssignment(
           commandEntry,
-          this.#commandAssignments.get(entry.handler.messageFullTypeName) ??
-            commandAssignments.get(entry.handler.messageFullTypeName),
+          this.#commandReceptors.get(entry.handler.messageFullTypeName) ??
+            commandReceptors.get(entry.handler.messageFullTypeName),
         );
-        commandAssignments.set(entry.handler.messageFullTypeName, commandEntry);
+        commandReceptors.set(entry.handler.messageFullTypeName, commandEntry);
       }
 
       if (entry.handler.kind === "event-application") {
@@ -628,8 +630,14 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
       this.#push(this.#byMessage, entry.handler.messageFullTypeName, entry);
     }
 
-    for (const [messageFullTypeName, entry] of commandAssignments) {
-      this.#commandAssignments.set(messageFullTypeName, entry);
+    for (const [messageFullTypeName, entry] of commandReceptors) {
+      this.#commandReceptors.set(messageFullTypeName, entry);
+      if (entry.handler.kind === "command-assignment") {
+        this.#commandAssignments.set(
+          messageFullTypeName,
+          entry as RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>,
+        );
+      }
     }
 
     for (const [key, entry] of eventApplications) {
@@ -701,10 +709,17 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
    */
   findCommandAssignment(
     commandTypeName: string,
+  ): RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined {
+    return this.#commandAssignments.get(commandTypeName);
+  }
+
+  /** Finds the effective command assignment or transformation receptor. */
+  findCommandReceptor(
+    commandTypeName: string,
   ):
     | RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>
     | undefined {
-    return this.#commandAssignments.get(commandTypeName);
+    return this.#commandReceptors.get(commandTypeName);
   }
 
   /**
