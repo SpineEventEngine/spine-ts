@@ -96,6 +96,7 @@ class Project extends Aggregate<ProjectId, typeof ProjectStateSchema, bigint> {
   review(command: ReviewProject, context: CommandContext): ScheduleProject {
     expect(context.$typeName).toBe(CommandContextSchema.typeName);
     this.update((draft) => Object.assign(draft, { status: "reviewed" }));
+    if (command.status === "fail") throw new Error("Review transformation failed.");
     return create(ScheduleProjectSchema, { project: command.project, status: command.status });
   }
 }
@@ -456,6 +457,16 @@ async function reviewProject(boundedContext: BoundedContext, id: ProjectId): Pro
     }),
   );
 }
+async function failReviewProject(boundedContext: BoundedContext, id: ProjectId): Promise<void> {
+  await boundedContext.commandBus().post(
+    SignalEnvelopes.command({
+      id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
+      context: create(CommandContextSchema),
+      schema: ReviewProjectSchema,
+      message: create(ReviewProjectSchema, { project: id, status: "fail" }),
+    }),
+  );
+}
 function ids() {
   return {
     project: projectId("org-a", 1),
@@ -503,6 +514,22 @@ describe("project workflow Event routing", () => {
       });
       await expect(boundedContext.stand().read(ProjectStateSchema, project)).resolves.toMatchObject({
         status: "review-approved",
+      });
+    } finally {
+      await boundedContext.close();
+    }
+  });
+
+  it("rolls back an Aggregate command transformation before it can publish a follow-up", async () => {
+    const { project, planning, staffing, portfolio } = ids();
+    const boundedContext = context(routeTo(portfolio), planning, staffing);
+    try {
+      await createProject(boundedContext, project);
+      await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
+      await failReviewProject(boundedContext, project);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      await expect(boundedContext.stand().read(ProjectStateSchema, project)).resolves.toMatchObject({
+        status: "scheduled",
       });
     } finally {
       await boundedContext.close();
