@@ -1633,7 +1633,7 @@ class AggregateCommandExecution {
       );
       return async () => {
         await dispatch();
-        for (const command of commands) void this.#runtime.onPostCommand(command);
+        await Promise.all(commands.map((command) => this.#runtime.onPostCommand(command)));
       };
     }
     const events = this.#bindProducedEvents(
@@ -2785,7 +2785,7 @@ class ProcessManagerCommandExecution {
   }
 
   async #postCommands(commands: readonly Command[]): Promise<void> {
-    for (const command of commands) void this.#runtime.onPostCommand(command);
+    await Promise.all(commands.map((command) => this.#runtime.onPostCommand(command)));
   }
 
   #postEvents(events: readonly Event[]): void {
