@@ -170,3 +170,17 @@ the accepted metadata evidence. The complete accepted correction batch is:
 No separate security finding was raised. The task adds no new authentication,
 authorization, credential, or external trust boundary; remote-input rejection
 remains covered by correctness and public-service tests.
+
+## Registry type correction checkpoint
+
+The implementation owner found that statically coupling v3/v4 at the top level
+also affects exported nested handler-group and input-record SPI types plus
+context-discovery consumers. A partial top-level-only union would leave an
+incoherent public contract.
+
+The existing `requirements_splitter` architecture context is therefore assigned
+a second read-only, bounded checkpoint to specify the smallest compatible nested
+discriminated-union design and migration. Its original explicit
+`gpt-5.6-sol`/high dispatch remains active and unchanged; it must not edit files
+or spawn subagents. Runtime self-introspection remains unavailable with no
+visible fallback.
