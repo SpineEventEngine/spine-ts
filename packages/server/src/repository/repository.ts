@@ -1605,6 +1605,11 @@ class AggregateCommandExecution {
     }
     if (assignee.handler.kind === "command-transformation") {
       const commands = this.#bindProducedCommands(this.#support.normalizeProducedSignals(produced));
+      if (commands.length === 0) {
+        throw new Error(
+          "Repository aggregate command transformations must return at least one command.",
+        );
+      }
       const dispatch = await this.#support.persistAggregateAndDispatch(
         loaded,
         route.entityId,
@@ -2662,6 +2667,11 @@ class ProcessManagerCommandExecution {
       assignee.handler.kind === "command-transformation"
         ? this.#bindProducedCommands(producedSignals)
         : Object.freeze([]);
+    if (assignee.handler.kind === "command-transformation" && commands.length === 0) {
+      throw new Error(
+        "Repository process-manager command transformations must return at least one command.",
+      );
+    }
     const events =
       assignee.handler.kind === "command-assignment"
         ? this.#bindProducedEvents(producedSignals, route.entityId)

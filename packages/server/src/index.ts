@@ -296,6 +296,7 @@ export {
 export {
   type BaseHandlerMetadata,
   type CommandAssignmentHandlerMetadata,
+  type CommandTransformationHandlerMetadata,
   type CommandReactionHandlerMetadata,
   type EntityClass,
   type EntityHandlersMetadata,
