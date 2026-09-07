@@ -1325,6 +1325,25 @@ class ValidatingTaskAggregate extends Aggregate<
   }
 }
 
+class CommandTransformingAggregate extends Aggregate<
+  string,
+  typeof ValidatedAggregateStateSchema,
+  bigint
+> {
+  transform(command: ValidatedTaskCommand): readonly TransformedTaskCommand[] {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ValidatedAggregateStateSchema, { id: command.id, name: command.name }),
+      ),
+    );
+    return [
+      create(TransformedTaskCommandSchema, { id: command.id, name: `${command.name} first` }),
+      create(TransformedTaskCommandSchema, { id: command.id, name: `${command.name} second` }),
+    ];
+  }
+}
+
 class ValidatedMessageIdRouteAggregate extends Aggregate<
   ValidatedTaskCommand,
   typeof ValidatedMessageIdStateSchema,
@@ -4019,6 +4038,58 @@ describe("repository signal routing", () => {
     } finally {
       CommandTransformingProcessManager.reset();
     }
+  });
+
+  it("commits aggregate transformations before containing a failed child and draining its sibling", async () => {
+    const admitted: string[] = [];
+    const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
+    const context = BoundedContext.singleTenant("Aggregate transformed commands")
+      .add(createCommandTransformingAggregateRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [TransformedTaskCommandSchema],
+        dispatch: (command) => {
+          if (command.message === undefined)
+            throw new Error("Expected transformed command payload.");
+          const message = AnyMessages.unpack(command.message, TransformedTaskCommandSchema);
+          admitted.push(message.name);
+          if (message.name === "Aggregate first") throw new Error("aggregate first child failed");
+          return Promise.resolve();
+        },
+      })
+      .build();
+    boundedContextAccess.installLogger(context, {
+      withMetadata: (facts: Record<string, unknown>) => ({
+        error: (message: string) => errors.push({ message, facts }),
+      }),
+    } as unknown as ILogLayer);
+
+    await context.commandBus().post(
+      SignalEnvelopes.command({
+        id: create(CommandIdSchema, { uuid: "aggregate-source" }),
+        context: create(CommandContextSchema),
+        schema: ValidatedTaskCommandSchema,
+        message: create(ValidatedTaskCommandSchema, { id: "aggregate-target", name: "Aggregate" }),
+      }),
+    );
+    await expect(
+      context.stand().read(ValidatedAggregateStateSchema, "aggregate-target"),
+    ).resolves.toEqual(
+      create(ValidatedAggregateStateSchema, { id: "aggregate-target", name: "Aggregate" }),
+    );
+    await context.close();
+
+    expect(admitted).toEqual(["Aggregate first", "Aggregate second"]);
+    expect(errors).toContainEqual({
+      message: "Repository transformed command follow-up failed.",
+      facts: {
+        operation: "repository.command_follow_up",
+        reasonCode: "dispatch_failed",
+        sourceCommandId: "aggregate-source",
+        sourceCommandType: TypeUrls.derive(ValidatedTaskCommandSchema),
+        childCommandId: "aggregate-source-1",
+        childCommandType: TypeUrls.derive(TransformedTaskCommandSchema),
+      },
+    });
   });
 
   it("routes commands to one aggregate ID by the first command field", () => {
@@ -11159,6 +11230,34 @@ function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate
     entityType: ValidatingTaskAggregate,
     schema: ValidatedAggregateStateSchema,
     handlers,
+  });
+}
+
+function createCommandTransformingAggregateRepository(): Repository<
+  typeof CommandTransformingAggregate
+> {
+  const handlers = HandlerMetadataValues.defineArity(
+    CommandTransformingAggregate,
+    ValidatedAggregateStateSchema,
+    (builder) => [builder.transform(ValidatedTaskCommandSchema, "transform")],
+    [
+      {
+        kind: "command-transformation",
+        methodName: "transform",
+        parameterCount: 1,
+        origin: "domestic",
+        emittedSchemas: [TransformedTaskCommandSchema],
+      },
+    ],
+  );
+  return new Repository({
+    entityType: CommandTransformingAggregate,
+    schema: ValidatedAggregateStateSchema,
+    handlers,
+    commandRouting: CommandRouting.create<string>().route(
+      ValidatedTaskCommandSchema,
+      (command) => command.id,
+    ),
   });
 }
 
