@@ -318,3 +318,31 @@ The implementation owner receives this as one correction batch. Correctness,
 standards, TypeScript/API docs, and reader docs require bounded re-review after
 the corrections; reliability re-review is required only if execution behavior
 changes beyond rejecting the unsupported Projection configuration.
+
+## Independent review convergence
+
+The complete correction batch was applied before re-review. All re-review
+contexts remained memory-isolated from implementation (`fork_turns="none"`),
+read the repository and task records directly, and stayed read-only.
+
+- Correctness/compatibility: clean. Projection transformations are rejected
+  before readiness, while Aggregate and Process Manager transformations retain
+  their command routing, transaction, and metadata behavior.
+- Style/maintainability: clean after the test fixtures were renamed for their
+  actual domain Command types and the generated Projection fixture was narrowed
+  without an unsafe cast.
+- Performance/reliability: clean in the first independent wave; no execution
+  correction reopened this concern.
+- TypeScript/API documentation: clean after the repository-kind restriction,
+  two-argument `CommandContext` arity, v4-write/v3-read compatibility, and
+  root-versus-SPI exports were documented.
+- Reader documentation: clean after the Aggregate/Process Manager support
+  boundary and Projection construction-time rejection were made explicit.
+- Security: N/A for the unchanged reason above.
+
+The final bounded preflight passed all static, generated-build, documentation,
+package-consumer, and release-readiness checks plus 356 focused tests in six
+files. The authoritative `pnpm verify:release` run then passed 288 test files
+and 4,578 tests. Coverage passed at 93.29% statements (22,337 / 23,942), 90.01%
+branches (13,183 / 14,646), 92.87% functions (5,477 / 5,897), and 94.45% lines
+(20,710 / 21,925). No independent finding remains open.

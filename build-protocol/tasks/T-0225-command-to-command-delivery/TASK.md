@@ -121,8 +121,9 @@ fields and the immutable role profile are the accepted metadata evidence.
 
 All acceptance criteria are implemented and verified on the published feature
 branch. The release version is `2.0.0-snapshot.9`. The corrective
-`pnpm verify:release` run passed 288 test files and 4,576 tests with 93.29%
-statement, 90.00% branch, 92.87% function, and 94.45% line coverage.
+independent review is clean across every applicable concern. Its final
+`pnpm verify:release` run passed 288 test files and 4,578 tests with 93.29%
+statement, 90.01% branch, 92.87% function, and 94.45% line coverage.
 
 The branch is ready for human review. It has not been merged and no pull request
 has been created, as required.
