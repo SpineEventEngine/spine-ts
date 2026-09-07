@@ -80,3 +80,23 @@ before specialist review. Expected model `gpt-5.6-luna` and expected reasoning
 `medium` are explicit because selecting valid changed-source coverage from the
 shared server module requires classification judgment. The function is
 read-only, must not spawn subagents, and may not edit or commit files.
+
+The preflight function completed with its explicit Luna/medium dispatch. Runtime
+self-introspection was not exposed and no visible fallback occurred. Focused
+behavior tests passed 435/435, but the preflight is not accepted yet:
+
+- TypeScript compilation found nine readiness fixtures missing
+  `commandTransformations` and two unsafe test dereferences.
+- Formatting failed for eight files; ESLint reported nine errors; cleanup naming
+  rejected `internalCommandFollowUpPosters`; TSDoc found incomplete public
+  comments in handler metadata.
+- Copyright, documentation audience, API docs, Proto lint/generated cleanliness,
+  logging containment, production dependencies, and release readiness passed.
+- Source-scoped coverage is above 90% for the registry writer, generated registry,
+  handler metadata, and readiness metadata. Command Bus branch coverage,
+  command readiness, repository, signal metadata, bounded-context wiring, and
+  decorator coverage still need valid changed-line evidence or additional tests.
+
+Proto generation changed six tracked random generation IDs under the orders,
+projects, and todo examples. These are setup artifacts, not accepted task
+changes, and must be restored before the corrected preflight.
