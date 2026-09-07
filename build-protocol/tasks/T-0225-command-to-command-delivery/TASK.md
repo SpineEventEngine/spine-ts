@@ -1,6 +1,6 @@
 # T-0225: Command-to-Command Delivery
 
-Status: In progress
+Status: Final verification passed; ready for human review
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`
@@ -108,3 +108,13 @@ fields and the immutable role profile are the accepted metadata evidence.
 - Do not create or merge a pull request without explicit human instruction.
 - Never rewrite the published feature branch.
 - Preserve event-to-command behavior while fixing command-to-command delivery.
+
+## Final disposition
+
+All acceptance criteria are implemented and verified on the published feature
+branch. The release version is `2.0.0-snapshot.9`. The corrective
+`pnpm verify:release` run passed 288 test files and 4,576 tests with 93.29%
+statement, 90.00% branch, 92.87% function, and 94.45% line coverage.
+
+The branch is ready for human review. It has not been merged and no pull request
+has been created, as required.

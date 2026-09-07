@@ -223,3 +223,16 @@ All canonical review concerns now have a clean or justified N/A disposition.
 No reviewer edited files or spawned subagents. Runtime self-introspection was
 unavailable for every review; explicit dispatch fields, immutable profiles, and
 the absence of visible fallback provide the accepted metadata evidence.
+
+## Release disposition
+
+The first `pnpm verify:release` run passed all 288 test files and 4,575 tests but
+correctly failed the global branch threshold at 89.96% (13,173 / 14,642).
+Behavioral boundary tests then covered closed and invalid internal Command Bus
+follow-up access plus three non-authentic readiness shapes. This deterministic
+test-only correction did not reopen a specialist concern.
+
+After the bounded preflight passed 645 tests in 21 files, the corrective release
+run passed all 288 test files and 4,576 tests. Global coverage passed at 93.29%
+statements, 90.00% branches, 92.87% functions, and 94.45% lines. The accepted
+branch is ready for human review and remains unmerged.
