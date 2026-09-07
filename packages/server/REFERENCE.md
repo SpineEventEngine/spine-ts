@@ -172,6 +172,13 @@ there is no exact route. This is TypeScript routing; it does not consume
 `(is).java_type` or `(every_is).java_type`, and it has no decorator-based
 route registration API.
 
+A command-input `@Command` method is a command transformation receptor: it is
+the one effective receptor for that Command type (instead of an `@Assign`),
+commits its Entity state before its returned Command or Commands are queued, and
+receives an optional `CommandContext`. Event- and rejection-input `@Command`
+methods remain Event Bus reactions. Produced commands retain the source actor,
+tenant, origin, and causal lineage.
+
 One `@Where({ eventField, equals })` equality filter may narrow an event- or
 rejection-consuming `@Subscribe`, `@React`, or `@Command` handler after type
 routing. `eventField` and `equals` are typed string literals; invalid or
