@@ -99,7 +99,7 @@ Subagents may not spawn subagents.
 Runtime self-introspection may be unavailable. In that case, explicit dispatch
 fields and the immutable role profile are the accepted metadata evidence.
 
-## Human-imposed requirements
+## Human-Imposed Requirements Ledger
 
 - Work from current official `origin/master` on a regular feature branch with no
   `codex/` prefix.
@@ -108,6 +108,14 @@ fields and the immutable role profile are the accepted metadata evidence.
 - Do not create or merge a pull request without explicit human instruction.
 - Never rewrite the published feature branch.
 - Preserve event-to-command behavior while fixing command-to-command delivery.
+- Use domain-correct Protobuf Command fixtures: never substitute entity state
+  messages or framework envelopes for command inputs or outputs.
+- Command-input transformations return one or more Commands and are the unique
+  effective receptor for their input; event/rejection-input `@Command` handlers
+  remain EventBus reactions.
+- Use the official `origin` remote and this feature worktree; any eventual
+  merge-version change is a separate version-only commit with the required
+  message and never changes internal dependency pins or the lockfile.
 
 ## Final disposition
 

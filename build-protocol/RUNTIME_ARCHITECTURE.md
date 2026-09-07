@@ -131,8 +131,9 @@ channel.
 ### Command Bus
 
 The command bus accepts packed Spine `Command` messages. It validates command
-metadata and dispatches commands through repository routes to matching command
-assignee/reactor endpoints.
+metadata and dispatches each command through repository routes to its one
+effective `@Assign` or command-input `@Command` receptor; event- and
+rejection-input `@Command` reactions remain on EventBus.
 
 Requirements:
 

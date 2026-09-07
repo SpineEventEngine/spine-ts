@@ -326,24 +326,21 @@ describe("CommandBus", () => {
   it("queues an internal follow-up command after active command dispatch", async () => {
     const observed: string[] = [];
     const context: { bus?: CommandBus } = {};
-    const dispatcher = createCommandDispatcher(
-      [ProjectionStateSchema, ValidatedTaskCommandSchema],
-      (command) => {
-        observed.push(command.id?.uuid ?? "missing");
-        if (command.id?.uuid === "command-outer") {
-          const bus = context.bus;
-          if (bus === undefined) throw new Error("Expected command bus.");
-          void commandBusAccess.postInternalFollowUp(
-            bus,
-            createValidatedCommand("command-follow-up", "task-follow-up", "Follow up"),
-          );
-        }
-      },
-    );
+    const dispatcher = createCommandDispatcher([ValidatedTaskCommandSchema], (command) => {
+      observed.push(command.id?.uuid ?? "missing");
+      if (command.id?.uuid === "command-outer") {
+        const bus = context.bus;
+        if (bus === undefined) throw new Error("Expected command bus.");
+        void commandBusAccess.postInternalFollowUp(
+          bus,
+          createValidatedCommand("command-follow-up", "task-follow-up", "Follow up"),
+        );
+      }
+    });
     const bus = new CommandBus([dispatcher]);
     context.bus = bus;
 
-    await bus.post(createProjectionCommand("command-outer"));
+    await bus.post(createValidatedCommand("command-outer", "task-outer", "Outer"));
     await commandBusAccess.drain(bus);
 
     expect(observed).toEqual(["command-outer", "command-follow-up"]);
@@ -355,11 +352,14 @@ describe("CommandBus", () => {
     await bus.close();
     await bus.close();
 
-    await expect(bus.post(createProjectionCommand("command-after-close"))).rejects.toThrow(
-      /closed/,
-    );
     await expect(
-      commandBusAccess.postInternal(bus, createProjectionCommand("command-internal-after-close")),
+      bus.post(createValidatedCommand("command-after-close", "task-after-close", "After close")),
+    ).rejects.toThrow(/closed/);
+    await expect(
+      commandBusAccess.postInternal(
+        bus,
+        createValidatedCommand("command-internal-after-close", "task-after-close", "After close"),
+      ),
     ).rejects.toThrow(/closed/);
     await expect(
       commandBusAccess.postInternalFollowUp(
@@ -373,7 +373,10 @@ describe("CommandBus", () => {
     const bus = {} as CommandBus;
 
     expect(() =>
-      commandBusAccess.postInternal(bus, createProjectionCommand("command-internal")),
+      commandBusAccess.postInternal(
+        bus,
+        createValidatedCommand("command-internal", "task-internal", "Internal"),
+      ),
     ).toThrow(/CommandBus instance/);
     expect(() =>
       commandBusAccess.postInternalFollowUp(

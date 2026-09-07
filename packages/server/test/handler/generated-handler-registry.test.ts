@@ -12,12 +12,13 @@
  * the License.
  */
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
+  DescriptorProtoSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
 import { CommandSchema, EventSchema, file_spine_options } from "@spine-event-engine/proto";
@@ -61,13 +62,18 @@ type TransformTaskCommand = Message<"example.validation_refusal.ValidatedTaskCom
   name: string;
 };
 
+type TransformedTaskCommand = Message<"example.validation_refusal.TransformedTaskCommand"> & {
+  id: string;
+  name: string;
+};
+
 class GeneratedProjection extends Projection<string, GenMessage<ProjectionState>, number> {
   assignCreate(command: Message<"spine.core.Command">): void {
     void command;
   }
 
-  commandFromCommand(command: TransformTaskCommand): TransformTaskCommand {
-    return command;
+  commandFromCommand(command: TransformTaskCommand): TransformedTaskCommand {
+    return command as unknown as TransformedTaskCommand;
   }
 
   subscribeCreated(event: Message<"spine.core.Event">): void {
@@ -86,8 +92,8 @@ class OtherGeneratedProjection {
 }
 
 class GeneratedAggregate extends Aggregate<string, GenMessage<AggregateState>, number> {
-  commandFromCommand(command: TransformTaskCommand): TransformTaskCommand {
-    return command;
+  commandFromCommand(command: TransformTaskCommand): TransformedTaskCommand {
+    return command as unknown as TransformedTaskCommand;
   }
 }
 
@@ -131,6 +137,21 @@ const TransformTaskCommandSchema = messageDesc(
   fileTransformCommandFixture,
   1,
 ) as GenMessage<TransformTaskCommand>;
+const fileTransformedTaskCommandFixture = (() => {
+  const descriptor = clone(FileDescriptorProtoSchema, fileTransformCommandFixture.proto);
+  const input = descriptor.messageType.find((message) => message.name === "ValidatedTaskCommand");
+  if (input === undefined) throw new Error("Generated transformation input fixture is missing.");
+  const output = clone(DescriptorProtoSchema, input);
+  output.name = "TransformedTaskCommand";
+  descriptor.messageType.push(output);
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+})();
+const TransformedTaskCommandSchema = messageDesc(
+  fileTransformedTaskCommandFixture,
+  2,
+) as GenMessage<TransformedTaskCommand>;
 
 describe("generated handler registry ingestion", () => {
   it("ingests version-2 state subscriptions separately from Event subscriptions", () => {
@@ -177,7 +198,7 @@ describe("generated handler registry ingestion", () => {
       kind: "command-transformation",
       methodName: "commandFromCommand",
       signalSchema: TransformTaskCommandSchema,
-      emittedSchemas: [TransformTaskCommandSchema],
+      emittedSchemas: [TransformedTaskCommandSchema],
       parameterCount: 1,
       origin: "domestic",
     };
@@ -213,7 +234,7 @@ describe("generated handler registry ingestion", () => {
       kind: "command-transformation",
       methodName: "commandFromCommand",
       signalSchema: TransformTaskCommandSchema,
-      emittedSchemas: [TransformTaskCommandSchema],
+      emittedSchemas: [TransformedTaskCommandSchema],
       parameterCount: 1,
       origin: "domestic",
     };

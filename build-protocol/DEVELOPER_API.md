@@ -166,8 +166,9 @@ return types on emitting handlers, `@Subscribe` handlers without explicit
 It must also reject missing first-parameter type annotations because signal
 schema inference depends on that explicit type.
 
-Generated registry version 3 records `origin: "domestic" | "external"` for
-every handler. The analyzer accepts only the canonical exported `External<T>`
+Generated registry version 4 output records `origin: "domestic" | "external"`
+for every handler; runtime ingestion retains legacy version-3 read
+compatibility. The analyzer accepts only the canonical exported `External<T>`
 marker (including namespace and marker-containing aliases), rejects counterfeit
 or unresolved markers, and rejects external command receivers. Event dispatch
 selects domestic receptors for ordinary events and external receptors for

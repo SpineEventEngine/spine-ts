@@ -527,7 +527,8 @@ The server root exports `External<T>` (a type-only alias), `HandlerOrigin`,
 `CommandTransformationHandlerMetadata`, `ThirdPartyContext`,
 `HandlerRegistryIngestor`, and `GeneratedRegistryDiscovery`. Generated registry
 data contracts remain on the `server/spi/handler-registry` SPI; the v4 writer
-continues to read legacy v3 registries. The canonical
+emits v4 data, while the runtime ingestor continues to read legacy v3
+registries. The canonical
 `External<T>` marker is recognized on a receptor's first parameter and produces
 external metadata; unmarked handlers are domestic. `EventDispatcher` retains
 the complete `messageSchemas()` set and may provide `externalEventSchemas()` as
