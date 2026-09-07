@@ -184,3 +184,19 @@ discriminated-union design and migration. Its original explicit
 `gpt-5.6-sol`/high dispatch remains active and unchanged; it must not edit files
 or spawn subagents. Runtime self-introspection remains unavailable with no
 visible fallback.
+
+## Correction and re-review state
+
+The implementation owner corrected the complete accepted batch and the final
+cheap preflight passed on `e25fb12ad`: the canonical generated-state task gate
+with 17 focused paths completed successfully, followed by full ESLint, cleanup,
+TSDoc, formatting, and diff checks. The worktree was clean and the branch matched
+the official remote.
+
+All five original concerns were substantively affected, so the same existing
+review contexts are assigned bounded re-review over
+`e37ec8a1fed84f11e0df07c78846d5607a698ede..e25fb12ad`. Their original explicit
+profiles remain unchanged: correctness function, style/maintainability, and
+performance/reliability use `gpt-5.6-terra`/high; TypeScript/API docs uses
+`gpt-5.6-terra`/high; reader documentation uses `gpt-5.6-luna`/medium. All are
+read-only and may not spawn subagents.
