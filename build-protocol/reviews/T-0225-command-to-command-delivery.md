@@ -236,3 +236,38 @@ After the bounded preflight passed 645 tests in 21 files, the corrective release
 run passed all 288 test files and 4,576 tests. Global coverage passed at 93.29%
 statements, 90.00% branches, 92.87% functions, and 94.45% lines. The accepted
 branch is ready for human review and remains unmerged.
+
+## Human-requested independent review reset
+
+The human requested a new review that does not inherit implementation memory.
+The fixed comparison is
+`origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede...8cef080b21358d6eb9ed488a098fdeabfbd788d7`.
+Every reviewer is dispatched with `fork_turns="none"`, must read the repository
+instructions, task/spec records, diff, and affected code directly, and remains
+read-only. Capacity may split dispatch into parallel groups, but findings are
+collected into one complete wave before implementation receives one batch.
+
+Assignments and explicit profiles:
+
+- Specification/correctness review: orchestrator-dispatched senior correctness
+  function, `gpt-5.6-terra` / `high`; checks the T-0225 acceptance criteria,
+  JVM parity, DDD/Proto correctness, registration, execution, routing,
+  transactions, metadata, and tests.
+- Standards review: existing `style_maintainability_reviewer`,
+  `gpt-5.6-terra` / `high`; checks the milestone diff against `AGENTS.md`,
+  `BUILD_PROTOCOL.md`, code-quality rules, and local conventions.
+- Performance/reliability review: existing
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / `high`; checks queueing,
+  ordering, idempotency, failure containment, persistence, shutdown, and bounded
+  work.
+- TypeScript/API documentation review: existing
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / `high`; checks public and
+  serialized contracts, registry compatibility, exports, declarations, and
+  runtime/type agreement.
+- Reader documentation review: existing `documentation_reviewer`,
+  `gpt-5.6-luna` / `medium`; checks changed user workflows, examples,
+  limitations, links, and claims against the implementation.
+
+The Desktop execution surface supports these explicit dispatch fields. Runtime
+self-introspection will be recorded if exposed; otherwise the immutable role
+profile and absence of visible fallback are the acceptance evidence.
