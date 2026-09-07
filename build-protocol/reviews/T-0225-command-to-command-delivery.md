@@ -271,3 +271,50 @@ Assignments and explicit profiles:
 The Desktop execution surface supports these explicit dispatch fields. Runtime
 self-introspection will be recorded if exposed; otherwise the immutable role
 profile and absence of visible fallback are the acceptance evidence.
+
+## Independent review findings
+
+All five memory-isolated reviewers completed. Their model and reasoning fields
+were explicit in dispatch, no visible fallback occurred, and runtime
+self-introspection was unavailable. The complete deduplicated correction batch
+is:
+
+1. Reject command-input `@Command` transformations on Projections. Registry
+   ingestion currently accepts them and command readiness advertises them, but
+   repository dispatch has no Projection command execution path, so an accepted
+   client Command can be silently dropped.
+2. Replace the new Command Bus follow-up tests that pack `ProjectionState` as a
+   Command with a domain-correct generated Command fixture.
+3. Replace the generated-registry transformation test that uses the
+   `spine.core.Command` envelope schema as both input and output. Use distinct
+   domain Command messages and an Aggregate or Process Manager owner.
+4. Update `build-protocol/RUNTIME_ARCHITECTURE.md`: each Command type has one
+   effective receptor, either `@Assign` or command-input `@Command`;
+   Event/rejection-input `@Command` remains exclusively on the Event Bus.
+5. Rename and complete the task's `Human-Imposed Requirements Ledger`, including
+   inherited domain-correct fixture, return-shape, and receptor constraints.
+6. Update `docs/api/README.md` from five to six handler metadata roles and name
+   command transformation explicitly.
+7. Replace the API README's v3-only registry SPI claim with the exact v3-read,
+   v4-write contract.
+8. Add the Command-input `@Command` workflow to the API README, including the
+   optional `CommandContext` and non-empty Command output.
+9. Add the detached in-process best-effort crash window and lack of durable
+   child retry to the API workflow.
+10. Update `build-protocol/DEVELOPER_API.md` from an unqualified version-3
+    registry claim to v4 output with v3 legacy read compatibility.
+11. Correct `GeneratedRegistryWriter` public TSDoc from version 3 to version 4
+    and cover the public documentation assertion where practical.
+12. Correct the API README's root-export claim: ingestion/discovery are root
+    exports, while versioned generated-registry data contracts remain on
+    `@spine-event-engine/server/spi/handler-registry`.
+
+The performance/reliability lane found no defects after independently checking
+reentrant follow-up admission, commit ordering, sibling fan-out, promise
+containment, close/drain, durable duplicate Inbox handoff, crash-window claims,
+tenant/metadata isolation, and bounded retention.
+
+The implementation owner receives this as one correction batch. Correctness,
+standards, TypeScript/API docs, and reader docs require bounded re-review after
+the corrections; reliability re-review is required only if execution behavior
+changes beyond rejecting the unsupported Projection configuration.
