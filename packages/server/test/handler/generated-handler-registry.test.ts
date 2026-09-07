@@ -147,12 +147,9 @@ describe("generated handler registry ingestion", () => {
   });
 
   it("accepts command transformations only from registry version 4 while retaining version 3", () => {
-    const transformation = record(
-      "command-transformation",
-      "commandFromCommand",
+    const transformation = record("command-transformation", "commandFromCommand", CommandSchema, [
       CommandSchema,
-      [CommandSchema],
-    );
+    ]);
 
     expect(() =>
       new HandlerRegistryIngestor().ingest({

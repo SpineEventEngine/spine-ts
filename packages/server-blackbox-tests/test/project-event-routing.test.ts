@@ -518,9 +518,11 @@ describe("project workflow Event routing", () => {
         portfolioExpected: true,
         projectStatus: "review-approved",
       });
-      await expect(boundedContext.stand().read(ProjectStateSchema, project)).resolves.toMatchObject({
-        status: "review-approved",
-      });
+      await expect(boundedContext.stand().read(ProjectStateSchema, project)).resolves.toMatchObject(
+        {
+          status: "review-approved",
+        },
+      );
     } finally {
       await boundedContext.close();
     }
@@ -534,9 +536,11 @@ describe("project workflow Event routing", () => {
       await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
       await failReviewProject(boundedContext, project);
       await new Promise((resolve) => setTimeout(resolve, 25));
-      await expect(boundedContext.stand().read(ProjectStateSchema, project)).resolves.toMatchObject({
-        status: "scheduled",
-      });
+      await expect(boundedContext.stand().read(ProjectStateSchema, project)).resolves.toMatchObject(
+        {
+          status: "scheduled",
+        },
+      );
     } finally {
       await boundedContext.close();
     }
@@ -553,12 +557,16 @@ describe("project workflow Event routing", () => {
         portfolioExpected: true,
         projectStatus: "approved",
       });
-      await expect(boundedContext.stand().read(ProjectStateSchema, project)).resolves.toMatchObject({
-        id: project,
-        name: "roadmap",
-        status: "approved",
-      });
-      await expect(boundedContext.stand().read(CoordinationStateSchema, project)).resolves.toMatchObject({
+      await expect(boundedContext.stand().read(ProjectStateSchema, project)).resolves.toMatchObject(
+        {
+          id: project,
+          name: "roadmap",
+          status: "approved",
+        },
+      );
+      await expect(
+        boundedContext.stand().read(CoordinationStateSchema, project),
+      ).resolves.toMatchObject({
         id: project,
         projectName: "approved",
       });

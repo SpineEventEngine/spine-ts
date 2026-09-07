@@ -50,8 +50,8 @@ describe("build-time handler analyzer", () => {
             parameterCount: 1,
           },
           {
-          kind: "command-reaction",
-          methodName: "renameAgain",
+            kind: "command-reaction",
+            methodName: "renameAgain",
             origin: "domestic",
             signalSchema: schema(
               "../generated/spine/examples/todo/task_events_pb.js",
@@ -895,8 +895,8 @@ describe("build-time handler analyzer", () => {
             parameterCount: 1,
           },
           {
-          kind: "command-transformation",
-          methodName: "rename",
+            kind: "command-transformation",
+            methodName: "rename",
             origin: "domestic",
             signalSchema: schema("../generated/commands_pb", "CreateTaskSchema"),
             emittedSchemas: [schema("../generated/commands_pb", "RenameTaskSchema")],

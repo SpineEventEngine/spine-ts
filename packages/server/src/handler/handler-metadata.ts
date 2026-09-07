@@ -535,7 +535,9 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   >();
   readonly #commandReceptors = new Map<
     string,
-    RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>
+    RegisteredHandlerMetadata<
+      CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+    >
   >();
   readonly #eventApplications = new Map<
     string,
@@ -563,7 +565,9 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     const entries = metadata.handlers.map((handler) => this.#entry(metadata, handler));
     const commandReceptors = new Map<
       string,
-      RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>
+      RegisteredHandlerMetadata<
+        CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+      >
     >();
     const eventApplications = new Map<
       string,
@@ -571,7 +575,10 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     >();
 
     for (const entry of entries) {
-      if (entry.handler.kind === "command-assignment" || entry.handler.kind === "command-transformation") {
+      if (
+        entry.handler.kind === "command-assignment" ||
+        entry.handler.kind === "command-transformation"
+      ) {
         const commandEntry = entry as RegisteredHandlerMetadata<
           CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
         >;
@@ -694,7 +701,9 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   findCommandReceptor(
     commandTypeName: string,
   ):
-    | RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>
+    | RegisteredHandlerMetadata<
+        CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+      >
     | undefined {
     return this.#commandReceptors.get(commandTypeName);
   }
@@ -726,9 +735,13 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   }
 
   #validateAssignment(
-    entry: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>,
+    entry: RegisteredHandlerMetadata<
+      CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+    >,
     duplicate:
-      | RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata>
+      | RegisteredHandlerMetadata<
+          CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+        >
       | undefined,
   ): void {
     if (duplicate !== undefined) {

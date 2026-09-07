@@ -2084,7 +2084,10 @@ class CommandTransformingProcessManager extends ProcessManager<
       archived: false,
     });
     return CommandTransformingProcessManager.siblingOutputs
-      ? [first, create(CommandTransformationOutputSchema, { ...first, name: `${command.name} sibling` })]
+      ? [
+          first,
+          create(CommandTransformationOutputSchema, { ...first, name: `${command.name} sibling` }),
+        ]
       : first;
   }
 }
@@ -3937,13 +3940,16 @@ describe("repository signal routing", () => {
     await context.commandBus().post(source);
     await waitForCondition(() => produced.length === 1);
 
-    expect(await context.stand().read(ProcessManagerStateSchema, "transform-target", { tenantId: tenant }))
-      .toEqual(
-        create(ProcessManagerStateSchema, {
-          id: "transform-target",
-          queue: "Transform:transformer",
-        }),
-      );
+    expect(
+      await context
+        .stand()
+        .read(ProcessManagerStateSchema, "transform-target", { tenantId: tenant }),
+    ).toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "transform-target",
+        queue: "Transform:transformer",
+      }),
+    );
     await expect(
       context.stand().read(ProcessManagerStateSchema, "transform-target", {
         tenantId: createTenantId("tenant-other"),
@@ -3955,7 +3961,10 @@ describe("repository signal routing", () => {
         actorContext,
         origin: create(OriginSchema, {
           message: create(MessageIdSchema, {
-            id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "transform-source" })),
+            id: AnyMessages.pack(
+              CommandIdSchema,
+              create(CommandIdSchema, { uuid: "transform-source" }),
+            ),
             typeUrl: TypeUrls.derive(CommandTransformationInputSchema),
           }),
           actorContext,
@@ -3963,7 +3972,9 @@ describe("repository signal routing", () => {
         }),
       }),
     });
-    expect(AnyMessages.unpack(produced[0]?.message as Any, CommandTransformationOutputSchema)).toEqual(
+    expect(
+      AnyMessages.unpack(produced[0]?.message as Any, CommandTransformationOutputSchema),
+    ).toEqual(
       create(CommandTransformationOutputSchema, {
         id: "declared-source-id",
         name: "Transform follow-up",

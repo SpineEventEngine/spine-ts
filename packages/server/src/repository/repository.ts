@@ -1776,7 +1776,9 @@ class AggregateCommandExecution {
           (candidate) => candidate.typeName === typeName,
         );
         if (schema === undefined) {
-          throw new Error(`Repository aggregate execution cannot pack command message "${typeName}".`);
+          throw new Error(
+            `Repository aggregate execution cannot pack command message "${typeName}".`,
+          );
         }
         const metadata = this.#runtime.signalMetadata.commandFromCommand(this.#command, sequence);
         return create(CommandSchema, {
@@ -4393,16 +4395,14 @@ const RepositoryRoutes = {
       ]),
     ]);
     const producedCommandSchemas = RepositoryHandlers.uniqueSchemas(
-      handlers.flatMap((handler) =>
-        [
-          ...handler.commandTransformations.flatMap((transformation) =>
-            RepositoryHandlers.handlerEmittedSchemas(transformation),
-          ),
-          ...handler.commandReactions.flatMap((reaction) =>
-            RepositoryHandlers.handlerEmittedSchemas(reaction),
-          ),
-        ],
-      ),
+      handlers.flatMap((handler) => [
+        ...handler.commandTransformations.flatMap((transformation) =>
+          RepositoryHandlers.handlerEmittedSchemas(transformation),
+        ),
+        ...handler.commandReactions.flatMap((reaction) =>
+          RepositoryHandlers.handlerEmittedSchemas(reaction),
+        ),
+      ]),
     );
     const commandReactions = RepositoryHandlers.createCommandReactionMap(handlers);
     const eventSubscribers = RepositoryHandlers.readinessMap(
