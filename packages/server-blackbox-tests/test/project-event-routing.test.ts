@@ -479,7 +479,7 @@ function expectProjectWorkflowIds(
 }
 
 describe("project workflow Event routing", () => {
-  it("delivers a client and server-context Command through a command-transforming Process Manager", async () => {
+  it("delivers a client and server-context Command through a command-substituting Process Manager", async () => {
     const { project, planning, staffing, portfolio } = ids();
     const boundedContext = context(routeTo(portfolio), planning, staffing);
     try {

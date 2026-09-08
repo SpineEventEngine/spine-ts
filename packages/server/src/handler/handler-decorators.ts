@@ -115,8 +115,8 @@ export function Assign(
  * Creates a command handler declaration.
  *
  * Bare `@Command` accepts a generated Command, Event, or rejection input.
- * A Command input is the unique command receptor for its type and transforms it
- * into one or more Commands. `@Command` handlers are supported only by Process
+ * A Command input is the unique command-substitution receptor for its type and
+ * substitutes it with one or more Commands. `@Command` handlers are supported only by Process
  * Manager repositories; Aggregate and Projection repositories reject them.
  * Event and rejection inputs are Event Bus reactions that may return Commands.
  * Rejections are thrown, not returned.

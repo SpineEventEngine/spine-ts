@@ -54,7 +54,7 @@ export interface CommandRegistrationAssigneeMetadata {
   readonly entity: EntityMetadata;
 
   /**
-   * Command assignment or command-transforming handler metadata declared by the entity.
+   * Command assignment or command-substitution handler metadata declared by the entity.
    */
   readonly handler: CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata;
 
