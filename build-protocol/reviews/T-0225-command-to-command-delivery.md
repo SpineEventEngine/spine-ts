@@ -445,6 +445,17 @@ It runs `verify:task -- --no-coverage` across the focused analyzer, registry,
 readiness, bus/runtime, context, repository, Integration Broker, and black-box
 flow suites before the complete specialist wave.
 
+The preflight function completed with the explicit Luna/medium profile; runtime
+self-introspection was not exposed and no fallback was visible. It exited 2
+before tests after the Proto/generation gates passed. Tooling TypeScript found
+25 T-0225 errors in `integration-broker.test.ts`: broker dispatcher test doubles
+return `readonly unknown[]` from `messageSchemas()` instead of
+`readonly MessageSchema[]`. Generation left the tree clean. This is an active
+fixture typing defect, not baseline debt. The existing final-convergence
+`implementer` receives the single correction with its explicit
+`gpt-5.6-terra` / medium profile and no subagents; it must type the helpers
+correctly rather than restore unnecessary casts.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
