@@ -744,11 +744,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   isCommandSchema(schema: DescriptorMessageSchema): boolean {
     const fileName = schema.file.name.split(/[\\/]/u).at(-1);
     return (
-      schema.typeName === "spine.core.Command" ||
-      fileName === "commands" ||
-      fileName === "commands.proto" ||
-      fileName?.endsWith("_commands") === true ||
-      fileName?.endsWith("_commands.proto") === true
+      schema.typeName !== "spine.core.Command" &&
+      (fileName === "commands" ||
+        fileName === "commands.proto" ||
+        fileName?.endsWith("_commands") === true ||
+        fileName?.endsWith("_commands.proto") === true)
     );
   },
 

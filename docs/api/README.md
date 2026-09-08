@@ -666,9 +666,9 @@ transaction only for accepted commits; rejected commits return violations and
 leave the transaction active. `rollback()` closes the transaction and returns
 the discarded draft evidence.
 Server handler metadata exports include
-`EntityHandlers.define()`, `HandlerRegistrationBuilder`, the six handler
-metadata roles for command assignment, command transformation, command
-reaction, event subscription, event reaction, and legacy event application,
+`EntityHandlers.define()`, `HandlerRegistrationBuilder`, the seven handler
+metadata roles for command assignment, command substitution, command
+reaction, event subscription, state subscription, event reaction, and legacy event application,
 `HandlerParameterCount` for
 canonical arity metadata, and `HandlerMetadataError` for registration-time
 structural failures. Handler names must refer to prototype data methods
@@ -702,10 +702,12 @@ lookup-only registration and duplicate-policy validation. These APIs are
 metadata-only and do not execute handlers, access storage, dispatch buses, or
 start transport.
 Generated handler registries are the intended ordinary bridge from bare
-decorators to canonical metadata. Their logical contract is a versioned list of
-entity handler groups with entity type, state schema, handler kind, method name,
-first-parameter signal schema, explicit one- or two-argument arity, and emitted
-schemas inferred from explicit return types. Build-time analysis derives and
+decorators to canonical metadata. Their unversioned `receivers` collection
+contains Entity records with entity type and state schema plus standalone
+receiver records matched to registered instances by exact constructor. Each
+record carries handler kind, method name, first-parameter signal schema,
+explicit one- or two-argument arity, and emitted schemas inferred from explicit
+return types. Build-time analysis derives and
 validates command, event, and distinct rejection roles from generated
 descriptors before writing those registry records. A rejection role requires a
 top-level message declared in a source file ending `rejections.proto`.
@@ -727,7 +729,7 @@ explicit `void` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
 
 A generated Process Manager command-input handler uses distinct domain Command
-types and can receive `CommandContext`. This standalone example explicitly
+types and can receive `CommandContext`. This self-contained example explicitly
 ingests the unversioned data that an application build normally emits, then assembles a
 repository from it; it does not claim that its fixture discovers a registry
 artifact automatically:
@@ -852,7 +854,7 @@ stack while preserving the typed payload and other event metadata. Generated
 producer handlers return
 domain messages; the framework wraps returned commands/events internally and
 dispatches produced signals only after the current storage/transactional work
-succeeds. Command transformations commit source work before detached,
+succeeds. Command substitutions commit source work before detached,
 in-process follow-up enqueue: it is best-effort, has a commit-to-enqueue crash
 window, is not an atomic outbox or exactly-once guarantee, and does not
 durably retry a failed child.

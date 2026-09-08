@@ -186,7 +186,7 @@ there is no exact route. This is TypeScript routing; it does not consume
 `(is).java_type` or `(every_is).java_type`, and it has no decorator-based
 route registration API.
 
-A command-input `@Command` method is a command transformation receptor: it is
+A command-input `@Command` method is a command substitution receptor: it is
 the one effective receptor for that Command type (instead of an `@Assign`),
 commits its Entity state before its one-or-more returned Commands are detached
 for in-process follow-up enqueue, and receives an optional `CommandContext`.
@@ -205,7 +205,7 @@ retry that child.
 
 For a generated Process Manager, a command-input handler uses distinct domain
 Command input and output types, and the generated registry supplies those
-schemas. This standalone example explicitly ingests the unversioned data that an
+schemas. This self-contained example explicitly ingests the unversioned data that an
 application build normally emits, then assembles a repository from it; it does
 not claim that its fixture discovers a registry artifact automatically:
 

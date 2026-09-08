@@ -58,22 +58,22 @@ responsibilities. End-user applications must not define, import, or call helper
 adapters such as `materializeDecoratedEntityHandlers()`.
 
 Generated registry tooling handles the ordinary decorated-handler path. The
-logical generated registry contains one entry per entity class with the entity
-type, state schema, and handler records for bare `@Assign`, `@Command`,
-`@Subscribe`, and `@React` declarations. Each handler record names the method,
-the inferred first-parameter signal schema, the allowed public arity
-`handler(signal)` or `handler(signal, context)`, and the explicit emitted
-schemas inferred from the return type. `@Subscribe` records have no emitted
-schemas because the required return type is explicit `void`. The generated
-registry intentionally excludes `@Apply`; new aggregate behavior is
-transactional rather than event-sourced.
+unversioned generated registry contains mixed `receivers`: Entity records carry
+an entity type and state schema, while standalone records name the exact
+constructor of an instance registered through the builder. Each handler record
+names the method, inferred first-parameter signal schema, allowed public arity
+`handler(signal)` or `handler(signal, context)`, and emitted schemas inferred
+from the return type. `@Subscribe` records have no emitted schemas because the
+required return type is explicit `void`. The generated registry intentionally
+excludes `@Apply`; new aggregate behavior is transactional rather than
+event-sourced.
 
 Generated registry ingestion preserves each handler record's public arity in
 canonical metadata. Existing explicit/schema-bearing handler registration
 continues to default to one-argument invocation. Repository execution calls
 generated one-argument handlers as `handler(signal)` and generated
-two-argument command assignees/command transformations/event subscribers as
-`handler(signal, context)`, where transformations receive `CommandContext` and
+two-argument command assignees/command substitutions/event subscribers as
+`handler(signal, context)`, where substitutions receive `CommandContext` and
 event handlers receive `EventContext` from the incoming envelope. If the
 envelope omits context, the framework passes an empty generated context message
 of the proper schema. `@Apply` has no two-argument runtime support.
@@ -119,10 +119,11 @@ Application packages that use bare decorators need a build step that runs after
 their Protobuf-ES files are generated and before TypeScript compilation. The
 step analyzes the package source, writes
 `generated/handler/generated-handler-registry.ts`, and lets `tsc` compile that
-ignored source artifact into the package output. Runtime assembly adds entity
-classes to `BoundedContextBuilder` and calls `buildAsync()`, which loads the
-compiled registry through framework discovery before constructing default
-repositories.
+ignored source artifact into the package output. Runtime assembly adds Entity
+classes and registered standalone instances to `BoundedContextBuilder`, then
+calls `buildAsync()`, which loads the compiled registry through framework
+discovery before constructing default repositories and matching standalone
+receiver records to their instances.
 If the registry is missing, stale, malformed, or rejected during ingestion,
 context creation should fail deterministically before any handler is invoked.
 

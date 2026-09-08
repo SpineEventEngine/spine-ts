@@ -81,17 +81,17 @@ const ReviewStateSchema = handlerRegistrySchema(
   0,
 );
 class Manager extends ProcessManager<string, typeof StateSchema, number> {
-  substitute(command: Message<"spine.core.Command">) {
+  substitute(command: Message<"spine.server.testing.StartReview">) {
     return command;
   }
 }
 class AggregateReceiver extends Aggregate<string, typeof StateSchema, number> {
-  substitute(command: Message<"spine.core.Command">) {
+  substitute(command: Message<"spine.server.testing.StartReview">) {
     return command;
   }
 }
 class Commander extends AbstractCommander {
-  replace(command: Message<"spine.core.Command">) {
+  replace(command: Message<"spine.server.testing.StartReview">) {
     return command;
   }
 }
@@ -101,8 +101,8 @@ class Subscriber extends AbstractEventSubscriber {}
 const substitution = (methodName = "substitute") => ({
   kind: "command-substitution" as const,
   methodName,
-  signalSchema: CommandSchema,
-  emittedSchemas: [CommandSchema],
+  signalSchema: StartReviewSchema,
+  emittedSchemas: [ScheduleReviewSchema],
   parameterCount: 1 as const,
   origin: "domestic" as const,
 });
@@ -138,6 +138,21 @@ function domainHandler(kind: GeneratedHandlerRecordInput["kind"]): GeneratedHand
 }
 
 describe("generated handler registry ingestion", () => {
+  it("rejects the framework Command envelope as a command handler payload", () => {
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        receivers: [
+          {
+            receiverKind: "entity" as const,
+            receiverType: Manager,
+            stateSchema: StateSchema,
+            handlers: [{ ...substitution(), signalSchema: CommandSchema }],
+          },
+        ],
+      }),
+    ).toThrow("must declare a Command input schema");
+  });
+
   it.each([
     { receivers: [null] },
     { receivers: [{ receiverKind: "standalone", receiverType: Commander, handlers: null }] },

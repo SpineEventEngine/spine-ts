@@ -301,7 +301,7 @@ export function materializeDecoratedEntityHandlers<
             return builder.assign(DecoratorMetadata.schema(handler), methodName);
           case "command-substitution":
             throw new TypeError(
-              "Command transformations require generated registry metadata with emitted schemas.",
+              "Command substitutions require generated registry metadata with emitted schemas.",
             );
           case "command-reaction":
             throw new TypeError(

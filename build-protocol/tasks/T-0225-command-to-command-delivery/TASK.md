@@ -1,6 +1,6 @@
 # T-0225: Command-to-Command Delivery
 
-Status: Corrective implementation in progress
+Status: Specialist review correction in progress
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`
@@ -22,7 +22,7 @@ Aggregates and Projections reject `@Command` methods.
 3. A Command posted by server context reaches the same method.
 4. A command substitution returns one or more Commands using the supported return
    shapes; zero output remains invalid.
-5. Process Manager command transformation works, including an optional
+5. Process Manager command substitution works, including an optional
    `CommandContext` parameter. Aggregate and Projection repositories reject all
    `@Command` handlers.
 6. The Entity state commit succeeds before transformed Commands are posted.
@@ -72,8 +72,8 @@ Aggregates and Projections reject `@Command` methods.
 22. Remove Aggregate command-substitution execution and tests. Keep defensive
     Aggregate and Projection rejection in analysis, ingestion, metadata, and
     runtime binding.
-23. Remove registry v3/v4 compatibility and all `command-transformation`
-    identifiers, aliases, tests, and documentation.
+23. Remove registry v3/v4 compatibility and obsolete command-substitution
+    aliases, tests, and documentation.
 24. Refactor touched large modules into cohesive classes/modules. Do not add a
     general cleanup unrelated to this correction.
 
@@ -168,8 +168,8 @@ fields and the immutable role profile are the accepted metadata evidence.
 - Do not use a registry version or retain compatibility with earlier unreleased
   generated-registry snapshots.
 - Do not place produced-signal failure responsibility in `BoundedContext`.
-- Use `command-substitution`; do not retain the invented
-  `command-transformation` term as an alias.
+- Use command substitution; do not retain obsolete transformation terminology
+  as an alias.
 - Use the official `origin` remote and this feature worktree; any eventual
   merge-version change is a separate version-only commit with the required
   message and never changes internal dependency pins or the lockfile.
@@ -186,6 +186,12 @@ This disposition predates the Process Manager-only correction below and must
 not be treated as current verification evidence.
 
 ## Current disposition
+
+The final specialist-review correction batch is in progress. It adds strict
+domain Command ingestion and canonical two-argument context validation, updates
+the active receiver-registry documentation, and removes obsolete terminology.
+Focused behavior tests and tooling typechecking are current; no release claim
+applies.
 
 Implementation, bounded task reviews, public-flow tests, documentation, API
 expectations, lint, typechecking, generated-output checks, TSDoc, and focused

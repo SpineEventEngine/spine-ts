@@ -324,7 +324,7 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
 }
 
 /**
- * Registers generated command transformation metadata during registry ingestion.
+ * Registers generated command substitution metadata during registry ingestion.
  *
  * @internal
  */
@@ -388,7 +388,7 @@ export interface EntityHandlersMetadata<
   readonly commandAssignments: readonly CommandAssignmentHandlerMetadata[];
 
   /**
-   * Command transformations in declaration order.
+   * Command substitutions in declaration order.
    */
   readonly commandSubstitutions: readonly CommandSubstitutionHandlerMetadata[];
 

@@ -250,13 +250,6 @@ const publicOriginContract = `
   type CanonicalOriginIsRequired = Assert<
     Equal<IsRequired<BaseHandlerMetadata, "origin">, true>
   >;
-  type HandlerKindExcludesCommandTransformation = Assert<
-    Equal<
-      Extract<GeneratedHandlerRecordInput["kind"], "command-transformation">,
-      never
-    >
-  >;
-
   declare const message: Message;
   declare const external: External<Message>;
   const transparentForward: External<Message> = message;
@@ -278,5 +271,4 @@ const publicOriginContract = `
   void (undefined as unknown as CanonicalOriginIsExact);
   void (undefined as unknown as GeneratedOriginIsRequired);
   void (undefined as unknown as CanonicalOriginIsRequired);
-  void (undefined as unknown as HandlerKindExcludesCommandTransformation);
 `;

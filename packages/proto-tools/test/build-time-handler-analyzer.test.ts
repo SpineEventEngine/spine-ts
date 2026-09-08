@@ -35,6 +35,67 @@ function entityReceivers(analysis: ReturnType<typeof BuildHandlerAnalyzer.analyz
 }
 
 describe("build-time handler analyzer", () => {
+  it("requires canonical handler contexts that match the input signal role", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/context-contract.ts",
+        `
+          import { Assign, Command, ProcessManager, Subscribe } from "@spine-event-engine/server";
+          import { type CommandContext, type EventContext } from "@spine-event-engine/proto";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+          import { type TaskCreated } from "../generated/events_pb.js";
+
+          export class ContextContract extends ProcessManager<string, typeof TaskSchema, bigint> {
+            @Assign assign(command: CreateTask, context: EventContext): TaskCreated {
+              throw new Error(String(command) + String(context));
+            }
+            @Command substitute(command: CreateTask, context: CommandContext): RenameTask {
+              throw new Error(String(command) + String(context));
+            }
+            @Subscribe observe(event: TaskCreated, context: CommandContext): void { void event; void context; }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_HANDLER_CONTEXT",
+      "INVALID_HANDLER_CONTEXT",
+    ]);
+    expect(entityReceivers(result)[0]?.handlers).toEqual([
+      expect.objectContaining({ methodName: "substitute", parameterCount: 2 }),
+    ]);
+  });
+
+  it("accepts aliased and namespace-imported canonical handler contexts", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/canonical-context.ts",
+        `
+          import { Assign, Command, ProcessManager, Subscribe } from "@spine-event-engine/server";
+          import { type CommandContext as CommandMetadata } from "@spine-event-engine/proto";
+          import * as proto from "@spine-event-engine/proto";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+          import { type TaskCreated } from "../generated/events_pb.js";
+
+          export class CanonicalContext extends ProcessManager<string, typeof TaskSchema, bigint> {
+            @Assign assign(command: CreateTask, context: CommandMetadata): TaskCreated {
+              throw new Error(String(command) + String(context));
+            }
+            @Command substitute(command: CreateTask, context: CommandMetadata): RenameTask {
+              throw new Error(String(command) + String(context));
+            }
+            @Subscribe observe(event: TaskCreated, context: proto.EventContext): void { void event; void context; }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+  });
+
   it("analyzes nominal standalone command receivers without an Entity state schema", () => {
     const result = analyzeBuildHandlers(
       programWithSource(
@@ -568,7 +629,9 @@ describe("build-time handler analyzer", () => {
       .map(
         ([decorator, methodName, returnType, , , parameterCount]) => `
           @${decorator}
-          ${methodName}(rejection: TaskAlreadyDone${parameterCount === 2 ? ", context: unknown" : ""}): ${returnType} {
+          ${methodName}(rejection: TaskAlreadyDone${
+            parameterCount === 2 ? ", context: EventContext" : ""
+          }): ${returnType} {
             throw new Error(String(rejection));
           }`,
       )
@@ -1448,6 +1511,7 @@ function schema(moduleSpecifier: string, exportName: string) {
 }
 
 const rejectionRoleImports = `
+  import { type EventContext } from "@spine-event-engine/proto";
   import { type TaskAlreadyDone } from "../generated/rejections_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
   import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";`;
@@ -1593,6 +1657,7 @@ function fileDescriptor(
 
 const validTaskSource = `
   import { Command, ProcessManager, Subscribe } from "@spine-event-engine/server";
+  import { type EventContext } from "@spine-event-engine/proto";
   import * as server from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/spine/examples/todo/tasks_pb.js";
   import { type RenameTask } from "../generated/spine/examples/todo/task_commands_pb.js";
@@ -1605,7 +1670,7 @@ const validTaskSource = `
     }
 
     @Command
-    renameAgain(event: events.TaskCreated, context: unknown): Array<RenameTask> {
+    renameAgain(event: events.TaskCreated, context: EventContext): Array<RenameTask> {
       throw new Error(String(event) + String(context));
     }
 

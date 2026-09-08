@@ -1432,7 +1432,7 @@ class AggregateExecutionSupport {
       deferred.notify();
     } catch (error) {
       const event = events[events.length - 1];
-      if (event !== undefined) this.#runtime.publisher.reportFailure("notification", event, error);
+      if (event !== undefined) this.#runtime.publisher.reportFailure("event", event, error);
     }
     return true;
   }
@@ -1465,7 +1465,7 @@ class AggregateExecutionSupport {
           try {
             await dispatch(event);
           } catch (error) {
-            this.#runtime.publisher.reportFailure("notification", event, error);
+            this.#runtime.publisher.reportFailure("event", event, error);
           }
         }),
       );
@@ -2151,7 +2151,7 @@ class ProjectionEventExecution {
     try {
       deferred.notify();
     } catch (error) {
-      this.#runtime.publisher.reportFailure("notification", this.#event, error);
+      this.#runtime.publisher.reportFailure("event", this.#event, error);
     }
     EntityStateChangePublisher.event(
       this.#runtime,
@@ -2453,7 +2453,7 @@ class ProcessManagerExecutionSupport {
       deferred?.notify();
     } catch (error) {
       this.#runtime.publisher.reportFailure(
-        "notification",
+        "event",
         events[events.length - 1] ?? create(EventSchema),
         error,
       );
@@ -2557,7 +2557,7 @@ class ProcessManagerCommandExecution {
         : Object.freeze([]);
     if (intake.assignee.handler.kind === "command-substitution" && commands.length === 0) {
       throw new Error(
-        "Repository process-manager command transformations must return at least one command.",
+        "Repository Process Manager command substitutions must return at least one command.",
       );
     }
     const events =
@@ -3741,7 +3741,7 @@ class HandlerDispatchPublishing {
       });
       this.#post(runtime, EntityLog.CommandDispatchedToHandlerSchema, event);
     } catch (error) {
-      runtime.publisher.reportFailure("notification", create(EventSchema), error);
+      runtime.publisher.reportFailure("event", create(EventSchema), error);
     }
   }
 
@@ -3798,7 +3798,7 @@ class HandlerDispatchPublishing {
       });
       this.#post(runtime, schema, diagnostic);
     } catch (error) {
-      runtime.publisher.reportFailure("notification", create(EventSchema), error);
+      runtime.publisher.reportFailure("event", create(EventSchema), error);
     }
   }
 

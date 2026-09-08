@@ -19,7 +19,7 @@ import { commandBusAccess, CommandBus } from "../bus/command-bus.js";
 import { eventBusAccess, EventBus } from "../bus/event-bus.js";
 import { emitServerError } from "../server/server-log.js";
 
-type PublicationKind = "command" | "event" | "system-event" | "stored-event" | "notification";
+type PublicationKind = "command" | "event" | "system-event" | "stored-event";
 type PublisherState = "open" | "closing" | "closed";
 
 /**
@@ -152,7 +152,8 @@ export class SignalPublisher {
   }
 
   /**
-   * Starts rejecting new produced-signal admission.
+   * Starts closing while trusted produced work admitted during context shutdown drains.
+   * New trusted work remains admissible until `finishClose()` rejects it.
    */
   beginClose(): void {
     if (this.#state === "open") this.#state = "closing";
@@ -185,7 +186,7 @@ export class SignalPublisher {
   }
 
   #publish(
-    kind: Exclude<PublicationKind, "notification">,
+    kind: PublicationKind,
     signal: Command | Event,
     publish: () => Promise<void>,
   ): Promise<void> {

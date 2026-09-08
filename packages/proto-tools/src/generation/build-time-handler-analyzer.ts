@@ -205,6 +205,7 @@ export type BuildHandlerDiagnosticCode =
   | "FRAMEWORK_ENVELOPE_RETURN"
   | "INVALID_EMITTED_SCHEMA"
   | "INVALID_HANDLER_NAME"
+  | "INVALID_HANDLER_CONTEXT"
   | "INVALID_HANDLER_VISIBILITY"
   | "INVALID_PARAMETER_COUNT"
   | "INVALID_SIGNAL_TYPE"
@@ -341,6 +342,7 @@ interface ImportState {
   readonly serverSymbols: ReadonlyMap<string, string>;
   readonly protoNamespaces: ReadonlySet<string>;
   readonly protoSymbols: ReadonlySet<string>;
+  readonly protoContextSymbols: ReadonlyMap<string, "CommandContext" | "EventContext">;
 }
 
 interface MutableImportState {
@@ -351,6 +353,7 @@ interface MutableImportState {
   readonly serverSymbols: Map<string, string>;
   readonly protoNamespaces: Set<string>;
   readonly protoSymbols: Set<string>;
+  readonly protoContextSymbols: Map<string, "CommandContext" | "EventContext">;
 }
 
 interface GeneratedNamespace {
@@ -612,7 +615,12 @@ const HandlerSources = Object.freeze({
       handler.name,
       scope.imports,
     )?.map((schema) => schema.reference);
-    if (signalSchema === undefined || emittedSchemas === undefined || method === undefined) {
+    if (signal === undefined || emittedSchemas === undefined || method === undefined) {
+      return undefined;
+    }
+    if (
+      !HandlerSources.validContextParameter(node.parameters, signal.kind, scope, className, method)
+    ) {
       return undefined;
     }
     const where = HandlerSources.whereDeclaration(
@@ -630,7 +638,7 @@ const HandlerSources = Object.freeze({
     return {
       kind: HandlerSources.handlerKind(handler.name, signal?.kind),
       methodName: method,
-      signalSchema,
+      signalSchema: signal.reference,
       emittedSchemas,
       parameterCount: node.parameters.length as GeneratedHandlerParameterCount,
       origin: origin.value,
@@ -1569,6 +1577,48 @@ const HandlerSources = Object.freeze({
     return { value: "domestic", type: first };
   },
 
+  validContextParameter(
+    parameters: readonly ts.ParameterDeclaration[],
+    signalKind: SignalKind | undefined,
+    scope: AnalyzerScope,
+    className: string,
+    method: string,
+  ): boolean {
+    if (parameters.length !== 2) return true;
+    const context = parameters[1]?.type;
+    const expected = signalKind === "command" ? "CommandContext" : "EventContext";
+    if (context !== undefined && HandlerSources.isCanonicalContext(context, expected, scope)) {
+      return true;
+    }
+    HandlerTypes.pushDiagnostic(
+      scope,
+      "INVALID_HANDLER_CONTEXT",
+      context ?? parameters[1] ?? parameters[0]!,
+      `Two-argument handlers receiving ${
+        signalKind === "command" ? "Commands" : "Events, rejections, or Entity states"
+      } must declare ${expected} as their second parameter.`,
+      className,
+      method,
+    );
+    return false;
+  },
+
+  isCanonicalContext(
+    type: ts.TypeNode,
+    expected: "CommandContext" | "EventContext",
+    scope: AnalyzerScope,
+  ): boolean {
+    if (!ts.isTypeReferenceNode(type)) return false;
+    if (ts.isIdentifier(type.typeName)) {
+      return scope.imports.protoContextSymbols.get(type.typeName.text) === expected;
+    }
+    return (
+      ts.isIdentifier(type.typeName.left) &&
+      scope.imports.protoNamespaces.has(type.typeName.left.text) &&
+      type.typeName.right.text === expected
+    );
+  },
+
   externalMarker(
     type: ts.TypeNode,
     scope: AnalyzerScope,
@@ -1672,6 +1722,7 @@ const HandlerSources = Object.freeze({
       serverSymbols: new Map(),
       protoNamespaces: new Set(),
       protoSymbols: new Set(),
+      protoContextSymbols: new Map(),
     };
 
     for (const statement of source.statements) {
@@ -1751,6 +1802,9 @@ const HandlerSources = Object.freeze({
       const imported = element.propertyName?.text ?? element.name.text;
       if (imported === "Event" || imported === "Command") {
         state.protoSymbols.add(element.name.text);
+      }
+      if (imported === "CommandContext" || imported === "EventContext") {
+        state.protoContextSymbols.set(element.name.text, imported);
       }
     }
   },

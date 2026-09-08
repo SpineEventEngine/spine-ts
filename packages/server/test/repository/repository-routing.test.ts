@@ -636,7 +636,7 @@ const fileCommandTransformationFixture = (() => {
   const descriptor = clone(FileDescriptorProtoSchema, fileValidationRefusalFixture.proto);
   descriptor.name = "validation_refusal_commands.proto";
   const command = descriptor.messageType.find((message) => message.name === "ValidatedTaskCommand");
-  if (command === undefined) throw new Error("Command transformation input fixture is missing.");
+  if (command === undefined) throw new Error("Command substitution input fixture is missing.");
   const output = clone(DescriptorProtoSchema, command);
   output.name = "TransformedTaskCommand";
   descriptor.messageType.push(output);
@@ -3897,9 +3897,9 @@ describe("repository signal routing", () => {
     expect(AnyMessages.unpack(stored?.context?.producerId as never, TaskIdSchema)).toEqual(taskId);
   });
 
-  it("routes command transformations within their tenant and preserves command lineage", async () => {
+  it("routes command substitutions within their tenant and preserves command lineage", async () => {
     const produced: SpineCommand[] = [];
-    const context = BoundedContext.multitenant("Command transformations")
+    const context = BoundedContext.multitenant("Command substitutions")
       .add(createCommandTransformingProcessManagerRepository())
       .addCommandDispatcher({
         messageSchemas: () => [TransformedTaskCommandSchema],
@@ -3981,7 +3981,7 @@ describe("repository signal routing", () => {
     CommandTransformingProcessManager.siblingOutputs = true;
     const observed: string[] = [];
     const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
-    const context = BoundedContext.singleTenant("Command transformation siblings")
+    const context = BoundedContext.singleTenant("Command substitution siblings")
       .add(createCommandTransformingProcessManagerRepository())
       .addCommandDispatcher({
         messageSchemas: () => [TransformedTaskCommandSchema],

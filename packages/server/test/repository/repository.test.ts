@@ -201,7 +201,7 @@ class PlainEntityClass {
 }
 
 describe("repository identity", () => {
-  it("rejects command transformations on Aggregates", () => {
+  it("rejects command substitutions on Aggregates", () => {
     expect(() =>
       HandlerMetadataValues.defineArity(
         CommandTransformingAggregate,
@@ -212,7 +212,7 @@ describe("repository identity", () => {
     ).toThrow(/Process Manager/);
   });
 
-  it("rejects command transformations on projections before command readiness is exposed", () => {
+  it("rejects command substitutions on projections before command readiness is exposed", () => {
     expect(() =>
       HandlerMetadataValues.defineArity(
         CommandTransformingProjection,

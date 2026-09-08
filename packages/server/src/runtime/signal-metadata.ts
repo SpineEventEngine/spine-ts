@@ -421,7 +421,7 @@ export class SignalMetadata {
   }
 
   /**
-   * Creates command metadata from a command transformation.
+   * Creates command metadata from a command substitution.
    *
    * @param command Source command.
    * @param sequence Causal sequence number.
