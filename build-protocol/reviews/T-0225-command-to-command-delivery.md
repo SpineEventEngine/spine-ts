@@ -321,6 +321,15 @@ baseline exclusions. The correction context must update all affected tests to
 the current contract and make the blocked external-interest proof executable
 before re-review; production compatibility shims are prohibited.
 
+The correction context reproduced the tooling failure and locally fixed the
+standalone rejection constructor type, two fixture initializer schemas, and a
+missing `EventContext` import, but its execution window ended before the broad
+test migration and no commit was made. A fresh existing `implementer` receives
+the intact tree without overlap and exclusive responsibility for every current
+tooling diagnostic. Its explicit profile is `gpt-5.6-terra` / medium, it must
+not spawn subagents, and it must update tests to the current contract rather
+than restoring removed production compatibility.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
