@@ -187,9 +187,13 @@ not be treated as current verification evidence.
 
 ## Current disposition
 
-Final convergence is in progress. The active documentation/API expectation and
-changed-file lint cleanup are recorded in the T-0225 work log; this task has no
-new release verification claim.
+Implementation, bounded task reviews, public-flow tests, documentation, API
+expectations, lint, typechecking, generated-output checks, TSDoc, and focused
+coverage are converged through `1e2a515a7`. The canonical cheap preflight and
+the complete independent specialist review wave are next. This task has no
+current release-verification claim.
+
+## Historical pre-standalone disposition
 
 This disposition is superseded by the corrective implementation started on
 2026-09-08. It remains historical evidence only.

@@ -431,6 +431,20 @@ responsibility with explicit `gpt-5.6-terra` / medium dispatch and no
 subagents. It must fix every diagnostic, verify CommandBus documentation, and
 must not suppress the checker or reduce its scope.
 
+Commit `1e2a515a7` corrects all 93 TSDoc diagnostics. `lint:tsdoc`, API and
+audience documentation, generated snippets, generated build and tooling/server
+typechecks, changed-file lint/formatting, generated Proto checks, current
+terminology scan, and diff checks pass. CommandBus and all changed public APIs
+have current documentation. Implementation is mechanically converged.
+
+The canonical cheap preflight is assigned as a read-only orchestrator
+verification function. Expected model is explicitly `gpt-5.6-luna` and
+reasoning is explicitly `medium` because the command spans multiple packages
+and requires failure classification. It must not edit files or spawn subagents.
+It runs `verify:task -- --no-coverage` across the focused analyzer, registry,
+readiness, bus/runtime, context, repository, Integration Broker, and black-box
+flow suites before the complete specialist wave.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
