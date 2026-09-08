@@ -488,6 +488,12 @@ source change. Copyright, fixture reproducibility, 14 registry tests, focused
 lint, formatting, and diff checks pass. The same read-only Luna/medium function
 reruns the identical canonical preflight.
 
+The fourth preflight cleared TypeScript, cleanup, TSDoc, copyright, and log
+containment, then stopped before tests on formatting in `bounded-context.ts`
+and `handler-metadata.ts`. Generation remained clean. The same
+final-convergence implementer receives this two-file mechanical formatting fix
+with its explicit `gpt-5.6-terra` / medium profile and no subagents.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
