@@ -195,35 +195,59 @@ For a generated Process Manager, a command-input handler uses distinct domain
 Command input and output types, and the generated registry supplies those
 schemas:
 
-```ts
-// Generated from project_commands.proto.
-interface ProjectId {
-  organization: string;
-  number: number;
-}
-interface ApproveProject {
-  project: ProjectId;
-  status: string;
-}
-interface ScheduleProject {
-  project: ProjectId;
-  status: string;
-}
-interface CommandContext {}
-declare abstract class ProcessManager {}
-declare const ScheduleProjectSchema: unique symbol;
-declare function Command(value: unknown, context: ClassMethodDecoratorContext): void;
-declare function create(
-  schema: typeof ScheduleProjectSchema,
-  message: ScheduleProject,
-): ScheduleProject;
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/project-event-routing.test.ts -->
 
-class ApprovalCoordinator extends ProcessManager {
+```ts
+import { create } from "@bufbuild/protobuf";
+import { SignalEnvelopes } from "@spine-event-engine/core";
+import {
+  CommandContextSchema,
+  CommandIdSchema,
+  type CommandContext,
+} from "@spine-event-engine/proto";
+import { BoundedContext, Command, ProcessManager } from "@spine-event-engine/server";
+
+import {
+  ApproveProjectSchema,
+  ScheduleProjectSchema,
+  type ApproveProject,
+  type ScheduleProject,
+} from "../generated/spine/server/testing/project_commands_pb.js";
+import {
+  CoordinationStateSchema,
+  OrganizationIdSchema,
+  ProjectIdSchema,
+  type ProjectId,
+} from "../generated/spine/server/testing/project_workflow_pb.js";
+
+class ApprovalCoordinator extends ProcessManager<
+  ProjectId,
+  typeof CoordinationStateSchema,
+  number
+> {
   @Command
   approve(command: ApproveProject, context: CommandContext): ScheduleProject {
+    this.update((draft) => Object.assign(draft, { id: this.id, projectName: command.status }));
     return create(ScheduleProjectSchema, { project: command.project, status: command.status });
   }
 }
+
+const project = create(ProjectIdSchema, {
+  organization: create(OrganizationIdSchema, { code: "org-a" }),
+  number: 1,
+});
+const context = await BoundedContext.singleTenant("Projects")
+  .withGeneratedRegistryRoot(new URL("../generated/", import.meta.url))
+  .add(ApprovalCoordinator)
+  .buildAsync();
+await context.commandBus().post(
+  SignalEnvelopes.command({
+    id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
+    context: create(CommandContextSchema),
+    schema: ApproveProjectSchema,
+    message: create(ApproveProjectSchema, { project, status: "approved" }),
+  }),
+);
 ```
 
 The generated v4 record declares `ApproveProjectSchema` as the input and
