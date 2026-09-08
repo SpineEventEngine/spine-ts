@@ -1,0 +1,3 @@
+syntax = "proto3";
+package spine.server.testing.handlerregistry;
+message ReviewStarted { string id = 1; }

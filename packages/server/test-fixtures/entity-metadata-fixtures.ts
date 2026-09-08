@@ -6,6 +6,10 @@
  * Source Proto: packages/server/test-fixtures/proto/entity-metadata/main.proto
  * Source Proto: packages/server/test-fixtures/proto/entity-metadata/unknown-kind.proto
  * Source Proto: packages/server/test-fixtures/proto/entity-metadata/visibility.proto
+ * Source Proto: packages/server/test-fixtures/proto/handler-registry/commands.proto
+ * Source Proto: packages/server/test-fixtures/proto/handler-registry/events.proto
+ * Source Proto: packages/server/test-fixtures/proto/handler-registry/rejections.proto
+ * Source Proto: packages/server/test-fixtures/proto/handler-registry/states.proto
  */
 
 /**
@@ -18,10 +22,14 @@
  * - `packages/server/test-fixtures/proto/entity-metadata/invalid-column.proto`
  * - `packages/server/test-fixtures/proto/entity-metadata/invalid-tag.proto`
  * - `packages/server/test-fixtures/proto/entity-metadata/visibility.proto`
+ * - `packages/server/test-fixtures/proto/handler-registry/commands.proto`
+ * - `packages/server/test-fixtures/proto/handler-registry/events.proto`
+ * - `packages/server/test-fixtures/proto/handler-registry/rejections.proto`
+ * - `packages/server/test-fixtures/proto/handler-registry/states.proto`
  */
 
 /**
- * Generated from Proto: packages/server/test-fixtures/proto/entity-metadata/empty.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-column.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-tag.proto, packages/server/test-fixtures/proto/entity-metadata/main.proto, packages/server/test-fixtures/proto/entity-metadata/unknown-kind.proto, packages/server/test-fixtures/proto/entity-metadata/visibility.proto.
+ * Generated from Proto: packages/server/test-fixtures/proto/entity-metadata/empty.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-column.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-tag.proto, packages/server/test-fixtures/proto/entity-metadata/main.proto, packages/server/test-fixtures/proto/entity-metadata/unknown-kind.proto, packages/server/test-fixtures/proto/entity-metadata/visibility.proto, packages/server/test-fixtures/proto/handler-registry/commands.proto, packages/server/test-fixtures/proto/handler-registry/events.proto, packages/server/test-fixtures/proto/handler-registry/rejections.proto, packages/server/test-fixtures/proto/handler-registry/states.proto.
  */
 export interface ServerEntityMetadataTestFixture {
   readonly protoPath: string;
@@ -29,7 +37,7 @@ export interface ServerEntityMetadataTestFixture {
 }
 
 /**
- * Generated from Proto: packages/server/test-fixtures/proto/entity-metadata/empty.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-column.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-tag.proto, packages/server/test-fixtures/proto/entity-metadata/main.proto, packages/server/test-fixtures/proto/entity-metadata/unknown-kind.proto, packages/server/test-fixtures/proto/entity-metadata/visibility.proto.
+ * Generated from Proto: packages/server/test-fixtures/proto/entity-metadata/empty.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-column.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-tag.proto, packages/server/test-fixtures/proto/entity-metadata/main.proto, packages/server/test-fixtures/proto/entity-metadata/unknown-kind.proto, packages/server/test-fixtures/proto/entity-metadata/visibility.proto, packages/server/test-fixtures/proto/handler-registry/commands.proto, packages/server/test-fixtures/proto/handler-registry/events.proto, packages/server/test-fixtures/proto/handler-registry/rejections.proto, packages/server/test-fixtures/proto/handler-registry/states.proto.
  */
 export const serverEntityMetadataFixtureGeneration = Object.freeze({
   command: "node scripts/generate-server-test-fixtures.mjs",
@@ -37,7 +45,7 @@ export const serverEntityMetadataFixtureGeneration = Object.freeze({
 });
 
 /**
- * Generated from Proto: packages/server/test-fixtures/proto/entity-metadata/empty.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-column.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-tag.proto, packages/server/test-fixtures/proto/entity-metadata/main.proto, packages/server/test-fixtures/proto/entity-metadata/unknown-kind.proto, packages/server/test-fixtures/proto/entity-metadata/visibility.proto.
+ * Generated from Proto: packages/server/test-fixtures/proto/entity-metadata/empty.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-column.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-tag.proto, packages/server/test-fixtures/proto/entity-metadata/main.proto, packages/server/test-fixtures/proto/entity-metadata/unknown-kind.proto, packages/server/test-fixtures/proto/entity-metadata/visibility.proto, packages/server/test-fixtures/proto/handler-registry/commands.proto, packages/server/test-fixtures/proto/handler-registry/events.proto, packages/server/test-fixtures/proto/handler-registry/rejections.proto, packages/server/test-fixtures/proto/handler-registry/states.proto.
  */
 export const serverEntityMetadataTestFixtures = Object.freeze({
   main: Object.freeze({
@@ -69,5 +77,25 @@ export const serverEntityMetadataTestFixtures = Object.freeze({
     protoPath: "packages/server/test-fixtures/proto/entity-metadata/visibility.proto",
     descriptorSetBase64:
       "CroKCiBlbnRpdHktbWV0YWRhdGEvdmlzaWJpbGl0eS5wcm90bxoTc3BpbmUvb3B0aW9ucy5wcm90byJLChNQcm9jZXNzTWFuYWdlclN0YXRlEg4KAmlkGAEgASgJUgJpZBIaCgVxdWV1ZRgCIAEoCUIE8IckAVIFcXVldWU6CPqKJAQIAxACIi8KE0Z1bGxWaXNpYmlsaXR5U3RhdGUSDgoCaWQYASABKAlSAmlkOgj6iiQECAQQBCInCgtIaWRkZW5TdGF0ZRIOCgJpZBgBIAEoCVICaWQ6CPqKJAQIBBABStEICgYSBA0AJQEK0AQKAQwSAw0AEhrFBAogQ29weXJpZ2h0IDIwMjYsIENvZGVNYXR0ZXJzLiBBbGwgcmlnaHRzIHJlc2VydmVkLgoKIExpY2Vuc2VkIHVuZGVyIHRoZSBBcGFjaGUgTGljZW5zZSwgVmVyc2lvbiAyLjAgKHRoZSAiTGljZW5zZSIpOyB5b3UgbWF5IG5vdCB1c2UgdGhpcyBmaWxlIGV4Y2VwdAogaW4gY29tcGxpYW5jZSB3aXRoIHRoZSBMaWNlbnNlLiBZb3UgbWF5IG9idGFpbiBhIGNvcHkgb2YgdGhlIExpY2Vuc2UgYXQKCiBodHRwczovL3d3dy5hcGFjaGUub3JnL2xpY2Vuc2VzL0xJQ0VOU0UtMi4wCgogVW5sZXNzIHJlcXVpcmVkIGJ5IGFwcGxpY2FibGUgbGF3IG9yIGFncmVlZCB0byBpbiB3cml0aW5nLCBzb2Z0d2FyZSBkaXN0cmlidXRlZCB1bmRlciB0aGUgTGljZW5zZQogaXMgZGlzdHJpYnV0ZWQgb24gYW4gIkFTIElTIiBCQVNJUywgV0lUSE9VVCBXQVJSQU5USUVTIE9SIENPTkRJVElPTlMgT0YgQU5ZIEtJTkQsIGVpdGhlciBleHByZXNzCiBvciBpbXBsaWVkLiBTZWUgdGhlIExpY2Vuc2UgZm9yIHRoZSBzcGVjaWZpYyBsYW5ndWFnZSBnb3Zlcm5pbmcgcGVybWlzc2lvbnMgYW5kIGxpbWl0YXRpb25zIHVuZGVyCiB0aGUgTGljZW5zZS4KCgkKAgMAEgMPAB0KCgoCBAASBBEAFwEKCgoDBAABEgMRCBsKCgoDBAAHEgMSAikKDgoHBAAHr8EEARIDEgIpCgoKAwQABxIDEwIpCg4KBwQAB6/BBAISAxMCKQoMCgUEAAIABRIDFQIICgsKBAQAAgASAxUCEAoMCgUEAAIAARIDFQkLCgwKBQQAAgADEgMVDg8KDAoFBAACAQUSAxYCCAoLCgQEAAIBEgMWAiUKDAoFBAACAQESAxYJDgoMCgUEAAIBAxIDFhESCgwKBQQAAgEIEgMWEyQKDwoIBAACAQj+wAQSAxYUIwoKCgIEARIEGQAeAQoKCgMEAQESAxkIGwoKCgMEAQcSAxoCIAoOCgcEAQevwQQBEgMaAiAKCgoDBAEHEgMbAiQKDgoHBAEHr8EEAhIDGwIkCgwKBQQBAgAFEgMdAggKCwoEBAECABIDHQIQCgwKBQQBAgABEgMdCQsKDAoFBAECAAMSAx0ODwoKCgIEAhIEIAAlAQoKCgMEAgESAyAIEwoKCgMEAgcSAyECIAoOCgcEAgevwQQBEgMhAiAKCgoDBAIHEgMiAiQKDgoHBAIHr8EEAhIDIgIkCgwKBQQCAgAFEgMkAggKCwoEBAICABIDJAIQCgwKBQQCAgABEgMkCQsKDAoFBAICAAMSAyQOD2IGcHJvdG8z",
+  }),
+  handlerRegistryCommands: Object.freeze({
+    protoPath: "packages/server/test-fixtures/proto/handler-registry/commands.proto",
+    descriptorSetBase64:
+      "CssCCh9oYW5kbGVyLXJlZ2lzdHJ5L2NvbW1hbmRzLnByb3RvEiRzcGluZS5zZXJ2ZXIudGVzdGluZy5oYW5kbGVycmVnaXN0cnkiHQoLU3RhcnRSZXZpZXcSDgoCaWQYASABKAlSAmlkIiAKDlNjaGVkdWxlUmV2aWV3Eg4KAmlkGAEgASgJUgJpZEq4AQoGEgQAAAMpCggKAQwSAwAAEgoICgECEgMBAC0KCQoCBAASAwIAJgoKCgMEAAESAwIIEwoMCgUEAAIABRIDAhYcCgsKBAQAAgASAwIWJAoMCgUEAAIAARIDAh0fCgwKBQQAAgADEgMCIiMKCQoCBAESAwMAKQoKCgMEAQESAwMIFgoMCgUEAQIABRIDAxkfCgsKBAQBAgASAwMZJwoMCgUEAQIAARIDAyAiCgwKBQQBAgADEgMDJSZiBnByb3RvMw==",
+  }),
+  handlerRegistryEvents: Object.freeze({
+    protoPath: "packages/server/test-fixtures/proto/handler-registry/events.proto",
+    descriptorSetBase64:
+      "CtoBCh1oYW5kbGVyLXJlZ2lzdHJ5L2V2ZW50cy5wcm90bxIkc3BpbmUuc2VydmVyLnRlc3RpbmcuaGFuZGxlcnJlZ2lzdHJ5Ih8KDVJldmlld1N0YXJ0ZWQSDgoCaWQYASABKAlSAmlkSmoKBhIEAAACKAoICgEMEgMAABIKCAoBAhIDAQAtCgkKAgQAEgMCACgKCgoDBAABEgMCCBUKDAoFBAACAAUSAwIYHgoLCgQEAAIAEgMCGCYKDAoFBAACAAESAwIfIQoMCgUEAAIAAxIDAiQlYgZwcm90bzM=",
+  }),
+  handlerRegistryRejections: Object.freeze({
+    protoPath: "packages/server/test-fixtures/proto/handler-registry/rejections.proto",
+    descriptorSetBase64:
+      "Ct8BCiFoYW5kbGVyLXJlZ2lzdHJ5L3JlamVjdGlvbnMucHJvdG8SJHNwaW5lLnNlcnZlci50ZXN0aW5nLmhhbmRsZXJyZWdpc3RyeSIgCg5SZXZpZXdSZWplY3RlZBIOCgJpZBgBIAEoCVICaWRKagoGEgQAAAIpCggKAQwSAwAAEgoICgECEgMBAC0KCQoCBAASAwIAKQoKCgMEAAESAwIIFgoMCgUEAAIABRIDAhkfCgsKBAQAAgASAwIZJwoMCgUEAAIAARIDAiAiCgwKBQQAAgADEgMCJSZiBnByb3RvMw==",
+  }),
+  handlerRegistryStates: Object.freeze({
+    protoPath: "packages/server/test-fixtures/proto/handler-registry/states.proto",
+    descriptorSetBase64:
+      "Cp4CCh1oYW5kbGVyLXJlZ2lzdHJ5L3N0YXRlcy5wcm90bxIkc3BpbmUuc2VydmVyLnRlc3RpbmcuaGFuZGxlcnJlZ2lzdHJ5GhNzcGluZS9vcHRpb25zLnByb3RvIiUKC1Jldmlld1N0YXRlEg4KAmlkGAEgASgJUgJpZDoG+ookAggDSpIBCgYSBAAABgEKCAoBDBIDAAASCggKAQISAwEALQoJCgIDABIDAgAdCgoKAgQAEgQDAAYBCgoKAwQAARIDAwgTCgoKAwQABxIDBAIpCg4KBwQAB6/BBAESAwQCKQoMCgUEAAIABRIDBQIICgsKBAQAAgASAwUCEAoMCgUEAAIAARIDBQkLCgwKBQQAAgADEgMFDg9iBnByb3RvMw==",
   }),
 });
