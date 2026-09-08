@@ -1,6 +1,6 @@
 # T-0225: Command-to-Command Delivery
 
-Status: Superseded by active inheritance and generated-schema-role correction
+Status: Ready for human review; final durable evidence commit pending
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`
@@ -133,7 +133,17 @@ not be treated as current verification evidence.
 
 ## Current disposition
 
-Aggregate and Projection `@Command` support was removed. Process Managers
-retain command-input substitutions and event/rejection command reactions. The
-current correction requires focused verification before a new review/release
-disposition is recorded.
+The final binding domain correction is complete: Aggregates and Projections
+reject every `@Command`; Process Managers retain command-input substitutions
+and event/rejection command reactions. The corrected review convergence also
+includes domain-correct black-box fixtures, truthful generated-registry
+documentation examples, and the analyzer symbol-lookup guard for unrelated
+heritage types.
+
+The former two-file generator failure is resolved: its focused rerun passed 98
+tests. The canonical preflight passed 9 files and 437 tests. The authoritative
+`pnpm verify:release` exited 0 with 288 files and 4,586 tests: 93.29% statements,
+90.04% branches, 92.89% functions, and 94.45% lines. These final gates supersede
+all earlier entries stating that release verification had not run. The branch is
+clean; this record-only commit will advance its final HEAD without changing the
+verified production behavior.

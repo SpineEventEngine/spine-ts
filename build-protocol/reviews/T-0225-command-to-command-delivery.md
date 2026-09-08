@@ -415,3 +415,20 @@ entity states in the workflow file, moves Commands to `project_commands.proto`,
 and moves Events to `project_events.proto`; runtime validation was not
 weakened. Normal generation refreshed the manifest and exports. No release run
 has occurred.
+
+## Final convergence and authoritative verification
+
+The final binding domain correction is complete: only Process Managers support
+`@Command`; Aggregates and Projections reject every command handler. Corrected
+review findings also cover strict generated Event names, domain-correct
+black-box command/event fixtures, executable and truthful registry examples,
+and the analyzer's guarded TypeScript symbol lookup for unrelated heritage
+types.
+
+The former generator failure reran across 2 files and 98 tests. The canonical
+preflight passed 9 files and 437 tests. The authoritative `pnpm verify:release`
+exited 0 with 288 files and 4,586 tests, with 93.29% statement, 90.04% branch,
+92.89% function, and 94.45% line coverage. This evidence supersedes every
+earlier record that stated a release run had not occurred. The branch was clean
+before this durable record-only commit; the commit advances final HEAD without
+altering the verified behavior.
