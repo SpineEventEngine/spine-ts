@@ -21,7 +21,11 @@ import { CommandSchema, EventSchema, file_spine_options } from "@spine-event-eng
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, it } from "vitest";
 
-import { AbstractEventSubscriber } from "../../src/handler/standalone.js";
+import {
+  AbstractCommander,
+  AbstractEventReactor,
+  AbstractEventSubscriber,
+} from "../../src/handler/standalone.js";
 import type { GeneratedStandaloneHandlerGroup } from "../../src/handler/generated-handler-registry.js";
 import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
@@ -41,6 +45,23 @@ const TaskEventSchema = messageDesc(
   ]),
   1,
 ) as GenMessage<TaskEvent>;
+const rejectionDescriptorSet = fromBinary(
+  FileDescriptorSetSchema,
+  Buffer.from(
+    serverEntityMetadataTestFixtures.handlerRegistryRejections.descriptorSetBase64,
+    "base64",
+  ),
+);
+const rejectionDescriptor = rejectionDescriptorSet.file[0];
+if (rejectionDescriptor === undefined) throw new Error("Expected rejection fixture descriptor.");
+type ReviewRejected = Message<"ReviewRejected"> & { id: string };
+const ReviewRejectedSchema = messageDesc(
+  fileDesc(
+    Buffer.from(toBinary(FileDescriptorProtoSchema, rejectionDescriptor)).toString("base64"),
+    [file_spine_options],
+  ),
+  0,
+) as GenMessage<ReviewRejected>;
 const stateDescriptorSet = fromBinary(
   FileDescriptorSetSchema,
   Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
@@ -107,7 +128,98 @@ class ProducingReactor extends AbstractEventSubscriber {
   }
 }
 
+class RejectionCommander extends AbstractCommander {
+  calls = 0;
+  react(): TaskEvent {
+    this.calls += 1;
+    return create(TaskEventSchema, { id: "commander", name: "commander" });
+  }
+}
+
+class RejectionReactor extends AbstractEventReactor {
+  calls = 0;
+  react(): TaskEvent {
+    this.calls += 1;
+    return create(TaskEventSchema, { id: "reactor", name: "reactor" });
+  }
+}
+
+class RejectionSubscriber extends AbstractEventSubscriber {
+  calls = 0;
+  react(): void {
+    this.calls += 1;
+  }
+}
+
 describe("StandaloneHandlerRuntime", () => {
+  it("routes rejection envelopes to commander, reactor, and subscriber handlers", async () => {
+    const commander = new RejectionCommander();
+    const reactor = new RejectionReactor();
+    const subscriber = new RejectionSubscriber();
+    const published: unknown[] = [];
+    const publisher = {
+      publishCommand: (signal: unknown) => {
+        published.push(signal);
+        return Promise.resolve();
+      },
+      publishEvent: (signal: unknown) => {
+        published.push(signal);
+        return Promise.resolve();
+      },
+    } as never;
+    const reaction = (
+      receiverType: object,
+      methodName: string,
+      emittedSchemas: readonly GenMessage<Message>[],
+    ) => ({
+      receiverKind: "standalone" as const,
+      receiverType,
+      handlers: [
+        {
+          kind:
+            methodName === "react" && receiverType === RejectionSubscriber
+              ? ("event-subscription" as const)
+              : methodName === "react" && receiverType === RejectionReactor
+                ? ("event-reaction" as const)
+                : ("command-reaction" as const),
+          methodName,
+          signalSchema: ReviewRejectedSchema,
+          emittedSchemas,
+          parameterCount: 1 as const,
+          origin: "domestic" as const,
+        },
+      ],
+    });
+    const dispatcher = new StandaloneHandlerRuntime([
+      {
+        group: reaction(RejectionCommander, "react", [TaskEventSchema]),
+        instance: commander,
+        publisher,
+      },
+      {
+        group: reaction(RejectionReactor, "react", [TaskEventSchema]),
+        instance: reactor,
+        publisher,
+      },
+      { group: reaction(RejectionSubscriber, "react", []), instance: subscriber, publisher },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected standalone Event dispatcher.");
+
+    await dispatcher.dispatch(
+      create(EventSchema, {
+        id: { value: "rejection" },
+        message: AnyMessages.pack(
+          ReviewRejectedSchema,
+          create(ReviewRejectedSchema, { id: "rejected" }),
+        ),
+      }),
+    );
+
+    expect(commander.calls).toBe(1);
+    expect(reactor.calls).toBe(1);
+    expect(subscriber.calls).toBe(1);
+    expect(published).toHaveLength(2);
+  });
   it("selects the matching @Where standalone event subscriber instead of its fallback", async () => {
     const receiver = new FilteredSubscriber();
     const group: GeneratedStandaloneHandlerGroup = {

@@ -198,6 +198,10 @@ const fileHandlerRegistryEventsFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64,
 );
 const TaskEventSchema = messageDesc(fileHandlerRegistryEventsFixture, 1) as GenMessage<TaskEvent>;
+const ReviewStartedSchema = messageDesc(
+  fileHandlerRegistryEventsFixture,
+  0,
+) as GenMessage<TaskEvent>;
 
 const fileEntityVisibilityFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
@@ -266,6 +270,14 @@ class StandaloneCommander extends AbstractCommander {
     return create(TaskCommandSchema, command);
   }
 }
+class SiblingStandaloneCommander extends AbstractCommander {
+  substitute(): readonly TaskCommand[] {
+    return [
+      create(TaskCommandSchema, { id: "failing-produced-command", name: "Failing" }),
+      create(TaskCommandSchema, { id: "later-produced-command", name: "Later" }),
+    ];
+  }
+}
 class StandaloneReactor extends AbstractEventReactor {
   calls = 0;
   react(_event: TaskEvent, _context: EventContext): void {
@@ -280,6 +292,11 @@ class StandaloneSubscriber extends AbstractEventSubscriber {
     void _event;
     void _context;
     this.calls += 1;
+  }
+}
+class ProducingStandaloneReactor extends AbstractEventReactor {
+  react(): TaskEvent {
+    return create(ReviewStartedSchema, { id: "produced-event" });
   }
 }
 class StateOutputSubscriber extends AbstractEventSubscriber {
@@ -774,6 +791,117 @@ describe("BoundedContext assembly", () => {
     } finally {
       await context.close();
     }
+  });
+
+  it("delivers standalone-produced Commands and Events through this context buses", async () => {
+    const commands: string[] = [];
+    const events: string[] = [];
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(
+        StandaloneCommander,
+        "command-substitution",
+        "substitute",
+        ProcessManagerTaskCommandSchema,
+        [TaskCommandSchema],
+      ),
+      standaloneReceiver(ProducingStandaloneReactor, "event-reaction", "react", TaskEventSchema, [
+        ReviewStartedSchema,
+      ]),
+    ]);
+    const context = await BoundedContext.singleTenant("StandaloneProducedSignals")
+      .withGeneratedRegistryRoot(registryRoot)
+      .addCommandDispatcher(new StandaloneCommander())
+      .addCommandDispatcher(
+        createCommandDispatcher([TaskCommandSchema], (command) => {
+          commands.push(command.id?.uuid ?? "missing");
+        }),
+      )
+      .addEventDispatcher(new ProducingStandaloneReactor())
+      .addEventDispatcher(
+        createEventDispatcher([ReviewStartedSchema], (event) => {
+          events.push(event.id?.value ?? "missing");
+        }),
+      )
+      .buildAsync();
+
+    try {
+      await context.commandBus().post(createProcessManagerTaskCommand("standalone-command"));
+      await context.eventBus().post(createTaskEvent("standalone-event"));
+    } finally {
+      await context.close();
+    }
+
+    expect(commands).toHaveLength(1);
+    expect(events).toHaveLength(1);
+  });
+
+  it("drains accepted standalone-produced Commands when close starts immediately", async () => {
+    const commands: string[] = [];
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(
+        StandaloneCommander,
+        "command-substitution",
+        "substitute",
+        ProcessManagerTaskCommandSchema,
+        [TaskCommandSchema],
+      ),
+    ]);
+    const context = await BoundedContext.singleTenant("StandaloneCloseDrain")
+      .withGeneratedRegistryRoot(registryRoot)
+      .addCommandDispatcher(new StandaloneCommander())
+      .addCommandDispatcher(
+        createCommandDispatcher([TaskCommandSchema], (command) => {
+          commands.push(command.id?.uuid ?? "missing");
+        }),
+      )
+      .buildAsync();
+
+    await context.commandBus().post(createProcessManagerTaskCommand("closing-command"));
+    await context.close();
+
+    expect(commands).toHaveLength(1);
+  });
+
+  it("contains one standalone-produced Command failure without suppressing its later sibling", async () => {
+    const delivered: string[] = [];
+    const unhandled: unknown[] = [];
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(
+        SiblingStandaloneCommander,
+        "command-substitution",
+        "substitute",
+        ProcessManagerTaskCommandSchema,
+        [TaskCommandSchema],
+      ),
+    ]);
+    const context = await BoundedContext.singleTenant("StandaloneSiblingFailure")
+      .withGeneratedRegistryRoot(registryRoot)
+      .addCommandDispatcher(new SiblingStandaloneCommander())
+      .addCommandDispatcher(
+        createCommandDispatcher([TaskCommandSchema], (command) => {
+          const message =
+            command.message === undefined
+              ? undefined
+              : AnyMessages.unpack(command.message, TaskCommandSchema);
+          if (message?.id === "failing-produced-command")
+            throw new Error("expected produced failure");
+          delivered.push(message?.id ?? "missing");
+        }),
+      )
+      .buildAsync();
+    const observeUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", observeUnhandled);
+    try {
+      await context.commandBus().post(createProcessManagerTaskCommand("sibling-source"));
+      await context.close();
+      await Promise.resolve();
+    } finally {
+      process.off("unhandledRejection", observeUnhandled);
+      await context.close();
+    }
+
+    expect(delivered).toEqual(["later-produced-command"]);
+    expect(unhandled).toEqual([]);
   });
 
   it("rejects signals returned by a standalone state subscriber", async () => {

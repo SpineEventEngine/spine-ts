@@ -205,3 +205,27 @@ all earlier entries stating that release verification had not run. The branch is
 clean. That endpoint missed standalone decorated handlers, retained a versioned
 registry, used rejected terminology, and placed produced-signal failure
 responsibility in `BoundedContext`; it is not ready for review.
+
+## Standalone integration tranche evidence (2026-09-08)
+
+- Added focused runtime proof that generated rejection handlers route to an
+  `AbstractCommander`, `AbstractEventReactor`, and `AbstractEventSubscriber`.
+- Added bounded-context proofs that standalone-produced Command-to-Command and
+  Event-to-Event work re-enters the local buses, immediate close drains an
+  accepted produced Command, and a failed produced Command neither suppresses
+  its later sibling nor causes an unhandled rejection.
+- TDD RED was recorded for the rejection case with an invalid per-receiver
+  publisher fixture; the expected failure established that the runtime uses one
+  context publisher. The corrected shared-publisher fixture passed without a
+  runtime correction. The new context cases passed against the existing
+  publisher and close implementation.
+- Focused validation: the runtime and bounded-context suites passed 88 tests;
+  server typecheck, generated-build typechecks (including `typecheck:tooling`),
+  generated-fixture check, scoped ESLint/Prettier, and `git diff --check`
+  passed. `typecheck:tooling` emitted no diagnostics, so there is no T-0225
+  tooling failure to classify.
+- Focused coverage completed with the two suites and exercised
+  `standalone-handler-runtime.ts` at 96.70% statements, 91.42% branches, and
+  100% functions/lines. The run exited nonzero only because the repository-wide
+  90% global threshold is inapplicable to this narrowed two-suite invocation
+  (21.49% aggregate); it is coverage evidence, not a global coverage gate.
