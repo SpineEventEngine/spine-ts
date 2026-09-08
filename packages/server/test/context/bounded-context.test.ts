@@ -72,6 +72,7 @@ import {
   type RepositoryView,
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
+import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
 import { Delivery } from "../../src/delivery/delivery.js";
 import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
 import type { InboxMessage } from "../../src/delivery/inbox.js";
@@ -279,6 +280,12 @@ class StandaloneSubscriber extends AbstractEventSubscriber {
     void _event;
     void _context;
     this.calls += 1;
+  }
+}
+class StateOutputSubscriber extends AbstractEventSubscriber {
+  subscribe(_state: AggregateState): TaskEvent {
+    void _state;
+    return create(TaskEventSchema, { id: "illegal", name: "illegal output" });
   }
 }
 class GeneratedTaskProcessManager extends ProcessManager<
@@ -767,6 +774,37 @@ describe("BoundedContext assembly", () => {
     } finally {
       await context.close();
     }
+  });
+
+  it("rejects signals returned by a standalone state subscriber", async () => {
+    const runtime = new StandaloneHandlerRuntime([
+      {
+        group: standaloneReceiver(
+          StateOutputSubscriber,
+          "state-subscription",
+          "subscribe",
+          AggregateStateSchema,
+          [],
+        ) as never,
+        instance: new StateOutputSubscriber(),
+        publisher: {} as never,
+      },
+    ]);
+    const dispatcher = runtime.stateDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected a state dispatcher.");
+
+    await expect(
+      dispatcher.dispatch(
+        createEntityStateChangedEvent(
+          AggregateStateSchema,
+          create(AggregateStateSchema, {
+            id: "state-output",
+            name: "State",
+            archived: false,
+          }),
+        ),
+      ),
+    ).rejects.toThrow('Standalone subscriber "subscribe" must not return signals.');
   });
 
   it("rejects a raw command dispatcher that collides with generated standalone metadata", async () => {
@@ -2747,7 +2785,12 @@ function createStandaloneGeneratedRegistryRoot(receivers: readonly object[]): UR
 
 function standaloneReceiver(
   receiverType: object,
-  kind: "command-assignment" | "command-substitution" | "event-reaction" | "event-subscription",
+  kind:
+    | "command-assignment"
+    | "command-substitution"
+    | "event-reaction"
+    | "event-subscription"
+    | "state-subscription",
   methodName: string,
   signalSchema: GenMessage<Message>,
   emittedSchemas: readonly GenMessage<Message>[],
@@ -2766,6 +2809,31 @@ function standaloneReceiver(
         origin: "domestic" as const,
       }),
     ]),
+  });
+}
+
+function createEntityStateChangedEvent(schema: GenMessage<Message>, state: Message): Event {
+  return create(EventSchema, {
+    id: create(EventIdSchema, { value: "state-change" }),
+    message: AnyMessages.pack(
+      EntityLog.EntityStateChangedSchema,
+      create(EntityLog.EntityStateChangedSchema, {
+        entity: {
+          id: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: "1" })),
+          typeUrl: TypeUrls.derive(schema),
+        },
+        newState: AnyMessages.pack(schema, state as never),
+        signalId: [
+          {
+            id: AnyMessages.pack(
+              StringValueSchema,
+              create(StringValueSchema, { value: "state-change" }),
+            ),
+            typeUrl: TypeUrls.derive(StringValueSchema),
+          },
+        ],
+      }),
+    ),
   });
 }
 

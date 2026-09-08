@@ -93,7 +93,10 @@ export class StandaloneHandlerRuntime {
         if (changed?.newState === undefined) return;
         for (const binding of bindings) {
           const state = AnyMessages.unpack(changed.newState, binding.handler.signalSchema);
-          if (state !== undefined) await binding.invoke(state, event.context);
+          if (state !== undefined) {
+            const output = await binding.invoke(state, event.context);
+            await this.#publish(binding, output, event);
+          }
         }
       },
     };
