@@ -609,7 +609,6 @@ const HandlerSources = Object.freeze({
     const origin = HandlerSources.externalOrigin(node.parameters, scope, className, method);
     if (origin === undefined) return undefined;
     const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
-    const signalSchema = signal?.reference;
     const emittedSchemas = HandlerSources.emittedSchemaUses(
       node.type,
       handler.name,
@@ -626,7 +625,7 @@ const HandlerSources = Object.freeze({
     const where = HandlerSources.whereDeclaration(
       whereUses,
       handler,
-      signal?.kind,
+      signal.kind,
       scope,
       className,
       method,
@@ -636,7 +635,7 @@ const HandlerSources = Object.freeze({
     }
 
     return {
-      kind: HandlerSources.handlerKind(handler.name, signal?.kind),
+      kind: HandlerSources.handlerKind(handler.name, signal.kind),
       methodName: method,
       signalSchema: signal.reference,
       emittedSchemas,
@@ -1593,7 +1592,7 @@ const HandlerSources = Object.freeze({
     HandlerTypes.pushDiagnostic(
       scope,
       "INVALID_HANDLER_CONTEXT",
-      context ?? parameters[1] ?? parameters[0]!,
+      context ?? parameters[1] ?? scope.source,
       `Two-argument handlers receiving ${
         signalKind === "command" ? "Commands" : "Events, rejections, or Entity states"
       } must declare ${expected} as their second parameter.`,
