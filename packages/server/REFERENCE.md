@@ -193,7 +193,9 @@ retry that child.
 
 For a generated Process Manager, a command-input handler uses distinct domain
 Command input and output types, and the generated registry supplies those
-schemas:
+schemas. Its application package emits
+`generated/handler/generated-handler-registry.js`; context assembly receives
+the compiled package root, not the `generated/` directory:
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/project-event-routing.test.ts -->
 
@@ -236,8 +238,9 @@ const project = create(ProjectIdSchema, {
   organization: create(OrganizationIdSchema, { code: "org-a" }),
   number: 1,
 });
+const applicationRoot = new URL("../", import.meta.url);
 const context = await BoundedContext.singleTenant("Projects")
-  .withGeneratedRegistryRoot(new URL("../generated/", import.meta.url))
+  .withGeneratedRegistryRoot(applicationRoot)
   .add(ApprovalCoordinator)
   .buildAsync();
 await context.commandBus().post(
