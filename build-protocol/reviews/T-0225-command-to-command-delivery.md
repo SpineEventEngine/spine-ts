@@ -623,6 +623,19 @@ the repository-wide threshold and is explicitly excluded by the canonical
 Vitest configuration. This is accepted changed-line evidence, not a claim that
 the legacy analyzer file exceeds the global threshold.
 
+### Final narrow re-review assignments
+
+After the corrected cheap preflight passed, three read-only existing roles were
+dispatched against `ff0d7574f..d53ffba1d`: correctness/reliability through
+`performance_reliability_reviewer`, style/maintainability, and TypeScript/API
+documentation. Each uses explicit `gpt-5.6-terra` / high, may not spawn
+subagents, and is limited to concerns affected by the final correction. The
+reader-documentation lane will use the existing `documentation_reviewer` role
+with its immutable `gpt-5.6-luna` / medium profile when capacity is available.
+Runtime self-introspection is not required; acceptance will check the immutable
+role/profile, explicit dispatch fields, and any visible fallback before using a
+result.
+
 All six accepted contract-review findings were corrected on the existing
 implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
 now accept only discriminated `receivers`; Entity receivers require
