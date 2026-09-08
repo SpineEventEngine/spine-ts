@@ -636,6 +636,25 @@ Runtime self-introspection is not required; acceptance will check the immutable
 role/profile, explicit dispatch fields, and any visible fallback before using a
 result.
 
+### Final narrow re-review findings
+
+The complete wave returned one clean lane and four accepted findings:
+
+- correctness/reliability: clean;
+- P1: generated registry schema validation accepts a non-null object without
+  `file.name`, allowing a raw `TypeError` in later role classification;
+- P1: the public standalone receiver constructor type is broad enough to admit
+  Entity constructors even though runtime validation rejects them;
+- P2: active code, tests, and documentation still use retired command
+  transformation wording instead of command substitution;
+- P2: active reader documentation still uses follow-up wording instead of
+  naming produced-command or produced-event enqueue/dispatch behavior.
+
+All four findings are accepted as one correction batch. The implementation
+owner must add focused compile-time/runtime tests, keep nominal standalone roles
+separate from Entities, update active terminology, and avoid changing historical
+records that are clearly marked as such.
+
 All six accepted contract-review findings were corrected on the existing
 implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
 now accept only discriminated `receivers`; Entity receivers require
