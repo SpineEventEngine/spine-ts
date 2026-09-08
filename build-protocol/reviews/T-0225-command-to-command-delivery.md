@@ -694,6 +694,14 @@ rejects the cited lookalike, and completes repository fixture terminology.
 Focused tests and scoped static checks passed. Canonical verification and final
 affected-concern re-review are pending.
 
+The first canonical rerun exposed only deterministic cleanup rules in the new
+descriptor helpers. The same implementation owner consolidated them into the
+private `DescriptorValidation` module and corrected the overlong line in
+`9ed9522ff`; cleanup, 19 registry tests, type/lint/TSDoc/format/diff checks then
+passed. The canonical cheap preflight rerun passed every gate and 359 focused
+tests with a clean tree. One final read-only closure is assigned only to the two
+contract fixes and this module shape.
+
 All six accepted contract-review findings were corrected on the existing
 implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
 now accept only discriminated `receivers`; Entity receivers require

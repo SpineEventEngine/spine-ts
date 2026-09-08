@@ -1,6 +1,6 @@
 # T-0225: Command-to-Command Delivery
 
-Status: Final contract verification pending
+Status: Final review closure pending
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`
@@ -187,12 +187,13 @@ not be treated as current verification evidence.
 
 ## Current disposition
 
-The final specialist-review correction passed its cheap preflight. Narrow
-re-review then found two remaining public-contract gaps: dependency-injected
-standalone handlers must remain assignable, and generated registry ingestion
-must reject fabricated descriptor-like objects. Active repository test fixtures
-also need the final command-substitution rename. These corrections are in
-progress. This task has no current release-verification claim.
+The final contract correction is complete. Dependency-injected nominal
+standalone handlers remain assignable and have real registration/dispatch
+coverage; generated registry ingestion validates coherent Buf message/file
+descriptor contracts and rejects fabricated descriptor-like objects. Active
+repository fixtures now use command-substitution terminology. The corrected
+canonical cheap preflight passed all gates and 359 focused tests. Final narrow
+review closure is pending; this task has no current release-verification claim.
 
 ## Historical pre-standalone disposition
 
