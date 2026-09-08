@@ -603,8 +603,6 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     return (
       fileName === "events" ||
       fileName === "events.proto" ||
-      fileName?.endsWith("_event") === true ||
-      fileName?.endsWith("_event.proto") === true ||
       fileName?.endsWith("_events") === true ||
       fileName?.endsWith("_events.proto") === true ||
       fileName === "rejections" ||

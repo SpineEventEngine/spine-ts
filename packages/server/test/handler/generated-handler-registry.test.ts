@@ -614,6 +614,34 @@ describe("generated handler registry ingestion", () => {
     ).toThrow(/invalid Event field filter/);
   });
 
+  it.each(["example/task_event", "example/task_event.proto"])(
+    "rejects singular Event source name %s",
+    (fileName) => {
+      const singularEvent = {
+        ...StringValueSchema,
+        file: { ...StringValueSchema.file, name: fileName },
+      } as unknown as typeof EventSchema;
+
+      expect(() =>
+        new HandlerRegistryIngestor().ingest({
+          version: 3,
+          entities: [
+            {
+              entityType: GeneratedProjection,
+              stateSchema: ProjectionStateSchema,
+              handlers: [
+                {
+                  ...record("event-subscription", "subscribeCreated", singularEvent, []),
+                  where: { eventField: "value", equals: "rejected" },
+                },
+              ],
+            },
+          ],
+        }),
+      ).toThrow(/invalid Event field filter/);
+    },
+  );
+
   it("rejects malformed or unsupported generated Event field filters", () => {
     const invalid = [
       { eventField: "", equals: "announcements" },

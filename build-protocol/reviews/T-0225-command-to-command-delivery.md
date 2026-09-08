@@ -386,3 +386,13 @@ and exact generated command/event basename matching. Focused analyzer and
 registry tests, tooling typecheck, TSDoc, targeted lint/formatting, and diff
 checks precede the implementation commit. Release verification is parent-owned
 and has not been rerun.
+
+## Runtime Event descriptor-name reconciliation
+
+Technical review confirmed that Buf `schema.file.name` omits `.proto`, so
+extensionless plural Event names are required at runtime and remain equivalent
+to analyzer `.file.proto.name` handling. The singular `*_event` and
+`*_event.proto` checks were fixture-only broadening and are removed. Registry
+tests reject both singular forms; repository-routing fixtures use strict plural
+Event descriptor names. Release verification remains parent-owned and has not
+been rerun.

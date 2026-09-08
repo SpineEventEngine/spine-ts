@@ -355,7 +355,7 @@ const fileProjectionEventFixture = (() => {
   const descriptor = clone(FileDescriptorProtoSchema, source);
   const event = descriptor.messageType[0];
   if (event === undefined) throw new Error("Projection Event fixture declaration is missing.");
-  descriptor.name = "projection_event.proto";
+  descriptor.name = "projection_events.proto";
   descriptor.messageType = [event];
   event.name = "ProjectionEvent";
   if (event.options !== undefined) {
@@ -450,7 +450,7 @@ const fileInt64MessageIdEventFixture = (() => {
   if (id === undefined || value === undefined || event === undefined) {
     throw new Error("Message-ID Event fixture declarations are missing.");
   }
-  descriptor.name = "int64_projection_event.proto";
+  descriptor.name = "int64_projection_events.proto";
   descriptor.messageType = [id, event];
   id.name = "Int64ProjectionId";
   value.type = FieldDescriptorProto_Type.INT64;
