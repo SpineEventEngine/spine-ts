@@ -252,6 +252,17 @@ fresh existing `implementer` role receives the intact tree without overlap for
 that final behavior tranche, again with explicit `gpt-5.6-terra` / medium
 dispatch and no subagents.
 
+The state-output correction was pushed as `1d707badf`. The expanded runtime
+matrix was pushed as `2703ed167`, covering external `@Where`, exact state
+matching and mismatch, output normalization and errors, both arities, arrays,
+and receiver failures. Focused runtime/context tests passed 84 cases, while
+`standalone-handler-runtime.ts` reached 96.70% statement, 90% branch, and 100%
+function/line coverage. The implementer's next execution window ended before
+the remaining rejection and context-level publication/close cases, with no new
+changes. A fresh existing `implementer` role receives exclusive responsibility
+for those last integration cases, explicitly dispatched as `gpt-5.6-terra` /
+medium with no subagents and no production overlap.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
