@@ -243,7 +243,7 @@ export interface BuildHandlerAnalyzer {
    *
    * @param program TypeScript program that owns the source files and diagnostics.
    * @param sourceFiles Application source files to inspect; defaults to program files.
-   * @returns Entity handler records and deterministic diagnostics.
+   * @returns Receiver handler records and deterministic diagnostics.
    */
   analyze(program: ts.Program, sourceFiles?: readonly ts.SourceFile[]): BuildHandlerAnalysis;
 }
@@ -259,7 +259,7 @@ export const BuildHandlerAnalyzer: BuildHandlerAnalyzer = Object.freeze({
    *
    * @param program TypeScript program that owns the source files and diagnostics.
    * @param sourceFiles Application source files to inspect; defaults to program files.
-   * @returns Entity handler records and deterministic diagnostics.
+   * @returns Receiver handler records and deterministic diagnostics.
    */
   analyze(
     program: ts.Program,

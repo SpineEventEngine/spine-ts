@@ -106,6 +106,23 @@ fixes**. The complete accepted batch is:
 No Critical finding was reported. The first three findings are Important; the
 last three are Minor but are included in the same correction batch.
 
+The 2026-09-08 contract re-review confirms every Important finding and four
+Minor findings closed. Two Minor corrections remain in this contract gate:
+
+1. Replace two shared generated-handler TSDoc references to “Entity” with
+   receiver-neutral wording.
+2. Remove an obsolete `entities` property and `as never` suppression from the
+   writer's no-follow output test; pass the receiver analysis directly.
+
+## Contract re-review minor disposition
+
+Both Minor corrections are closed. Shared generated-handler analyzer and
+handler-record TSDoc now describes receivers rather than Entities. The no-follow
+writer test uses the current writer source and passes the receiver-only analysis
+without an obsolete `entities` field or type suppression. Its RED reproduced the
+stale package build's legacy dereference; the corrected focused command passed
+89 tests, with both package typechecks, fixture `--check`, and diff validation.
+
 ## Contract-review correction disposition
 
 All six accepted contract-review findings were corrected on the existing

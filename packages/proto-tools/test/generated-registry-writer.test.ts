@@ -855,10 +855,10 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("@spine-event-engine/proto-tools/testing");
+        await import("../src/generation/generated-registry-writer.js");
 
       const analyzed = analysis(repoRoot);
-      new MockedWriter().write({ ...analyzed, entities: analyzed.receivers } as never, {
+      new MockedWriter().write(analyzed, {
         generatedRoot,
         outputFile,
         repoRoot,

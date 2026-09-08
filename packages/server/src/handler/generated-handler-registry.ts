@@ -220,7 +220,7 @@ export interface GeneratedHandlerRecordInput {
   readonly kind: GeneratedHandlerKind;
 
   /**
-   * Entity instance method name selected by generated metadata.
+   * Receiver instance method name selected by generated metadata.
    */
   readonly methodName: string;
 
