@@ -14,6 +14,10 @@
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   BoolValueSchema,
   Int32ValueSchema,
@@ -40,8 +44,6 @@ import {
   ServerEnvironment,
 } from "@spine-event-engine/server";
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
-import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
-import type { GeneratedStandaloneHandlerGroup } from "../../src/handler/generated-handler-registry.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -125,6 +127,22 @@ async function close(...contexts: BoundedContext[]) {
   await Promise.all(contexts.map((context) => context.close()));
 }
 
+function createStandaloneGeneratedRegistryRoot(receivers: readonly object[]): URL {
+  const slot = `__spineIntegrationStandaloneRegistry_${Math.random().toString(36).slice(2)}`;
+  const root = mkdtempSync(join(tmpdir(), "spine-integration-standalone-registry-"));
+  const moduleDir = join(root, "generated/handler");
+  mkdirSync(moduleDir, { recursive: true });
+  (globalThis as Record<string, unknown>)[slot] = Object.freeze({
+    receivers: Object.freeze(receivers),
+  });
+  writeFileSync(
+    join(moduleDir, "generated-handler-registry.js"),
+    `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
+    "utf8",
+  );
+  return pathToFileURL(root);
+}
+
 describe("Wave 13 IntegrationBroker", () => {
   beforeEach(async () => resetServerEnvironmentForTest());
   afterEach(async () => resetServerEnvironmentForTest());
@@ -156,27 +174,26 @@ describe("Wave 13 IntegrationBroker", () => {
       }
     }
     const subscriber = new ExternalSubscriber();
-    const group: GeneratedStandaloneHandlerGroup = {
-      receiverKind: "standalone",
-      receiverType: ExternalSubscriber,
-      handlers: [
-        {
-          kind: "event-subscription",
-          methodName: "subscribe",
-          signalSchema: StringValueSchema,
-          emittedSchemas: [],
-          parameterCount: 1,
-          origin: "external",
-        },
-      ],
-    };
-    const dispatcher = new StandaloneHandlerRuntime([
-      { group, instance: subscriber, publisher: {} as never },
-    ]).eventDispatcher();
-    if (dispatcher === undefined) throw new Error("Expected standalone Event dispatcher.");
-    const consumer = BoundedContext.singleTenant("StandaloneExternalConsumer")
-      .addEventDispatcher(dispatcher)
-      .build();
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      {
+        receiverKind: "standalone",
+        receiverType: ExternalSubscriber,
+        handlers: [
+          {
+            kind: "event-subscription",
+            methodName: "subscribe",
+            signalSchema: StringValueSchema,
+            emittedSchemas: [],
+            parameterCount: 1,
+            origin: "external",
+          },
+        ],
+      },
+    ]);
+    const consumer = await BoundedContext.singleTenant("StandaloneExternalConsumer")
+      .withGeneratedRegistryRoot(registryRoot)
+      .addEventDispatcher(subscriber)
+      .buildAsync();
     const producer = BoundedContext.singleTenant("StandaloneExternalProducer")
       .addEventDispatcher(domestic([StringValueSchema]) as never)
       .build();

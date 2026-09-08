@@ -259,3 +259,11 @@ responsibility in `BoundedContext`; it is not ready for review.
   at 97.95% statements, 93.42% branches, and 100% functions/lines; its process
   exit reflects only the inapplicable repository-wide global threshold for a
   three-file subset.
+
+## Generated standalone broker-proof correction (2026-09-08)
+
+- The broker integration proof now materializes a concrete standalone Event
+  subscriber through a temporary generated registry root and
+  `addEventDispatcher(...).buildAsync()`. It verifies the assembled standalone
+  external schema appears in `ExternalEventsWanted` and imported delivery calls
+  that registered instance.
