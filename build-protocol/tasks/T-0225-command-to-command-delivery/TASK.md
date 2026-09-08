@@ -1,6 +1,6 @@
 # T-0225: Command-to-Command Delivery
 
-Status: Final verification pending
+Status: Final contract correction in progress
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`
@@ -187,18 +187,12 @@ not be treated as current verification evidence.
 
 ## Current disposition
 
-The final specialist-review correction batch is in progress. It adds strict
-domain Command ingestion and canonical two-argument context validation, updates
-the active receiver-registry documentation, and removes obsolete terminology.
-Focused behavior tests and tooling typechecking are current; no release claim
-applies.
-
-Implementation, bounded task reviews, public-flow tests, documentation, API
-expectations, lint, typechecking, generated-output checks, TSDoc, and focused
-coverage are converged. The canonical cheap preflight passed 12 files and 521
-tests at `9bd06c7b5`; all static, generated, documentation, package, and
-release-readiness checks passed. The complete independent specialist review
-wave is in progress. This task has no current release-verification claim.
+The final specialist-review correction passed its cheap preflight. Narrow
+re-review then found two remaining public-contract gaps: dependency-injected
+standalone handlers must remain assignable, and generated registry ingestion
+must reject fabricated descriptor-like objects. Active repository test fixtures
+also need the final command-substitution rename. These corrections are in
+progress. This task has no current release-verification claim.
 
 ## Historical pre-standalone disposition
 

@@ -674,6 +674,15 @@ force and they may not spawn subagents. Reader documentation follows with its
 original explicit Luna/medium profile when capacity is available. Only the four
 corrected concerns are reopened.
 
+The correction re-review found two P1 contract gaps and two P2 record/test
+cleanup items. `typeof Abstract*` excludes valid concrete standalone handlers
+with required constructor parameters even though runtime registration receives
+an existing instance. The schema guard still admits a fabricated object with
+only plausible `typeName` and `file.name`; it must validate the Buf message
+descriptor contract. Active repository-routing fixture names retain retired
+transformation wording, and the current task disposition was stale. All four
+findings are accepted as one final correction batch.
+
 All six accepted contract-review findings were corrected on the existing
 implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
 now accept only discriminated `receivers`; Entity receivers require
