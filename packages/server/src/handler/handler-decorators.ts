@@ -100,7 +100,7 @@ export function Assign<This extends object, Parameters extends readonly unknown[
 /**
  * Creates command-assignment decorator metadata or a schema-bearing decorator.
  *
- * @param schemaOrValue Command schema or decorated method implementation.
+ * @param schemaOrValue Generated Command, Event, or rejection schema, or decorated method implementation.
  * @param context Standard decorator context for bare usage.
  * @returns A decorator for schema-bearing usage, or `undefined` after bare usage.
  */

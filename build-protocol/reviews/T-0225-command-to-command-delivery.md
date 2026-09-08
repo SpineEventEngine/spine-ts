@@ -378,3 +378,11 @@ The correction adds inheritance-aware Aggregate/Projection rejection, strict
 generated `@Command` schema-role validation, and current documentation/record
 dispositions. The earlier final-ready and release assertions remain superseded
 until this correction receives its own final verification.
+
+## Final bounded re-review correction
+
+The final bounded re-review requires one analyzer lineage calculation per class
+and exact generated command/event basename matching. Focused analyzer and
+registry tests, tooling typecheck, TSDoc, targeted lint/formatting, and diff
+checks precede the implementation commit. Release verification is parent-owned
+and has not been rerun.

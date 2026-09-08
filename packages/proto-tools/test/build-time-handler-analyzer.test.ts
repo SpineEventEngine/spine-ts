@@ -661,6 +661,34 @@ describe("build-time handler analyzer", () => {
     expect(result.diagnostics[0]?.methodName).toBe("create");
   });
 
+  it("requires exact generated command and event source basenames", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/misnamed.ts", {
+        "src/misnamed.ts": `
+          import { Aggregate, Assign, React } from "@spine-event-engine/server";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { type NotACommand } from "../generated/notcommands_pb.js";
+          import { type NotAnEvent } from "../generated/notevents_pb.js";
+          export class MisnamedAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+            @Assign command(command: NotACommand): NotAnEvent { throw new Error(String(command)); }
+            @React event(event: NotAnEvent): NotAnEvent { throw new Error(String(event)); }
+          }
+        `,
+        "generated/notcommands_pb.ts": generatedModule("example/notcommands.proto", "NotACommand"),
+        "generated/notevents_pb.ts": generatedModule("example/notevents.proto", "NotAnEvent"),
+        "generated/task_pb.ts": generatedModule("example/tasks.proto", "Task"),
+      }),
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_SIGNAL_TYPE",
+      "INVALID_EMITTED_SCHEMA",
+      "INVALID_SIGNAL_TYPE",
+      "INVALID_EMITTED_SCHEMA",
+    ]);
+  });
+
   it("ties descriptor roles to the imported schema export", () => {
     const result = analyzeBuildHandlers(
       programWithSources("src/mixed-descriptors.ts", {

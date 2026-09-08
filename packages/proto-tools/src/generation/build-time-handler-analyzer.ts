@@ -408,8 +408,9 @@ const HandlerSources = Object.freeze({
       return undefined;
     }
 
-    const entityBase = HandlerSources.entityBaseName(node, scope);
-    const stateSchema = HandlerSources.entityStateSchema(node, scope);
+    const lineage = HandlerSources.entityLineage(node, scope);
+    const entityBase = lineage?.base;
+    const stateSchema = lineage?.stateSchema;
     const handlers: BuildHandlerRecord[] = [];
 
     for (const member of node.members) {
@@ -981,14 +982,6 @@ const HandlerSources = Object.freeze({
 
   isHandlerUse(decorator: DecoratorUse): decorator is HandlerDecoratorUse {
     return handlerDecorators.has(decorator.name as HandlerDecorator);
-  },
-
-  entityStateSchema(node: ts.ClassDeclaration, scope: AnalyzerScope): SchemaReference | undefined {
-    return HandlerSources.entityLineage(node, scope)?.stateSchema;
-  },
-
-  entityBaseName(node: ts.ClassDeclaration, scope: AnalyzerScope): string | undefined {
-    return HandlerSources.entityLineage(node, scope)?.base;
   },
 
   entityLineage(
@@ -1924,10 +1917,10 @@ const HandlerSources = Object.freeze({
     if (sourceName === "rejections.proto" || sourceName?.endsWith("_rejections.proto") === true) {
       return messageIndexes?.length === 1 ? "rejection" : undefined;
     }
-    if (sourceFile.endsWith("commands.proto")) {
+    if (sourceName === "commands.proto" || sourceName?.endsWith("_commands.proto") === true) {
       return "command";
     }
-    if (sourceFile.endsWith("events.proto")) {
+    if (sourceName === "events.proto" || sourceName?.endsWith("_events.proto") === true) {
       return "event";
     }
 
