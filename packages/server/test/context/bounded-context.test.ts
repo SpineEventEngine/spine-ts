@@ -271,6 +271,18 @@ class StandaloneCommander extends AbstractCommander {
     return create(TaskCommandSchema, { id: command.id, name: command.name });
   }
 }
+class DependencyInjectedStandaloneCommander extends AbstractCommander {
+  constructor(readonly dependency: string) {
+    super();
+  }
+
+  substitute(command: ProcessManagerTaskCommand): TaskCommand {
+    return create(TaskCommandSchema, {
+      id: command.id,
+      name: `${command.name} ${this.dependency}`,
+    });
+  }
+}
 class CollidingStandaloneCommander extends AbstractCommander {
   substitute(command: TaskCommand): TaskCommand {
     return create(TaskCommandSchema, { id: command.id, name: command.name });
@@ -862,6 +874,41 @@ describe("BoundedContext assembly", () => {
 
     expect(commands).toHaveLength(1);
     expect(events).toHaveLength(1);
+  });
+
+  it("matches a dependency-injected standalone commander by its registered constructor", async () => {
+    const names: string[] = [];
+    const commander = new DependencyInjectedStandaloneCommander("dependency");
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(
+        DependencyInjectedStandaloneCommander,
+        "command-substitution",
+        "substitute",
+        ProcessManagerTaskCommandSchema,
+        [TaskCommandSchema],
+      ),
+    ]);
+    const context = await BoundedContext.singleTenant("DependencyInjectedStandalone")
+      .withGeneratedRegistryRoot(registryRoot)
+      .addCommandDispatcher(commander)
+      .addCommandDispatcher(
+        createCommandDispatcher([TaskCommandSchema], (command) => {
+          if (command.message === undefined)
+            throw new Error("Expected a produced TaskCommand payload.");
+          const message = AnyMessages.unpack(command.message, TaskCommandSchema);
+          if (message === undefined) throw new Error("Expected a produced TaskCommand.");
+          names.push(message.name);
+        }),
+      )
+      .buildAsync();
+
+    try {
+      await context.commandBus().post(createProcessManagerTaskCommand("standalone-command"));
+    } finally {
+      await context.close();
+    }
+
+    expect(names).toEqual(["Task Ready dependency"]);
   });
 
   it("drains accepted standalone-produced Commands when close starts immediately", async () => {

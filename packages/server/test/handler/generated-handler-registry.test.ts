@@ -97,6 +97,15 @@ class ProjectionReceiver extends Projection<string, typeof StateSchema, number> 
 class UnrelatedReceiver {
   readonly unrelated = true;
 }
+class DependencyCommander extends AbstractCommander {
+  constructor(readonly dependency: string) {
+    super();
+  }
+
+  replace(command: Message<"spine.server.testing.StartReview">) {
+    return command;
+  }
+}
 class Commander extends AbstractCommander {
   replace(command: Message<"spine.server.testing.StartReview">) {
     return command;
@@ -164,7 +173,29 @@ describe("generated handler registry ingestion", () => {
       });
 
     expect(ingest).toThrow(HandlerRegistryIngestionError);
-    expect(ingest).toThrow(/file name/i);
+    expect(ingest).toThrow(/descriptor/i);
+  });
+
+  it("rejects a descriptor lookalike before command classification", () => {
+    const ingest = () =>
+      new HandlerRegistryIngestor().ingest({
+        receivers: [
+          {
+            receiverKind: "entity",
+            receiverType: Manager,
+            stateSchema: StateSchema,
+            handlers: [
+              {
+                ...substitution(),
+                signalSchema: { typeName: "example.Start", file: { name: "commands" } },
+              },
+            ],
+          },
+        ],
+      });
+
+    expect(ingest).toThrow(HandlerRegistryIngestionError);
+    expect(ingest).toThrow(/descriptor/i);
   });
 
   it("accepts only nominal standalone receiver constructors in generated groups", () => {
@@ -172,6 +203,7 @@ describe("generated handler registry ingestion", () => {
 
     expect(acceptsStandaloneReceiver(Assignee)).toBe(Assignee);
     expect(acceptsStandaloneReceiver(Commander)).toBe(Commander);
+    expect(acceptsStandaloneReceiver(DependencyCommander)).toBe(DependencyCommander);
     expect(acceptsStandaloneReceiver(Reactor)).toBe(Reactor);
     expect(acceptsStandaloneReceiver(Subscriber)).toBe(Subscriber);
     // @ts-expect-error Entity constructors are not standalone receiver constructors.
@@ -189,6 +221,13 @@ describe("generated handler registry ingestion", () => {
       handlers: [],
     } satisfies GeneratedStandaloneHandlerGroup;
     expect(group.receiverType).toBe(Commander);
+
+    const dependencyGroup = {
+      receiverKind: "standalone" as const,
+      receiverType: DependencyCommander,
+      handlers: [],
+    } satisfies GeneratedStandaloneHandlerGroup;
+    expect(dependencyGroup.receiverType).toBe(DependencyCommander);
   });
 
   it("rejects the framework Command envelope as a command handler payload", () => {

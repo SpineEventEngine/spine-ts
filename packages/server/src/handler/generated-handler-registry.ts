@@ -33,6 +33,112 @@ import {
 } from "./handler-metadata.js";
 import { RejectionSources } from "./rejection-source.js";
 
+interface DescriptorCandidate {
+  readonly file?: unknown;
+  readonly fields?: unknown;
+  readonly kind?: unknown;
+  readonly members?: unknown;
+  readonly messages?: unknown;
+  readonly name?: unknown;
+  readonly nestedEnums?: unknown;
+  readonly nestedExtensions?: unknown;
+  readonly nestedMessages?: unknown;
+  readonly oneofs?: unknown;
+  readonly proto?: unknown;
+  readonly toString?: unknown;
+  readonly typeName?: unknown;
+}
+
+/**
+ * Determines whether an untrusted value has the runtime contract of a generated
+ * Protobuf-ES message descriptor.
+ *
+ * @param value Untrusted generated schema candidate.
+ * @returns `true` for a descriptor coherently declared by its file descriptor.
+ */
+function isDescriptorMessage(value: unknown): value is DescriptorMessageSchema {
+  if (value === null || typeof value !== "object") return false;
+  const message = value as DescriptorCandidate;
+  if (
+    message.kind !== "message" ||
+    typeof message.typeName !== "string" ||
+    message.typeName.trim().length === 0 ||
+    typeof message.name !== "string" ||
+    message.name.trim().length === 0 ||
+    message.typeName.split(".").at(-1) !== message.name ||
+    !Array.isArray(message.fields) ||
+    !Array.isArray(message.members) ||
+    !Array.isArray(message.oneofs) ||
+    !Array.isArray(message.nestedEnums) ||
+    !Array.isArray(message.nestedExtensions) ||
+    !Array.isArray(message.nestedMessages) ||
+    !hasDescriptorProtoType(message.proto, "google.protobuf.DescriptorProto") ||
+    typeof message.toString !== "function" ||
+    !isDescriptorFile(message.file)
+  ) {
+    return false;
+  }
+  return descriptorFileContainsMessage(message.file, value);
+}
+
+/**
+ * Determines whether a value has the stable descriptor identity of a generated
+ * Protobuf message.
+ *
+ * @param value Candidate generated descriptor message.
+ * @param typeName Expected Protobuf descriptor message type name.
+ * @returns `true` when the candidate exposes the expected descriptor identity.
+ */
+function hasDescriptorProtoType(value: unknown, typeName: string): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    (value as { readonly $typeName?: unknown }).$typeName === typeName
+  );
+}
+
+/**
+ * Determines whether a value has the runtime contract of a generated
+ * Protobuf-ES file descriptor.
+ *
+ * @param value Candidate file descriptor.
+ * @returns `true` when the candidate exposes a coherent generated file descriptor shape.
+ */
+function isDescriptorFile(value: unknown): value is DescriptorCandidate {
+  if (value === null || typeof value !== "object") return false;
+  const file = value as DescriptorCandidate;
+  return (
+    file.kind === "file" &&
+    typeof file.name === "string" &&
+    file.name.trim().length > 0 &&
+    Array.isArray(file.messages) &&
+    hasDescriptorProtoType(file.proto, "google.protobuf.FileDescriptorProto") &&
+    typeof file.toString === "function"
+  );
+}
+
+/**
+ * Determines whether a generated file descriptor contains a message descriptor
+ * by object identity, including nested message declarations.
+ *
+ * @param file Generated file descriptor.
+ * @param target Generated message descriptor candidate.
+ * @returns `true` when the file declares the target message descriptor.
+ */
+function descriptorFileContainsMessage(file: DescriptorCandidate, target: object): boolean {
+  const visited = new Set<object>();
+  const contains = (messages: unknown): boolean => {
+    if (!Array.isArray(messages)) return false;
+    return (messages as readonly unknown[]).some((message) => {
+      if (message === target) return true;
+      if (message === null || typeof message !== "object" || visited.has(message)) return false;
+      visited.add(message);
+      return contains((message as DescriptorCandidate).nestedMessages);
+    });
+  };
+  return contains(file.messages);
+}
+
 /**
  * Generated registry metadata consumed by the framework.
  *
@@ -168,14 +274,35 @@ export interface GeneratedEntityHandlerGroup {
   readonly handlers: readonly GeneratedHandlerRecordInput[];
 }
 
+type StandaloneReceiver =
+  AbstractAssignee | AbstractCommander | AbstractEventReactor | AbstractEventSubscriber;
+
+interface NominalStandaloneReceiverConstructor<Instance extends StandaloneReceiver> {
+  // prettier-ignore
+
+  /**
+   * Prototype carrying the standalone receiver's nominal base-class brand.
+   */
+  readonly prototype: Instance;
+
+  /**
+   * Creates a standalone receiver instance.
+   *
+   * @param args Application-defined constructor arguments.
+   * @returns A nominal standalone receiver instance.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Application constructors may require arbitrary dependencies.
+  new (...args: any[]): Instance;
+}
+
 /**
  * Nominal constructor for a supported standalone handler receiver.
  */
 export type StandaloneReceiverConstructor =
-  | typeof AbstractAssignee
-  | typeof AbstractCommander
-  | typeof AbstractEventReactor
-  | typeof AbstractEventSubscriber;
+  | NominalStandaloneReceiverConstructor<AbstractAssignee>
+  | NominalStandaloneReceiverConstructor<AbstractCommander>
+  | NominalStandaloneReceiverConstructor<AbstractEventReactor>
+  | NominalStandaloneReceiverConstructor<AbstractEventSubscriber>;
 
 /**
  * Metadata for one decorated standalone application receiver.
@@ -619,34 +746,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   validateSchema(schema: DescriptorMessageSchema, label: string): void {
-    const value: unknown = schema;
-
-    if (value === null || typeof value !== "object") {
-      throw new HandlerRegistryIngestionError(
-        "INVALID_SCHEMA",
-        `Generated handler registry ${label} must be an object with a non-empty typeName.`,
-      );
-    }
-
-    const typeName = (value as { readonly typeName?: unknown }).typeName;
-    const file = (value as { readonly file?: unknown }).file;
-    const fileName =
-      file !== null && typeof file === "object"
-        ? (file as { readonly name?: unknown }).name
-        : undefined;
-
-    if (
-      typeof typeName === "string" &&
-      typeName.trim().length > 0 &&
-      typeof fileName === "string" &&
-      fileName.trim().length > 0
-    ) {
-      return;
-    }
+    if (isDescriptorMessage(schema)) return;
 
     throw new HandlerRegistryIngestionError(
       "INVALID_SCHEMA",
-      `Generated handler registry ${label} must be an object with non-empty typeName and file name.`,
+      `Generated handler registry ${label} must be a generated Protobuf message descriptor.`,
     );
   },
 

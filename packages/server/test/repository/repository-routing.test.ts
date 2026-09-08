@@ -179,7 +179,7 @@ type TaskCommand = Message<"TaskCommand"> & {
   name: string;
 };
 
-type TransformedTaskCommand = Message<"example.validation_refusal.TransformedTaskCommand"> & {
+type ProducedTaskCommand = Message<"example.validation_refusal.ProducedTaskCommand"> & {
   id: string;
   name: string;
 };
@@ -632,21 +632,21 @@ const ValidatedTaskCommandSchema = messageDesc(
   fileValidationRefusalFixture,
   1,
 ) as GenMessage<ValidatedTaskCommand>;
-const fileCommandTransformationFixture = (() => {
+const fileCommandSubstitutionFixture = (() => {
   const descriptor = clone(FileDescriptorProtoSchema, fileValidationRefusalFixture.proto);
   descriptor.name = "validation_refusal_commands.proto";
   const command = descriptor.messageType.find((message) => message.name === "ValidatedTaskCommand");
   if (command === undefined) throw new Error("Command substitution input fixture is missing.");
   const output = clone(DescriptorProtoSchema, command);
-  output.name = "TransformedTaskCommand";
+  output.name = "ProducedTaskCommand";
   descriptor.messageType.push(output);
   return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
     file_spine_options,
   ]);
 })();
-const TransformedTaskCommandSchema = fixtureMessageSchema<TransformedTaskCommand>(
-  fileCommandTransformationFixture,
-  "TransformedTaskCommand",
+const ProducedTaskCommandSchema = fixtureMessageSchema<ProducedTaskCommand>(
+  fileCommandSubstitutionFixture,
+  "ProducedTaskCommand",
 );
 const fileValidatedMessageIdFixture = (() => {
   const descriptor = clone(FileDescriptorProtoSchema, fileValidationRefusalFixture.proto);
@@ -1239,12 +1239,12 @@ class GeneratedCommandingProcessManager extends ProcessManager<
   async commandProjection(
     event: ProjectionEvent,
     context: EventContext,
-  ): Promise<TransformedTaskCommand> {
+  ): Promise<ProducedTaskCommand> {
     GeneratedCommandingProcessManager.argumentCounts.push(arguments.length);
     GeneratedCommandingProcessManager.contexts.push(context);
     GeneratedCommandingProcessManager.commandProjectionStarted++;
     await GeneratedCommandingProcessManager.#commandProjectionCanFinish;
-    return create(TransformedTaskCommandSchema, {
+    return create(ProducedTaskCommandSchema, {
       id: event.id,
       name: `${event.name} command`,
     });
@@ -2061,7 +2061,7 @@ class RoutingProcessManager extends ProcessManager<
   }
 }
 
-class CommandTransformingProcessManager extends ProcessManager<
+class CommandSubstitutingProcessManager extends ProcessManager<
   string,
   typeof ProcessManagerStateSchema,
   number
@@ -2072,10 +2072,10 @@ class CommandTransformingProcessManager extends ProcessManager<
     this.siblingOutputs = false;
   }
 
-  transform(
+  substitute(
     command: ValidatedTaskCommand,
     context: CommandContext,
-  ): TransformedTaskCommand | readonly TransformedTaskCommand[] {
+  ): ProducedTaskCommand | readonly ProducedTaskCommand[] {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -2085,12 +2085,12 @@ class CommandTransformingProcessManager extends ProcessManager<
         }),
       ),
     );
-    const first = create(TransformedTaskCommandSchema, {
+    const first = create(ProducedTaskCommandSchema, {
       id: command.id,
       name: `${command.name} follow-up`,
     });
-    return CommandTransformingProcessManager.siblingOutputs
-      ? [first, create(TransformedTaskCommandSchema, { ...first, name: `${command.name} sibling` })]
+    return CommandSubstitutingProcessManager.siblingOutputs
+      ? [first, create(ProducedTaskCommandSchema, { ...first, name: `${command.name} sibling` })]
       : first;
   }
 }
@@ -3322,7 +3322,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedCommandingRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [TransformedTaskCommandSchema],
+        messageSchemas: () => [ProducedTaskCommandSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -3341,8 +3341,8 @@ describe("repository signal routing", () => {
     if (command?.message === undefined) {
       throw new Error("Expected a produced command message.");
     }
-    expect(AnyMessages.unpack(command.message, TransformedTaskCommandSchema)).toEqual(
-      create(TransformedTaskCommandSchema, {
+    expect(AnyMessages.unpack(command.message, ProducedTaskCommandSchema)).toEqual(
+      create(ProducedTaskCommandSchema, {
         id: "task-command",
         name: "Task command",
       }),
@@ -3354,7 +3354,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.multitenant("Tasks")
       .add(createGeneratedCommandingRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [TransformedTaskCommandSchema],
+        messageSchemas: () => [ProducedTaskCommandSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -3399,7 +3399,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedCommandingRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [TransformedTaskCommandSchema],
+        messageSchemas: () => [ProducedTaskCommandSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -3900,9 +3900,9 @@ describe("repository signal routing", () => {
   it("routes command substitutions within their tenant and preserves command lineage", async () => {
     const produced: SpineCommand[] = [];
     const context = BoundedContext.multitenant("Command substitutions")
-      .add(createCommandTransformingProcessManagerRepository())
+      .add(createCommandSubstitutingProcessManagerRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [TransformedTaskCommandSchema],
+        messageSchemas: () => [ProducedTaskCommandSchema],
         dispatch: (command) => {
           produced.push(command);
           return Promise.resolve();
@@ -3950,7 +3950,7 @@ describe("repository signal routing", () => {
       }),
     ).resolves.toBeUndefined();
     const producedCommand = produced.at(0);
-    if (producedCommand === undefined) throw new Error("Expected a transformed command.");
+    if (producedCommand === undefined) throw new Error("Expected a produced command.");
     expect(producedCommand).toMatchObject({
       id: create(CommandIdSchema, { uuid: "transform-source-1" }),
       context: create(CommandContextSchema, {
@@ -3968,27 +3968,27 @@ describe("repository signal routing", () => {
         }),
       }),
     });
-    if (producedCommand.message === undefined) throw new Error("Expected a transformed payload.");
-    expect(AnyMessages.unpack(producedCommand.message, TransformedTaskCommandSchema)).toEqual(
-      create(TransformedTaskCommandSchema, {
+    if (producedCommand.message === undefined) throw new Error("Expected a produced payload.");
+    expect(AnyMessages.unpack(producedCommand.message, ProducedTaskCommandSchema)).toEqual(
+      create(ProducedTaskCommandSchema, {
         id: "declared-source-id",
         name: "Transform follow-up",
       }),
     );
   });
 
-  it("starts every sibling transformed command in declaration order when one child rejects", async () => {
-    CommandTransformingProcessManager.siblingOutputs = true;
+  it("starts every sibling produced command in declaration order when one child rejects", async () => {
+    CommandSubstitutingProcessManager.siblingOutputs = true;
     const observed: string[] = [];
     const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
     const context = BoundedContext.singleTenant("Command substitution siblings")
-      .add(createCommandTransformingProcessManagerRepository())
+      .add(createCommandSubstitutingProcessManagerRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [TransformedTaskCommandSchema],
+        messageSchemas: () => [ProducedTaskCommandSchema],
         dispatch: (command) => {
-          if (command.message === undefined) throw new Error("Expected a transformed payload.");
-          const message = AnyMessages.unpack(command.message, TransformedTaskCommandSchema);
-          if (message === undefined) throw new Error("Expected a transformed command.");
+          if (command.message === undefined) throw new Error("Expected a produced payload.");
+          const message = AnyMessages.unpack(command.message, ProducedTaskCommandSchema);
+          if (message === undefined) throw new Error("Expected a produced command.");
           observed.push(message.name);
           if (message.name === "Siblings follow-up") throw new Error("first child failed");
           return Promise.resolve();
@@ -4031,7 +4031,7 @@ describe("repository signal routing", () => {
         },
       ]);
     } finally {
-      CommandTransformingProcessManager.reset();
+      CommandSubstitutingProcessManager.reset();
     }
   });
 
@@ -11063,7 +11063,7 @@ function createGeneratedCommandingRepository(): Repository<
             kind: "command-reaction",
             methodName: "commandProjection",
             signalSchema: ProjectionEventSchema,
-            emittedSchemas: [TransformedTaskCommandSchema],
+            emittedSchemas: [ProducedTaskCommandSchema],
             parameterCount: 2,
             origin: "domestic",
           },
@@ -11550,26 +11550,26 @@ function createProcessManagerCommandOnlyRepository(): Repository<typeof RoutingP
   });
 }
 
-function createCommandTransformingProcessManagerRepository(): Repository<
-  typeof CommandTransformingProcessManager
+function createCommandSubstitutingProcessManagerRepository(): Repository<
+  typeof CommandSubstitutingProcessManager
 > {
   const handlers = HandlerMetadataValues.defineArity(
-    CommandTransformingProcessManager,
+    CommandSubstitutingProcessManager,
     ProcessManagerStateSchema,
-    (builder) => [builder.substitute(ValidatedTaskCommandSchema, "transform")],
+    (builder) => [builder.substitute(ValidatedTaskCommandSchema, "substitute")],
     [
       {
         kind: "command-substitution",
-        methodName: "transform",
+        methodName: "substitute",
         parameterCount: 2,
         origin: "domestic",
-        emittedSchemas: [TransformedTaskCommandSchema],
+        emittedSchemas: [ProducedTaskCommandSchema],
       },
     ],
   );
 
   return new Repository({
-    entityType: CommandTransformingProcessManager,
+    entityType: CommandSubstitutingProcessManager,
     schema: ProcessManagerStateSchema,
     handlers,
     commandRouting: CommandRouting.create<string>().route(
