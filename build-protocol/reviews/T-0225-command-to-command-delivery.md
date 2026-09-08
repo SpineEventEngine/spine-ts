@@ -655,6 +655,17 @@ owner must add focused compile-time/runtime tests, keep nominal standalone roles
 separate from Entities, update active terminology, and avoid changing historical
 records that are clearly marked as such.
 
+The existing `implementer` role received the complete batch with explicit
+`gpt-5.6-terra` / medium and no subagents. Runtime self-introspection was not
+exposed; the immutable configured profile matched the dispatch and no fallback
+was visible. Commits `2e2bc64a8` and `315e010b2` validate schema descriptor
+shape before classification, restrict the public standalone constructor union
+to the four nominal standalone bases, add runtime and compile-time regression
+tests, and correct the active produced-signal and command-substitution language.
+The parent scan found and immediately returned three missed inflected terms to
+the same implementation owner before accepting the result. No accepted finding
+remains open; final mechanical verification is pending.
+
 All six accepted contract-review findings were corrected on the existing
 implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
 now accept only discriminated `receivers`; Entity receivers require

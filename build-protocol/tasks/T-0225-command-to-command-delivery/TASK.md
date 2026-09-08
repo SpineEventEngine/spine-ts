@@ -1,6 +1,6 @@
 # T-0225: Command-to-Command Delivery
 
-Status: Final re-review correction in progress
+Status: Final verification pending
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`
@@ -25,8 +25,8 @@ Aggregates and Projections reject `@Command` methods.
 5. Process Manager command substitution works, including an optional
    `CommandContext` parameter. Aggregate and Projection repositories reject all
    `@Command` handlers.
-6. The Entity state commit succeeds before transformed Commands are posted.
-7. Failure before commit does not publish transformed Commands or partially
+6. The Entity state commit succeeds before substituted Commands are posted.
+7. Failure before commit does not publish substituted Commands or partially
    persist state.
 8. Actor, tenant, origin, and causal metadata remain correct for each produced
    Command.
@@ -157,7 +157,7 @@ fields and the immutable role profile are the accepted metadata evidence.
 - Preserve event-to-command behavior while fixing command-to-command delivery.
 - Use domain-correct Protobuf Command fixtures: never substitute entity state
   messages or framework envelopes for command inputs or outputs.
-- Command-input transformations return one or more Commands and are the unique
+- Command substitutions return one or more Commands and are the unique
   effective receptor for their input; event/rejection-input `@Command` handlers
   remain EventBus reactions.
 - `@Command` handlers are Process Manager-only. Aggregates and Projections
