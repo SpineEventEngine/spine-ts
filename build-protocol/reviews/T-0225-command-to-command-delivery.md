@@ -233,6 +233,25 @@ method arities, output validation, and duplicate command receptors. State and
 close-chain edge cases follow after that checkpoint. It must not spawn
 subagents.
 
+The standalone core checkpoint is pushed as `3342a1e4e`. It covers exact
+constructor matching, duplicate instance and mixed raw/generated command
+receptor rejection, all four public registration paths, two-argument
+Reactor/Subscriber invocation, `@Where` selection, output normalization,
+declared-schema checks, and empty-result rules. Focused runtime/context tests
+passed 74 cases; server typecheck and narrow lint, format, and diff checks
+passed. The same explicit implementer/profile continues without overlap on the
+remaining external/rejection, System Event state, produced-signal, and close
+drain behavior before independent task review.
+
+The next pass found that the state adapter discarded a subscriber's illegal
+return value instead of applying the common output contract. The uncommitted
+draft now validates that result, and the existing focused 74 tests and static
+checks remain green. The implementer's execution window ended before the
+required state, external/rejection, produced-chain, and close-drain tests. A
+fresh existing `implementer` role receives the intact tree without overlap for
+that final behavior tranche, again with explicit `gpt-5.6-terra` / medium
+dispatch and no subagents.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
