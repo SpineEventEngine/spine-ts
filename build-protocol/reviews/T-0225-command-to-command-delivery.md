@@ -330,6 +330,20 @@ tooling diagnostic. Its explicit profile is `gpt-5.6-terra` / medium, it must
 not spawn subagents, and it must update tests to the current contract rather
 than restoring removed production compatibility.
 
+Commit `74fa2d5bf` completes the correction's test-contract migration. Generated
+build and tooling typechecks pass; 248 migrated tests and 197 focused
+server/external-interest/lifecycle tests pass; fixture reproducibility, scoped
+lint and formatting, and diff checks pass. A combined 13-file process showed a
+close-test timeout cascade, while its isolated server rerun passed 150 tests;
+this is recorded as test-process interference rather than a product failure.
+
+The same two reviewers re-review only their accepted findings against the full
+corrected range `1bacc57e2..74fa2d5bf`. Both retain their explicitly selected
+existing roles and `gpt-5.6-terra` / high profiles, remain read-only, and must
+not spawn subagents. They must verify the semantic fixture migration and the
+external-interest proof as part of closure and report any remaining or newly
+introduced finding.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
