@@ -49,95 +49,77 @@ interface DescriptorCandidate {
   readonly typeName?: unknown;
 }
 
-/**
- * Determines whether an untrusted value has the runtime contract of a generated
- * Protobuf-ES message descriptor.
- *
- * @param value Untrusted generated schema candidate.
- * @returns `true` for a descriptor coherently declared by its file descriptor.
- */
-function isDescriptorMessage(value: unknown): value is DescriptorMessageSchema {
-  if (value === null || typeof value !== "object") return false;
-  const message = value as DescriptorCandidate;
-  if (
-    message.kind !== "message" ||
-    typeof message.typeName !== "string" ||
-    message.typeName.trim().length === 0 ||
-    typeof message.name !== "string" ||
-    message.name.trim().length === 0 ||
-    message.typeName.split(".").at(-1) !== message.name ||
-    !Array.isArray(message.fields) ||
-    !Array.isArray(message.members) ||
-    !Array.isArray(message.oneofs) ||
-    !Array.isArray(message.nestedEnums) ||
-    !Array.isArray(message.nestedExtensions) ||
-    !Array.isArray(message.nestedMessages) ||
-    !hasDescriptorProtoType(message.proto, "google.protobuf.DescriptorProto") ||
-    typeof message.toString !== "function" ||
-    !isDescriptorFile(message.file)
-  ) {
-    return false;
-  }
-  return descriptorFileContainsMessage(message.file, value);
+interface DescriptorValidationOperations {
+  isMessage(value: unknown): value is DescriptorMessageSchema;
+  hasProtoType(value: unknown, typeName: string): boolean;
+  isFile(value: unknown): value is DescriptorCandidate;
+  fileContainsMessage(file: DescriptorCandidate, target: object): boolean;
 }
 
 /**
- * Determines whether a value has the stable descriptor identity of a generated
- * Protobuf message.
- *
- * @param value Candidate generated descriptor message.
- * @param typeName Expected Protobuf descriptor message type name.
- * @returns `true` when the candidate exposes the expected descriptor identity.
+ * Cohesive fail-closed validation for generated Protobuf-ES descriptor objects.
  */
-function hasDescriptorProtoType(value: unknown, typeName: string): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    (value as { readonly $typeName?: unknown }).$typeName === typeName
-  );
-}
+const DescriptorValidation: DescriptorValidationOperations = Object.freeze({
+  isMessage(value: unknown): value is DescriptorMessageSchema {
+    if (value === null || typeof value !== "object") return false;
+    const message = value as DescriptorCandidate;
+    if (
+      message.kind !== "message" ||
+      typeof message.typeName !== "string" ||
+      message.typeName.trim().length === 0 ||
+      typeof message.name !== "string" ||
+      message.name.trim().length === 0 ||
+      message.typeName.split(".").at(-1) !== message.name ||
+      !Array.isArray(message.fields) ||
+      !Array.isArray(message.members) ||
+      !Array.isArray(message.oneofs) ||
+      !Array.isArray(message.nestedEnums) ||
+      !Array.isArray(message.nestedExtensions) ||
+      !Array.isArray(message.nestedMessages) ||
+      !DescriptorValidation.hasProtoType(message.proto, "google.protobuf.DescriptorProto") ||
+      typeof message.toString !== "function" ||
+      !DescriptorValidation.isFile(message.file)
+    ) {
+      return false;
+    }
+    return DescriptorValidation.fileContainsMessage(message.file, value);
+  },
 
-/**
- * Determines whether a value has the runtime contract of a generated
- * Protobuf-ES file descriptor.
- *
- * @param value Candidate file descriptor.
- * @returns `true` when the candidate exposes a coherent generated file descriptor shape.
- */
-function isDescriptorFile(value: unknown): value is DescriptorCandidate {
-  if (value === null || typeof value !== "object") return false;
-  const file = value as DescriptorCandidate;
-  return (
-    file.kind === "file" &&
-    typeof file.name === "string" &&
-    file.name.trim().length > 0 &&
-    Array.isArray(file.messages) &&
-    hasDescriptorProtoType(file.proto, "google.protobuf.FileDescriptorProto") &&
-    typeof file.toString === "function"
-  );
-}
+  hasProtoType(value: unknown, typeName: string): boolean {
+    return (
+      value !== null &&
+      typeof value === "object" &&
+      (value as { readonly $typeName?: unknown }).$typeName === typeName
+    );
+  },
 
-/**
- * Determines whether a generated file descriptor contains a message descriptor
- * by object identity, including nested message declarations.
- *
- * @param file Generated file descriptor.
- * @param target Generated message descriptor candidate.
- * @returns `true` when the file declares the target message descriptor.
- */
-function descriptorFileContainsMessage(file: DescriptorCandidate, target: object): boolean {
-  const visited = new Set<object>();
-  const contains = (messages: unknown): boolean => {
-    if (!Array.isArray(messages)) return false;
-    return (messages as readonly unknown[]).some((message) => {
-      if (message === target) return true;
-      if (message === null || typeof message !== "object" || visited.has(message)) return false;
-      visited.add(message);
-      return contains((message as DescriptorCandidate).nestedMessages);
-    });
-  };
-  return contains(file.messages);
-}
+  isFile(value: unknown): value is DescriptorCandidate {
+    if (value === null || typeof value !== "object") return false;
+    const file = value as DescriptorCandidate;
+    return (
+      file.kind === "file" &&
+      typeof file.name === "string" &&
+      file.name.trim().length > 0 &&
+      Array.isArray(file.messages) &&
+      DescriptorValidation.hasProtoType(file.proto, "google.protobuf.FileDescriptorProto") &&
+      typeof file.toString === "function"
+    );
+  },
+
+  fileContainsMessage(file: DescriptorCandidate, target: object): boolean {
+    const visited = new Set<object>();
+    const contains = (messages: unknown): boolean => {
+      if (!Array.isArray(messages)) return false;
+      return (messages as readonly unknown[]).some((message) => {
+        if (message === target) return true;
+        if (message === null || typeof message !== "object" || visited.has(message)) return false;
+        visited.add(message);
+        return contains((message as DescriptorCandidate).nestedMessages);
+      });
+    };
+    return contains(file.messages);
+  },
+});
 
 /**
  * Generated registry metadata consumed by the framework.
@@ -291,7 +273,7 @@ interface NominalStandaloneReceiverConstructor<Instance extends StandaloneReceiv
    * @param args Application-defined constructor arguments.
    * @returns A nominal standalone receiver instance.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Application constructors may require arbitrary dependencies.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DI arguments vary.
   new (...args: any[]): Instance;
 }
 
@@ -746,7 +728,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   validateSchema(schema: DescriptorMessageSchema, label: string): void {
-    if (isDescriptorMessage(schema)) return;
+    if (DescriptorValidation.isMessage(schema)) return;
 
     throw new HandlerRegistryIngestionError(
       "INVALID_SCHEMA",
