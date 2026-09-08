@@ -96,6 +96,37 @@ describe("build-time handler analyzer", () => {
     expect(result.diagnostics).toEqual([]);
   });
 
+  it("rejects primitive and untyped second handler parameters", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/invalid-handler-contexts.ts",
+        `
+          import { Command, ProcessManager } from "@spine-event-engine/server";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+
+          export class InvalidHandlerContexts extends ProcessManager<string, typeof TaskSchema, bigint> {
+            @Command primitive(command: CreateTask, context: string): RenameTask {
+              throw new Error(String(command) + context);
+            }
+            @Command untyped(command: CreateTask, context): RenameTask {
+              throw new Error(String(command) + String(context));
+            }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_HANDLER_CONTEXT",
+      "INVALID_HANDLER_CONTEXT",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
+      "primitive",
+      "untyped",
+    ]);
+  });
+
   it("analyzes nominal standalone command receivers without an Entity state schema", () => {
     const result = analyzeBuildHandlers(
       programWithSource(
