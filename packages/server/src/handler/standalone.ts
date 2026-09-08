@@ -13,13 +13,21 @@
  */
 
 /** Nominal base class for a decorated standalone command assignee. */
-export abstract class AbstractAssignee {}
+export abstract class AbstractAssignee {
+  private readonly assigneeBrand!: never;
+}
 
 /** Nominal base class for a decorated standalone command handler. */
-export abstract class AbstractCommander {}
+export abstract class AbstractCommander {
+  private readonly commanderBrand!: never;
+}
 
 /** Nominal base class for a decorated standalone Event reactor. */
-export abstract class AbstractEventReactor {}
+export abstract class AbstractEventReactor {
+  private readonly eventReactorBrand!: never;
+}
 
 /** Nominal base class for a decorated standalone Event subscriber. */
-export abstract class AbstractEventSubscriber {}
+export abstract class AbstractEventSubscriber {
+  private readonly eventSubscriberBrand!: never;
+}

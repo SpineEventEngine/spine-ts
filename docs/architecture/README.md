@@ -596,9 +596,9 @@ rolls back state, schedules its typed event independently, and returns an OK
 acceptance `Ack`. The EventBus follow-up post is best-effort: when it succeeds,
 an active `SubscriptionService` stream with queue capacity may receive the
 rejection asynchronously; an inactive, saturated, or closed stream may not
-observe it. When posting fails, the context records the failure in
-`storedEventDispatchFailures()`, the command client is not notified, and no
-retry is currently promised. Managed aggregate command handlers use
+observe it. When posting fails, the internal signal publisher logs and contains
+the failure, the command client is not notified, and no retry is currently
+promised. Managed aggregate command handlers use
 `EntityTransaction.commit()` for transition validation. When
 that transaction is rejected, repository execution raises
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`

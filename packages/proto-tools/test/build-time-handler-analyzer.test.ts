@@ -28,7 +28,10 @@ const analyzeBuildHandlers = (...args: Parameters<typeof BuildHandlerAnalyzer.an
 function entityReceivers(analysis: ReturnType<typeof BuildHandlerAnalyzer.analyze>) {
   return analysis.receivers
     .filter((receiver) => receiver.receiverKind === "entity")
-    .map(({ receiverKind: _receiverKind, ...receiver }) => receiver);
+    .map(({ receiverKind, ...receiver }) => {
+      void receiverKind;
+      return receiver;
+    });
 }
 
 describe("build-time handler analyzer", () => {

@@ -94,7 +94,7 @@ approve(command: ApproveProject, context: CommandContext): ScheduleProject {
 }
 ```
 
-The generated v4 registry records `ApproveProjectSchema` as the input and
+The generated unversioned receiver registry records `ApproveProjectSchema` as the input and
 `ScheduleProjectSchema` as the emitted schema. `BoundedContext.buildAsync()`
 loads that registry through `withGeneratedRegistryRoot(root)` before callers
 post `ApproveProject` through the Command Bus.
@@ -102,8 +102,7 @@ post `ApproveProject` through the Command Bus.
 Generated registry modules are build artifacts under ignored `generated/`
 directories. T-0015c implements the build-time analyzer that extracts
 structured handler records. T-0015d adds the internal writer that turns those
-records into deterministic version-4 TypeScript source (while runtime readers
-retain legacy version-3 compatibility) and writes files only
+records into deterministic unversioned TypeScript source and writes files only
 when explicitly invoked into a caller-configured generated root that stays
 under Git ignore. T-0015e adds `GeneratedRegistryDiscovery` as the small
 runtime loader for these artifacts. Callers provide explicit filesystem paths
@@ -187,9 +186,8 @@ return types on emitting handlers, `@Subscribe` handlers without explicit
 It must also reject missing first-parameter type annotations because signal
 schema inference depends on that explicit type.
 
-Generated registry version 4 output records `origin: "domestic" | "external"`
-for every handler; runtime ingestion retains legacy version-3 read
-compatibility. The analyzer accepts only the canonical exported `External<T>`
+Generated registry output records `origin: "domestic" | "external"` for every
+handler. The analyzer accepts only the canonical exported `External<T>`
 marker (including namespace and marker-containing aliases), rejects counterfeit
 or unresolved markers, and rejects external command receivers. Event dispatch
 selects domestic receptors for ordinary events and external receptors for

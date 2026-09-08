@@ -203,9 +203,9 @@ be received by an active `SubscriptionService` stream with queue capacity;
 inactive, saturated, or closed streams may not observe it. Client event updates
 retain the typed rejection and ordinary event metadata but redact
 rejected-command payload forms and throwable stack from
-`EventContext.rejection`. A failed post is
-recorded in `storedEventDispatchFailures()`, is not reflected in the client
-`Ack`, and has no promised retry.
+`EventContext.rejection`. Produced-signal publication is internal and
+best-effort: a publication failure is logged and does not change the client
+`Ack` or promise a retry.
 Core envelope construction exports include
 `AnyMessages.pack()`, `AnyMessages.unpack()`,
 `SignalEnvelopes.command()`, `SignalEnvelopes.event()`, `PackAnyOptions`, `PackCommandInput`, and
@@ -214,8 +214,7 @@ Core envelope construction exports include
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
 `ContextSpec`, `BoundedContextName`, `TenantMode`, `BoundedContextSnapshot`,
 small immutable snapshot contracts, `CommandEndpoint`, `EventEndpoint`,
-`ReadCatchUpOptions`, `ReadCatchUpResult`, `StoredEventDispatchFailure`,
-`DispatchErrorSnapshot`, `Stand`, direct stand
+`ReadCatchUpOptions`, `ReadCatchUpResult`, `Stand`, direct stand
 read/version/list/update/subscription/clear contracts, and
 `BoundedContextNameError` for bounded-context assembly. `CommandEndpoint`
 also exposes accepted command message type URLs so service adapters can route
@@ -226,9 +225,9 @@ typed rejection event is scheduled, command dispatch resolves, and
 `CommandService.Post` returns an OK acceptance `Ack`. A successful follow-up
 post stores the event through EventBus; an active `SubscriptionService` stream
 with queue capacity may receive it, while inactivity, saturation, or closure
-may prevent observation. Post failure is recorded in
-`storedEventDispatchFailures()`, is not visible to the command client, and is
-not currently retried. OK does not mean a state transition or rejection-event
+may prevent observation. Post failure is contained and logged by the internal
+signal publisher, is not visible to the command client, and is not currently
+retried. OK does not mean a state transition or rejection-event
 delivery succeeded. `CommandService.Post` still returns
 `COMMAND_VALIDATION_ERROR` with message `Command payload validation failed.` and
 packed `spine.validation.ValidationError` details when `CommandBus` rejects an
@@ -279,10 +278,9 @@ transactions and execute projection subscribers. Aggregate command execution
 requires `command.id` so produced events can carry a contract-valid command
 origin; missing IDs reject before
 mutation or storage. Aggregate command completion resolves after traceability
-event-journal append and latest persisted state write; later already-stored
-event redispatch failures are observable through the copy-safe
-`storedEventDispatchFailures()` diagnostic snapshot on the corresponding
-`BoundedContext`. Generated entity-class assembly creates default repositories
+event-journal append and latest persisted state write. Later produced-signal
+publication is contained by the internal publisher and does not extend the
+`BoundedContext` API. Generated entity-class assembly creates default repositories
 through `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This
 implementation does not invoke query handlers, run durable delivery catch-up, expose a
 broad server lifecycle, or integrate transports. The supported durable inbox
@@ -524,11 +522,10 @@ the normal generated services and their Buses; the integration channel factory
 does not provide another application-signal ingress path.
 
 The server root exports `External<T>` (a type-only alias), `HandlerOrigin`,
-`CommandTransformationHandlerMetadata`, `ThirdPartyContext`,
-`HandlerRegistryIngestor`, and `GeneratedRegistryDiscovery`. Generated registry
-data contracts remain on the `server/spi/handler-registry` SPI; the v4 writer
-emits v4 data, while the runtime ingestor continues to read legacy v3
-registries. The canonical
+`ThirdPartyContext`, `HandlerRegistryIngestor`, and `GeneratedRegistryDiscovery`.
+Generated registry data contracts remain on the `server/spi/handler-registry`
+SPI. The writer emits unversioned receiver records; retired versioned registries
+are rejected and must be regenerated. The canonical
 `External<T>` marker is recognized on a receptor's first parameter and produces
 external metadata; unmarked handlers are domestic. `EventDispatcher` retains
 the complete `messageSchemas()` set and may provide `externalEventSchemas()` as
@@ -538,6 +535,18 @@ repository mixes origins for one event type. External command inputs are
 invalid; external events, rejections, and supported state subscriptions are
 valid. See the [server reference](../../packages/server/REFERENCE.md) for
 decorator and generated-registry details.
+
+Standalone generated handlers extend one of `AbstractAssignee`,
+`AbstractCommander`, `AbstractEventReactor`, or `AbstractEventSubscriber`.
+Register an assignee with `addAssignee()`, a commander with
+`addCommandDispatcher()`, and reactors or subscribers with
+`addEventDispatcher()`, then call `buildAsync()` so the generated receiver
+metadata can match the registered instance. Assignees consume Commands and
+produce Events; commanders may consume Commands, Events, or rejections and
+produce Commands; reactors consume Events or rejections and may produce Events;
+subscribers consume Events, rejections, or Entity states and produce no signal.
+Entity-state subscriptions arrive through the System Event Bus. Publication of
+produced signals is in-process best effort and makes no exactly-once claim.
 
 `ThirdPartyContext.singleTenant(name)` and `.multitenant(name)` create the
 JVM-aligned hidden import context. `emittedEvent()` accepts a generated event
@@ -719,7 +728,7 @@ artifacts under ignored `generated/` directories and are not committed.
 
 A generated Process Manager command-input handler uses distinct domain Command
 types and can receive `CommandContext`. This standalone example explicitly
-ingests the v4 data that an application build normally emits, then assembles a
+ingests the unversioned data that an application build normally emits, then assembles a
 repository from it; it does not claim that its fixture discovers a registry
 artifact automatically:
 
@@ -772,15 +781,15 @@ const project = create(ProjectIdSchema, {
   organization: create(OrganizationIdSchema, { code: "org-a" }),
   number: 1,
 });
-const registry: GeneratedHandlerRegistry<4> = {
-  version: 4,
-  entities: [
+const registry: GeneratedHandlerRegistry = {
+  receivers: [
     {
-      entityType: ApprovalCoordinator,
+      receiverKind: "entity",
+      receiverType: ApprovalCoordinator,
       stateSchema: CoordinationStateSchema,
       handlers: [
         {
-          kind: "command-transformation",
+          kind: "command-substitution",
           methodName: "approve",
           signalSchema: ApproveProjectSchema,
           emittedSchemas: [ScheduleProjectSchema],
@@ -809,13 +818,13 @@ await context.commandBus().post(
 );
 ```
 
-Its v4 generated registry record declares `ApproveProjectSchema` as input and
+Its generated registry record declares `ApproveProjectSchema` as input and
 `ScheduleProjectSchema` as emitted output. Application builds emit that record
 to `generated/handler/generated-handler-registry.js`; those applications use
 `buildAsync()` with their compiled package root before Command Bus posting.
 The public `@spine-event-engine/server/spi/handler-registry` subpath is the
-generated-registry data-contract SPI. Generated source writes v4 and the
-runtime reads legacy v3 registries for compatibility. Generated registry source
+generated-registry data-contract SPI. Generated source writes unversioned
+receiver records and rejects retired registry shapes. Generated registry source
 uses it for the
 type-only `GeneratedHandlerRegistry` contract; ordinary application code should
 use the package-root server APIs and context assembly rather than importing this
@@ -828,7 +837,7 @@ generation after Protobuf-ES generation and before `tsc`; normal context
 assembly lets `buildAsync()` load the compiled registry module from the explicit
 trusted package output tree passed to `withGeneratedRegistryRoot(root)`.
 Repository execution calls generated two-argument command assignees, command
-transformations, event subscribers, command reactions, and event reactors with generated
+substitutions, event subscribers, command reactions, and event reactors with generated
 `CommandContext` or `EventContext` values from the incoming envelope; if the
 envelope omits context, execution supplies an empty generated context message
 of the proper schema. Rejection subscribers receive the typed rejection payload

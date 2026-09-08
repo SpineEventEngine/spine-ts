@@ -17,7 +17,6 @@ import { closeSync, constants, lstatSync, mkdirSync, openSync, writeFileSync } f
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type {
-  BuildEntityHandlers,
   BuildHandlerAnalysis,
   BuildReceiverHandlers,
   SchemaReference,

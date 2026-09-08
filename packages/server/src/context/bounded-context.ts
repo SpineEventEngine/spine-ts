@@ -1441,7 +1441,12 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Builds a context after loading generated metadata for added entity classes.
+   * Builds a context after loading generated metadata for added entity classes
+   * and registered standalone handlers.
+   *
+   * Standalone assignees, commanders, reactors, and subscribers require this
+   * asynchronous path so their exact constructors can be matched to generated
+   * receiver metadata.
    *
    * @returns Resolves to the built context.
    */

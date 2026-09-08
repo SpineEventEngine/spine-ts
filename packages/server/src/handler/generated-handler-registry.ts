@@ -303,7 +303,9 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
         "Generated handler registry must declare an unversioned receivers array; regenerate generated handler metadata.",
       );
     }
-    receivers.forEach((receiver) => GeneratedRegistry.validateReceiver(receiver));
+    receivers.forEach((receiver) => {
+      GeneratedRegistry.validateReceiver(receiver);
+    });
   },
 
   validateReceiver(receiver: unknown): asserts receiver is GeneratedReceiver {
@@ -341,9 +343,9 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
         "Generated Entity receiver must declare a state schema.",
       );
     }
-    value.handlers.forEach((handler) =>
-      GeneratedRegistry.validateHandler(handler as GeneratedHandlerRecordInput),
-    );
+    value.handlers.forEach((handler) => {
+      GeneratedRegistry.validateHandler(handler as GeneratedHandlerRecordInput);
+    });
   },
 
   materializeAll(registry: GeneratedHandlerRegistry): readonly EntityHandlersMetadata[] {
@@ -499,13 +501,14 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   validateHandler(handler: GeneratedHandlerRecordInput): void {
-    if (handler === null || typeof handler !== "object") {
+    const untrustedHandler: unknown = handler;
+    if (untrustedHandler === null || typeof untrustedHandler !== "object") {
       throw new HandlerRegistryIngestionError(
         "INVALID_SCHEMA",
         "Generated handler must be an object.",
       );
     }
-    const value = handler as unknown as Record<string, unknown>;
+    const value = untrustedHandler as Record<string, unknown>;
     if (
       typeof value.kind !== "string" ||
       typeof value.methodName !== "string" ||

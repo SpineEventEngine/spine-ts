@@ -150,10 +150,10 @@ describe("Wave 13 IntegrationBroker", () => {
     await broker("one producer / one consumer delivery");
     const seen: unknown[] = [];
     const consumer = BoundedContext.singleTenant("Red01Consumer")
-      .addEventDispatcher(external([StringValueSchema], seen) as never)
+      .addEventDispatcher(external([StringValueSchema], seen))
       .build();
     const producer = BoundedContext.singleTenant("Red01Producer")
-      .addEventDispatcher(domestic([StringValueSchema]) as never)
+      .addEventDispatcher(domestic([StringValueSchema]))
       .build();
     try {
       const original = event();
@@ -195,7 +195,7 @@ describe("Wave 13 IntegrationBroker", () => {
       .addEventDispatcher(subscriber)
       .buildAsync();
     const producer = BoundedContext.singleTenant("StandaloneExternalProducer")
-      .addEventDispatcher(domestic([StringValueSchema]) as never)
+      .addEventDispatcher(domestic([StringValueSchema]))
       .build();
     try {
       await producer.eventBus().post(event(StringValueSchema, "standalone-external"));
@@ -214,13 +214,13 @@ describe("Wave 13 IntegrationBroker", () => {
     const first: unknown[] = [],
       second: unknown[] = [];
     const producer = BoundedContext.singleTenant("Red02Producer")
-      .addEventDispatcher(domestic([StringValueSchema]) as never)
+      .addEventDispatcher(domestic([StringValueSchema]))
       .build();
     const one = BoundedContext.singleTenant("Red02One")
-      .addEventDispatcher(external([StringValueSchema], first) as never)
+      .addEventDispatcher(external([StringValueSchema], first))
       .build();
     const two = BoundedContext.singleTenant("Red02Two")
-      .addEventDispatcher(external([StringValueSchema], second) as never)
+      .addEventDispatcher(external([StringValueSchema], second))
       .build();
     try {
       await producer.eventBus().post(event());
@@ -234,10 +234,10 @@ describe("Wave 13 IntegrationBroker", () => {
     await broker("wanted-type-only domestic publication");
     const seen: unknown[] = [];
     const consumer = BoundedContext.singleTenant("Red05Consumer")
-      .addEventDispatcher(external([StringValueSchema], seen) as never)
+      .addEventDispatcher(external([StringValueSchema], seen))
       .build();
     const producer = BoundedContext.singleTenant("Red05Producer")
-      .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema]) as never)
+      .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema]))
       .build();
     try {
       await producer.eventBus().post(event(Int32ValueSchema, "unwanted"));
@@ -255,12 +255,12 @@ describe("Wave 13 IntegrationBroker", () => {
     const a: unknown[] = [],
       b: unknown[] = [];
     const left = BoundedContext.singleTenant("Red06A")
-      .addEventDispatcher(domestic([StringValueSchema]) as never)
-      .addEventDispatcher(external([Int32ValueSchema], a) as never)
+      .addEventDispatcher(domestic([StringValueSchema]))
+      .addEventDispatcher(external([Int32ValueSchema], a))
       .build();
     const right = BoundedContext.singleTenant("Red06B")
-      .addEventDispatcher(domestic([Int32ValueSchema]) as never)
-      .addEventDispatcher(external([StringValueSchema], b) as never)
+      .addEventDispatcher(domestic([Int32ValueSchema]))
+      .addEventDispatcher(external([StringValueSchema], b))
       .build();
     try {
       await left.eventBus().post(event(StringValueSchema, "a"));
@@ -285,7 +285,7 @@ describe("Wave 13 IntegrationBroker", () => {
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const producer = await BoundedContext.singleTenant(`Red07${crypto.randomUUID()}`)
-      .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema]) as never)
+      .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema]))
       .buildAsync();
     try {
       await publishWanted(factory, "Red07Peer", [StringValueSchema]);
@@ -315,7 +315,7 @@ describe("Wave 13 IntegrationBroker", () => {
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const producer = await BoundedContext.singleTenant(`Red08${crypto.randomUUID()}`)
-      .addEventDispatcher(domestic([StringValueSchema]) as never)
+      .addEventDispatcher(domestic([StringValueSchema]))
       .buildAsync();
     try {
       await publishWanted(factory, "Red08First", [StringValueSchema]);
@@ -342,8 +342,8 @@ describe("Wave 13 IntegrationBroker", () => {
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const context = await BoundedContext.singleTenant(`Red10${crypto.randomUUID()}`)
-      .addEventDispatcher(external([StringValueSchema], []) as never)
-      .addEventDispatcher(external([StringValueSchema], []) as never)
+      .addEventDispatcher(external([StringValueSchema], []))
+      .addEventDispatcher(external([StringValueSchema], []))
       .buildAsync();
     try {
       expect(await decodeWantedFrames(factory)).toHaveLength(1);
@@ -375,10 +375,10 @@ describe("Wave 13 IntegrationBroker", () => {
     await broker("full Event identity and order");
     const seen: unknown[] = [];
     const c = BoundedContext.singleTenant("Red13C")
-      .addEventDispatcher(external([StringValueSchema], seen) as never)
+      .addEventDispatcher(external([StringValueSchema], seen))
       .build();
     const p = BoundedContext.singleTenant("Red13P")
-      .addEventDispatcher(domestic([StringValueSchema]) as never)
+      .addEventDispatcher(domestic([StringValueSchema]))
       .build();
     try {
       const one = event(StringValueSchema, "one"),
@@ -402,7 +402,7 @@ describe("Wave 13 IntegrationBroker", () => {
       .add(Wave13OriginProjection, { eventRouting: wave13OriginRouting })
       .buildAsync();
     const p = await BoundedContext.multitenant("Red15P")
-      .addEventDispatcher(domestic([StringValueSchema]) as never)
+      .addEventDispatcher(domestic([StringValueSchema]))
       .buildAsync();
     const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } });
     const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-b" } });
@@ -426,10 +426,10 @@ describe("Wave 13 IntegrationBroker", () => {
         /tenant/u,
       );
       const single = await BoundedContext.singleTenant("Red15Single")
-        .addEventDispatcher(external([StringValueSchema], []) as never)
+        .addEventDispatcher(external([StringValueSchema], []))
         .buildAsync();
       const forbidden = await BoundedContext.singleTenant("Red15Forbidden")
-        .addEventDispatcher(domestic([StringValueSchema]) as never)
+        .addEventDispatcher(domestic([StringValueSchema]))
         .buildAsync();
       await expect(
         forbidden.eventBus().post(event(StringValueSchema, "forbidden", "tenant-a")),
@@ -446,10 +446,10 @@ describe("Wave 13 IntegrationBroker", () => {
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const seen: unknown[] = [];
     const c = await BoundedContext.singleTenant("Red16C")
-      .addEventDispatcher(external([StringValueSchema], seen) as never)
+      .addEventDispatcher(external([StringValueSchema], seen))
       .buildAsync();
     const p = await BoundedContext.singleTenant("Red16P")
-      .addEventDispatcher(domestic([StringValueSchema]) as never)
+      .addEventDispatcher(domestic([StringValueSchema]))
       .buildAsync();
     try {
       const original = SignalEnvelopes.event({
@@ -501,7 +501,7 @@ async function assertWantedLifecycle(options: {
   const factory = new RecordingTransportFactory();
   ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
   const producer = await BoundedContext.singleTenant(`WantedProducer${crypto.randomUUID()}`)
-    .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema]) as never)
+    .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema]))
     .buildAsync();
   // RED-07 exercises producer-before-consumer; the peer-online branch creates
   // a consumer before its producer to retain the reverse construction order.
@@ -554,7 +554,7 @@ async function assertFailedReplacementKeepsPriorWantedSet(): Promise<void> {
   const factory = new RecordingTransportFactory();
   ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
   const producer = await BoundedContext.singleTenant(`RollbackProducer${crypto.randomUUID()}`)
-    .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema, BoolValueSchema]) as never)
+    .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema, BoolValueSchema]))
     .buildAsync();
   try {
     await publishWanted(factory, "RollbackPeer", [StringValueSchema]);

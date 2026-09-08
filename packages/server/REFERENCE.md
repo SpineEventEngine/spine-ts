@@ -21,12 +21,24 @@ the server root API and does not independently create delivery work.
 
 Generated model modules import only their registry data types from
 `@spine-event-engine/server/spi/handler-registry`. The stable contract is the
-versioned `GeneratedHandlerRegistry` contract, its entity groups, handler records,
-kinds, arity, and optional `where` data. `GeneratedHandlerRegistry<3>` excludes
-command transformations at compile time; generated output uses
-`GeneratedHandlerRegistry<4>`. The subpath has no runtime values. Server-side
-ingestion, validation errors, and their error codes are implementation details;
-generated code must not depend on them.
+unversioned `GeneratedHandlerRegistry` receiver collection, receiver records,
+handler records, kinds, arity, and optional `where` data. The subpath has no
+runtime values. Server-side ingestion, validation errors, and their error codes
+are implementation details; generated code must not depend on them. Retired
+versioned registries are rejected and must be regenerated.
+
+## Standalone handlers
+
+Generated standalone handlers extend `AbstractAssignee`, `AbstractCommander`,
+`AbstractEventReactor`, or `AbstractEventSubscriber`. Register instances with
+`addAssignee()`, `addCommandDispatcher()`, or `addEventDispatcher()` as their
+role requires, then use `buildAsync()` to load generated receiver metadata and
+match the exact constructor. Assignees consume Commands and produce Events;
+commanders consume Commands, Events, or rejections and produce Commands;
+reactors consume Events or rejections and may produce Events; subscribers
+consume Events, rejections, or Entity states and produce no signal. State
+subscribers use the System Event Bus. Produced signals are published in-process
+on a best-effort basis; this is not an exactly-once contract.
 
 ## Integration broker and event origin
 
@@ -193,7 +205,7 @@ retry that child.
 
 For a generated Process Manager, a command-input handler uses distinct domain
 Command input and output types, and the generated registry supplies those
-schemas. This standalone example explicitly ingests the v4 data that an
+schemas. This standalone example explicitly ingests the unversioned data that an
 application build normally emits, then assembles a repository from it; it does
 not claim that its fixture discovers a registry artifact automatically:
 
@@ -246,15 +258,15 @@ const project = create(ProjectIdSchema, {
   organization: create(OrganizationIdSchema, { code: "org-a" }),
   number: 1,
 });
-const registry: GeneratedHandlerRegistry<4> = {
-  version: 4,
-  entities: [
+const registry: GeneratedHandlerRegistry = {
+  receivers: [
     {
-      entityType: ApprovalCoordinator,
+      receiverKind: "entity",
+      receiverType: ApprovalCoordinator,
       stateSchema: CoordinationStateSchema,
       handlers: [
         {
-          kind: "command-transformation",
+          kind: "command-substitution",
           methodName: "approve",
           signalSchema: ApproveProjectSchema,
           emittedSchemas: [ScheduleProjectSchema],
@@ -283,7 +295,7 @@ await context.commandBus().post(
 );
 ```
 
-The generated v4 record declares `ApproveProjectSchema` as the input and
+The generated record declares `ApproveProjectSchema` as the input and
 `ScheduleProjectSchema` as the emitted Command schema; registry ingestion, not
 manual decorator materialization, constructs the output-bearing metadata.
 Application builds emit the record to
@@ -312,10 +324,9 @@ handler registry for classes registered with `add(EntityClass)`;
 explicit `Repository` registration. A built context contains `CommandBus`,
 `EventBus`, `Stand`, repositories, and its storage lifecycle.
 
-Generated writer output is registry version 4 and records command
-transformations explicitly. The ingestor remains read-compatible with version 3
-registries using their older handler kinds, but rejects a command-transformation
-record under version 3.
+Generated writer output is an unversioned receiver collection and records
+command substitutions explicitly. The ingestor rejects retired versioned
+registry shapes with an instruction to regenerate.
 
 ### Stand subscription registry
 

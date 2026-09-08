@@ -170,7 +170,11 @@ describe("generated handler registry ingestion", () => {
   it("enforces standalone handler input, output, origin, and filter semantics", () => {
     const ingestor = new HandlerRegistryIngestor();
     const standalone =
-      (receiverType: typeof Assignee, handler: ReturnType<typeof domainHandler>) => () =>
+      (
+        receiverType: typeof Assignee | typeof Commander | typeof Reactor | typeof Subscriber,
+        handler: ReturnType<typeof domainHandler>,
+      ) =>
+      () =>
         ingestor.ingest({
           receivers: [{ receiverKind: "standalone", receiverType, handlers: [handler] }],
         });
