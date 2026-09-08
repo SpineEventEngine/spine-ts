@@ -211,6 +211,16 @@ subagents. Runtime self-introspection will be recorded if exposed; otherwise
 the immutable configured role/profile and explicit dispatch fields are the
 accepted metadata evidence.
 
+The first standalone implementer left an uncommitted compiling draft and
+explicitly rejected it as a checkpoint because the focused standalone behavior
+matrix was absent. Existing Bounded Context tests passed 68 cases, and server
+typecheck plus narrow lint, format, and diff checks passed. The implementer's
+execution window ended with no committed production work. A fresh existing
+`implementer` role therefore receives the intact working tree without overlap,
+with the same exclusive responsibility and explicit `gpt-5.6-terra` / medium
+profile. It must add the required TDD matrix, correct defects exposed by those
+tests, and commit only a behavior-proven slice. It must not spawn subagents.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
