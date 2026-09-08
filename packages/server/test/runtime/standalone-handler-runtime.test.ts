@@ -31,6 +31,7 @@ import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-r
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type TaskEvent = Message<"TaskEvent"> & { id: string; name: string };
+type TaskCommand = Message<"TaskCommand"> & { id: string; name: string };
 type AggregateState = Message<"AggregateState"> & { id: string; name: string; archived: boolean };
 
 const descriptorSet = fromBinary(
@@ -45,6 +46,21 @@ const TaskEventSchema = messageDesc(
   ]),
   1,
 ) as GenMessage<TaskEvent>;
+const commandDescriptorSet = fromBinary(
+  FileDescriptorSetSchema,
+  Buffer.from(
+    serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
+    "base64",
+  ),
+);
+const commandDescriptor = commandDescriptorSet.file[0];
+if (commandDescriptor === undefined) throw new Error("Expected Command fixture descriptor.");
+const TaskCommandSchema = messageDesc(
+  fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, commandDescriptor)).toString("base64"), [
+    file_spine_options,
+  ]),
+  2,
+) as GenMessage<TaskCommand>;
 const rejectionDescriptorSet = fromBinary(
   FileDescriptorSetSchema,
   Buffer.from(
@@ -130,9 +146,9 @@ class ProducingReactor extends AbstractEventSubscriber {
 
 class RejectionCommander extends AbstractCommander {
   calls = 0;
-  react(): TaskEvent {
+  react(): TaskCommand {
     this.calls += 1;
-    return create(TaskEventSchema, { id: "commander", name: "commander" });
+    return create(TaskCommandSchema, { id: "commander", name: "commander" });
   }
 }
 
@@ -192,7 +208,7 @@ describe("StandaloneHandlerRuntime", () => {
     });
     const dispatcher = new StandaloneHandlerRuntime([
       {
-        group: reaction(RejectionCommander, "react", [TaskEventSchema]),
+        group: reaction(RejectionCommander, "react", [TaskCommandSchema]),
         instance: commander,
         publisher,
       },
@@ -287,6 +303,7 @@ describe("StandaloneHandlerRuntime", () => {
     await dispatcher.dispatch(
       create(EventSchema, {
         id: { value: "external-event" },
+        context: { external: true },
         message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema, { name: "external" })),
       }),
     );
@@ -478,13 +495,14 @@ describe("StandaloneHandlerRuntime", () => {
     if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
     const event = create(EventSchema, {
       id: { value: "context" },
-      context: { external: true },
+      context: { external: false },
       message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
     });
 
     await dispatcher.dispatch(event);
 
     expect(receiver.context).toEqual(event.context);
+    expect(receiver.context).not.toBe(event.context);
   });
 
   it("allows a reactor to return no Event", async () => {

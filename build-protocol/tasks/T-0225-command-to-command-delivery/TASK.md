@@ -229,3 +229,18 @@ responsibility in `BoundedContext`; it is not ready for review.
   100% functions/lines. The run exited nonzero only because the repository-wide
   90% global threshold is inapplicable to this narrowed two-suite invocation
   (21.49% aggregate); it is coverage evidence, not a global coverage gate.
+
+## Standalone review correction batch (2026-09-08)
+
+- Standalone event selection now partitions `@Where` filters by both signal
+  schema and domestic/external origin. Two-parameter command and event methods
+  receive cloned generated default contexts when an envelope omits context.
+- Context assembly includes generated standalone external interests in broker
+  setup and rejects duplicate standalone command receptors before bus intake.
+- The external standalone test now marks its envelope as external; rejection
+  commander output uses a Command fixture rather than an Event fixture. Public
+  standalone registration methods have parameter/return and `buildAsync()`
+  metadata TSDoc.
+- Focused standalone/context suites passed 88 tests. The combined broker suite
+  is blocked by pre-existing `RED-15` versioned registry test metadata, which
+  fails registry discovery before the standalone paths execute.

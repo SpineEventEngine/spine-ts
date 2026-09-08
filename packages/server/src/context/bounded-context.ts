@@ -1292,8 +1292,10 @@ export class BoundedContextBuilder {
   /**
    * Adds a command dispatcher to the context being built.
    *
-   * @param dispatcher Dispatches commands accepted by this context.
-   * @returns Returns this builder for further configuration.
+   * @param dispatcher Raw command dispatcher, or an `AbstractCommander` instance.
+   *   A standalone commander requires generated receiver metadata and therefore
+   *   this builder's `buildAsync()` path.
+   * @returns This builder for further configuration.
    */
   addCommandDispatcher(dispatcher: CommandDispatcher | AbstractCommander): this {
     if (dispatcher instanceof AbstractCommander) {
@@ -1318,8 +1320,9 @@ export class BoundedContextBuilder {
   /**
    * Adds an event dispatcher to the context being built.
    *
-   * @param dispatcher Dispatches events accepted by this context.
-   * @returns Returns this builder for further configuration.
+   * @param dispatcher Raw event dispatcher, or a standalone reactor/subscriber.
+   *   Standalone receivers require generated receiver metadata and `buildAsync()`.
+   * @returns This builder for further configuration.
    */
   addEventDispatcher(
     dispatcher: EventDispatcher | AbstractEventReactor | AbstractEventSubscriber,
@@ -1335,7 +1338,15 @@ export class BoundedContextBuilder {
     return this;
   }
 
-  /** Adds a generated standalone command assignee. */
+  /**
+   * Adds a generated standalone command assignee.
+   *
+   * The registered instance is matched by exact constructor to generated
+   * receiver metadata when `buildAsync()` assembles the context.
+   *
+   * @param assignee Generated standalone assignee instance.
+   * @returns This builder for further configuration.
+   */
   addAssignee(assignee: AbstractAssignee): this {
     this.#assignees.push(assignee);
     return this;
@@ -1518,6 +1529,7 @@ export class BoundedContextBuilder {
         systemEventBus,
         this.#specSnapshot.name.value,
       );
+      ContextParts.assertUniqueStandaloneCommandReceptors(standalone);
       const standaloneRuntime =
         standalone.length === 0
           ? undefined
@@ -1566,7 +1578,10 @@ export class BoundedContextBuilder {
         context,
         eventBus,
         systemSpec,
-        ContextParts.externalEventSchemas(domainEventDispatchers),
+        ContextParts.externalEventSchemas([
+          ...domainEventDispatchers,
+          ...(standaloneEvent === undefined ? [] : [standaloneEvent]),
+        ]),
       );
       return context;
     } catch (error) {
@@ -1779,6 +1794,27 @@ class CatchUpReplayError extends Error {
  * Assembles private bounded-context lifecycle and replay details.
  */
 const ContextParts = Object.freeze({
+  assertUniqueStandaloneCommandReceptors(
+    receivers: readonly GeneratedStandaloneHandlerGroup[],
+  ): void {
+    const receptorByType = new Map<string, string>();
+    for (const receiver of receivers) {
+      for (const handler of receiver.handlers) {
+        if (handler.kind !== "command-assignment" && handler.kind !== "command-substitution")
+          continue;
+        const typeName = TypeUrls.derive(handler.signalSchema);
+        const prior = receptorByType.get(typeName);
+        if (prior !== undefined)
+          throw new Error(
+            `Standalone command receptors conflict for "${typeName}": ${prior} and ${(receiver.receiverType as unknown as StandaloneConstructor).name}.`,
+          );
+        receptorByType.set(
+          typeName,
+          (receiver.receiverType as unknown as StandaloneConstructor).name,
+        );
+      }
+    }
+  },
   matchStandaloneHandlers(
     generated: readonly GeneratedStandaloneHandlerGroup[],
     instances: readonly object[],

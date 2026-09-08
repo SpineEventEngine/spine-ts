@@ -12,9 +12,18 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
 import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
-import { CommandSchema, EventSchema, type Command, type Event } from "@spine-event-engine/proto";
+import {
+  CommandContextSchema,
+  CommandSchema,
+  EventContextSchema,
+  EventSchema,
+  type CommandContext,
+  type EventContext,
+  type Command,
+  type Event,
+} from "@spine-event-engine/proto";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
@@ -94,7 +103,10 @@ export class StandaloneHandlerRuntime {
         for (const binding of bindings) {
           const state = AnyMessages.unpack(changed.newState, binding.handler.signalSchema);
           if (state !== undefined) {
-            const output = await binding.invoke(state, event.context);
+            const output = await binding.invoke(
+              state,
+              StandaloneHandlerRuntime.eventContext(event),
+            );
             await this.#publish(binding, output, event);
           }
         }
@@ -108,7 +120,10 @@ export class StandaloneHandlerRuntime {
     for (const binding of bindings) {
       const message = AnyMessages.unpack(command.message, binding.handler.signalSchema);
       if (message === undefined) continue;
-      const output = await binding.invoke(message, command.context);
+      const output = await binding.invoke(
+        message,
+        StandaloneHandlerRuntime.commandContext(command),
+      );
       await this.#publish(binding, output, command);
     }
   }
@@ -116,15 +131,20 @@ export class StandaloneHandlerRuntime {
   async #dispatchEvent(event: Event, bindings: readonly Binding[]): Promise<void> {
     if (event.message === undefined)
       throw new Error("Standalone event handler requires a message.");
-    for (const [typeName, filter] of this.#eventFilters) {
+    const origin = event.context?.external === true ? "external" : "domestic";
+    for (const [key, filter] of this.#eventFilters) {
       const binding = bindings.find(
-        (candidate) => candidate.handler.signalSchema.typeName === typeName,
+        (candidate) =>
+          StandaloneHandlerRuntime.eventFilterKey(
+            candidate.handler.signalSchema.typeName,
+            origin,
+          ) === key,
       );
       if (binding === undefined) continue;
       const message = AnyMessages.unpack(event.message, binding.handler.signalSchema);
       if (message === undefined) continue;
       for (const selected of filter.select(message)) {
-        const output = await selected.invoke(message, event.context);
+        const output = await selected.invoke(message, StandaloneHandlerRuntime.eventContext(event));
         await this.#publish(selected, output, event);
       }
     }
@@ -227,7 +247,9 @@ export class StandaloneHandlerRuntime {
         handler.kind === "event-reaction" ||
         handler.kind === "event-subscription",
     );
-    const grouped = Map.groupBy(eventBindings, ({ handler }) => handler.signalSchema.typeName);
+    const grouped = Map.groupBy(eventBindings, ({ handler }) =>
+      StandaloneHandlerRuntime.eventFilterKey(handler.signalSchema.typeName, handler.origin),
+    );
     return new Map(
       [...grouped].map(([typeName, candidates]) => [
         typeName,
@@ -240,6 +262,22 @@ export class StandaloneHandlerRuntime {
         ),
       ]),
     );
+  }
+
+  static commandContext(command: Command): CommandContext {
+    return command.context === undefined
+      ? create(CommandContextSchema)
+      : clone(CommandContextSchema, command.context);
+  }
+
+  static eventContext(event: Event): EventContext {
+    return event.context === undefined
+      ? create(EventContextSchema)
+      : clone(EventContextSchema, event.context);
+  }
+
+  static eventFilterKey(typeName: string, origin: "domestic" | "external"): string {
+    return `${typeName}\u0000${origin}`;
   }
 
   static missingPublisher(): SignalPublisher {
