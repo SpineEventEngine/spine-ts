@@ -1066,7 +1066,11 @@ const HandlerSources = Object.freeze({
     }
     const declaration = symbol?.declarations?.find(ts.isClassDeclaration);
     if (declaration !== undefined) return declaration;
-    return checker.getTypeAtLocation(expression).symbol.declarations?.find(ts.isClassDeclaration);
+    const type = checker.getTypeAtLocation(expression) as Omit<ts.Type, "symbol"> & {
+      readonly symbol?: ts.Symbol;
+    };
+    const declarations = type.symbol?.declarations;
+    return declarations === undefined ? undefined : declarations.find(ts.isClassDeclaration);
   },
 
   isEntityBase(expression: ts.Expression, imports: ImportState): boolean {

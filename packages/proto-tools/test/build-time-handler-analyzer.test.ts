@@ -135,6 +135,27 @@ describe("build-time handler analyzer", () => {
     expect(result.entities[0]?.handlers[0]?.kind).toBe("command-transformation");
   });
 
+  it("ignores unrelated classes whose heritage type has no symbol", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/message-board-shape.ts",
+        `
+          import { ProcessManager, Subscribe } from "@spine-event-engine/server";
+          import { TaskListSchema } from "../generated/task_list_pb.js";
+          import { type TaskCreated } from "../generated/events_pb.js";
+
+          class MessageBoardBootstrap extends (undefined as never) {}
+          export class TaskProcessManager extends ProcessManager<string, typeof TaskListSchema, number> {
+            @Subscribe observe(event: TaskCreated): void { void event; }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.entities.map((entity) => entity.className)).toEqual(["TaskProcessManager"]);
+  });
+
   it("discovers bare handler decorators and generated schema references", () => {
     const result = analyzeBuildHandlers(programWithSource("src/task.ts", validTaskSource));
 
