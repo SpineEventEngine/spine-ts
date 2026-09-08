@@ -24,12 +24,13 @@ import {
   StringValueSchema,
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
-import { SignalEnvelopes } from "@spine-event-engine/core";
+import { SignalEnvelopes, type MessageSchema } from "@spine-event-engine/core";
 import { TypeUrls } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  type Event,
   BoundedContextNameSchema,
   ChannelIdSchema,
   ExternalEventsWantedSchema,
@@ -59,14 +60,14 @@ import {
 } from "./wave13-origin-repository.js";
 
 const brokerModule = new URL("../../src/integration/integration-broker.js", import.meta.url).href;
-const external = (schemas: readonly unknown[], received: unknown[]) => ({
+const external = (schemas: readonly MessageSchema[], received: unknown[]) => ({
   messageSchemas: () => schemas,
   externalEventSchemas: () => schemas,
-  dispatch: (event: unknown) => Promise.resolve(received.push(event)).then(() => undefined),
+  dispatch: (event: Event) => Promise.resolve(received.push(event)).then(() => undefined),
 });
-const domestic = (schemas: readonly unknown[], received: unknown[] = []) => ({
+const domestic = (schemas: readonly MessageSchema[], received: unknown[] = []) => ({
   messageSchemas: () => schemas,
-  dispatch: (event: unknown) => Promise.resolve(received.push(event)).then(() => undefined),
+  dispatch: (event: Event) => Promise.resolve(received.push(event)).then(() => undefined),
 });
 function event(
   schema?: typeof StringValueSchema,
