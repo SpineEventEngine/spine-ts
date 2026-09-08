@@ -570,6 +570,20 @@ for both P1 code changes, preserve semantic fixtures, and must not spawn
 subagents. One correction commit group and focused verification precede narrow
 re-review of only affected concerns.
 
+Commit `00a6c0d59` implements all nine accepted findings. Both P1 defects were
+reproduced RED, then corrected with domain-Command ingestion and canonical
+second-parameter context validation, including alias and namespace imports.
+Eight focused files and 450 tests pass; cleanup, TSDoc, tooling typecheck,
+formatting, and diff checks pass. Generated/docs/copyright gates and
+changed-source coverage were not run by the implementer, so the handoff is not
+yet accepted for re-review.
+
+The read-only orchestrator verification function receives the missing focused
+profile with explicit `gpt-5.6-luna` / medium dispatch and no subagents. It runs
+`verify:task -- --coverage` for the analyzer and registry P1 sources and their
+tests, which also exercises generated, documentation, copyright, package, and
+release-readiness gates. Re-review starts only after this profile is green.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
