@@ -82,7 +82,14 @@ import {
   HandlerRegistryIngestor,
   type GeneratedEntityHandlerGroup,
   type GeneratedHandlerRegistry,
+  type GeneratedStandaloneHandlerGroup,
 } from "../handler/generated-handler-registry.js";
+import {
+  AbstractAssignee,
+  AbstractCommander,
+  AbstractEventReactor,
+  AbstractEventSubscriber,
+} from "../handler/standalone.js";
 import {
   HandlerMetadataRegistry,
   type EntityHandlersMetadata,
@@ -101,6 +108,10 @@ import { ShardIndex } from "../delivery/shard-index.js";
 import { IntegrationBroker } from "../integration/integration-broker.js";
 import { ServerEnvironment } from "../server/server-environment.js";
 import { SignalPublisher } from "../runtime/signal-publisher.js";
+import {
+  StandaloneHandlerRuntime,
+  type StandaloneBinding,
+} from "../runtime/standalone-handler-runtime.js";
 
 /**
  * Tenant isolation mode declared by a bounded context specification.
@@ -1143,6 +1154,9 @@ export class BoundedContextBuilder {
   readonly #specSnapshot: ContextSpecSnapshot;
   readonly #commandDispatchers = new Set<CommandDispatcher>();
   readonly #eventDispatchers = new Set<EventDispatcher>();
+  readonly #assignees: AbstractAssignee[] = [];
+  readonly #commanders: AbstractCommander[] = [];
+  readonly #eventReceivers: (AbstractEventReactor | AbstractEventSubscriber)[] = [];
   readonly #repositories = new Set<RepositoryView>();
   readonly #entityTypes = new Set<RepositoryEntityType>();
   readonly #generatedRepositoryOptions = new Map<RepositoryEntityType, object>();
@@ -1281,7 +1295,11 @@ export class BoundedContextBuilder {
    * @param dispatcher Dispatches commands accepted by this context.
    * @returns Returns this builder for further configuration.
    */
-  addCommandDispatcher(dispatcher: CommandDispatcher): this {
+  addCommandDispatcher(dispatcher: CommandDispatcher | AbstractCommander): this {
+    if (dispatcher instanceof AbstractCommander) {
+      this.#commanders.push(dispatcher);
+      return this;
+    }
     this.#commandDispatchers.add(dispatcher);
     return this;
   }
@@ -1303,8 +1321,23 @@ export class BoundedContextBuilder {
    * @param dispatcher Dispatches events accepted by this context.
    * @returns Returns this builder for further configuration.
    */
-  addEventDispatcher(dispatcher: EventDispatcher): this {
+  addEventDispatcher(
+    dispatcher: EventDispatcher | AbstractEventReactor | AbstractEventSubscriber,
+  ): this {
+    if (
+      dispatcher instanceof AbstractEventReactor ||
+      dispatcher instanceof AbstractEventSubscriber
+    ) {
+      this.#eventReceivers.push(dispatcher);
+      return this;
+    }
     this.#eventDispatchers.add(dispatcher);
+    return this;
+  }
+
+  /** Adds a generated standalone command assignee. */
+  addAssignee(assignee: AbstractAssignee): this {
+    this.#assignees.push(assignee);
     return this;
   }
 
@@ -1385,6 +1418,9 @@ export class BoundedContextBuilder {
    * @returns Returns the built context.
    */
   build(): BoundedContext {
+    if (this.#standaloneInstances().length > 0) {
+      throw new Error("Standalone generated handlers require buildAsync().");
+    }
     ContextParts.rejectSyncEntityAssembly(this.#entityTypes);
     return this.#buildWith(
       [...this.#repositories],
@@ -1402,14 +1438,13 @@ export class BoundedContextBuilder {
   }
 
   async #buildAsyncWith(defaultStorageFactory?: StorageFactory): Promise<BoundedContext> {
-    const repositories = [
-      ...this.#repositories,
-      ...(await this.#loadGeneratedRepositories([...this.#entityTypes])),
-    ];
+    const generated = await this.#loadGeneratedArtifacts([...this.#entityTypes]);
+    const repositories = [...this.#repositories, ...generated.repositories];
 
     const context = this.#buildWith(
       repositories,
       this.#storageFactory ?? defaultStorageFactory ?? new InMemoryStorageFactory(),
+      generated.standalone,
     );
     try {
       await ContextParts.integrationReady(context);
@@ -1430,6 +1465,7 @@ export class BoundedContextBuilder {
   #buildWith(
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
+    standalone: readonly GeneratedStandaloneHandlerGroup[] = [],
   ): BoundedContext {
     let registry = this.#subscriptionRegistry;
     this.#subscriptionRegistry = undefined;
@@ -1482,6 +1518,22 @@ export class BoundedContextBuilder {
         systemEventBus,
         this.#specSnapshot.name.value,
       );
+      const standaloneRuntime =
+        standalone.length === 0
+          ? undefined
+          : new StandaloneHandlerRuntime(
+              ContextParts.matchStandaloneHandlers(
+                standalone,
+                this.#standaloneInstances(),
+                publisher,
+              ),
+            );
+      const standaloneCommand = standaloneRuntime?.commandDispatcher();
+      const standaloneEvent = standaloneRuntime?.eventDispatcher();
+      const standaloneState = standaloneRuntime?.stateDispatcher();
+      if (standaloneCommand !== undefined) commandBus.register(standaloneCommand);
+      if (standaloneEvent !== undefined) eventBus.register(standaloneEvent);
+      if (standaloneState !== undefined) systemEventBus.register(standaloneState);
       for (const dispatcher of domainEventDispatchers) eventBus.register(dispatcher);
       eventBusAccess.registerSchemas(
         eventBus,
@@ -1553,11 +1605,12 @@ export class BoundedContextBuilder {
     }
   }
 
-  async #loadGeneratedRepositories(
-    entityTypes: readonly RepositoryEntityType[],
-  ): Promise<readonly RepositoryView[]> {
-    if (entityTypes.length === 0) {
-      return Object.freeze([]);
+  async #loadGeneratedArtifacts(entityTypes: readonly RepositoryEntityType[]): Promise<{
+    readonly repositories: readonly RepositoryView[];
+    readonly standalone: readonly GeneratedStandaloneHandlerGroup[];
+  }> {
+    if (entityTypes.length === 0 && this.#standaloneInstances().length === 0) {
+      return Object.freeze({ repositories: Object.freeze([]), standalone: Object.freeze([]) });
     }
 
     const root = ContextParts.requireGeneratedRegistryRoot(this.#generatedRegistryRoot);
@@ -1575,7 +1628,7 @@ export class BoundedContextBuilder {
       })) as readonly GeneratedHandlerRegistry[];
     const metadata = ContextParts.ingestGeneratedRegistries(registries);
 
-    return Object.freeze(
+    const repositories = Object.freeze(
       entityTypes.map((entityType) =>
         ContextParts.createGeneratedRepository(
           entityType,
@@ -1585,6 +1638,19 @@ export class BoundedContextBuilder {
         ),
       ),
     );
+    const standalone = Object.freeze(
+      registries.flatMap((registry) =>
+        registry.receivers.filter(
+          (receiver): receiver is GeneratedStandaloneHandlerGroup =>
+            receiver.receiverKind === "standalone",
+        ),
+      ),
+    );
+    return Object.freeze({ repositories, standalone });
+  }
+
+  #standaloneInstances(): readonly object[] {
+    return Object.freeze([...this.#assignees, ...this.#commanders, ...this.#eventReceivers]);
   }
 
   private createEventStore(storageFactory: StorageFactory): EventStore {
@@ -1713,6 +1779,39 @@ class CatchUpReplayError extends Error {
  * Assembles private bounded-context lifecycle and replay details.
  */
 const ContextParts = Object.freeze({
+  matchStandaloneHandlers(
+    generated: readonly GeneratedStandaloneHandlerGroup[],
+    instances: readonly object[],
+    publisher: SignalPublisher,
+  ): readonly StandaloneBinding[] {
+    const byConstructor = new Map<StandaloneConstructor, object>();
+    for (const instance of instances) {
+      const constructor = instance.constructor as StandaloneConstructor;
+      if (byConstructor.has(constructor)) {
+        throw new Error(`Standalone receiver ${constructor.name} is registered more than once.`);
+      }
+      byConstructor.set(constructor, instance);
+    }
+    const bindings: StandaloneBinding[] = [];
+    for (const receiver of generated) {
+      const receiverType = receiver.receiverType as unknown as StandaloneConstructor;
+      const instance = byConstructor.get(receiverType);
+      if (instance === undefined) {
+        throw new Error(
+          `Generated standalone receiver ${receiverType.name} has no explicitly registered instance.`,
+        );
+      }
+      bindings.push(Object.freeze({ group: receiver, instance, publisher }));
+      byConstructor.delete(receiverType);
+    }
+    if (byConstructor.size > 0) {
+      throw new Error(
+        `Registered standalone receiver ${[...byConstructor.keys()][0]?.name ?? "unknown"} has no generated metadata.`,
+      );
+    }
+    return Object.freeze(bindings);
+  },
+
   attemptCleanup(onCleanup: () => void, errors: unknown[]): void {
     try {
       onCleanup();
@@ -2767,6 +2866,10 @@ const ContextParts = Object.freeze({
     return (record as Record<string, unknown>)[localName];
   },
 });
+
+interface StandaloneConstructor {
+  readonly name: string;
+}
 
 /**
  * Exposes broker-only operations for the owning integration package.

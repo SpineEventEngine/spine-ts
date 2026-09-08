@@ -53,6 +53,10 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   Aggregate,
+  AbstractAssignee,
+  AbstractCommander,
+  AbstractEventReactor,
+  AbstractEventSubscriber,
   BoundedContext,
   BoundedContextBuilder,
   BoundedContextNameError,
@@ -246,6 +250,37 @@ class TaskProjection extends Projection<string, typeof ProjectionStateSchema, nu
   }
 }
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
+class StandaloneAssignee extends AbstractAssignee {
+  assign(): TaskEvent {
+    return create(TaskEventSchema, { id: "event-1", name: "assigned" });
+  }
+}
+class OtherStandaloneAssignee extends AbstractAssignee {
+  assign(): TaskEvent {
+    return create(TaskEventSchema, { id: "event-2", name: "other" });
+  }
+}
+class StandaloneCommander extends AbstractCommander {
+  substitute(command: ProcessManagerTaskCommand): TaskCommand {
+    return create(TaskCommandSchema, command);
+  }
+}
+class StandaloneReactor extends AbstractEventReactor {
+  calls = 0;
+  react(_event: TaskEvent, _context: EventContext): void {
+    void _event;
+    void _context;
+    this.calls += 1;
+  }
+}
+class StandaloneSubscriber extends AbstractEventSubscriber {
+  calls = 0;
+  subscribe(_event: TaskEvent, _context: EventContext): void {
+    void _event;
+    void _context;
+    this.calls += 1;
+  }
+}
 class GeneratedTaskProcessManager extends ProcessManager<
   string,
   typeof ProcessManagerStateSchema,
@@ -642,6 +677,114 @@ describe("BoundedContext assembly", () => {
     expect(() => invalidAdd.add(repository, {})).toThrow(
       "Explicit Repository instances do not accept generated options.",
     );
+  });
+
+  it("matches standalone generated metadata by exact registered constructor", async () => {
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
+        TaskEventSchema,
+      ]),
+    ]);
+
+    await expect(
+      BoundedContext.singleTenant("StandaloneExact")
+        .withGeneratedRegistryRoot(registryRoot)
+        .addAssignee(new OtherStandaloneAssignee())
+        .buildAsync(),
+    ).rejects.toThrow(
+      "Generated standalone receiver StandaloneAssignee has no explicitly registered instance",
+    );
+  });
+
+  it("rejects duplicate standalone instances during generated assembly", async () => {
+    const instance = new StandaloneAssignee();
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
+        TaskEventSchema,
+      ]),
+    ]);
+
+    await expect(
+      BoundedContext.singleTenant("StandaloneDuplicate")
+        .withGeneratedRegistryRoot(registryRoot)
+        .addAssignee(instance)
+        .addAssignee(instance)
+        .buildAsync(),
+    ).rejects.toThrow("Standalone receiver StandaloneAssignee is registered more than once");
+  });
+
+  it("installs assignee and commander through their public registration paths", async () => {
+    const assignee = new StandaloneAssignee();
+    const commander = new StandaloneCommander();
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
+        TaskEventSchema,
+      ]),
+      standaloneReceiver(
+        StandaloneCommander,
+        "command-substitution",
+        "substitute",
+        ProcessManagerTaskCommandSchema,
+        [TaskCommandSchema],
+      ),
+    ]);
+    const context = await BoundedContext.singleTenant("StandalonePaths")
+      .withGeneratedRegistryRoot(registryRoot)
+      .addAssignee(assignee)
+      .addCommandDispatcher(commander)
+      .buildAsync();
+
+    try {
+      await context.commandBus().post(createAggregateCommand("standalone-assignee"));
+      await context.commandBus().post(createProcessManagerTaskCommand("standalone-commander"));
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("installs reactor and subscriber through the public Event dispatcher path", async () => {
+    const reactor = new StandaloneReactor();
+    const subscriber = new StandaloneSubscriber();
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(StandaloneReactor, "event-reaction", "react", TaskEventSchema, []),
+      standaloneReceiver(
+        StandaloneSubscriber,
+        "event-subscription",
+        "subscribe",
+        TaskEventSchema,
+        [],
+      ),
+    ]);
+    const context = await BoundedContext.singleTenant("StandaloneEvents")
+      .withGeneratedRegistryRoot(registryRoot)
+      .addEventDispatcher(reactor)
+      .addEventDispatcher(subscriber)
+      .buildAsync();
+    try {
+      await context.eventBus().post(createTaskEvent("standalone-event"));
+      expect(reactor.calls).toBe(1);
+      expect(subscriber.calls).toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("rejects a raw command dispatcher that collides with generated standalone metadata", async () => {
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
+        TaskEventSchema,
+      ]),
+    ]);
+    await expect(
+      BoundedContext.singleTenant("StandaloneCollision")
+        .withGeneratedRegistryRoot(registryRoot)
+        .addAssignee(new StandaloneAssignee())
+        .addCommandDispatcher({
+          messageSchemas: () => [TaskCommandSchema],
+          dispatch: () => Promise.resolve(),
+        })
+        .buildAsync(),
+    ).rejects.toThrow();
   });
 
   it("enumerates every configured entity inbox shard from the context delivery strategy", async () => {
@@ -2584,6 +2727,46 @@ function createGeneratedRegistryRoot(
   receivers: Parameters<typeof createGeneratedRegistryFixture>[0],
 ): URL {
   return createGeneratedRegistryFixture(receivers).root;
+}
+
+function createStandaloneGeneratedRegistryRoot(receivers: readonly object[]): URL {
+  const slot = `__spineStandaloneRegistry_${Math.random().toString(36).slice(2)}`;
+  const root = mkdtempSync(join(tmpdir(), "spine-standalone-generated-registry-"));
+  const moduleDir = join(root, "generated/handler");
+  mkdirSync(moduleDir, { recursive: true });
+  (globalThis as Record<string, unknown>)[slot] = Object.freeze({
+    receivers: Object.freeze(receivers),
+  });
+  writeFileSync(
+    join(moduleDir, "generated-handler-registry.js"),
+    `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
+    "utf8",
+  );
+  return pathToFileURL(root);
+}
+
+function standaloneReceiver(
+  receiverType: object,
+  kind: "command-assignment" | "command-substitution" | "event-reaction" | "event-subscription",
+  methodName: string,
+  signalSchema: GenMessage<Message>,
+  emittedSchemas: readonly GenMessage<Message>[],
+  parameterCount: 1 | 2 = 1,
+) {
+  return Object.freeze({
+    receiverKind: "standalone" as const,
+    receiverType,
+    handlers: Object.freeze([
+      Object.freeze({
+        kind,
+        methodName,
+        signalSchema,
+        emittedSchemas,
+        parameterCount,
+        origin: "domestic" as const,
+      }),
+    ]),
+  });
 }
 
 function processManagerRegistry(
