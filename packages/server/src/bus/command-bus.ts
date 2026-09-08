@@ -31,6 +31,7 @@ const commandFollowUpPosters = new WeakMap<CommandBus, (command: Command) => Pro
 const commandBusCloseStarters = new WeakMap<CommandBus, () => void>();
 const commandBusDrainers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusCloseFinishers = new WeakMap<CommandBus, () => Promise<void>>();
+const commandBusAborters = new WeakMap<CommandBus, () => void>();
 const commandBusWorkCounters = new WeakMap<CommandBus, () => number>();
 
 interface CommandBusAccess {
@@ -39,6 +40,7 @@ interface CommandBusAccess {
   beginClose(commandBus: CommandBus): void;
   drain(commandBus: CommandBus): Promise<void>;
   finishClose(commandBus: CommandBus): Promise<void>;
+  abortClose(commandBus: CommandBus): void;
   acceptedWorkCount(commandBus: CommandBus): number;
 }
 
@@ -70,8 +72,13 @@ export class CommandBus {
     commandBusCloseStarters.set(this, () => {
       this.#beginClose();
     });
-    commandBusDrainers.set(this, () => this.#drain());
+    commandBusDrainers.set(this, () => {
+      return this.#drain();
+    });
     commandBusCloseFinishers.set(this, () => this.#finishClose());
+    commandBusAborters.set(this, () => {
+      this.#abortClose();
+    });
     commandBusWorkCounters.set(this, () => this.#acceptedWorkCount);
 
     for (const dispatcher of dispatchers) {
@@ -167,6 +174,12 @@ export class CommandBus {
   #finishClose(): Promise<void> {
     this.#closed ??= this.#closeOnce();
     return this.#closed;
+  }
+
+  #abortClose(): void {
+    this.#beginClose();
+    void this.#started.then(() => this.#runtime.close()).catch(() => undefined);
+    this.#intakeState = "closed";
   }
 
   async #closeOnce(): Promise<void> {
@@ -265,6 +278,16 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
     }
 
     return finishClose();
+  },
+
+  abortClose(commandBus: CommandBus): void {
+    const abortClose = commandBusAborters.get(commandBus);
+
+    if (abortClose === undefined) {
+      throw new TypeError("Command-bus close coordination requires a CommandBus instance.");
+    }
+
+    abortClose();
   },
 
   acceptedWorkCount(commandBus: CommandBus): number {

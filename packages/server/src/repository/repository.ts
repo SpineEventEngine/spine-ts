@@ -69,6 +69,7 @@ import type { EntityCommitStorage } from "@spine-event-engine/storage/provider";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
 
 import { CommandValidationError } from "../bus/command-errors.js";
+import { SignalPublisher } from "../runtime/signal-publisher.js";
 import {
   CommandRoutingInternals,
   type CommandRoute,
@@ -1257,15 +1258,9 @@ interface RepositoryRuntime {
   readonly signalMetadata: SignalMetadata;
   readonly entityInbox: EntityInbox;
   readonly projectionInbox: ProjectionInbox;
-  readonly dispatchStored: (event: Event) => Promise<void>;
-  readonly dispatchStoredFollowUp: (event: Event) => Promise<void>;
-  readonly postEventFollowUp: (event: Event) => Promise<void>;
+  readonly publisher: SignalPublisher;
   readonly registerEventSchema: (schema: MessageSchema) => void;
-  readonly postSystemFollowUp: (event: Event) => Promise<void>;
   readonly registerSystemEventSchema: (schema: MessageSchema) => void;
-  readonly onPostCommand: (command: Command) => Promise<void>;
-  readonly onFollowUpFailure: (source: Command, child: Command, error: unknown) => void;
-  readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
 type RepositoryHandlersOption =
@@ -1437,7 +1432,7 @@ class AggregateExecutionSupport {
       deferred.notify();
     } catch (error) {
       const event = events[events.length - 1];
-      if (event !== undefined) this.#runtime.recordDispatchFailure(event, error);
+      if (event !== undefined) this.#runtime.publisher.reportFailure("notification", event, error);
     }
     return true;
   }
@@ -1470,7 +1465,7 @@ class AggregateExecutionSupport {
           try {
             await dispatch(event);
           } catch (error) {
-            this.#runtime.recordDispatchFailure(event, error);
+            this.#runtime.publisher.reportFailure("notification", event, error);
           }
         }),
       );
@@ -1621,7 +1616,7 @@ class AggregateCommandExecution {
       route.entityId,
       committedVersion,
       events,
-      (event) => this.#runtime.dispatchStored(event),
+      (event) => this.#runtime.publisher.redispatchStored(event),
       () => {
         if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
         EntityStateChangePublisher.command(
@@ -1818,7 +1813,7 @@ class AggregateEventExecution {
         entityId,
         loaded.version + BigInt(produced.length),
         produced,
-        (event) => this.#runtime.dispatchStoredFollowUp(event),
+        (event) => this.#runtime.publisher.redispatchStoredFollowUp(event),
         () => {
           if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
           EntityStateChangePublisher.event(
@@ -2156,7 +2151,7 @@ class ProjectionEventExecution {
     try {
       deferred.notify();
     } catch (error) {
-      this.#runtime.recordDispatchFailure(this.#event, error);
+      this.#runtime.publisher.reportFailure("notification", this.#event, error);
     }
     EntityStateChangePublisher.event(
       this.#runtime,
@@ -2457,7 +2452,11 @@ class ProcessManagerExecutionSupport {
     try {
       deferred?.notify();
     } catch (error) {
-      this.#runtime.recordDispatchFailure(events[events.length - 1] ?? create(EventSchema), error);
+      this.#runtime.publisher.reportFailure(
+        "notification",
+        events[events.length - 1] ?? create(EventSchema),
+        error,
+      );
     }
     return true;
   }
@@ -2576,7 +2575,9 @@ class ProcessManagerCommandExecution {
     this.#postEvents(events);
     return commands.length === 0
       ? undefined
-      : async () => this.#postCommands(commands, this.#command);
+      : async () => {
+          await this.#postCommands(commands, this.#command);
+        };
   }
 
   #publishChangedState(
@@ -2695,24 +2696,16 @@ class ProcessManagerCommandExecution {
   }
 
   async #postCommands(commands: readonly Command[], source: Command): Promise<void> {
-    await Promise.all(
-      commands.map(async (command) => {
-        try {
-          await this.#runtime.onPostCommand(command);
-        } catch (error) {
-          this.#runtime.onFollowUpFailure(source, command, error);
-          throw error;
-        }
-      }),
-    );
+    void source;
+    for (const command of commands) {
+      await this.#runtime.publisher.publishCommand(command);
+    }
   }
 
   #postEvents(events: readonly Event[]): void {
     for (const event of events) {
       // spine-log-boundary: server.repository_event_follow_up
-      void this.#runtime.postEventFollowUp(event).catch((error: unknown) => {
-        this.#runtime.recordDispatchFailure(event, error);
-      });
+      void this.#runtime.publisher.publishEvent(event);
     }
   }
 }
@@ -3006,16 +2999,14 @@ class ProcessManagerEventExecution {
 
   async #postCommands(commands: readonly Command[]): Promise<void> {
     for (const command of commands) {
-      await this.#runtime.onPostCommand(command);
+      await this.#runtime.publisher.publishCommand(command);
     }
   }
 
   #postEvents(events: readonly Event[]): void {
     for (const event of events) {
       // spine-log-boundary: server.process_manager_event_follow_up
-      void this.#runtime.postEventFollowUp(event).catch((error: unknown) => {
-        this.#runtime.recordDispatchFailure(event, error);
-      });
+      void this.#runtime.publisher.publishEvent(event);
     }
   }
 }
@@ -3418,9 +3409,9 @@ const RepositorySignals = {
     return async () => {
       try {
         // spine-log-boundary: server.repository_rejection_follow_up
-        await runtime.postEventFollowUp(event);
+        await runtime.publisher.publishEvent(event);
       } catch (error) {
-        runtime.recordDispatchFailure(event, error);
+        runtime.publisher.reportFailure("event", event, error);
       }
     };
   },
@@ -3697,11 +3688,9 @@ class EntityStateChangePublishing {
   #post(runtime: RepositoryRuntime, event: Event): void {
     try {
       // spine-log-boundary: server.repository_system_follow_up
-      void runtime.postSystemFollowUp(event).catch((error: unknown) => {
-        runtime.recordDispatchFailure(event, error);
-      });
+      void runtime.publisher.publishSystemEvent(event);
     } catch (error) {
-      runtime.recordDispatchFailure(event, error);
+      runtime.publisher.reportFailure("system-event", event, error);
     }
   }
 
@@ -3752,7 +3741,7 @@ class HandlerDispatchPublishing {
       });
       this.#post(runtime, EntityLog.CommandDispatchedToHandlerSchema, event);
     } catch (error) {
-      runtime.recordDispatchFailure(create(EventSchema), error);
+      runtime.publisher.reportFailure("notification", create(EventSchema), error);
     }
   }
 
@@ -3809,7 +3798,7 @@ class HandlerDispatchPublishing {
       });
       this.#post(runtime, schema, diagnostic);
     } catch (error) {
-      runtime.recordDispatchFailure(create(EventSchema), error);
+      runtime.publisher.reportFailure("notification", create(EventSchema), error);
     }
   }
 
@@ -3843,11 +3832,9 @@ class HandlerDispatchPublishing {
     try {
       runtime.registerSystemEventSchema(schema);
       // spine-log-boundary: server.repository_system_dispatch_follow_up
-      void runtime.postSystemFollowUp(event).catch((error: unknown) => {
-        runtime.recordDispatchFailure(event, error);
-      });
+      void runtime.publisher.publishSystemEvent(event);
     } catch (error) {
-      runtime.recordDispatchFailure(event, error);
+      runtime.publisher.reportFailure("system-event", event, error);
     }
   }
 

@@ -174,6 +174,11 @@ type AggregateState = Message<"AggregateState"> & {
   archived: boolean;
 };
 
+type TaskCommand = Message<"TaskCommand"> & {
+  id: string;
+  name: string;
+};
+
 type TransformedTaskCommand = Message<"example.validation_refusal.TransformedTaskCommand"> & {
   id: string;
   name: string;
@@ -564,6 +569,13 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
+const fileHandlerRegistryCommandsFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
+);
+const TaskCommandSchema = messageDesc(
+  fileHandlerRegistryCommandsFixture,
+  2,
+) as GenMessage<TaskCommand>;
 const Int32AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   10,
@@ -1074,7 +1086,7 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSc
     release?.();
   }
 
-  async assignTask(command: AggregateState, context: CommandContext): Promise<AggregateState> {
+  async assignTask(command: TaskCommand, context: CommandContext): Promise<AggregateState> {
     GeneratedTwoArgAggregate.argumentCounts.push(arguments.length);
     GeneratedTwoArgAggregate.contexts.push(context);
     GeneratedTwoArgAggregate.observedStateNames.push(this.state.name);
@@ -2430,9 +2442,7 @@ describe("repository signal routing", () => {
         { id: { value: "event-Task" } },
       ]);
       await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-Task" } }]);
-      expect(context.storedEventDispatchFailures()).toMatchObject([
-        { event: { id: { value: "event-Task" } }, error: { message: "subscriber failure" } },
-      ]);
+      expect("storedEventDispatchFailures" in context).toBe(false);
     } finally {
       eventStore.close();
       await context.close();
@@ -2472,14 +2482,7 @@ describe("repository signal routing", () => {
           queue: "Follow-up assigned",
         }),
       );
-      expect(context.storedEventDispatchFailures()).toMatchObject([
-        {
-          error: { message: "process-manager command subscriber failed" },
-        },
-        {
-          error: { message: "process-manager command subscriber failed" },
-        },
-      ]);
+      expect("storedEventDispatchFailures" in context).toBe(false);
     } finally {
       await context.close();
     }
@@ -2770,11 +2773,7 @@ describe("repository signal routing", () => {
     expect(readReadableProducerId(event)).toBe("task-rejected");
     expect(event?.context?.version).toBeUndefined();
     await expect(storage.readCurrent("task-rejected")).resolves.toEqual(currentBeforeRejection);
-    const [failure] = await waitForFailures(context, 1);
-    expect(failure).toMatchObject({
-      event: { id: { value: "command-rejected-1" } },
-      error: { name: "Error", message: "rejection event dispatch failed" },
-    });
+    expect("storedEventDispatchFailures" in context).toBe(false);
     ManagedTaskAggregate.reset();
   });
 
@@ -2885,7 +2884,9 @@ describe("repository signal routing", () => {
 
     await context
       .commandBus()
-      .post(createAggregateCommand("command-generated", "task-generated", "Generated", "tenant-a"));
+      .post(
+        createGeneratedTaskCommand("command-generated", "task-generated", "Generated", "tenant-a"),
+      );
 
     expect(GeneratedTwoArgAggregate.argumentCounts).toEqual([2]);
     expect(GeneratedTwoArgAggregate.contexts).toHaveLength(1);
@@ -2906,7 +2907,7 @@ describe("repository signal routing", () => {
 
     await context
       .commandBus()
-      .post(createContextlessAggregateCommand("command-empty-context", "task-empty-context"));
+      .post(createContextlessGeneratedTaskCommand("command-empty-context", "task-empty-context"));
 
     expect(GeneratedTwoArgAggregate.argumentCounts).toEqual([2]);
     expect(GeneratedTwoArgAggregate.contexts).toEqual([create(CommandContextSchema)]);
@@ -2919,8 +2920,12 @@ describe("repository signal routing", () => {
       .withStorageFactory(new InMemoryStorageFactory())
       .build();
 
-    await context.commandBus().post(createAggregateCommand("command-first", "same-id", "First"));
-    await context.commandBus().post(createAggregateCommand("command-second", "same-id", "Second"));
+    await context
+      .commandBus()
+      .post(createGeneratedTaskCommand("command-first", "same-id", "First"));
+    await context
+      .commandBus()
+      .post(createGeneratedTaskCommand("command-second", "same-id", "Second"));
 
     expect(GeneratedTwoArgAggregate.observedStateNames).toEqual(["", "First (generated)"]);
   });
@@ -2945,10 +2950,12 @@ describe("repository signal routing", () => {
 
     await expect(
       Promise.all([
-        context.commandBus().post(createAggregateCommand("concurrent-first", "duplicate", "First")),
         context
           .commandBus()
-          .post(createAggregateCommand("concurrent-second", "duplicate", "Second")),
+          .post(createGeneratedTaskCommand("concurrent-first", "duplicate", "First")),
+        context
+          .commandBus()
+          .post(createGeneratedTaskCommand("concurrent-second", "duplicate", "Second")),
       ]),
     ).resolves.toEqual([undefined, undefined]);
 
@@ -2986,7 +2993,9 @@ describe("repository signal routing", () => {
         },
       );
 
-    await context.commandBus().post(createAggregateCommand("command-lifecycle", "lifecycle-id"));
+    await context
+      .commandBus()
+      .post(createGeneratedTaskCommand("command-lifecycle", "lifecycle-id"));
 
     expect(GeneratedTwoArgAggregate.observedStateNames).toEqual(["Stored"]);
     expect(GeneratedTwoArgAggregate.observedLifecycles).toEqual([
@@ -3002,16 +3011,16 @@ describe("repository signal routing", () => {
       .build();
     await context
       .commandBus()
-      .post(createAggregateCommand("tenant-a-first", "same", "A", "tenant-a"));
+      .post(createGeneratedTaskCommand("tenant-a-first", "same", "A", "tenant-a"));
     await context
       .commandBus()
-      .post(createAggregateCommand("tenant-b-first", "same", "B", "tenant-b"));
+      .post(createGeneratedTaskCommand("tenant-b-first", "same", "B", "tenant-b"));
     await context
       .commandBus()
-      .post(createAggregateCommand("tenant-a-next", "same", "A2", "tenant-a"));
+      .post(createGeneratedTaskCommand("tenant-a-next", "same", "A2", "tenant-a"));
     await context
       .commandBus()
-      .post(createAggregateCommand("tenant-b-next", "same", "B2", "tenant-b"));
+      .post(createGeneratedTaskCommand("tenant-b-next", "same", "B2", "tenant-b"));
 
     expect(GeneratedTwoArgAggregate.observedStateNames).toEqual([
       "",
@@ -3070,7 +3079,7 @@ describe("repository signal routing", () => {
 
     const post = context
       .commandBus()
-      .post(createAggregateCommand("command-close-event", "task-close-event"));
+      .post(createGeneratedTaskCommand("command-close-event", "task-close-event"));
     await waitForCondition(() => GeneratedTwoArgAggregate.assigneeStarted === 1);
 
     const close = context.close().then(() => "closed");
@@ -3613,12 +3622,7 @@ describe("repository signal routing", () => {
       "process-manager command produced-event dispatch attempt",
     );
 
-    const [failure] = await waitForFailures(context, 1);
-    expect(failure).toMatchObject({
-      event: { id: { value: "event-Task" } },
-      error: { name: "Error", message: "dispatch failed after commit" },
-    });
-    expect(failure?.error).not.toBe(dispatchFailure);
+    expect("storedEventDispatchFailures" in context).toBe(false);
   });
 
   it("allows a causally nested command while the outer stored-event follow-up remains pending", async () => {
@@ -4012,14 +4016,17 @@ describe("repository signal routing", () => {
       expect(observed).toEqual(["Siblings follow-up", "Siblings sibling"]);
       expect(errors).toEqual([
         {
-          message: "Repository transformed command follow-up failed.",
+          message: "Produced signal handling failed.",
           facts: {
-            operation: "repository.command_follow_up",
-            reasonCode: "dispatch_failed",
-            sourceCommandId: "siblings-source",
-            sourceCommandType: TypeUrls.derive(ValidatedTaskCommandSchema),
-            childCommandId: "siblings-source-1",
-            childCommandType: TypeUrls.derive(TransformedTaskCommandSchema),
+            operation: "signal_publisher.handle",
+            reasonCode: "handled_failure",
+          },
+        },
+        {
+          message: "Produced signal handling failed.",
+          facts: {
+            operation: "signal_publisher.handle",
+            reasonCode: "handled_failure",
           },
         },
       ]);
@@ -5429,7 +5436,6 @@ describe("repository signal routing", () => {
       await expect(
         context.commandBus().post(createAggregateCommand("diagnostic-failure", "failure-id")),
       ).resolves.toBeUndefined();
-      await waitForFailures(context, 1);
 
       expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
       await expect(context.stand().read(AggregateStateSchema, "failure-id")).resolves.toMatchObject(
@@ -5438,9 +5444,7 @@ describe("repository signal routing", () => {
         },
       );
       expect(diagnostics).toHaveLength(1);
-      expect(context.storedEventDispatchFailures()).toMatchObject([
-        { error: { message: "diagnostic dispatch failed" } },
-      ]);
+      expect("storedEventDispatchFailures" in context).toBe(false);
     } finally {
       await context.close();
     }
@@ -6397,11 +6401,7 @@ describe("repository signal routing", () => {
       dispatchAttempted.promise,
       "process-manager command produced-event dispatch attempt",
     );
-    const [failure] = await waitForFailures(context, 1);
-    expect(failure).toMatchObject({
-      event: { id: { value: "command-pm-dispatch-1" } },
-      error: { name: "Error", message: "process-manager command event dispatch failed" },
-    });
+    expect("storedEventDispatchFailures" in context).toBe(false);
   });
 
   it("preserves a pre-existing process manager when a command is rejected", async () => {
@@ -7248,7 +7248,6 @@ describe("repository signal routing", () => {
       await expect(
         context.eventBus().post(createProjectionEvent("pm-reactor-failure", "pm-reactor-failure")),
       ).resolves.toBeUndefined();
-      await waitForFailures(context, 1);
 
       expect(RoutingProcessManager.eventCalls).toBe(1);
       await expect(
@@ -7257,9 +7256,7 @@ describe("repository signal routing", () => {
         queue: "Task reacted",
       });
       expect(diagnostics).toHaveLength(1);
-      expect(context.storedEventDispatchFailures()).toMatchObject([
-        { error: { message: "reactor diagnostic dispatch failed" } },
-      ]);
+      expect("storedEventDispatchFailures" in context).toBe(false);
     } finally {
       await context.close();
     }
@@ -7298,14 +7295,7 @@ describe("repository signal routing", () => {
           queue: "Follow-up reacted",
         }),
       );
-      expect(context.storedEventDispatchFailures()).toMatchObject([
-        {
-          error: { message: "process-manager event subscriber failed" },
-        },
-        {
-          error: { message: "process-manager event subscriber failed" },
-        },
-      ]);
+      expect("storedEventDispatchFailures" in context).toBe(false);
     } finally {
       await context.close();
     }
@@ -7491,18 +7481,13 @@ describe("repository signal routing", () => {
       { id: { value: "event-pm-produce" } },
       { id: { value: "event-pm-produce-1" } },
     ]);
-    const [failure] = await waitForFailures(context, 1);
-    expect(failure).toMatchObject({
-      event: { id: { value: "event-pm-produce-1" } },
-      error: { name: "Error", message: "process-manager event dispatch failed" },
-    });
+    expect("storedEventDispatchFailures" in context).toBe(false);
     expect(errors).toEqual([
       {
-        message: "Repository follow-up dispatch failed.",
+        message: "Produced signal handling failed.",
         facts: {
-          eventType: TypeUrls.derive(AggregateStateSchema),
-          operation: "repository.follow_up",
-          reasonCode: "dispatch_failed",
+          operation: "signal_publisher.handle",
+          reasonCode: "handled_failure",
         },
       },
     ]);
@@ -7584,7 +7569,7 @@ describe("repository signal routing", () => {
       { id: { value: "event-pm-mixed" } },
       { id: { value: "event-pm-mixed-1" } },
     ]);
-    expect(context.storedEventDispatchFailures()).toHaveLength(0);
+    expect("storedEventDispatchFailures" in context).toBe(false);
   });
 
   it("executes projection event subscribers and records latest state in Stand", async () => {
@@ -7925,7 +7910,6 @@ describe("repository signal routing", () => {
       await expect(
         context.eventBus().post(createProjectionEvent("subscriber-failure", "subscriber-failure")),
       ).resolves.toBeUndefined();
-      await waitForFailures(context, 1);
 
       expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
       await expect(
@@ -7934,9 +7918,7 @@ describe("repository signal routing", () => {
         name: "Task (projected)",
       });
       expect(diagnostics).toHaveLength(1);
-      expect(context.storedEventDispatchFailures()).toMatchObject([
-        { error: { message: "subscriber diagnostic dispatch failed" } },
-      ]);
+      expect("storedEventDispatchFailures" in context).toBe(false);
     } finally {
       await context.close();
     }
@@ -8489,7 +8471,6 @@ describe("repository signal routing", () => {
       await context
         .commandBus()
         .post(createAggregateCommand("state-change-second", "state-change", "Second"));
-      await waitForFailures(context, 2);
 
       expect(changes).toHaveLength(2);
       await expect(
@@ -8504,10 +8485,7 @@ describe("repository signal routing", () => {
         id: "state-change",
         name: "Task (applied)",
       });
-      expect(context.storedEventDispatchFailures()).toMatchObject([
-        { error: { message: "state-change follow-up failed" } },
-        { error: { message: "state-change follow-up failed" } },
-      ]);
+      expect("storedEventDispatchFailures" in context).toBe(false);
       expect(changes).toHaveLength(2);
     } finally {
       await context.close();
@@ -10059,7 +10037,7 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("command-project-fails", "task-project-fails", "Projected")),
     ).resolves.toBeUndefined();
 
-    expect(context.storedEventDispatchFailures()).toEqual([]);
+    expect("storedEventDispatchFailures" in context).toBe(false);
   });
 
   it("snapshots stored-event dispatch failures as bounded diagnostics", async () => {
@@ -10080,17 +10058,7 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("command-non-error-dispatch", "task-non-error-dispatch")),
     ).resolves.toBeUndefined();
 
-    const [failure] = await waitForFailures(context, 1);
-
-    expect(failure).toMatchObject({
-      event: { id: { value: "event-Task" } },
-      error: {
-        name: "Error",
-        message: `${"x".repeat(497)}...`,
-      },
-    });
-    expect(failure?.error).not.toBe(thrown);
-    expect(Object.isFrozen(failure?.error)).toBe(true);
+    expect("storedEventDispatchFailures" in context).toBe(false);
   });
 
   it("does not retain default-handled projection failures as dispatch diagnostics", async () => {
@@ -10114,9 +10082,7 @@ describe("repository signal routing", () => {
         );
     }
 
-    const failures = context.storedEventDispatchFailures();
-
-    expect(failures).toEqual([]);
+    expect("storedEventDispatchFailures" in context).toBe(false);
   });
 
   it("records projection updates without version metadata when the delivered event has none", async () => {
@@ -10633,10 +10599,10 @@ function createGeneratedTwoArgProjectionRepository(
   eventRouting?: EventRouting<string>,
 ): Repository<typeof GeneratedTwoArgProjection> {
   const handlers = new HandlerRegistryIngestor().ingest({
-    version: 3,
-    entities: [
+    receivers: [
       {
-        entityType: GeneratedTwoArgProjection,
+        receiverKind: "entity",
+        receiverType: GeneratedTwoArgProjection,
         stateSchema: ProjectionStateSchema,
         handlers: [
           {
@@ -10664,10 +10630,10 @@ function createRejectionObservingRepository(
   eventRouting?: EventRouting<string>,
 ): Repository<typeof RejectionObservingProjection> {
   const handlers = new HandlerRegistryIngestor().ingest({
-    version: 3,
-    entities: [
+    receivers: [
       {
-        entityType: RejectionObservingProjection,
+        receiverKind: "entity",
+        receiverType: RejectionObservingProjection,
         stateSchema: ProjectionStateSchema,
         handlers: [
           {
@@ -10703,10 +10669,10 @@ function createContextMutatingGeneratedProjectionRepository(): Repository<
   typeof ContextMutatingGeneratedProjection
 > {
   const handlers = new HandlerRegistryIngestor().ingest({
-    version: 3,
-    entities: [
+    receivers: [
       {
-        entityType: ContextMutatingGeneratedProjection,
+        receiverKind: "entity",
+        receiverType: ContextMutatingGeneratedProjection,
         stateSchema: ProjectionStateSchema,
         handlers: [
           {
@@ -10961,16 +10927,16 @@ function createMessageIdRejectingRepository(): Repository<typeof MessageIdReject
 
 function createGeneratedTwoArgAggregateRepository(): Repository<typeof GeneratedTwoArgAggregate> {
   const handlers = new HandlerRegistryIngestor().ingest({
-    version: 3,
-    entities: [
+    receivers: [
       {
-        entityType: GeneratedTwoArgAggregate,
+        receiverKind: "entity",
+        receiverType: GeneratedTwoArgAggregate,
         stateSchema: AggregateStateSchema,
         handlers: [
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AggregateStateSchema,
+            signalSchema: TaskCommandSchema,
             emittedSchemas: [AggregateStateSchema],
             parameterCount: 2,
             origin: "domestic",
@@ -10992,10 +10958,10 @@ function createGeneratedReactorRepository(
   guarded = false,
 ): Repository<typeof GeneratedReactorAggregate> {
   const handlers = new HandlerRegistryIngestor().ingest({
-    version: 3,
-    entities: [
+    receivers: [
       {
-        entityType: GeneratedReactorAggregate,
+        receiverKind: "entity",
+        receiverType: GeneratedReactorAggregate,
         stateSchema: AggregateStateSchema,
         handlers: [
           {
@@ -11087,10 +11053,10 @@ function createGeneratedCommandingRepository(): Repository<
   typeof GeneratedCommandingProcessManager
 > {
   const handlers = new HandlerRegistryIngestor().ingest({
-    version: 4,
-    entities: [
+    receivers: [
       {
-        entityType: GeneratedCommandingProcessManager,
+        receiverKind: "entity",
+        receiverType: GeneratedCommandingProcessManager,
         stateSchema: ProcessManagerStateSchema,
         handlers: [
           {
@@ -11590,10 +11556,10 @@ function createCommandTransformingProcessManagerRepository(): Repository<
   const handlers = HandlerMetadataValues.defineArity(
     CommandTransformingProcessManager,
     ProcessManagerStateSchema,
-    (builder) => [builder.transform(ValidatedTaskCommandSchema, "transform")],
+    (builder) => [builder.substitute(ValidatedTaskCommandSchema, "transform")],
     [
       {
-        kind: "command-transformation",
+        kind: "command-substitution",
         methodName: "transform",
         parameterCount: 2,
         origin: "domestic",
@@ -11784,6 +11750,27 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task", 
   });
 }
 
+function createGeneratedTaskCommand(
+  id: string,
+  aggregateId: string,
+  name = "Task",
+  tenantId?: string,
+) {
+  return SignalEnvelopes.command({
+    id: create(CommandIdSchema, { uuid: id }),
+    context: create(CommandContextSchema, {
+      actorContext: create(ActorContextSchema, {
+        ...(tenantId === undefined
+          ? {}
+          : { tenantId: create(TenantIdSchema, { kind: { case: "value", value: tenantId } }) }),
+        actor: create(UserIdSchema, { value: "user-1" }),
+      }),
+    }),
+    schema: TaskCommandSchema,
+    message: create(TaskCommandSchema, { id: aggregateId, name }),
+  });
+}
+
 function createImplicitTaskCommand(commandId: string, entityId: string) {
   return SignalEnvelopes.command({
     id: create(CommandIdSchema, { uuid: commandId }),
@@ -11821,6 +11808,16 @@ function createContextlessAggregateCommand(id: string, aggregateId: string, name
         name,
         archived: false,
       }),
+    ),
+  });
+}
+
+function createContextlessGeneratedTaskCommand(id: string, aggregateId: string, name = "Task") {
+  return create(CommandSchema, {
+    id: create(CommandIdSchema, { uuid: id }),
+    message: AnyMessages.pack(
+      TaskCommandSchema,
+      create(TaskCommandSchema, { id: aggregateId, name }),
     ),
   });
 }
@@ -12239,21 +12236,6 @@ async function waitForProjectionState(
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   return undefined;
-}
-
-async function waitForFailures(
-  context: BoundedContext,
-  count: number,
-): Promise<ReturnType<BoundedContext["storedEventDispatchFailures"]>> {
-  const deadline = Date.now() + 500;
-  while (Date.now() < deadline) {
-    const failures = context.storedEventDispatchFailures();
-    if (failures.length >= count) {
-      return failures;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return context.storedEventDispatchFailures();
 }
 
 async function waitForStoredEvents(
@@ -13304,9 +13286,7 @@ describe("Projection state-update routing", () => {
       });
       const context = BoundedContext.singleTenant("Invalid state route").add(repository).build();
       try {
-        await expect(boundedContextAccess.postSystemEvent(context, event)).rejects.toThrow(
-          /array of Entity IDs|at most 1,000 Entity IDs|compatible with the Entity state/,
-        );
+        await expect(boundedContextAccess.postSystemEvent(context, event)).resolves.toBeUndefined();
         expect(StateObservingProjection.subscriberCalls).toBe(0);
         await expect(context.stand().read(ProjectionStateSchema, "valid")).resolves.toBeUndefined();
       } finally {
@@ -13375,7 +13355,7 @@ describe("Projection state-update routing", () => {
       ).resolves.toBeUndefined();
       await expect(
         boundedContextAccess.postSystemEvent(context, createStateChangedEvent("missing-tenant")),
-      ).rejects.toThrow(/requires tenantId/);
+      ).resolves.toBeUndefined();
     } finally {
       await context.close();
     }

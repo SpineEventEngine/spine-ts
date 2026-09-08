@@ -130,6 +130,21 @@ type AggregateState = Message<"AggregateState"> & {
   archived: boolean;
 };
 
+type TaskCommand = Message<"TaskCommand"> & {
+  id: string;
+  name: string;
+};
+
+type ProcessManagerTaskCommand = Message<"ProcessManagerTaskCommand"> & {
+  id: string;
+  name: string;
+};
+
+type TaskEvent = Message<"TaskEvent"> & {
+  id: string;
+  name: string;
+};
+
 type ProcessManagerState = Message<"ProcessManagerState"> & {
   id: string;
   queue: string;
@@ -163,6 +178,21 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
+const fileHandlerRegistryCommandsFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
+);
+const TaskCommandSchema = messageDesc(
+  fileHandlerRegistryCommandsFixture,
+  2,
+) as GenMessage<TaskCommand>;
+const ProcessManagerTaskCommandSchema = messageDesc(
+  fileHandlerRegistryCommandsFixture,
+  3,
+) as GenMessage<ProcessManagerTaskCommand>;
+const fileHandlerRegistryEventsFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64,
+);
+const TaskEventSchema = messageDesc(fileHandlerRegistryEventsFixture, 1) as GenMessage<TaskEvent>;
 
 const fileEntityVisibilityFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
@@ -175,7 +205,7 @@ const ProcessManagerStateSchema = messageDesc(
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class DuplicateTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class ReplayTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
-  assignTask(command: ProjectionState): AggregateState {
+  assignTask(command: TaskCommand): AggregateState {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -186,7 +216,7 @@ class ReplayTaskAggregate extends Aggregate<string, typeof AggregateStateSchema,
   }
 }
 class GeneratedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignProjection(command: ProjectionState): ProjectionState {
+  assignProjection(command: TaskCommand): ProjectionState {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -221,7 +251,7 @@ class GeneratedTaskProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: AggregateState): ProjectionState {
+  assignTask(command: TaskCommand): ProjectionState {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -245,7 +275,7 @@ class ReplayTaskProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: AggregateState): AggregateState {
+  assignTask(command: ProcessManagerTaskCommand): AggregateState {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -258,7 +288,7 @@ class ReplayTaskProcessManager extends ProcessManager<
     return create(AggregateStateSchema, command);
   }
 
-  reactToProjection(event: ProjectionState): AggregateState {
+  reactToProjection(event: TaskEvent): AggregateState {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -279,7 +309,7 @@ class FailingRecoveryProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: AggregateState): void {
+  assignTask(command: TaskCommand): void {
     void command;
     throw pendingFreshRecovery;
   }
@@ -290,7 +320,7 @@ class FreshRecoveryProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: AggregateState): ProjectionState {
+  assignTask(command: TaskCommand): ProjectionState {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -498,7 +528,7 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AggregateStateSchema,
+            signalSchema: TaskCommandSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
             origin: "domestic",
@@ -623,7 +653,7 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AggregateStateSchema,
+            signalSchema: TaskCommandSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
             origin: "domestic",
@@ -656,7 +686,7 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AggregateStateSchema,
+            signalSchema: TaskCommandSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
             origin: "domestic",
@@ -715,9 +745,9 @@ describe("BoundedContext assembly", () => {
       const aggregateId = targetForShard(strategy, aggregateType, 1, "aggregate");
       const commandId = targetForShard(strategy, processManagerType, 2, "pm-command");
       const eventId = targetForShard(strategy, processManagerType, 1, "pm-event");
-      const aggregateCommand = createProjectionCommand("aggregate-row", aggregateId);
-      const processManagerCommand = createAggregateCommand("pm-command-row", commandId);
-      const processManagerEvent = createProjectionEvent("pm-event-row", eventId);
+      const aggregateCommand = createAggregateCommand("aggregate-row", aggregateId);
+      const processManagerCommand = createProcessManagerTaskCommand("pm-command-row", commandId);
+      const processManagerEvent = createTaskEvent("pm-event-row", eventId);
 
       const aggregateRow = await persistDescriptorRow({
         descriptor,
@@ -756,7 +786,7 @@ describe("BoundedContext assembly", () => {
 
       await expect(context.stand().read(AggregateStateSchema, aggregateId)).resolves.toMatchObject({
         id: aggregateId,
-        name: "Task",
+        name: "Task Ready",
       });
       await expect(
         context.stand().read(ProcessManagerStateSchema, commandId),
@@ -822,7 +852,7 @@ describe("BoundedContext assembly", () => {
         label: "HANDLE_COMMAND",
         signal: AnyMessages.pack(
           CommandSchema,
-          createAggregateCommand("forged-pm", processManagerId),
+          createProcessManagerTaskCommand("forged-pm", processManagerId),
           { validate: false },
         ),
         shard: new ShardIndex(0, 3),
@@ -878,10 +908,14 @@ describe("BoundedContext assembly", () => {
           const signalId = `${label}-${String(index)}`;
           const signal =
             label === "HANDLE_COMMAND"
-              ? AnyMessages.pack(CommandSchema, createAggregateCommand(signalId, targetId), {
-                  validate: false,
-                })
-              : AnyMessages.pack(EventSchema, createProjectionEvent(signalId, targetId), {
+              ? AnyMessages.pack(
+                  CommandSchema,
+                  createProcessManagerTaskCommand(signalId, targetId),
+                  {
+                    validate: false,
+                  },
+                )
+              : AnyMessages.pack(EventSchema, createTaskEvent(signalId, targetId), {
                   validate: false,
                 });
           rows.push(
@@ -1271,7 +1305,7 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignProjection",
-            signalSchema: ProjectionStateSchema,
+            signalSchema: TaskCommandSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
             origin: "domestic",
@@ -1304,10 +1338,10 @@ describe("BoundedContext assembly", () => {
       TaskProjection,
     ]);
     expect(context.commandBus().acceptedCommandTypes()).toEqual([
-      TypeUrls.derive(ProjectionStateSchema),
+      TypeUrls.derive(TaskCommandSchema),
     ]);
 
-    await expect(context.commandBus().post(createProjectionCommand("command-4"))).resolves.toBe(
+    await expect(context.commandBus().post(createAggregateCommand("command-4"))).resolves.toBe(
       undefined,
     );
   });
@@ -1322,7 +1356,7 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AggregateStateSchema,
+            signalSchema: TaskCommandSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
             origin: "domestic",
@@ -1349,11 +1383,10 @@ describe("BoundedContext assembly", () => {
               actor: create(UserIdSchema, { value: "user-1" }),
             }),
           }),
-          schema: AggregateStateSchema,
-          message: create(AggregateStateSchema, {
+          schema: TaskCommandSchema,
+          message: create(TaskCommandSchema, {
             id: "generated-pm",
             name: "Generated PM",
-            archived: false,
           }),
         }),
       ),
@@ -1388,7 +1421,7 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AggregateStateSchema,
+            signalSchema: TaskCommandSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
             origin: "domestic",
@@ -1413,11 +1446,10 @@ describe("BoundedContext assembly", () => {
             actor: create(UserIdSchema, { value: "user-1" }),
           }),
         }),
-        schema: AggregateStateSchema,
-        message: create(AggregateStateSchema, {
+        schema: TaskCommandSchema,
+        message: create(TaskCommandSchema, {
           id: "producer-only",
           name: "Producer only",
-          archived: false,
         }),
       }),
     );
@@ -1454,17 +1486,14 @@ describe("BoundedContext assembly", () => {
     ).resolves.toBeInstanceOf(BoundedContext);
   });
 
-  it("discovers version-4 generated registries", async () => {
-    const registryRoot = createGeneratedRegistryRoot(
-      [
-        {
-          entityType: GeneratedTaskAggregate,
-          stateSchema: AggregateStateSchema,
-          handlers: [],
-        },
-      ],
-      4,
-    );
+  it("discovers receiver-only generated registries", async () => {
+    const registryRoot = createGeneratedRegistryRoot([
+      {
+        entityType: GeneratedTaskAggregate,
+        stateSchema: AggregateStateSchema,
+        handlers: [],
+      },
+    ]);
 
     await expect(
       BoundedContext.singleTenant("Tasks")
@@ -2454,12 +2483,24 @@ function createAggregateCommand(id: string, targetId = "task-ready", tenantId?: 
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    schema: AggregateStateSchema,
-    message: create(AggregateStateSchema, {
+    schema: TaskCommandSchema,
+    message: create(TaskCommandSchema, {
       id: targetId,
       name: "Task Ready",
-      archived: false,
     }),
+  });
+}
+
+function createProcessManagerTaskCommand(id: string, targetId = "task-ready") {
+  return SignalEnvelopes.command({
+    id: create(CommandIdSchema, { uuid: id }),
+    context: create(CommandContextSchema, {
+      actorContext: create(ActorContextSchema, {
+        actor: create(UserIdSchema, { value: "user-1" }),
+      }),
+    }),
+    schema: ProcessManagerTaskCommandSchema,
+    message: create(ProcessManagerTaskCommandSchema, { id: targetId, name: "Task Ready" }),
   });
 }
 
@@ -2487,8 +2528,17 @@ function createProjectionEvent(id: string, targetId = "task-1", tenantId?: Tenan
   });
 }
 
+function createTaskEvent(id: string, targetId = "task-1") {
+  return SignalEnvelopes.event({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema),
+    schema: TaskEventSchema,
+    message: create(TaskEventSchema, { id: targetId, name: "Task" }),
+  });
+}
+
 function createGeneratedRegistryFixture(
-  entities: readonly {
+  receivers: readonly {
     readonly entityType: object;
     readonly stateSchema: GenMessage<Message>;
     readonly handlers: readonly {
@@ -2505,7 +2555,6 @@ function createGeneratedRegistryFixture(
       readonly origin: "domestic" | "external";
     }[];
   }[],
-  version: 3 | 4 = 3,
 ): { readonly root: URL; readonly registryPath: string } {
   const slot = `__spineContextGeneratedRegistry_${Math.random().toString(36).slice(2)}`;
   const root = mkdtempSync(join(tmpdir(), "spine-context-generated-registry-"));
@@ -2514,7 +2563,11 @@ function createGeneratedRegistryFixture(
   const values = globalThis as Record<string, unknown>;
 
   mkdirSync(moduleDir, { recursive: true });
-  values[slot] = Object.freeze({ version, entities });
+  values[slot] = Object.freeze({
+    receivers: receivers.map(({ entityType, ...receiver }) =>
+      Object.freeze({ receiverKind: "entity" as const, receiverType: entityType, ...receiver }),
+    ),
+  });
   writeFileSync(
     registryPath,
     `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
@@ -2528,10 +2581,9 @@ function createGeneratedRegistryFixture(
 }
 
 function createGeneratedRegistryRoot(
-  entities: Parameters<typeof createGeneratedRegistryFixture>[0],
-  version?: 3 | 4,
+  receivers: Parameters<typeof createGeneratedRegistryFixture>[0],
 ): URL {
-  return createGeneratedRegistryFixture(entities, version).root;
+  return createGeneratedRegistryFixture(receivers).root;
 }
 
 function processManagerRegistry(
@@ -2544,7 +2596,7 @@ function processManagerRegistry(
       {
         kind: "command-assignment" as const,
         methodName: "assignTask",
-        signalSchema: AggregateStateSchema,
+        signalSchema: TaskCommandSchema,
         emittedSchemas: [ProjectionStateSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,
@@ -2561,7 +2613,7 @@ function aggregateReplayRegistry(entityType: typeof ReplayTaskAggregate) {
       {
         kind: "command-assignment" as const,
         methodName: "assignTask",
-        signalSchema: ProjectionStateSchema,
+        signalSchema: TaskCommandSchema,
         emittedSchemas: [AggregateStateSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,
@@ -2578,7 +2630,7 @@ function replayProcessManagerRegistry(entityType: typeof ReplayTaskProcessManage
       {
         kind: "command-assignment" as const,
         methodName: "assignTask",
-        signalSchema: AggregateStateSchema,
+        signalSchema: ProcessManagerTaskCommandSchema,
         emittedSchemas: [AggregateStateSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,
@@ -2586,7 +2638,7 @@ function replayProcessManagerRegistry(entityType: typeof ReplayTaskProcessManage
       {
         kind: "event-reaction" as const,
         methodName: "reactToProjection",
-        signalSchema: ProjectionStateSchema,
+        signalSchema: TaskEventSchema,
         emittedSchemas: [AggregateStateSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,

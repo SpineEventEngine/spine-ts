@@ -202,7 +202,7 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
 
   #enqueue(work: ServerRuntimeWork, allowRunningWork: boolean): Promise<void> {
     const runningWork = RuntimeValues.isRunningWork(this);
-    const acceptsDrainFollowUp = allowRunningWork && runningWork && this.#state === "closing";
+    const acceptsDrainFollowUp = allowRunningWork && this.#state === "closing";
 
     if (this.#state !== "running" && !acceptsDrainFollowUp) {
       throw new ServerRuntimeStateError("enqueue", this.#state);

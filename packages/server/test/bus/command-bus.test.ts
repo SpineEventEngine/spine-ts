@@ -30,7 +30,9 @@ import { fromBinary, toBinary } from "@bufbuild/protobuf";
 
 import { CommandBus, type CommandDispatcher } from "../../src/index.js";
 import { commandBusAccess } from "../../src/bus/command-bus.js";
+import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
+import { SignalPublisher } from "../../src/runtime/signal-publisher.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -346,6 +348,28 @@ describe("CommandBus", () => {
     expect(observed).toEqual(["command-outer", "command-follow-up"]);
   });
 
+  it("contains one produced command failure while admitting its later sibling", async () => {
+    const observed: string[] = [];
+    const bus = new CommandBus([
+      createValidatedCommandDispatcher((command) => {
+        observed.push(command.id?.uuid ?? "missing");
+        if (command.id?.uuid === "command-failing") {
+          throw new Error("produced command failed");
+        }
+      }),
+    ]);
+    const events = eventBusAccess.createForgettingBus();
+    const publisher = new SignalPublisher(bus, events, events, "Tasks");
+
+    void publisher.publishCommand(
+      createValidatedCommand("command-failing", "task-failing", "Failing"),
+    );
+    void publisher.publishCommand(createValidatedCommand("command-later", "task-later", "Later"));
+    await publisher.drain();
+
+    expect(observed).toEqual(["command-failing", "command-later"]);
+  });
+
   it("rejects public and internal command intake after close", async () => {
     const bus = new CommandBus();
 
@@ -369,6 +393,19 @@ describe("CommandBus", () => {
     ).rejects.toThrow(/closed/);
   });
 
+  it("aborts an assembling command bus without leaving its runtime open", async () => {
+    const bus = new CommandBus();
+
+    commandBusAccess.abortClose(bus);
+
+    await expect(
+      commandBusAccess.postInternalFollowUp(
+        bus,
+        createValidatedCommand("command-aborted", "task-aborted", "Aborted"),
+      ),
+    ).rejects.toThrow(/closed/);
+  });
+
   it("rejects internal command-bus access for non-command-bus values", () => {
     const bus = {} as CommandBus;
 
@@ -387,8 +424,15 @@ describe("CommandBus", () => {
     expect(() => {
       commandBusAccess.beginClose(bus);
     }).toThrow(/CommandBus instance/);
-    expect(() => commandBusAccess.drain(bus)).toThrow(/CommandBus instance/);
-    expect(() => commandBusAccess.finishClose(bus)).toThrow(/CommandBus instance/);
+    expect(() => {
+      void commandBusAccess.drain(bus);
+    }).toThrow(/CommandBus instance/);
+    expect(() => {
+      void commandBusAccess.finishClose(bus);
+    }).toThrow(/CommandBus instance/);
+    expect(() => {
+      commandBusAccess.abortClose(bus);
+    }).toThrow(/CommandBus instance/);
     expect(() => commandBusAccess.acceptedWorkCount(bus)).toThrow(/CommandBus instance/);
   });
 });

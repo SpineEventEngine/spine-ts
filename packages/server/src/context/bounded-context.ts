@@ -98,9 +98,9 @@ import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import { InboxTargets } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
-import { emitServerError } from "../server/server-log.js";
 import { IntegrationBroker } from "../integration/integration-broker.js";
 import { ServerEnvironment } from "../server/server-environment.js";
+import { SignalPublisher } from "../runtime/signal-publisher.js";
 
 /**
  * Tenant isolation mode declared by a bounded context specification.
@@ -217,19 +217,9 @@ interface RepositoryRegistration {
   readonly projectionInbox: ProjectionInbox;
 
   /**
-   * Stored-event dispatch callback into the owning context event bus.
+   * Context-owned contained publisher for signals produced by repository work.
    */
-  readonly dispatchStored: (event: Event) => Promise<void>;
-
-  /**
-   * Stored-event follow-up dispatch callback into the owning context event bus.
-   */
-  readonly dispatchStoredFollowUp: (event: Event) => Promise<void>;
-
-  /**
-   * Follow-up event posting callback into the owning context event bus.
-   */
-  readonly postEventFollowUp: (event: Event) => Promise<void>;
+  readonly publisher: SignalPublisher;
 
   /**
    * Registers a schema for a framework-produced event before it enters the event bus.
@@ -240,26 +230,6 @@ interface RepositoryRegistration {
    * Registers a schema for an internal system event.
    */
   readonly registerSystemEventSchema: (schema: MessageSchema) => void;
-
-  /**
-   * Posts a committed system event without affecting domain event storage.
-   */
-  readonly postSystemFollowUp: (event: Event) => Promise<void>;
-
-  /**
-   * Command posting callback into the owning context command bus.
-   */
-  readonly onPostCommand: (command: Command) => Promise<void>;
-
-  /**
-   * Records a contained transformed-command follow-up failure for diagnostics.
-   */
-  readonly onFollowUpFailure: (source: Command, child: Command, error: unknown) => void;
-
-  /**
-   * Records asynchronous event follow-up failures for diagnostics.
-   */
-  readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
 interface RegisteredEntityInbox extends EntityInbox {
@@ -450,48 +420,6 @@ export interface ReadCatchUpResult {
 type CatchUpReplayCode = "READ_SIDE_CATCH_UP_REPLAY_FAILED";
 
 /**
- * Observable failure from asynchronous event follow-up processing.
- *
- * This covers dispatch of already-stored events and independent follow-up
- * posts whose acceptance, storage, or dispatch failed.
- */
-export interface StoredEventDispatchFailure {
-  // prettier-ignore
-
-  /**
-   * Event snapshot associated with the failure; it may not have reached storage.
-   */
-  readonly event: Event;
-
-  /**
-   * Frozen scalar snapshot of the thrown failure.
-   */
-  readonly error: DispatchErrorSnapshot;
-}
-
-/**
- * Copy-safe event follow-up error diagnostic.
- */
-export interface DispatchErrorSnapshot {
-  // prettier-ignore
-
-  /**
-   * Error class/name, or a stable label for non-Error throws.
-   */
-  readonly name: string;
-
-  /**
-   * Bounded diagnostic message.
-   */
-  readonly message: string;
-
-  /**
-   * Bounded stack string when the thrown value is an Error with a stack.
-   */
-  readonly stack?: string;
-}
-
-/**
  * Error thrown when a bounded context name cannot be accepted.
  */
 export class BoundedContextNameError extends Error {
@@ -522,10 +450,8 @@ interface FrameworkConstructionToken {
 const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
   frameworkConstructionToken: true,
 });
-const dispatchFailureLimit = 10;
-const dispatchErrorMessageLimit = 500;
-const dispatchErrorStackLimit = 2_000;
 const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
+const catchUpErrorMessageLimit = 500;
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 const internalStoragePrefix = "__spine/";
 const generatedRegistryLoadAttempts = new Map<string, number>();
@@ -539,12 +465,9 @@ const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDescriptor>();
 const contextSubscriptionRuntimes = new WeakMap<BoundedContext, SubscriptionRuntime>();
 const contextLoggers = new WeakMap<BoundedContext, ILogLayer>();
+const contextSignalPublishers = new WeakMap<BoundedContext, SignalPublisher>();
 const contextEventBuses = new WeakMap<BoundedContext, readonly [EventBus, EventBus]>();
 const closingContexts = new WeakSet<BoundedContext>();
-const contextDispatchFailureRecorders = new WeakMap<
-  BoundedContext,
-  (event: Event, error: unknown) => void
->();
 const contextIntegrations = new WeakMap<
   BoundedContext,
   { readonly broker: IntegrationBroker; readonly ready: Promise<void> }
@@ -578,7 +501,6 @@ interface BoundedContextAccess {
   ): Promise<import("../stand/stand.js").StandSubscription>;
   installLogger(context: BoundedContext, logger: ILogLayer): void;
   loggerFor(context: BoundedContext): ILogLayer;
-  recordDispatchFailure(context: BoundedContext, event: Event, error: unknown): void;
   delivery(context: BoundedContext): ContextDeliveryDescriptor;
 }
 let constructBoundedContext:
@@ -587,6 +509,7 @@ let constructBoundedContext:
       commandBus: CommandBus,
       eventBus: EventBus,
       systemEventBus: EventBus,
+      publisher: SignalPublisher,
       stand: Stand,
       systemStand: Stand,
       runtime: SubscriptionRuntime,
@@ -611,13 +534,13 @@ export class BoundedContext {
   readonly #commandBus: CommandBus;
   readonly #eventBus: EventBus;
   readonly #systemEventBus: EventBus;
+  readonly #publisher: SignalPublisher;
   readonly #commandEndpoint: CommandEndpoint;
   readonly #eventEndpoint: EventEndpoint;
   readonly #entityInbox: RegisteredEntityInbox;
   readonly #projectionInbox: PrjInbox;
   readonly #deliveryStrategy: DeliveryStrategy;
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
-  readonly #storedEventDispatchFailures: StoredEventDispatchFailure[] = [];
   readonly #repositoryViews = new Set<RepositoryView>();
   readonly #storageFactory: StorageFactory;
   readonly #stand: Stand;
@@ -634,6 +557,7 @@ export class BoundedContext {
       commandBus,
       eventBus,
       systemEventBus,
+      publisher,
       stand,
       systemStand,
       runtime,
@@ -648,6 +572,7 @@ export class BoundedContext {
         commandBus,
         eventBus,
         systemEventBus,
+        publisher,
         stand,
         systemStand,
         runtime,
@@ -680,6 +605,7 @@ export class BoundedContext {
     commandBus: CommandBus,
     eventBus: EventBus,
     systemEventBus: EventBus,
+    publisher: SignalPublisher,
     stand: Stand,
     systemStand: Stand,
     subscriptionRuntime: SubscriptionRuntime,
@@ -697,6 +623,7 @@ export class BoundedContext {
     this.#commandBus = commandBus;
     this.#eventBus = eventBus;
     this.#systemEventBus = systemEventBus;
+    this.#publisher = publisher;
     contextEventBuses.set(this, [eventBus, systemEventBus]);
     this.#stand = stand;
     this.#systemStand = systemStand;
@@ -710,9 +637,6 @@ export class BoundedContext {
     this.#eventEndpoint = Object.freeze({
       acceptedEventTypes: () => ContextParts.exposedEventTypeUrls(this.#eventBus),
       post: (event: Event) => ContextParts.postContextEvent(this, event),
-    });
-    contextDispatchFailureRecorders.set(this, (event, error) => {
-      this.#recordDispatchFailure(event, error);
     });
     const deliveryReadiness = new DeliveryReadiness();
     const tenantIndex = TenantIndexes.create({
@@ -735,11 +659,12 @@ export class BoundedContext {
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
-    systemEventPosters.set(this, (event) => this.#systemEventBus.post(event));
+    systemEventPosters.set(this, (event) => this.#publisher.publishSystemEvent(event));
     contextSystemPairings.set(this, ContextParts.createSystemPairing(this.#snapshot, systemSpec));
     contextTenantIndexes.set(this, tenantIndex);
     contextStorageFactories.set(this, storageFactory);
     contextSubscriptionRuntimes.set(this, subscriptionRuntime);
+    contextSignalPublishers.set(this, publisher);
     contextDeliveryDescriptors.set(
       this,
       ContextParts.createDeliveryDescriptor(
@@ -802,22 +727,12 @@ export class BoundedContext {
       stand: this.#stand,
       entityInbox: this.#entityInbox,
       projectionInbox: this.#projectionInbox,
-      dispatchStored: (event) => eventBusAccess.postStored(this.#eventBus, event),
-      dispatchStoredFollowUp: (event) => eventBusAccess.postStoredFollowUp(this.#eventBus, event),
-      postEventFollowUp: (event) => eventBusAccess.postFollowUp(this.#eventBus, event),
+      publisher: this.#publisher,
       registerEventSchema: (schema) => {
         eventBusAccess.registerSchemas(this.#eventBus, [schema]);
       },
       registerSystemEventSchema: (schema) => {
         eventBusAccess.registerSchemas(this.#systemEventBus, [schema]);
-      },
-      postSystemFollowUp: (event) => eventBusAccess.postFollowUp(this.#systemEventBus, event),
-      onPostCommand: (command) => commandBusAccess.postInternalFollowUp(this.#commandBus, command),
-      onFollowUpFailure: (source, child, error) => {
-        this.#recordFollowUpFailure(source, child, error);
-      },
-      recordDispatchFailure: (event, error) => {
-        this.#recordDispatchFailure(event, error);
       },
     };
     const preparedRepositories: PreparedRepository[] = [];
@@ -948,18 +863,6 @@ export class BoundedContext {
   }
 
   /**
-   * Returns copy-safe diagnostics for asynchronous event follow-up failures.
-   *
-   * Entries can describe already-stored event dispatch or an independent
-   * follow-up post that failed before storage.
-   *
-   * @returns Returns immutable failure diagnostics.
-   */
-  storedEventDispatchFailures(): readonly StoredEventDispatchFailure[] {
-    return this.#storedEventDispatchFailures.map(ContextParts.cloneDispatchFailure);
-  }
-
-  /**
    * Clears and locally replays every registered Projection from already-stored events.
    *
    * Despite its legacy name, this method is not Projection catch-up. It is a
@@ -1036,7 +939,10 @@ export class BoundedContext {
    */
   close(): Promise<void> {
     closingContexts.add(this);
+    this.#publisher.beginClose();
+    commandBusAccess.beginClose(this.#commandBus);
     eventBusAccess.beginClose(this.#eventBus);
+    eventBusAccess.beginClose(this.#systemEventBus);
     this.#closed ??= this.#closeOnce();
     return this.#closed;
   }
@@ -1046,19 +952,23 @@ export class BoundedContext {
 
     await ContextParts.closeContextPart(() => ContextParts.closeIntegration(this), errors);
 
-    commandBusAccess.beginClose(this.#commandBus);
-    eventBusAccess.beginClose(this.#eventBus);
     await ContextParts.closeContextPart(
-      () => ContextParts.drainContextBuses(this.#commandBus, this.#eventBus),
+      () =>
+        ContextParts.drainContextWork(
+          this.#commandBus,
+          this.#eventBus,
+          this.#systemEventBus,
+          this.#publisher,
+        ),
       errors,
     );
+    this.#publisher.finishClose();
     await ContextParts.closeContextPart(
       () => commandBusAccess.finishClose(this.#commandBus),
       errors,
     );
     await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
     this.#subscriptionRuntime.beginClose();
-    eventBusAccess.beginClose(this.#systemEventBus);
     await ContextParts.closeContextPart(() => eventBusAccess.drain(this.#systemEventBus), errors);
     await ContextParts.closeContextPart(() => this.#subscriptionRuntime.drainClose(), errors);
     await ContextParts.closeContextPart(
@@ -1084,56 +994,6 @@ export class BoundedContext {
     }
     ContextParts.clearContextMetadata(this);
   }
-
-  #recordDispatchFailure(event: Event, error: unknown): void {
-    this.#storedEventDispatchFailures.push(
-      Object.freeze({
-        event: clone(EventSchema, event),
-        error: ContextParts.snapshotDispatchError(error),
-      }),
-    );
-    if (this.#storedEventDispatchFailures.length > dispatchFailureLimit) {
-      this.#storedEventDispatchFailures.splice(
-        0,
-        this.#storedEventDispatchFailures.length - dispatchFailureLimit,
-      );
-    }
-    const logger = contextLoggers.get(this);
-    const eventType = event.message?.typeUrl;
-    if (logger !== undefined && eventType !== undefined && eventType.length > 0) {
-      emitServerError(logger, "Repository follow-up dispatch failed.", {
-        eventType,
-        operation: "repository.follow_up",
-        reasonCode: "dispatch_failed",
-      });
-    }
-  }
-
-  #recordFollowUpFailure(source: Command, child: Command, error: unknown): void {
-    void error;
-    const logger = contextLoggers.get(this);
-    const sourceCommandId = source.id?.uuid;
-    const sourceCommandType = source.message?.typeUrl;
-    const childCommandId = child.id?.uuid;
-    const childCommandType = child.message?.typeUrl;
-    if (
-      logger === undefined ||
-      sourceCommandId === undefined ||
-      sourceCommandType === undefined ||
-      childCommandId === undefined ||
-      childCommandType === undefined
-    ) {
-      return;
-    }
-    emitServerError(logger, "Repository transformed command follow-up failed.", {
-      operation: "repository.command_follow_up",
-      reasonCode: "dispatch_failed",
-      sourceCommandId,
-      sourceCommandType,
-      childCommandId,
-      childCommandType,
-    });
-  }
 }
 
 /**
@@ -1151,6 +1011,10 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     }
     eventBusAccess.installLogger(buses[0], logger);
     eventBusAccess.installLogger(buses[1], logger);
+    const publisher = contextSignalPublishers.get(context);
+    if (publisher === undefined)
+      throw new TypeError("Context logger requires a built BoundedContext instance.");
+    publisher.installLogger(logger);
     const runtime = contextSubscriptionRuntimes.get(context);
     if (runtime === undefined) {
       throw new TypeError("Context logger requires a built BoundedContext instance.");
@@ -1164,14 +1028,6 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
       throw new TypeError("Context logger requires a built BoundedContext instance.");
     }
     return logger;
-  },
-
-  recordDispatchFailure(context: BoundedContext, event: Event, error: unknown): void {
-    const record = contextDispatchFailureRecorders.get(context);
-    if (record === undefined) {
-      throw new TypeError("Dispatch failure recording requires a built BoundedContext instance.");
-    }
-    record(event, error);
   },
 
   isBuilder(value: unknown): value is BoundedContextBuilder {
@@ -1579,10 +1435,12 @@ export class BoundedContextBuilder {
     this.#subscriptionRegistry = undefined;
 
     const registeredRepositories = [...repositories];
+    let commandBus: CommandBus | undefined;
     let eventStore: EventStore | undefined;
     let systemEventStore: EventStore | undefined;
     let eventBus: EventBus | undefined;
     let systemEventBus: EventBus | undefined;
+    let publisher: SignalPublisher | undefined;
     let stand: Stand | undefined;
     let systemStand: Stand | undefined;
     let runtime: SubscriptionRuntime | undefined;
@@ -1599,7 +1457,7 @@ export class BoundedContextBuilder {
         ...ContextParts.systemEventDispatchers(eventDispatchers),
         ...repositorySystemEventDispatchers,
       ];
-      const commandBus = new CommandBus([
+      commandBus = new CommandBus([
         ...this.#commandDispatchers,
         ...ContextParts.repositoryCommandDispatchers(registeredRepositories),
       ]);
@@ -1618,6 +1476,12 @@ export class BoundedContextBuilder {
       });
       eventStore = this.createEventStore(storageFactory);
       eventBus = new EventBus(eventStore);
+      publisher = new SignalPublisher(
+        commandBus,
+        eventBus,
+        systemEventBus,
+        this.#specSnapshot.name.value,
+      );
       for (const dispatcher of domainEventDispatchers) eventBus.register(dispatcher);
       eventBusAccess.registerSchemas(
         eventBus,
@@ -1637,6 +1501,7 @@ export class BoundedContextBuilder {
         commandBus,
         eventBus,
         systemEventBus,
+        publisher,
         stand,
         systemStand,
         runtime,
@@ -1655,6 +1520,7 @@ export class BoundedContextBuilder {
     } catch (error) {
       const cleanupErrors: unknown[] = [];
       ContextParts.attemptCleanup(() => runtime?.abortClose(), cleanupErrors);
+      ContextParts.attemptCleanup(() => publisher?.abortAssembly(), cleanupErrors);
       if (runtime === undefined) {
         ContextParts.attemptCleanup(
           () => void registry?.close().catch(() => undefined),
@@ -1666,6 +1532,9 @@ export class BoundedContextBuilder {
         () => void systemStand?.close().catch(() => undefined),
         cleanupErrors,
       );
+      ContextParts.attemptCleanup(() => {
+        if (commandBus !== undefined) commandBusAccess.abortClose(commandBus);
+      }, cleanupErrors);
       ContextParts.attemptCleanup(() => {
         if (systemEventBus !== undefined) eventBusAccess.abortClose(systemEventBus);
         else if (systemEventStore !== undefined) systemEventStore.close();
@@ -1875,6 +1744,7 @@ const ContextParts = Object.freeze({
     commandBus: CommandBus,
     eventBus: EventBus,
     systemEventBus: EventBus,
+    publisher: SignalPublisher,
     stand: Stand,
     systemStand: Stand,
     runtime: SubscriptionRuntime,
@@ -1892,6 +1762,7 @@ const ContextParts = Object.freeze({
       commandBus,
       eventBus,
       systemEventBus,
+      publisher,
       stand,
       systemStand,
       runtime,
@@ -2508,7 +2379,8 @@ const ContextParts = Object.freeze({
     }
     const runtime = contextSubscriptionRuntimes.get(context);
     if (runtime !== undefined) subscriptionRuntimeAccess.clearLogger(runtime);
-    contextDispatchFailureRecorders.delete(context);
+    contextSignalPublishers.get(context)?.clearLogger();
+    contextSignalPublishers.delete(context);
     contextLoggers.delete(context);
     contextSystemPairings.delete(context);
     contextTenantIndexes.delete(context);
@@ -2602,18 +2474,28 @@ const ContextParts = Object.freeze({
     }
   },
 
-  async drainContextBuses(commandBus: CommandBus, eventBus: EventBus): Promise<void> {
+  async drainContextWork(
+    commandBus: CommandBus,
+    eventBus: EventBus,
+    systemEventBus: EventBus,
+    publisher: SignalPublisher,
+  ): Promise<void> {
     let observedCommandWork = -1;
     let observedEventWork = -1;
+    let observedSystemEventWork = -1;
 
     do {
       observedCommandWork = commandBusAccess.acceptedWorkCount(commandBus);
       observedEventWork = eventBusAccess.acceptedWorkCount(eventBus);
+      observedSystemEventWork = eventBusAccess.acceptedWorkCount(systemEventBus);
       await commandBusAccess.drain(commandBus);
       await eventBusAccess.drain(eventBus);
+      await eventBusAccess.drain(systemEventBus);
+      await publisher.drain();
     } while (
       commandBusAccess.acceptedWorkCount(commandBus) !== observedCommandWork ||
-      eventBusAccess.acceptedWorkCount(eventBus) !== observedEventWork
+      eventBusAccess.acceptedWorkCount(eventBus) !== observedEventWork ||
+      eventBusAccess.acceptedWorkCount(systemEventBus) !== observedSystemEventWork
     );
   },
 
@@ -2642,15 +2524,9 @@ const ContextParts = Object.freeze({
       signalMetadata: new SignalMetadata(),
       entityInbox: registration.entityInbox,
       projectionInbox: registration.projectionInbox,
-      dispatchStored: registration.dispatchStored,
-      dispatchStoredFollowUp: registration.dispatchStoredFollowUp,
-      postEventFollowUp: registration.postEventFollowUp,
+      publisher: registration.publisher,
       registerEventSchema: registration.registerEventSchema,
       registerSystemEventSchema: registration.registerSystemEventSchema,
-      postSystemFollowUp: registration.postSystemFollowUp,
-      onPostCommand: registration.onPostCommand,
-      onFollowUpFailure: registration.onFollowUpFailure,
-      recordDispatchFailure: registration.recordDispatchFailure,
     });
 
     const entityInboxTarget = repositoryAccess.entityInboxTarget(repository);
@@ -2714,39 +2590,6 @@ const ContextParts = Object.freeze({
       stateFullTypeName: snapshot.stateFullTypeName,
       idField: snapshot.idField,
       snapshot: snapshot.snapshot,
-    });
-  },
-
-  cloneDispatchFailure(failure: StoredEventDispatchFailure): StoredEventDispatchFailure {
-    return Object.freeze({
-      event: clone(EventSchema, failure.event),
-      error: ContextParts.cloneDispatchError(failure.error),
-    });
-  },
-
-  snapshotDispatchError(error: unknown): DispatchErrorSnapshot {
-    if (error instanceof Error) {
-      const snapshot: DispatchErrorSnapshot = {
-        name: ContextParts.boundedErrorString(error.name, dispatchErrorMessageLimit) || "Error",
-        message: ContextParts.boundedErrorString(error.message, dispatchErrorMessageLimit),
-        ...(typeof error.stack === "string"
-          ? { stack: ContextParts.boundedErrorString(error.stack, dispatchErrorStackLimit) }
-          : {}),
-      };
-      return Object.freeze(snapshot);
-    }
-
-    return Object.freeze({
-      name: "NonErrorThrow",
-      message: ContextParts.boundedErrorString(String(error), dispatchErrorMessageLimit),
-    });
-  },
-
-  cloneDispatchError(error: DispatchErrorSnapshot): DispatchErrorSnapshot {
-    return Object.freeze({
-      name: error.name,
-      message: error.message,
-      ...(error.stack === undefined ? {} : { stack: error.stack }),
     });
   },
 
@@ -2897,14 +2740,14 @@ const ContextParts = Object.freeze({
   catchUpReplayDetail(error: unknown): CatchUpReplayDetail {
     if (error instanceof Error) {
       return Object.freeze({
-        name: ContextParts.boundedErrorString(error.name, dispatchErrorMessageLimit) || "Error",
-        message: ContextParts.boundedErrorString(error.message, dispatchErrorMessageLimit),
+        name: ContextParts.boundedErrorString(error.name, catchUpErrorMessageLimit) || "Error",
+        message: ContextParts.boundedErrorString(error.message, catchUpErrorMessageLimit),
       });
     }
 
     return Object.freeze({
       name: "NonErrorThrow",
-      message: ContextParts.boundedErrorString(String(error), dispatchErrorMessageLimit),
+      message: ContextParts.boundedErrorString(String(error), catchUpErrorMessageLimit),
     });
   },
 

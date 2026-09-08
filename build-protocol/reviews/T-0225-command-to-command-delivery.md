@@ -114,6 +114,58 @@ Minor findings closed. Two Minor corrections remain in this contract gate:
 2. Remove an obsolete `entities` property and `as never` suppression from the
    writer's no-follow output test; pass the receiver analysis directly.
 
+The final narrow re-review approved both corrections at `5d3daa068` with no
+Critical, Important, or Minor finding. The generated contract task is closed.
+
+## 2026-09-08 standalone runtime assignment
+
+The replacement existing `implementer` role retains exclusive production
+responsibility for standalone runtime materialization, Bounded Context
+registration/assembly, produced-signal publication, System Event state
+subscriptions, focused tests, and narrow records. Its immutable and explicitly
+selected profile is `gpt-5.6-terra` with medium reasoning. It must use TDD,
+must not spawn subagents, and must not commit scratch artifacts. This is the
+second bounded task; it receives an independent task review before black-box
+and documentation closure.
+
+The runtime implementer mapped nine repository propagation/failure call sites
+and found that current Bounded Context close ordering shuts buses before the
+proposed publisher could drain. Its remaining execution window ended before
+code mutation. This is a demonstrated lifecycle blocker, so the existing
+`requirements_splitter` role receives one read-only architecture checkpoint.
+Expected and explicitly dispatched profile: `gpt-5.6-sol`, high reasoning. It
+must freeze the publisher interface, construction point, close order, stored
+Entity-event distinction, and safe call-site migration; it must not edit files
+or spawn subagents. A fresh existing implementer receives production
+responsibility afterward without overlap.
+
+The architecture checkpoint completed with the explicitly dispatched existing
+role and `gpt-5.6-sol` / high profile. Runtime self-introspection was not
+exposed and no fallback was visible. It froze one context-scoped internal
+`SignalPublisher`, an explicit stored-event redispatch path, trusted cross-bus
+follow-up admission while closing, reverse-order assembly rollback, and a
+fixed-point drain before bus destruction. It mapped all repository callback
+categories and found no remaining human decision. The full blueprint is copied
+into the runtime task brief. Repeating this architecture pass is unnecessary
+unless implementation reveals a materially different contract conflict.
+
+A fresh existing `implementer` role receives exclusive production
+responsibility for the publisher/repository/context lifecycle migration.
+Expected and explicitly dispatched profile: `gpt-5.6-terra`, medium reasoning.
+It must not spawn subagents or commit scratch artifacts. Standalone adapter
+materialization follows after this migration passes its focused task review.
+
+The publisher migration reached an uncommitted implementation with focused
+publisher, CommandBus abort, close-drain, server typecheck, and diff evidence.
+The broader suites then exposed invalid legacy test fixtures: one
+repository-routing handler and six bounded-context generated groups plus three
+helpers use Entity state schemas as Command inputs. Validation was not weakened.
+The runtime implementer's execution window ended, so the intact working tree
+transfers without overlap to a fresh existing `implementer` role. Expected and
+explicitly dispatched profile remains `gpt-5.6-terra`, medium reasoning. The
+replacement must finish domain-correct fixtures, run the complete focused gate,
+and commit the publisher migration only after GREEN.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
@@ -498,3 +550,25 @@ exited 0 with 288 files and 4,586 tests, with 93.29% statement, 90.04% branch,
 earlier record that stated a release run had not occurred. The branch was clean
 before this durable record-only commit; the commit advances final HEAD without
 altering the verified behavior.
+
+## SignalPublisher lifecycle migration
+
+RED: the publisher tests failed before the internal publisher module and the
+CommandBus assembly-abort seam existed. GREEN: the publisher contains detached
+produced-signal failures, admits later siblings in order, and drains accepted
+work while context shutdown is in progress. The migration removes the public
+stored-event failure registry and routes repository produced commands and
+events through the context-scoped publisher.
+
+Generated repository fixtures now use canonical command and event Proto files
+(`TaskCommand`, `ProcessManagerTaskCommand`, and `TaskEvent`) rather than
+representing Entity states as application signals. Focused validation passed:
+repository routing and bounded context (329 tests), registry discovery (16),
+lifecycle/export/external-origin/black-box checks (106), and the final
+combined lifecycle set (448). Server typecheck, deterministic fixture check,
+changed-file ESLint, targeted formatting, and `git diff --check` passed.
+
+Focused V8 coverage passed the 363-test execution and covered
+`signal-publisher.ts` at 92.1% lines. Its process exits nonzero only because
+the repository's global 90% threshold is evaluated against all workspaces for
+this narrowed test selection; no source-level test failed.
