@@ -2319,7 +2319,10 @@ const ContextParts = Object.freeze({
     registries: readonly GeneratedHandlerRegistry[],
   ): GeneratedEntityHandlerGroup {
     for (const registry of registries) {
-      const generated = registry.entities.find((entity) => entity.entityType === entityType);
+      const generated = registry.receivers.find(
+        (receiver): receiver is GeneratedEntityHandlerGroup =>
+          receiver.receiverKind === "entity" && receiver.receiverType === entityType,
+      );
       if (generated !== undefined) {
         return generated;
       }

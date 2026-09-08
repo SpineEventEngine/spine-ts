@@ -12,20 +12,14 @@
  * the License.
  */
 
-/**
- * The stable generated handler-registry data contract.
- *
- * Generated modules import these types. Server ingestion, validation errors,
- * and helper implementations remain private to the server runtime.
- */
-export type {
-  GeneratedEntityHandlerGroup,
-  GeneratedEntityHandlers,
-  GeneratedHandlerKind,
-  GeneratedHandlerParameterCount,
-  GeneratedHandlerRecord,
-  GeneratedHandlerRecordInput,
-  GeneratedHandlerRegistry,
-  GeneratedReceiver,
-  GeneratedStandaloneHandlerGroup,
-} from "../handler/generated-handler-registry.js";
+/** Nominal base class for a decorated standalone command assignee. */
+export abstract class AbstractAssignee {}
+
+/** Nominal base class for a decorated standalone command handler. */
+export abstract class AbstractCommander {}
+
+/** Nominal base class for a decorated standalone Event reactor. */
+export abstract class AbstractEventReactor {}
+
+/** Nominal base class for a decorated standalone Event subscriber. */
+export abstract class AbstractEventSubscriber {}

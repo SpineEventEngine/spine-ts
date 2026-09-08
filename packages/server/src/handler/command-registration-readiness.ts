@@ -15,7 +15,7 @@
 import {
   HandlerMetadataRegistry,
   type CommandAssignmentHandlerMetadata,
-  type CommandTransformationHandlerMetadata,
+  type CommandSubstitutionHandlerMetadata,
   type EntityClass,
   type EntityHandlersMetadata,
   type HandlerMetadataRegistryLookup,
@@ -56,13 +56,13 @@ export interface CommandRegistrationAssigneeMetadata {
   /**
    * Command assignment or command-transforming handler metadata declared by the entity.
    */
-  readonly handler: CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata;
+  readonly handler: CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata;
 
   /**
    * Original registered handler entry from the handler metadata registry.
    */
   readonly registeredHandler: RegisteredHandlerMetadata<
-    CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+    CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
   >;
 }
 
@@ -132,7 +132,7 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
           .filter(
             (entry) =>
               entry.handler.kind === "command-assignment" ||
-              entry.handler.kind === "command-transformation",
+              entry.handler.kind === "command-substitution",
           )
           .map((entry) => entry.handler.messageFullTypeName),
       ),
@@ -214,7 +214,7 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
   static #createAssignee(
     commandFullTypeName: string,
     registeredHandler: RegisteredHandlerMetadata<
-      CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+      CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
     >,
   ): CommandRegistrationAssigneeMetadata {
     const fields = ReadinessMetadata.create(registeredHandler);

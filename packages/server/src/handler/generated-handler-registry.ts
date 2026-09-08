@@ -31,32 +31,14 @@ import { RejectionSources } from "./rejection-source.js";
  * Describes the generated handler registry module shape accepted by the framework ingestor.
  *
  */
-type GeneratedHandlerRegistryVersion = 3 | 4;
-type GeneratedHandlerKindV3 = Exclude<GeneratedHandlerKind, "command-transformation">;
-type GeneratedHandlerKindFor<V extends GeneratedHandlerRegistryVersion> = V extends 3
-  ? GeneratedHandlerKindV3
-  : GeneratedHandlerKind;
-
-interface GeneratedHandlerRegistryShape<V extends GeneratedHandlerRegistryVersion> {
-  // prettier-ignore
-
-  /**
-   * Generated registry contract version.
-   */
-  readonly version: V;
-
-  /**
-   * Entity handler groups declared by the generated module.
-   */
-  readonly entities: readonly GeneratedEntityHandlerGroup<V>[];
-}
-
 /**
- * Generated handler registry metadata for a supported serialized version.
+ * Generated registry metadata consumed by the framework.
+ *
+ * Application code regenerates this data whenever the handler contract changes.
  */
-export type GeneratedHandlerRegistry<
-  V extends GeneratedHandlerRegistryVersion = GeneratedHandlerRegistryVersion,
-> = V extends 3 ? GeneratedHandlerRegistryShape<3> : GeneratedHandlerRegistryShape<4>;
+export interface GeneratedHandlerRegistry {
+  readonly receivers: readonly GeneratedReceiver[];
+}
 
 /**
  * Framework-owned ingestion adapter for generated handler registries.
@@ -142,7 +124,7 @@ export class HandlerRegistryIngestionError extends Error {
  */
 export type GeneratedHandlerKind =
   | "command-assignment"
-  | "command-transformation"
+  | "command-substitution"
   | "command-reaction"
   | "event-subscription"
   | "state-subscription"
@@ -158,15 +140,14 @@ export type GeneratedHandlerParameterCount = 1 | 2;
  * Describes a type-erased generated entity group accepted by a top-level registry.
  *
  */
-export interface GeneratedEntityHandlerGroup<
-  V extends GeneratedHandlerRegistryVersion = GeneratedHandlerRegistryVersion,
-> {
+export interface GeneratedEntityHandlerGroup {
   // prettier-ignore
 
   /**
    * Entity class whose prototype owns the generated handler methods.
    */
-  readonly entityType: EntityClass;
+  readonly receiverKind: "entity";
+  readonly receiverType: EntityClass;
 
   /**
    * Generated Protobuf-ES schema for the entity state.
@@ -176,8 +157,18 @@ export interface GeneratedEntityHandlerGroup<
   /**
    * Generated handler records in declaration order.
    */
-  readonly handlers: readonly GeneratedHandlerRecordInput<V>[];
+  readonly handlers: readonly GeneratedHandlerRecordInput[];
 }
+
+/** Metadata for one decorated standalone application instance. */
+export interface GeneratedStandaloneHandlerGroup {
+  readonly receiverKind: "standalone";
+  readonly receiverType: EntityClass;
+  readonly handlers: readonly GeneratedHandlerRecordInput[];
+}
+
+/** One generated Entity or standalone receiver declaration. */
+export type GeneratedReceiver = GeneratedEntityHandlerGroup | GeneratedStandaloneHandlerGroup;
 
 /**
  * Describes generated handler records for one entity class.
@@ -186,14 +177,13 @@ export interface GeneratedEntityHandlerGroup<
 export interface GeneratedEntityHandlers<
   Instance extends object = object,
   StateSchema extends DescriptorMessageSchema = DescriptorMessageSchema,
-  V extends GeneratedHandlerRegistryVersion = GeneratedHandlerRegistryVersion,
-> extends GeneratedEntityHandlerGroup<V> {
+> extends GeneratedEntityHandlerGroup {
   // prettier-ignore
 
   /**
    * Entity class whose prototype owns the generated handler methods.
    */
-  readonly entityType: EntityClass<Instance>;
+  readonly receiverType: EntityClass<Instance>;
 
   /**
    * Generated Protobuf-ES schema for the entity state.
@@ -203,22 +193,20 @@ export interface GeneratedEntityHandlers<
   /**
    * Generated handler records in declaration order.
    */
-  readonly handlers: readonly GeneratedHandlerRecord<Instance, V>[];
+  readonly handlers: readonly GeneratedHandlerRecord<Instance>[];
 }
 
 /**
  * Describes type-erased generated metadata for one decorated handler method.
  *
  */
-export interface GeneratedHandlerRecordInput<
-  V extends GeneratedHandlerRegistryVersion = GeneratedHandlerRegistryVersion,
-> {
+export interface GeneratedHandlerRecordInput {
   // prettier-ignore
 
   /**
    * Handler role inferred from the bare decorator.
    */
-  readonly kind: GeneratedHandlerKindFor<V>;
+  readonly kind: GeneratedHandlerKind;
 
   /**
    * Entity instance method name selected by generated metadata.
@@ -257,8 +245,7 @@ export interface GeneratedHandlerRecordInput<
  */
 export interface GeneratedHandlerRecord<
   Instance extends object = object,
-  V extends GeneratedHandlerRegistryVersion = GeneratedHandlerRegistryVersion,
-> extends GeneratedHandlerRecordInput<V> {
+> extends GeneratedHandlerRecordInput {
   // prettier-ignore
 
   /**
@@ -269,20 +256,14 @@ export interface GeneratedHandlerRecord<
 
 interface GeneratedRegistryOperations {
   assert(registry: unknown): asserts registry is GeneratedHandlerRegistry;
-  materializeAll<V extends GeneratedHandlerRegistryVersion>(
-    registry: GeneratedHandlerRegistry<V>,
-  ): readonly EntityHandlersMetadata[];
-  materialize<V extends GeneratedHandlerRegistryVersion>(
-    entity: GeneratedEntityHandlerGroup<V>,
-    version: V,
-  ): EntityHandlersMetadata;
+  materializeAll(registry: GeneratedHandlerRegistry): readonly EntityHandlersMetadata[];
+  materialize(entity: GeneratedEntityHandlerGroup): EntityHandlersMetadata;
   build<Instance extends object>(
     builder: GeneratedHandlerRegistrationBuilder<Instance>,
     handler: GeneratedHandlerRecordInput,
   ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>;
   validateHandler(
     handler: GeneratedHandlerRecordInput,
-    version: GeneratedHandlerRegistryVersion,
   ): void;
   validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void;
   validateSchema(schema: DescriptorMessageSchema, label: string): void;
@@ -304,35 +285,32 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       );
     }
 
-    const version = (registry as { readonly version?: unknown }).version;
-    if (version !== 3 && version !== 4) {
+    const receivers = (registry as { readonly receivers?: unknown }).receivers;
+    if (!Array.isArray(receivers)) {
       throw new HandlerRegistryIngestionError(
         "UNSUPPORTED_REGISTRY_VERSION",
-        `Generated handler registry version ${String(version)} is not supported.`,
+        "Generated handler registry must declare an unversioned receivers array; regenerate generated handler metadata.",
       );
     }
   },
 
-  materializeAll<V extends GeneratedHandlerRegistryVersion>(
-    registry: GeneratedHandlerRegistry<V>,
-  ): readonly EntityHandlersMetadata[] {
+  materializeAll(registry: GeneratedHandlerRegistry): readonly EntityHandlersMetadata[] {
     return Object.freeze(
-      registry.entities.map((entity) => GeneratedRegistry.materialize(entity, registry.version)),
+      registry.receivers
+        .filter((receiver): receiver is GeneratedEntityHandlerGroup => receiver.receiverKind === "entity")
+        .map((receiver) => GeneratedRegistry.materialize(receiver)),
     );
   },
 
-  materialize<V extends GeneratedHandlerRegistryVersion>(
-    entity: GeneratedEntityHandlerGroup<V>,
-    version: V,
-  ): EntityHandlersMetadata {
+  materialize(entity: GeneratedEntityHandlerGroup): EntityHandlersMetadata {
     GeneratedRegistry.validateSchema(entity.stateSchema, "entity state schema");
     entity.handlers.forEach((handler) => {
-      GeneratedRegistry.validateHandler(handler, version);
+      GeneratedRegistry.validateHandler(handler);
     });
     GeneratedRegistry.validateCommandHandlers(entity);
 
     return HandlerMetadataValues.defineArity(
-      entity.entityType,
+      entity.receiverType,
       entity.stateSchema,
       (builder) => entity.handlers.map((handler) => GeneratedRegistry.build(builder, handler)),
       entity.handlers.map((handler) => ({
@@ -352,9 +330,9 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     if (
       entity.handlers.some(
         (handler) =>
-          handler.kind === "command-transformation" || handler.kind === "command-reaction",
+          handler.kind === "command-substitution" || handler.kind === "command-reaction",
       ) &&
-      !(entity.entityType.prototype instanceof ProcessManager)
+      !(entity.receiverType.prototype instanceof ProcessManager)
     ) {
       throw new HandlerRegistryIngestionError(
         "UNSUPPORTED_HANDLER_KIND",
@@ -373,8 +351,8 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
           handler.signalSchema,
           handler.methodName as HandlerMethodName<Instance>,
         );
-      case "command-transformation":
-        return builder.transform(
+      case "command-substitution":
+        return builder.substitute(
           handler.signalSchema,
           handler.methodName as HandlerMethodName<Instance>,
         );
@@ -408,7 +386,6 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
 
   validateHandler(
     handler: GeneratedHandlerRecordInput,
-    version: GeneratedHandlerRegistryVersion,
   ): void {
     if (!GeneratedRegistry.isKind(handler.kind)) {
       throw new HandlerRegistryIngestionError(
@@ -426,18 +403,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
     if (
       handler.origin === "external" &&
-      (handler.kind === "command-assignment" || handler.kind === "command-transformation")
+      (handler.kind === "command-assignment" || handler.kind === "command-substitution")
     ) {
       throw new HandlerRegistryIngestionError(
         "EXTERNAL_COMMAND_RECEIVER",
         `Generated command receiver "${handler.methodName}" cannot accept external commands.`,
-      );
-    }
-
-    if (version === 3 && handler.kind === "command-transformation") {
-      throw new HandlerRegistryIngestionError(
-        "UNSUPPORTED_HANDLER_KIND",
-        `Generated command transformation "${handler.methodName}" requires registry version 4.`,
       );
     }
 
@@ -483,7 +453,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
 
     if (
       handler.kind === "command-assignment" ||
-      handler.kind === "command-transformation" ||
+      handler.kind === "command-substitution" ||
       handler.kind === "command-reaction"
     ) {
       GeneratedRegistry.validateEmits(handler);
@@ -524,16 +494,16 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   validateCommandRoles(handler: GeneratedHandlerRecordInput): void {
-    if (handler.kind !== "command-transformation" && handler.kind !== "command-reaction") {
+    if (handler.kind !== "command-substitution" && handler.kind !== "command-reaction") {
       return;
     }
     if (
-      handler.kind === "command-transformation" &&
+      handler.kind === "command-substitution" &&
       !GeneratedRegistry.isCommandSchema(handler.signalSchema)
     ) {
       throw new HandlerRegistryIngestionError(
         "INVALID_SCHEMA",
-        `Generated command transformation "${handler.methodName}" must declare a Command input schema.`,
+        `Generated command substitution "${handler.methodName}" must declare a Command input schema.`,
       );
     }
     if (
@@ -626,7 +596,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   isKind(kind: string): kind is GeneratedHandlerKind {
     return (
       kind === "command-assignment" ||
-      kind === "command-transformation" ||
+      kind === "command-substitution" ||
       kind === "command-reaction" ||
       kind === "event-subscription" ||
       kind === "state-subscription" ||

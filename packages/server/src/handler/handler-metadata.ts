@@ -36,7 +36,7 @@ export interface EntityClass<Instance extends object = object> {
  */
 export type HandlerKind =
   | "command-assignment"
-  | "command-transformation"
+  | "command-substitution"
   | "command-reaction"
   | "event-subscription"
   | "state-subscription"
@@ -188,10 +188,10 @@ export type CommandReactionHandlerMetadata<
 /**
  * Command-input `@Command` metadata that produces Commands after commit.
  */
-export type CommandTransformationHandlerMetadata<
+export type CommandSubstitutionHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
   MethodName extends string = string,
-> = BaseHandlerMetadata<"command-transformation", Schema, MethodName>;
+> = BaseHandlerMetadata<"command-substitution", Schema, MethodName>;
 
 /**
  * Metadata for an event subscription method.
@@ -252,7 +252,7 @@ export type HandlerMetadata<
   MethodName extends string = string,
 > =
   | CommandAssignmentHandlerMetadata<Schema, MethodName>
-  | CommandTransformationHandlerMetadata<Schema, MethodName>
+  | CommandSubstitutionHandlerMetadata<Schema, MethodName>
   | CommandReactionHandlerMetadata<Schema, MethodName>
   | EventSubscriptionHandlerMetadata<Schema, MethodName>
   | StateSubscriptionHandlerMetadata<Schema, MethodName>
@@ -340,10 +340,10 @@ export interface GeneratedHandlerRegistrationBuilder<
    * @param methodName Process Manager method selected by generated metadata.
    * @returns Generated transformation handler metadata.
    */
-  transform<Schema extends DescriptorMessageSchema>(
+  substitute<Schema extends DescriptorMessageSchema>(
     schema: Schema,
     methodName: HandlerMethodName<Instance>,
-  ): CommandTransformationHandlerMetadata<Schema, HandlerMethodName<Instance>>;
+  ): CommandSubstitutionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 
   /**
    * Registers a generated event- or rejection-input command reaction.
@@ -390,7 +390,7 @@ export interface EntityHandlersMetadata<
   /**
    * Command transformations in declaration order.
    */
-  readonly commandTransformations: readonly CommandTransformationHandlerMetadata[];
+  readonly commandSubstitutions: readonly CommandSubstitutionHandlerMetadata[];
 
   /**
    * Command reactors in declaration order.
@@ -561,7 +561,7 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   readonly #commandReceptors = new Map<
     string,
     RegisteredHandlerMetadata<
-      CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+      CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
     >
   >();
   readonly #eventApplications = new Map<
@@ -591,7 +591,7 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     const commandReceptors = new Map<
       string,
       RegisteredHandlerMetadata<
-        CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+        CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
       >
     >();
     const eventApplications = new Map<
@@ -602,10 +602,10 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     for (const entry of entries) {
       if (
         entry.handler.kind === "command-assignment" ||
-        entry.handler.kind === "command-transformation"
+        entry.handler.kind === "command-substitution"
       ) {
         const commandEntry = entry as RegisteredHandlerMetadata<
-          CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+          CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
         >;
         this.#validateAssignment(
           commandEntry,
@@ -732,7 +732,7 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     commandTypeName: string,
   ):
     | RegisteredHandlerMetadata<
-        CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+        CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
       >
     | undefined {
     return this.#commandReceptors.get(commandTypeName);
@@ -766,11 +766,11 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
 
   #validateAssignment(
     entry: RegisteredHandlerMetadata<
-      CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+      CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
     >,
     duplicate:
       | RegisteredHandlerMetadata<
-          CommandAssignmentHandlerMetadata | CommandTransformationHandlerMetadata
+          CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
         >
       | undefined,
   ): void {
@@ -950,7 +950,7 @@ class EntityHandlersOwner {
       entity: describeEntityMetadata(stateSchema),
       handlers,
       commandAssignments: this.#ofKind(handlers, "command-assignment"),
-      commandTransformations: this.#ofKind(handlers, "command-transformation"),
+      commandSubstitutions: this.#ofKind(handlers, "command-substitution"),
       commandReactions: this.#ofKind(handlers, "command-reaction"),
       eventSubscriptions: this.#ofKind(handlers, "event-subscription"),
       stateSubscriptions: this.#ofKind(handlers, "state-subscription"),
@@ -971,10 +971,10 @@ class EntityHandlersOwner {
         schema: Schema,
         methodName: HandlerMethodName<Instance>,
       ) => this.#handler(entityType, "command-assignment", schema, methodName, built, arities),
-      transform: <Schema extends DescriptorMessageSchema>(
+      substitute: <Schema extends DescriptorMessageSchema>(
         schema: Schema,
         methodName: HandlerMethodName<Instance>,
-      ) => this.#handler(entityType, "command-transformation", schema, methodName, built, arities),
+      ) => this.#handler(entityType, "command-substitution", schema, methodName, built, arities),
       command: <Schema extends DescriptorMessageSchema>(
         schema: Schema,
         methodName: HandlerMethodName<Instance>,
@@ -1080,7 +1080,7 @@ class EntityHandlersOwner {
     if (
       handlers.some(
         (handler) =>
-          handler.kind === "command-transformation" || handler.kind === "command-reaction",
+          handler.kind === "command-substitution" || handler.kind === "command-reaction",
       ) &&
       !(entityType.prototype instanceof ProcessManager)
     ) {

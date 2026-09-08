@@ -1,24 +1,26 @@
 # T-0225: Command-to-Command Delivery
 
-Status: Ready for human review; final durable evidence commit pending
+Status: Corrective implementation in progress
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`
 
 ## Objective
 
-Make a `@Command` handler whose input is a Command participate in Command Bus
-registration and execution. Keep event-to-command and rejection-to-command
-reactions on the Event Bus.
+Provide JVM-aligned delivery for decorated Entity and standalone signal
+handlers. A Process Manager `@Command` method with a Command input performs
+command substitution through the Command Bus. Standalone assignees, commanders,
+event reactors, and event subscribers participate through generated metadata.
+Aggregates and Projections reject `@Command` methods.
 
 ## Acceptance criteria
 
-1. A generated `@Command` method with a Command input is registered as the
-   effective handler for that Command type.
+1. A generated Process Manager `@Command` method with a Command input is
+   registered as the effective handler for that Command type.
 2. A client-posted Command reaches that method instead of returning
    `UNSUPPORTED_COMMAND`.
 3. A Command posted by server context reaches the same method.
-4. The method returns one or more Commands using the existing supported return
+4. A command substitution returns one or more Commands using the supported return
    shapes; zero output remains invalid.
 5. Process Manager command transformation works, including an optional
    `CommandContext` parameter. Aggregate and Projection repositories reject all
@@ -36,24 +38,60 @@ reactions on the Event Bus.
 11. Routing continues to support default and custom routes, composite IDs, and
     tenant isolation.
 12. Public TSDoc and runtime architecture documentation describe the same
-    command-transformation contract.
+    command-substitution contract.
 13. Domain-correct Protobuf fixtures and focused end-to-end tests reproduce the
     original client and context-posting failures before production code changes.
+14. Export `AbstractAssignee`, `AbstractCommander`, `AbstractEventReactor`, and
+    `AbstractEventSubscriber` as nominal base classes for decorated standalone
+    handlers.
+15. Standalone handler registration matches JVM capabilities: assignees receive
+    Commands and produce Events; commanders receive Commands, Events, or
+    rejections and produce Commands; reactors receive Events or rejections and
+    produce Events or no signal; subscribers receive Events, rejections, or
+    Entity states and produce no signal.
+16. Register a commander through `addCommandDispatcher()` and install both its
+    command and event sides exactly once. Add `addAssignee()` for standalone
+    assignees. Reactors and subscribers use `addEventDispatcher()`. Existing raw
+    dispatcher registration remains supported.
+17. Replace the versioned Entity-only generated registry with one unversioned
+    `receivers` collection containing Entity and standalone receiver records.
+    Old `{ version, entities }` registries fail with an instruction to regenerate.
+18. Match a registered standalone instance to generated metadata by exact
+    constructor. The registry never constructs application handler instances.
+19. A standalone state subscriber receives exact-schema state changes through
+    the System Event Bus. It does not use a Repository, Entity Inbox, or the
+    Integration Broker. State subscriptions reject `External<State>` and
+    `@Where`.
+20. A produced Command re-enters the Command Bus and a produced Event re-enters
+    the Event Bus after the current handler or transaction succeeds. Same-bus
+    work is admitted without awaiting the currently executing queue.
+21. `BoundedContext` does not retain, expose, or report produced-signal dispatch
+    failures. A separate internal signal publisher contains detached failures,
+    logs them, drains admitted work during close, and prevents unhandled promise
+    rejections.
+22. Remove Aggregate command-substitution execution and tests. Keep defensive
+    Aggregate and Projection rejection in analysis, ingestion, metadata, and
+    runtime binding.
+23. Remove registry v3/v4 compatibility and all `command-transformation`
+    identifiers, aliases, tests, and documentation.
+24. Refactor touched large modules into cohesive classes/modules. Do not add a
+    general cleanup unrelated to this correction.
 
 ## Classification and estimate
 
 High risk: this changes shared command registration, Entity execution,
 transaction ordering, causal metadata, and a public decorator contract.
 
-Estimated active work: 5–8 uninterrupted hours, including RED tests,
-implementation, focused coverage, specialist review and corrections, version
-alignment, one release gate, commits, pushes, and reporting.
+Estimated active work: 18–24 uninterrupted agent-hours and 12–16 elapsed hours,
+plus 1–3 hours of CI or release-gate waiting. This includes implementation,
+focused coverage, one parallel specialist-review wave and corrections, version
+validation, one release gate, commits, pushes, and reporting.
 
 ## Execution and verification
 
 - Use behavior-first TDD and preserve the failing-test output before changing
   production code.
-- Inspect and retain JVM command-substitution semantics: command-input
+- Retain JVM command-substitution semantics: command-input
   `@Command` is a command receptor, while event/rejection-input `@Command` is an
   event receptor.
 - Run focused handler, repository, service, and metadata tests plus
@@ -65,15 +103,19 @@ alignment, one release gate, commits, pushes, and reporting.
   version changes in the commit named exactly `Bump version -> <version>`;
   dependency pins, lockfile, generated metadata, and release expectations belong
   in separate commits.
+- Run the completed architecture pass only again if implementation reveals a
+  material contract conflict.
 
 ## Agent routing
 
 The Codex Desktop surface supports explicit model and reasoning selection.
 Subagents may not spawn subagents.
 
-- Implementation owner: existing `implementer` role; generated metadata,
-  handler readiness, repository execution, tests, documentation, and task
-  records; model explicitly `gpt-5.6-terra`, reasoning explicitly `medium`.
+- Implementation owner: existing `implementer` role; generated registry and
+  analyzer, handler metadata and readiness, standalone runtime, Bounded Context
+  assembly, Process Manager substitution, focused tests, narrow documentation,
+  and task records; model explicitly `gpt-5.6-terra`, reasoning explicitly
+  `medium`.
 - Mechanical verification: orchestrator-dispatched function; focused commands
   and output classification; model explicitly `gpt-5.6-luna`, reasoning
   explicitly `medium` when classification needs judgment.
@@ -120,6 +162,14 @@ fields and the immutable role profile are the accepted metadata evidence.
   remain EventBus reactions.
 - `@Command` handlers are Process Manager-only. Aggregates and Projections
   reject every `@Command` declaration and generated command metadata record.
+  This Entity restriction does not apply to standalone `AbstractCommander`.
+- The framework supports all four JVM standalone signal-handler families. They
+  are not Entities and must not be materialized through a Repository.
+- Do not use a registry version or retain compatibility with earlier unreleased
+  generated-registry snapshots.
+- Do not place produced-signal failure responsibility in `BoundedContext`.
+- Use `command-substitution`; do not retain the invented
+  `command-transformation` term as an alias.
 - Use the official `origin` remote and this feature worktree; any eventual
   merge-version change is a separate version-only commit with the required
   message and never changes internal dependency pins or the lockfile.
@@ -137,7 +187,10 @@ not be treated as current verification evidence.
 
 ## Current disposition
 
-The final binding domain correction is complete: Aggregates and Projections
+This disposition is superseded by the corrective implementation started on
+2026-09-08. It remains historical evidence only.
+
+The previous binding domain correction stated that Aggregates and Projections
 reject every `@Command`; Process Managers retain command-input substitutions
 and event/rejection command reactions. The corrected review convergence also
 includes domain-correct black-box fixtures, truthful generated-registry
@@ -149,5 +202,6 @@ tests. The canonical preflight passed 9 files and 437 tests. The authoritative
 `pnpm verify:release` exited 0 with 288 files and 4,586 tests: 93.29% statements,
 90.04% branches, 92.89% functions, and 94.45% lines. These final gates supersede
 all earlier entries stating that release verification had not run. The branch is
-clean; this record-only commit will advance its final HEAD without changing the
-verified production behavior.
+clean. That endpoint missed standalone decorated handlers, retained a versioned
+registry, used rejected terminology, and placed produced-signal failure
+responsibility in `BoundedContext`; it is not ready for review.

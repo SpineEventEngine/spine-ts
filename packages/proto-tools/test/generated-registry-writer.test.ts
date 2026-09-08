@@ -53,11 +53,11 @@ describe("generated registry writer", () => {
           'from "../spine/examples/todo/task_events_pb.js";',
         'import { TaskSchema } from "../spine/examples/todo/tasks_pb.js";',
         "",
-        "export const generatedHandlerRegistry: GeneratedHandlerRegistry<4> = {",
-        "  version: 4,",
-        "  entities: [",
+        "export const generatedHandlerRegistry: GeneratedHandlerRegistry = {",
+        "  receivers: [",
         "    {",
-        "      entityType: TaskAggregate,",
+        '      receiverKind: "entity",',
+        "      receiverType: TaskAggregate,",
         "      stateSchema: TaskSchema,",
         "      handlers: [",
         "        {",
@@ -79,7 +79,8 @@ describe("generated registry writer", () => {
         "      ],",
         "    },",
         "    {",
-        "      entityType: TaskProjection,",
+        '      receiverKind: "entity",',
+        "      receiverType: TaskProjection,",
         "      stateSchema: TaskSchema,",
         "      handlers: [",
         "        {",
@@ -319,8 +320,8 @@ describe("generated registry writer", () => {
     );
     expect(source).toContain('import { TaskSchema } from "../alpha_pb.js";');
     expect(source).toContain('import { TaskSchema as TaskSchema_2 } from "../beta_pb.js";');
-    expect(source).toContain("      entityType: TaskEntity,");
-    expect(source).toContain("      entityType: TaskEntity_2,");
+    expect(source).toContain("      receiverType: TaskEntity,");
+    expect(source).toContain("      receiverType: TaskEntity_2,");
     expect(source).toContain("      stateSchema: TaskSchema,");
     expect(source).toContain("      stateSchema: TaskSchema_2,");
   });
@@ -353,7 +354,7 @@ describe("generated registry writer", () => {
 
     expect(source).toContain('import { TaskAggregate } from "../../src/task-aggregate.js";');
     expect(source).not.toContain("TaskAggregate_2");
-    expect(source.match(/entityType: TaskAggregate,/g)).toHaveLength(2);
+    expect(source.match(/receiverType: TaskAggregate,/g)).toHaveLength(2);
   });
 
   it("writes a generated registry file only inside an ignored generated root", () => {
@@ -930,17 +931,15 @@ function createCompileFixture(): string {
   writeFileSync(
     join(repoRoot, "node_modules/@spine-event-engine/server/spi/handler-registry.d.ts"),
     [
-      "export type GeneratedHandlerKind<V extends 3 | 4> = V extends 3 ? " +
-        '"command-assignment" | "command-reaction" | "event-subscription" | "event-reaction" : ' +
-        '"command-assignment" | "command-transformation" | "command-reaction" | ' +
-        '"event-subscription" | "event-reaction";',
-      "export type GeneratedHandlerRegistry<V extends 3 | 4 = 3 | 4> = {",
-      "  readonly version: V;",
-      "  readonly entities: readonly {",
-      "    readonly entityType: new (...args: never[]) => object;",
+      'export type GeneratedHandlerKind = "command-assignment" | "command-substitution" | ' +
+        '"command-reaction" | "event-subscription" | "event-reaction";',
+      "export type GeneratedHandlerRegistry = {",
+      "  readonly receivers: readonly {",
+      '    readonly receiverKind: "entity";',
+      "    readonly receiverType: new (...args: never[]) => object;",
       "    readonly stateSchema: object;",
       "    readonly handlers: readonly {",
-      "      readonly kind: GeneratedHandlerKind<V>;",
+      "      readonly kind: GeneratedHandlerKind;",
       "      readonly methodName: string;",
       "      readonly signalSchema: object;",
       "      readonly emittedSchemas: readonly object[];",

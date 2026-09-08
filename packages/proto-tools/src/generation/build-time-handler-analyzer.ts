@@ -23,7 +23,7 @@ import ts from "typescript";
 
 type GeneratedHandlerKind =
   | "command-assignment"
-  | "command-transformation"
+  | "command-substitution"
   | "command-reaction"
   | "event-subscription"
   | "state-subscription"
@@ -1328,7 +1328,7 @@ const HandlerSources = Object.freeze({
       case "Assign":
         return "command-assignment";
       case "Command":
-        return signalKind === "command" ? "command-transformation" : "command-reaction";
+        return signalKind === "command" ? "command-substitution" : "command-reaction";
       case "React":
         return "event-reaction";
       case "Subscribe":

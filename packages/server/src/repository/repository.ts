@@ -2553,10 +2553,10 @@ class ProcessManagerCommandExecution {
     producedSignals: readonly unknown[],
   ): Promise<EntityInboxFollowUp | undefined> {
     const commands =
-      intake.assignee.handler.kind === "command-transformation"
+      intake.assignee.handler.kind === "command-substitution"
         ? this.#bindProducedCommands(producedSignals)
         : Object.freeze([]);
-    if (intake.assignee.handler.kind === "command-transformation" && commands.length === 0) {
+    if (intake.assignee.handler.kind === "command-substitution" && commands.length === 0) {
       throw new Error(
         "Repository process-manager command transformations must return at least one command.",
       );
@@ -4169,7 +4169,7 @@ const RepositoryHandlers = {
   handlerEmittedSchemas(
     handler:
       | CommandAssignmentHandlerMetadata
-      | import("../handler/handler-metadata.js").CommandTransformationHandlerMetadata
+      | import("../handler/handler-metadata.js").CommandSubstitutionHandlerMetadata
       | CommandReactionHandlerMetadata
       | EventReactionHandlerMetadata,
   ): readonly DescriptorMessageSchema[] {
@@ -4199,7 +4199,7 @@ const RepositoryHandlers = {
 
       if (
         metadata.kind !== "process-manager" &&
-        (handlersMetadata.commandTransformations.length > 0 ||
+        (handlersMetadata.commandSubstitutions.length > 0 ||
           handlersMetadata.commandReactions.length > 0)
       ) {
         throw new RepositoryIdentityError(
@@ -4257,7 +4257,7 @@ const RepositoryRoutes = {
     const commandSchemas = RepositoryHandlers.uniqueSchemas(
       handlers.flatMap((handler) => [
         ...handler.commandAssignments.map((assignment) => assignment.schema),
-        ...handler.commandTransformations.map((transformation) => transformation.schema),
+        ...handler.commandSubstitutions.map((substitution) => substitution.schema),
       ]),
     );
     const eventSchemas = RepositoryHandlers.uniqueSchemas(
@@ -4324,8 +4324,8 @@ const RepositoryRoutes = {
     ]);
     const producedCommandSchemas = RepositoryHandlers.uniqueSchemas(
       handlers.flatMap((handler) => [
-        ...handler.commandTransformations.flatMap((transformation) =>
-          RepositoryHandlers.handlerEmittedSchemas(transformation),
+        ...handler.commandSubstitutions.flatMap((substitution) =>
+          RepositoryHandlers.handlerEmittedSchemas(substitution),
         ),
         ...handler.commandReactions.flatMap((reaction) =>
           RepositoryHandlers.handlerEmittedSchemas(reaction),

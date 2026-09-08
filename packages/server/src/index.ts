@@ -281,6 +281,13 @@ export {
 export type { External } from "./handler/external.js";
 
 export {
+  AbstractAssignee,
+  AbstractCommander,
+  AbstractEventReactor,
+  AbstractEventSubscriber,
+} from "./handler/standalone.js";
+
+export {
   GeneratedRegistryDiscovery,
   GeneratedRegistryDiscoveryError,
   type GeneratedRegistryDiscoveryOptions,
@@ -296,7 +303,7 @@ export {
 export {
   type BaseHandlerMetadata,
   type CommandAssignmentHandlerMetadata,
-  type CommandTransformationHandlerMetadata,
+  type CommandSubstitutionHandlerMetadata,
   type CommandReactionHandlerMetadata,
   type EntityClass,
   type EntityHandlersMetadata,

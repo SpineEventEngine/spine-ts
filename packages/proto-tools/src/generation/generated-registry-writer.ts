@@ -135,7 +135,7 @@ export interface RegistryWriteOptions extends RegistryRenderOptions {
 }
 
 /**
- * Build-time writer for version-4 generated handler registry source.
+ * Build-time writer for unversioned generated handler registry source.
  */
 export class GeneratedRegistryWriter {
   // prettier-ignore
@@ -267,9 +267,8 @@ const RegistrySource = Object.freeze({
     refs: RenderRefs,
   ): readonly string[] {
     const lines = [
-      `export const ${registryName}: GeneratedHandlerRegistry<4> = {`,
-      "  version: 4,",
-      "  entities: [",
+      `export const ${registryName}: GeneratedHandlerRegistry = {`,
+      "  receivers: [",
     ];
 
     entities.forEach((entity) => {
@@ -293,7 +292,8 @@ const RegistrySource = Object.freeze({
     );
     const lines = [
       "    {",
-      `      entityType: ${entityType},`,
+      '      receiverKind: "entity",',
+      `      receiverType: ${entityType},`,
       `      stateSchema: ${stateSchema},`,
       "      handlers: [",
     ];
