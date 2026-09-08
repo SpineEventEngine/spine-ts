@@ -475,6 +475,13 @@ tooling/server typechecks, 92 focused context/registry tests, changed-file lint,
 formatting, and diff checks pass. The same read-only Luna/medium verification
 function reruns the identical canonical preflight.
 
+The third preflight cleared TypeScript, cleanup, and TSDoc, then stopped before
+tests on copyright enforcement. Four new handler-registry Proto fixtures lack
+the CodeMatters header, and `generated-handler-registry.test.ts` has incorrect
+header blank-line spacing. Generation remained clean. The same
+final-convergence implementer receives this exact five-file mechanical fix with
+its explicit `gpt-5.6-terra` / medium profile and no subagents.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
