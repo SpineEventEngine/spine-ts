@@ -532,6 +532,44 @@ authorization, secret, or new external trust-boundary policy. Imported Event
 origin behavior remains part of correctness review. The complete wave is
 collected and deduplicated before one correction batch.
 
+All four reviewers completed with their explicitly dispatched existing roles
+and profiles. Separate runtime self-introspection was not exposed and no
+fallback was visible. All verdicts are **Needs fixes**; no P0 finding was
+reported. The single deduplicated accepted batch is:
+
+1. P1: reject the framework `spine.core.Command` envelope as a generated
+   handler payload schema and replace the fixture with distinct domain Command
+   messages.
+2. P1: analyzer validation must require the canonical `CommandContext` or
+   `EventContext` type for a declared second parameter, matching the handler's
+   input; add negative coverage for unrelated types.
+3. P1: replace active Entity-only/versioned registry prose with the unversioned
+   mixed `receivers` contract, including Entity and standalone records and the
+   `buildAsync()` registration path.
+4. P2: document all seven handler metadata roles, including state subscription.
+5. P2: replace remaining active `command-transformation` identifiers and prose
+   with command substitution across task/API/reference/runtime/tests.
+6. P2: correct `SignalPublisher.beginClose()` TSDoc to state that trusted
+   produced work remains admissible while closing and is rejected after finish.
+7. P2: rename Process Manager “standalone example” wording to “self-contained
+   example” so it is not confused with standalone handler registration.
+8. P2: update the task's top-level status from implementation to specialist
+   review correction.
+9. P3: remove unused `"notification"` from `PublicationKind` and remove the
+   compensating `Exclude` type.
+
+All findings are accepted, including P3 because the human requested every
+review finding be fixed. Clean dispositions: runtime routing and origin rules,
+transaction/metadata ordering, stored-versus-fresh Events, failure containment,
+close and rollback, module/OOP shape, public exports, standalone roles and
+registration, state path, best-effort limits, links, and security N/A.
+
+A fresh existing `implementer` receives exclusive responsibility for the whole
+batch. It is explicitly dispatched as `gpt-5.6-terra` / medium, must use TDD
+for both P1 code changes, preserve semantic fixtures, and must not spawn
+subagents. One correction commit group and focused verification precede narrow
+re-review of only affected concerns.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
