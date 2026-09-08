@@ -591,6 +591,11 @@ non-null assertion. Generation remained clean. The final-correction
 `gpt-5.6-terra` / medium profile and no subagents; the context-validation
 contract must not change.
 
+Commit `eb4e6cff8` resolves all four analyzer lint findings. Full analyzer lint,
+49 analyzer tests, tooling and proto-tools builds, cleanup, TSDoc, formatting,
+and diff checks pass; the context-validation behavior is unchanged. The same
+read-only Luna/medium function reruns the identical coverage profile.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
