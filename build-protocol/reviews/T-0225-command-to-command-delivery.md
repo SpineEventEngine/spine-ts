@@ -194,6 +194,13 @@ The same independent `performance_reliability_reviewer` re-reviews only this
 accepted finding across `5d3daa068..0c8dff589`, again with explicitly selected
 `gpt-5.6-terra` and high reasoning, read-only and without subagents.
 
+The lifecycle re-review verdict is **Approved**. The reviewer confirmed that
+the tests directly prove close-time internal admission and drain, observed
+post-finish rejection without an unhandled rejection, and trusted
+cross-runtime admission while public target intake rejects. No remaining or
+new Critical, Important, or Minor finding was reported. The SignalPublisher
+lifecycle migration is closed; standalone adapter materialization may begin.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
