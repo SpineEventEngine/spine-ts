@@ -193,9 +193,9 @@ retry that child.
 
 For a generated Process Manager, a command-input handler uses distinct domain
 Command input and output types, and the generated registry supplies those
-schemas. Its application package emits
-`generated/handler/generated-handler-registry.js`; context assembly receives
-the compiled package root, not the `generated/` directory:
+schemas. This standalone example explicitly ingests the v4 data that an
+application build normally emits, then assembles a repository from it; it does
+not claim that its fixture discovers a registry artifact automatically:
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/project-event-routing.test.ts -->
 
@@ -207,7 +207,15 @@ import {
   CommandIdSchema,
   type CommandContext,
 } from "@spine-event-engine/proto";
-import { BoundedContext, Command, ProcessManager } from "@spine-event-engine/server";
+import {
+  BoundedContext,
+  Command,
+  type EntityHandlersMetadata,
+  HandlerRegistryIngestor,
+  ProcessManager,
+  Repository,
+} from "@spine-event-engine/server";
+import type { GeneratedHandlerRegistry } from "@spine-event-engine/server/spi/handler-registry";
 
 import {
   ApproveProjectSchema,
@@ -238,11 +246,33 @@ const project = create(ProjectIdSchema, {
   organization: create(OrganizationIdSchema, { code: "org-a" }),
   number: 1,
 });
-const applicationRoot = new URL("../", import.meta.url);
-const context = await BoundedContext.singleTenant("Projects")
-  .withGeneratedRegistryRoot(applicationRoot)
-  .add(ApprovalCoordinator)
-  .buildAsync();
+const registry: GeneratedHandlerRegistry<4> = {
+  version: 4,
+  entities: [
+    {
+      entityType: ApprovalCoordinator,
+      stateSchema: CoordinationStateSchema,
+      handlers: [
+        {
+          kind: "command-transformation",
+          methodName: "approve",
+          signalSchema: ApproveProjectSchema,
+          emittedSchemas: [ScheduleProjectSchema],
+          parameterCount: 2,
+          origin: "domestic",
+        },
+      ],
+    },
+  ],
+};
+const [handlers] = new HandlerRegistryIngestor().ingest(registry);
+if (handlers === undefined) throw new Error("Generated Process Manager metadata is missing.");
+const repository = new Repository({
+  entityType: ApprovalCoordinator,
+  schema: CoordinationStateSchema,
+  handlers: handlers as EntityHandlersMetadata<ApprovalCoordinator, typeof CoordinationStateSchema>,
+});
+const context = BoundedContext.singleTenant("Projects").add(repository).build();
 await context.commandBus().post(
   SignalEnvelopes.command({
     id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
@@ -256,6 +286,9 @@ await context.commandBus().post(
 The generated v4 record declares `ApproveProjectSchema` as the input and
 `ScheduleProjectSchema` as the emitted Command schema; registry ingestion, not
 manual decorator materialization, constructs the output-bearing metadata.
+Application builds emit the record to
+`generated/handler/generated-handler-registry.js`; those applications use
+`buildAsync()` with their compiled package root.
 
 One `@Where({ eventField, equals })` equality filter may narrow an event- or
 rejection-consuming `@Subscribe`, `@React`, or `@Command` handler after type
