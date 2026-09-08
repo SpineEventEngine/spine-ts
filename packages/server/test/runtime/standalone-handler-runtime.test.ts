@@ -17,7 +17,8 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages } from "@spine-event-engine/core";
-import { EventSchema, file_spine_options } from "@spine-event-engine/proto";
+import { CommandSchema, EventSchema, file_spine_options } from "@spine-event-engine/proto";
+import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, it } from "vitest";
 
 import { AbstractEventSubscriber } from "../../src/handler/standalone.js";
@@ -26,6 +27,7 @@ import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-r
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type TaskEvent = Message<"TaskEvent"> & { id: string; name: string };
+type AggregateState = Message<"AggregateState"> & { id: string; name: string; archived: boolean };
 
 const descriptorSet = fromBinary(
   FileDescriptorSetSchema,
@@ -39,6 +41,18 @@ const TaskEventSchema = messageDesc(
   ]),
   1,
 ) as GenMessage<TaskEvent>;
+const stateDescriptorSet = fromBinary(
+  FileDescriptorSetSchema,
+  Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
+);
+const stateDescriptor = stateDescriptorSet.file[0];
+if (stateDescriptor === undefined) throw new Error("Expected state fixture descriptor.");
+const AggregateStateSchema = messageDesc(
+  fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, stateDescriptor)).toString("base64"), [
+    file_spine_options,
+  ]),
+  1,
+) as GenMessage<AggregateState>;
 
 class FilteredSubscriber extends AbstractEventSubscriber {
   readonly calls: string[] = [];
@@ -49,6 +63,47 @@ class FilteredSubscriber extends AbstractEventSubscriber {
 
   fallback(): void {
     this.calls.push("fallback");
+  }
+}
+
+class StateSubscriber extends AbstractEventSubscriber {
+  readonly states: string[] = [];
+
+  subscribe(state: AggregateState): void {
+    this.states.push(state.id);
+  }
+}
+
+class UndeclaredOutputReceiver extends AbstractEventSubscriber {
+  react(): AggregateState {
+    return create(AggregateStateSchema, { id: "unexpected", name: "Unexpected" });
+  }
+}
+
+class EmptyCommandReceiver extends AbstractEventSubscriber {
+  substitute(): undefined {
+    return undefined;
+  }
+}
+
+class ContextSubscriber extends AbstractEventSubscriber {
+  context: unknown;
+
+  subscribe(_event: TaskEvent, context: unknown): void {
+    void _event;
+    this.context = context;
+  }
+}
+
+class EmptyReactor extends AbstractEventSubscriber {
+  react(): null {
+    return null;
+  }
+}
+
+class ProducingReactor extends AbstractEventSubscriber {
+  react(): readonly TaskEvent[] {
+    return [create(TaskEventSchema, { id: "produced", name: "Produced" })];
   }
 }
 
@@ -93,4 +148,322 @@ describe("StandaloneHandlerRuntime", () => {
 
     expect(receiver.calls).toEqual(["selected"]);
   });
+
+  it("advertises external standalone subscribers and preserves their @Where selection", async () => {
+    const receiver = new FilteredSubscriber();
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: FilteredSubscriber,
+      handlers: [
+        {
+          kind: "event-subscription",
+          methodName: "selected",
+          signalSchema: TaskEventSchema,
+          emittedSchemas: [],
+          parameterCount: 1,
+          origin: "external",
+          where: { eventField: "name", equals: "external" },
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      { group, instance: receiver, publisher: {} as never },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected standalone Event dispatcher.");
+
+    expect(dispatcher.externalEventSchemas?.()).toEqual([TaskEventSchema]);
+    await dispatcher.dispatch(
+      create(EventSchema, {
+        id: { value: "external-event" },
+        message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema, { name: "external" })),
+      }),
+    );
+    expect(receiver.calls).toEqual(["selected"]);
+  });
+
+  it("invokes a state subscriber only for its exact new-state schema", async () => {
+    const receiver = new StateSubscriber();
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: StateSubscriber,
+      handlers: [
+        {
+          kind: "state-subscription",
+          methodName: "subscribe",
+          signalSchema: AggregateStateSchema,
+          emittedSchemas: [],
+          parameterCount: 1,
+          origin: "domestic",
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      { group, instance: receiver, publisher: {} as never },
+    ]).stateDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected standalone state dispatcher.");
+
+    await dispatcher.dispatch(
+      stateChanged(
+        AggregateStateSchema,
+        create(AggregateStateSchema, { id: "matching", name: "A" }),
+      ),
+    );
+    await dispatcher.dispatch(
+      stateChanged(TaskEventSchema, create(TaskEventSchema, { id: "mismatch", name: "B" })),
+    );
+
+    expect(receiver.states).toEqual(["matching"]);
+    expect(dispatcher.messageSchemas()).toEqual([EntityLog.EntityStateChangedSchema]);
+  });
+
+  it("rejects an undeclared produced signal before it reaches the publisher", async () => {
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: UndeclaredOutputReceiver,
+      handlers: [
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          signalSchema: TaskEventSchema,
+          emittedSchemas: [TaskEventSchema],
+          parameterCount: 1,
+          origin: "domestic",
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      { group, instance: new UndeclaredOutputReceiver(), publisher: {} as never },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected standalone Event dispatcher.");
+
+    await expect(
+      dispatcher.dispatch(
+        create(EventSchema, {
+          id: { value: "undeclared-output" },
+          message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+        }),
+      ),
+    ).rejects.toThrow('Standalone handler "react" returned an undeclared signal.');
+  });
+
+  it("rejects missing standalone methods and an empty runtime binding list", () => {
+    expect(() => new StandaloneHandlerRuntime([])).toThrow(
+      "Standalone handler runtime requires a SignalPublisher.",
+    );
+    expect(
+      () =>
+        new StandaloneHandlerRuntime([
+          {
+            group: {
+              receiverKind: "standalone",
+              receiverType: StateSubscriber,
+              handlers: [
+                {
+                  kind: "event-subscription",
+                  methodName: "missing",
+                  signalSchema: TaskEventSchema,
+                  emittedSchemas: [],
+                  parameterCount: 1,
+                  origin: "domestic",
+                },
+              ],
+            },
+            instance: new StateSubscriber(),
+            publisher: {} as never,
+          },
+        ]),
+    ).toThrow('Standalone receiver is missing method "missing".');
+  });
+
+  it("rejects incomplete Command and Event envelopes before handler invocation", async () => {
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: EmptyCommandReceiver,
+      handlers: [
+        {
+          kind: "command-substitution",
+          methodName: "substitute",
+          signalSchema: TaskEventSchema,
+          emittedSchemas: [TaskEventSchema],
+          parameterCount: 1,
+          origin: "domestic",
+        },
+        {
+          kind: "event-subscription",
+          methodName: "substitute",
+          signalSchema: TaskEventSchema,
+          emittedSchemas: [],
+          parameterCount: 1,
+          origin: "domestic",
+        },
+      ],
+    };
+    const runtime = new StandaloneHandlerRuntime([
+      { group, instance: new EmptyCommandReceiver(), publisher: {} as never },
+    ]);
+    const command = runtime.commandDispatcher();
+    const event = runtime.eventDispatcher();
+    if (command === undefined || event === undefined) throw new Error("Expected both dispatchers.");
+
+    await expect(
+      command.dispatch(create(CommandSchema, { id: { uuid: "missing-command" } })),
+    ).rejects.toThrow("Standalone command handler requires a message.");
+    await expect(
+      event.dispatch(create(EventSchema, { id: { value: "missing-event" } })),
+    ).rejects.toThrow("Standalone event handler requires a message.");
+    expect(runtime.stateDispatcher()).toBeUndefined();
+  });
+
+  it("rejects empty Command output from a standalone commander", async () => {
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: EmptyCommandReceiver,
+      handlers: [
+        {
+          kind: "command-substitution",
+          methodName: "substitute",
+          signalSchema: TaskEventSchema,
+          emittedSchemas: [TaskEventSchema],
+          parameterCount: 1,
+          origin: "domestic",
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      { group, instance: new EmptyCommandReceiver(), publisher: {} as never },
+    ]).commandDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Command dispatcher.");
+
+    await expect(
+      dispatcher.dispatch(
+        create(CommandSchema, {
+          id: { uuid: "empty-output" },
+          message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+        }),
+      ),
+    ).rejects.toThrow('Standalone command-substitution "substitute" must return a signal.');
+  });
+
+  it("passes the Event context to a two-parameter standalone subscriber", async () => {
+    const receiver = new ContextSubscriber();
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: ContextSubscriber,
+      handlers: [
+        {
+          kind: "event-subscription",
+          methodName: "subscribe",
+          signalSchema: TaskEventSchema,
+          emittedSchemas: [],
+          parameterCount: 2,
+          origin: "domestic",
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      { group, instance: receiver, publisher: {} as never },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+    const event = create(EventSchema, {
+      id: { value: "context" },
+      context: { external: true },
+      message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+    });
+
+    await dispatcher.dispatch(event);
+
+    expect(receiver.context).toEqual(event.context);
+  });
+
+  it("allows a reactor to return no Event", async () => {
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: EmptyReactor,
+      handlers: [
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          signalSchema: TaskEventSchema,
+          emittedSchemas: [TaskEventSchema],
+          parameterCount: 1,
+          origin: "domestic",
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      { group, instance: new EmptyReactor(), publisher: {} as never },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+
+    await expect(
+      dispatcher.dispatch(
+        create(EventSchema, {
+          id: { value: "empty-reactor" },
+          message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("publishes an array of reactor Events with Event ancestry", async () => {
+    const published: unknown[] = [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: ProducingReactor,
+      handlers: [
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          signalSchema: TaskEventSchema,
+          emittedSchemas: [TaskEventSchema],
+          parameterCount: 1,
+          origin: "domestic",
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: new ProducingReactor(),
+        publisher: {
+          publishEvent: (event: unknown) => {
+            published.push(event);
+            return Promise.resolve();
+          },
+        } as never,
+      },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+
+    await dispatcher.dispatch(
+      create(EventSchema, {
+        id: { value: "source-event" },
+        message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+      }),
+    );
+
+    expect(published).toHaveLength(1);
+  });
 });
+
+function stateChanged(schema: GenMessage<Message>, state: Message) {
+  return create(EventSchema, {
+    id: { value: "state-change" },
+    message: AnyMessages.pack(
+      EntityLog.EntityStateChangedSchema,
+      create(EntityLog.EntityStateChangedSchema, {
+        entity: {
+          id: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+          typeUrl: schema.typeName,
+        },
+        newState: AnyMessages.pack(schema, state as never),
+        signalId: [
+          {
+            id: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+            typeUrl: TaskEventSchema.typeName,
+          },
+        ],
+      }),
+    ),
+  });
+}
