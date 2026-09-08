@@ -369,6 +369,20 @@ construction, module boundaries, or OOP shape. A fresh existing `implementer`
 receives this single batch with exclusive responsibility, explicit
 `gpt-5.6-terra` / medium dispatch, and no subagents.
 
+Commit `dda81fa9d` implements all seven targeted corrections. Focused
+runtime/context/Integration Broker tests pass 104 cases; tooling and generated
+build typechecks, generated-output checks, TSDoc, formatting, and diff checks
+pass. Standalone runtime coverage is 97.95% statements, 93.42% branches, and
+100% functions/lines. The scoped coverage process fails only the unrelated
+repository-wide aggregate threshold. `docs:api:check` still names three removed
+T-0225 exports (`CommandTransformationHandlerMetadata`,
+`DispatchErrorSnapshot`, and `StoredEventDispatchFailure`); this remains an
+active documentation/contract cleanup item, not baseline debt.
+
+The same two independent reviewers receive one final narrow verification of
+their seven findings against `1bacc57e2..dda81fa9d`, with their existing
+explicit `gpt-5.6-terra` / high profiles, read-only and without subagents.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
