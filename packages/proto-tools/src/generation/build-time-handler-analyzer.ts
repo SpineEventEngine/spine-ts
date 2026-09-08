@@ -1066,10 +1066,7 @@ const HandlerSources = Object.freeze({
     }
     const declaration = symbol?.declarations?.find(ts.isClassDeclaration);
     if (declaration !== undefined) return declaration;
-    const type = checker.getTypeAtLocation(expression) as Omit<ts.Type, "symbol"> & {
-      readonly symbol?: ts.Symbol;
-    };
-    const declarations = type.symbol?.declarations;
+    const declarations = checker.getTypeAtLocation(expression).getSymbol()?.declarations;
     return declarations === undefined ? undefined : declarations.find(ts.isClassDeclaration);
   },
 

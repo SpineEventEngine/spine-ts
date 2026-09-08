@@ -144,7 +144,11 @@ describe("build-time handler analyzer", () => {
           import { TaskListSchema } from "../generated/task_list_pb.js";
           import { type TaskCreated } from "../generated/events_pb.js";
 
-          class MessageBoardBootstrap extends (undefined as never) {}
+          declare const BootstrapBase: any;
+          class MessageBoardBootstrap extends BootstrapBase {}
+          export class InvalidBootstrapHandler extends BootstrapBase {
+            @Subscribe observe(): void {}
+          }
           export class TaskProcessManager extends ProcessManager<string, typeof TaskListSchema, number> {
             @Subscribe observe(event: TaskCreated): void { void event; }
           }
@@ -152,7 +156,10 @@ describe("build-time handler analyzer", () => {
       ),
     );
 
-    expect(result.diagnostics).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "MISSING_ENTITY_STATE_SCHEMA",
+      "INVALID_PARAMETER_COUNT",
+    ]);
     expect(result.entities.map((entity) => entity.className)).toEqual(["TaskProcessManager"]);
   });
 
