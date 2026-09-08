@@ -263,6 +263,25 @@ changes. A fresh existing `implementer` role receives exclusive responsibility
 for those last integration cases, explicitly dispatched as `gpt-5.6-terra` /
 medium with no subagents and no production overlap.
 
+The final integration commit `8a5da6938` adds rejection routing for Commander,
+Reactor, and Subscriber; context-local Command-to-Command and Event-to-Event
+delivery; contained produced-command failure with later sibling delivery; and
+immediate-close drain. Focused suites passed 88 cases. Server, generated-build,
+and tooling typechecks; fixture reproducibility; scoped lint and formatting;
+and diff checks passed. Standalone runtime coverage reached 96.70% statements,
+91.42% branches, and 100% functions/lines.
+
+The standalone runtime task review freezes `1bacc57e2..8a5da6938` after a
+lightweight pre-review scan. The scan found no accidental public export or
+active compatibility claim; obsolete version and transformation wording is
+confined to clearly historical records. Two relevant existing reviewers run as
+one task wave: `style_maintainability_reviewer` for module depth, OOP shape,
+public registration documentation, and test maintainability; and
+`performance_reliability_reviewer` for routing, publication, lifecycle, and
+failure correctness. Both are explicitly dispatched with `gpt-5.6-terra` and
+high reasoning, read-only, without subagents. Findings are collected before a
+single correction batch.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
