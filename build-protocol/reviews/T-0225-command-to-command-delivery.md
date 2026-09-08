@@ -393,6 +393,17 @@ registry-root context using a concrete `AbstractEventSubscriber` registered
 through `addEventDispatcher()`, and prove both `ExternalEventsWanted` and
 imported delivery. Every other targeted finding is closed.
 
+Commit `ccf1c6133` replaces the bypassing proof with a temporary generated
+registry root, a concrete `AbstractEventSubscriber` registered through
+`addEventDispatcher()`, and `buildAsync()`. It verifies the external interest
+and imported invocation. Focused Integration Broker and Bounded Context tests
+pass 92 cases; tooling/generated typechecks, generated-output, TSDoc,
+formatting, and diff checks pass. Full-file lint still reports 25 stale
+`as never` assertions outside this narrow correction; they remain an active
+branch-wide preflight item. The style reviewer receives one final read-only
+verification of this single finding with its existing explicit
+`gpt-5.6-terra` / high profile and no subagents.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
