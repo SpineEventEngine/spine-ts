@@ -186,6 +186,14 @@ The reviewer found no implementation defect; the missing proof is the complete
 accepted correction batch. Its narrow Process Manager ordering/failure
 diagnostic passed 2 tests.
 
+The correction commit `0c8dff589` adds the two missing lifecycle regressions.
+Both tests were GREEN against the existing production behavior, so no runtime
+code changed. Focused Command Bus, runtime, and Bounded Context tests passed 102
+cases; server typecheck, focused lint and formatting, and diff checks passed.
+The same independent `performance_reliability_reviewer` re-reviews only this
+accepted finding across `5d3daa068..0c8dff589`, again with explicitly selected
+`gpt-5.6-terra` and high reasoning, read-only and without subagents.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
