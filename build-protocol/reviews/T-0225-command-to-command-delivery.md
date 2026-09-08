@@ -482,6 +482,12 @@ header blank-line spacing. Generation remained clean. The same
 final-convergence implementer receives this exact five-file mechanical fix with
 its explicit `gpt-5.6-terra` / medium profile and no subagents.
 
+Commit `a34ebb50c` adds the four required Proto headers, corrects the test header
+spacing, and updates the deterministic descriptor fixture required by the Proto
+source change. Copyright, fixture reproducibility, 14 registry tests, focused
+lint, formatting, and diff checks pass. The same read-only Luna/medium function
+reruns the identical canonical preflight.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
