@@ -494,6 +494,11 @@ and `handler-metadata.ts`. Generation remained clean. The same
 final-convergence implementer receives this two-file mechanical formatting fix
 with its explicit `gpt-5.6-terra` / medium profile and no subagents.
 
+Commit `4070c59ef` applies only repository formatting to the two files.
+Repository formatting, tooling typecheck, 100 focused context/metadata tests,
+and diff checks pass. The same read-only Luna/medium function reruns the
+identical canonical preflight.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
