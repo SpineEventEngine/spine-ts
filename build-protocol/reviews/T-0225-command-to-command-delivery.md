@@ -462,6 +462,14 @@ formatting, and diff checks pass. The same read-only preflight function reruns
 the identical canonical command with its explicit `gpt-5.6-luna` / medium
 profile and no subagents.
 
+The second preflight cleared TypeScript and stopped before tests on four
+T-0225 cleanup findings: overlong lines in `bounded-context.ts` and
+`generated-handler-registry.ts`, plus the five-component names
+`catchUpErrorMessageLimit` and `assertUniqueStandaloneCommandReceptors`.
+Generation remained clean. The same final-convergence implementer receives
+these four mechanical production corrections with its explicit
+`gpt-5.6-terra` / medium profile and no subagents; behavior must not change.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
