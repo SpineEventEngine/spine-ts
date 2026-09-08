@@ -134,6 +134,9 @@ export function Command<This extends object, Parameters extends readonly unknown
 
 /**
  * Creates command-handler decorator metadata or a schema-bearing decorator.
+ * Command input declares a Process Manager transformation; Event or rejection
+ * input declares an Event Bus command reaction. Schema-bearing metadata cannot
+ * provide generated emitted schemas and is rejected during materialization.
  *
  * @param schemaOrValue Command schema or decorated method implementation.
  * @param context Standard decorator context for bare usage.

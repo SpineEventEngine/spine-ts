@@ -287,8 +287,10 @@ interface GeneratedRegistryOperations {
   validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void;
   validateSchema(schema: DescriptorMessageSchema, label: string): void;
   validateEmits(handler: GeneratedHandlerRecordInput): void;
+  validateCommandRoles(handler: GeneratedHandlerRecordInput): void;
   validateSubscription(handler: GeneratedHandlerRecordInput): void;
   validateWhere(handler: GeneratedHandlerRecordInput): void;
+  isCommandSchema(schema: DescriptorMessageSchema): boolean;
   isLegacyEventSchema(schema: DescriptorMessageSchema): boolean;
   isKind(kind: string): kind is GeneratedHandlerKind;
 }
@@ -459,6 +461,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
         `emitted schema ${String(index)} for generated handler "${handler.methodName}"`,
       );
     });
+    GeneratedRegistry.validateCommandRoles(handler);
     GeneratedRegistry.validateWhere(handler);
 
     if (handler.kind === "event-subscription" || handler.kind === "state-subscription") {
@@ -520,6 +523,35 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     );
   },
 
+  validateCommandRoles(handler: GeneratedHandlerRecordInput): void {
+    if (handler.kind !== "command-transformation" && handler.kind !== "command-reaction") {
+      return;
+    }
+    if (
+      handler.kind === "command-transformation" &&
+      !GeneratedRegistry.isCommandSchema(handler.signalSchema)
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        `Generated command transformation "${handler.methodName}" must declare a Command input schema.`,
+      );
+    }
+    if (
+      handler.kind === "command-reaction" &&
+      !GeneratedRegistry.isLegacyEventSchema(handler.signalSchema)
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        `Generated command reaction "${handler.methodName}" must declare an Event or rejection input schema.`,
+      );
+    }
+    if (handler.emittedSchemas.every((schema) => GeneratedRegistry.isCommandSchema(schema))) return;
+    throw new HandlerRegistryIngestionError(
+      "INVALID_SCHEMA",
+      `Generated @Command handler "${handler.methodName}" must declare Command outputs.`,
+    );
+  },
+
   validateSubscription(handler: GeneratedHandlerRecordInput): void {
     if (handler.emittedSchemas.length === 0) {
       return;
@@ -571,12 +603,25 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     return (
       fileName === "events" ||
       fileName === "events.proto" ||
+      fileName?.endsWith("_event") === true ||
+      fileName?.endsWith("_event.proto") === true ||
       fileName?.endsWith("_events") === true ||
       fileName?.endsWith("_events.proto") === true ||
       fileName === "rejections" ||
       fileName?.endsWith("_rejections") === true ||
       RejectionSources.matches(schema.file.name) ||
       schema.typeName === "spine.core.Event"
+    );
+  },
+
+  isCommandSchema(schema: DescriptorMessageSchema): boolean {
+    const fileName = schema.file.name.split(/[\\/]/u).at(-1);
+    return (
+      schema.typeName === "spine.core.Command" ||
+      fileName === "commands" ||
+      fileName === "commands.proto" ||
+      fileName?.endsWith("_commands") === true ||
+      fileName?.endsWith("_commands.proto") === true
     );
   },
 

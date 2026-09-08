@@ -182,13 +182,42 @@ Only Process Manager repositories support `@Command` handlers. Aggregate and
 Projection repositories reject command-input transformations and event- or
 rejection-input command reactions during generated metadata ingestion and
 repository construction.
-Event- and rejection-input `@Command` methods remain Event Bus reactions.
+Event- and rejection-input `@Command` methods remain Event- or
+rejection-to-command reactions on Event Bus.
 Produced commands retain the source actor, tenant, origin, and causal lineage.
 The enqueue is post-commit best effort, not an atomic outbox or exactly-once
 delivery: a process crash between commit and enqueue can lose a child. Accepted
 follow-ups drain during context close. A contained child failure is diagnosed,
 but does not retroactively fail an already accepted source command or durably
 retry that child.
+
+For a generated Process Manager, a command-input handler uses distinct domain
+Command input and output types, and the generated registry supplies those
+schemas:
+
+```ts
+class ApprovalCoordinator extends ProcessManager<ProjectId, typeof ApprovalStateSchema, number> {
+  @Command
+  approve(command: ApproveProject, context: CommandContext): ScheduleProject {
+    return create(ScheduleProjectSchema, { project: command.project, status: command.status });
+  }
+}
+
+const context = await BoundedContext.singleTenant("Projects")
+  .withGeneratedRegistryRoot(generatedRegistryRoot)
+  .add(ApprovalCoordinator)
+  .buildAsync();
+await context.commandBus().post(
+  SignalEnvelopes.command({
+    schema: ApproveProjectSchema,
+    message: create(ApproveProjectSchema, { project, status: "approved" }),
+  }),
+);
+```
+
+The generated v4 record declares `ApproveProjectSchema` as the input and
+`ScheduleProjectSchema` as the emitted Command schema; registry ingestion, not
+manual decorator materialization, constructs the output-bearing metadata.
 
 One `@Where({ eventField, equals })` equality filter may narrow an event- or
 rejection-consuming `@Subscribe`, `@React`, or `@Command` handler after type

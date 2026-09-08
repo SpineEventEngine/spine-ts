@@ -81,6 +81,11 @@ class GeneratedProjection extends Projection<string, GenMessage<ProjectionState>
     return createTransformedTaskCommand(command);
   }
 
+  commandFromEvent(event: Message<"spine.core.Event">): TransformedTaskCommand {
+    void event;
+    return create(TransformedTaskCommandSchema, { id: "event", name: "reaction" });
+  }
+
   subscribeCreated(event: Message<"spine.core.Event">): void {
     void event;
   }
@@ -113,6 +118,11 @@ class GeneratedProcessManager extends ProcessManager<
 
   commandFromCommand(command: ValidatedTaskCommand): TransformedTaskCommand {
     return createTransformedTaskCommand(command);
+  }
+
+  commandFromEvent(event: Message<"spine.core.Event">): TransformedTaskCommand {
+    void event;
+    return create(TransformedTaskCommandSchema, { id: "event", name: "reaction" });
   }
 
   subscribeCreated(event: Message<"spine.core.Event">): void {
@@ -159,14 +169,21 @@ const ProcessManagerStateSchema = messageDesc(
   fileProcessManagerFixture,
   0,
 ) as GenMessage<ProcessManagerState>;
-const fileValidatedTaskCommandFixture = fileDesc(
-  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
-    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
-    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
-    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
-    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
-  [file_spine_options],
-);
+const fileValidatedTaskCommandFixture = (() => {
+  const fixture = fileDesc(
+    "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
+      "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
+      "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
+      "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
+      "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
+    [file_spine_options],
+  );
+  const proto = clone(FileDescriptorProtoSchema, fixture.proto);
+  proto.name = "validation-refusal/commands.proto";
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, proto)).toString("base64"), [
+    file_spine_options,
+  ]);
+})();
 const ValidatedTaskCommandSchema = messageDesc(
   fileValidatedTaskCommandFixture,
   1,
@@ -265,6 +282,44 @@ describe("generated handler registry ingestion", () => {
         ],
       })[0]?.commandTransformations,
     ).toHaveLength(1);
+  });
+
+  it("rejects generated Process Manager @Command records with mismatched signal roles", () => {
+    const registry = (handler: ReturnType<typeof record>) => ({
+      version: 4 as const,
+      entities: [
+        {
+          entityType: GeneratedProcessManager,
+          stateSchema: ProcessManagerStateSchema,
+          handlers: [handler],
+        },
+      ],
+    });
+
+    expect(() =>
+      new HandlerRegistryIngestor().ingest(
+        registry(
+          record("command-transformation", "commandFromCommand", EventSchema, [CommandSchema]),
+        ),
+      ),
+    ).toThrow(/Command input/);
+    expect(() =>
+      new HandlerRegistryIngestor().ingest(
+        registry(
+          record("command-transformation", "commandFromCommand", CommandSchema, [EventSchema]),
+        ),
+      ),
+    ).toThrow(/Command outputs/);
+    expect(() =>
+      new HandlerRegistryIngestor().ingest(
+        registry(record("command-reaction", "commandFromCommand", CommandSchema, [CommandSchema])),
+      ),
+    ).toThrow(/Event or rejection input/);
+    expect(() =>
+      new HandlerRegistryIngestor().ingest(
+        registry(record("command-reaction", "commandFromCommand", EventSchema, [EventSchema])),
+      ),
+    ).toThrow(/Command outputs/);
   });
 
   it("rejects generated command transformations for Aggregates", () => {
@@ -413,7 +468,7 @@ describe("generated handler registry ingestion", () => {
           stateSchema: ProcessManagerStateSchema,
           handlers: [
             record("command-assignment", "assignCreate", CommandSchema, [EventSchema], 1),
-            record("command-reaction", "commandFromCommand", CommandSchema, [CommandSchema], 2),
+            record("command-reaction", "commandFromEvent", EventSchema, [CommandSchema], 2),
             record("event-subscription", "subscribeCreated", EventSchema, [], 1),
             record("event-reaction", "reactToCreated", EventSchema, [EventSchema], 2),
           ],
@@ -434,13 +489,13 @@ describe("generated handler registry ingestion", () => {
     ]);
     expect(entity?.handlers.map((handler) => handler.methodName)).toEqual([
       "assignCreate",
-      "commandFromCommand",
+      "commandFromEvent",
       "subscribeCreated",
       "reactToCreated",
     ]);
     expect(entity?.handlers.map((handler) => handler.messageFullTypeName)).toEqual([
       "spine.core.Command",
-      "spine.core.Command",
+      "spine.core.Event",
       "spine.core.Event",
       "spine.core.Event",
     ]);
@@ -878,7 +933,7 @@ describe("generated handler registry ingestion", () => {
   it("rejects empty emitted schemas for command-producing generated handler kinds", () => {
     for (const [kind, methodName, signalSchema] of [
       ["command-assignment", "assignCreate", CommandSchema],
-      ["command-reaction", "commandFromCommand", CommandSchema],
+      ["command-reaction", "commandFromEvent", EventSchema],
     ] as const) {
       expect(() =>
         new HandlerRegistryIngestor().ingest({

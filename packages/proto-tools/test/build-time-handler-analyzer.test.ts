@@ -84,6 +84,57 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
+  it("rejects @Command inherited through Aggregate and Projection domain bases", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/inherited-command.ts",
+        `
+          import { Aggregate, Command, Projection } from "@spine-event-engine/server";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { TaskListSchema } from "../generated/task_list_pb.js";
+          import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+
+          abstract class DomainAggregate extends Aggregate<string, typeof TaskSchema, bigint> {}
+          abstract class DomainProjection extends Projection<string, typeof TaskListSchema, number> {}
+
+          export class InheritedAggregate extends DomainAggregate {
+            @Command transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
+          }
+          export class InheritedProjection extends DomainProjection {
+            @Command transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
+          }
+        `,
+      ),
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_COMMAND_HANDLER",
+      "UNSUPPORTED_COMMAND_HANDLER",
+    ]);
+  });
+
+  it("accepts @Command inherited through a Process Manager domain base", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/inherited-process-manager-command.ts",
+        `
+          import { Command, ProcessManager } from "@spine-event-engine/server";
+          import { TaskListSchema } from "../generated/task_list_pb.js";
+          import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+
+          abstract class DomainProcessManager extends ProcessManager<string, typeof TaskListSchema, number> {}
+          export class InheritedProcessManager extends DomainProcessManager {
+            @Command transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.entities[0]?.handlers[0]?.kind).toBe("command-transformation");
+  });
+
   it("discovers bare handler decorators and generated schema references", () => {
     const result = analyzeBuildHandlers(programWithSource("src/task.ts", validTaskSource));
 

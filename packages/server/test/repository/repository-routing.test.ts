@@ -622,6 +622,7 @@ const ValidatedTaskCommandSchema = messageDesc(
 ) as GenMessage<ValidatedTaskCommand>;
 const fileCommandTransformationFixture = (() => {
   const descriptor = clone(FileDescriptorProtoSchema, fileValidationRefusalFixture.proto);
+  descriptor.name = "validation_refusal_commands.proto";
   const command = descriptor.messageType.find((message) => message.name === "ValidatedTaskCommand");
   if (command === undefined) throw new Error("Command transformation input fixture is missing.");
   const output = clone(DescriptorProtoSchema, command);

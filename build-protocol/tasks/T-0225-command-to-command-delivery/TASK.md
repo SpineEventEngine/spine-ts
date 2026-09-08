@@ -1,6 +1,6 @@
 # T-0225: Command-to-Command Delivery
 
-Status: Final verification passed; ready for human review
+Status: Superseded by active inheritance and generated-schema-role correction
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`

@@ -357,3 +357,24 @@ and repository construction; removes Aggregate command-reaction and
 transformation execution; and keeps Process Manager command reactions and
 transformations. The prior release evidence predates this correction and is not
 current release evidence.
+
+## Independent follow-up review wave
+
+Explicit dispatch fields were recorded for every reviewer; runtime
+self-introspection was unavailable and no fallback was visible. Findings were
+returned to the existing Terra/medium implementation owner as one batch:
+
+- Style/maintainability (`gpt-5.6-terra`, `high`): P1 inherited entity-family
+  analysis and P2 stale status/work-log disposition.
+- TypeScript/API specification (`gpt-5.6-terra`, `high`): P1 generated-registry
+  Command/Event/rejection schema-role validation and P3 `@Command` overload
+  TSDoc.
+- Performance/reliability (`gpt-5.6-terra`, `high`): clean after 498 focused
+  tests; no new lifecycle or follow-up defect.
+- Reader documentation (`gpt-5.6-luna`, `medium`): P2 current status/work-log
+  wording and P3 runnable Process Manager example and reaction terminology.
+
+The correction adds inheritance-aware Aggregate/Projection rejection, strict
+generated `@Command` schema-role validation, and current documentation/record
+dispositions. The earlier final-ready and release assertions remain superseded
+until this correction receives its own final verification.

@@ -706,13 +706,27 @@ values. Generated `@Assign` and command-input `@Command` producer records must
 declare at least one emitted schema. A command-input `@Command` is the unique
 command receptor/transformation for its input and may receive an optional
 `CommandContext`; event- and rejection-input `@Command` handlers are EventBus
-reactions. `@Command` handlers are supported only by Process Manager
+reactions. Event- or rejection-to-command `@Command` handlers are supported only by Process Manager
 repositories. Aggregate and Projection repositories reject command-input
 transformations and event- or rejection-input command reactions during generated
 ingestion and repository construction. `@React` records may return generated event messages
 or explicit `void` with no emitted schemas. `@Subscribe` records return
 explicit `void` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
+
+A generated Process Manager command-input handler uses distinct domain Command
+types and can receive `CommandContext`:
+
+```ts
+@Command
+approve(command: ApproveProject, context: CommandContext): ScheduleProject {
+  return create(ScheduleProjectSchema, { project: command.project, status: command.status });
+}
+```
+
+Its v4 generated registry record declares `ApproveProjectSchema` as input and
+`ScheduleProjectSchema` as emitted output; `BoundedContext.buildAsync()` loads
+the registry with `withGeneratedRegistryRoot(root)` before Command Bus posting.
 The public `@spine-event-engine/server/spi/handler-registry` subpath is the
 generated-registry data-contract SPI. Generated source writes v4 and the
 runtime reads legacy v3 registries for compatibility. Generated registry source

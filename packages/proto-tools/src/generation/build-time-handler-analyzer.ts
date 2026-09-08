@@ -408,8 +408,8 @@ const HandlerSources = Object.freeze({
       return undefined;
     }
 
-    const entityBase = HandlerSources.entityBaseName(node, scope.imports);
-    const stateSchema = HandlerSources.entityStateSchema(node, scope.imports);
+    const entityBase = HandlerSources.entityBaseName(node, scope);
+    const stateSchema = HandlerSources.entityStateSchema(node, scope);
     const handlers: BuildHandlerRecord[] = [];
 
     for (const member of node.members) {
@@ -983,63 +983,101 @@ const HandlerSources = Object.freeze({
     return handlerDecorators.has(decorator.name as HandlerDecorator);
   },
 
-  entityStateSchema(node: ts.ClassDeclaration, imports: ImportState): SchemaReference | undefined {
+  entityStateSchema(node: ts.ClassDeclaration, scope: AnalyzerScope): SchemaReference | undefined {
+    return HandlerSources.entityLineage(node, scope)?.stateSchema;
+  },
+
+  entityBaseName(node: ts.ClassDeclaration, scope: AnalyzerScope): string | undefined {
+    return HandlerSources.entityLineage(node, scope)?.base;
+  },
+
+  entityLineage(
+    node: ts.ClassDeclaration,
+    scope: AnalyzerScope,
+    seen: ReadonlySet<ts.ClassDeclaration> = new Set(),
+  ): { readonly base: string; readonly stateSchema: SchemaReference | undefined } | undefined {
+    if (seen.has(node)) return undefined;
+    const nextSeen = new Set(seen);
+    nextSeen.add(node);
+
     for (const clause of node.heritageClauses ?? []) {
       for (const type of clause.types) {
-        if (!HandlerSources.isEntityBase(type.expression, imports)) {
-          continue;
-        }
-
-        const stateType = type.typeArguments?.[1];
-        const reference =
-          stateType === undefined
-            ? undefined
-            : HandlerSources.schemaFromTypeQuery(stateType, imports, HandlerSources.newTypeWalk());
-        if (reference !== undefined) {
-          return reference;
-        }
+        const direct = HandlerSources.directEntityLineage(type, scope);
+        if (direct !== undefined) return direct;
+        const inherited = HandlerSources.inheritedEntityLineage(type.expression, scope, nextSeen);
+        if (inherited !== undefined) return inherited;
       }
     }
 
     return undefined;
   },
 
-  entityBaseName(node: ts.ClassDeclaration, imports: ImportState): string | undefined {
-    for (const clause of node.heritageClauses ?? []) {
-      for (const type of clause.types) {
-        if (ts.isIdentifier(type.expression)) {
-          const base = imports.serverSymbols.get(type.expression.text);
-          if (base !== undefined && entityBaseNames.has(base)) return base;
-        }
-        if (ts.isPropertyAccessExpression(type.expression)) {
-          const namespace = HandlerTypes.expressionName(type.expression.expression);
-          if (
-            namespace !== undefined &&
-            imports.serverNamespaces.has(namespace) &&
-            entityBaseNames.has(type.expression.name.text)
-          ) {
-            return type.expression.name.text;
-          }
-        }
-      }
-    }
-    return undefined;
+  directEntityLineage(
+    type: ts.ExpressionWithTypeArguments,
+    scope: AnalyzerScope,
+  ): { readonly base: string; readonly stateSchema: SchemaReference | undefined } | undefined {
+    const base = HandlerSources.directEntityBaseName(type.expression, scope.imports);
+    if (base === undefined) return undefined;
+    const stateType = type.typeArguments?.[1];
+    const stateSchema =
+      stateType === undefined
+        ? undefined
+        : HandlerSources.schemaFromTypeQuery(
+            stateType,
+            scope.imports,
+            HandlerSources.newTypeWalk(),
+          );
+    return { base, stateSchema };
   },
 
-  isEntityBase(expression: ts.Expression, imports: ImportState): boolean {
+  inheritedEntityLineage(
+    expression: ts.Expression,
+    scope: AnalyzerScope,
+    seen: ReadonlySet<ts.ClassDeclaration>,
+  ): { readonly base: string; readonly stateSchema: SchemaReference | undefined } | undefined {
+    const parent = HandlerSources.classDeclarationFor(expression, scope);
+    if (parent === undefined) return undefined;
+    const source = parent.getSourceFile();
+    return HandlerSources.entityLineage(
+      parent,
+      { ...scope, source, imports: HandlerSources.buildImportState(source, scope.program) },
+      seen,
+    );
+  },
+
+  directEntityBaseName(expression: ts.Expression, imports: ImportState): string | undefined {
     if (ts.isIdentifier(expression)) {
-      return entityBaseNames.has(imports.serverSymbols.get(expression.text) ?? "");
+      const base = imports.serverSymbols.get(expression.text);
+      return base !== undefined && entityBaseNames.has(base) ? base : undefined;
     }
     if (ts.isPropertyAccessExpression(expression)) {
       const namespace = HandlerTypes.expressionName(expression.expression);
-      return (
-        namespace !== undefined &&
+      return namespace !== undefined &&
         imports.serverNamespaces.has(namespace) &&
         entityBaseNames.has(expression.name.text)
-      );
+        ? expression.name.text
+        : undefined;
     }
+    return undefined;
+  },
 
-    return false;
+  classDeclarationFor(
+    expression: ts.Expression,
+    scope: AnalyzerScope,
+  ): ts.ClassDeclaration | undefined {
+    const checker = scope.program.getTypeChecker();
+    const location = ts.isPropertyAccessExpression(expression) ? expression.name : expression;
+    let symbol = checker.getSymbolAtLocation(location);
+    if (symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0) {
+      symbol = checker.getAliasedSymbol(symbol);
+    }
+    const declaration = symbol?.declarations?.find(ts.isClassDeclaration);
+    if (declaration !== undefined) return declaration;
+    return checker.getTypeAtLocation(expression).symbol.declarations?.find(ts.isClassDeclaration);
+  },
+
+  isEntityBase(expression: ts.Expression, imports: ImportState): boolean {
+    return HandlerSources.directEntityBaseName(expression, imports) !== undefined;
   },
 
   schemaFromTypeQuery(

@@ -84,6 +84,21 @@ and event- or rejection-input reaction metadata during generated ingestion and
 repository construction; registry and handler-registration types remain generic
 and do not provide compile-time rejection.
 
+For a generated Process Manager, a command-input `@Command` method returns a
+distinct generated Command and may receive `CommandContext`:
+
+```ts
+@Command
+approve(command: ApproveProject, context: CommandContext): ScheduleProject {
+  return create(ScheduleProjectSchema, { project: command.project, status: command.status });
+}
+```
+
+The generated v4 registry records `ApproveProjectSchema` as the input and
+`ScheduleProjectSchema` as the emitted schema. `BoundedContext.buildAsync()`
+loads that registry through `withGeneratedRegistryRoot(root)` before callers
+post `ApproveProject` through the Command Bus.
+
 Generated registry modules are build artifacts under ignored `generated/`
 directories. T-0015c implements the build-time analyzer that extracts
 structured handler records. T-0015d adds the internal writer that turns those
