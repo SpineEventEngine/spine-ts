@@ -166,10 +166,15 @@ export interface GeneratedEntityHandlerGroup {
   readonly handlers: readonly GeneratedHandlerRecordInput[];
 }
 
+/** Constructor shape for a standalone receiver; it is not an Entity class. */
+export interface StandaloneReceiverConstructor {
+  readonly prototype: object;
+}
+
 /** Metadata for one decorated standalone application instance. */
 export interface GeneratedStandaloneHandlerGroup {
   readonly receiverKind: "standalone";
-  readonly receiverType: EntityClass;
+  readonly receiverType: StandaloneReceiverConstructor;
   readonly handlers: readonly GeneratedHandlerRecordInput[];
 }
 
@@ -269,6 +274,7 @@ interface GeneratedRegistryOperations {
     handler: GeneratedHandlerRecordInput,
   ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>;
   validateHandler(handler: GeneratedHandlerRecordInput): void;
+  validateReceiver(receiver: unknown): asserts receiver is GeneratedReceiver;
   validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void;
   validateStandalone(receiver: GeneratedStandaloneHandlerGroup): void;
   validateSchema(schema: DescriptorMessageSchema, label: string): void;
@@ -297,6 +303,47 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
         "Generated handler registry must declare an unversioned receivers array; regenerate generated handler metadata.",
       );
     }
+    receivers.forEach((receiver) => GeneratedRegistry.validateReceiver(receiver));
+  },
+
+  validateReceiver(receiver: unknown): asserts receiver is GeneratedReceiver {
+    if (receiver === null || typeof receiver !== "object") {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated receiver must be an object.",
+      );
+    }
+    const value = receiver as Record<string, unknown>;
+    if (value.receiverKind !== "entity" && value.receiverKind !== "standalone") {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated receiver must declare a supported receiver kind.",
+      );
+    }
+    if (typeof value.receiverType !== "function" || value.receiverType.prototype === undefined) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated receiver must declare a constructor.",
+      );
+    }
+    if (!Array.isArray(value.handlers)) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated receiver must declare a handlers array.",
+      );
+    }
+    if (
+      value.receiverKind === "entity" &&
+      (value.stateSchema === undefined || value.stateSchema === null)
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated Entity receiver must declare a state schema.",
+      );
+    }
+    value.handlers.forEach((handler) =>
+      GeneratedRegistry.validateHandler(handler as GeneratedHandlerRecordInput),
+    );
   },
 
   materializeAll(registry: GeneratedHandlerRegistry): readonly EntityHandlersMetadata[] {
@@ -452,6 +499,25 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   validateHandler(handler: GeneratedHandlerRecordInput): void {
+    if (handler === null || typeof handler !== "object") {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated handler must be an object.",
+      );
+    }
+    const value = handler as unknown as Record<string, unknown>;
+    if (
+      typeof value.kind !== "string" ||
+      typeof value.methodName !== "string" ||
+      !Array.isArray(value.emittedSchemas) ||
+      typeof value.parameterCount !== "number" ||
+      typeof value.origin !== "string"
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated handler has an invalid record shape.",
+      );
+    }
     if (!GeneratedRegistry.isKind(handler.kind)) {
       throw new HandlerRegistryIngestionError(
         "UNSUPPORTED_HANDLER_KIND",

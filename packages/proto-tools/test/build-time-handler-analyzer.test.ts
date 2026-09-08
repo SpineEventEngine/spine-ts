@@ -25,6 +25,12 @@ import { BuildHandlerAnalyzer } from "../src/generation/build-time-handler-analy
 const analyzeBuildHandlers = (...args: Parameters<typeof BuildHandlerAnalyzer.analyze>) =>
   BuildHandlerAnalyzer.analyze(...args);
 
+function entityReceivers(analysis: ReturnType<typeof BuildHandlerAnalyzer.analyze>) {
+  return analysis.receivers
+    .filter((receiver) => receiver.receiverKind === "entity")
+    .map(({ receiverKind: _receiverKind, ...receiver }) => receiver);
+}
+
 describe("build-time handler analyzer", () => {
   it("analyzes nominal standalone command receivers without an Entity state schema", () => {
     const result = analyzeBuildHandlers(
@@ -254,7 +260,7 @@ describe("build-time handler analyzer", () => {
       ),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "UNSUPPORTED_COMMAND_HANDLER",
       "UNSUPPORTED_COMMAND_HANDLER",
@@ -283,7 +289,7 @@ describe("build-time handler analyzer", () => {
       ),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "UNSUPPORTED_COMMAND_HANDLER",
       "UNSUPPORTED_COMMAND_HANDLER",
@@ -313,7 +319,7 @@ describe("build-time handler analyzer", () => {
       ),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "UNSUPPORTED_COMMAND_HANDLER",
       "UNSUPPORTED_COMMAND_HANDLER",
@@ -338,7 +344,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers[0]?.kind).toBe("command-substitution");
+    expect(entityReceivers(result)[0]?.handlers[0]?.kind).toBe("command-substitution");
   });
 
   it("ignores unrelated classes whose heritage type has no symbol", () => {
@@ -366,14 +372,16 @@ describe("build-time handler analyzer", () => {
       "MISSING_ENTITY_STATE_SCHEMA",
       "INVALID_PARAMETER_COUNT",
     ]);
-    expect(result.entities.map((entity) => entity.className)).toEqual(["TaskProcessManager"]);
+    expect(entityReceivers(result).map((entity) => entity.className)).toEqual([
+      "TaskProcessManager",
+    ]);
   });
 
   it("discovers bare handler decorators and generated schema references", () => {
     const result = analyzeBuildHandlers(programWithSource("src/task.ts", validTaskSource));
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities).toEqual([
+    expect(entityReceivers(result)).toEqual([
       {
         className: "TaskProcessManager",
         sourceFile: "src/task.ts",
@@ -453,7 +461,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers[0]).toEqual({
+    expect(entityReceivers(result)[0]?.handlers[0]).toEqual({
       kind: "command-assignment",
       methodName: "create",
       origin: "domestic",
@@ -479,7 +487,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers[0]).toEqual({
+    expect(entityReceivers(result)[0]?.handlers[0]).toEqual({
       kind: "event-subscription",
       methodName: "observe",
       origin: "domestic",
@@ -501,7 +509,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers).toEqual([
+    expect(entityReceivers(result)[0]?.handlers).toEqual([
       {
         kind: "state-subscription",
         methodName: "observe",
@@ -532,7 +540,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities[0]?.handlers).toEqual([
+    expect(entityReceivers(result)[0]?.handlers).toEqual([
       {
         kind: "state-subscription",
         methodName: "observeForeign",
@@ -570,7 +578,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers).toEqual(
+    expect(entityReceivers(result)[0]?.handlers).toEqual(
       roles.map(([, methodName, , kind, emittedSchemas, parameterCount]) => ({
         kind,
         methodName,
@@ -617,7 +625,9 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers.map(({ kind, where }) => ({ kind, where }))).toEqual([
+    expect(
+      entityReceivers(result)[0]?.handlers.map(({ kind, where }) => ({ kind, where })),
+    ).toEqual([
       {
         kind: "event-subscription",
         where: { eventField: "board", equals: "announcements" },
@@ -691,7 +701,7 @@ describe("build-time handler analyzer", () => {
       ),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual(
       [
         "variable",
@@ -733,7 +743,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics).toEqual([
       expect.objectContaining({ code: "INVALID_WHERE", methodName: "state" }),
     ]);
@@ -762,7 +772,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers[0]).toMatchObject({
+    expect(entityReceivers(result)[0]?.handlers[0]).toMatchObject({
       kind: "event-subscription",
       where: { eventField: "board", equals: "announcements" },
     });
@@ -791,7 +801,7 @@ describe("build-time handler analyzer", () => {
       ),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual(
       roles.map(([, methodName, , , code]) => [code, methodName]),
     );
@@ -837,7 +847,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual(
       roles.map(([methodName]) => ["INVALID_SIGNAL_TYPE", methodName]),
     );
@@ -866,7 +876,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
       ["INVALID_SIGNAL_TYPE", "observe"],
     ]);
@@ -888,7 +898,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_SIGNAL_TYPE",
     ]);
@@ -914,7 +924,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_SIGNAL_TYPE",
       "INVALID_EMITTED_SCHEMA",
@@ -936,7 +946,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_SIGNAL_TYPE",
     ]);
@@ -959,7 +969,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_SIGNAL_TYPE",
       "INVALID_EMITTED_SCHEMA",
@@ -986,7 +996,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_SIGNAL_TYPE",
       "INVALID_SIGNAL_TYPE",
@@ -1014,7 +1024,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.stateSchema).toEqual(
+    expect(entityReceivers(result)[0]?.stateSchema).toEqual(
       schema("../generated/state_pb.js", "TaskSchema"),
     );
   });
@@ -1040,7 +1050,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers[0]?.signalSchema).toEqual(
+    expect(entityReceivers(result)[0]?.handlers[0]?.signalSchema).toEqual(
       schema("../generated/domain_pb.js", "CreateTaskSchema"),
     );
   });
@@ -1049,7 +1059,7 @@ describe("build-time handler analyzer", () => {
     const result = analyzeBuildHandlers(programWithSource("src/reaction.ts", noEmissionSource));
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities).toEqual([
+    expect(entityReceivers(result)).toEqual([
       {
         className: "TaskProjection",
         sourceFile: "src/reaction.ts",
@@ -1071,7 +1081,7 @@ describe("build-time handler analyzer", () => {
   it("rejects void Assign and Command handlers", () => {
     const result = analyzeBuildHandlers(programWithSource("src/void.ts", voidEmissionSource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_EMITTED_SCHEMAS",
       "MISSING_EMITTED_SCHEMAS",
@@ -1085,7 +1095,7 @@ describe("build-time handler analyzer", () => {
   it("rejects no-emission React handlers with empty tuple returns", () => {
     const result = analyzeBuildHandlers(programWithSource("src/tuple.ts", emptyTupleReactSource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_EMITTED_SCHEMAS",
     ]);
@@ -1096,7 +1106,7 @@ describe("build-time handler analyzer", () => {
     const result = analyzeBuildHandlers(programWithSource("src/string-name.ts", stringNameSource));
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers).toEqual([
+    expect(entityReceivers(result)[0]?.handlers).toEqual([
       {
         kind: "command-assignment",
         methodName: 'create\u2028"task"\nnext',
@@ -1111,7 +1121,7 @@ describe("build-time handler analyzer", () => {
   it("reports deterministic diagnostics for unsupported decorator and signature shapes", () => {
     const result = analyzeBuildHandlers(programWithSource("src/bad.ts", invalidSource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_ENTITY_STATE_SCHEMA",
       "SCHEMA_BEARING_DECORATOR",
@@ -1139,7 +1149,7 @@ describe("build-time handler analyzer", () => {
   it("requires decorated entity classes to be exported", () => {
     const result = analyzeBuildHandlers(programWithSource("src/local.ts", localEntitySource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "NON_EXPORTED_RECEIVER_CLASS",
     ]);
@@ -1155,9 +1165,9 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(namedResult.diagnostics).toEqual([]);
-    expect(namedResult.entities[0]?.className).toBe("ListedAggregate");
+    expect(entityReceivers(namedResult)[0]?.className).toBe("ListedAggregate");
     expect(defaultResult.diagnostics).toEqual([]);
-    expect(defaultResult.entities[0]).toMatchObject({
+    expect(entityReceivers(defaultResult)[0]).toMatchObject({
       className: "DefaultAggregate",
       defaultExport: true,
     });
@@ -1166,7 +1176,7 @@ describe("build-time handler analyzer", () => {
   it("reports deterministic diagnostics for cyclic aliases", () => {
     const result = analyzeBuildHandlers(programWithSource("src/cyclic.ts", cyclicAliasSource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_ENTITY_STATE_SCHEMA",
       "INVALID_SIGNAL_TYPE",
@@ -1184,7 +1194,7 @@ describe("build-time handler analyzer", () => {
       programWithSource("src/invalid-generated.ts", invalidGeneratedSource),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_SIGNAL_TYPE",
       "INVALID_SIGNAL_TYPE",
@@ -1215,7 +1225,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_ENTITY_STATE_SCHEMA",
       "UNSUPPORTED_RETURN_TYPE",
@@ -1233,7 +1243,7 @@ describe("build-time handler analyzer", () => {
   it("validates emitted schema roles for each handler decorator", () => {
     const result = analyzeBuildHandlers(programWithSource("src/roles.ts", invalidRoleSource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_EMITTED_SCHEMA",
       "INVALID_EMITTED_SCHEMA",
@@ -1249,7 +1259,7 @@ describe("build-time handler analyzer", () => {
   it("handles namespace imports, aliases, readonly wrappers, and computed method diagnostics", () => {
     const result = analyzeBuildHandlers(programWithSource("src/oddball.ts", oddballSource));
 
-    expect(result.entities).toEqual([
+    expect(entityReceivers(result)).toEqual([
       {
         className: "OddballAggregate",
         sourceFile: "src/oddball.ts",
@@ -1300,7 +1310,7 @@ describe("build-time handler analyzer", () => {
   it("reports edge diagnostics for tuple members, missing generics, and proto envelopes", () => {
     const result = analyzeBuildHandlers(programWithSource("src/edge.ts", edgeSource));
 
-    expect(result.entities).toEqual([
+    expect(entityReceivers(result)).toEqual([
       {
         className: "EdgeAggregate",
         sourceFile: "src/edge.ts",
@@ -1340,7 +1350,7 @@ describe("build-time handler analyzer", () => {
   it("surfaces TypeScript syntax diagnostics for malformed source", () => {
     const result = analyzeBuildHandlers(programWithSource("src/malformed.ts", malformedSource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "TYPESCRIPT_SYNTAX_ERROR",
     ]);

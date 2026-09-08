@@ -145,7 +145,7 @@ export class GeneratedRegistryWriter {
   /**
    * Renders generated registry source without writing to disk.
    *
-   * @param analysis Analyzed entity handlers to render.
+   * @param analysis Analyzed receiver handlers to render.
    * @param options Caller-owned output and registry naming options.
    * @returns Deterministic generated TypeScript source.
    */
@@ -153,8 +153,7 @@ export class GeneratedRegistryWriter {
     const outputFile = resolve(options.outputFile);
     const registryName = options.registryName ?? defaultRegistryConst;
     const registryModule = options.registryModuleSpecifier ?? defaultRegistryModule;
-    const receivers =
-      analysis.receivers ?? analysis.entities.map((entity) => ({ receiverKind: "entity" as const, ...entity }));
+    const receivers = analysis.receivers;
     const refs = RegistrySource.buildRefs(receivers, outputFile);
 
     RegistrySource.assertRegistryName(registryName, RegistrySource.importNames(refs));
@@ -172,7 +171,7 @@ export class GeneratedRegistryWriter {
   /**
    * Validates and writes generated registry source only when explicitly invoked.
    *
-   * @param analysis Analyzed entity handlers to render and validate.
+   * @param analysis Analyzed receiver handlers to render and validate.
    * @param options Guarded output location and registry naming options.
    * @returns Generated TypeScript source written to the output file.
    */
@@ -237,11 +236,21 @@ const RegistrySource = Object.freeze({
         ref.localName,
       );
       if (receiver.receiverKind === "entity") {
-        RegistrySource.addSchemaRef(schemaRaw, outputFile, receiver.sourceFile, receiver.stateSchema);
+        RegistrySource.addSchemaRef(
+          schemaRaw,
+          outputFile,
+          receiver.sourceFile,
+          receiver.stateSchema,
+        );
       }
 
       for (const handler of receiver.handlers) {
-        RegistrySource.addSchemaRef(schemaRaw, outputFile, receiver.sourceFile, handler.signalSchema);
+        RegistrySource.addSchemaRef(
+          schemaRaw,
+          outputFile,
+          receiver.sourceFile,
+          handler.signalSchema,
+        );
         handler.emittedSchemas.forEach((schema) => {
           RegistrySource.addSchemaRef(schemaRaw, outputFile, receiver.sourceFile, schema);
         });
@@ -273,10 +282,7 @@ const RegistrySource = Object.freeze({
     registryName: string,
     refs: RenderRefs,
   ): readonly string[] {
-    const lines = [
-      `export const ${registryName}: GeneratedHandlerRegistry = {`,
-      "  receivers: [",
-    ];
+    const lines = [`export const ${registryName}: GeneratedHandlerRegistry = {`, "  receivers: ["];
 
     receivers.forEach((receiver) => {
       lines.push(...RegistrySource.renderReceiver(receiver, outputFile, refs));
@@ -286,15 +292,15 @@ const RegistrySource = Object.freeze({
     return lines;
   },
   renderReceiver(
-    entity: BuildReceiverHandlers,
+    receiver: BuildReceiverHandlers,
     outputFile: string,
     refs: RenderRefs,
   ): readonly string[] {
-    const entityType = RegistrySource.entityName(refs, outputFile, entity);
-    const receiverKind = entity.receiverKind ?? "entity";
+    const entityType = RegistrySource.entityName(refs, outputFile, receiver);
+    const receiverKind = receiver.receiverKind;
     const stateSchema =
-      entity.receiverKind === "entity"
-        ? RegistrySource.schemaName(refs, outputFile, entity.sourceFile, entity.stateSchema)
+      receiver.receiverKind === "entity"
+        ? RegistrySource.schemaName(refs, outputFile, receiver.sourceFile, receiver.stateSchema)
         : undefined;
     const lines = [
       "    {",
@@ -304,14 +310,14 @@ const RegistrySource = Object.freeze({
       "      handlers: [",
     ];
 
-    entity.handlers.forEach((handler) => {
+    receiver.handlers.forEach((handler) => {
       const emitted = handler.emittedSchemas
-        .map((schema) => RegistrySource.schemaName(refs, outputFile, entity.sourceFile, schema))
+        .map((schema) => RegistrySource.schemaName(refs, outputFile, receiver.sourceFile, schema))
         .join(", ");
       const signalSchema = RegistrySource.schemaName(
         refs,
         outputFile,
-        entity.sourceFile,
+        receiver.sourceFile,
         handler.signalSchema,
       );
 

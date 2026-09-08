@@ -133,6 +133,17 @@ function domainHandler(kind: string) {
 }
 
 describe("generated handler registry ingestion", () => {
+  it.each([
+    { receivers: [null] },
+    { receivers: [{ receiverKind: "standalone", receiverType: Commander, handlers: null }] },
+    { receivers: [{ receiverKind: "standalone", receiverType: Commander, handlers: [null] }] },
+    { receivers: [{ receiverKind: "standalone", receiverType: Commander, handlers: [{}] }] },
+  ])("rejects malformed generated registry records with an ingestion error", (registry) => {
+    expect(() => new HandlerRegistryIngestor().ingest(registry)).toThrow(
+      HandlerRegistryIngestionError,
+    );
+  });
+
   it.each(roleMatrix)("enforces the handler-kind matrix for %s", (_role, receiverType, allowed) => {
     for (const kind of [
       "command-assignment",

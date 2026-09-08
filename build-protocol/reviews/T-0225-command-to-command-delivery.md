@@ -72,6 +72,55 @@ so production ownership does not overlap.
   authorization, or external trust boundary. Remote rejection behavior remains
   a correctness concern.
 
+## 2026-09-08 contract-layer task review
+
+The corrected registry/analyzer slice spans `32b93582e..5e55ca68d`. The
+existing `typescript_api_docs_reviewer` performs the task-scoped specification
+and code-quality gate because this slice changes the generated TypeScript/SPI
+contract. Expected profile is explicitly dispatched as `gpt-5.6-terra` with
+high reasoning. The reviewer is read-only, must not spawn subagents, and reads
+the prepared brief, implementation report, and frozen review package. Runtime
+assembly and reader documentation are outside this checkpoint. Actual runtime
+metadata will be recorded when exposed; otherwise the immutable configured
+profile and explicit dispatch fields are the acceptance evidence.
+
+The reviewer completed with the explicitly dispatched existing role and
+`gpt-5.6-terra` / high profile. Separate runtime self-introspection was not
+exposed and no fallback was visible. The task quality verdict is **Needs
+fixes**. The complete accepted batch is:
+
+1. Remove `BuildHandlerAnalysis.entities`, require the Entity
+   `receiverKind`, and remove the writer fallback from `entities`; the contract
+   must have no pre-receiver compatibility path.
+2. Validate malformed receiver and handler record structure before any
+   dereference, always reporting `HandlerRegistryIngestionError` rather than a
+   raw `TypeError`.
+3. Introduce a neutral standalone receiver constructor/prototype type instead
+   of falsely typing standalone classes as `EntityClass`.
+4. Add writer render/typecheck coverage for named and anonymous default
+   receivers.
+5. Correct changed narrow TSDoc from Entity-only wording to receiver wording.
+6. Replace remaining changed-path command-transformation wording with command
+   substitution.
+
+No Critical finding was reported. The first three findings are Important; the
+last three are Minor but are included in the same correction batch.
+
+## Contract-review correction disposition
+
+All six accepted contract-review findings were corrected on the existing
+implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
+now accept only discriminated `receivers`; Entity receivers require
+`receiverKind: "entity"`. Generated registry ingestion checks malformed
+receiver/handler shapes before dereference and reports only
+`HandlerRegistryIngestionError` at that boundary. Standalone receiver metadata
+uses a neutral prototype constructor type rather than `EntityClass`. Named and
+anonymous default standalone receiver rendering and isolated typechecking are
+covered. Narrow changed TSDoc now says receiver rather than Entity where the
+contract is shared, and changed-path terminology uses command substitution.
+
+Focused evidence: `pnpm exec vitest run packages/proto-tools/test/generated-registry-writer.test.ts packages/proto-tools/test/build-time-handler-analyzer.test.ts packages/server/test/handler/generated-handler-registry.test.ts` passed 89 tests; proto-tools/server typechecks, fixture `--check`, and `git diff --check` passed. Runtime assembly is outside this contract-only correction.
+
 ## Mechanical preflight assignment
 
 The orchestrator-dispatched verification function will run the cheap static
