@@ -26,6 +26,26 @@ const analyzeBuildHandlers = (...args: Parameters<typeof BuildHandlerAnalyzer.an
   BuildHandlerAnalyzer.analyze(...args);
 
 describe("build-time handler analyzer", () => {
+  it("analyzes nominal standalone command receivers without an Entity state schema", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/standalone-commander.ts",
+        `
+          import { AbstractCommander, Command } from "@spine-event-engine/server";
+          import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+          export class TaskCommander extends AbstractCommander {
+            @Command replace(command: CreateTask): RenameTask { throw new Error(String(command)); }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.receivers).toMatchObject([
+      { receiverKind: "standalone", className: "TaskCommander", handlers: [{ kind: "command-substitution" }] },
+    ]);
+  });
+
   it("rejects every @Command handler declared on an Aggregate", () => {
     const result = analyzeBuildHandlers(
       programWithSource(
@@ -132,7 +152,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers[0]?.kind).toBe("command-transformation");
+    expect(result.entities[0]?.handlers[0]?.kind).toBe("command-substitution");
   });
 
   it("ignores unrelated classes whose heritage type has no symbol", () => {
@@ -1058,7 +1078,7 @@ describe("build-time handler analyzer", () => {
             parameterCount: 1,
           },
           {
-            kind: "command-transformation",
+                kind: "command-substitution",
             methodName: "rename",
             origin: "domestic",
             signalSchema: schema("../generated/commands_pb", "CreateTaskSchema"),

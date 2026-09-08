@@ -41,6 +41,9 @@ export interface BuildHandlerAnalysis {
    */
   readonly entities: readonly BuildEntityHandlers[];
 
+  /** All generated Entity and standalone receiver declarations. */
+  readonly receivers: readonly BuildReceiverHandlers[];
+
   /**
    * Deterministic diagnostics for unsupported handler declarations.
    */
@@ -58,6 +61,8 @@ export interface BuildEntityHandlers {
    */
   readonly className: string;
 
+  readonly receiverKind?: "entity";
+
   /**
    * Source file where the entity class is declared.
    */
@@ -73,6 +78,17 @@ export interface BuildEntityHandlers {
    */
   readonly handlers: readonly BuildHandlerRecord[];
 }
+
+/** Build-time standalone receiver declaration. */
+export interface BuildStandaloneHandlers {
+  readonly receiverKind: "standalone";
+  readonly className: string;
+  readonly sourceFile: string;
+  readonly handlers: readonly BuildHandlerRecord[];
+}
+
+/** One generated receiver declaration. */
+export type BuildReceiverHandlers = BuildEntityHandlers | BuildStandaloneHandlers;
 
 /**
  * Importable generated schema reference used by later source rendering.
@@ -253,6 +269,7 @@ export const BuildHandlerAnalyzer: BuildHandlerAnalyzer = Object.freeze({
   ): BuildHandlerAnalysis {
     PackageDependencies.load(program);
     const entities: BuildEntityHandlers[] = [];
+    const receivers: BuildReceiverHandlers[] = [];
     const diagnostics: BuildHandlerDiagnostic[] = [];
 
     for (const source of sourceFiles) {
@@ -272,10 +289,16 @@ export const BuildHandlerAnalyzer: BuildHandlerAnalyzer = Object.freeze({
         imports: HandlerSources.buildImportState(source, program),
         diagnostics,
       };
-      entities.push(...HandlerSources.analyzeSource(scope));
+      const sourceReceivers = HandlerSources.analyzeSource(scope);
+      receivers.push(...sourceReceivers);
+      entities.push(
+        ...sourceReceivers
+          .filter((receiver): receiver is BuildEntityHandlers => receiver.receiverKind === "entity")
+          .map(({ receiverKind: _receiverKind, ...entity }) => entity),
+      );
     }
 
-    return { entities, diagnostics };
+    return { entities, receivers, diagnostics };
   },
 });
 
@@ -366,6 +389,12 @@ interface HandlerDecoratorUse extends DecoratorUse {
 
 const handlerDecorators = new Set<HandlerDecorator>(["Assign", "Command", "React", "Subscribe"]);
 const entityBaseNames = new Set(["Aggregate", "Projection", "ProcessManager"]);
+const standaloneBaseNames = new Set([
+  "AbstractAssignee",
+  "AbstractCommander",
+  "AbstractEventReactor",
+  "AbstractEventSubscriber",
+]);
 const maxAliasDepth = 50;
 // `spine.options.entity` in the frozen `spine/options.proto` contract.
 const entityOptionFieldNumber = 73903;
@@ -377,24 +406,24 @@ const HandlerSources = Object.freeze({
     return program.getSourceFiles().filter((source) => !source.isDeclarationFile);
   },
 
-  analyzeSource(scope: AnalyzerScope): readonly BuildEntityHandlers[] {
-    const entities: BuildEntityHandlers[] = [];
+  analyzeSource(scope: AnalyzerScope): readonly BuildReceiverHandlers[] {
+    const receivers: BuildReceiverHandlers[] = [];
 
     for (const statement of scope.source.statements) {
       if (!ts.isClassDeclaration(statement) || statement.name === undefined) {
         continue;
       }
 
-      const entity = HandlerSources.analyzeClass(statement, scope);
-      if (entity !== undefined) {
-        entities.push(entity);
+      const receiver = HandlerSources.analyzeClass(statement, scope);
+      if (receiver !== undefined) {
+        receivers.push(receiver);
       }
     }
 
-    return entities;
+    return receivers;
   },
 
-  analyzeClass(node: ts.ClassDeclaration, scope: AnalyzerScope): BuildEntityHandlers | undefined {
+  analyzeClass(node: ts.ClassDeclaration, scope: AnalyzerScope): BuildReceiverHandlers | undefined {
     const className = node.name?.text ?? "(anonymous)";
     const exportIssue = HandlerSources.entityExportIssue(node, scope.source);
     if (HandlerSources.hasDecoratedMethod(node, scope.imports) && exportIssue !== undefined) {
@@ -408,7 +437,7 @@ const HandlerSources = Object.freeze({
       return undefined;
     }
 
-    const lineage = HandlerSources.entityLineage(node, scope);
+    const lineage = HandlerSources.receiverLineage(node, scope);
     const entityBase = lineage?.base;
     const stateSchema = lineage?.stateSchema;
     const handlers: BuildHandlerRecord[] = [];
@@ -423,6 +452,7 @@ const HandlerSources = Object.freeze({
         className,
         entityBase,
         stateSchema,
+        lineage?.receiverKind,
         scope,
       );
       if (handler !== undefined) {
@@ -430,11 +460,15 @@ const HandlerSources = Object.freeze({
       }
     }
 
-    if (stateSchema === undefined || handlers.length === 0) {
+    if (lineage === undefined || handlers.length === 0) {
       return undefined;
     }
 
-    return { className, sourceFile: scope.source.fileName, stateSchema, handlers };
+    return lineage.receiverKind === "entity"
+      ? stateSchema === undefined
+        ? undefined
+        : { receiverKind: "entity", className, sourceFile: scope.source.fileName, stateSchema, handlers }
+      : { receiverKind: "standalone", className, sourceFile: scope.source.fileName, handlers };
   },
 
   analyzeMethod(
@@ -442,6 +476,7 @@ const HandlerSources = Object.freeze({
     className: string,
     entityBase: string | undefined,
     stateSchema: SchemaReference | undefined,
+    receiverKind: "entity" | "standalone" | undefined,
     scope: AnalyzerScope,
   ): BuildHandlerRecord | undefined {
     const decorators = HandlerSources.methodDecorators(node, scope.imports);
@@ -488,7 +523,8 @@ const HandlerSources = Object.freeze({
     const invalid = HandlerSources.validateHandlerNode(
       node,
       handler.name,
-      stateSchema,
+      receiverKind === "entity" ? stateSchema : undefined,
+      receiverKind !== "standalone",
       scope,
       className,
       method,
@@ -697,12 +733,20 @@ const HandlerSources = Object.freeze({
     node: ts.MethodDeclaration,
     decorator: HandlerDecorator,
     stateSchema: SchemaReference | undefined,
+    requiresEntityState: boolean,
     scope: AnalyzerScope,
     className: string,
     method: string | undefined,
   ): boolean {
     return [
-      HandlerSources.validateEntityState(node, stateSchema, scope, className, method),
+      HandlerSources.validateEntityState(
+        node,
+        stateSchema,
+        requiresEntityState,
+        scope,
+        className,
+        method,
+      ),
       HandlerSources.validateName(node, scope, className),
       HandlerSources.validateVisibility(node, scope, className, method),
       HandlerSources.validateParameters(node, decorator, scope, className, method),
@@ -713,11 +757,12 @@ const HandlerSources = Object.freeze({
   validateEntityState(
     node: ts.MethodDeclaration,
     stateSchema: SchemaReference | undefined,
+    requiresEntityState: boolean,
     scope: AnalyzerScope,
     className: string,
     method: string | undefined,
   ): boolean {
-    if (stateSchema !== undefined) {
+    if (!requiresEntityState || stateSchema !== undefined) {
       return false;
     }
 
@@ -984,20 +1029,23 @@ const HandlerSources = Object.freeze({
     return handlerDecorators.has(decorator.name as HandlerDecorator);
   },
 
-  entityLineage(
+  receiverLineage(
     node: ts.ClassDeclaration,
     scope: AnalyzerScope,
     seen: ReadonlySet<ts.ClassDeclaration> = new Set(),
-  ): { readonly base: string; readonly stateSchema: SchemaReference | undefined } | undefined {
+  ):
+    | { readonly receiverKind: "entity"; readonly base: string; readonly stateSchema: SchemaReference | undefined }
+    | { readonly receiverKind: "standalone"; readonly base: string; readonly stateSchema: undefined }
+    | undefined {
     if (seen.has(node)) return undefined;
     const nextSeen = new Set(seen);
     nextSeen.add(node);
 
     for (const clause of node.heritageClauses ?? []) {
       for (const type of clause.types) {
-        const direct = HandlerSources.directEntityLineage(type, scope);
+        const direct = HandlerSources.directReceiverLineage(type, scope);
         if (direct !== undefined) return direct;
-        const inherited = HandlerSources.inheritedEntityLineage(type.expression, scope, nextSeen);
+        const inherited = HandlerSources.inheritedReceiverLineage(type.expression, scope, nextSeen);
         if (inherited !== undefined) return inherited;
       }
     }
@@ -1005,33 +1053,42 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
-  directEntityLineage(
+  directReceiverLineage(
     type: ts.ExpressionWithTypeArguments,
     scope: AnalyzerScope,
-  ): { readonly base: string; readonly stateSchema: SchemaReference | undefined } | undefined {
+  ):
+    | { readonly receiverKind: "entity"; readonly base: string; readonly stateSchema: SchemaReference | undefined }
+    | { readonly receiverKind: "standalone"; readonly base: string; readonly stateSchema: undefined }
+    | undefined {
     const base = HandlerSources.directEntityBaseName(type.expression, scope.imports);
-    if (base === undefined) return undefined;
-    const stateType = type.typeArguments?.[1];
-    const stateSchema =
-      stateType === undefined
-        ? undefined
-        : HandlerSources.schemaFromTypeQuery(
-            stateType,
-            scope.imports,
-            HandlerSources.newTypeWalk(),
-          );
-    return { base, stateSchema };
+    if (base !== undefined) {
+      const stateType = type.typeArguments?.[1];
+      const stateSchema =
+        stateType === undefined
+          ? undefined
+          : HandlerSources.schemaFromTypeQuery(
+              stateType,
+              scope.imports,
+              HandlerSources.newTypeWalk(),
+            );
+      return { receiverKind: "entity", base, stateSchema };
+    }
+    const standalone = HandlerSources.directStandaloneBaseName(type.expression, scope.imports);
+    if (standalone !== undefined) return { receiverKind: "standalone", base: standalone, stateSchema: undefined };
   },
 
-  inheritedEntityLineage(
+  inheritedReceiverLineage(
     expression: ts.Expression,
     scope: AnalyzerScope,
     seen: ReadonlySet<ts.ClassDeclaration>,
-  ): { readonly base: string; readonly stateSchema: SchemaReference | undefined } | undefined {
+  ):
+    | { readonly receiverKind: "entity"; readonly base: string; readonly stateSchema: SchemaReference | undefined }
+    | { readonly receiverKind: "standalone"; readonly base: string; readonly stateSchema: undefined }
+    | undefined {
     const parent = HandlerSources.classDeclarationFor(expression, scope);
     if (parent === undefined) return undefined;
     const source = parent.getSourceFile();
-    return HandlerSources.entityLineage(
+    return HandlerSources.receiverLineage(
       parent,
       { ...scope, source, imports: HandlerSources.buildImportState(source, scope.program) },
       seen,
@@ -1048,6 +1105,20 @@ const HandlerSources = Object.freeze({
       return namespace !== undefined &&
         imports.serverNamespaces.has(namespace) &&
         entityBaseNames.has(expression.name.text)
+        ? expression.name.text
+        : undefined;
+    }
+    return undefined;
+  },
+
+  directStandaloneBaseName(expression: ts.Expression, imports: ImportState): string | undefined {
+    if (ts.isIdentifier(expression)) {
+      const base = imports.serverSymbols.get(expression.text);
+      return base !== undefined && standaloneBaseNames.has(base) ? base : undefined;
+    }
+    if (ts.isPropertyAccessExpression(expression)) {
+      const namespace = HandlerTypes.expressionName(expression.expression);
+      return namespace !== undefined && imports.serverNamespaces.has(namespace) && standaloneBaseNames.has(expression.name.text)
         ? expression.name.text
         : undefined;
     }

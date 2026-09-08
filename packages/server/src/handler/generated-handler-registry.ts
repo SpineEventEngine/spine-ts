@@ -15,6 +15,12 @@
 import { isEntitySchema, type DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import { ProcessManager } from "../entity/entity.js";
 import {
+  AbstractAssignee,
+  AbstractCommander,
+  AbstractEventReactor,
+  AbstractEventSubscriber,
+} from "./standalone.js";
+import {
   HandlerMetadataValues,
   HandlerMetadataRegistry,
   type EntityClass,
@@ -266,6 +272,7 @@ interface GeneratedRegistryOperations {
     handler: GeneratedHandlerRecordInput,
   ): void;
   validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void;
+  validateStandalone(receiver: GeneratedStandaloneHandlerGroup): void;
   validateSchema(schema: DescriptorMessageSchema, label: string): void;
   validateEmits(handler: GeneratedHandlerRecordInput): void;
   validateCommandRoles(handler: GeneratedHandlerRecordInput): void;
@@ -295,6 +302,9 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   materializeAll(registry: GeneratedHandlerRegistry): readonly EntityHandlersMetadata[] {
+    registry.receivers.forEach((receiver) => {
+      if (receiver.receiverKind === "standalone") GeneratedRegistry.validateStandalone(receiver);
+    });
     return Object.freeze(
       registry.receivers
         .filter((receiver): receiver is GeneratedEntityHandlerGroup => receiver.receiverKind === "entity")
@@ -338,6 +348,48 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
         "UNSUPPORTED_HANDLER_KIND",
         "Generated @Command handlers are supported only by Process Manager entities.",
       );
+    }
+  },
+
+  validateStandalone(receiver: GeneratedStandaloneHandlerGroup): void {
+    const prototype = receiver.receiverType.prototype;
+    const role =
+      prototype instanceof AbstractAssignee
+        ? "assignee"
+        : prototype instanceof AbstractCommander
+          ? "commander"
+          : prototype instanceof AbstractEventReactor
+            ? "reactor"
+            : prototype instanceof AbstractEventSubscriber
+              ? "subscriber"
+              : undefined;
+    if (role === undefined) {
+      throw new HandlerRegistryIngestionError(
+        "UNSUPPORTED_HANDLER_KIND",
+        "Standalone receiver must extend a supported nominal handler base class.",
+      );
+    }
+    for (const handler of receiver.handlers) {
+      GeneratedRegistry.validateHandler(handler);
+      const valid =
+        (role === "assignee" && handler.kind === "command-assignment") ||
+        (role === "commander" && (handler.kind === "command-substitution" || handler.kind === "command-reaction")) ||
+        (role === "reactor" && handler.kind === "event-reaction") ||
+        (role === "subscriber" && (handler.kind === "event-subscription" || handler.kind === "state-subscription"));
+      if (!valid) {
+        throw new HandlerRegistryIngestionError(
+          "UNSUPPORTED_HANDLER_KIND",
+          `Generated handler "${handler.methodName}" is not legal for standalone ${role}.`,
+        );
+      }
+      if (role === "assignee" || role === "reactor") {
+        if (handler.emittedSchemas.some((schema) => GeneratedRegistry.isCommandSchema(schema))) {
+          throw new HandlerRegistryIngestionError("INVALID_SCHEMA", `Standalone ${role} "${handler.methodName}" must produce Events.`);
+        }
+      }
+      if (role === "subscriber" && handler.origin === "external" && handler.kind === "state-subscription") {
+        throw new HandlerRegistryIngestionError("INVALID_SIGNAL_ORIGIN", `Standalone state subscriber "${handler.methodName}" cannot accept External state.`);
+      }
     }
   },
 

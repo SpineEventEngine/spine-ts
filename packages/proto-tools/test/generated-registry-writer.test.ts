@@ -34,6 +34,38 @@ import {
 } from "../src/generation/generated-registry-writer.js";
 
 describe("generated registry writer", () => {
+  it("renders a standalone receiver without an Entity state schema", () => {
+    const repoRoot = "/workspace/repo";
+    const source = new GeneratedRegistryWriter().render(
+      {
+        diagnostics: [],
+        entities: [],
+        receivers: [
+          {
+            receiverKind: "standalone",
+            className: "TaskCommander",
+            sourceFile: join(repoRoot, "src/task-commander.ts"),
+            handlers: [
+              {
+                kind: "command-substitution",
+                methodName: "replace",
+                signalSchema: schema("../generated/commands_pb.js", "CreateTaskSchema"),
+                emittedSchemas: [schema("../generated/commands_pb.js", "RenameTaskSchema")],
+                parameterCount: 1,
+                origin: "domestic",
+              },
+            ],
+          },
+        ],
+      },
+      { outputFile: join(repoRoot, "generated/handler-registry.ts") },
+    );
+
+    expect(source).toContain('receiverKind: "standalone"');
+    expect(source).toContain("receiverType: TaskCommander,");
+    expect(source).not.toContain("stateSchema:");
+  });
+
   it("renders deterministic registry source from analyzed handlers", () => {
     const repoRoot = "/workspace/repo";
     const outputFile = join(

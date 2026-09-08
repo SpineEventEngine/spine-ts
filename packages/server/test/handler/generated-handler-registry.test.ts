@@ -18,7 +18,7 @@ import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/pr
 import { CommandSchema, file_spine_options } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
-import { Aggregate, HandlerRegistryIngestionError, HandlerRegistryIngestor, ProcessManager } from "../../src/index.js";
+import { AbstractCommander, Aggregate, HandlerRegistryIngestionError, HandlerRegistryIngestor, ProcessManager } from "../../src/index.js";
 
 type State = Message<"ProjectionState"> & { id: string; name: string; priority: number };
 const descriptorSet = fromBinary(FileDescriptorSetSchema, Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"));
@@ -27,6 +27,7 @@ if (descriptor === undefined) throw new Error("Expected Entity fixture descripto
 const StateSchema = messageDesc(fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [file_spine_options]), 0) as GenMessage<State>;
 class Manager extends ProcessManager<string, typeof StateSchema, number> { substitute(command: Message<"spine.core.Command">) { return command; } }
 class AggregateReceiver extends Aggregate<string, typeof StateSchema, number> { substitute(command: Message<"spine.core.Command">) { return command; } }
+class Commander extends AbstractCommander { replace(command: Message<"spine.core.Command">) { return command; } }
 const substitution = (methodName = "substitute") => ({ kind: "command-substitution" as const, methodName, signalSchema: CommandSchema, emittedSchemas: [CommandSchema], parameterCount: 1 as const, origin: "domestic" as const });
 
 describe("generated handler registry ingestion", () => {
@@ -39,5 +40,8 @@ describe("generated handler registry ingestion", () => {
   });
   it("rejects an Aggregate command substitution", () => {
     expect(() => new HandlerRegistryIngestor().ingest({ receivers: [{ receiverKind: "entity" as const, receiverType: AggregateReceiver, stateSchema: StateSchema, handlers: [substitution()] }] })).toThrow(HandlerRegistryIngestionError);
+  });
+  it("rejects a standalone commander that declares Event output", () => {
+    expect(() => new HandlerRegistryIngestor().ingest({ receivers: [{ receiverKind: "standalone" as const, receiverType: Commander, handlers: [{ ...substitution("replace"), emittedSchemas: [StateSchema] }] }] })).toThrow(HandlerRegistryIngestionError);
   });
 });
