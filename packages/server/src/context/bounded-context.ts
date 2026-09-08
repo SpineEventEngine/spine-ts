@@ -254,7 +254,7 @@ interface RepositoryRegistration {
   /**
    * Records a contained transformed-command follow-up failure for diagnostics.
    */
-  readonly recordFollowUpFailure: (source: Command, child: Command, error: unknown) => void;
+  readonly onFollowUpFailure: (source: Command, child: Command, error: unknown) => void;
 
   /**
    * Records asynchronous event follow-up failures for diagnostics.
@@ -813,7 +813,7 @@ export class BoundedContext {
       },
       postSystemFollowUp: (event) => eventBusAccess.postFollowUp(this.#systemEventBus, event),
       onPostCommand: (command) => commandBusAccess.postInternalFollowUp(this.#commandBus, command),
-      recordFollowUpFailure: (source, child, error) => {
+      onFollowUpFailure: (source, child, error) => {
         this.#recordFollowUpFailure(source, child, error);
       },
       recordDispatchFailure: (event, error) => {
@@ -2646,7 +2646,7 @@ const ContextParts = Object.freeze({
       registerSystemEventSchema: registration.registerSystemEventSchema,
       postSystemFollowUp: registration.postSystemFollowUp,
       onPostCommand: registration.onPostCommand,
-      recordFollowUpFailure: registration.recordFollowUpFailure,
+      onFollowUpFailure: registration.onFollowUpFailure,
       recordDispatchFailure: registration.recordDispatchFailure,
     });
 

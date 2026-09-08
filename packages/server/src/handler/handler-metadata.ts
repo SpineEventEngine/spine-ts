@@ -14,6 +14,7 @@
 
 import type { EntityMetadata, DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import { describeEntityMetadata, isEntitySchema } from "../entity/entity-metadata.js";
+import { ProcessManager } from "../entity/entity.js";
 
 /**
  * Entity class value accepted by explicit handler metadata registration.
@@ -72,7 +73,8 @@ export type HandlerMethodName<Instance extends object> = Extract<
 /**
  * Error code for explicit handler metadata registration failures.
  */
-export type HandlerMetadataErrorCode = "UNKNOWN_HANDLER_METHOD" | "INVALID_PARAMETER_COUNT";
+export type HandlerMetadataErrorCode =
+  "UNKNOWN_HANDLER_METHOD" | "INVALID_PARAMETER_COUNT" | "UNSUPPORTED_COMMAND_HANDLER";
 
 /**
  * Error thrown when explicit handler metadata cannot be defined.
@@ -279,30 +281,6 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
   ): CommandAssignmentHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 
   /**
-   * Registers a command-input `@Command` transformation method.
-   *
-   * @param schema Command schema accepted by the method.
-   * @param methodName Entity method name.
-   * @returns The registered command-transformation metadata.
-   */
-  transform<Schema extends DescriptorMessageSchema>(
-    schema: Schema,
-    methodName: HandlerMethodName<Instance>,
-  ): CommandTransformationHandlerMetadata<Schema, HandlerMethodName<Instance>>;
-
-  /**
-   * Registers a command reactor method.
-   *
-   * @param schema Command schema accepted by the method.
-   * @param methodName Entity method name.
-   * @returns The registered command-reaction metadata.
-   */
-  command<Schema extends DescriptorMessageSchema>(
-    schema: Schema,
-    methodName: HandlerMethodName<Instance>,
-  ): CommandReactionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
-
-  /**
    * Registers an Event/rejection or Entity-state subscriber method.
    *
    * @param schema Event, rejection, or descriptor-marked Entity state schema
@@ -343,6 +321,41 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
     methodName: HandlerMethodName<Instance>,
     options?: EventApplicationOptions,
   ): EventApplicationHandlerMetadata<Schema, HandlerMethodName<Instance>>;
+}
+
+/**
+ * Registers generated command transformation metadata during registry ingestion.
+ *
+ * @internal
+ */
+export interface GeneratedHandlerRegistrationBuilder<
+  Instance extends object,
+> extends HandlerRegistrationBuilder<Instance> {
+  // prettier-ignore
+
+  /**
+   * Registers a generated command-input transformation with emitted schemas.
+   *
+   * @param schema Generated command input schema.
+   * @param methodName Process Manager method selected by generated metadata.
+   * @returns Generated transformation handler metadata.
+   */
+  transform<Schema extends DescriptorMessageSchema>(
+    schema: Schema,
+    methodName: HandlerMethodName<Instance>,
+  ): CommandTransformationHandlerMetadata<Schema, HandlerMethodName<Instance>>;
+
+  /**
+   * Registers a generated event- or rejection-input command reaction.
+   *
+   * @param schema Generated Event or rejection input schema.
+   * @param methodName Process Manager method selected by generated metadata.
+   * @returns Generated command-reaction handler metadata.
+   */
+  command<Schema extends DescriptorMessageSchema>(
+    schema: Schema,
+    methodName: HandlerMethodName<Instance>,
+  ): CommandReactionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 }
 
 /**
@@ -912,7 +925,7 @@ class EntityHandlersOwner {
     entityType: EntityClass<Instance>,
     stateSchema: StateSchema,
     define: (
-      builder: HandlerRegistrationBuilder<Instance>,
+      builder: GeneratedHandlerRegistrationBuilder<Instance>,
     ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
     arities: Iterable<HandlerArity>,
   ): EntityHandlersMetadata<Instance, StateSchema> {
@@ -923,13 +936,14 @@ class EntityHandlersOwner {
     entityType: EntityClass<Instance>,
     stateSchema: StateSchema,
     define: (
-      builder: HandlerRegistrationBuilder<Instance>,
+      builder: GeneratedHandlerRegistrationBuilder<Instance>,
     ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
     arities: Iterable<HandlerArity>,
   ): EntityHandlersMetadata<Instance, StateSchema> {
     const built = new WeakSet<HandlerMetadata>();
     const builder = this.#builder(entityType, built, this.#arityMap(arities));
     const handlers = Object.freeze([...define(builder)]);
+    this.#validateCommandHandlers(entityType, handlers);
     this.#validateBuilt(handlers, built);
     const metadata: EntityHandlersMetadata<Instance, StateSchema> = {
       entityType,
@@ -951,7 +965,7 @@ class EntityHandlersOwner {
     entityType: EntityClass<Instance>,
     built: WeakSet<HandlerMetadata>,
     arities: ReadonlyMap<string, HandlerGeneratedData>,
-  ): HandlerRegistrationBuilder<Instance> {
+  ): GeneratedHandlerRegistrationBuilder<Instance> {
     return Object.freeze({
       assign: <Schema extends DescriptorMessageSchema>(
         schema: Schema,
@@ -1060,6 +1074,21 @@ class EntityHandlersOwner {
 
   #arityKey(kind: HandlerKind, methodName: string): string {
     return `${kind}\u0000${methodName}`;
+  }
+
+  #validateCommandHandlers(entityType: EntityClass, handlers: readonly HandlerMetadata[]): void {
+    if (
+      handlers.some(
+        (handler) =>
+          handler.kind === "command-transformation" || handler.kind === "command-reaction",
+      ) &&
+      !(entityType.prototype instanceof ProcessManager)
+    ) {
+      throw new HandlerMetadataError(
+        "UNSUPPORTED_COMMAND_HANDLER",
+        "Only Process Manager entities support @Command handlers.",
+      );
+    }
   }
 
   #validateBuilt(handlers: readonly HandlerMetadata[], built: WeakSet<HandlerMetadata>): void {

@@ -116,10 +116,10 @@ export function Assign(
  *
  * Bare `@Command` accepts a generated Command, Event, or rejection input.
  * A Command input is the unique command receptor for its type and transforms it
- * into one or more Commands. Command-input transformations are supported by
- * Aggregate and Process Manager repositories; Projection repositories reject
- * them during repository construction. Event and rejection inputs are Event Bus
- * reactions that may return Commands. Rejections are thrown, not returned.
+ * into one or more Commands. `@Command` handlers are supported only by Process
+ * Manager repositories; Aggregate and Projection repositories reject them.
+ * Event and rejection inputs are Event Bus reactions that may return Commands.
+ * Rejections are thrown, not returned.
  *
  * @typeParam This - Entity instance that owns the method.
  * @typeParam Parameters - Parameters accepted by the method.
@@ -296,9 +296,13 @@ export function materializeDecoratedEntityHandlers<
           case "command-assignment":
             return builder.assign(DecoratorMetadata.schema(handler), methodName);
           case "command-transformation":
-            return builder.transform(DecoratorMetadata.schema(handler), methodName);
+            throw new TypeError(
+              "Command transformations require generated registry metadata with emitted schemas.",
+            );
           case "command-reaction":
-            return builder.command(DecoratorMetadata.schema(handler), methodName);
+            throw new TypeError(
+              "@Command handlers require generated registry metadata with emitted schemas.",
+            );
           case "event-subscription":
             return builder.subscribe(DecoratorMetadata.schema(handler), methodName);
           case "event-reaction":

@@ -346,3 +346,14 @@ files. The authoritative `pnpm verify:release` run then passed 288 test files
 and 4,578 tests. Coverage passed at 93.29% statements (22,337 / 23,942), 90.01%
 branches (13,183 / 14,646), 92.87% functions (5,477 / 5,897), and 94.45% lines
 (20,710 / 21,925). No independent finding remains open.
+
+## Superseding domain correction
+
+The human clarified that Aggregates permit no `@Command` methods. This
+supersedes prior review conclusions that retained Aggregate command
+transformations. The corrective implementation rejects every Aggregate and
+Projection `@Command` during analysis, generated ingestion, metadata creation,
+and repository construction; removes Aggregate command-reaction and
+transformation execution; and keeps Process Manager command reactions and
+transformations. The prior release evidence predates this correction and is not
+current release evidence.

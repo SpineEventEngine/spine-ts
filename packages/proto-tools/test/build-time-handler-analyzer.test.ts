@@ -26,27 +26,83 @@ const analyzeBuildHandlers = (...args: Parameters<typeof BuildHandlerAnalyzer.an
   BuildHandlerAnalyzer.analyze(...args);
 
 describe("build-time handler analyzer", () => {
+  it("rejects every @Command handler declared on an Aggregate", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/aggregate-command.ts",
+        handlerFixtureSource(
+          "Aggregate",
+          "TaskSchema",
+          `
+            @Command
+            transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
+
+            @Command
+            react(event: TaskCreated): RenameTask { throw new Error(String(event)); }
+          `,
+          `
+            import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+            import { type TaskCreated } from "../generated/events_pb.js";
+          `,
+        ),
+      ),
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_COMMAND_HANDLER",
+      "UNSUPPORTED_COMMAND_HANDLER",
+    ]);
+  });
+
+  it("rejects every @Command handler declared on a Projection", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/projection-command.ts",
+        handlerFixtureSource(
+          "Projection",
+          "TaskListSchema",
+          `
+            @Command
+            transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
+
+            @Command
+            react(event: TaskCreated): RenameTask { throw new Error(String(event)); }
+          `,
+          `
+            import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+            import { type TaskCreated } from "../generated/events_pb.js";
+          `,
+        ),
+      ),
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_COMMAND_HANDLER",
+      "UNSUPPORTED_COMMAND_HANDLER",
+    ]);
+  });
+
   it("discovers bare handler decorators and generated schema references", () => {
     const result = analyzeBuildHandlers(programWithSource("src/task.ts", validTaskSource));
 
     expect(result.diagnostics).toEqual([]);
     expect(result.entities).toEqual([
       {
-        className: "TaskAggregate",
+        className: "TaskProcessManager",
         sourceFile: "src/task.ts",
         stateSchema: schema("../generated/spine/examples/todo/tasks_pb.js", "TaskSchema"),
         handlers: [
           {
-            kind: "command-assignment",
-            methodName: "createTask",
+            kind: "event-subscription",
+            methodName: "observeCreated",
             origin: "domestic",
             signalSchema: schema(
-              "../generated/spine/examples/todo/task_commands_pb.js",
-              "CreateTaskSchema",
+              "../generated/spine/examples/todo/task_events_pb.js",
+              "TaskCreatedSchema",
             ),
-            emittedSchemas: [
-              schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
-            ],
+            emittedSchemas: [],
             parameterCount: 1,
           },
           {
@@ -224,7 +280,7 @@ describe("build-time handler analyzer", () => {
     const result = analyzeBuildHandlers(
       programWithSource(
         "src/rejection-consumers.ts",
-        handlerFixtureSource("Projection", "TaskListSchema", methods, rejectionRoleImports),
+        handlerFixtureSource("ProcessManager", "TaskListSchema", methods, rejectionRoleImports),
       ),
     );
 
@@ -264,7 +320,7 @@ describe("build-time handler analyzer", () => {
       programWithSource(
         "src/where-handlers.ts",
         handlerFixtureSource(
-          "Projection",
+          "ProcessManager",
           "TaskListSchema",
           methods,
           `
@@ -338,7 +394,7 @@ describe("build-time handler analyzer", () => {
         `
           const filter = { eventField: "board", equals: "one" };
           ${handlerFixtureSource(
-            "Projection",
+            "ProcessManager",
             "TaskListSchema",
             methods,
             `
@@ -446,7 +502,7 @@ describe("build-time handler analyzer", () => {
     const result = analyzeBuildHandlers(
       programWithSource(
         "src/rejection-roles.ts",
-        handlerFixtureSource("Aggregate", "TaskSchema", methods, rejectionRoleImports),
+        handlerFixtureSource("ProcessManager", "TaskSchema", methods, rejectionRoleImports),
       ),
     );
 
@@ -1055,7 +1111,7 @@ function handlerFixtureSource(
   const stateModule = stateSchema === "TaskSchema" ? "task_pb" : "task_list_pb";
   const versionType = entityBase === "Aggregate" ? "bigint" : "number";
   return `
-    import { Aggregate, Assign, Command, Projection, React, Subscribe, Where } from "@spine-event-engine/server";
+    import { Aggregate, Assign, Command, ProcessManager, Projection, React, Subscribe, Where } from "@spine-event-engine/server";
     import { ${stateSchema} } from "../generated/${stateModule}.js";
     ${imports}
 
@@ -1184,16 +1240,16 @@ function fileDescriptor(
 }
 
 const validTaskSource = `
-  import { Aggregate, Assign as HandleCommand, Command, Subscribe } from "@spine-event-engine/server";
+  import { Command, ProcessManager, Subscribe } from "@spine-event-engine/server";
   import * as server from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/spine/examples/todo/tasks_pb.js";
-  import { type CreateTask, type RenameTask } from "../generated/spine/examples/todo/task_commands_pb.js";
+  import { type RenameTask } from "../generated/spine/examples/todo/task_commands_pb.js";
   import * as events from "../generated/spine/examples/todo/task_events_pb.js";
 
-  export class TaskAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
-    @HandleCommand
-    createTask(command: CreateTask): events.TaskCreated {
-      throw new Error(String(command));
+  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema, bigint> {
+    @Subscribe
+    observeCreated(event: events.TaskCreated): void {
+      void event;
     }
 
     @Command
@@ -1474,12 +1530,12 @@ const typeOnlySchemaSource = `
 `;
 
 const invalidRoleSource = `
-  import { Aggregate, Assign, Command, React } from "@spine-event-engine/server";
+  import { Assign, Command, ProcessManager, React } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class InvalidRoleAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class InvalidRoleAggregate extends ProcessManager<string, typeof TaskSchema, bigint> {
     @Assign
     assignCommand(command: CreateTask): RenameTask {
       throw new Error(String(command));
@@ -1507,7 +1563,7 @@ const oddballSource = `
   type State = (typeof StateSchema);
   const computed = "computed";
 
-  export class OddballAggregate extends spine.Aggregate<string, State, bigint> {
+  export class OddballAggregate extends spine.ProcessManager<string, State, bigint> {
     @spine.Assign
     create(command: commands.CreateTask): readonly events.TaskCreated[] {
       throw new Error(String(command));
@@ -1618,12 +1674,12 @@ const noEmissionSource = `
 `;
 
 const voidEmissionSource = `
-  import { Aggregate, Assign, Command } from "@spine-event-engine/server";
+  import { Assign, Command, ProcessManager } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class TaskAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class TaskAggregate extends ProcessManager<string, typeof TaskSchema, bigint> {
     @Assign
     silentAssign(command: CreateTask): void {
       void command;
@@ -1665,7 +1721,7 @@ const stringNameSource = `
 `;
 
 const invalidSource = `
-  import { Aggregate, Apply, Assign, Command, Subscribe } from "@spine-event-engine/server";
+  import { Apply, Assign, Command, ProcessManager, Subscribe } from "@spine-event-engine/server";
   import { type Event } from "@spine-event-engine/proto";
   import { TaskSchema } from "../generated/task_pb.js";
   import { CreateTaskSchema, type CreateTask } from "../generated/commands_pb.js";
@@ -1678,7 +1734,7 @@ const invalidSource = `
     }
   }
 
-  export class BadAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class BadAggregate extends ProcessManager<string, typeof TaskSchema, bigint> {
     @Assign(CreateTaskSchema)
     schemaDecorator(command: CreateTask): TaskCreated {
       throw new Error(String(command));

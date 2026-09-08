@@ -32,11 +32,10 @@ import {
   HandlerRegistryIngestionError,
   HandlerRegistryIngestor,
   Aggregate,
+  ProcessManager,
   Projection,
-  Repository,
   type CommandAssignmentHandlerMetadata,
   type CommandReactionHandlerMetadata,
-  type EntityHandlersMetadata,
   type EventReactionHandlerMetadata,
 } from "../../src/index.js";
 import type {
@@ -56,6 +55,11 @@ type AggregateState = Message<"AggregateState"> & {
   id: string;
   name: string;
   archived: boolean;
+};
+
+type ProcessManagerState = Message<"ProcessManagerState"> & {
+  id: string;
+  queue: string;
 };
 
 type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
@@ -98,6 +102,28 @@ class GeneratedAggregate extends Aggregate<string, GenMessage<AggregateState>, n
   }
 }
 
+class GeneratedProcessManager extends ProcessManager<
+  string,
+  GenMessage<ProcessManagerState>,
+  number
+> {
+  assignCreate(command: Message<"spine.core.Command">): void {
+    void command;
+  }
+
+  commandFromCommand(command: ValidatedTaskCommand): TransformedTaskCommand {
+    return createTransformedTaskCommand(command);
+  }
+
+  subscribeCreated(event: Message<"spine.core.Event">): void {
+    void event;
+  }
+
+  reactToCreated(event: Message<"spine.core.Event">): void {
+    void event;
+  }
+}
+
 function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
   const descriptorSet = fromBinary(
     FileDescriptorSetSchema,
@@ -126,6 +152,13 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
+const fileProcessManagerFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
+);
+const ProcessManagerStateSchema = messageDesc(
+  fileProcessManagerFixture,
+  0,
+) as GenMessage<ProcessManagerState>;
 const fileValidatedTaskCommandFixture = fileDesc(
   "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
     "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
@@ -154,22 +187,6 @@ const TransformedTaskCommandSchema = messageDesc(
   2,
 ) as GenMessage<TransformedTaskCommand>;
 
-function assertGeneratedProjectionHandlers(
-  handlers: readonly EntityHandlersMetadata[],
-): asserts handlers is readonly EntityHandlersMetadata<
-  GeneratedProjection,
-  typeof ProjectionStateSchema
->[] {
-  const [metadata] = handlers;
-  if (
-    handlers.length !== 1 ||
-    metadata?.entityType !== GeneratedProjection ||
-    metadata.entity.fullTypeName !== ProjectionStateSchema.typeName
-  ) {
-    throw new Error("Expected generated Projection handler metadata.");
-  }
-}
-
 function createTransformedTaskCommand(command: ValidatedTaskCommand): TransformedTaskCommand {
   return create(TransformedTaskCommandSchema, { id: command.id, name: command.name });
 }
@@ -180,8 +197,8 @@ describe("generated handler registry ingestion", () => {
       version: 3,
       entities: [
         {
-          entityType: GeneratedProjection,
-          stateSchema: ProjectionStateSchema,
+          entityType: GeneratedProcessManager,
+          stateSchema: ProcessManagerStateSchema,
           handlers: [
             record("event-subscription", "subscribeCreated", EventSchema, []),
             {
@@ -214,8 +231,8 @@ describe("generated handler registry ingestion", () => {
     );
   });
 
-  it("accepts command transformations only from registry version 4 while retaining version 3", () => {
-    const transformation: GeneratedHandlerRecord<GeneratedAggregate, 4> = {
+  it("accepts Process Manager command transformations only from registry version 4", () => {
+    const transformation: GeneratedHandlerRecord<GeneratedProcessManager, 4> = {
       kind: "command-transformation",
       methodName: "commandFromCommand",
       signalSchema: ValidatedTaskCommandSchema,
@@ -229,8 +246,8 @@ describe("generated handler registry ingestion", () => {
         version: 3,
         entities: [
           {
-            entityType: GeneratedAggregate,
-            stateSchema: AggregateStateSchema,
+            entityType: GeneratedProcessManager,
+            stateSchema: ProcessManagerStateSchema,
             handlers: [transformation],
           },
         ],
@@ -241,13 +258,37 @@ describe("generated handler registry ingestion", () => {
         version: 4,
         entities: [
           {
-            entityType: GeneratedAggregate,
-            stateSchema: AggregateStateSchema,
+            entityType: GeneratedProcessManager,
+            stateSchema: ProcessManagerStateSchema,
             handlers: [transformation],
           },
         ],
       })[0]?.commandTransformations,
     ).toHaveLength(1);
+  });
+
+  it("rejects generated command transformations for Aggregates", () => {
+    const transformation: GeneratedHandlerRecord<GeneratedAggregate, 4> = {
+      kind: "command-transformation",
+      methodName: "commandFromCommand",
+      signalSchema: ValidatedTaskCommandSchema,
+      emittedSchemas: [TransformedTaskCommandSchema],
+      parameterCount: 1,
+      origin: "domestic",
+    };
+
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        version: 4,
+        entities: [
+          {
+            entityType: GeneratedAggregate,
+            stateSchema: AggregateStateSchema,
+            handlers: [transformation],
+          },
+        ],
+      }),
+    ).toThrow(/Process Manager/);
   });
 
   it("rejects generated command transformations when the owner is a projection", () => {
@@ -259,26 +300,40 @@ describe("generated handler registry ingestion", () => {
       parameterCount: 1,
       origin: "domestic",
     };
-    const handlers = new HandlerRegistryIngestor().ingest({
-      version: 4,
-      entities: [
-        {
-          entityType: GeneratedProjection,
-          stateSchema: ProjectionStateSchema,
-          handlers: [transformation],
-        },
-      ],
-    });
-    assertGeneratedProjectionHandlers(handlers);
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        version: 4,
+        entities: [
+          {
+            entityType: GeneratedProjection,
+            stateSchema: ProjectionStateSchema,
+            handlers: [transformation],
+          },
+        ],
+      }),
+    ).toThrow(/Process Manager/);
+  });
 
-    expect(
-      () =>
-        new Repository({
-          entityType: GeneratedProjection,
-          schema: ProjectionStateSchema,
-          handlers,
+  it("rejects generated command reactions for Aggregate and Projection owners", () => {
+    for (const [entityType, stateSchema] of [
+      [GeneratedAggregate, AggregateStateSchema],
+      [GeneratedProjection, ProjectionStateSchema],
+    ] as const) {
+      expect(() =>
+        new HandlerRegistryIngestor().ingest({
+          version: 4,
+          entities: [
+            {
+              entityType,
+              stateSchema,
+              handlers: [
+                record("command-reaction", "commandFromCommand", EventSchema, [CommandSchema]),
+              ],
+            },
+          ],
         }),
-    ).toThrow(/Projection repositories do not support command transformations/);
+      ).toThrow(/Process Manager/);
+    }
   });
 
   it("rejects an Event subscription record that declares an Entity-state schema", () => {
@@ -354,8 +409,8 @@ describe("generated handler registry ingestion", () => {
       version: 3,
       entities: [
         {
-          entityType: GeneratedProjection,
-          stateSchema: ProjectionStateSchema,
+          entityType: GeneratedProcessManager,
+          stateSchema: ProcessManagerStateSchema,
           handlers: [
             record("command-assignment", "assignCreate", CommandSchema, [EventSchema], 1),
             record("command-reaction", "commandFromCommand", CommandSchema, [CommandSchema], 2),
@@ -369,8 +424,8 @@ describe("generated handler registry ingestion", () => {
 
     expect(metadata).toHaveLength(1);
     expect(Object.isFrozen(metadata)).toBe(true);
-    expect(entity?.entityType).toBe(GeneratedProjection);
-    expect(entity?.entity.fullTypeName).toBe("ProjectionState");
+    expect(entity?.entityType).toBe(GeneratedProcessManager);
+    expect(entity?.entity.fullTypeName).toBe("ProcessManagerState");
     expect(entity?.handlers.map((handler) => handler.kind)).toEqual([
       "command-assignment",
       "command-reaction",
@@ -709,7 +764,7 @@ describe("generated handler registry ingestion", () => {
         },
         registry,
       ),
-    ).toThrow(HandlerMetadataRegistryError);
+    ).toThrow(HandlerRegistryIngestionError);
     expect(registry.listEntityHandlers()).toEqual(originalEntityHandlers);
     expect(registry.findHandlersByKind("command-reaction")).toEqual([]);
   });

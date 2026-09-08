@@ -13,6 +13,7 @@
  */
 
 import { isEntitySchema, type DescriptorMessageSchema } from "../entity/entity-metadata.js";
+import { ProcessManager } from "../entity/entity.js";
 import {
   HandlerMetadataValues,
   HandlerMetadataRegistry,
@@ -21,7 +22,7 @@ import {
   type HandlerMethodName,
   type HandlerOrigin,
   type HandlerMetadata,
-  type HandlerRegistrationBuilder,
+  type GeneratedHandlerRegistrationBuilder,
   type WhereOptions,
 } from "./handler-metadata.js";
 import { RejectionSources } from "./rejection-source.js";
@@ -71,13 +72,7 @@ export class HandlerRegistryIngestor {
    */
   ingest(registry: unknown): readonly EntityHandlersMetadata[] {
     GeneratedRegistry.assert(registry);
-
-    switch (registry.version) {
-      case 3:
-        return GeneratedRegistry.materializeAll(registry);
-      case 4:
-        return GeneratedRegistry.materializeAll(registry);
-    }
+    return GeneratedRegistry.materializeAll(registry);
   }
 
   /**
@@ -282,13 +277,14 @@ interface GeneratedRegistryOperations {
     version: V,
   ): EntityHandlersMetadata;
   build<Instance extends object>(
-    builder: HandlerRegistrationBuilder<Instance>,
+    builder: GeneratedHandlerRegistrationBuilder<Instance>,
     handler: GeneratedHandlerRecordInput,
   ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>;
   validateHandler(
     handler: GeneratedHandlerRecordInput,
     version: GeneratedHandlerRegistryVersion,
   ): void;
+  validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void;
   validateSchema(schema: DescriptorMessageSchema, label: string): void;
   validateEmits(handler: GeneratedHandlerRecordInput): void;
   validateSubscription(handler: GeneratedHandlerRecordInput): void;
@@ -331,6 +327,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     entity.handlers.forEach((handler) => {
       GeneratedRegistry.validateHandler(handler, version);
     });
+    GeneratedRegistry.validateCommandHandlers(entity);
 
     return HandlerMetadataValues.defineArity(
       entity.entityType,
@@ -349,8 +346,23 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     );
   },
 
+  validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void {
+    if (
+      entity.handlers.some(
+        (handler) =>
+          handler.kind === "command-transformation" || handler.kind === "command-reaction",
+      ) &&
+      !(entity.entityType.prototype instanceof ProcessManager)
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "UNSUPPORTED_HANDLER_KIND",
+        "Generated @Command handlers are supported only by Process Manager entities.",
+      );
+    }
+  },
+
   build<Instance extends object>(
-    builder: HandlerRegistrationBuilder<Instance>,
+    builder: GeneratedHandlerRegistrationBuilder<Instance>,
     handler: GeneratedHandlerRecordInput,
   ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>> {
     switch (handler.kind) {

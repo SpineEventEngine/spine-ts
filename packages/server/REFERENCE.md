@@ -178,9 +178,10 @@ A command-input `@Command` method is a command transformation receptor: it is
 the one effective receptor for that Command type (instead of an `@Assign`),
 commits its Entity state before its one-or-more returned Commands are detached
 for in-process follow-up enqueue, and receives an optional `CommandContext`.
-Only Aggregate and Process Manager repositories support command-input
-transformations; Projection repositories reject them during repository
-construction.
+Only Process Manager repositories support `@Command` handlers. Aggregate and
+Projection repositories reject command-input transformations and event- or
+rejection-input command reactions during generated metadata ingestion and
+repository construction.
 Event- and rejection-input `@Command` methods remain Event Bus reactions.
 Produced commands retain the source actor, tenant, origin, and causal lineage.
 The enqueue is post-commit best effort, not an atomic outbox or exactly-once

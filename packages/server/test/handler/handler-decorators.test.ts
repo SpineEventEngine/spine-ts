@@ -380,43 +380,12 @@ describe("handler decorators", () => {
     );
   }, 15_000);
 
-  it("materializes every decorator kind into frozen handler metadata in declaration order", async () => {
+  it("rejects schema-less @Command decorator materialization", async () => {
     const { DecoratedProjection } = await createDecoratedClasses();
 
-    const metadata = materializeDecoratedEntityHandlers(DecoratedProjection, ProjectionStateSchema);
-
-    expect(metadata.entityType).toBe(DecoratedProjection);
-    expect(metadata.entity.fullTypeName).toBe("ProjectionState");
-    expect(metadata.handlers.map((handler) => handler.kind)).toEqual([
-      "command-assignment",
-      "command-reaction",
-      "event-subscription",
-      "event-reaction",
-      "event-application",
-    ]);
-    expect(metadata.handlers.map((handler) => handler.methodName)).toEqual([
-      "assignCreate",
-      "commandFromCommand",
-      "subscribeCreated",
-      "reactToCreated",
-      "applyCreated",
-    ]);
-    expect(metadata.handlers.map((handler) => handler.messageFullTypeName)).toEqual([
-      "spine.core.Command",
-      "spine.core.Command",
-      "spine.core.Event",
-      "spine.core.Event",
-      "spine.core.Event",
-    ]);
-    expect(metadata.commandAssignments[0]).toBe(metadata.handlers[0]);
-    expect(metadata.commandReactions[0]).toBe(metadata.handlers[1]);
-    expect(metadata.eventSubscriptions[0]).toBe(metadata.handlers[2]);
-    expect(metadata.eventReactions[0]).toBe(metadata.handlers[3]);
-    expect(metadata.eventApplications[0]).toBe(metadata.handlers[4]);
-    expect(metadata.eventApplications[0]?.allowImport).toBe(true);
-    expect(Object.isFrozen(metadata)).toBe(true);
-    expect(Object.isFrozen(metadata.handlers)).toBe(true);
-    expect(Object.isFrozen(metadata.handlers[0])).toBe(true);
+    expect(() =>
+      materializeDecoratedEntityHandlers(DecoratedProjection, ProjectionStateSchema),
+    ).toThrow(/generated registry metadata with emitted schemas/);
   });
 
   it("keeps bare decorators for framework-owned registry generation only", async () => {

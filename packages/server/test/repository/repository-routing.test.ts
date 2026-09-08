@@ -1192,7 +1192,11 @@ class ProducingGuardedAggregate extends Aggregate<string, typeof AggregateStateS
   }
 }
 
-class GeneratedCommandingAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class GeneratedCommandingProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
   static argumentCounts: number[] = [];
   static contexts: EventContext[] = [];
   static commandProjectionStarted = 0;
@@ -1219,15 +1223,17 @@ class GeneratedCommandingAggregate extends Aggregate<string, typeof AggregateSta
     release?.();
   }
 
-  async commandProjection(event: ProjectionEvent, context: EventContext): Promise<AggregateState> {
-    GeneratedCommandingAggregate.argumentCounts.push(arguments.length);
-    GeneratedCommandingAggregate.contexts.push(context);
-    GeneratedCommandingAggregate.commandProjectionStarted++;
-    await GeneratedCommandingAggregate.#commandProjectionCanFinish;
-    return create(AggregateStateSchema, {
+  async commandProjection(
+    event: ProjectionEvent,
+    context: EventContext,
+  ): Promise<TransformedTaskCommand> {
+    GeneratedCommandingProcessManager.argumentCounts.push(arguments.length);
+    GeneratedCommandingProcessManager.contexts.push(context);
+    GeneratedCommandingProcessManager.commandProjectionStarted++;
+    await GeneratedCommandingProcessManager.#commandProjectionCanFinish;
+    return create(TransformedTaskCommandSchema, {
       id: event.id,
       name: `${event.name} command`,
-      archived: false,
     });
   }
 }
@@ -1322,25 +1328,6 @@ class ValidatingTaskAggregate extends Aggregate<
       ),
     );
     this.commitTransaction();
-  }
-}
-
-class CommandTransformingAggregate extends Aggregate<
-  string,
-  typeof ValidatedAggregateStateSchema,
-  bigint
-> {
-  transform(command: ValidatedTaskCommand): readonly TransformedTaskCommand[] {
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(ValidatedAggregateStateSchema, { id: command.id, name: command.name }),
-      ),
-    );
-    return [
-      create(TransformedTaskCommandSchema, { id: command.id, name: `${command.name} first` }),
-      create(TransformedTaskCommandSchema, { id: command.id, name: `${command.name} second` }),
-    ];
   }
 }
 
@@ -3320,12 +3307,12 @@ describe("repository signal routing", () => {
   });
 
   it("runs generated command reactions and wraps returned domain commands after event intake", async () => {
-    GeneratedCommandingAggregate.reset();
+    GeneratedCommandingProcessManager.reset();
     const commands: SpineCommand[] = [];
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedCommandingRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [TransformedTaskCommandSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -3335,7 +3322,7 @@ describe("repository signal routing", () => {
 
     await context.eventBus().post(createProjectionEvent("event-command-source", "task-command"));
 
-    expect(GeneratedCommandingAggregate.argumentCounts).toEqual([2]);
+    expect(GeneratedCommandingProcessManager.argumentCounts).toEqual([2]);
     expect(commands).toHaveLength(1);
     const [command] = commands;
 
@@ -3344,11 +3331,10 @@ describe("repository signal routing", () => {
     if (command?.message === undefined) {
       throw new Error("Expected a produced command message.");
     }
-    expect(AnyMessages.unpack(command.message, AggregateStateSchema)).toEqual(
-      create(AggregateStateSchema, {
+    expect(AnyMessages.unpack(command.message, TransformedTaskCommandSchema)).toEqual(
+      create(TransformedTaskCommandSchema, {
         id: "task-command",
         name: "Task command",
-        archived: false,
       }),
     );
   });
@@ -3358,7 +3344,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.multitenant("Tasks")
       .add(createGeneratedCommandingRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [TransformedTaskCommandSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -3398,12 +3384,12 @@ describe("repository signal routing", () => {
   });
 
   it("keeps command bus open until event-side command reactions drain during close", async () => {
-    GeneratedCommandingAggregate.reset({ pauseCommandProjection: true });
+    GeneratedCommandingProcessManager.reset({ pauseCommandProjection: true });
     const commands: SpineCommand[] = [];
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedCommandingRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [TransformedTaskCommandSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -3414,13 +3400,13 @@ describe("repository signal routing", () => {
     const post = context
       .eventBus()
       .post(createProjectionEvent("event-command-close", "task-command-close"));
-    await waitForCondition(() => GeneratedCommandingAggregate.commandProjectionStarted === 1);
+    await waitForCondition(() => GeneratedCommandingProcessManager.commandProjectionStarted === 1);
 
     const close = context.close().then(() => "closed");
 
     await expect(Promise.race([close, delay(25)])).resolves.toBe("pending");
 
-    GeneratedCommandingAggregate.releaseCommandProjection();
+    GeneratedCommandingProcessManager.releaseCommandProjection();
 
     await expect(post).resolves.toBeUndefined();
     await expect(close).resolves.toBe("closed");
@@ -4039,59 +4025,6 @@ describe("repository signal routing", () => {
     } finally {
       CommandTransformingProcessManager.reset();
     }
-  });
-
-  it("commits aggregate transformations before containing a failed child and draining its sibling", async () => {
-    const admitted: string[] = [];
-    const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
-    const context = BoundedContext.singleTenant("Aggregate transformed commands")
-      .add(createCommandTransformingAggregateRepository())
-      .addCommandDispatcher({
-        messageSchemas: () => [TransformedTaskCommandSchema],
-        dispatch: (command) => {
-          if (command.message === undefined)
-            throw new Error("Expected transformed command payload.");
-          const message = AnyMessages.unpack(command.message, TransformedTaskCommandSchema);
-          if (message === undefined) throw new Error("Expected transformed command.");
-          admitted.push(message.name);
-          if (message.name === "Aggregate first") throw new Error("aggregate first child failed");
-          return Promise.resolve();
-        },
-      })
-      .build();
-    boundedContextAccess.installLogger(context, {
-      withMetadata: (facts: Record<string, unknown>) => ({
-        error: (message: string) => errors.push({ message, facts }),
-      }),
-    } as unknown as ILogLayer);
-
-    await context.commandBus().post(
-      SignalEnvelopes.command({
-        id: create(CommandIdSchema, { uuid: "aggregate-source" }),
-        context: create(CommandContextSchema),
-        schema: ValidatedTaskCommandSchema,
-        message: create(ValidatedTaskCommandSchema, { id: "aggregate-target", name: "Aggregate" }),
-      }),
-    );
-    await expect(
-      context.stand().read(ValidatedAggregateStateSchema, "aggregate-target"),
-    ).resolves.toEqual(
-      create(ValidatedAggregateStateSchema, { id: "aggregate-target", name: "Aggregate" }),
-    );
-    await context.close();
-
-    expect(admitted).toEqual(["Aggregate first", "Aggregate second"]);
-    expect(errors).toContainEqual({
-      message: "Repository transformed command follow-up failed.",
-      facts: {
-        operation: "repository.command_follow_up",
-        reasonCode: "dispatch_failed",
-        sourceCommandId: "aggregate-source",
-        sourceCommandType: TypeUrls.derive(ValidatedTaskCommandSchema),
-        childCommandId: "aggregate-source-1",
-        childCommandType: TypeUrls.derive(TransformedTaskCommandSchema),
-      },
-    });
   });
 
   it("routes commands to one aggregate ID by the first command field", () => {
@@ -11149,30 +11082,35 @@ function routeAggregateTargets(
   });
 }
 
-function createGeneratedCommandingRepository(): Repository<typeof GeneratedCommandingAggregate> {
+function createGeneratedCommandingRepository(): Repository<
+  typeof GeneratedCommandingProcessManager
+> {
   const handlers = new HandlerRegistryIngestor().ingest({
-    version: 3,
+    version: 4,
     entities: [
       {
-        entityType: GeneratedCommandingAggregate,
-        stateSchema: AggregateStateSchema,
+        entityType: GeneratedCommandingProcessManager,
+        stateSchema: ProcessManagerStateSchema,
         handlers: [
           {
             kind: "command-reaction",
             methodName: "commandProjection",
             signalSchema: ProjectionEventSchema,
-            emittedSchemas: [AggregateStateSchema],
+            emittedSchemas: [TransformedTaskCommandSchema],
             parameterCount: 2,
             origin: "domestic",
           },
         ],
       },
     ],
-  })[0] as EntityHandlersMetadata<GeneratedCommandingAggregate, typeof AggregateStateSchema>;
+  })[0] as EntityHandlersMetadata<
+    GeneratedCommandingProcessManager,
+    typeof ProcessManagerStateSchema
+  >;
 
   return new Repository({
-    entityType: GeneratedCommandingAggregate,
-    schema: AggregateStateSchema,
+    entityType: GeneratedCommandingProcessManager,
+    schema: ProcessManagerStateSchema,
     handlers,
   });
 }
@@ -11232,34 +11170,6 @@ function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate
     entityType: ValidatingTaskAggregate,
     schema: ValidatedAggregateStateSchema,
     handlers,
-  });
-}
-
-function createCommandTransformingAggregateRepository(): Repository<
-  typeof CommandTransformingAggregate
-> {
-  const handlers = HandlerMetadataValues.defineArity(
-    CommandTransformingAggregate,
-    ValidatedAggregateStateSchema,
-    (builder) => [builder.transform(ValidatedTaskCommandSchema, "transform")],
-    [
-      {
-        kind: "command-transformation",
-        methodName: "transform",
-        parameterCount: 1,
-        origin: "domestic",
-        emittedSchemas: [TransformedTaskCommandSchema],
-      },
-    ],
-  );
-  return new Repository({
-    entityType: CommandTransformingAggregate,
-    schema: ValidatedAggregateStateSchema,
-    handlers,
-    commandRouting: CommandRouting.create<string>().route(
-      ValidatedTaskCommandSchema,
-      (command) => command.id,
-    ),
   });
 }
 

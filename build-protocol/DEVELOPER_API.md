@@ -78,10 +78,11 @@ event handlers receive `EventContext` from the incoming envelope. If the
 envelope omits context, the framework passes an empty generated context message
 of the proper schema. `@Apply` has no two-argument runtime support.
 
-Command-input transformations are supported only by Aggregate and Process
-Manager repositories. Projection repositories reject transformation metadata
-during repository construction; registry and handler-registration types remain
-generic and do not provide compile-time rejection.
+`@Command` handlers are supported only by Process Manager repositories.
+Aggregate and Projection repositories reject both command-input transformation
+and event- or rejection-input reaction metadata during generated ingestion and
+repository construction; registry and handler-registration types remain generic
+and do not provide compile-time rejection.
 
 Generated registry modules are build artifacts under ignored `generated/`
 directories. T-0015c implements the build-time analyzer that extracts

@@ -36,6 +36,7 @@ import {
   type RepositoryIdentitySnapshot,
   type RepositoryOptions,
 } from "../../src/index.js";
+import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 
 function expectRepositoryIdentityError(
   error: unknown,
@@ -169,6 +170,19 @@ class CommandTransformingProjection extends Projection<
   transformTask(command: ValidatedTaskCommand): ValidatedTaskCommand {
     return command;
   }
+
+  reactWithCommand(command: ValidatedTaskCommand): ValidatedTaskCommand {
+    return command;
+  }
+}
+class CommandTransformingAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+  transformTask(command: ValidatedTaskCommand): ValidatedTaskCommand {
+    return command;
+  }
+
+  reactWithCommand(command: ValidatedTaskCommand): ValidatedTaskCommand {
+    return command;
+  }
 }
 const DomainEntityBase = {
   Aggregate,
@@ -187,21 +201,45 @@ class PlainEntityClass {
 }
 
 describe("repository identity", () => {
-  it("rejects command transformations on projections before command readiness is exposed", () => {
-    const handlers = EntityHandlers.define(
-      CommandTransformingProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.transform(ValidatedTaskCommandSchema, "transformTask")],
-    );
+  it("rejects command transformations on Aggregates", () => {
+    expect(() =>
+      HandlerMetadataValues.defineArity(
+        CommandTransformingAggregate,
+        AggregateStateSchema,
+        (builder) => [builder.transform(ValidatedTaskCommandSchema, "transformTask")],
+        [{ kind: "command-transformation", methodName: "transformTask", parameterCount: 1 }],
+      ),
+    ).toThrow(/Process Manager/);
+  });
 
-    expect(
-      () =>
-        new Repository({
-          entityType: CommandTransformingProjection,
-          schema: ProjectionStateSchema,
-          handlers,
-        }),
-    ).toThrow(/Projection repositories do not support command transformations/);
+  it("rejects command transformations on projections before command readiness is exposed", () => {
+    expect(() =>
+      HandlerMetadataValues.defineArity(
+        CommandTransformingProjection,
+        ProjectionStateSchema,
+        (builder) => [builder.transform(ValidatedTaskCommandSchema, "transformTask")],
+        [{ kind: "command-transformation", methodName: "transformTask", parameterCount: 1 }],
+      ),
+    ).toThrow(/Process Manager/);
+  });
+
+  it("rejects command reactions on non-Process-Manager metadata", () => {
+    expect(() =>
+      HandlerMetadataValues.defineArity(
+        CommandTransformingAggregate,
+        AggregateStateSchema,
+        (builder) => [builder.command(ValidatedTaskCommandSchema, "reactWithCommand")],
+        [{ kind: "command-reaction", methodName: "reactWithCommand", parameterCount: 1 }],
+      ),
+    ).toThrow(/Process Manager/);
+    expect(() =>
+      HandlerMetadataValues.defineArity(
+        CommandTransformingProjection,
+        ProjectionStateSchema,
+        (builder) => [builder.command(ValidatedTaskCommandSchema, "reactWithCommand")],
+        [{ kind: "command-reaction", methodName: "reactWithCommand", parameterCount: 1 }],
+      ),
+    ).toThrow(/Process Manager/);
   });
 
   it("constructs metadata-only identity for aggregate, projection, and process-manager entities", () => {

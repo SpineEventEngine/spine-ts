@@ -167,7 +167,6 @@ describe("handler metadata", () => {
 
     const metadata = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
-      builder.command(CommandSchema, "commandFromCommand"),
       builder.subscribe(EventSchema, "subscribeCreated"),
       builder.react(EventSchema, "reactToCreated"),
       builder.apply(EventSchema, "applyCreated", { allowImport: true }),
@@ -181,31 +180,28 @@ describe("handler metadata", () => {
     expect(metadata.entityType).toBe(TaskProjection);
     expect(metadata.handlers.map((handler) => handler.kind)).toEqual([
       "command-assignment",
-      "command-reaction",
       "event-subscription",
       "event-reaction",
       "event-application",
     ]);
     expect(metadata.handlers.map((handler) => handler.methodName)).toEqual([
       "assignCreate",
-      "commandFromCommand",
       "subscribeCreated",
       "reactToCreated",
       "applyCreated",
     ]);
     expect(metadata.handlers.map((handler) => handler.messageFullTypeName)).toEqual([
       "spine.core.Command",
-      "spine.core.Command",
       "spine.core.Event",
       "spine.core.Event",
       "spine.core.Event",
     ]);
-    expect(metadata.handlers.map((handler) => handler.parameterCount)).toEqual([1, 1, 1, 1, 1]);
+    expect(metadata.handlers.map((handler) => handler.parameterCount)).toEqual([1, 1, 1, 1]);
     expect(metadata.commandAssignments[0]).toBe(metadata.handlers[0]);
-    expect(metadata.commandReactions[0]).toBe(metadata.handlers[1]);
-    expect(metadata.eventSubscriptions[0]).toBe(metadata.handlers[2]);
-    expect(metadata.eventReactions[0]).toBe(metadata.handlers[3]);
-    expect(metadata.eventApplications[0]).toBe(metadata.handlers[4]);
+    expect(metadata.commandReactions).toEqual([]);
+    expect(metadata.eventSubscriptions[0]).toBe(metadata.handlers[1]);
+    expect(metadata.eventReactions[0]).toBe(metadata.handlers[2]);
+    expect(metadata.eventApplications[0]).toBe(metadata.handlers[3]);
     expect(metadata.eventApplications[0]?.allowImport).toBe(true);
 
     expect(Object.isFrozen(metadata)).toBe(true);
@@ -331,7 +327,6 @@ describe("handler metadata registry", () => {
       TaskProjection,
       AggregateStateSchema,
       (builder) => [
-        builder.command(CommandSchema, "commandFromArchive"),
         builder.subscribe(EventSchema, "subscribeArchived"),
         builder.react(EventSchema, "reactToArchived"),
         builder.apply(EventSchema, "applyArchived"),
@@ -386,34 +381,9 @@ describe("handler metadata registry", () => {
     );
   });
 
-  it("rejects assignment and transformation receptors for the same command across entities", () => {
-    const assignment = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
-      builder.assign(CommandSchema, "assignCreate"),
-    ]);
-    const transformation = EntityHandlers.define(
-      OtherProjection,
-      AggregateStateSchema,
-      (builder) => [builder.transform(CommandSchema, "assignCreate")],
-    );
-
-    expect(() => new HandlerMetadataRegistry([assignment, transformation])).toThrow(
-      /Duplicate command assignment for "spine\.core\.Command"/,
-    );
-  });
-
-  it("rejects transformation receptors duplicated across entities and keeps assignment lookup narrow", () => {
-    const first = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
-      builder.transform(CommandSchema, "commandFromCommand"),
-    ]);
-    const second = EntityHandlers.define(OtherProjection, AggregateStateSchema, (builder) => [
-      builder.transform(CommandSchema, "assignCreate"),
-    ]);
-    const registry = new HandlerMetadataRegistry([first]);
-
-    expect(registry.findCommandAssignment("spine.core.Command")).toBeUndefined();
-    expect(() => new HandlerMetadataRegistry([first, second])).toThrow(
-      /Duplicate command assignment for "spine\.core\.Command"/,
-    );
+  it("keeps @Command registrations out of the public registration builder", () => {
+    expectTypeOf<HandlerRegistrationBuilder<TaskProjection>>().not.toHaveProperty("transform");
+    expectTypeOf<HandlerRegistrationBuilder<TaskProjection>>().not.toHaveProperty("command");
   });
 
   it("rejects duplicate event applications for the same entity state and event type", () => {
@@ -432,35 +402,21 @@ describe("handler metadata registry", () => {
     );
   });
 
-  it("allows fan-out metadata for command reactions and event subscribers/reactors", () => {
+  it("allows fan-out metadata for event subscribers and reactors", () => {
     const first = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
-      builder.command(CommandSchema, "commandFromCommand"),
       builder.subscribe(EventSchema, "subscribeCreated"),
       builder.react(EventSchema, "reactToCreated"),
     ]);
     const second = EntityHandlers.define(TaskProjection, AggregateStateSchema, (builder) => [
-      builder.command(CommandSchema, "commandFromArchive"),
       builder.subscribe(EventSchema, "subscribeArchived"),
       builder.react(EventSchema, "reactToArchived"),
     ]);
 
     const registry = new HandlerMetadataRegistry([first, second]);
 
-    expect(registry.findHandlersByKind("command-reaction")).toHaveLength(2);
     expect(registry.findHandlersByKind("event-subscription")).toHaveLength(2);
     expect(registry.findHandlersByKind("event-reaction")).toHaveLength(2);
-    expect(registry.findByMessage("spine.core.Command")).toHaveLength(2);
     expect(registry.findByMessage("spine.core.Event")).toHaveLength(4);
-  });
-
-  it("keeps event-input command methods on the event side instead of command receptor lookup", () => {
-    const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
-      builder.command(EventSchema, "commandFromCommand"),
-    ]);
-    const registry = new HandlerMetadataRegistry([handlers]);
-
-    expect(registry.findCommandReceptor("spine.core.Event")).toBeUndefined();
-    expect(registry.findHandlersByKind("command-reaction")).toHaveLength(1);
   });
 
   it("keeps registries caller-owned and does not instantiate or invoke handlers", () => {

@@ -706,9 +706,10 @@ values. Generated `@Assign` and command-input `@Command` producer records must
 declare at least one emitted schema. A command-input `@Command` is the unique
 command receptor/transformation for its input and may receive an optional
 `CommandContext`; event- and rejection-input `@Command` handlers are EventBus
-reactions. Command-input transformations are supported by Aggregate and Process
-Manager repositories; Projection repositories reject them during repository
-construction. `@React` records may return generated event messages
+reactions. `@Command` handlers are supported only by Process Manager
+repositories. Aggregate and Projection repositories reject command-input
+transformations and event- or rejection-input command reactions during generated
+ingestion and repository construction. `@React` records may return generated event messages
 or explicit `void` with no emitted schemas. `@Subscribe` records return
 explicit `void` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.

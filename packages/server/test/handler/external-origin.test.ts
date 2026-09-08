@@ -187,19 +187,19 @@ function generatedModule(protoSource: string, ...names: string[]): string {
 }
 
 const externalCommandSource = `
-  import { Aggregate, Assign, Command, type External } from "@spine-event-engine/server";
+  import { Assign, Command, ProcessManager, type External } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask, type RenameTask } from "../generated/task_commands_pb.js";
   import { type TaskCreated } from "../generated/task_events_pb.js";
 
-  export class TaskAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema, number> {
     @Assign assign(command: External<CreateTask>): TaskCreated { throw new Error(String(command)); }
     @Command onEvent(event: External<TaskCreated>): RenameTask { throw new Error(String(event)); }
   }
 `;
 
 const externalOriginSource = `
-  import { Command, Projection, React, Subscribe, type External } from "@spine-event-engine/server";
+  import { Command, ProcessManager, React, Subscribe, type External } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type RenameTask } from "../generated/task_commands_pb.js";
   import { type TaskCreated, type TaskRenamed } from "../generated/task_events_pb.js";
@@ -207,7 +207,7 @@ const externalOriginSource = `
 
   type IndirectExternal<T> = External<T>;
   type LocalEvent = TaskCreated;
-  export class TaskProjection extends Projection<string, typeof TaskSchema, number> {
+  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema, number> {
     @Subscribe externalEvent(event: External<TaskCreated>): void { void event; }
     @Subscribe domesticEvent(event: TaskRenamed): void { void event; }
     @React externalReaction(event: External<TaskCreated>): TaskRenamed { throw new Error(String(event)); }

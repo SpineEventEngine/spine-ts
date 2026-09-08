@@ -1264,7 +1264,7 @@ interface RepositoryRuntime {
   readonly postSystemFollowUp: (event: Event) => Promise<void>;
   readonly registerSystemEventSchema: (schema: MessageSchema) => void;
   readonly onPostCommand: (command: Command) => Promise<void>;
-  readonly recordFollowUpFailure: (source: Command, child: Command, error: unknown) => void;
+  readonly onFollowUpFailure: (source: Command, child: Command, error: unknown) => void;
   readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
@@ -1604,53 +1604,6 @@ class AggregateCommandExecution {
         error,
       );
     }
-    if (assignee.handler.kind === "command-transformation") {
-      const commands = this.#bindProducedCommands(this.#support.normalizeProducedSignals(produced));
-      if (commands.length === 0) {
-        throw new Error(
-          "Repository aggregate command transformations must return at least one command.",
-        );
-      }
-      const dispatch = await this.#support.persistAggregateAndDispatch(
-        loaded,
-        route.entityId,
-        loaded.version,
-        [],
-        (event) => this.#runtime.dispatchStored(event),
-        () => {
-          if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
-          EntityStateChangePublisher.command(
-            this.#runtime,
-            this.#repository,
-            this.#command,
-            route.entityId,
-            loaded.oldState,
-            loaded.current === undefined
-              ? undefined
-              : {
-                  archived: loaded.current.lifecycleFlags?.archived ?? false,
-                  deleted: loaded.current.lifecycleFlags?.deleted ?? false,
-                },
-            RepositoryEntities.repositoryState(loaded.entity) as Message,
-            RepositoryEntities.repositoryLifecycle(loaded.entity),
-            RepositorySignals.eventVersionNumber(loaded.version),
-          );
-        },
-      );
-      return async () => {
-        await dispatch();
-        await Promise.all(
-          commands.map(async (command) => {
-            try {
-              await this.#runtime.onPostCommand(command);
-            } catch (error) {
-              this.#runtime.recordFollowUpFailure(this.#command, command, error);
-              throw error;
-            }
-          }),
-        );
-      };
-    }
     const events = this.#bindProducedEvents(
       this.#support.normalizeProducedSignals(produced),
       route.entityId,
@@ -1780,30 +1733,6 @@ class AggregateCommandExecution {
       context: metadata.context,
     });
   }
-
-  #bindProducedCommands(produced: readonly unknown[]): readonly Command[] {
-    let sequence = 0;
-    return Object.freeze(
-      produced.map((signal) => {
-        sequence += 1;
-        const typeName = EntityInvocation.messageTypeName(signal);
-        const schema = this.#routing.producedCommandSchemas.find(
-          (candidate) => candidate.typeName === typeName,
-        );
-        if (schema === undefined) {
-          throw new Error(
-            `Repository aggregate execution cannot pack command message "${typeName}".`,
-          );
-        }
-        const metadata = this.#runtime.signalMetadata.commandFromCommand(this.#command, sequence);
-        return create(CommandSchema, {
-          id: metadata.id,
-          message: AnyMessages.pack(schema, signal as never),
-          context: metadata.context,
-        });
-      }),
-    );
-  }
 }
 
 class AggregateEventExecution {
@@ -1837,18 +1766,17 @@ class AggregateEventExecution {
   async runTarget(entityId: unknown, acceptedRoute: RepositoryEventRoute): Promise<void> {
     const intake = this.#readIntake(acceptedRoute);
 
-    if (intake.reactors.length === 0 && intake.commanders.length === 0) {
+    if (intake.reactors.length === 0) {
       return;
     }
 
-    await this.#postCommands(await this.#executeEntity(entityId, intake));
+    await this.#executeEntity(entityId, intake);
   }
 
   #readIntake(acceptedRoute: RepositoryEventRoute): {
     readonly message: unknown;
     readonly route: RepositoryEventRoute;
     readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
-    readonly commanders: readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
   } {
     const eventMessage = EntityInvocation.requireSignalMessage(this.#event.message, "event");
     const eventSchema = RepositoryRoutes.schemaForTypeUrl(
@@ -1861,17 +1789,10 @@ class AggregateEventExecution {
     const reactors = this.#routing
       .eventReactors(route.messageFullTypeName, message, this.#event.context?.external === true)
       .filter((reactor) => RepositoryHandlers.handlerEmittedSchemas(reactor.handler).length > 0);
-    const commanders = this.#routing.commandReactions(
-      route.messageFullTypeName,
-      message,
-      this.#event.context?.external === true,
-    );
-
     return Object.freeze({
       message,
       route,
       reactors: Object.freeze([...reactors]),
-      commanders,
     });
   }
 
@@ -1881,11 +1802,9 @@ class AggregateEventExecution {
       readonly message: unknown;
       readonly route: RepositoryEventRoute;
       readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
-      readonly commanders: readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
     },
-  ): Promise<readonly Command[]> {
+  ): Promise<void> {
     const loaded = await this.#support.loadAggregate(entityId);
-    const commands: Command[] = [];
     const produced = await this.#invokeHandlers(
       entityId,
       loaded,
@@ -1893,16 +1812,12 @@ class AggregateEventExecution {
       intake.route.entityIds.length > 1,
     );
 
-    for (const command of produced.commands) {
-      commands.push(command);
-    }
-
-    if (produced.events.length > 0) {
+    if (produced.length > 0) {
       const dispatch = await this.#support.persistAggregateAndDispatch(
         loaded,
         entityId,
-        loaded.version + BigInt(produced.events.length),
-        produced.events,
+        loaded.version + BigInt(produced.length),
+        produced,
         (event) => this.#runtime.dispatchStoredFollowUp(event),
         () => {
           if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
@@ -1920,7 +1835,7 @@ class AggregateEventExecution {
                 },
             RepositoryEntities.repositoryState(loaded.entity) as Message,
             RepositoryEntities.repositoryLifecycle(loaded.entity),
-            RepositorySignals.eventVersionNumber(loaded.version + BigInt(produced.events.length)),
+            RepositorySignals.eventVersionNumber(loaded.version + BigInt(produced.length)),
           );
         },
       );
@@ -1933,7 +1848,7 @@ class AggregateEventExecution {
       DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId),
     );
 
-    return Object.freeze(commands);
+    return undefined;
   }
 
   async #invokeHandlers(
@@ -1942,29 +1857,14 @@ class AggregateEventExecution {
     intake: {
       readonly message: unknown;
       readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
-      readonly commanders: readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
     },
     multiTarget: boolean,
-  ): Promise<{ readonly commands: readonly Command[]; readonly events: readonly Event[] }> {
+  ): Promise<readonly Event[]> {
     const eventContext = EntityInvocation.eventHandlerContext(this.#event);
-    const commands: Command[] = [];
     const events: Event[] = [];
 
     transactionalEntityAccess.start(loaded.entity);
     try {
-      for (const commander of intake.commanders) {
-        const produced = await EntityInvocation.invokeEntityMethod(
-          loaded.entity,
-          commander.handler.methodName,
-          intake.message,
-          commander.handler.parameterCount,
-          eventContext,
-        );
-        commands.push(
-          ...this.#bindProducedCommands(this.#support.normalizeProducedSignals(produced)),
-        );
-      }
-
       if (intake.reactors.length > 0) {
         HandlerDispatchPublisher.reactor(this.#runtime, this.#repository, this.#event, entityId);
       }
@@ -1993,19 +1893,10 @@ class AggregateEventExecution {
         throw new TransitionValidationError(commit.validation.error);
       }
 
-      return Object.freeze({
-        commands: Object.freeze(commands),
-        events: Object.freeze(events),
-      });
+      return Object.freeze(events);
     } catch (error) {
       transactionalEntityAccess.rollback(loaded.entity);
       throw error;
-    }
-  }
-
-  async #postCommands(commands: readonly Command[]): Promise<void> {
-    for (const command of commands) {
-      await this.#runtime.onPostCommand(command);
     }
   }
 
@@ -2061,34 +1952,6 @@ class AggregateEventExecution {
         entityId,
       ),
     });
-  }
-
-  #bindProducedCommands(produced: readonly unknown[]): readonly Command[] {
-    let sequence = 0;
-
-    return Object.freeze(
-      produced.map((signal) => {
-        sequence += 1;
-        const typeName = EntityInvocation.messageTypeName(signal);
-        const schema = this.#routing.producedCommandSchemas.find(
-          (candidate) => candidate.typeName === typeName,
-        );
-
-        if (schema === undefined) {
-          throw new Error(
-            `Repository aggregate execution cannot pack command message "${typeName}".`,
-          );
-        }
-
-        const metadata = this.#runtime.signalMetadata.commandFromEvent(this.#event, sequence);
-
-        return create(CommandSchema, {
-          id: metadata.id,
-          message: AnyMessages.pack(schema, signal as never),
-          context: metadata.context,
-        });
-      }),
-    );
   }
 }
 
@@ -2632,6 +2495,42 @@ class ProcessManagerCommandExecution {
 
   async run(replayedRoute?: RepositoryCommandRoute): Promise<EntityInboxFollowUp | undefined> {
     RepositorySignals.requireCommandId(this.#command);
+    const intake = this.#readIntake(replayedRoute);
+    if (intake === undefined) return undefined;
+
+    const tenantOptions = RepositoryTenants.commandStandOptions(
+      this.#runtime.context,
+      this.#command,
+    );
+    const loaded = await this.#support.load(intake.route.entityId, tenantOptions);
+    HandlerDispatchPublisher.command(
+      this.#runtime,
+      this.#repository,
+      this.#command,
+      intake.route.entityId,
+    );
+    try {
+      const produced = await this.#invoke(loaded.entity, intake.assignee, intake.message);
+      return await this.#commitAndPublish(loaded, tenantOptions, intake, produced);
+    } catch (error) {
+      if (!RejectionThrowable.is(error)) throw error;
+      return RepositorySignals.postRejectionEvent(
+        this.#runtime,
+        this.#repository,
+        this.#command,
+        intake.route.entityId,
+        error,
+      );
+    }
+  }
+
+  #readIntake(replayedRoute?: RepositoryCommandRoute):
+    | {
+        readonly assignee: RepositoryCommandAssignee;
+        readonly message: unknown;
+        readonly route: RepositoryCommandRoute;
+      }
+    | undefined {
     const commandMessage = EntityInvocation.requireSignalMessage(this.#command.message, "command");
     const commandSchema = RepositoryRoutes.schemaForTypeUrl(
       this.#routing.commandSchemas,
@@ -2641,50 +2540,30 @@ class ProcessManagerCommandExecution {
     const message = EntityInvocation.unpackRequired(commandMessage, commandSchema, "command");
     const route = replayedRoute ?? this.#repository.routeCommand(this.#command);
     const assignee = this.#routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
+    return assignee === undefined ? undefined : Object.freeze({ assignee, message, route });
+  }
 
-    if (assignee === undefined) {
-      return;
-    }
-
-    const tenantOptions = RepositoryTenants.commandStandOptions(
-      this.#runtime.context,
-      this.#command,
-    );
-    const loaded = await this.#support.load(route.entityId, tenantOptions);
-    HandlerDispatchPublisher.command(
-      this.#runtime,
-      this.#repository,
-      this.#command,
-      route.entityId,
-    );
-    let producedSignals: readonly unknown[];
-    try {
-      producedSignals = await this.#invoke(loaded.entity, assignee, message);
-    } catch (error) {
-      if (!RejectionThrowable.is(error)) {
-        throw error;
-      }
-      return RepositorySignals.postRejectionEvent(
-        this.#runtime,
-        this.#repository,
-        this.#command,
-        route.entityId,
-        error,
-      );
-    }
-
+  async #commitAndPublish(
+    loaded: Awaited<ReturnType<ProcessManagerExecutionSupport["load"]>>,
+    tenantOptions: ReturnType<typeof RepositoryTenants.commandStandOptions>,
+    intake: {
+      readonly assignee: RepositoryCommandAssignee;
+      readonly route: RepositoryCommandRoute;
+    },
+    producedSignals: readonly unknown[],
+  ): Promise<EntityInboxFollowUp | undefined> {
     const commands =
-      assignee.handler.kind === "command-transformation"
+      intake.assignee.handler.kind === "command-transformation"
         ? this.#bindProducedCommands(producedSignals)
         : Object.freeze([]);
-    if (assignee.handler.kind === "command-transformation" && commands.length === 0) {
+    if (intake.assignee.handler.kind === "command-transformation" && commands.length === 0) {
       throw new Error(
         "Repository process-manager command transformations must return at least one command.",
       );
     }
     const events =
-      assignee.handler.kind === "command-assignment"
-        ? this.#bindProducedEvents(producedSignals, route.entityId)
+      intake.assignee.handler.kind === "command-assignment"
+        ? this.#bindProducedEvents(producedSignals, intake.route.entityId)
         : Object.freeze([]);
     const committed = await this.#support.commit(
       loaded,
@@ -2693,12 +2572,23 @@ class ProcessManagerCommandExecution {
       events,
     );
     if (!committed) return undefined;
+    this.#publishChangedState(loaded, intake.route.entityId);
+    this.#postEvents(events);
+    return commands.length === 0
+      ? undefined
+      : async () => this.#postCommands(commands, this.#command);
+  }
+
+  #publishChangedState(
+    loaded: Awaited<ReturnType<ProcessManagerExecutionSupport["load"]>>,
+    entityId: unknown,
+  ): void {
     if (RepositoryEntities.repositoryChanged(loaded.entity)) {
       EntityStateChangePublisher.command(
         this.#runtime,
         this.#repository,
         this.#command,
-        route.entityId,
+        entityId,
         loaded.current === undefined
           ? undefined
           : EntityRecords.unpack(this.#repository.stateSchema, loaded.current).state,
@@ -2713,10 +2603,6 @@ class ProcessManagerCommandExecution {
         RepositoryStand.processManagerVersion(loaded.entity),
       );
     }
-    this.#postEvents(events);
-    return commands.length === 0
-      ? undefined
-      : async () => this.#postCommands(commands, this.#command);
   }
 
   async #invoke(
@@ -2814,7 +2700,7 @@ class ProcessManagerCommandExecution {
         try {
           await this.#runtime.onPostCommand(command);
         } catch (error) {
-          this.#runtime.recordFollowUpFailure(source, command, error);
+          this.#runtime.onFollowUpFailure(source, command, error);
           throw error;
         }
       }),
@@ -4311,10 +4197,14 @@ const RepositoryHandlers = {
         );
       }
 
-      if (metadata.kind === "projection" && handlersMetadata.commandTransformations.length > 0) {
+      if (
+        metadata.kind !== "process-manager" &&
+        (handlersMetadata.commandTransformations.length > 0 ||
+          handlersMetadata.commandReactions.length > 0)
+      ) {
         throw new RepositoryIdentityError(
           "UNSUPPORTED_ENTITY_TYPE",
-          "Projection repositories do not support command transformations.",
+          "Only Process Manager repositories support @Command handlers.",
         );
       }
     }

@@ -173,6 +173,7 @@ export type BuildHandlerDiagnosticCode =
   | "SCHEMA_BEARING_DECORATOR"
   | "TYPESCRIPT_SYNTAX_ERROR"
   | "UNSUPPORTED_ENTITY_EXPORT"
+  | "UNSUPPORTED_COMMAND_HANDLER"
   | "UNSUPPORTED_RETURN_TYPE";
 
 /**
@@ -407,6 +408,7 @@ const HandlerSources = Object.freeze({
       return undefined;
     }
 
+    const entityBase = HandlerSources.entityBaseName(node, scope.imports);
     const stateSchema = HandlerSources.entityStateSchema(node, scope.imports);
     const handlers: BuildHandlerRecord[] = [];
 
@@ -415,7 +417,13 @@ const HandlerSources = Object.freeze({
         continue;
       }
 
-      const handler = HandlerSources.analyzeMethod(member, className, stateSchema, scope);
+      const handler = HandlerSources.analyzeMethod(
+        member,
+        className,
+        entityBase,
+        stateSchema,
+        scope,
+      );
       if (handler !== undefined) {
         handlers.push(handler);
       }
@@ -431,6 +439,7 @@ const HandlerSources = Object.freeze({
   analyzeMethod(
     node: ts.MethodDeclaration,
     className: string,
+    entityBase: string | undefined,
     stateSchema: SchemaReference | undefined,
     scope: AnalyzerScope,
   ): BuildHandlerRecord | undefined {
@@ -464,6 +473,17 @@ const HandlerSources = Object.freeze({
     }
 
     const method = HandlerTypes.methodName(node);
+    if ((entityBase === "Aggregate" || entityBase === "Projection") && handler.name === "Command") {
+      HandlerTypes.pushDiagnostic(
+        scope,
+        "UNSUPPORTED_COMMAND_HANDLER",
+        handler.node,
+        "Only Process Managers support @Command handlers.",
+        className,
+        method,
+      );
+      return undefined;
+    }
     const invalid = HandlerSources.validateHandlerNode(
       node,
       handler.name,
@@ -981,6 +1001,28 @@ const HandlerSources = Object.freeze({
       }
     }
 
+    return undefined;
+  },
+
+  entityBaseName(node: ts.ClassDeclaration, imports: ImportState): string | undefined {
+    for (const clause of node.heritageClauses ?? []) {
+      for (const type of clause.types) {
+        if (ts.isIdentifier(type.expression)) {
+          const base = imports.serverSymbols.get(type.expression.text);
+          if (base !== undefined && entityBaseNames.has(base)) return base;
+        }
+        if (ts.isPropertyAccessExpression(type.expression)) {
+          const namespace = HandlerTypes.expressionName(type.expression.expression);
+          if (
+            namespace !== undefined &&
+            imports.serverNamespaces.has(namespace) &&
+            entityBaseNames.has(type.expression.name.text)
+          ) {
+            return type.expression.name.text;
+          }
+        }
+      }
+    }
     return undefined;
   },
 

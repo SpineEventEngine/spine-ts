@@ -44,7 +44,6 @@ import { BlackBox } from "@spine-event-engine/testing";
 import {
   CoordinationStateSchema,
   ApproveProjectSchema,
-  ReviewProjectSchema,
   CreateProjectSchema,
   OrganizationIdSchema,
   PlanningIdSchema,
@@ -61,7 +60,6 @@ import {
   StaffingStateSchema,
   type CreateProject,
   type ApproveProject,
-  type ReviewProject,
   type OrganizationId,
   type PlanningId,
   type PortfolioId,
@@ -97,13 +95,6 @@ class Project extends Aggregate<ProjectId, typeof ProjectStateSchema, bigint> {
     Project.scheduledStatuses.push(command.status);
     this.update((draft) => Object.assign(draft, { status: command.status }));
     return create(ProjectScheduledSchema, { project: this.id, status: command.status });
-  }
-
-  review(command: ReviewProject, context: CommandContext): ScheduleProject {
-    expect(context.$typeName).toBe(CommandContextSchema.typeName);
-    this.update((draft) => Object.assign(draft, { status: "reviewed" }));
-    if (command.status === "fail") throw new Error("Review transformation failed.");
-    return create(ScheduleProjectSchema, { project: command.project, status: command.status });
   }
 }
 
@@ -153,14 +144,6 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
           signalSchema: CreateProjectSchema,
           emittedSchemas: [ProjectCreatedSchema],
           parameterCount: 1,
-          origin: "domestic",
-        },
-        {
-          kind: "command-transformation",
-          methodName: "review",
-          signalSchema: ReviewProjectSchema,
-          emittedSchemas: [ScheduleProjectSchema],
-          parameterCount: 2,
           origin: "domestic",
         },
         {
@@ -453,26 +436,6 @@ async function approveProject(boundedContext: BoundedContext, id: ProjectId): Pr
     }),
   );
 }
-async function reviewProject(boundedContext: BoundedContext, id: ProjectId): Promise<void> {
-  await boundedContext.commandBus().post(
-    SignalEnvelopes.command({
-      id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
-      context: create(CommandContextSchema),
-      schema: ReviewProjectSchema,
-      message: create(ReviewProjectSchema, { project: id, status: "review-approved" }),
-    }),
-  );
-}
-async function failReviewProject(boundedContext: BoundedContext, id: ProjectId): Promise<void> {
-  await boundedContext.commandBus().post(
-    SignalEnvelopes.command({
-      id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
-      context: create(CommandContextSchema),
-      schema: ReviewProjectSchema,
-      message: create(ReviewProjectSchema, { project: id, status: "fail" }),
-    }),
-  );
-}
 function ids() {
   return {
     project: projectId("org-a", 1),
@@ -507,45 +470,6 @@ function expectProjectWorkflowIds(
 }
 
 describe("project workflow Event routing", () => {
-  it("commits an Aggregate command transformation before its follow-up command is delivered", async () => {
-    const { project, planning, staffing, portfolio } = ids();
-    const boundedContext = context(routeTo(portfolio), planning, staffing);
-    try {
-      await createProject(boundedContext, project);
-      await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
-      await reviewProject(boundedContext, project);
-      await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio, {
-        portfolioExpected: true,
-        projectStatus: "review-approved",
-      });
-      await expect(boundedContext.stand().read(ProjectStateSchema, project)).resolves.toMatchObject(
-        {
-          status: "review-approved",
-        },
-      );
-    } finally {
-      await boundedContext.close();
-    }
-  });
-
-  it("rolls back an Aggregate command transformation before it can publish a follow-up", async () => {
-    const { project, planning, staffing, portfolio } = ids();
-    const boundedContext = context(routeTo(portfolio), planning, staffing);
-    try {
-      await createProject(boundedContext, project);
-      await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
-      await failReviewProject(boundedContext, project);
-      await new Promise((resolve) => setTimeout(resolve, 25));
-      await expect(boundedContext.stand().read(ProjectStateSchema, project)).resolves.toMatchObject(
-        {
-          status: "scheduled",
-        },
-      );
-    } finally {
-      await boundedContext.close();
-    }
-  });
-
   it("delivers a client and server-context Command through a command-transforming Process Manager", async () => {
     const { project, planning, staffing, portfolio } = ids();
     const boundedContext = context(routeTo(portfolio), planning, staffing);
