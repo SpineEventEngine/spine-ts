@@ -344,6 +344,31 @@ not spawn subagents. They must verify the semantic fixture migration and the
 external-interest proof as part of closure and report any remaining or newly
 introduced finding.
 
+Both narrow re-reviews completed with the expected explicit profiles and
+returned **Needs fixes**, with no Critical finding. The final targeted batch is:
+
+1. Important: define both domestic and external Event schema sets through the
+   existing origin-schema facility; otherwise a schema shared by both origins
+   is removed from domestic routing before the runtime filter runs.
+2. Important: prove a single runtime with domestic and external handlers for
+   the same schema invokes only the matching side for each envelope.
+3. Important: add executable Bounded Context/Integration Broker proof that a
+   standalone external schema appears in `ExternalEventsWanted` and imported
+   delivery reaches the handler.
+4. Important: add the required Assignee/Commander same-Command generated
+   receptor rejection test.
+5. Important: replace remaining runtime fixtures whose nominal role or signal
+   kind could not be admitted by generated registry validation.
+6. Minor: prove default context creation and mutation isolation for both a
+   two-argument Command handler and Event handler.
+7. Minor: state in `addCommandDispatcher()` TSDoc that an
+   `AbstractCommander` installs its Command and Event sides exactly once.
+
+The re-review found no new problem in broker assembly code, cloned-context
+construction, module boundaries, or OOP shape. A fresh existing `implementer`
+receives this single batch with exclusive responsibility, explicit
+`gpt-5.6-terra` / medium dispatch, and no subagents.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
