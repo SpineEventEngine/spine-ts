@@ -702,6 +702,17 @@ passed. The canonical cheap preflight rerun passed every gate and 359 focused
 tests with a clean tree. One final read-only closure is assigned only to the two
 contract fixes and this module shape.
 
+Final closure is clean. Correctness/reliability confirmed dependency-injected
+registered instances, Entity exclusion, stable ingestion errors, real descriptor
+classification, and bounded cyclic traversal. Style/maintainability approved the
+private validation module and terminology cleanup. TypeScript/API/TSDoc approved
+the nominal constructor contract, generated-writer compatibility, descriptor
+contract, and public wording. Reader documentation approved the current status
+and active terminology. All original explicit profiles remained unchanged; no
+reviewer spawned subagents or edited files. Security is N/A because this batch
+changes local metadata validation/type contracts and documentation, with no new
+trust boundary, credential, transport, or externally reachable surface.
+
 All six accepted contract-review findings were corrected on the existing
 implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
 now accept only discriminated `receivers`; Entity receivers require
