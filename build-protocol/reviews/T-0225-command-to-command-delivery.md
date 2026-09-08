@@ -420,6 +420,17 @@ The task must make `docs:api:check`, full changed-file lint, typechecks,
 generated checks, TSDoc/docs checks, focused behavior tests, and coverage green
 before the complete specialist review wave.
 
+Checkpoint `95328b745` makes API-doc checking, full changed-file ESLint,
+tooling typecheck, formatting, diff checks, 137 focused public-flow tests, and
+standalone runtime coverage green. The orchestrator rejected convergence
+because `pnpm lint:tsdoc` reports 93 current T-0225 documentation defects across
+the generated registry contracts, Bounded Context constructor,
+`SignalPublisher`, `StandaloneHandlerRuntime`, and nominal bases. A fresh
+existing `implementer` receives exclusive comment/API-documentation correction
+responsibility with explicit `gpt-5.6-terra` / medium dispatch and no
+subagents. It must fix every diagnostic, verify CommandBus documentation, and
+must not suppress the checker or reduce its scope.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
