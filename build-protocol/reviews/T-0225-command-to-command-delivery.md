@@ -383,6 +383,16 @@ The same two independent reviewers receive one final narrow verification of
 their seven findings against `1bacc57e2..dda81fa9d`, with their existing
 explicit `gpt-5.6-terra` / high profiles, read-only and without subagents.
 
+The correctness/reliability re-review approved the final behavior correction
+with no remaining or new finding. The style/maintainability re-review found one
+remaining Important proof defect: the Integration Broker test manually creates
+the standalone runtime and registers a raw dispatcher, so it bypasses the
+generated `buildAsync()` assembly path and cannot prove the corrected
+`standaloneEvent` interest collection. Replace that test with a generated
+registry-root context using a concrete `AbstractEventSubscriber` registered
+through `addEventDispatcher()`, and prove both `ExternalEventsWanted` and
+imported delivery. Every other targeted finding is closed.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
