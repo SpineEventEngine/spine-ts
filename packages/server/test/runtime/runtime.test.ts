@@ -267,6 +267,45 @@ describe("SingleProcessServerRuntime", () => {
     expect(observed).toEqual(["active-start", "active-end", "follow-up", "nested-follow-up"]);
   });
 
+  it("admits trusted cross-runtime follow-up work while the target is closing", async () => {
+    const source = new SingleProcessServerRuntime();
+    const target = new SingleProcessServerRuntime();
+    const observed: string[] = [];
+    let releaseTarget!: () => void;
+    const targetCanFinish = new Promise<void>((resolve) => {
+      releaseTarget = resolve;
+    });
+
+    await Promise.all([source.start(), target.start()]);
+
+    const targetStarted = new Promise<void>((resolve) => {
+      void target.enqueue(async () => {
+        observed.push("target-active");
+        resolve();
+        await targetCanFinish;
+      });
+    });
+    await targetStarted;
+    const close = target.close();
+
+    expect(target.state).toBe("closing");
+    expect(() => target.enqueue(() => undefined)).toThrow(ServerRuntimeStateError);
+
+    let followUp!: Promise<void>;
+    await source.enqueue(() => {
+      followUp = runtimeAccess.enqueueFollowUp(target, () => {
+        observed.push("trusted-follow-up");
+      });
+      observed.push("source-complete");
+    });
+
+    releaseTarget();
+    await Promise.all([followUp, close]);
+
+    expect(observed).toEqual(["target-active", "source-complete", "trusted-follow-up"]);
+    await source.close();
+  });
+
   it("rejects close from active work", async () => {
     const runtime = new SingleProcessServerRuntime();
     const observed: string[] = [];

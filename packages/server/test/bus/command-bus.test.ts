@@ -370,6 +370,54 @@ describe("CommandBus", () => {
     expect(observed).toEqual(["command-failing", "command-later"]);
   });
 
+  it("drains a gated produced command admitted while closing and contains post-finish rejection", async () => {
+    const gate = createSignal();
+    const observed: string[] = [];
+    const bus = new CommandBus([
+      createValidatedCommandDispatcher(async (command) => {
+        observed.push(command.id?.uuid ?? "missing");
+        await gate.promise;
+      }),
+    ]);
+    const events = eventBusAccess.createForgettingBus();
+    const publisher = new SignalPublisher(bus, events, events, "Tasks");
+
+    publisher.beginClose();
+    commandBusAccess.beginClose(bus);
+    const child = publisher.publishCommand(
+      createValidatedCommand("command-closing-child", "task-closing-child", "Closing child"),
+    );
+    await waitUntil(() => observed.length === 1);
+
+    let drained = false;
+    const drain = publisher.drain().then(() => {
+      drained = true;
+    });
+    await waitForRuntimeTurn();
+    expect(drained).toBe(false);
+
+    gate.resolve();
+    await Promise.all([child, drain]);
+    expect(observed).toEqual(["command-closing-child"]);
+
+    publisher.finishClose();
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      await expect(
+        publisher.publishCommand(
+          createValidatedCommand("command-after-publisher-finish", "task-finished", "Finished"),
+        ),
+      ).rejects.toThrow("SignalPublisher is closed.");
+      await waitForRuntimeTurn();
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+      await commandBusAccess.finishClose(bus);
+    }
+  });
+
   it("rejects public and internal command intake after close", async () => {
     const bus = new CommandBus();
 
