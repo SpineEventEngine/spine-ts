@@ -326,7 +326,8 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     if (!Array.isArray(receivers)) {
       throw new HandlerRegistryIngestionError(
         "UNSUPPORTED_REGISTRY_VERSION",
-        "Generated handler registry must declare an unversioned receivers array; regenerate generated handler metadata.",
+        "Generated handler registry must declare an unversioned receivers array; " +
+          "regenerate generated handler metadata.",
       );
     }
     receivers.forEach((receiver) => {

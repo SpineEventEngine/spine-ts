@@ -462,7 +462,7 @@ const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
   frameworkConstructionToken: true,
 });
 const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
-const catchUpErrorMessageLimit = 500;
+const errorDetailLimit = 500;
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 const internalStoragePrefix = "__spine/";
 const generatedRegistryLoadAttempts = new Map<string, number>();
@@ -1536,7 +1536,7 @@ export class BoundedContextBuilder {
         systemEventBus,
         this.#specSnapshot.name.value,
       );
-      ContextParts.assertUniqueStandaloneCommandReceptors(standalone);
+      ContextParts.assertUniqueCommandReceptors(standalone);
       const standaloneRuntime =
         standalone.length === 0
           ? undefined
@@ -1801,7 +1801,7 @@ class CatchUpReplayError extends Error {
  * Assembles private bounded-context lifecycle and replay details.
  */
 const ContextParts = Object.freeze({
-  assertUniqueStandaloneCommandReceptors(
+  assertUniqueCommandReceptors(
     receivers: readonly GeneratedStandaloneHandlerGroup[],
   ): void {
     const receptorByType = new Map<string, string>();
@@ -1813,7 +1813,9 @@ const ContextParts = Object.freeze({
         const prior = receptorByType.get(typeName);
         if (prior !== undefined)
           throw new Error(
-            `Standalone command receptors conflict for "${typeName}": ${prior} and ${(receiver.receiverType as unknown as StandaloneConstructor).name}.`,
+            `Standalone command receptors conflict for "${typeName}": ${prior} and ${
+              (receiver.receiverType as unknown as StandaloneConstructor).name
+            }.`,
           );
         receptorByType.set(
           typeName,
@@ -2882,14 +2884,14 @@ const ContextParts = Object.freeze({
   catchUpReplayDetail(error: unknown): CatchUpReplayDetail {
     if (error instanceof Error) {
       return Object.freeze({
-        name: ContextParts.boundedErrorString(error.name, catchUpErrorMessageLimit) || "Error",
-        message: ContextParts.boundedErrorString(error.message, catchUpErrorMessageLimit),
+        name: ContextParts.boundedErrorString(error.name, errorDetailLimit) || "Error",
+        message: ContextParts.boundedErrorString(error.message, errorDetailLimit),
       });
     }
 
     return Object.freeze({
       name: "NonErrorThrow",
-      message: ContextParts.boundedErrorString(String(error), catchUpErrorMessageLimit),
+      message: ContextParts.boundedErrorString(String(error), errorDetailLimit),
     });
   },
 
