@@ -244,3 +244,18 @@ responsibility in `BoundedContext`; it is not ready for review.
 - Focused standalone/context suites passed 88 tests. The combined broker suite
   is blocked by pre-existing `RED-15` versioned registry test metadata, which
   fails registry discovery before the standalone paths execute.
+
+## Final standalone re-review correction batch (2026-09-08)
+
+- Standalone Event dispatchers now define explicit domestic and external schema
+  sets through `EventDispatcherOriginSchemas`, keeping a same-schema domestic
+  handler registered while retaining the external interest.
+- Focused behavior covers same-schema routing in both directions, generated
+  Assignee/Commander receptor rejection, RecordingTransport broker interest
+  and imported delivery, semantic standalone fixture roles, default and cloned
+  two-argument contexts, and commander installation TSDoc.
+- Fresh focused runtime, bounded-context, and integration-broker tests passed
+  104 cases. The scoped coverage run exercised `standalone-handler-runtime.ts`
+  at 97.95% statements, 93.42% branches, and 100% functions/lines; its process
+  exit reflects only the inapplicable repository-wide global threshold for a
+  three-file subset.

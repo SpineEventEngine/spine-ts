@@ -33,8 +33,15 @@ import {
   TenantIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
-import { BoundedContext, EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
+import {
+  AbstractEventSubscriber,
+  BoundedContext,
+  EnvironmentType,
+  ServerEnvironment,
+} from "@spine-event-engine/server";
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
+import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
+import type { GeneratedStandaloneHandlerGroup } from "../../src/handler/generated-handler-registry.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -136,6 +143,53 @@ describe("Wave 13 IntegrationBroker", () => {
       expect(seen).toEqual([expect.objectContaining({ id: original.id })]);
     } finally {
       await close(producer, consumer);
+    }
+  });
+  it("advertises and delivers a standalone external Event through the context broker", async () => {
+    await broker("standalone external Event interest and imported delivery");
+    const factory = new RecordingTransportFactory();
+    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
+    class ExternalSubscriber extends AbstractEventSubscriber {
+      calls = 0;
+      subscribe(): void {
+        this.calls += 1;
+      }
+    }
+    const subscriber = new ExternalSubscriber();
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: ExternalSubscriber,
+      handlers: [
+        {
+          kind: "event-subscription",
+          methodName: "subscribe",
+          signalSchema: StringValueSchema,
+          emittedSchemas: [],
+          parameterCount: 1,
+          origin: "external",
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      { group, instance: subscriber, publisher: {} as never },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected standalone Event dispatcher.");
+    const consumer = BoundedContext.singleTenant("StandaloneExternalConsumer")
+      .addEventDispatcher(dispatcher)
+      .build();
+    const producer = BoundedContext.singleTenant("StandaloneExternalProducer")
+      .addEventDispatcher(domestic([StringValueSchema]) as never)
+      .build();
+    try {
+      await producer.eventBus().post(event(StringValueSchema, "standalone-external"));
+      expect(subscriber.calls).toBe(1);
+      const wanted = await decodeWantedFrames(factory, "StandaloneExternalConsumer");
+      expect(wanted.flatMap(({ message }) => wantedTypeUrls(message))).toContain(
+        TypeUrls.derive(StringValueSchema),
+      );
+    } finally {
+      await close(producer, consumer);
+      await ServerEnvironment.instance().close();
     }
   });
   it("RED-02 fans one producer event out to every requesting consumer", async () => {

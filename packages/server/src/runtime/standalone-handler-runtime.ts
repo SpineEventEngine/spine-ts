@@ -28,6 +28,7 @@ import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/ser
 
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
+import { EventDispatcherOriginSchemas } from "../bus/event-dispatcher-origin-schemas.js";
 import type {
   GeneratedHandlerRecordInput,
   GeneratedStandaloneHandlerGroup,
@@ -77,7 +78,7 @@ export class StandaloneHandlerRuntime {
         binding.handler.kind === "event-subscription",
     );
     if (bindings.length === 0) return undefined;
-    return {
+    const dispatcher: EventDispatcher = {
       messageSchemas: () => Object.freeze(StandaloneHandlerRuntime.schemas(bindings)),
       externalEventSchemas: () =>
         Object.freeze(
@@ -87,6 +88,15 @@ export class StandaloneHandlerRuntime {
         ),
       dispatch: async (event) => this.#dispatchEvent(event, bindings),
     };
+    return EventDispatcherOriginSchemas.define(
+      dispatcher,
+      StandaloneHandlerRuntime.schemas(
+        bindings.filter(({ handler }) => handler.origin === "domestic"),
+      ),
+      StandaloneHandlerRuntime.schemas(
+        bindings.filter(({ handler }) => handler.origin === "external"),
+      ),
+    );
   }
 
   stateDispatcher(): EventDispatcher | undefined {

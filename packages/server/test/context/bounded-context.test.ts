@@ -271,6 +271,11 @@ class StandaloneCommander extends AbstractCommander {
     return create(TaskCommandSchema, { id: command.id, name: command.name });
   }
 }
+class CollidingStandaloneCommander extends AbstractCommander {
+  substitute(command: TaskCommand): TaskCommand {
+    return create(TaskCommandSchema, { id: command.id, name: command.name });
+  }
+}
 class SiblingStandaloneCommander extends AbstractCommander {
   substitute(): readonly TaskCommand[] {
     return [
@@ -765,6 +770,29 @@ describe("BoundedContext assembly", () => {
     } finally {
       await context.close();
     }
+  });
+
+  it("rejects an assignee and commander generated for the same Command before intake", async () => {
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
+        TaskEventSchema,
+      ]),
+      standaloneReceiver(
+        CollidingStandaloneCommander,
+        "command-substitution",
+        "substitute",
+        TaskCommandSchema,
+        [TaskCommandSchema],
+      ),
+    ]);
+
+    await expect(
+      BoundedContext.singleTenant("StandaloneMixedReceptor")
+        .withGeneratedRegistryRoot(registryRoot)
+        .addAssignee(new StandaloneAssignee())
+        .addCommandDispatcher(new CollidingStandaloneCommander())
+        .buildAsync(),
+    ).rejects.toThrow("Standalone command receptors conflict");
   });
 
   it("installs reactor and subscriber through the public Event dispatcher path", async () => {

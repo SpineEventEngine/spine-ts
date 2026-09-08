@@ -1294,7 +1294,8 @@ export class BoundedContextBuilder {
    *
    * @param dispatcher Raw command dispatcher, or an `AbstractCommander` instance.
    *   A standalone commander requires generated receiver metadata and therefore
-   *   this builder's `buildAsync()` path.
+   *   this builder's `buildAsync()` path. It installs its Command and Event sides
+   *   exactly once.
    * @returns This builder for further configuration.
    */
   addCommandDispatcher(dispatcher: CommandDispatcher | AbstractCommander): this {
