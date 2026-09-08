@@ -309,6 +309,18 @@ state isolation, output validation, or valid source metadata. They also found
 the runtime module cohesive and the added Bounded Context wiring acceptably
 bounded. All six findings are in scope and accepted as one correction batch.
 
+Correction commit `9ae8faaa7` implements the six review items and its focused
+runtime/context tests pass 88 cases. The orchestrator's mechanical acceptance
+then rejected the handoff: server typecheck, focused lint/format, fixture, and
+diff checks pass, but `pnpm typecheck:tooling` reports current T-0225 test debt.
+Failures include removed failure APIs, versioned `entities` registries, removed
+`commandTransformations` and `command-transformation` names, widened receiver
+discriminants, semantically wrong message initializers, abstract nominal-base
+construction, and a new rejection-helper constructor type error. These are not
+baseline exclusions. The correction context must update all affected tests to
+the current contract and make the blocked external-interest proof executable
+before re-review; production compatibility shims are prohibited.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
