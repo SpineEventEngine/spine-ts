@@ -507,6 +507,31 @@ deleted; all durable decisions and evidence remain in committed task/work/review
 records, and frozen diffs remain reproducible from their commit ranges. The
 same read-only Luna/medium function reruns the identical canonical preflight.
 
+The canonical preflight passed at `9bd06c7b5`: all static, documentation,
+packaging, generated-output, and release-readiness gates passed; 12 focused
+files and 521 tests passed; the worktree remained clean. The explicit
+Luna/medium verification function exposed no runtime fallback.
+
+The complete specialist wave reviews the fixed baseline
+`e37ec8a1fed84f11e0df07c78846d5607a698ede..HEAD`. All reviewers are read-only,
+must not spawn subagents, and receive the frozen diff plus current task, work,
+review, developer API, runtime architecture, and reader documentation. The
+assignments are:
+
+- correctness/performance/reliability: existing
+  `performance_reliability_reviewer`, explicit `gpt-5.6-terra` / high;
+- style/maintainability/OOP: existing `style_maintainability_reviewer`, explicit
+  `gpt-5.6-terra` / high;
+- TypeScript/public API/TSDoc: existing `typescript_api_docs_reviewer`, explicit
+  `gpt-5.6-terra` / high;
+- reader documentation: existing `documentation_reviewer`, explicit
+  `gpt-5.6-luna` / medium.
+
+Security is N/A as a separate lane: the correction adds no credential,
+authorization, secret, or new external trust-boundary policy. Imported Event
+origin behavior remains part of correctness review. The complete wave is
+collected and deduplicated before one correction batch.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and

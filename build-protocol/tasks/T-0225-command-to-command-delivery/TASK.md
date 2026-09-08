@@ -189,9 +189,10 @@ not be treated as current verification evidence.
 
 Implementation, bounded task reviews, public-flow tests, documentation, API
 expectations, lint, typechecking, generated-output checks, TSDoc, and focused
-coverage are converged through `1e2a515a7`. The canonical cheap preflight and
-the complete independent specialist review wave are next. This task has no
-current release-verification claim.
+coverage are converged. The canonical cheap preflight passed 12 files and 521
+tests at `9bd06c7b5`; all static, generated, documentation, package, and
+release-readiness checks passed. The complete independent specialist review
+wave is in progress. This task has no current release-verification claim.
 
 ## Historical pre-standalone disposition
 
