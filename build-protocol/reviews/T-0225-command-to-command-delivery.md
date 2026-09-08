@@ -201,6 +201,16 @@ cross-runtime admission while public target intake rejects. No remaining or
 new Critical, Important, or Minor finding was reported. The SignalPublisher
 lifecycle migration is closed; standalone adapter materialization may begin.
 
+A fresh existing `implementer` role now receives exclusive production
+responsibility for standalone handler instance matching, bus adapters, runtime
+invocation and output validation, state subscription routing, context assembly,
+and focused proof. The model is explicitly `gpt-5.6-terra` and reasoning is
+explicitly `medium`. The implementer must follow the frozen runtime brief, use
+TDD and domain-correct fixtures, keep Bounded Context thin, and must not spawn
+subagents. Runtime self-introspection will be recorded if exposed; otherwise
+the immutable configured role/profile and explicit dispatch fields are the
+accepted metadata evidence.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
