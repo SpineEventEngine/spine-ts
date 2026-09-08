@@ -46,6 +46,30 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
+  it("analyzes a named default-export standalone receiver", () => {
+    const result = analyzeBuildHandlers(programWithSource("src/default-commander.ts", `
+      import { AbstractCommander, Command } from "@spine-event-engine/server";
+      import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+      export default class DefaultCommander extends AbstractCommander {
+        @Command replace(command: CreateTask): RenameTask { throw new Error(String(command)); }
+      }
+    `));
+    expect(result.diagnostics).toEqual([]);
+    expect(result.receivers[0]).toMatchObject({ receiverKind: "standalone", defaultExport: true });
+  });
+
+  it("analyzes an anonymous default-export standalone receiver", () => {
+    const result = analyzeBuildHandlers(programWithSource("src/anonymous-commander.ts", `
+      import { AbstractCommander, Command } from "@spine-event-engine/server";
+      import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+      export default class extends AbstractCommander {
+        @Command replace(command: CreateTask): RenameTask { throw new Error(String(command)); }
+      }
+    `));
+    expect(result.diagnostics).toEqual([]);
+    expect(result.receivers[0]).toMatchObject({ receiverKind: "standalone", defaultExport: true });
+  });
+
   it("rejects every @Command handler declared on an Aggregate", () => {
     const result = analyzeBuildHandlers(
       programWithSource(
@@ -955,7 +979,7 @@ describe("build-time handler analyzer", () => {
 
     expect(result.entities).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      "NON_EXPORTED_ENTITY_CLASS",
+      "NON_EXPORTED_RECEIVER_CLASS",
     ]);
     expect(result.diagnostics[0]?.className).toBe("LocalAggregate");
   });
@@ -970,11 +994,11 @@ describe("build-time handler analyzer", () => {
 
     expect(namedResult.diagnostics).toEqual([]);
     expect(namedResult.entities[0]?.className).toBe("ListedAggregate");
-    expect(defaultResult.entities).toEqual([]);
-    expect(defaultResult.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      "UNSUPPORTED_ENTITY_EXPORT",
-    ]);
-    expect(defaultResult.diagnostics[0]?.className).toBe("DefaultAggregate");
+    expect(defaultResult.diagnostics).toEqual([]);
+    expect(defaultResult.entities[0]).toMatchObject({
+      className: "DefaultAggregate",
+      defaultExport: true,
+    });
   });
 
   it("reports deterministic diagnostics for cyclic aliases", () => {

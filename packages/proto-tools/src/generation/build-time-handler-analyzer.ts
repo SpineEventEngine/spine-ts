@@ -61,6 +61,9 @@ export interface BuildEntityHandlers {
    */
   readonly className: string;
 
+  /** Whether the class is imported from a default export. */
+  readonly defaultExport?: boolean;
+
   readonly receiverKind?: "entity";
 
   /**
@@ -83,6 +86,7 @@ export interface BuildEntityHandlers {
 export interface BuildStandaloneHandlers {
   readonly receiverKind: "standalone";
   readonly className: string;
+  readonly defaultExport?: boolean;
   readonly sourceFile: string;
   readonly handlers: readonly BuildHandlerRecord[];
 }
@@ -185,10 +189,9 @@ export type BuildHandlerDiagnosticCode =
   | "MISSING_ENTITY_STATE_SCHEMA"
   | "MISSING_RETURN_TYPE"
   | "MISSING_SIGNAL_TYPE"
-  | "NON_EXPORTED_ENTITY_CLASS"
+  | "NON_EXPORTED_RECEIVER_CLASS"
   | "SCHEMA_BEARING_DECORATOR"
   | "TYPESCRIPT_SYNTAX_ERROR"
-  | "UNSUPPORTED_ENTITY_EXPORT"
   | "UNSUPPORTED_COMMAND_HANDLER"
   | "UNSUPPORTED_RETURN_TYPE";
 
@@ -410,7 +413,10 @@ const HandlerSources = Object.freeze({
     const receivers: BuildReceiverHandlers[] = [];
 
     for (const statement of scope.source.statements) {
-      if (!ts.isClassDeclaration(statement) || statement.name === undefined) {
+      if (
+        !ts.isClassDeclaration(statement) ||
+        (statement.name === undefined && !HandlerTypes.hasModifier(statement, ts.SyntaxKind.DefaultKeyword))
+      ) {
         continue;
       }
 
@@ -424,8 +430,8 @@ const HandlerSources = Object.freeze({
   },
 
   analyzeClass(node: ts.ClassDeclaration, scope: AnalyzerScope): BuildReceiverHandlers | undefined {
-    const className = node.name?.text ?? "(anonymous)";
-    const exportIssue = HandlerSources.entityExportIssue(node, scope.source);
+    const className = node.name?.text ?? "DefaultReceiver";
+    const exportIssue = HandlerSources.receiverExportIssue(node, scope.source);
     if (HandlerSources.hasDecoratedMethod(node, scope.imports) && exportIssue !== undefined) {
       HandlerTypes.pushDiagnostic(
         scope,
@@ -467,8 +473,8 @@ const HandlerSources = Object.freeze({
     return lineage.receiverKind === "entity"
       ? stateSchema === undefined
         ? undefined
-        : { receiverKind: "entity", className, sourceFile: scope.source.fileName, stateSchema, handlers }
-      : { receiverKind: "standalone", className, sourceFile: scope.source.fileName, handlers };
+        : { receiverKind: "entity", className, ...(HandlerTypes.hasModifier(node, ts.SyntaxKind.DefaultKeyword) ? { defaultExport: true } : {}), sourceFile: scope.source.fileName, stateSchema, handlers }
+      : { receiverKind: "standalone", className, ...(HandlerTypes.hasModifier(node, ts.SyntaxKind.DefaultKeyword) ? { defaultExport: true } : {}), sourceFile: scope.source.fileName, handlers };
   },
 
   analyzeMethod(
@@ -685,16 +691,11 @@ const HandlerSources = Object.freeze({
     );
   },
 
-  entityExportIssue(
+  receiverExportIssue(
     node: ts.ClassDeclaration,
     source: ts.SourceFile,
   ): { readonly code: BuildHandlerDiagnosticCode; readonly message: string } | undefined {
-    if (HandlerTypes.hasModifier(node, ts.SyntaxKind.DefaultKeyword)) {
-      return {
-        code: "UNSUPPORTED_ENTITY_EXPORT",
-        message: "Decorated entity classes must use named exports, not default exports.",
-      };
-    }
+    if (HandlerTypes.hasModifier(node, ts.SyntaxKind.DefaultKeyword)) return undefined;
     if (HandlerTypes.hasModifier(node, ts.SyntaxKind.ExportKeyword)) {
       return undefined;
     }
@@ -703,8 +704,8 @@ const HandlerSources = Object.freeze({
     }
 
     return {
-      code: "NON_EXPORTED_ENTITY_CLASS",
-      message: "Decorated entity classes must be exported for generated registry imports.",
+      code: "NON_EXPORTED_RECEIVER_CLASS",
+      message: "Decorated receiver classes must be exported for generated registry imports.",
     };
   },
 

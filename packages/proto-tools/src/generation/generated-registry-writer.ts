@@ -82,6 +82,7 @@ interface ImportRef {
   readonly importedName: string;
   readonly localName: string;
   readonly moduleSpecifier: string;
+  readonly defaultExport?: boolean;
 }
 
 interface RenderRefs {
@@ -221,6 +222,7 @@ const RegistrySource = Object.freeze({
             importedName: receiver.className,
             localName: "",
             moduleSpecifier,
+            ...(receiver.defaultExport === true ? { defaultExport: true } : {}),
           },
           used,
         );
@@ -419,6 +421,9 @@ const RegistrySource = Object.freeze({
     return next;
   },
   renderImport(ref: ImportRef): string {
+    if (ref.defaultExport === true) {
+      return `import ${ref.localName} from ${RegistrySource.stringLiteral(ref.moduleSpecifier)};`;
+    }
     const local =
       ref.importedName === ref.localName
         ? ref.importedName
