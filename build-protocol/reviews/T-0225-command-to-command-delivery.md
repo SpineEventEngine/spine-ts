@@ -470,6 +470,11 @@ Generation remained clean. The same final-convergence implementer receives
 these four mechanical production corrections with its explicit
 `gpt-5.6-terra` / medium profile and no subagents; behavior must not change.
 
+Commit `d2b923638` resolves all four cleanup findings. Cleanup lint,
+tooling/server typechecks, 92 focused context/registry tests, changed-file lint,
+formatting, and diff checks pass. The same read-only Luna/medium verification
+function reruns the identical canonical preflight.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
