@@ -136,10 +136,10 @@ class ProjectProjection extends Projection<ProjectId, typeof ProjectProjectionSt
 }
 
 const generatedHandlerRegistry: GeneratedHandlerRegistry = {
-  version: 4,
-  entities: [
+  receivers: [
     {
-      entityType: Project,
+      receiverKind: "entity",
+      receiverType: Project,
       stateSchema: ProjectStateSchema,
       handlers: [
         {
@@ -161,7 +161,8 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
       ],
     },
     {
-      entityType: ProjectPlanning,
+      receiverKind: "entity",
+      receiverType: ProjectPlanning,
       stateSchema: PlanningStateSchema,
       handlers: [
         {
@@ -175,7 +176,8 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
       ],
     },
     {
-      entityType: ProjectStaffing,
+      receiverKind: "entity",
+      receiverType: ProjectStaffing,
       stateSchema: StaffingStateSchema,
       handlers: [
         {
@@ -189,7 +191,8 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
       ],
     },
     {
-      entityType: ProjectCoordinator,
+      receiverKind: "entity",
+      receiverType: ProjectCoordinator,
       stateSchema: CoordinationStateSchema,
       handlers: [
         {
@@ -201,7 +204,7 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
           origin: "domestic",
         },
         {
-          kind: "command-transformation",
+          kind: "command-substitution",
           methodName: "approve",
           signalSchema: ApproveProjectSchema,
           emittedSchemas: [ScheduleProjectSchema],
@@ -211,7 +214,8 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
       ],
     },
     {
-      entityType: Portfolio,
+      receiverKind: "entity",
+      receiverType: Portfolio,
       stateSchema: PortfolioStateSchema,
       handlers: [
         {
@@ -225,7 +229,8 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
       ],
     },
     {
-      entityType: ProjectProjection,
+      receiverKind: "entity",
+      receiverType: ProjectProjection,
       stateSchema: ProjectProjectionStateSchema,
       handlers: [
         {

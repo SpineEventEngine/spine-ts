@@ -28,6 +28,10 @@ import {
   HandlerRegistryIngestor,
   ProcessManager,
 } from "../../src/index.js";
+import type {
+  GeneratedHandlerKind,
+  GeneratedHandlerRecordInput,
+} from "../../src/handler/generated-handler-registry.js";
 
 type State = Message<"ProjectionState"> & { id: string; name: string; priority: number };
 const descriptorSet = fromBinary(
@@ -109,7 +113,7 @@ const roleMatrix = [
   ["subscriber", Subscriber, ["event-subscription", "state-subscription"]],
 ] as const;
 
-function domainHandler(kind: string) {
+function domainHandler(kind: GeneratedHandlerRecordInput["kind"]): GeneratedHandlerRecordInput {
   const signalSchema =
     kind === "command-assignment" || kind === "command-substitution"
       ? StartReviewSchema
@@ -152,7 +156,7 @@ describe("generated handler registry ingestion", () => {
       "event-reaction",
       "event-subscription",
       "state-subscription",
-    ]) {
+    ] satisfies readonly GeneratedHandlerKind[]) {
       const ingest = () =>
         new HandlerRegistryIngestor().ingest({
           receivers: [

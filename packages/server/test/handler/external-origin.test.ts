@@ -72,7 +72,7 @@ describe("Wave 13 external receptor origin", () => {
     const server = await import("../../src/index.js");
     expect(server).not.toHaveProperty("External");
     const result = BuildHandlerAnalyzer.analyze(programWithSource(externalCommandSource));
-    const records = result.entities[0]?.handlers as
+    const records = result.receivers[0]?.handlers as
       readonly { readonly methodName: string; readonly origin?: string }[] | undefined;
 
     expect(result.diagnostics.map(({ code }) => code)).toContain("EXTERNAL_COMMAND_RECEIVER");
@@ -83,7 +83,7 @@ describe("Wave 13 external receptor origin", () => {
   });
   it("RED-19 emits first-parameter External<T> origin metadata and rejects untrusted shapes", () => {
     const result = BuildHandlerAnalyzer.analyze(programWithSource(externalOriginSource));
-    const records = result.entities[0]?.handlers as
+    const records = result.receivers[0]?.handlers as
       readonly { readonly methodName: string; readonly origin?: string }[] | undefined;
 
     expect(records).toEqual(
@@ -102,8 +102,8 @@ describe("Wave 13 external receptor origin", () => {
     const generated = new GeneratedRegistryWriter().render(result, {
       outputFile: "/tmp/wave13/generated/handler/generated-handler-registry.ts",
     });
-    expect(generated).toContain("GeneratedHandlerRegistry<4>");
-    expect(generated).toContain("version: 4");
+    expect(generated).toContain("GeneratedHandlerRegistry");
+    expect(generated).toContain("receivers: [");
     expect(generated).toContain('origin: "external"');
     expect(generated).toContain('origin: "domestic"');
     void EventIdSchema;
@@ -112,7 +112,7 @@ describe("Wave 13 external receptor origin", () => {
   it("rejects a same-spelled External from a resolved counterfeit module", () => {
     const result = BuildHandlerAnalyzer.analyze(programWithSource(externalOriginSource, true));
     expect(result.diagnostics.map(({ code }) => code)).toContain("INVALID_SIGNAL_TYPE");
-    expect(result.entities.flatMap((entity) => entity.handlers)).not.toContainEqual(
+    expect(result.receivers.flatMap((receiver) => receiver.handlers)).not.toContainEqual(
       expect.objectContaining({ origin: "external" }),
     );
   });
@@ -235,8 +235,8 @@ const publicOriginContract = `
   type Assert<Value extends true> = Value;
   type IsRequired<Value, Key extends keyof Value> =
     {} extends Pick<Value, Key> ? false : true;
-  type RegistryVersionIsThreeOrFour = Assert<
-    Equal<GeneratedHandlerRegistry["version"], 3 | 4>
+  type RegistryReceiversAreRequired = Assert<
+    Equal<IsRequired<GeneratedHandlerRegistry, "receivers">, true>
   >;
   type GeneratedOriginIsExact = Assert<
     Equal<GeneratedHandlerRecordInput["origin"], "domestic" | "external">
@@ -250,14 +250,11 @@ const publicOriginContract = `
   type CanonicalOriginIsRequired = Assert<
     Equal<IsRequired<BaseHandlerMetadata, "origin">, true>
   >;
-  type V3HandlerKindExcludesCommandTransformation = Assert<
+  type HandlerKindExcludesCommandTransformation = Assert<
     Equal<
-      GeneratedHandlerRecordInput<3>["kind"],
-      Exclude<GeneratedHandlerRecordInput["kind"], "command-transformation">
+      Extract<GeneratedHandlerRecordInput["kind"], "command-transformation">,
+      never
     >
-  >;
-  type V4HandlerKindIncludesCommandTransformation = Assert<
-    Equal<Extract<GeneratedHandlerRecordInput<4>["kind"], "command-transformation">, "command-transformation">
   >;
 
   declare const message: Message;
@@ -269,25 +266,17 @@ const publicOriginContract = `
     externalEventSchemas: (): readonly MessageSchema[] => [],
     dispatch: async (_event: Event): Promise<void> => undefined,
   };
-  const registryVersion: GeneratedHandlerRegistry["version"] = 3;
   const generatedOrigin: GeneratedHandlerRecordInput["origin"] = "external";
   const canonicalOrigin: BaseHandlerMetadata["origin"] = "domestic";
-  const v4Transformation: GeneratedHandlerRecordInput<4>["kind"] = "command-transformation";
-  // @ts-expect-error Registry version 3 does not serialize command transformations.
-  const v3Transformation: GeneratedHandlerRecordInput<3>["kind"] = "command-transformation";
   void transparentForward;
   void transparentBackward;
   void dispatcher.externalEventSchemas?.();
-  void registryVersion;
   void generatedOrigin;
   void canonicalOrigin;
-  void v4Transformation;
-  void v3Transformation;
-  void (undefined as unknown as RegistryVersionIsThreeOrFour);
+  void (undefined as unknown as RegistryReceiversAreRequired);
   void (undefined as unknown as GeneratedOriginIsExact);
   void (undefined as unknown as CanonicalOriginIsExact);
   void (undefined as unknown as GeneratedOriginIsRequired);
   void (undefined as unknown as CanonicalOriginIsRequired);
-  void (undefined as unknown as V3HandlerKindExcludesCommandTransformation);
-  void (undefined as unknown as V4HandlerKindIncludesCommandTransformation);
+  void (undefined as unknown as HandlerKindExcludesCommandTransformation);
 `;

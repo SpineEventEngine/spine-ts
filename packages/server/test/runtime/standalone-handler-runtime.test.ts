@@ -184,7 +184,7 @@ describe("StandaloneHandlerRuntime", () => {
       },
     } as never;
     const reaction = (
-      receiverType: object,
+      receiverType: GeneratedStandaloneHandlerGroup["receiverType"],
       methodName: string,
       emittedSchemas: readonly GenMessage<Message>[],
     ) => ({

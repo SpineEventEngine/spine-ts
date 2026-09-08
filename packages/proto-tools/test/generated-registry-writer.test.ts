@@ -436,7 +436,7 @@ describe("generated registry writer", () => {
     const outputFile = join(repoRoot, "generated/handler/generated-handler-registry.ts");
     const repeatedEntity = {
       className: "TaskAggregate",
-      receiverKind: "entity",
+      receiverKind: "entity" as const,
       sourceFile: join(repoRoot, "src/task-aggregate.ts"),
       stateSchema: schema("../generated/task_pb.js", "TaskSchema"),
       handlers: [

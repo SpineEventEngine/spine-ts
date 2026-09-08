@@ -91,10 +91,10 @@ function generatedStateRegistryRoot(): {
   const slot = `__spineWave13State_${Math.random().toString(36).slice(2)}`;
   mkdirSync(directory, { recursive: true });
   const registry = {
-    version: 3,
-    entities: [
+    receivers: [
       {
-        entityType: ExternalStateProjection,
+        receiverKind: "entity",
+        receiverType: ExternalStateProjection,
         stateSchema: StateSchema,
         handlers: [
           {
@@ -310,31 +310,31 @@ describe("Wave 13 ThirdPartyContext", () => {
     });
     const stateRegistry = generatedStateRegistryRoot();
     const ingestor = new HandlerRegistryIngestor();
-    expect(() => ingestor.ingest({ version: 2, entities: [] })).toThrow(/version 2/u);
+    expect(() => ingestor.ingest({ version: 2, entities: [] })).toThrow(/regenerate/u);
     expect(() =>
       ingestor.ingest({
         ...stateRegistry.registry,
-        entities: stateRegistry.registry.entities.map((entity) => ({
-          ...entity,
-          handlers: entity.handlers.map((handler) => ({ ...handler, origin: "foreign" })),
+        receivers: stateRegistry.registry.receivers.map((receiver) => ({
+          ...receiver,
+          handlers: receiver.handlers.map((handler) => ({ ...handler, origin: "foreign" })),
         })),
       }),
     ).toThrow(/origin/u);
     expect(() =>
       ingestor.ingest({
         ...stateRegistry.registry,
-        entities: stateRegistry.registry.entities.map((entity) => ({
-          ...entity,
-          handlers: entity.handlers.map((handler) => withoutOrigin(handler)),
+        receivers: stateRegistry.registry.receivers.map((receiver) => ({
+          ...receiver,
+          handlers: receiver.handlers.map((handler) => withoutOrigin(handler)),
         })),
       }),
-    ).toThrow(/origin/u);
+    ).toThrow(/invalid record shape/u);
     expect(() =>
       ingestor.ingest({
         ...stateRegistry.registry,
-        entities: stateRegistry.registry.entities.map((entity) => ({
-          ...entity,
-          handlers: entity.handlers.map((handler) => ({
+        receivers: stateRegistry.registry.receivers.map((receiver) => ({
+          ...receiver,
+          handlers: receiver.handlers.map((handler) => ({
             ...handler,
             kind: "command-assignment",
             origin: "external",

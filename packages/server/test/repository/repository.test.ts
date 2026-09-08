@@ -206,8 +206,8 @@ describe("repository identity", () => {
       HandlerMetadataValues.defineArity(
         CommandTransformingAggregate,
         AggregateStateSchema,
-        (builder) => [builder.transform(ValidatedTaskCommandSchema, "transformTask")],
-        [{ kind: "command-transformation", methodName: "transformTask", parameterCount: 1 }],
+        (builder) => [builder.substitute(ValidatedTaskCommandSchema, "transformTask")],
+        [{ kind: "command-substitution", methodName: "transformTask", parameterCount: 1 }],
       ),
     ).toThrow(/Process Manager/);
   });
@@ -217,8 +217,8 @@ describe("repository identity", () => {
       HandlerMetadataValues.defineArity(
         CommandTransformingProjection,
         ProjectionStateSchema,
-        (builder) => [builder.transform(ValidatedTaskCommandSchema, "transformTask")],
-        [{ kind: "command-transformation", methodName: "transformTask", parameterCount: 1 }],
+        (builder) => [builder.substitute(ValidatedTaskCommandSchema, "transformTask")],
+        [{ kind: "command-substitution", methodName: "transformTask", parameterCount: 1 }],
       ),
     ).toThrow(/Process Manager/);
   });

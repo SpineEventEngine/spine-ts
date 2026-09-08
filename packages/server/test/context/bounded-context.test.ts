@@ -31,6 +31,7 @@ import {
   CommandSchema,
   type Event,
   EventContextSchema,
+  type EventContext,
   EventIdSchema,
   EventSchema,
   TenantIdSchema,
@@ -237,7 +238,7 @@ class GeneratedTaskAggregate extends Aggregate<string, typeof AggregateStateSche
       ),
     );
 
-    return create(ProjectionStateSchema, command);
+    return create(ProjectionStateSchema, { id: command.id, name: command.name });
   }
 }
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
@@ -267,7 +268,7 @@ class OtherStandaloneAssignee extends AbstractAssignee {
 }
 class StandaloneCommander extends AbstractCommander {
   substitute(command: ProcessManagerTaskCommand): TaskCommand {
-    return create(TaskCommandSchema, command);
+    return create(TaskCommandSchema, { id: command.id, name: command.name });
   }
 }
 class SiblingStandaloneCommander extends AbstractCommander {
@@ -344,7 +345,7 @@ class ReplayTaskProcessManager extends ProcessManager<
         }),
       ),
     );
-    return create(AggregateStateSchema, command);
+    return create(AggregateStateSchema, { id: command.id, name: command.name, archived: false });
   }
 
   reactToProjection(event: TaskEvent): AggregateState {

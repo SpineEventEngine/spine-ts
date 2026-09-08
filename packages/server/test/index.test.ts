@@ -173,10 +173,14 @@ const AggregateStateSchema = messageDesc(
 const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
 
 it("exports nominal standalone handler base classes", () => {
-  expect(new AbstractAssignee()).toBeInstanceOf(AbstractAssignee);
-  expect(new AbstractCommander()).toBeInstanceOf(AbstractCommander);
-  expect(new AbstractEventReactor()).toBeInstanceOf(AbstractEventReactor);
-  expect(new AbstractEventSubscriber()).toBeInstanceOf(AbstractEventSubscriber);
+  class Assignee extends AbstractAssignee {}
+  class Commander extends AbstractCommander {}
+  class Reactor extends AbstractEventReactor {}
+  class Subscriber extends AbstractEventSubscriber {}
+  expect(new Assignee()).toBeInstanceOf(AbstractAssignee);
+  expect(new Commander()).toBeInstanceOf(AbstractCommander);
+  expect(new Reactor()).toBeInstanceOf(AbstractEventReactor);
+  expect(new Subscriber()).toBeInstanceOf(AbstractEventSubscriber);
 });
 
 class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
