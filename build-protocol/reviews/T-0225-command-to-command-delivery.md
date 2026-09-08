@@ -221,6 +221,18 @@ with the same exclusive responsibility and explicit `gpt-5.6-terra` / medium
 profile. It must add the required TDD matrix, correct defects exposed by those
 tests, and commit only a behavior-proven slice. It must not spawn subagents.
 
+That continuation added the first focused standalone test and exposed a real
+selection defect: a matching `@Where` method and its fallback both ran. The
+draft now delegates selection to the existing event-handler filter. Duplicate
+instance registrations also remain observable until assembly validation. The
+focused runtime/context tests passed 69 cases and static checks passed, but the
+role matrix was still incomplete, so nothing was committed. The same explicit
+`implementer` role and `gpt-5.6-terra` / medium profile continues without
+overlap on a smaller checkpoint: assembly validation, all four role paths,
+method arities, output validation, and duplicate command receptors. State and
+close-chain edge cases follow after that checkpoint. It must not spawn
+subagents.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
