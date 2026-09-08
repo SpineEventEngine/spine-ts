@@ -166,6 +166,16 @@ explicitly dispatched profile remains `gpt-5.6-terra`, medium reasoning. The
 replacement must finish domain-correct fixtures, run the complete focused gate,
 and commit the publisher migration only after GREEN.
 
+The replacement completed the frozen lifecycle migration and pushed commit
+`f524b67db`. The independent lifecycle task review is assigned to the existing
+`performance_reliability_reviewer` role. The expected model is explicitly
+`gpt-5.6-terra` and the expected reasoning is explicitly `high`. The reviewer
+is read-only, must not spawn subagents, and reviews the frozen range
+`5d3daa068..f524b67db` against the lifecycle blueprint and code-quality rules.
+Standalone handler adapters remain outside this review. Runtime
+self-introspection will be recorded if exposed; otherwise the immutable role
+profile and explicit dispatch fields are the accepted metadata evidence.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
