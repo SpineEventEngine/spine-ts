@@ -268,9 +268,7 @@ interface GeneratedRegistryOperations {
     builder: GeneratedHandlerRegistrationBuilder<Instance>,
     handler: GeneratedHandlerRecordInput,
   ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>;
-  validateHandler(
-    handler: GeneratedHandlerRecordInput,
-  ): void;
+  validateHandler(handler: GeneratedHandlerRecordInput): void;
   validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void;
   validateStandalone(receiver: GeneratedStandaloneHandlerGroup): void;
   validateSchema(schema: DescriptorMessageSchema, label: string): void;
@@ -307,7 +305,9 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     });
     return Object.freeze(
       registry.receivers
-        .filter((receiver): receiver is GeneratedEntityHandlerGroup => receiver.receiverKind === "entity")
+        .filter(
+          (receiver): receiver is GeneratedEntityHandlerGroup => receiver.receiverKind === "entity",
+        )
         .map((receiver) => GeneratedRegistry.materialize(receiver)),
     );
   },
@@ -339,8 +339,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void {
     if (
       entity.handlers.some(
-        (handler) =>
-          handler.kind === "command-substitution" || handler.kind === "command-reaction",
+        (handler) => handler.kind === "command-substitution" || handler.kind === "command-reaction",
       ) &&
       !(entity.receiverType.prototype instanceof ProcessManager)
     ) {
@@ -373,9 +372,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       GeneratedRegistry.validateHandler(handler);
       const valid =
         (role === "assignee" && handler.kind === "command-assignment") ||
-        (role === "commander" && (handler.kind === "command-substitution" || handler.kind === "command-reaction")) ||
+        (role === "commander" &&
+          (handler.kind === "command-substitution" || handler.kind === "command-reaction")) ||
         (role === "reactor" && handler.kind === "event-reaction") ||
-        (role === "subscriber" && (handler.kind === "event-subscription" || handler.kind === "state-subscription"));
+        (role === "subscriber" &&
+          (handler.kind === "event-subscription" || handler.kind === "state-subscription"));
       if (!valid) {
         throw new HandlerRegistryIngestionError(
           "UNSUPPORTED_HANDLER_KIND",
@@ -388,11 +389,21 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
             (schema) => !GeneratedRegistry.isLegacyEventSchema(schema) || isEntitySchema(schema),
           )
         ) {
-          throw new HandlerRegistryIngestionError("INVALID_SCHEMA", `Standalone ${role} "${handler.methodName}" must produce Events.`);
+          throw new HandlerRegistryIngestionError(
+            "INVALID_SCHEMA",
+            `Standalone ${role} "${handler.methodName}" must produce Events.`,
+          );
         }
       }
-      if (role === "subscriber" && handler.origin === "external" && handler.kind === "state-subscription") {
-        throw new HandlerRegistryIngestionError("INVALID_SIGNAL_ORIGIN", `Standalone state subscriber "${handler.methodName}" cannot accept External state.`);
+      if (
+        role === "subscriber" &&
+        handler.origin === "external" &&
+        handler.kind === "state-subscription"
+      ) {
+        throw new HandlerRegistryIngestionError(
+          "INVALID_SIGNAL_ORIGIN",
+          `Standalone state subscriber "${handler.methodName}" cannot accept External state.`,
+        );
       }
     }
   },
@@ -440,9 +451,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
-  validateHandler(
-    handler: GeneratedHandlerRecordInput,
-  ): void {
+  validateHandler(handler: GeneratedHandlerRecordInput): void {
     if (!GeneratedRegistry.isKind(handler.kind)) {
       throw new HandlerRegistryIngestionError(
         "UNSUPPORTED_HANDLER_KIND",
@@ -550,27 +559,25 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   validateCommandRoles(handler: GeneratedHandlerRecordInput): void {
-    if (handler.kind !== "command-substitution" && handler.kind !== "command-reaction") {
-      return;
-    }
     if (
-      handler.kind === "command-substitution" &&
+      (handler.kind === "command-assignment" || handler.kind === "command-substitution") &&
       !GeneratedRegistry.isCommandSchema(handler.signalSchema)
     ) {
       throw new HandlerRegistryIngestionError(
         "INVALID_SCHEMA",
-        `Generated command substitution "${handler.methodName}" must declare a Command input schema.`,
+        `Generated command receiver "${handler.methodName}" must declare a Command input schema.`,
       );
     }
     if (
-      handler.kind === "command-reaction" &&
+      (handler.kind === "command-reaction" || handler.kind === "event-reaction") &&
       !GeneratedRegistry.isLegacyEventSchema(handler.signalSchema)
     ) {
       throw new HandlerRegistryIngestionError(
         "INVALID_SCHEMA",
-        `Generated command reaction "${handler.methodName}" must declare an Event or rejection input schema.`,
+        `Generated Event reactor "${handler.methodName}" must declare an Event or rejection input schema.`,
       );
     }
+    if (handler.kind !== "command-substitution" && handler.kind !== "command-reaction") return;
     if (handler.emittedSchemas.every((schema) => GeneratedRegistry.isCommandSchema(schema))) return;
     throw new HandlerRegistryIngestionError(
       "INVALID_SCHEMA",

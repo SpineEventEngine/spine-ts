@@ -42,30 +42,44 @@ describe("build-time handler analyzer", () => {
 
     expect(result.diagnostics).toEqual([]);
     expect(result.receivers).toMatchObject([
-      { receiverKind: "standalone", className: "TaskCommander", handlers: [{ kind: "command-substitution" }] },
+      {
+        receiverKind: "standalone",
+        className: "TaskCommander",
+        handlers: [{ kind: "command-substitution" }],
+      },
     ]);
   });
 
   it("analyzes a named default-export standalone receiver", () => {
-    const result = analyzeBuildHandlers(programWithSource("src/default-commander.ts", `
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/default-commander.ts",
+        `
       import { AbstractCommander, Command } from "@spine-event-engine/server";
       import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
       export default class DefaultCommander extends AbstractCommander {
         @Command replace(command: CreateTask): RenameTask { throw new Error(String(command)); }
       }
-    `));
+    `,
+      ),
+    );
     expect(result.diagnostics).toEqual([]);
     expect(result.receivers[0]).toMatchObject({ receiverKind: "standalone", defaultExport: true });
   });
 
   it("analyzes an anonymous default-export standalone receiver", () => {
-    const result = analyzeBuildHandlers(programWithSource("src/anonymous-commander.ts", `
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/anonymous-commander.ts",
+        `
       import { AbstractCommander, Command } from "@spine-event-engine/server";
       import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
       export default class extends AbstractCommander {
         @Command replace(command: CreateTask): RenameTask { throw new Error(String(command)); }
       }
-    `));
+    `,
+      ),
+    );
     expect(result.diagnostics).toEqual([]);
     expect(result.receivers[0]).toMatchObject({ receiverKind: "standalone", defaultExport: true });
   });
@@ -76,14 +90,146 @@ describe("build-time handler analyzer", () => {
     ["AbstractEventReactor", "Subscribe"],
     ["AbstractEventSubscriber", "React"],
   ])("rejects @%s methods with @%s outside the standalone role matrix", (base, decorator) => {
-    const result = analyzeBuildHandlers(programWithSource("src/invalid-standalone.ts", `
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/invalid-standalone.ts",
+        `
       import { ${base}, ${decorator} } from "@spine-event-engine/server";
       import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
       export class InvalidReceiver extends ${base} {
         @${decorator} handle(signal: CreateTask): RenameTask { throw new Error(String(signal)); }
       }
-    `));
-    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain("UNSUPPORTED_COMMAND_HANDLER");
+    `,
+      ),
+    );
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+      "UNSUPPORTED_COMMAND_HANDLER",
+    );
+  });
+
+  it("analyzes the standalone handler contract and rejects invalid standalone declarations", () => {
+    const valid = analyzeBuildHandlers(
+      standaloneContractProgram(
+        "src/standalone-contract.ts",
+        `
+      import {
+        AbstractAssignee, AbstractCommander, AbstractEventReactor, AbstractEventSubscriber,
+        Assign, Command, React, Subscribe,
+      } from "@spine-event-engine/server";
+      import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+      import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+      import { type TaskAlreadyDone } from "../generated/rejections_pb.js";
+      import { type Task } from "../generated/task_pb.js";
+
+      export class TaskAssignee extends AbstractAssignee {
+        @Assign
+        assign(command: CreateTask): TaskCreated {
+          throw new Error(String(command));
+        }
+      }
+      export class TaskCommander extends AbstractCommander {
+        @Command
+        replace(command: CreateTask): RenameTask {
+          throw new Error(String(command));
+        }
+        @Command
+        reactToEvent(event: TaskCreated): RenameTask {
+          throw new Error(String(event));
+        }
+        @Command
+        reactToRejection(rejection: TaskAlreadyDone): RenameTask {
+          throw new Error(String(rejection));
+        }
+      }
+      export class TaskReactor extends AbstractEventReactor {
+        @React
+        react(event: TaskCreated): TaskRenamed {
+          throw new Error(String(event));
+        }
+        @React
+        observeRejection(rejection: TaskAlreadyDone): void {
+          void rejection;
+        }
+      }
+      export class TaskSubscriber extends AbstractEventSubscriber {
+        @Subscribe
+        observeEvent(event: TaskCreated): void {
+          void event;
+        }
+        @Subscribe
+        observeRejection(rejection: TaskAlreadyDone): void {
+          void rejection;
+        }
+        @Subscribe
+        observeState(state: Task): void {
+          void state;
+        }
+      }
+    `,
+      ),
+    );
+
+    expect(valid.diagnostics).toEqual([]);
+    expect(valid.receivers).toHaveLength(4);
+
+    const invalid = analyzeBuildHandlers(
+      standaloneContractProgram(
+        "src/invalid-standalone-contract.ts",
+        `
+      import {
+        AbstractAssignee, AbstractCommander, AbstractEventReactor, AbstractEventSubscriber,
+        Assign, Command, External, React, Subscribe, Where,
+      } from "@spine-event-engine/server";
+      import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+      import { type TaskCreated } from "../generated/events_pb.js";
+      import { type Task } from "../generated/task_pb.js";
+
+      export class InvalidAssignee extends AbstractAssignee {
+        @Assign
+        assign(event: TaskCreated): TaskCreated {
+          throw new Error(String(event));
+        }
+      }
+      export class InvalidCommander extends AbstractCommander {
+        @Command
+        replace(command: CreateTask): TaskCreated {
+          throw new Error(String(command));
+        }
+      }
+      export class InvalidReactor extends AbstractEventReactor {
+        @React
+        react(command: CreateTask): RenameTask {
+          throw new Error(String(command));
+        }
+      }
+      export class InvalidSubscriber extends AbstractEventSubscriber {
+        @Subscribe
+        observe(event: TaskCreated): TaskCreated {
+          throw new Error(String(event));
+        }
+        @Subscribe
+        observeExternalState(state: External<Task>): void {
+          void state;
+        }
+        @Where({ eventField: "id", equals: "task-1" })
+        @Subscribe
+        observeFilteredState(state: Task): void {
+          void state;
+        }
+      }
+    `,
+      ),
+    );
+
+    expect(invalid.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_SIGNAL_TYPE",
+      "INVALID_EMITTED_SCHEMA",
+      "INVALID_SIGNAL_TYPE",
+      "INVALID_EMITTED_SCHEMA",
+      "INVALID_SUBSCRIBE_RETURN",
+      "INVALID_SIGNAL_TYPE",
+      "INVALID_WHERE",
+    ]);
   });
 
   it("rejects every @Command handler declared on an Aggregate", () => {
@@ -1118,7 +1264,7 @@ describe("build-time handler analyzer", () => {
             parameterCount: 1,
           },
           {
-                kind: "command-substitution",
+            kind: "command-substitution",
             methodName: "rename",
             origin: "domestic",
             signalSchema: schema("../generated/commands_pb", "CreateTaskSchema"),
@@ -1237,6 +1383,30 @@ function programWithSource(fileName: string, source: string): ts.Program {
     "generated/spine/examples/todo/tasks_pb.ts": generatedModule(
       "spine/examples/todo/tasks.proto",
       "Task",
+    ),
+  });
+}
+
+function standaloneContractProgram(fileName: string, source: string): ts.Program {
+  return programWithSources(fileName, {
+    [fileName]: source,
+    "generated/commands_pb.ts": generatedModule(
+      "spine/examples/todo/task_commands.proto",
+      "CreateTask",
+      "RenameTask",
+    ),
+    "generated/events_pb.ts": generatedModule(
+      "spine/examples/todo/task_events.proto",
+      "TaskCreated",
+      "TaskRenamed",
+    ),
+    "generated/rejections_pb.ts": generatedModule(
+      "spine/examples/todo/task_rejections.proto",
+      "TaskAlreadyDone",
+    ),
+    "generated/task_pb.ts": generatedModuleWithDescriptorMessages(
+      "spine/examples/todo/tasks.proto",
+      [{ exportName: "Task", descriptorName: "Task", entityState: true }],
     ),
   });
 }
