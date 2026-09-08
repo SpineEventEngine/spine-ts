@@ -70,6 +70,22 @@ describe("build-time handler analyzer", () => {
     expect(result.receivers[0]).toMatchObject({ receiverKind: "standalone", defaultExport: true });
   });
 
+  it.each([
+    ["AbstractAssignee", "Command"],
+    ["AbstractCommander", "Assign"],
+    ["AbstractEventReactor", "Subscribe"],
+    ["AbstractEventSubscriber", "React"],
+  ])("rejects @%s methods with @%s outside the standalone role matrix", (base, decorator) => {
+    const result = analyzeBuildHandlers(programWithSource("src/invalid-standalone.ts", `
+      import { ${base}, ${decorator} } from "@spine-event-engine/server";
+      import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+      export class InvalidReceiver extends ${base} {
+        @${decorator} handle(signal: CreateTask): RenameTask { throw new Error(String(signal)); }
+      }
+    `));
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain("UNSUPPORTED_COMMAND_HANDLER");
+  });
+
   it("rejects every @Command handler declared on an Aggregate", () => {
     const result = analyzeBuildHandlers(
       programWithSource(

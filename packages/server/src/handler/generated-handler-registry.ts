@@ -383,7 +383,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
         );
       }
       if (role === "assignee" || role === "reactor") {
-        if (handler.emittedSchemas.some((schema) => GeneratedRegistry.isCommandSchema(schema))) {
+        if (
+          handler.emittedSchemas.some(
+            (schema) => !GeneratedRegistry.isLegacyEventSchema(schema) || isEntitySchema(schema),
+          )
+        ) {
           throw new HandlerRegistryIngestionError("INVALID_SCHEMA", `Standalone ${role} "${handler.methodName}" must produce Events.`);
         }
       }

@@ -18,7 +18,7 @@ import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/pr
 import { CommandSchema, file_spine_options } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
-import { AbstractCommander, Aggregate, HandlerRegistryIngestionError, HandlerRegistryIngestor, ProcessManager } from "../../src/index.js";
+import { AbstractAssignee, AbstractCommander, Aggregate, HandlerRegistryIngestionError, HandlerRegistryIngestor, ProcessManager } from "../../src/index.js";
 
 type State = Message<"ProjectionState"> & { id: string; name: string; priority: number };
 const descriptorSet = fromBinary(FileDescriptorSetSchema, Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"));
@@ -43,5 +43,9 @@ describe("generated handler registry ingestion", () => {
   });
   it("rejects a standalone commander that declares Event output", () => {
     expect(() => new HandlerRegistryIngestor().ingest({ receivers: [{ receiverKind: "standalone" as const, receiverType: Commander, handlers: [{ ...substitution("replace"), emittedSchemas: [StateSchema] }] }] })).toThrow(HandlerRegistryIngestionError);
+  });
+  it("rejects a standalone assignee that declares Entity state output", () => {
+    class Assignee extends AbstractAssignee { assign(command: Message<"spine.core.Command">) { return command; } }
+    expect(() => new HandlerRegistryIngestor().ingest({ receivers: [{ receiverKind: "standalone" as const, receiverType: Assignee, handlers: [{ ...substitution("assign"), kind: "command-assignment", emittedSchemas: [StateSchema] }] }] })).toThrow(HandlerRegistryIngestionError);
   });
 });

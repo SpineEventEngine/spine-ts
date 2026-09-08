@@ -526,6 +526,20 @@ const HandlerSources = Object.freeze({
       );
       return undefined;
     }
+    if (
+      receiverKind === "standalone" &&
+      !HandlerSources.allowsStandaloneDecorator(entityBase, handler.name)
+    ) {
+      HandlerTypes.pushDiagnostic(
+        scope,
+        "UNSUPPORTED_COMMAND_HANDLER",
+        handler.node,
+        `@${handler.name} is not legal for standalone ${entityBase ?? "receiver"}.`,
+        className,
+        method,
+      );
+      return undefined;
+    }
     const invalid = HandlerSources.validateHandlerNode(
       node,
       handler.name,
@@ -1028,6 +1042,15 @@ const HandlerSources = Object.freeze({
 
   isHandlerUse(decorator: DecoratorUse): decorator is HandlerDecoratorUse {
     return handlerDecorators.has(decorator.name as HandlerDecorator);
+  },
+
+  allowsStandaloneDecorator(base: string | undefined, decorator: HandlerDecorator): boolean {
+    return (
+      (base === "AbstractAssignee" && decorator === "Assign") ||
+      (base === "AbstractCommander" && decorator === "Command") ||
+      (base === "AbstractEventReactor" && decorator === "React") ||
+      (base === "AbstractEventSubscriber" && decorator === "Subscribe")
+    );
   },
 
   receiverLineage(
