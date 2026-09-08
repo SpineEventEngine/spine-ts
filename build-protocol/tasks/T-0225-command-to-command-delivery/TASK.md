@@ -102,6 +102,10 @@ fields and the immutable role profile are the accepted metadata evidence.
 
 ## Human-Imposed Requirements Ledger
 
+- Avoid `own` and its derived forms unless they are necessary for technical
+  accuracy. This applies to code, documentation, review records, and chat
+  responses; name the responsible class, module, package, agent, or person
+  directly when possible.
 - Work from current official `origin/master` on a regular feature branch with no
   `codex/` prefix.
 - Never modify or push official `master` directly.
