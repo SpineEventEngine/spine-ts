@@ -584,6 +584,13 @@ profile with explicit `gpt-5.6-luna` / medium dispatch and no subagents. It runs
 tests, which also exercises generated, documentation, copyright, package, and
 release-readiness gates. Re-review starts only after this profile is green.
 
+The profile stopped before tests on four real analyzer lint findings: one
+unused `signalSchema`, two unnecessary optional chains, and one forbidden
+non-null assertion. Generation remained clean. The final-correction
+`implementer` receives this exact source cleanup with its explicit
+`gpt-5.6-terra` / medium profile and no subagents; the context-validation
+contract must not change.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
