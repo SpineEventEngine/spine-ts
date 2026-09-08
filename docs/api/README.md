@@ -721,9 +721,33 @@ A generated Process Manager command-input handler uses distinct domain Command
 types and can receive `CommandContext`:
 
 ```ts
-@Command
-approve(command: ApproveProject, context: CommandContext): ScheduleProject {
-  return create(ScheduleProjectSchema, { project: command.project, status: command.status });
+// Generated from project_commands.proto.
+interface ProjectId {
+  organization: string;
+  number: number;
+}
+interface ApproveProject {
+  project: ProjectId;
+  status: string;
+}
+interface ScheduleProject {
+  project: ProjectId;
+  status: string;
+}
+interface CommandContext {}
+declare abstract class ProcessManager {}
+declare const ScheduleProjectSchema: unique symbol;
+declare function Command(value: unknown, context: ClassMethodDecoratorContext): void;
+declare function create(
+  schema: typeof ScheduleProjectSchema,
+  message: ScheduleProject,
+): ScheduleProject;
+
+class ApprovalCoordinator extends ProcessManager {
+  @Command
+  approve(command: ApproveProject, context: CommandContext): ScheduleProject {
+    return create(ScheduleProjectSchema, { project: command.project, status: command.status });
+  }
 }
 ```
 

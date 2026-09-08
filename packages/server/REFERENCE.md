@@ -196,23 +196,34 @@ Command input and output types, and the generated registry supplies those
 schemas:
 
 ```ts
-class ApprovalCoordinator extends ProcessManager<ProjectId, typeof ApprovalStateSchema, number> {
+// Generated from project_commands.proto.
+interface ProjectId {
+  organization: string;
+  number: number;
+}
+interface ApproveProject {
+  project: ProjectId;
+  status: string;
+}
+interface ScheduleProject {
+  project: ProjectId;
+  status: string;
+}
+interface CommandContext {}
+declare abstract class ProcessManager {}
+declare const ScheduleProjectSchema: unique symbol;
+declare function Command(value: unknown, context: ClassMethodDecoratorContext): void;
+declare function create(
+  schema: typeof ScheduleProjectSchema,
+  message: ScheduleProject,
+): ScheduleProject;
+
+class ApprovalCoordinator extends ProcessManager {
   @Command
   approve(command: ApproveProject, context: CommandContext): ScheduleProject {
     return create(ScheduleProjectSchema, { project: command.project, status: command.status });
   }
 }
-
-const context = await BoundedContext.singleTenant("Projects")
-  .withGeneratedRegistryRoot(generatedRegistryRoot)
-  .add(ApprovalCoordinator)
-  .buildAsync();
-await context.commandBus().post(
-  SignalEnvelopes.command({
-    schema: ApproveProjectSchema,
-    message: create(ApproveProjectSchema, { project, status: "approved" }),
-  }),
-);
 ```
 
 The generated v4 record declares `ApproveProjectSchema` as the input and
