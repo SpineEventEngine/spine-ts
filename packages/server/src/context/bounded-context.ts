@@ -1801,9 +1801,7 @@ class CatchUpReplayError extends Error {
  * Assembles private bounded-context lifecycle and replay details.
  */
 const ContextParts = Object.freeze({
-  assertUniqueCommandReceptors(
-    receivers: readonly GeneratedStandaloneHandlerGroup[],
-  ): void {
+  assertUniqueCommandReceptors(receivers: readonly GeneratedStandaloneHandlerGroup[]): void {
     const receptorByType = new Map<string, string>();
     for (const receiver of receivers) {
       for (const handler of receiver.handlers) {

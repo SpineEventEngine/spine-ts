@@ -560,9 +560,7 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   >();
   readonly #commandReceptors = new Map<
     string,
-    RegisteredHandlerMetadata<
-      CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
-    >
+    RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata>
   >();
   readonly #eventApplications = new Map<
     string,
@@ -1079,8 +1077,7 @@ class EntityHandlersOwner {
   #validateCommandHandlers(entityType: EntityClass, handlers: readonly HandlerMetadata[]): void {
     if (
       handlers.some(
-        (handler) =>
-          handler.kind === "command-substitution" || handler.kind === "command-reaction",
+        (handler) => handler.kind === "command-substitution" || handler.kind === "command-reaction",
       ) &&
       !(entityType.prototype instanceof ProcessManager)
     ) {
