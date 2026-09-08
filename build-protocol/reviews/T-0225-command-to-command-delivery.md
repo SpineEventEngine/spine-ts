@@ -499,6 +499,14 @@ Repository formatting, tooling typecheck, 100 focused context/metadata tests,
 and diff checks pass. The same read-only Luna/medium function reruns the
 identical canonical preflight.
 
+The fifth preflight passed all code, documentation, generated-output, and
+packaging gates, then release-readiness policy found 26 internal-history terms
+only in ignored `.planning` and `.superpowers/sdd` scratch artifacts. No test
+ran and generation remained clean. Those disposable untracked files were
+deleted; all durable decisions and evidence remain in committed task/work/review
+records, and frozen diffs remain reproducible from their commit ranges. The
+same read-only Luna/medium function reruns the identical canonical preflight.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
