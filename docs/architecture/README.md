@@ -177,7 +177,7 @@ surface does not construct or access the broker.
 
 Handler origin is build-time metadata. The server exports the type-only marker
 `External<T>`; on the first receptor parameter, the canonical marker unwraps to
-`T` and generated registry v3 emits `origin: "external"`. Unmarked handlers emit
+`T` and the unversioned generated receiver registry emits `origin: "external"`. Unmarked handlers emit
 `origin: "domestic"`. `EventDispatcher.messageSchemas()` remains the complete
 schema universe; optional `externalEventSchemas()` declares its external subset,
 from which the domestic complement is derived. Event-bus and repository dispatch

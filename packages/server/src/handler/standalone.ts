@@ -12,22 +12,30 @@
  * the License.
  */
 
-/** Nominal base class for a decorated standalone command assignee. */
+/**
+ * Nominal base class for a decorated standalone Command assignee.
+ */
 export abstract class AbstractAssignee {
   private readonly assigneeBrand!: never;
 }
 
-/** Nominal base class for a decorated standalone command handler. */
+/**
+ * Nominal base class for a decorated standalone Command commander.
+ */
 export abstract class AbstractCommander {
   private readonly commanderBrand!: never;
 }
 
-/** Nominal base class for a decorated standalone Event reactor. */
+/**
+ * Nominal base class for a decorated standalone Event reactor.
+ */
 export abstract class AbstractEventReactor {
   private readonly eventReactorBrand!: never;
 }
 
-/** Nominal base class for a decorated standalone Event subscriber. */
+/**
+ * Nominal base class for a decorated standalone Event subscriber.
+ */
 export abstract class AbstractEventSubscriber {
   private readonly eventSubscriberBrand!: never;
 }

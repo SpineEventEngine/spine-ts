@@ -36,7 +36,9 @@ type GeneratedHandlerParameterCount = 1 | 2;
 export interface BuildHandlerAnalysis {
   // prettier-ignore
 
-  /** All generated Entity and standalone receiver declarations. */
+  /**
+   * All generated Entity and standalone receiver declarations.
+   */
   readonly receivers: readonly BuildReceiverHandlers[];
 
   /**
@@ -56,9 +58,14 @@ export interface BuildEntityHandlers {
    */
   readonly className: string;
 
-  /** Whether the class is imported from a default export. */
+  /**
+   * Whether the class is imported from a default export.
+   */
   readonly defaultExport?: boolean;
 
+  /**
+   * Marks this declaration as an Entity receiver.
+   */
   readonly receiverKind: "entity";
 
   /**
@@ -77,16 +84,41 @@ export interface BuildEntityHandlers {
   readonly handlers: readonly BuildHandlerRecord[];
 }
 
-/** Build-time standalone receiver declaration. */
+/**
+ * Build-time standalone receiver declaration.
+ */
 export interface BuildStandaloneHandlers {
+  // prettier-ignore
+
+  /**
+   * Marks this declaration as a standalone receiver.
+   */
   readonly receiverKind: "standalone";
+
+  /**
+   * Standalone receiver class declaration name.
+   */
   readonly className: string;
+
+  /**
+   * Indicates that the receiver class is a default export.
+   */
   readonly defaultExport?: boolean;
+
+  /**
+   * Source file that declares the standalone receiver class.
+   */
   readonly sourceFile: string;
+
+  /**
+   * Analyzed decorated handler records in declaration order.
+   */
   readonly handlers: readonly BuildHandlerRecord[];
 }
 
-/** One generated receiver declaration. */
+/**
+ * One generated receiver declaration.
+ */
 export type BuildReceiverHandlers = BuildEntityHandlers | BuildStandaloneHandlers;
 
 /**

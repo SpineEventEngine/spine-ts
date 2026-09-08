@@ -40,13 +40,22 @@ import {
 import { SignalMetadata } from "./signal-metadata.js";
 import { SignalPublisher } from "./signal-publisher.js";
 
-/** Materializes generated standalone receivers without treating them as Entities. @internal */
+/**
+ * Materializes generated standalone receivers without treating them as Entities.
+ *
+ * @internal
+ */
 export class StandaloneHandlerRuntime {
   readonly #publisher: SignalPublisher;
   readonly #metadata = new SignalMetadata();
   readonly #bindings: readonly Binding[];
   readonly #eventFilters: ReadonlyMap<string, EventHandlerFilterPlan<Binding>>;
 
+  /**
+   * Creates runtime bindings for registered standalone receivers.
+   *
+   * @param receivers Generated receiver groups with their application instances and publisher.
+   */
   constructor(receivers: readonly StandaloneBinding[]) {
     this.#publisher = receivers[0]?.publisher ?? StandaloneHandlerRuntime.missingPublisher();
     this.#bindings = Object.freeze(
@@ -57,6 +66,11 @@ export class StandaloneHandlerRuntime {
     this.#eventFilters = StandaloneHandlerRuntime.eventFilters(this.#bindings);
   }
 
+  /**
+   * Creates a dispatcher for standalone Command receptors.
+   *
+   * @returns The dispatcher, or `undefined` when no Command receptor is bound.
+   */
   commandDispatcher(): CommandDispatcher | undefined {
     const bindings = this.#bindings.filter(
       (binding) =>
@@ -70,6 +84,11 @@ export class StandaloneHandlerRuntime {
     };
   }
 
+  /**
+   * Creates a dispatcher for standalone Event receptors.
+   *
+   * @returns The dispatcher, or `undefined` when no Event receptor is bound.
+   */
   eventDispatcher(): EventDispatcher | undefined {
     const bindings = this.#bindings.filter(
       (binding) =>
@@ -99,6 +118,11 @@ export class StandaloneHandlerRuntime {
     );
   }
 
+  /**
+   * Creates a System Event Bus dispatcher for standalone state subscribers.
+   *
+   * @returns The dispatcher, or `undefined` when no state subscriber is bound.
+   */
   stateDispatcher(): EventDispatcher | undefined {
     const bindings = this.#bindings.filter(({ handler }) => handler.kind === "state-subscription");
     if (bindings.length === 0) return undefined;
@@ -220,6 +244,14 @@ export class StandaloneHandlerRuntime {
     return Promise.resolve();
   }
 
+  /**
+   * Binds one generated handler declaration to its standalone application instance.
+   *
+   * @param group The generated receiver group.
+   * @param instance The registered application instance.
+   * @param handler The generated handler declaration.
+   * @returns The immutable runtime binding.
+   */
   static bind(
     group: GeneratedStandaloneHandlerGroup,
     instance: object,
@@ -240,6 +272,12 @@ export class StandaloneHandlerRuntime {
     });
   }
 
+  /**
+   * Lists distinct signal schemas used by bindings.
+   *
+   * @param bindings The bindings to inspect.
+   * @returns Distinct signal schemas in binding order.
+   */
   static schemas(bindings: readonly Binding[]): readonly MessageSchema[] {
     return [
       ...new Map(
@@ -248,6 +286,12 @@ export class StandaloneHandlerRuntime {
     ];
   }
 
+  /**
+   * Builds Event filters for standalone Event receptors.
+   *
+   * @param bindings The bindings to organize.
+   * @returns Filter plans keyed by signal schema and origin.
+   */
   static eventFilters(
     bindings: readonly Binding[],
   ): ReadonlyMap<string, EventHandlerFilterPlan<Binding>> {
@@ -274,30 +318,70 @@ export class StandaloneHandlerRuntime {
     );
   }
 
+  /**
+   * Copies a Command context or creates its generated default.
+   *
+   * @param command The Command that provides the context.
+   * @returns An independent Command context.
+   */
   static commandContext(command: Command): CommandContext {
     return command.context === undefined
       ? create(CommandContextSchema)
       : clone(CommandContextSchema, command.context);
   }
 
+  /**
+   * Copies an Event context or creates its generated default.
+   *
+   * @param event The Event that provides the context.
+   * @returns An independent Event context.
+   */
   static eventContext(event: Event): EventContext {
     return event.context === undefined
       ? create(EventContextSchema)
       : clone(EventContextSchema, event.context);
   }
 
+  /**
+   * Creates a key for one Event schema and origin.
+   *
+   * @param typeName The Event schema type name.
+   * @param origin The required Event origin.
+   * @returns The filter-map key.
+   */
   static eventFilterKey(typeName: string, origin: "domestic" | "external"): string {
     return `${typeName}\u0000${origin}`;
   }
 
+  /**
+   * Throws for a missing publisher during invalid runtime construction.
+   *
+   * @returns This method never returns because it throws.
+   */
   static missingPublisher(): SignalPublisher {
     throw new Error("Standalone handler runtime requires a SignalPublisher.");
   }
 }
 
+/**
+ * Connects generated standalone metadata with its registered application instance.
+ */
 export interface StandaloneBinding {
+  // prettier-ignore
+
+  /**
+   * The generated group for the standalone receiver.
+   */
   readonly group: GeneratedStandaloneHandlerGroup;
+
+  /**
+   * The registered standalone application instance.
+   */
   readonly instance: object;
+
+  /**
+   * Publishes signals produced by the bound receiver.
+   */
   readonly publisher: SignalPublisher;
 }
 interface Binding {

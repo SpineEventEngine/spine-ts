@@ -34,15 +34,16 @@ import {
 import { RejectionSources } from "./rejection-source.js";
 
 /**
- * Describes the generated handler registry module shape accepted by the framework ingestor.
- *
- */
-/**
  * Generated registry metadata consumed by the framework.
  *
  * Application code regenerates this data whenever the handler contract changes.
  */
 export interface GeneratedHandlerRegistry {
+  // prettier-ignore
+
+  /**
+   * Unversioned Entity and standalone receiver declarations.
+   */
   readonly receivers: readonly GeneratedReceiver[];
 }
 
@@ -126,7 +127,6 @@ export class HandlerRegistryIngestionError extends Error {
 
 /**
  * Describes handler categories supported by generated registry ingestion.
- *
  */
 export type GeneratedHandlerKind =
   | "command-assignment"
@@ -138,13 +138,11 @@ export type GeneratedHandlerKind =
 
 /**
  * Describes public handler arity recorded by generated registry tooling.
- *
  */
 export type GeneratedHandlerParameterCount = 1 | 2;
 
 /**
- * Describes a type-erased generated entity group accepted by a top-level registry.
- *
+ * Describes a type-erased generated Entity group accepted by a top-level registry.
  */
 export interface GeneratedEntityHandlerGroup {
   // prettier-ignore
@@ -153,6 +151,10 @@ export interface GeneratedEntityHandlerGroup {
    * Entity class whose prototype owns the generated handler methods.
    */
   readonly receiverKind: "entity";
+
+  /**
+   * Entity constructor matched to the generated receiver declaration.
+   */
   readonly receiverType: EntityClass;
 
   /**
@@ -166,19 +168,43 @@ export interface GeneratedEntityHandlerGroup {
   readonly handlers: readonly GeneratedHandlerRecordInput[];
 }
 
-/** Constructor shape for a standalone receiver; it is not an Entity class. */
+/**
+ * Constructor shape for a standalone receiver; it is not an Entity class.
+ */
 export interface StandaloneReceiverConstructor {
+  // prettier-ignore
+
+  /**
+   * Prototype used to match a registered standalone instance by constructor.
+   */
   readonly prototype: object;
 }
 
-/** Metadata for one decorated standalone application instance. */
+/**
+ * Metadata for one decorated standalone application receiver.
+ */
 export interface GeneratedStandaloneHandlerGroup {
+  // prettier-ignore
+
+  /**
+   * Marks this declaration as a standalone receiver.
+   */
   readonly receiverKind: "standalone";
+
+  /**
+   * Constructor used to match a registered standalone application instance.
+   */
   readonly receiverType: StandaloneReceiverConstructor;
+
+  /**
+   * Generated handler declarations in source order.
+   */
   readonly handlers: readonly GeneratedHandlerRecordInput[];
 }
 
-/** One generated Entity or standalone receiver declaration. */
+/**
+ * One generated Entity or standalone receiver declaration.
+ */
 export type GeneratedReceiver = GeneratedEntityHandlerGroup | GeneratedStandaloneHandlerGroup;
 
 /**

@@ -602,6 +602,7 @@ export class BoundedContext {
    * @param commandBus Dispatches commands accepted by this context.
    * @param eventBus Dispatches events accepted by this context.
    * @param systemEventBus Dispatches framework-only System events.
+   * @param publisher Publishes signals produced by context handlers.
    * @param stand Stores read-side state for this context.
    * @param systemStand Stores read-side state for the paired System Context.
    * @param subscriptionRuntime Coordinates pair-owned subscription delivery.
