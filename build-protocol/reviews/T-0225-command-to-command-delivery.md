@@ -666,6 +666,14 @@ The parent scan found and immediately returned three missed inflected terms to
 the same implementation owner before accepting the result. No accepted finding
 remains open; final mechanical verification is pending.
 
+The post-correction cheap preflight passed every canonical gate and 73 focused
+tests. The same independent correctness/reliability, style/maintainability, and
+TypeScript/API reviewers are assigned one read-only correction re-review over
+`786a86506..42b393c13`; their original explicit Terra/high profiles remain in
+force and they may not spawn subagents. Reader documentation follows with its
+original explicit Luna/medium profile when capacity is available. Only the four
+corrected concerns are reopened.
+
 All six accepted contract-review findings were corrected on the existing
 implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
 now accept only discriminated `receivers`; Entity receivers require
