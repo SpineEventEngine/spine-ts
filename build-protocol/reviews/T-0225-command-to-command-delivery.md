@@ -456,6 +456,12 @@ fixture typing defect, not baseline debt. The existing final-convergence
 `gpt-5.6-terra` / medium profile and no subagents; it must type the helpers
 correctly rather than restore unnecessary casts.
 
+Commit `92e6660bf` gives the Integration Broker test doubles precise schema
+types. Tooling typecheck, full-file lint, all 14 Integration Broker tests,
+formatting, and diff checks pass. The same read-only preflight function reruns
+the identical canonical command with its explicit `gpt-5.6-luna` / medium
+profile and no subagents.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
