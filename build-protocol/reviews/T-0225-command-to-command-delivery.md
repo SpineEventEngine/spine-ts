@@ -404,3 +404,14 @@ fixture import and regenerated the absent `server-blackbox-tests` output. The
 current manifest generation ID was produced by that regeneration and matches
 its generated marker. This correction records no canonical rerun or release
 verification claim; those remain parent-owned.
+
+## Black-box fixture role correction
+
+Canonical preflight passed 431 tests and then failed one integration load when
+the black-box project-workflow fixture used a mixed command/event/state proto
+source. Generated registry validation correctly rejected the resulting
+hand-authored command-reaction metadata. The corrective split keeps IDs and
+entity states in the workflow file, moves Commands to `project_commands.proto`,
+and moves Events to `project_events.proto`; runtime validation was not
+weakened. Normal generation refreshed the manifest and exports. No release run
+has occurred.

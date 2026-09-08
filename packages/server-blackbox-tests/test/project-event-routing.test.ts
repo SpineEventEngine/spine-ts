@@ -42,31 +42,35 @@ import { describe, expect, it } from "vitest";
 
 import { BlackBox } from "@spine-event-engine/testing";
 import {
-  CoordinationStateSchema,
   ApproveProjectSchema,
   CreateProjectSchema,
+  ScheduleProjectSchema,
+  type ApproveProject,
+  type CreateProject,
+  type ScheduleProject,
+} from "../generated/spine/server/testing/project_commands_pb.js";
+import {
+  ProjectCreatedSchema,
+  ProjectScheduledSchema,
+  type ProjectCreated,
+  type ProjectScheduled,
+} from "../generated/spine/server/testing/project_events_pb.js";
+import {
+  CoordinationStateSchema,
   OrganizationIdSchema,
   PlanningIdSchema,
   PlanningStateSchema,
   PortfolioIdSchema,
   PortfolioStateSchema,
-  ProjectCreatedSchema,
   ProjectIdSchema,
   ProjectProjectionStateSchema,
-  ProjectScheduledSchema,
   ProjectStateSchema,
-  ScheduleProjectSchema,
   StaffingIdSchema,
   StaffingStateSchema,
-  type CreateProject,
-  type ApproveProject,
   type OrganizationId,
   type PlanningId,
   type PortfolioId,
-  type ProjectCreated,
   type ProjectId,
-  type ProjectScheduled,
-  type ScheduleProject,
   type StaffingId,
 } from "../generated/spine/server/testing/project_workflow_pb.js";
 
