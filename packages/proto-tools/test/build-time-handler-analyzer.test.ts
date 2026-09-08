@@ -1190,7 +1190,9 @@ function handlerFixtureSource(
   const stateModule = stateSchema === "TaskSchema" ? "task_pb" : "task_list_pb";
   const versionType = entityBase === "Aggregate" ? "bigint" : "number";
   return `
-    import { Aggregate, Assign, Command, ProcessManager, Projection, React, Subscribe, Where } from "@spine-event-engine/server";
+    import {
+      Aggregate, Assign, Command, ProcessManager, Projection, React, Subscribe, Where,
+    } from "@spine-event-engine/server";
     import { ${stateSchema} } from "../generated/${stateModule}.js";
     ${imports}
 

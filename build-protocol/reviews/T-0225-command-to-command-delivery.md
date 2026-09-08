@@ -396,3 +396,11 @@ to analyzer `.file.proto.name` handling. The singular `*_event` and
 tests reject both singular forms; repository-routing fixtures use strict plural
 Event descriptor names. Release verification remains parent-owned and has not
 been rerun.
+
+## Canonical preflight artifact correction
+
+The canonical preflight deterministically found an overlong analyzer-test
+fixture import and regenerated the absent `server-blackbox-tests` output. The
+current manifest generation ID was produced by that regeneration and matches
+its generated marker. This correction records no canonical rerun or release
+verification claim; those remain parent-owned.
