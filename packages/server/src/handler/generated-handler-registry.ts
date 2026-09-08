@@ -169,16 +169,13 @@ export interface GeneratedEntityHandlerGroup {
 }
 
 /**
- * Constructor shape for a standalone receiver; it is not an Entity class.
+ * Nominal constructor for a supported standalone handler receiver.
  */
-export interface StandaloneReceiverConstructor {
-  // prettier-ignore
-
-  /**
-   * Prototype used to match a registered standalone instance by constructor.
-   */
-  readonly prototype: object;
-}
+export type StandaloneReceiverConstructor =
+  | typeof AbstractAssignee
+  | typeof AbstractCommander
+  | typeof AbstractEventReactor
+  | typeof AbstractEventSubscriber;
 
 /**
  * Metadata for one decorated standalone application receiver.
@@ -632,14 +629,24 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
 
     const typeName = (value as { readonly typeName?: unknown }).typeName;
+    const file = (value as { readonly file?: unknown }).file;
+    const fileName =
+      file !== null && typeof file === "object"
+        ? (file as { readonly name?: unknown }).name
+        : undefined;
 
-    if (typeof typeName === "string" && typeName.trim().length > 0) {
+    if (
+      typeof typeName === "string" &&
+      typeName.trim().length > 0 &&
+      typeof fileName === "string" &&
+      fileName.trim().length > 0
+    ) {
       return;
     }
 
     throw new HandlerRegistryIngestionError(
       "INVALID_SCHEMA",
-      `Generated handler registry ${label} must be an object with a non-empty typeName.`,
+      `Generated handler registry ${label} must be an object with non-empty typeName and file name.`,
     );
   },
 

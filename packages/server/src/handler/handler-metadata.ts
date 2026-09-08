@@ -334,11 +334,11 @@ export interface GeneratedHandlerRegistrationBuilder<
   // prettier-ignore
 
   /**
-   * Registers a generated command-input transformation with emitted schemas.
+   * Registers a generated command-input substitution with emitted schemas.
    *
    * @param schema Generated command input schema.
    * @param methodName Process Manager method selected by generated metadata.
-   * @returns Generated transformation handler metadata.
+   * @returns Generated command-substitution handler metadata.
    */
   substitute<Schema extends DescriptorMessageSchema>(
     schema: Schema,
@@ -721,7 +721,7 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   }
 
   /**
-   * Finds the effective command assignment or transformation receptor.
+   * Finds the effective command assignment or substitution receptor.
    *
    * @param commandTypeName Fully qualified command type name.
    * @returns The receptor when registered.

@@ -222,8 +222,8 @@ without dispatch-probing unrelated contexts.
 Generated rejection companions are the public domain-rule failure contract.
 When a repository handler throws one, rollback completes before an independent
 typed rejection event is scheduled, command dispatch resolves, and
-`CommandService.Post` returns an OK acceptance `Ack`. A successful follow-up
-post stores the event through EventBus; an active `SubscriptionService` stream
+`CommandService.Post` returns an OK acceptance `Ack`. A successfully produced rejection event
+is posted through EventBus; an active `SubscriptionService` stream
 with queue capacity may receive it, while inactivity, saturation, or closure
 may prevent observation. Post failure is contained and logged by the internal
 signal publisher, is not visible to the command client, and is not currently
@@ -403,7 +403,7 @@ target type URL, and routed target ID.
 State is stored in tenant-scoped `Stand` records with numeric
 versions, returned commands are wrapped and posted after state storage, and
 returned event messages are wrapped with process-manager-emitted event schemas
-and appended through the event store before follow-up dispatch. The repository
+and appended through the event store before produced-event dispatch. The repository
 surface still does not expose direct entity lookup/storage APIs, inboxes,
 caches, catch-up, or transport startup. Built bounded contexts use repository
 metadata to register known state types with their direct read-side `Stand`.
@@ -716,12 +716,12 @@ event- or rejection-to-command `@Command`,
 but not by `@Assign`; they cannot be normal emitted values. Generated `@Assign`
 and command-input `@Command` producer records must
 declare at least one emitted schema. A command-input `@Command` is the unique
-command receptor/transformation for its input and may receive an optional
+command substitution receptor for its input and may receive an optional
 `CommandContext`; event- and rejection-input `@Command` handlers are EventBus
 reactions. Event- or rejection-to-command `@Command` handlers are supported by
 Process Manager repositories
 only. Aggregate and Projection repositories
-reject command-input transformations and event- or rejection-input command
+reject command-input substitutions and event- or rejection-input command
 reactions during generated ingestion and repository construction. `@React`
 records may return generated event messages
 or explicit `void` with no emitted schemas. `@Subscribe` records return
@@ -855,7 +855,7 @@ producer handlers return
 domain messages; the framework wraps returned commands/events internally and
 dispatches produced signals only after the current storage/transactional work
 succeeds. Command substitutions commit source work before detached,
-in-process follow-up enqueue: it is best-effort, has a commit-to-enqueue crash
+in-process produced-command enqueue: it is best-effort, has a commit-to-enqueue crash
 window, is not an atomic outbox or exactly-once guarantee, and does not
 durably retry a failed child.
 Command registration readiness exports include

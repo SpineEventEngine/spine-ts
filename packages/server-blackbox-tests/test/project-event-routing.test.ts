@@ -508,7 +508,7 @@ describe("project workflow Event routing", () => {
     }
   });
 
-  it("drains a command transformation follow-up when the context closes immediately", async () => {
+  it("drains a command substitution's produced command when the context closes immediately", async () => {
     const { project, planning, staffing, portfolio } = ids();
     const boundedContext = context(routeTo(portfolio), planning, staffing);
     Project.reset();

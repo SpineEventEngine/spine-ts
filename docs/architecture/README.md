@@ -576,9 +576,9 @@ stored-event dispatch.
 Repository command execution recognizes only core-branded domain rejection
 throwables. Aggregate direct-state transactions and process-manager command
 transactions roll back before one versionless rejection event is scheduled
-through the regular EventBus follow-up path. That event carries the rejection
+through regular EventBus produced-event dispatch. That event carries the rejection
 payload, a cloned original command, available stack trace, causal origin,
-timestamp, and producer ID. When the best-effort follow-up post succeeds,
+timestamp, and producer ID. When the best-effort produced-event post succeeds,
 EventBus stores the event independently rather than appending it to aggregate
 history. EventStore, EventBus, and internal generated handlers retain the full
 context. Client-facing `SubscriptionService` updates clone the envelope and
@@ -593,7 +593,7 @@ sole domain-rule failure model used by services and the to-do example.
 message `Command payload validation failed.`, and packed
 `spine.validation.ValidationError` details. A handled domain rejection instead
 rolls back state, schedules its typed event independently, and returns an OK
-acceptance `Ack`. The EventBus follow-up post is best-effort: when it succeeds,
+acceptance `Ack`. The EventBus produced-event post is best-effort: when it succeeds,
 an active `SubscriptionService` stream with queue capacity may receive the
 rejection asynchronously; an inactive, saturated, or closed stream may not
 observe it. When posting fails, the internal signal publisher logs and contains
@@ -685,7 +685,7 @@ and its front-facing unary Coordinator while leaving child listener topology
 private.
 
 The same local runtime boundary provides a narrow generated-signal metadata
-policy through `SignalMetadata`. Repository-produced follow-up commands/events
+policy through `SignalMetadata`. Repository-produced commands/events
 share one policy for command/event IDs, timestamps, actor/tenant command
 context, event origin chains, primitive producer IDs, and validated int32
 version metadata. Tests inject `SignalIds` and `Clock` instead of mutating

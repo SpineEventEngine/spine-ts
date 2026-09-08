@@ -28,10 +28,13 @@ import {
   HandlerRegistryIngestionError,
   HandlerRegistryIngestor,
   ProcessManager,
+  Projection,
 } from "../../src/index.js";
 import type {
   GeneratedHandlerKind,
   GeneratedHandlerRecordInput,
+  GeneratedStandaloneHandlerGroup,
+  StandaloneReceiverConstructor,
 } from "../../src/handler/generated-handler-registry.js";
 
 type State = Message<"ProjectionState"> & { id: string; name: string; priority: number };
@@ -90,6 +93,10 @@ class AggregateReceiver extends Aggregate<string, typeof StateSchema, number> {
     return command;
   }
 }
+class ProjectionReceiver extends Projection<string, typeof StateSchema, number> {}
+class UnrelatedReceiver {
+  readonly unrelated = true;
+}
 class Commander extends AbstractCommander {
   replace(command: Message<"spine.server.testing.StartReview">) {
     return command;
@@ -138,6 +145,52 @@ function domainHandler(kind: GeneratedHandlerRecordInput["kind"]): GeneratedHand
 }
 
 describe("generated handler registry ingestion", () => {
+  it("rejects a schema without the descriptor file classifiers require", () => {
+    const ingest = () =>
+      new HandlerRegistryIngestor().ingest({
+        receivers: [
+          {
+            receiverKind: "entity",
+            receiverType: Manager,
+            stateSchema: StateSchema,
+            handlers: [
+              {
+                ...substitution(),
+                signalSchema: { typeName: "example.Start" },
+              },
+            ],
+          },
+        ],
+      });
+
+    expect(ingest).toThrow(HandlerRegistryIngestionError);
+    expect(ingest).toThrow(/file name/i);
+  });
+
+  it("accepts only nominal standalone receiver constructors in generated groups", () => {
+    const acceptsStandaloneReceiver = (receiverType: StandaloneReceiverConstructor) => receiverType;
+
+    expect(acceptsStandaloneReceiver(Assignee)).toBe(Assignee);
+    expect(acceptsStandaloneReceiver(Commander)).toBe(Commander);
+    expect(acceptsStandaloneReceiver(Reactor)).toBe(Reactor);
+    expect(acceptsStandaloneReceiver(Subscriber)).toBe(Subscriber);
+    // @ts-expect-error Entity constructors are not standalone receiver constructors.
+    acceptsStandaloneReceiver(AggregateReceiver);
+    // @ts-expect-error Entity constructors are not standalone receiver constructors.
+    acceptsStandaloneReceiver(ProjectionReceiver);
+    // @ts-expect-error Entity constructors are not standalone receiver constructors.
+    acceptsStandaloneReceiver(Manager);
+    // @ts-expect-error Arbitrary constructors are not standalone receiver constructors.
+    acceptsStandaloneReceiver(UnrelatedReceiver);
+
+    const group = {
+      receiverKind: "standalone" as const,
+      receiverType: Commander,
+      handlers: [],
+    } satisfies GeneratedStandaloneHandlerGroup;
+    expect(group.receiverType).toBe(Commander);
+  });
+
   it("rejects the framework Command envelope as a command handler payload", () => {
     expect(() =>
       new HandlerRegistryIngestor().ingest({

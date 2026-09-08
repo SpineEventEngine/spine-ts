@@ -189,9 +189,9 @@ route registration API.
 A command-input `@Command` method is a command substitution receptor: it is
 the one effective receptor for that Command type (instead of an `@Assign`),
 commits its Entity state before its one-or-more returned Commands are detached
-for in-process follow-up enqueue, and receives an optional `CommandContext`.
+for in-process produced-command enqueue, and receives an optional `CommandContext`.
 Only Process Manager repositories support `@Command` handlers. Aggregate and
-Projection repositories reject command-input transformations and event- or
+Projection repositories reject command-input substitutions and event- or
 rejection-input command reactions during generated metadata ingestion and
 repository construction.
 Event- and rejection-input `@Command` methods remain Event- or
@@ -199,7 +199,7 @@ rejection-to-command reactions on Event Bus.
 Produced commands retain the source actor, tenant, origin, and causal lineage.
 The enqueue is post-commit best effort, not an atomic outbox or exactly-once
 delivery: a process crash between commit and enqueue can lose a child. Accepted
-follow-ups drain during context close. A contained child failure is diagnosed,
+produced commands drain during context close. A contained child failure is diagnosed,
 but does not retroactively fail an already accepted source command or durably
 retry that child.
 
