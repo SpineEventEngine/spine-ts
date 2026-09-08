@@ -1,6 +1,6 @@
 # T-0225: Command-to-Command Delivery
 
-Status: Final contract correction in progress
+Status: Final contract verification pending
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`

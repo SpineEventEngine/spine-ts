@@ -683,6 +683,17 @@ descriptor contract. Active repository-routing fixture names retain retired
 transformation wording, and the current task disposition was stale. All four
 findings are accepted as one final correction batch.
 
+The same existing `implementer` role received the complete final batch under
+its explicit `gpt-5.6-terra` / medium profile and no-subagent rule. Runtime
+self-introspection was not exposed; the immutable profile matched and no
+fallback was visible. Commit `cbd275e2f` replaces fixed zero-argument base
+constructors with a nominal standalone-instance constructor contract that
+allows application dependencies, adds real Bounded Context registration and
+dispatch coverage, validates coherent Buf message/file descriptor identity,
+rejects the cited lookalike, and completes repository fixture terminology.
+Focused tests and scoped static checks passed. Canonical verification and final
+affected-concern re-review are pending.
+
 All six accepted contract-review findings were corrected on the existing
 implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
 now accept only discriminated `receivers`; Entity receivers require
