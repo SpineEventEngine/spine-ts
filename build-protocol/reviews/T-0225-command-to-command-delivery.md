@@ -282,6 +282,33 @@ failure correctness. Both are explicitly dispatched with `gpt-5.6-terra` and
 high reasoning, read-only, without subagents. Findings are collected before a
 single correction batch.
 
+Both reviewers completed with the explicitly dispatched existing roles and
+`gpt-5.6-terra` / high profiles. Separate runtime self-introspection was not
+exposed and no fallback was visible. Both verdicts are **Needs fixes**. No
+Critical finding was reported. The deduplicated accepted batch is:
+
+1. Important: partition standalone Event filter plans and dispatch by both
+   schema and exact domestic/external origin; prove both directions for the
+   same schema.
+2. Important: include the generated standalone Event dispatcher when deriving
+   Integration Broker external interests; add context-level imported-event
+   proof.
+3. Important: construct the existing defaulted, isolated Command/Event handler
+   context for two-argument standalone methods instead of passing the optional
+   envelope context by reference; prove absent context and mutation isolation.
+4. Important: reject duplicate standalone command receptors by input type,
+   including Assignee/Commander mixtures, before bus intake.
+5. Important: replace standalone tests that use the wrong nominal role or treat
+   Event messages as produced Commands with semantic role-specific fixtures.
+6. Minor: expand public TSDoc for `addCommandDispatcher`,
+   `addEventDispatcher`, and `addAssignee` to explain standalone registration,
+   `buildAsync()` metadata requirements, parameters, and return behavior.
+
+The reviewers found no additional defect in close drain, contained publication,
+state isolation, output validation, or valid source metadata. They also found
+the runtime module cohesive and the added Bounded Context wiring acceptably
+bounded. All six findings are in scope and accepted as one correction batch.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
