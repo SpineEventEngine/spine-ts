@@ -410,6 +410,16 @@ external-interest publication, and imported delivery to the registered
 instance. No remaining or new Critical, Important, or Minor finding exists in
 the standalone runtime task. This reviewed slice is closed.
 
+The final convergence task is assigned to a fresh existing `implementer` role
+with exclusive responsibility for public black-box flow proof, current
+documentation/API expectations, canonical terminology, CommandBus/public
+TSDoc, and the measured changed-file lint failures. Expected model is explicitly
+`gpt-5.6-terra` and reasoning is explicitly `medium`; it must not spawn
+subagents. The standalone runtime contract is closed and must not be redesigned.
+The task must make `docs:api:check`, full changed-file lint, typechecks,
+generated checks, TSDoc/docs checks, focused behavior tests, and coverage green
+before the complete specialist review wave.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
