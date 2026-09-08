@@ -176,6 +176,16 @@ Standalone handler adapters remain outside this review. Runtime
 self-introspection will be recorded if exposed; otherwise the immutable role
 profile and explicit dispatch fields are the accepted metadata evidence.
 
+The reviewer completed with the explicitly dispatched existing role and
+`gpt-5.6-terra` / high profile. Separate runtime self-introspection was not
+exposed and no fallback was visible. Verdict: **Needs fixes**. There is one
+Important finding and no Critical or Minor findings: add direct regression
+coverage for publisher drain and rejection after finish, and for trusted
+cross-runtime follow-up admission during close while public intake rejects.
+The reviewer found no implementation defect; the missing proof is the complete
+accepted correction batch. Its narrow Process Manager ordering/failure
+diagnostic passed 2 tests.
+
 ## Contract re-review minor disposition
 
 Both Minor corrections are closed. Shared generated-handler analyzer and
