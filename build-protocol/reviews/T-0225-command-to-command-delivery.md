@@ -607,6 +607,22 @@ stale package build's legacy dereference; the corrected focused command passed
 
 ## Contract-review correction disposition
 
+### Final correction coverage assignment
+
+The bounded test-only correction used the existing `implementer` role with
+explicit model `gpt-5.6-terra` and explicit medium reasoning. The assignment
+prohibited subagents and limited edits to the two focused registry and analyzer
+test files. Runtime self-introspection was not exposed; the immutable configured
+role/profile matched the dispatch and no fallback was visible.
+
+The generated-registry correction now exceeds 90% in every changed-source
+metric, including 90.15% branch coverage. The analyzer's isolated compiler
+integration run passed all 50 tests. Its exact final-review additions reached
+93.75% statement and 93.55% branch coverage; the older whole file remains below
+the repository-wide threshold and is explicitly excluded by the canonical
+Vitest configuration. This is accepted changed-line evidence, not a claim that
+the legacy analyzer file exceeds the global threshold.
+
 All six accepted contract-review findings were corrected on the existing
 implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
 now accept only discriminated `receivers`; Entity receivers require
