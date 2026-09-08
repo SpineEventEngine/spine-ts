@@ -158,6 +158,15 @@ describe("generated handler registry ingestion", () => {
     { receivers: [{ receiverKind: "standalone", receiverType: Commander, handlers: null }] },
     { receivers: [{ receiverKind: "standalone", receiverType: Commander, handlers: [null] }] },
     { receivers: [{ receiverKind: "standalone", receiverType: Commander, handlers: [{}] }] },
+    {
+      receivers: [
+        {
+          receiverKind: "standalone",
+          receiverType: Commander,
+          handlers: [{ ...substitution(), signalSchema: null }],
+        },
+      ],
+    },
   ])("rejects malformed generated registry records with an ingestion error", (registry) => {
     expect(() => new HandlerRegistryIngestor().ingest(registry)).toThrow(
       HandlerRegistryIngestionError,
