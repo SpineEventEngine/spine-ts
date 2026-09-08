@@ -701,15 +701,18 @@ validates command, event, and distinct rejection roles from generated
 descriptors before writing those registry records. A rejection role requires a
 top-level message declared in a source file ending `rejections.proto`.
 Rejections are accepted as inputs by `@Subscribe`, `@React`, and
-event-to-command `@Command`, but not by `@Assign`; they cannot be normal emitted
-values. Generated `@Assign` and command-input `@Command` producer records must
+event- or rejection-to-command `@Command`,
+but not by `@Assign`; they cannot be normal emitted values. Generated `@Assign`
+and command-input `@Command` producer records must
 declare at least one emitted schema. A command-input `@Command` is the unique
 command receptor/transformation for its input and may receive an optional
 `CommandContext`; event- and rejection-input `@Command` handlers are EventBus
-reactions. Event- or rejection-to-command `@Command` handlers are supported only by Process Manager
-repositories. Aggregate and Projection repositories reject command-input
-transformations and event- or rejection-input command reactions during generated
-ingestion and repository construction. `@React` records may return generated event messages
+reactions. Event- or rejection-to-command `@Command` handlers are supported by
+Process Manager repositories
+only. Aggregate and Projection repositories
+reject command-input transformations and event- or rejection-input command
+reactions during generated ingestion and repository construction. `@React`
+records may return generated event messages
 or explicit `void` with no emitted schemas. `@Subscribe` records return
 explicit `void` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
