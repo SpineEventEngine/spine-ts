@@ -11,7 +11,9 @@ Authoring sub-agents: `/root/t0226_implementer`,
 `/root/t0226_implementer_2`, and `/root/t0226_implementer_3` in sequential
 non-overlapping ownership; all use the existing `implementer` role configured
 `gpt-5.6-terra` / medium reasoning
-Reviewer sub-agents: Formal wave pending dispatch
+Reviewer sub-agents: `/root/t0226_style_review`, `/root/t0226_api_review`, and
+`/root/t0226_reliability_review` active; reader documentation and security
+pending capacity
 Implementation commit: `b3f56720e`
 Final branch HEAD: Pending branch commit
 

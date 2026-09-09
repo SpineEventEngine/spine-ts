@@ -19,13 +19,13 @@ Worktree: `.worktrees/t-0226`
 
 ## Review assignments
 
-| Concern                        | Existing role                      | Explicit profile        | Status                           |
-| ------------------------------ | ---------------------------------- | ----------------------- | -------------------------------- |
-| Code style and maintainability | `style_maintainability_reviewer`   | `gpt-5.6-terra` / high  | Pending dispatch                 |
-| TypeScript/API documentation   | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` / high  | Pending dispatch                 |
-| Performance and reliability    | `performance_reliability_reviewer` | `gpt-5.6-terra` / high  | Pending dispatch                 |
-| Reader documentation           | `documentation_reviewer`           | `gpt-5.6-luna` / medium | Pending dispatch                 |
-| Security and tenant boundary   | `security_reviewer`                | `gpt-5.6-terra` / high  | Pending final readiness dispatch |
+| Concern                        | Existing role                      | Explicit profile        | Status                                  |
+| ------------------------------ | ---------------------------------- | ----------------------- | --------------------------------------- |
+| Code style and maintainability | `style_maintainability_reviewer`   | `gpt-5.6-terra` / high  | `/root/t0226_style_review` active       |
+| TypeScript/API documentation   | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` / high  | `/root/t0226_api_review` active         |
+| Performance and reliability    | `performance_reliability_reviewer` | `gpt-5.6-terra` / high  | `/root/t0226_reliability_review` active |
+| Reader documentation           | `documentation_reviewer`           | `gpt-5.6-luna` / medium | Pending dispatch                        |
+| Security and tenant boundary   | `security_reviewer`                | `gpt-5.6-terra` / high  | Pending final readiness dispatch        |
 
 Every reviewer is read-only, may not spawn subagents, and must inspect the
 human-imposed requirements ledger. The Desktop surface does not expose separate
