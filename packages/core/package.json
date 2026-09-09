@@ -26,9 +26,9 @@
       "types": "./dist/codegen/index.d.ts",
       "default": "./dist/codegen/index.js"
     },
-    "./internal/entity-query-plan": {
-      "types": "./dist/internal/entity-query-plan.d.ts",
-      "default": "./dist/internal/entity-query-plan.js"
+    "./spi/entity-query-plan": {
+      "types": "./dist/spi/entity-query-plan.d.ts",
+      "default": "./dist/spi/entity-query-plan.js"
     }
   },
   "files": [

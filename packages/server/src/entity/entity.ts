@@ -24,7 +24,7 @@ import {
   type EntityPredicate,
   type EntityQueryBuilder,
 } from "@spine-event-engine/core";
-import type { EntityQueryPlan } from "@spine-event-engine/core/internal/entity-query-plan";
+import type { EntityQueryPlan } from "@spine-event-engine/core/spi/entity-query-plan";
 import {
   type ConstraintViolation,
   type Event,
