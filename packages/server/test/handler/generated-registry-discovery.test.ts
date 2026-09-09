@@ -17,11 +17,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { CommandSchema, EventSchema, file_spine_options } from "@spine-event-engine/proto";
+import { file_spine_options } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -38,10 +38,13 @@ type ProjectionState = Message<"ProjectionState"> & {
   name: string;
   priority: number;
 };
+type StartReview = Message<"spine.server.testing.StartReview">;
+type ReviewStarted = Message<"spine.server.testing.ReviewStarted">;
 
 class DiscoveredProjection {
-  assignCreate(command: Message<"spine.core.Command">): void {
+  assignCreate(command: StartReview): ReviewStarted {
     void command;
+    return create(ReviewStartedSchema);
   }
 }
 
@@ -69,6 +72,18 @@ const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
 ) as GenMessage<ProjectionState>;
+const StartReviewSchema = messageDesc(
+  createFixtureFileDescriptor(
+    serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
+  ),
+  0,
+) as GenMessage<StartReview>;
+const ReviewStartedSchema = messageDesc(
+  createFixtureFileDescriptor(
+    serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64,
+  ),
+  0,
+) as GenMessage<ReviewStarted>;
 
 describe("generated registry discovery", () => {
   it("loads generated registries from explicit file URLs", async () => {
@@ -267,8 +282,8 @@ describe("generated registry discovery", () => {
             {
               kind: "command-assignment",
               methodName: "assignCreate",
-              signalSchema: CommandSchema,
-              emittedSchemas: [EventSchema],
+              signalSchema: StartReviewSchema,
+              emittedSchemas: [ReviewStartedSchema],
               parameterCount: 1,
               origin: "domestic",
             },
@@ -282,7 +297,7 @@ describe("generated registry discovery", () => {
       const registry = await discovery.register({ modules: [module.modulePath] });
 
       expect(registry).toBeInstanceOf(HandlerMetadataRegistry);
-      expect(registry.findCommandAssignment("spine.core.Command")?.entityType).toBe(
+      expect(registry.findCommandAssignment(StartReviewSchema.typeName)?.entityType).toBe(
         DiscoveredProjection,
       );
       expect(registry.listEntityHandlers()).toHaveLength(1);
