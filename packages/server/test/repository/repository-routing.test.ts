@@ -34,6 +34,9 @@ import {
 import {
   TypeUrls,
   AnyMessages,
+  EntityColumn,
+  EntityQuery,
+  GeneratedEntityColumns,
   Identifiers,
   MessageInterfaces,
   SignalEnvelopes,
@@ -2034,17 +2037,31 @@ class RoutingProcessManager extends ProcessManager<
   static commandCalls = 0;
   static eventCalls = 0;
   static commandReactionCalls = 0;
+  static queryResults: readonly ProjectionState[] = [];
   static failure: Error | undefined;
 
   static reset(failure?: Error): void {
     this.commandCalls = 0;
     this.eventCalls = 0;
     this.commandReactionCalls = 0;
+    this.queryResults = [];
     this.failure = failure;
   }
 
-  assignTask(command: AggregateState): ProjectionEvent {
+  async assignTask(command: AggregateState): Promise<ProjectionEvent> {
     RoutingProcessManager.commandCalls++;
+    if (command.name.startsWith("query")) {
+      const query = this.select(ProjectionStateSchema, projectionQueryColumns);
+      RoutingProcessManager.queryResults =
+        command.name === "query all"
+          ? await query.all()
+          : await query
+              .byId(command.id)
+              .where(
+                EntityQuery.eq(projectionQueryColumns.name, command.name.slice("query ".length)),
+              )
+              .read();
+    }
     if (command.name.endsWith("-lifecycle")) {
       if (command.name === "archive-lifecycle") this.archiveDraft();
       if (command.name === "unarchive-lifecycle") this.unarchiveDraft();
@@ -2123,6 +2140,14 @@ class RoutingProcessManager extends ProcessManager<
     });
   }
 }
+
+const projectionQueryColumns = EntityColumn.register(
+  ProjectionStateSchema,
+  GeneratedEntityColumns.define(ProjectionStateSchema, {
+    name: { field: ProjectionStateSchema.field.name, comparison: "ordering" },
+    priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" },
+  }),
+);
 
 class CommandSubstitutingProcessManager extends ProcessManager<
   string,
@@ -5715,6 +5740,92 @@ describe("repository signal routing", () => {
         .stand()
         .read(ProcessManagerStateSchema, "pm-tenant", { tenantId: createTenantId("tenant-b") }),
     ).resolves.toBeUndefined();
+  });
+
+  it("binds Process Manager reads to the active tenant for equal projection IDs", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .add(createProcessManagerAssignRepository())
+      .build();
+    const tenantA = createTenantId("query-tenant-a");
+    const tenantB = createTenantId("query-tenant-b");
+
+    await context
+      .stand()
+      .update(
+        ProjectionStateSchema,
+        create(ProjectionStateSchema, { id: "shared-query", name: "A", priority: 1 }),
+        { tenantId: tenantA },
+      );
+    await context
+      .stand()
+      .update(
+        ProjectionStateSchema,
+        create(ProjectionStateSchema, { id: "shared-query", name: "B", priority: 2 }),
+        { tenantId: tenantB },
+      );
+
+    await context
+      .commandBus()
+      .post(createAggregateCommand("query-a", "shared-query", "query A", "query-tenant-a"));
+    expect(RoutingProcessManager.queryResults).toEqual([
+      create(ProjectionStateSchema, { id: "shared-query", name: "A", priority: 1 }),
+    ]);
+
+    await context
+      .commandBus()
+      .post(createAggregateCommand("query-b", "shared-query", "query B", "query-tenant-b"));
+    expect(RoutingProcessManager.queryResults).toEqual([
+      create(ProjectionStateSchema, { id: "shared-query", name: "B", priority: 2 }),
+    ]);
+
+    await context.close();
+  });
+
+  it("keeps archived projections queryable, excludes deleted projections, and clones query results", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .add(createProcessManagerAssignRepository())
+      .build();
+
+    await context
+      .stand()
+      .update(
+        ProjectionStateSchema,
+        create(ProjectionStateSchema, { id: "query-live", name: "live", priority: 1 }),
+      );
+    await context
+      .stand()
+      .update(
+        ProjectionStateSchema,
+        create(ProjectionStateSchema, { id: "query-archived", name: "archived", priority: 2 }),
+        { lifecycle: { archived: true, deleted: false } },
+      );
+    await context
+      .stand()
+      .update(
+        ProjectionStateSchema,
+        create(ProjectionStateSchema, { id: "query-deleted", name: "deleted", priority: 3 }),
+        { lifecycle: { archived: false, deleted: true } },
+      );
+
+    await context.commandBus().post(createAggregateCommand("query-all-1", "pm-query", "query all"));
+    expect(RoutingProcessManager.queryResults.map((state) => state.name).sort()).toEqual([
+      "archived",
+      "live",
+    ]);
+
+    const live = RoutingProcessManager.queryResults.find((state) => state.id === "query-live");
+    if (live === undefined) throw new Error("Expected live Process Manager query result.");
+    live.name = "mutated by handler";
+
+    await context.commandBus().post(createAggregateCommand("query-all-2", "pm-query", "query all"));
+    expect(RoutingProcessManager.queryResults.find((state) => state.id === "query-live")).toEqual(
+      create(ProjectionStateSchema, { id: "query-live", name: "live", priority: 1 }),
+    );
+    await context.close();
   });
 
   it("rejects multitenant process-manager handoff without a tenant before inbox write", async () => {

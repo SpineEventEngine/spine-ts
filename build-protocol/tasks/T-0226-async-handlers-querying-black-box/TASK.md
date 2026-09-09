@@ -307,6 +307,12 @@ surface exposes no additional metadata.
   releases it in `finally`. Focused core/server typechecks and 37 focused tests
   passed. Remaining behavior coverage must exercise repository dispatch,
   lifecycle visibility, and concurrent tenant isolation before review.
+- `2026-09-09 12:54 WEST`: Repository-dispatch coverage proves Process Manager
+  reads isolate equal projection IDs by active tenant, retain archived records,
+  exclude deleted records, and return state copies that cannot change a later
+  read. The lifecycle test first failed because storage order is deliberately
+  unspecified; its assertion now checks membership rather than order. Focused
+  core/client-node/server builds and 302 query/repository tests passed.
 
 ## Decisions
 
