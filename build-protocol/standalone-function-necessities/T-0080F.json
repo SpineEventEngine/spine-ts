@@ -1510,5 +1510,23 @@
     "name": "controlPayload",
     "disposition": "necessity",
     "reason": "TypeScript Protobuf boundary: controlPayload validates broker control identity before payload-specific unpacking."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/testing/index.ts",
+    "kind": "function-declaration",
+    "identity": "postExternalEvent()#1",
+    "name": "postExternalEvent",
+    "disposition": "necessity",
+    "reason": "TypeScript package-testing boundary: postExternalEvent exposes controlled external-event intake without widening the production BoundedContext API."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/testing/index.ts",
+    "kind": "function-declaration",
+    "identity": "observeProducedSignals()#1",
+    "name": "observeProducedSignals",
+    "disposition": "necessity",
+    "reason": "TypeScript package-testing boundary: observeProducedSignals exposes produced-signal observation only through the server/testing entrypoint."
   }
 ]

@@ -474,6 +474,14 @@ an immediate frozen empty array instead of the reader contract's Promise. They
 now return `Promise.resolve(Object.freeze([]))`, preserving both the required
 asynchronous shape and the lint rule against `async` callbacks with no await.
 
+Cleanup enforcement requires exact standalone-function dispositions. The two
+server/testing-only boundary functions now have narrow `necessity` records in
+the server partition: one keeps external-event intake confined to the testing
+entrypoint, and the other keeps produced-signal observation there. The cleanup
+gate passes without adding a production export or changing runtime behavior.
+The repository-wide TSDoc gate remains red on existing T-0226 public query and
+publisher documentation findings outside this ledger-only correction.
+
 ## Review Waves And Dispositions
 
 - One read-only architecture/requirements pass dispatched to the existing
