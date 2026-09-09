@@ -486,6 +486,11 @@ It explicitly preserves the query projection's eventual-consistency semantics,
 readonly results, the 1,000-result limit, and the potential cost of `all()`;
 no runtime behavior changed. The repository-wide TSDoc gate now passes.
 
+The copyright preflight correction restores the exact 2026 CodeMatters Apache
+header in the two client-node re-export modules and repairs the malformed core
+field-classification and server query-reader headers. It changes no executable
+code or public contract.
+
 ## Review Waves And Dispositions
 
 - One read-only architecture/requirements pass dispatched to the existing
