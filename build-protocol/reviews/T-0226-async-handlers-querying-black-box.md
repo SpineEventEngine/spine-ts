@@ -97,3 +97,8 @@ profile, no subagents, and no overlapping production writer.
   generic inference through `EntityQueryPredicateFor`; the actual Projection
   and Process Manager registered-column predicates compile under strict tooling
   checks without weakening the existing negative cases.
+
+The correction tree converges through `31df88c1a`. The expanded preflight
+passes every generated/strict build and deterministic policy, documentation,
+Proto, and readiness gate plus 442 focused tests across 10 files. A second and
+final targeted review wave rechecks every substantively affected concern.

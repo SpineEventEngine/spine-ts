@@ -562,6 +562,10 @@ generic type contracts are unchanged.
   `45b57685f`, then exhausted its execution window with a clean worktree. A
   fresh existing implementer receives the remaining frozen batch with the same
   explicit `gpt-5.6-terra` / medium profile and no overlapping writer.
+- The complete correction tree converges through `31df88c1a`; the expanded
+  affected-scope preflight passes all generated/strict builds, deterministic
+  policy/docs/Proto/readiness gates, and 442 focused tests. The second and final
+  targeted review wave is ready.
 
 ## Integration Result
 
