@@ -769,6 +769,12 @@ describe("project workflow Event routing", () => {
         () => deliveredRejections[0],
         (event) => event !== undefined,
       );
+      expect(rejection, "ProjectSchedulingRejected envelope is required.").toBeDefined();
+      if (rejection === undefined)
+        throw new Error("ProjectSchedulingRejected envelope is required.");
+      expect(rejection.message, "ProjectSchedulingRejected payload is required.").toBeDefined();
+      if (rejection.message === undefined)
+        throw new Error("ProjectSchedulingRejected payload is required.");
       expect(AnyMessages.unpack(rejection.message, ProjectSchedulingRejectedSchema)).toEqual(
         create(ProjectSchedulingRejectedSchema, { project }),
       );

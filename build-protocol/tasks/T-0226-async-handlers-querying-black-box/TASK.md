@@ -362,6 +362,10 @@ surface exposes no additional metadata.
   restored. The accepted proof now lives in the test-owned server BlackBox
   Project model with a domain-specific rejection Proto, deterministic await,
   observed rejection dispatch, and committed-history exclusion.
+- `2026-09-09 14:58 WEST`: Strict tooling required explicit presence narrowing
+  for the delivered test rejection Event and its `Any` payload before unpacking.
+  The focused BlackBox proof now makes those contract checks explicit without
+  weakening the domain rejection assertion.
 
 ## Decisions
 
