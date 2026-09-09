@@ -24,8 +24,8 @@ Worktree: `.worktrees/t-0226`
 | Code style and maintainability | `style_maintainability_reviewer`   | `gpt-5.6-terra` / high  | `/root/t0226_style_review` complete       |
 | TypeScript/API documentation   | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` / high  | `/root/t0226_api_review` complete         |
 | Performance and reliability    | `performance_reliability_reviewer` | `gpt-5.6-terra` / high  | `/root/t0226_reliability_review` complete |
-| Reader documentation           | `documentation_reviewer`           | `gpt-5.6-luna` / medium | `/root/t0226_docs_review` active          |
-| Security and tenant boundary   | `security_reviewer`                | `gpt-5.6-terra` / high  | `/root/t0226_security_review` active      |
+| Reader documentation           | `documentation_reviewer`           | `gpt-5.6-luna` / medium | `/root/t0226_docs_review` complete        |
+| Security and tenant boundary   | `security_reviewer`                | `gpt-5.6-terra` / high  | `/root/t0226_security_review` complete    |
 
 Every reviewer is read-only, may not spawn subagents, and must inspect the
 human-imposed requirements ledger. The Desktop surface does not expose separate
@@ -34,17 +34,17 @@ the available runtime metadata.
 
 ## Canonical dispositions
 
-- Code style/maintainability: pending.
-- Documentation completeness: pending.
-- TypeScript/API docs: pending.
-- Performance/reliability: pending.
-- Security: pending because tenant-bound reads and external-event intake cross
-  authorization/trust semantics.
+- Code style/maintainability: findings; two P1 and one P2.
+- Documentation completeness: findings; two P1 and two P2.
+- TypeScript/API docs: findings; one P1 and two P2, with documentation overlap.
+- Performance/reliability: findings; three P1.
+- Security: findings; one P1 duplicated with reliability. Tenant,
+  external-event, deserialization, logging, dependency, and secret checks are
+  otherwise clean.
 
 ## Findings and author response
 
-The first three lanes are complete. Preliminary findings are held without fixes
-until documentation and security complete:
+The complete five-lane wave is accepted as one deduplicated correction batch:
 
 - P1: restore BlackBox lifecycle-test construction after observation became
   mandatory.
@@ -58,6 +58,16 @@ until documentation and security complete:
 - P2: add beginner package documentation for the new APIs.
 - P2: move canonical query behavior tests to the core package, leaving
   client-node compatibility tests in client-node.
+- P1: add beginner async-handler and Process Manager query workflows to the
+  main user guide and server README, including transaction duration/rejection,
+  eventual consistency, Aggregate exclusion, and the 1,000-result bound.
+- P1: add the BlackBox external-event and produced-snapshot workflow to the
+  testing README, including included/excluded signals and call-time timing.
+- P2: add the typed query example, result ceiling, and `all()` cost warning to
+  the server reference; update the core entrypoint inventory and compatibility
+  forwarding explanation after the generator-only export is corrected.
 
-Documentation and security findings remain pending. No fixes begin from this
-partial wave.
+All findings are task-scope and accepted. No P0 was reported. The duplicated
+typed-query and shadowed-Promise findings are fixed once each. The existing
+implementation owner receives this whole batch; re-review is limited to
+substantively affected concerns after focused mechanical evidence is clean.

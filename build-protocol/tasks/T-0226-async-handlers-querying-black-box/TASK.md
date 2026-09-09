@@ -518,6 +518,11 @@ generic type contracts are unchanged.
   strict TypeScript builds, ESLint and repository policy, TSDoc, copyright,
   formatting, documentation/TypeDoc, Proto, dependency/readiness checks, and
   490 focused tests are clean. Formal specialist review is ready to start.
+- The complete five-lane formal review found no P0 and produced one accepted,
+  deduplicated correction batch: five runtime/API P1 defects, two
+  beginner-documentation P1 omissions, and four related P2 export, test-layout,
+  and reference corrections. Details and role dispositions are recorded in
+  `build-protocol/reviews/T-0226-async-handlers-querying-black-box.md`.
 
 ## Integration Result
 
