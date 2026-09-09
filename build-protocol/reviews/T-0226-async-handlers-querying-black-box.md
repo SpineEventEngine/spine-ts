@@ -149,6 +149,12 @@ and server-reference example draft. A fresh existing `implementer` with explicit
 `gpt-5.6-terra` / medium profile receives the intact draft and the remaining
 Process Manager guard-path tests; it may not spawn subagents.
 
+The final correction tree is pushed through `6f01138b5`. All accepted P2 items
+have focused deterministic evidence. `/root/t0226_api_final`, the existing
+`typescript_api_docs_reviewer` role with explicit `gpt-5.6-terra` / high
+profile, performs the sole focused re-review of the remaining `orderBy()` P1.
+It is read-only and may not spawn subagents.
+
 ## Final P2 correction response
 
 - The final implementer used the explicitly dispatched existing `implementer`

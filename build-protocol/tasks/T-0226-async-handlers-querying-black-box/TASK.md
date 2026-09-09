@@ -17,6 +17,7 @@ Reviewer sub-agents: `/root/t0226_style_review`, `/root/t0226_api_review`,
 `/root/t0226_security_review`; targeted round two begins with
 `/root/t0226_style_r2`, `/root/t0226_api_r2`, and
 `/root/t0226_reliability_r2`
+Focused final API reviewer: `/root/t0226_api_final`
 Implementation commit: `b3f56720e`
 Final branch HEAD: Pending branch commit
 
