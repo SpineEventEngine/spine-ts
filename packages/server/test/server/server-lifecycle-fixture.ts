@@ -96,7 +96,8 @@ export async function lifecycleFixture(
   });
   const registry = generatedRegistry([
     {
-      entityType: LifecycleProjection,
+      receiverKind: "entity",
+      receiverType: LifecycleProjection,
       stateSchema: LifecycleStateSchema,
       handlers: [
         {
@@ -433,8 +434,9 @@ function fixtureFile(descriptorSetBase64: string) {
 }
 
 function generatedRegistry(
-  entities: readonly {
-    readonly entityType: object;
+  receivers: readonly {
+    readonly receiverKind: "entity";
+    readonly receiverType: object;
     readonly stateSchema: GenMessage<Message>;
     readonly handlers: readonly {
       readonly kind: "event-subscription";
@@ -451,7 +453,7 @@ function generatedRegistry(
   const moduleDirectory = join(directory, "generated/handler");
   const registryPath = join(moduleDirectory, "generated-handler-registry.js");
   mkdirSync(moduleDirectory, { recursive: true });
-  (globalThis as Record<string, unknown>)[slot] = Object.freeze({ version: 3, entities });
+  (globalThis as Record<string, unknown>)[slot] = Object.freeze({ receivers });
   writeFileSync(
     registryPath,
     `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
