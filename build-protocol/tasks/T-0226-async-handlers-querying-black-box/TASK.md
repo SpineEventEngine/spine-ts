@@ -362,6 +362,17 @@ surface exposes no additional metadata.
   tests; affected proto-tools and server TypeScript builds passed; `git diff
 --check` passed. A rejected handler promise is intentionally suppressed at
   command intake after rollback, as characterized by the runtime regression.
+- RED: `pnpm exec vitest run packages/server/test/repository/repository-routing.test.ts
+packages/server/test/repository/repository.test.ts` - the new full-dispatch
+  actor-context test failed as expected because `QueryReader.observe` was not
+  implemented.
+- GREEN: the same focused repository run passed 290 tests after adding the
+  package-internal cloned wire-query observer, the Process Manager 1,000-row
+  limit, compile-time query-surface assertions, and exact unbound/retained
+  lifecycle errors.
+- `pnpm exec tsc -b packages/core packages/client-node packages/server` - passed.
+- Focused core/client/server query, service, and repository run - 418 tests
+  passed with zero failures.
 
 ## Coverage Result
 
@@ -400,6 +411,16 @@ surface exposes no additional metadata.
 | Signal capture could include inputs or uncommitted output   | Implementation owner | Must prevent          | Correctness/reliability review |
 | `all()` may be costly on large projections                  | Documentation        | Accepted with warning | Documentation review           |
 | HTTP side effects cannot roll back                          | Documentation        | Accepted limitation   | Documentation review           |
+
+## Slice 2 Closure
+
+The Process Manager path now builds the same wire `Query` as its fluent plan
+and passes it through the bounded reader's package-internal test observer.
+Full repository dispatch proves source actor, tenant, and zone preservation.
+The process-manager-only query object rejects limits above 1,000, exposes no
+mutation or tenant override at runtime or compile time, and rejects both
+unbound access and retained query execution after release with the established
+message. The observer is not exported from the server package entrypoint.
 
 ## Review Waves And Dispositions
 

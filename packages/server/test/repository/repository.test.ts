@@ -244,7 +244,39 @@ describe("repository identity", () => {
     expect(query).not.toHaveProperty("update");
     expect(query).not.toHaveProperty("stand");
     expect(query).not.toHaveProperty("tenant");
+    expectTypeOf(query).not.toHaveProperty("update");
+    expectTypeOf(query).not.toHaveProperty("tenant");
+    expectTypeOf<Aggregate<string, typeof AggregateStateSchema, number>>().not.toHaveProperty(
+      "select",
+    );
+    expect(() => query.limit(1_001)).toThrow("Process Manager query limit may be at most 1000.");
     release();
+  });
+
+  it("rejects Process Manager reads before binding and after release", async () => {
+    const processManager = new QueryingProcessManager({
+      id: "process-1",
+      schema: ProcessManagerStateSchema,
+      state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
+      version: 1,
+      lifecycle: { archived: false, deleted: false },
+    });
+
+    expect(() => processManager.query()).toThrow(
+      "Process Manager queries are available only during repository handler execution.",
+    );
+
+    const release = processManagerQueryAccess.bind(
+      processManager,
+      async () => Object.freeze([]),
+      create(ActorContextSchema),
+    );
+    const retained = processManager.query();
+    release();
+
+    await expect(retained.read()).rejects.toThrow(
+      "Process Manager queries are available only during repository handler execution.",
+    );
   });
 
   it("rejects command substitutions on Aggregates", () => {

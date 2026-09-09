@@ -2329,13 +2329,14 @@ const ProcessManagerQueries = Object.freeze({
     }
     return processManagerQueryAccess.bind(
       entity,
-      async (plan, schema) => {
+      async (plan, schema, query) => {
         const results = await QueryReader.read(
           runtime.stand,
           schema,
           plan as NormalizedQueryPlan<unknown>,
           tenantId,
           1_000,
+          query,
         );
         return Object.freeze(results.map((result) => clone(schema, result.state)));
       },

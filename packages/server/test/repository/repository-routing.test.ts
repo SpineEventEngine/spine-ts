@@ -63,6 +63,7 @@ import {
   type TenantId,
   UserIdSchema,
   VersionSchema,
+  ZoneIdSchema,
   file_spine_options,
 } from "@spine-event-engine/proto";
 import type { UserId } from "@spine-event-engine/proto";
@@ -129,6 +130,7 @@ import {
   SpecScanner,
   StateUpdateRouting,
 } from "../../src/index.js";
+import { QueryReader } from "../../src/services/query-reader.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
@@ -5781,6 +5783,43 @@ describe("repository signal routing", () => {
     ]);
 
     await context.close();
+  });
+
+  it("preserves the source actor, tenant, and zone in the Process Manager wire query", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .add(createProcessManagerAssignRepository())
+      .build();
+    const captured: unknown[] = [];
+    const reader = QueryReader as typeof QueryReader & {
+      observe(onRead: (query: unknown) => void): { close(): void };
+    };
+    const observation = reader.observe((query) => captured.push(query));
+    const command = createAggregateCommand("query-context", "shared-query", "query A", "tenant-a");
+    const actorContext = command.context?.actorContext;
+    if (actorContext === undefined || command.context === undefined) {
+      throw new Error("Expected a command actor context.");
+    }
+    command.context.actorContext = create(ActorContextSchema, {
+      ...actorContext,
+      zoneId: create(ZoneIdSchema, { value: "Europe/Lisbon" }),
+    });
+
+    try {
+      await context.commandBus().post(command);
+      expect(captured).toHaveLength(1);
+      expect(captured[0]).toMatchObject({
+        context: {
+          actor: create(UserIdSchema, { value: "user-1" }),
+          tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
+          zoneId: create(ZoneIdSchema, { value: "Europe/Lisbon" }),
+        },
+      });
+    } finally {
+      observation.close();
+      await context.close();
+    }
   });
 
   it("keeps archived projections queryable, excludes deleted projections, and clones query results", async () => {

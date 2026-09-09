@@ -28,6 +28,7 @@ import {
   type ActorContext,
   ValidationErrorSchema,
 } from "@spine-event-engine/proto";
+import type { Query } from "@spine-event-engine/proto/client";
 import type { EntityEventStorage, EntityStateHistoryStorage } from "@spine-event-engine/storage";
 
 import {
@@ -60,6 +61,7 @@ interface ProcessManagerQueryCapability {
   readonly execute: <Schema extends DescriptorMessageSchema>(
     plan: EntityQueryPlan,
     schema: Schema,
+    query: Query,
   ) => Promise<readonly MessageShape<Schema>[]>;
   active: boolean;
 }
@@ -149,13 +151,16 @@ export class ProcessManagerQuery<
   }
 
   limit(value: number): this {
+    if (value > 1_000) {
+      throw new TypeError("Process Manager query limit may be at most 1000.");
+    }
     this.#builder.limit(value);
     return this;
   }
 
   async read(): Promise<readonly MessageShape<Schema>[]> {
     const capability = processManagerQueryAccess.require(this.#entity);
-    return await capability.execute(this.#builder.buildPlan(), this.#schema);
+    return await capability.execute(this.#builder.buildPlan(), this.#schema, this.#builder.build());
   }
 
   async findById(id: unknown): Promise<MessageShape<Schema> | undefined> {
