@@ -1,6 +1,6 @@
 # T-0225: Command-to-Command Delivery
 
-Status: Release verification pending
+Status: Release verification correction in progress
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`
@@ -195,7 +195,9 @@ repository fixtures now use command-substitution terminology. The corrected
 canonical cheap preflight passed all gates and 359 focused tests. Final narrow
 review closure is clean across correctness/reliability, style/OOP,
 TypeScript/API/TSDoc, and reader documentation. This task has no current
-release-verification claim.
+release-verification claim. The first release run exposed two executable server
+fixtures that still emit the removed version-3 registry shape; their migration
+to unversioned receivers is in progress without runtime compatibility support.
 
 ## Historical pre-standalone disposition
 

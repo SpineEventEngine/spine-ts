@@ -713,6 +713,15 @@ reviewer spawned subagents or edited files. Security is N/A because this batch
 changes local metadata validation/type contracts and documentation, with no new
 trust boundary, credential, transport, or externally reachable surface.
 
+The first authoritative release run passed every pre-test gate, then exposed a
+stale executable-fixture contract before coverage. Managed child registries in
+`managed-external-events-application.mjs` and `server-lifecycle-fixture.ts`
+still export removed version-3 `entities` metadata, so current discovery
+correctly raises `INVALID_REGISTRY_MODULE` and managed replicas restart. The
+failure reproduces with the single concurrent-managed-fixture test. The fix is
+test-fixture migration to unversioned `receivers`; production compatibility is
+explicitly prohibited.
+
 All six accepted contract-review findings were corrected on the existing
 implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
 now accept only discriminated `receivers`; Entity receivers require
