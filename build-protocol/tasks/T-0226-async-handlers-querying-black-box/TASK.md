@@ -7,7 +7,8 @@ Baseline commit: `437cafcf380da33222d852f86a802200ef5ddc41`
 Task log path: `build-protocol/tasks/T-0226-async-handlers-querying-black-box/TASK.md`
 Branch: `feature/async-handlers-querying-black-box`
 Worktree: `.worktrees/t-0226`
-Authoring sub-agent: Pending existing `implementer` role dispatch
+Authoring sub-agent: `/root/t0226_implementer`, existing `implementer` role,
+configured `gpt-5.6-terra` / medium reasoning
 Reviewer sub-agents: Pending
 Implementation commit: Pending branch commit
 Final branch HEAD: Pending branch commit
@@ -77,6 +78,12 @@ Selected skills read before task actions:
 
 Skills passed to implementation and review roles must be recorded at dispatch.
 No task-specific skill conflicts override the repository protocol.
+
+Implementation dispatch passes `test-driven-development`, `implement`, the
+task contract, accepted architecture review, and repository protocol. Both the
+model and reasoning profile were explicit in the dispatch. The Desktop surface
+does not expose separate live self-introspection; the immutable role profile
+and explicit dispatch fields are the available runtime metadata.
 
 ## Scope
 
@@ -273,6 +280,10 @@ surface exposes no additional metadata.
   pnpm and will be retried in the task worktree.
 - `2026-09-09 12:07 WEST`: Persisted the human-approved contract and revised
   14-20 hour estimate before production implementation.
+- `2026-09-09 12:24 WEST`: Assigned the first Promise-handler slice to the sole
+  production implementation owner `/root/t0226_implementer`, using the existing
+  `implementer` role with explicit configured `gpt-5.6-terra` / medium
+  reasoning. The owner may not spawn subagents or revert concurrent work.
 
 ## Decisions
 
