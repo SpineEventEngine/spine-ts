@@ -15,10 +15,15 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { EntityColumn } from "../dist/index.js";
+import { EntityColumn, EntityQuery, EntityQueryBuilder } from "../dist/index.js";
 import * as clientRoot from "../dist/index.js";
 import { GeneratedEntityColumns } from "../dist/codegen/index.js";
 import { ProjectionStateSchema } from "../test-fixtures/entity-column-fixtures.js";
+import {
+  EntityColumn as CoreEntityColumn,
+  EntityQuery as CoreEntityQuery,
+  EntityQueryBuilder as CoreEntityQueryBuilder,
+} from "@spine-event-engine/core";
 
 describe("@spine-event-engine/client-node built exports", () => {
   it("declares the Node-only client package identity", () => {
@@ -49,6 +54,31 @@ describe("@spine-event-engine/client-node built exports", () => {
     expect(() => {
       Reflect.construct(EntityColumn, [{}]);
     }).toThrow(/Entity columns can only be constructed during registration/);
+  });
+
+  it("preserves canonical core identities through the compatibility exports", () => {
+    expect(EntityColumn).toBe(CoreEntityColumn);
+    expect(EntityQuery).toBe(CoreEntityQuery);
+    expect(EntityQueryBuilder).toBe(CoreEntityQueryBuilder);
+  });
+
+  it("keeps every documented Entity query and column contract available from declarations", () => {
+    const declarations = readFileSync(new URL("../dist/index.d.ts", import.meta.url), "utf8");
+    const contracts: readonly string[] = [
+      "EntityColumnDefinition",
+      "EntityColumnDefinitionEntry",
+      "EntityColumnOperator",
+      "EntityColumnValue",
+      "EntityColumnValueKind",
+      "EntityColumns",
+      "EntityComparison",
+      "EntityComparisonPredicate",
+      "EntityEqualityOperator",
+      "EntityGroup",
+      "EntityOrderingOperator",
+      "EntityPredicate",
+    ];
+    for (const contract of contracts) expect(declarations).toContain(contract);
   });
 
   it("ships the Projection companion generator as a package bin", () => {

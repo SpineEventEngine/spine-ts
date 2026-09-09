@@ -491,6 +491,15 @@ header in the two client-node re-export modules and repairs the malformed core
 field-classification and server query-reader headers. It changes no executable
 code or public contract.
 
+The API-documentation preflight exposed a TypeDoc-only compatibility issue:
+the client-node forwarding declarations compiled and emitted correctly, but
+TypeDoc resolved their aliases to the canonical core declarations and omitted
+them from the client-node module. The forwarding modules now declare typed
+identity aliases, so client-node preserves its existing root import paths and
+runtime object identity while core remains the only implementation. Built
+package tests pin the three runtime identities and the complete declaration
+inventory; TypeDoc now includes every expected compatibility export.
+
 ## Review Waves And Dispositions
 
 - One read-only architecture/requirements pass dispatched to the existing
