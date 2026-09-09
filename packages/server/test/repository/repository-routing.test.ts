@@ -784,6 +784,32 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigin
   }
 }
 
+class TaskCommandRoutingAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignTask(command: TaskCommand): void {
+    void command;
+  }
+}
+
+class IdlessCommandProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  assignTask(command: TaskCommand): void {
+    void command;
+  }
+}
+
+class IdlessCommandProjectionAggregate extends Aggregate<
+  string,
+  typeof AggregateStateSchema,
+  bigint
+> {
+  assignTask(command: TaskCommand): void {
+    void command;
+  }
+}
+
 class ImplicitIdAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static calls = 0;
 
@@ -4544,14 +4570,14 @@ describe("repository signal routing", () => {
 
   it("supplies a default Command context to custom routing", () => {
     let observed: CommandContext | undefined;
-    const repository = createRoutingRepository(
-      CommandRouting.create<string>().route(AggregateStateSchema, (message, context) => {
+    const repository = createTaskCommandRoutingRepository(
+      CommandRouting.create<string>().route(TaskCommandSchema, (message, context) => {
         observed = context;
         return message.id;
       }),
     );
 
-    repository.routeCommand(createContextlessAggregateCommand("command-context-route", "task"));
+    repository.routeCommand(createContextlessGeneratedTaskCommand("command-context-route", "task"));
 
     expect(observed).toEqual(create(CommandContextSchema));
   });
@@ -5718,7 +5744,7 @@ describe("repository signal routing", () => {
   it("rejects idless process-manager commands before route, handler, or Stand write", async () => {
     RoutingProcessManager.reset();
     const context = BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
+      .add(createIdlessCommandProcessManagerRepository())
       .build();
 
     await expect(
@@ -6689,7 +6715,7 @@ describe("repository signal routing", () => {
   it("rejects idless Entity Inbox replay before handler or Stand write", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    const repository = createProcessManagerAssignRepository();
+    const repository = createIdlessCommandProcessManagerRepository();
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .withStorageFactory(factory)
@@ -10329,7 +10355,7 @@ describe("repository signal routing", () => {
 
   it("rejects aggregate commands without ids before tenant projection updates", async () => {
     const context = BoundedContext.multitenant("Tasks")
-      .add(createProjectionProducingRepository())
+      .add(createIdlessCommandProjectionRepository())
       .add(createExecutingProjectionRepository())
       .build();
 
@@ -10654,6 +10680,21 @@ function createRoutingRepository(
     handlers,
     ...(commandRouting === undefined ? {} : { commandRouting }),
     ...(eventRouting === undefined ? {} : { eventRouting }),
+  });
+}
+
+function createTaskCommandRoutingRepository(
+  commandRouting?: CommandRouting<string>,
+): Repository<typeof TaskCommandRoutingAggregate> {
+  return new Repository({
+    entityType: TaskCommandRoutingAggregate,
+    schema: AggregateStateSchema,
+    handlers: EntityHandlers.define(
+      TaskCommandRoutingAggregate,
+      AggregateStateSchema,
+      (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ),
+    ...(commandRouting === undefined ? {} : { commandRouting }),
   });
 }
 
@@ -11727,6 +11768,34 @@ function createProcessManagerAssignRepository(
   });
 }
 
+function createIdlessCommandProcessManagerRepository(): Repository<
+  typeof IdlessCommandProcessManager
+> {
+  return new Repository({
+    entityType: IdlessCommandProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers: EntityHandlers.define(
+      IdlessCommandProcessManager,
+      ProcessManagerStateSchema,
+      (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ),
+  });
+}
+
+function createIdlessCommandProjectionRepository(): Repository<
+  typeof IdlessCommandProjectionAggregate
+> {
+  return new Repository({
+    entityType: IdlessCommandProjectionAggregate,
+    schema: AggregateStateSchema,
+    handlers: EntityHandlers.define(
+      IdlessCommandProjectionAggregate,
+      AggregateStateSchema,
+      (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ),
+  });
+}
+
 function createProcessManagerReactRepository(
   eventRouting?: EventRouting<string>,
 ): Repository<typeof RoutingProcessManager> {
@@ -12228,11 +12297,7 @@ function createContextlessAggregateCommand(id: string, aggregateId: string, name
     id: create(CommandIdSchema, { uuid: id }),
     message: AnyMessages.pack(
       AggregateStateSchema,
-      create(AggregateStateSchema, {
-        id: aggregateId,
-        name,
-        archived: false,
-      }),
+      create(AggregateStateSchema, { id: aggregateId, name, archived: false }),
     ),
   });
 }
@@ -12314,12 +12379,8 @@ function createIdlessAggregateCommand(aggregateId: string, name = "Task", tenant
       }),
     }),
     message: AnyMessages.pack(
-      AggregateStateSchema,
-      create(AggregateStateSchema, {
-        id: aggregateId,
-        name,
-        archived: false,
-      }),
+      TaskCommandSchema,
+      create(TaskCommandSchema, { id: aggregateId, name }),
     ),
   });
 }
@@ -12411,7 +12472,8 @@ function readAggregateId(command: SpineCommand): string {
   const message =
     command.message === undefined
       ? undefined
-      : AnyMessages.unpack(command.message, AggregateStateSchema);
+      : (AnyMessages.unpack(command.message, AggregateStateSchema) ??
+        AnyMessages.unpack(command.message, TaskCommandSchema));
 
   if (message === undefined) {
     const validated =

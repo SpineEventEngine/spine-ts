@@ -253,10 +253,16 @@ available runtime metadata.
   Process Manager query handler workflow.
 - Evidence: `pnpm typecheck:build` passed; `pnpm docs:snippets:check` passed; focused Vitest
   coverage across core query, server repository/routing, and BlackBox lifecycle tests passed
-  312/312; Prettier and `git diff --check` passed. The legacy state-as-command routing helpers
-  remain only where those negative route tests register that state type itself; converting them to
-  the generated Task command changes the test's registered domain and is not a safe fixture-only
-  correction. The generated `TaskCommand` fixture is retained for the domain-correct command paths.
+  312/312; Prettier and `git diff --check` passed.
+
+### Mandatory fixture correction
+
+- The previously open state-as-command finding is closed. The idless command, context-routing,
+  Process Manager, projection-routing, and inbox-negative fixtures now post generated
+  `TaskCommand` messages. Dedicated repositories intentionally register `TaskCommand` handlers so
+  the tests still prove missing command-envelope IDs reject before routing, handler invocation,
+  and state writes. The generic inbox ID reader accepts its existing Aggregate-state fixtures and
+  the new generated command fixture without conflating their domain message types.
 
 ## Final P2 correction response
 
