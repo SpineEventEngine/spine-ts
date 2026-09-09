@@ -18,6 +18,12 @@ Import from `@spine-event-engine/core`. The package exports `Validate`,
 `StringifierRegistry`, the `Stringifier` contract, and their exported input,
 result, and metadata types.
 
+Descriptor-backed `EntityColumn` and `EntityQuery` behavior is canonical in
+core. The generated `GeneratedEntityColumns` helper is intentionally excluded
+from the root: generated model code imports it from
+`@spine-event-engine/core/codegen`. `@spine-event-engine/client-node` retains
+its compatibility exports and its `/codegen` forwarding entry point.
+
 ## Subscription lifecycle SPI
 
 Framework integrations that coordinate subscription activation import

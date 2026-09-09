@@ -18,7 +18,8 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { ActorContextSchema, file_spine_options } from "@spine-event-engine/proto";
-import { EntityColumn, EntityQuery, GeneratedEntityColumns } from "@spine-event-engine/core";
+import { EntityColumn, EntityQuery } from "@spine-event-engine/core";
+import { GeneratedEntityColumns } from "@spine-event-engine/core/codegen";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import {

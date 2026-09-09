@@ -17,7 +17,7 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   EntityQuery,
   type EntityColumn,
-  type EntityPredicate,
+  type EntityQueryMaskPath,
   type EntityQueryPlan,
   type EntityQueryBuilder,
 } from "@spine-event-engine/core";
@@ -154,8 +154,8 @@ export class ProcessManagerQuery<
    * @param predicate Predicate evaluated against registered state columns.
    * @returns This query for fluent configuration.
    */
-  where(predicate: EntityPredicate): this {
-    this.#builder.where(predicate as never);
+  where(...args: Parameters<EntityQueryBuilder<Schema, Columns>["where"]>): this {
+    this.#builder.where(...args);
     return this;
   }
 
@@ -165,8 +165,8 @@ export class ProcessManagerQuery<
    * @param paths Generated state-field property names to include.
    * @returns This query for fluent configuration.
    */
-  mask(...paths: readonly (keyof MessageShape<Schema> & string)[]): this {
-    (this.#builder.mask as (...values: string[]) => unknown)(...paths);
+  mask(...paths: readonly EntityQueryMaskPath<Schema>[]): this {
+    this.#builder.mask(...paths);
     return this;
   }
 
@@ -177,8 +177,8 @@ export class ProcessManagerQuery<
    * @param direction Sort direction, ascending by default.
    * @returns This query for fluent configuration.
    */
-  orderBy(column: EntityColumn<Schema>, direction: "asc" | "desc" = "asc"): this {
-    this.#builder.orderBy(column as never, direction);
+  orderBy(...args: Parameters<EntityQueryBuilder<Schema, Columns>["orderBy"]>): this {
+    this.#builder.orderBy(...args);
     return this;
   }
 

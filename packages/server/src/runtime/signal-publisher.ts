@@ -20,7 +20,7 @@ import { commandBusAccess, CommandBus } from "../bus/command-bus.js";
 import { eventBusAccess, EventBus } from "../bus/event-bus.js";
 import { emitServerError } from "../server/server-log.js";
 
-type PublicationKind = "command" | "event" | "system-event" | "stored-event";
+type PublicationKind = "command" | "event" | "rejection-event" | "system-event" | "stored-event";
 type PublisherState = "open" | "closing" | "closed";
 interface ProducedSignalObserver {
   readonly onCommand?: (command: Readonly<Command>) => void;
@@ -82,6 +82,19 @@ export class SignalPublisher {
    */
   publishEvent(event: Event): Promise<void> {
     return this.#publish("event", event, () => eventBusAccess.postFollowUp(this.#eventBus, event));
+  }
+
+  /**
+   * Dispatches a rejection Event without recording it as committed produced output.
+   *
+   * @internal
+   * @param event The rejection Event envelope.
+   * @returns A promise that settles after detached rejection handling is contained.
+   */
+  publishRejectionEvent(event: Event): Promise<void> {
+    return this.#publish("rejection-event", event, () =>
+      eventBusAccess.postFollowUp(this.#eventBus, event),
+    );
   }
 
   /**

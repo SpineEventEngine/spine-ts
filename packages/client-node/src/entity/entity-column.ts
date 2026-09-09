@@ -16,7 +16,6 @@ import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import {
   EntityColumn as CoreEntityColumn,
-  GeneratedEntityColumns,
   type EntityColumn as CoreEntityColumnType,
   type EntityColumnDefinition as CoreEntityColumnDefinition,
   type EntityColumnDefinitionEntry as CoreColumnDefinitionEntry,
@@ -28,6 +27,7 @@ import {
   type EntityEqualityOperator as CoreEntityEqualityOperator,
   type EntityOrderingOperator as CoreEntityOrderingOperator,
 } from "@spine-event-engine/core";
+import { GeneratedEntityColumns } from "@spine-event-engine/core/codegen";
 
 /**
  * Operators available for every Entity column.

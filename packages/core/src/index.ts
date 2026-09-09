@@ -86,7 +86,6 @@ import {
 
 export {
   EntityColumn,
-  GeneratedEntityColumns,
   type EntityColumnDefinition,
   type EntityColumnDefinitionEntry,
   type EntityColumnOperator,
@@ -104,6 +103,7 @@ export {
   type EntityGroup,
   type EntityQueryPlan,
   type EntityQueryPlanPredicate,
+  type EntityQueryMaskPath,
   type EntityPredicate,
 } from "./query/entity-query.js";
 

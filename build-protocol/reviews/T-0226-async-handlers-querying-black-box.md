@@ -77,3 +77,17 @@ P1 with a testing-only no-op observation handle and 3/3 focused tests. The
 owner's execution window then ended cleanly. A fresh existing `implementer`
 continues the remaining frozen batch with explicit `gpt-5.6-terra` / medium
 profile, no subagents, and no overlapping production writer.
+
+## Author correction response
+
+- Promise provenance: resolved by checking the TypeScript type symbol's
+  standard-library declaration, preserving aliases while rejecting local and
+  imported lookalikes; focused analyzer regression passed.
+- Query bounds and facade types: resolved by making `buildPlan()` validate via
+  the existing iterative traversal and forwarding builder argument constraints
+  without `as never`; focused query regression and affected builds passed.
+- Produced-event capture: rejection dispatch now has an explicit publisher
+  path that bypasses produced-event observers; focused publisher regression
+  passed. A BlackBox end-to-end rejection fixture remains for re-review.
+- Generator containment, canonical test relocation, and reference/prose
+  corrections are implemented where applicable; focused package builds passed.

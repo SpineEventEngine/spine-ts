@@ -201,7 +201,7 @@ describe("EntityQuery", () => {
     expect(() =>
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
         .mask("missing" as "title")
-        .build(),
+        .buildPlan(),
     ).toThrow('Entity query mask path "missing" is not a state field.');
     expect(() =>
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).limit(0),
@@ -309,7 +309,7 @@ describe("EntityQuery", () => {
     expect(() =>
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
         .where(cyclic as never)
-        .build(),
+        .buildPlan(),
     ).toThrow("must not contain cycles");
 
     let deep: unknown = leaf;
@@ -319,7 +319,7 @@ describe("EntityQuery", () => {
     expect(() =>
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
         .where(deep as never)
-        .build(),
+        .buildPlan(),
     ).toThrow("maximum depth 64");
 
     const wide = { kind: "all", predicates: new Array(10_001).fill(leaf) };

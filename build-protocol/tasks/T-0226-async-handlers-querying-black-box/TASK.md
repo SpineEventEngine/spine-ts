@@ -335,6 +335,13 @@ surface exposes no additional metadata.
   read. The lifecycle test first failed because storage order is deliberately
   unspecified; its assertion now checks membership rather than order. Focused
   core/client-node/server builds and 302 query/repository tests passed.
+- `2026-09-09 14:37 WEST`: Accepted review corrections restore standard-library
+  Promise provenance, plan traversal bounds, constrained Process Manager query
+  forwarding, rejection-capture exclusion, codegen export containment, and
+  required beginner/reference prose. Focused analyzer, query, publisher, and
+  affected package-build evidence is recorded in the work log; BlackBox
+  rejection end-to-end proof and canonical test relocation remain follow-up
+  review items.
 
 ## Decisions
 

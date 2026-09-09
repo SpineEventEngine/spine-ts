@@ -75,7 +75,7 @@ type ColumnName<Column> =
 const maximumPredicateDepth = 64;
 const maximumPredicateNodes = 10_000;
 
-type StateName<Schema extends GenMessage<Message>> = Exclude<
+export type EntityQueryMaskPath<Schema extends GenMessage<Message>> = Exclude<
   keyof MessageShape<Schema>,
   "$typeName" | "$unknown"
 > &
@@ -288,7 +288,7 @@ export class EntityQueryBuilder<
    * @param paths Generated property names of state fields.
    * @returns This builder.
    */
-  mask(...paths: readonly StateName<Schema>[]): this {
+  mask(...paths: readonly EntityQueryMaskPath<Schema>[]): this {
     for (const path of paths) {
       const field = EntityQueryWire.findField(this.#schema, path);
       if (field === undefined) {
@@ -623,6 +623,10 @@ const EntityQueryCompiler = Object.freeze({
     schema: Schema,
     columns: EntityColumnCollection<Schema>,
   ): readonly EntityQueryPlanPredicate[] {
+    // Reuse the iterative wire traversal as the single validation boundary. The
+    // storage plan has the same predicate graph but must not recurse before
+    // cycle, depth, and breadth limits have been checked.
+    EntityQueryCompiler.compileGroups(roots, schema, columns);
     return roots.map((predicate) =>
       EntityQueryCompiler.compilePlanPredicate(predicate, schema, columns),
     );

@@ -1212,6 +1212,37 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
+  it("rejects locally declared and imported Promise lookalikes", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/promise-lookalikes.ts", {
+        "src/promise-lookalikes.ts": handlerFixtureSource(
+          "ProcessManager",
+          "TaskListSchema",
+          `
+            @Assign
+            local(command: CreateTask): Promise<TaskCreated> { throw new Error(String(command)); }
+
+            @Assign
+            imported(command: CreateTask): ImportedPromise<TaskCreated> { throw new Error(String(command)); }
+          `,
+          `
+            import { type CreateTask } from "../generated/commands_pb.js";
+            interface Promise<Value> { readonly value: Value; }
+            import { type Promise as ImportedPromise } from "../promise-lookalike.js";
+          `,
+        ),
+        "promise-lookalike.ts": `export interface Promise<Value> { readonly value: Value; }`,
+      }),
+    );
+
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "UNSUPPORTED_RETURN_TYPE", methodName: "local" }),
+        expect.objectContaining({ code: "UNSUPPORTED_RETURN_TYPE", methodName: "imported" }),
+      ]),
+    );
+  });
+
   it("rejects void Assign and Command handlers", () => {
     const result = analyzeBuildHandlers(programWithSource("src/void.ts", voidEmissionSource));
 

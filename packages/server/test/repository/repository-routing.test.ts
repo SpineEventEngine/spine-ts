@@ -36,12 +36,12 @@ import {
   AnyMessages,
   EntityColumn,
   EntityQuery,
-  GeneratedEntityColumns,
   Identifiers,
   MessageInterfaces,
   SignalEnvelopes,
   StringifierRegistry,
 } from "@spine-event-engine/core";
+import { GeneratedEntityColumns } from "@spine-event-engine/core/codegen";
 import {
   ActorContextSchema,
   type CommandId,

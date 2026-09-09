@@ -3465,7 +3465,7 @@ const RepositorySignals = {
     return async () => {
       try {
         // spine-log-boundary: server.repository_rejection_follow_up
-        await runtime.publisher.publishEvent(event);
+        await runtime.publisher.publishRejectionEvent(event);
       } catch (error) {
         runtime.publisher.reportFailure("event", event, error);
       }

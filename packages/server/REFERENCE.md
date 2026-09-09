@@ -193,6 +193,11 @@ side effects. Process Managers may use their protected read-only query surface
 for eventually consistent projection state during a handler. Aggregates must
 not use projection reads for invariants.
 
+`select(schema, columns)` supports `byId`, typed `where`, `mask`, `orderBy`,
+`limit`, `read`, `findById`, and `all`. A Process Manager query returns at most
+1,000 states. `all()` is a convenience and can be costly on a large Projection;
+prefer an ID-targeted or ordered bounded query.
+
 A command-input `@Command` method is a command substitution receptor: it is
 the one effective receptor for that Command type (instead of an `@Assign`),
 commits its Entity state before its one-or-more returned Commands are detached

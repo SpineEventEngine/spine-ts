@@ -612,7 +612,7 @@ const HandlerSources = Object.freeze({
     const emittedSchemas = HandlerSources.emittedSchemaUses(
       node.type === undefined
         ? undefined
-        : HandlerSources.unwrapOuterPromise(node.type, scope.imports),
+        : HandlerSources.unwrapOuterPromise(node.type, scope),
       handler.name,
       scope.imports,
     )?.map((schema) => schema.reference);
@@ -961,7 +961,7 @@ const HandlerSources = Object.freeze({
       return true;
     }
 
-    const returnType = HandlerSources.unwrapOuterPromise(node.type, scope.imports);
+    const returnType = HandlerSources.unwrapOuterPromise(node.type, scope);
     const envelope = HandlerSources.frameworkEnvelope(returnType, scope.imports);
     if (envelope !== undefined) {
       HandlerTypes.pushDiagnostic(
@@ -993,7 +993,7 @@ const HandlerSources = Object.freeze({
   ): boolean {
     if (
       node.type !== undefined &&
-      HandlerSources.isExplicitVoidType(HandlerSources.unwrapOuterPromise(node.type, scope.imports))
+      HandlerSources.isExplicitVoidType(HandlerSources.unwrapOuterPromise(node.type, scope))
     ) {
       return false;
     }
@@ -1486,7 +1486,7 @@ const HandlerSources = Object.freeze({
 
   unwrapOuterPromise(
     typeNode: ts.TypeNode,
-    imports: ImportState,
+    scope: AnalyzerScope,
     walk: TypeWalk = HandlerSources.newTypeWalk(),
   ): ts.TypeNode {
     if (!HandlerSources.consumeTypeWalk(walk)) {
@@ -1496,19 +1496,33 @@ const HandlerSources = Object.freeze({
     if (!ts.isTypeReferenceNode(unwrapped) || !ts.isIdentifier(unwrapped.typeName)) {
       return typeNode;
     }
-    const alias = imports.localTypeAliases.get(unwrapped.typeName.text);
+    const alias = scope.imports.localTypeAliases.get(unwrapped.typeName.text);
     if (alias !== undefined) {
       return (
         HandlerSources.resolveAlias(unwrapped.typeName.text, alias, walk, (resolved) =>
-          HandlerSources.unwrapOuterPromise(resolved, imports, walk),
+          HandlerSources.unwrapOuterPromise(resolved, scope, walk),
         ) ?? typeNode
       );
     }
-    if (unwrapped.typeName.text !== "Promise" || unwrapped.typeArguments?.length !== 1) {
+    if (
+      unwrapped.typeName.text !== "Promise" ||
+      unwrapped.typeArguments?.length !== 1 ||
+      !HandlerSources.isBuiltInPromise(unwrapped, scope.program)
+    ) {
       return typeNode;
     }
 
     return unwrapped.typeArguments[0] ?? typeNode;
+  },
+
+  isBuiltInPromise(typeNode: ts.TypeReferenceNode, program: ts.Program): boolean {
+    const symbol = program.getTypeChecker().getTypeFromTypeNode(typeNode).getSymbol();
+    return (
+      symbol?.getName() === "Promise" &&
+      symbol.declarations?.some((declaration) =>
+        program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
+      ) === true
+    );
   },
 
   isExplicitVoidType(typeNode: ts.TypeNode | undefined): boolean {

@@ -43,6 +43,28 @@ Add generated entities with `BoundedContext.add(...)` and use
 context is single-tenant or multitenant by construction; select that mode
 before registering application handlers and storage.
 
+## Async handlers and Process Manager queries
+
+An `@Assign`, `@Command`, `@React`, or `@Subscribe` handler may return its
+usual result through a standard `Promise`. Its transaction remains open until
+that promise settles. Rejection rolls back framework state and suppresses
+produced output; it cannot roll back an external HTTP request or other side
+effect.
+
+Process Managers, but not Aggregates, have protected read-only `select()`:
+
+```ts
+const pending = await this.select(RequestViewSchema, RequestViewColumns)
+  .where(EntityQuery.eq(RequestViewColumns.status, "pending"))
+  .orderBy(RequestViewColumns.createdAt, "asc")
+  .limit(10)
+  .read();
+```
+
+These reads are eventually consistent. `limit()` may not exceed 1,000, and
+`all()` can be expensive for a large Projection; prefer a targeted, ordered,
+bounded query.
+
 ## Native lifecycle and routing
 
 `Server.run()` is the standalone process form: it handles `SIGINT`/`SIGTERM`

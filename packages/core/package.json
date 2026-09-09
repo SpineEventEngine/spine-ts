@@ -21,6 +21,10 @@
     "./spi/subscription-lifecycle": {
       "types": "./dist/spi/subscription-lifecycle.d.ts",
       "default": "./dist/spi/subscription-lifecycle.js"
+    },
+    "./codegen": {
+      "types": "./dist/codegen/index.d.ts",
+      "default": "./dist/codegen/index.js"
     }
   },
   "files": [
