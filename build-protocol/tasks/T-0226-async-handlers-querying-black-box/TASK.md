@@ -12,7 +12,7 @@ Authoring sub-agents: `/root/t0226_implementer`,
 non-overlapping ownership; all use the existing `implementer` role configured
 `gpt-5.6-terra` / medium reasoning
 Reviewer sub-agents: Pending
-Implementation commit: Pending branch commit
+Implementation commit: `bf12f5cb1`
 Final branch HEAD: Pending branch commit
 
 Task classification: High-risk
@@ -53,6 +53,19 @@ The largest uncertainties are sharing typed query concepts without a
 actor, and recording only committed context-produced signals. The release gate
 may add elapsed waiting time without increasing active work materially. Revise
 this estimate promptly if implementation evidence changes those assumptions.
+
+## Human-Imposed Requirements Ledger
+
+| Requirement                                                                                                                | Source                                | Status                                                                                   |
+| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Write the detailed task and estimate before implementation.                                                                | Human request                         | Recorded above before implementation began.                                              |
+| Keep the revised estimate materially below the rejected first estimate.                                                    | Human approval                        | Frozen at 14-20 active hours.                                                            |
+| Support both synchronous and asynchronous signal handlers.                                                                 | Human feedback                        | Implemented for the four existing handler decorators.                                    |
+| Permit read-side queries from Process Managers, following Spine JVM direction; do not grant this capability to Aggregates. | Human clarification                   | Implemented as protected, read-only Process Manager access.                              |
+| Do not limit querying to `findById()` and `all()`; expose the existing typed query concepts as one coherent contract.      | Human clarification                   | Implemented with typed predicates, grouping, ordering, masks, limits, and conveniences.  |
+| Add BlackBox external-event intake plus access to context-produced Commands and Events.                                    | Human feedback                        | Implemented as `postExternalEvent()`, `assertCommands()`, and `assertEvents()`.          |
+| Explain the feature in simple, beginner-level English.                                                                     | Human request                         | Required for public prose, task handoff, and final report.                               |
+| Work on a new official feature branch and do not create or merge a pull request without a separate request.                | Human request and repository workflow | Using `feature/async-handlers-querying-black-box`; no pull request or merge is in scope. |
 
 ## Required Inputs Read
 
@@ -441,6 +454,14 @@ intake before and after BlackBox server startup observed the same two events;
 `ServerValues.buildContexts()` retains a supplied built context by reference
 and repository registration binds its context publisher. Temporary diagnostics
 were removed and no production identity/follow-up change was necessary.
+
+Pre-review lint typechecking found test-only strictness gaps: BlackBox snapshot
+indexing did not establish that each selected envelope and `Any` payload was
+present before unpacking, and the public-member declaration fixture had not
+listed the two new readonly snapshot APIs. The focused tests now guard those
+payloads explicitly and the declaration fixture asserts exact
+`readonly Command[]` and `readonly Event[]` return types; no runtime contract
+was changed.
 
 ## Review Waves And Dispositions
 
