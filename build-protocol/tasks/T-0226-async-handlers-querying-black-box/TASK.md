@@ -578,6 +578,10 @@ generic type contracts are unchanged.
   uncommitted TypeDoc/server-reference draft when its execution window ended.
   A fresh implementer receives that exact tree plus the remaining Process
   Manager guard-path tests, with no overlapping writer.
+- The focused API review confirms `orderBy()` rejects equality-only and foreign
+  columns but still accepts a same-schema column absent from the selected
+  collection. The canonical builder and facade require one final
+  `Columns[keyof Columns]` constraint plus a public negative compile test.
 
 ## Integration Result
 

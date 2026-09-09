@@ -155,6 +155,15 @@ have focused deterministic evidence. `/root/t0226_api_final`, the existing
 profile, performs the sole focused re-review of the remaining `orderBy()` P1.
 It is read-only and may not spawn subagents.
 
+The focused review closes valid inference, equality-only rejection,
+foreign-schema rejection, TypeDoc inventory, and TSDoc, but keeps the P1 open:
+a separately registered same-schema column outside the selected `Columns`
+collection still compiles and fails only at runtime. Both the canonical builder
+and Process Manager facade must constrain `Column` to `Columns[keyof Columns]`
+while retaining the orderable-column conditional. A public consumer
+`@ts-expect-error` pins the non-selected same-schema case before the same API
+concern is checked again. No complete review wave reopens.
+
 ## Final P2 correction response
 
 - The final implementer used the explicitly dispatched existing `implementer`
