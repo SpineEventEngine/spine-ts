@@ -621,11 +621,33 @@ describe("project workflow Event routing", () => {
         create(CreateProjectSchema, { project, name: "roadmap" }),
       );
       expect(posted.kind).toBe("ok");
+      await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
+      const producedEvents = await blackBox.eventually(
+        () => blackBox.assertEvents(),
+        (events) => events.length === 2,
+      );
+      expect(AnyMessages.unpack(producedEvents[0]?.message, ProjectCreatedSchema)).toMatchObject({
+        project,
+        name: "roadmap",
+      });
+      expect(AnyMessages.unpack(producedEvents[1]?.message, ProjectScheduledSchema)).toEqual(
+        create(ProjectScheduledSchema, { project, status: "scheduled" }),
+      );
       const approved = await scope.post(
         ApproveProjectSchema,
         create(ApproveProjectSchema, { project, status: "approved" }),
       );
       expect(approved.kind).toBe("ok");
+      const producedCommands = await blackBox.eventually(
+        () => blackBox.assertCommands(),
+        (commands) => commands.length === 2,
+      );
+      expect(AnyMessages.unpack(producedCommands[0]?.message, ScheduleProjectSchema)).toEqual(
+        create(ScheduleProjectSchema, { project, status: "scheduled" }),
+      );
+      expect(AnyMessages.unpack(producedCommands[1]?.message, ScheduleProjectSchema)).toEqual(
+        create(ScheduleProjectSchema, { project, status: "approved" }),
+      );
       const results = await blackBox.eventually(
         () =>
           Promise.all([

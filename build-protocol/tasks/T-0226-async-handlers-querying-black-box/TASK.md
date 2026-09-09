@@ -431,6 +431,17 @@ publication, and BlackBox attaches it at creation, returns cloned snapshots,
 and detaches it after server cleanup. `postExternalEvent()` now constructs the
 scoped envelope and uses the narrow server testing external-intake seam.
 
+Follow-up BlackBox coverage proves a real Aggregate workflow records its
+committed `ProjectCreated` and `ProjectScheduled` events and the Process
+Manager records its produced `ScheduleProject` commands in production order
+(`scheduled`, then `approved`), while client input remains absent. The initial
+diagnostic failure was test-only: the workflow produces two events, so a
+non-monotonic `length === 1` eventual predicate could never settle. Direct
+intake before and after BlackBox server startup observed the same two events;
+`ServerValues.buildContexts()` retains a supplied built context by reference
+and repository registration binds its context publisher. Temporary diagnostics
+were removed and no production identity/follow-up change was necessary.
+
 ## Review Waves And Dispositions
 
 - One read-only architecture/requirements pass dispatched to the existing
