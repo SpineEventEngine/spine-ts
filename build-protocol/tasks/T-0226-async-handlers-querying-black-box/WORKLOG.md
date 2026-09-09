@@ -46,10 +46,10 @@ Branch: `feature/async-handlers-querying-black-box`
 - Repository-wide `pnpm docs:snippets:check:generated` remains red on unrelated
   unresolved package/example imports. The changed server reference is clean
   when checked directly.
-- Repository-wide `pnpm lint:tsdoc` remains red on the pre-existing
-  `ProcessManagerQuery.orderBy` documentation in
-  `packages/server/src/entity/entity.ts`: it names obsolete `args` instead of
-  `column` and `direction`. That file is outside this final correction scope.
+- `2026-09-09 15:49 WEST`: The final correction includes the task-scope
+  `ProcessManagerQuery.orderBy` TSDoc repair. It now documents the explicit
+  `column` and `direction` parameters rather than stale `args`; `pnpm
+lint:tsdoc` passes.
 
 ## Next step
 

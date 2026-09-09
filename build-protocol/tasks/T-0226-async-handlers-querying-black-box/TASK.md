@@ -604,7 +604,8 @@ Pending feature-branch commits, pushes, and human review.
   TypeScript build, generated build, TypeDoc inventory, reference snippet,
   lint, cleanup, copyright, formatting, production-dependency, and diff checks
   pass. The durable detailed command record is in `WORKLOG.md`.
-- Limitations: the repository-wide snippet gate still has unrelated unresolved
-  package/example imports, while the changed reference passes directly; the
-  repository-wide TSDoc gate reports pre-existing obsolete `args` documentation
-  for `ProcessManagerQuery.orderBy` in the out-of-scope entity source.
+- Limitation: the repository-wide snippet gate still has unrelated unresolved
+  package/example imports, while the changed reference passes directly.
+- `2026-09-09 15:49 WEST`: The `ProcessManagerQuery.orderBy` TSDoc correction
+  is task-scope, not baseline debt. Its explicit `column` and `direction`
+  parameters now match the final generic signature; `pnpm lint:tsdoc` passes.

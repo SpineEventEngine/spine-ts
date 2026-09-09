@@ -5849,7 +5849,9 @@ describe("repository signal routing", () => {
     });
 
     try {
-      await context.commandBus().post(createAggregateCommand("query-cycle", "query-id", "query cycle"));
+      await context
+        .commandBus()
+        .post(createAggregateCommand("query-cycle", "query-id", "query cycle"));
       expect(RoutingProcessManager.queryFailure).toMatchObject({
         message: "Entity query predicate must not contain cycles.",
       });
@@ -5878,7 +5880,9 @@ describe("repository signal routing", () => {
     });
 
     try {
-      await context.commandBus().post(createAggregateCommand("query-depth", "query-id", "query depth"));
+      await context
+        .commandBus()
+        .post(createAggregateCommand("query-depth", "query-id", "query depth"));
       expect(RoutingProcessManager.queryFailure).toMatchObject({
         message: "Entity query predicate exceeds maximum depth 64.",
       });
@@ -5907,7 +5911,9 @@ describe("repository signal routing", () => {
     });
 
     try {
-      await context.commandBus().post(createAggregateCommand("query-wide", "query-id", "query wide"));
+      await context
+        .commandBus()
+        .post(createAggregateCommand("query-wide", "query-id", "query wide"));
       expect(RoutingProcessManager.queryFailure).toMatchObject({
         message: "Entity query predicate exceeds maximum node count 10000.",
       });

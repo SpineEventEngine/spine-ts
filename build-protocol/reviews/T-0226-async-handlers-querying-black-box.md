@@ -172,9 +172,10 @@ Process Manager guard-path tests; it may not spawn subagents.
   affected strict and generated builds, TypeDoc inventory, focused snippet,
   lint, cleanup, copyright, formatting, production-dependency, and diff checks
   pass. Repository-wide snippets still fail on unrelated unresolved package and
-  example imports; repository-wide TSDoc still reports an out-of-scope stale
-  `args` parameter comment for `ProcessManagerQuery.orderBy`. These two
-  limitations do not alter the final P2 correction behavior.
+  example imports. The task-scope `ProcessManagerQuery.orderBy` TSDoc now
+  documents its explicit `column` and `direction` parameters, and `pnpm
+lint:tsdoc` passes. The snippet limitation does not alter the final P2
+  correction behavior.
 
 The focused API P1 re-review is still required and is intentionally not run in
 this correction context.

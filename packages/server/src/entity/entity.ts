@@ -178,7 +178,8 @@ export class ProcessManagerQuery<
   /**
    * Sets the ordering for matching states by one registered column.
    *
-   * @param args The registered orderable column followed by an optional sort direction.
+   * @param column Registered orderable column used for sorting.
+   * @param direction Optional sort direction, ascending by default.
    * @returns This query for fluent configuration.
    */
   orderBy<Column extends EntityColumn<Schema>>(
