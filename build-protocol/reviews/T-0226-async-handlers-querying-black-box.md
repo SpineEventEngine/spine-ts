@@ -339,6 +339,9 @@ fields are the available runtime metadata.
   no override, and `all`/`either` combinators.
 - Evidence so far: repository routing 269/269, analyzer suite 52/52, generated strict build, and
   tooling typecheck pass.
+- End-to-end BlackBox proof: a generated `ProjectCreated` Aggregate reactor returns generated
+  `ProjectScheduled(status: "reacted")`; `assertEvents()` observes it once, immediately after the
+  source Event in production order. The BlackBox integration suite passes 7/7.
 
 ## Final P2 correction response
 

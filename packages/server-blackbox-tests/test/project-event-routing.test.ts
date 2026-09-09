@@ -112,6 +112,11 @@ class Project extends Aggregate<ProjectId, typeof ProjectStateSchema, bigint> {
     this.update((draft) => Object.assign(draft, { status: command.status }));
     return create(ProjectScheduledSchema, { project: this.id, status: command.status });
   }
+
+  react(event: ProjectCreated): ProjectScheduled | undefined {
+    if (event.name !== "reactor-output") return undefined;
+    return create(ProjectScheduledSchema, { project: this.id, status: "reacted" });
+  }
 }
 
 class ProjectPlanning extends ProcessManager<PlanningId, typeof PlanningStateSchema, number> {
@@ -159,6 +164,14 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
           methodName: "create",
           signalSchema: CreateProjectSchema,
           emittedSchemas: [ProjectCreatedSchema],
+          parameterCount: 1,
+          origin: "domestic",
+        },
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          signalSchema: ProjectCreatedSchema,
+          emittedSchemas: [ProjectScheduledSchema],
           parameterCount: 1,
           origin: "domestic",
         },
@@ -739,6 +752,42 @@ describe("project workflow Event routing", () => {
         id: project,
         name: "roadmap",
       });
+    } finally {
+      await blackBox.close();
+    }
+  });
+
+  it("captures a committed Aggregate reactor Event once in production order", async () => {
+    const { project, planning, staffing, portfolio } = ids();
+    const blackBox = await BlackBox.from(context(routeTo(portfolio), planning, staffing));
+    try {
+      const posted = await blackBox
+        .asGuest()
+        .post(
+          CreateProjectSchema,
+          create(CreateProjectSchema, { project, name: "reactor-output" }),
+        );
+      expect(posted.kind).toBe("ok");
+      const events = await blackBox.eventually(
+        () => blackBox.assertEvents(),
+        (candidate) => candidate.length >= 3,
+      );
+      expect(
+        AnyMessages.unpack(producedMessage(events[0], "ProjectCreated"), ProjectCreatedSchema),
+      ).toMatchObject({ project, name: "reactor-output" });
+      expect(
+        AnyMessages.unpack(
+          producedMessage(events[1], "reacted ProjectScheduled"),
+          ProjectScheduledSchema,
+        ),
+      ).toEqual(create(ProjectScheduledSchema, { project, status: "reacted" }));
+      expect(
+        events.filter(
+          (event) =>
+            event.message !== undefined &&
+            AnyMessages.unpack(event.message, ProjectScheduledSchema)?.status === "reacted",
+        ),
+      ).toHaveLength(1);
     } finally {
       await blackBox.close();
     }
