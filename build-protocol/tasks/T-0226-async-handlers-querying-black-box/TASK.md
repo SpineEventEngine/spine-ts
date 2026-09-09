@@ -1,15 +1,15 @@
 # T-0226: Async Handlers, Process Manager Queries, And BlackBox Signals
 
-Status: In progress
+Status: Ready for human review
 Start: `2026-09-09 12:07 WEST`
-End: Pending
+End: `2026-09-09 17:21 WEST`
 Baseline commit: `437cafcf380da33222d852f86a802200ef5ddc41`
 Task log path: `build-protocol/tasks/T-0226-async-handlers-querying-black-box/TASK.md`
 Branch: `feature/async-handlers-querying-black-box`
 Worktree: `.worktrees/t-0226`
 Authoring sub-agents: `/root/t0226_implementer`,
 `/root/t0226_implementer_2`, `/root/t0226_implementer_3`,
-`/root/t0226_implementer_4`, and the pending final P2 continuation in sequential
+`/root/t0226_implementer_4`, and `/root/t0226_implementer_5` in sequential
 non-overlapping ownership; all use the existing `implementer` role configured
 `gpt-5.6-terra` / medium reasoning
 Reviewer sub-agents: `/root/t0226_style_review`, `/root/t0226_api_review`,
@@ -18,8 +18,8 @@ Reviewer sub-agents: `/root/t0226_style_review`, `/root/t0226_api_review`,
 `/root/t0226_style_r2`, `/root/t0226_api_r2`, and
 `/root/t0226_reliability_r2`
 Focused final API reviewer: `/root/t0226_api_final`
-Implementation commit: `b3f56720e`
-Final branch HEAD: Pending branch commit
+Final verified implementation HEAD: `102922bf9`
+Final branch HEAD: See the current official feature-branch ref after the report commit.
 
 Task classification: High-risk
 Classification reason: This task changes public TypeScript contracts, permits
@@ -430,7 +430,9 @@ packages/server/test/repository/repository.test.ts` - the new full-dispatch
 
 ## Coverage Result
 
-- Pending focused and release coverage.
+- Final `pnpm verify:release` passed 4,637 tests in 289 files.
+- Coverage passed all configured thresholds: 93.22% statements, 90% branches,
+  92.79% functions, and 94.39% lines.
 
 ## Documentation And Public API Impact
 
@@ -603,8 +605,9 @@ generic type contracts are unchanged.
 
 ## Integration Result
 
-Pending final cheap preflight, the one release verification profile, final
-report commit, and human review.
+Implementation, correction, review, versioning, and release verification are
+complete on the official feature branch. No pull request or merge was created;
+the branch is ready for human review.
 
 ## Final P2 Correction Record
 

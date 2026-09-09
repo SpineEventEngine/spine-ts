@@ -66,4 +66,12 @@ lint:tsdoc` passes.
 The focused API P1 re-review closed the finding and reported no P0-P2. Release
 preparation selected unused version `2.0.0-snapshot.10` and pushed the
 version-only, internal-pin/lockfile, and Proto-manifest updates as separate
-commits through `653ac420b`. Final preflight and release verification remain.
+commits through `653ac420b`.
+
+Release correction `f68eb4d30` updated stale version expectations, the moved
+column fixture import, the server testing-export inventory, the BlackBox docs
+snippet, and the stale-snapshot archive guard. Coverage correction `102922bf9`
+added two missing behavior branches. Final preflight passed 526 tests in 19
+files. Final `pnpm verify:release` passed 4,637 tests in 289 files and all
+coverage thresholds: 93.22% statements, 90% branches, 92.79% functions, and
+94.39% lines. The pushed branch is ready for human review.
