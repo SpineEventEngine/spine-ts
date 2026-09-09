@@ -191,7 +191,7 @@ minutes of elapsed verification time per correction cycle. This includes five
 specialist lanes per round, aggregation, all confirmed fixes, focused and
 release-proportionate verification, pushes, and final records.
 
-Round one assignments at endpoint `f09b24eee`:
+Round one assignments at endpoint `5e51662b4`:
 
 | Concern                        | Existing role                      | Explicit profile        | Memory |
 | ------------------------------ | ---------------------------------- | ----------------------- | ------ |
@@ -204,6 +204,39 @@ Round one assignments at endpoint `f09b24eee`:
 All reviewers are read-only senior specialists and may not spawn subagents.
 Desktop exposes the immutable configured role/profile and explicit dispatch
 fields, but no additional live self-introspection metadata.
+
+### Independent round one result
+
+All five independent reviewers completed without prior-turn memory. Security
+reported no P0-P2 findings. The other four lanes reported the following single
+deduplicated correction batch; every item is accepted:
+
+- P1: carry the selected Entity's identifier type through the Process Manager
+  query facade and canonical builder so wrong primitive and message identifier
+  shapes fail at compile time.
+- P1: enforce the documented deterministic maximum of 1,000 returned Entities
+  for Process Manager reads instead of relying on the storage candidate-budget
+  error.
+- P2: reject an identifier list larger than the same 1,000-item budget before
+  cloning or serializing its values, with a Process Manager-path regression.
+- P2: clear captured Commands and Events when a BlackBox closes, including
+  cleanup paths where another close operation fails.
+- P2: replace repository tests that post an Entity state as a Command with a
+  domain-correct generated Command fixture.
+- P2: make the compile-time Process Manager query example select a Projection
+  state rather than selecting another Process Manager state.
+- P2: document the canonical query builder and generated-column API in the core
+  README, including the generator-only import path.
+- P2: document that async handlers accept exactly one built-in `Promise<T>`
+  layer and reject nested Promises and thenable lookalikes.
+- P2: replace the server README's standalone query-shaped object with a minimal
+  Process Manager handler example that demonstrates the protected workflow.
+
+The round-one correction owner is the existing `implementer` role, dispatched
+explicitly with `gpt-5.6-terra` / medium reasoning and no inherited turn memory.
+It is the sole production-code writer, may not spawn subagents, and owns this
+entire batch. The immutable role profile and explicit dispatch fields are the
+available runtime metadata.
 
 ## Final P2 correction response
 
