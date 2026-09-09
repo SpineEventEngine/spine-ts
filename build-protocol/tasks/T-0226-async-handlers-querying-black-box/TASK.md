@@ -286,6 +286,11 @@ surface exposes no additional metadata.
   nested-Promise forms. Runtime regression coverage proves delayed fulfillment
   does not expose state early, rejected promises roll back and suppress output,
   and same-Aggregate command execution remains serial.
+- `2026-09-09 12:36 WEST`: Began slice 2 shared-query extraction. Moved the
+  existing descriptor-column and wire-query builder foundations to core and
+  retained client-node module-path compatibility forwarders. Core and
+  client-node TypeScript builds are green; server reader extraction and Process
+  Manager capability tests remain next.
 
 ## Decisions
 
