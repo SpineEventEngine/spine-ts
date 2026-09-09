@@ -19,7 +19,11 @@ type QueryReaderObserver = (query: Readonly<Query>) => void;
 
 const observers = new Set<QueryReaderObserver>();
 
-/** @internal */
+/**
+ * Executes normalized Entity query plans against a Stand and exposes a testing-only read observer.
+ *
+ * @internal
+ */
 export const QueryReader: Readonly<{
   readonly read: <Schema extends MessageSchema>(
     stand: Stand,

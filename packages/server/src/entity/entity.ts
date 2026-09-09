@@ -123,33 +123,71 @@ export class ProcessManagerQuery<
   readonly #schema: Schema;
   readonly #builder: EntityQueryBuilder<Schema, Columns>;
 
-  /** @internal */
+  /**
+   * Creates the repository-scoped query facade.
+   *
+   * @internal
+   * @param entity Process Manager that owns this query capability.
+   * @param schema State schema read by this query.
+   * @param builder Typed query builder used to create the wire query.
+   */
   constructor(entity: object, schema: Schema, builder: EntityQueryBuilder<Schema, Columns>) {
     this.#entity = entity;
     this.#schema = schema;
     this.#builder = builder;
   }
 
+  /**
+   * Adds the supplied Entity IDs to the query target.
+   *
+   * @param ids Entity IDs to include.
+   * @returns This query for fluent configuration.
+   */
   byId(...ids: readonly unknown[]): this {
     this.#builder.byId(...ids);
     return this;
   }
 
+  /**
+   * Adds a typed state predicate to the query.
+   *
+   * @param predicate Predicate evaluated against registered state columns.
+   * @returns This query for fluent configuration.
+   */
   where(predicate: EntityPredicate): this {
     this.#builder.where(predicate as never);
     return this;
   }
 
+  /**
+   * Sets the state fields returned by the server.
+   *
+   * @param paths Generated state-field property names to include.
+   * @returns This query for fluent configuration.
+   */
   mask(...paths: readonly (keyof MessageShape<Schema> & string)[]): this {
     (this.#builder.mask as (...values: string[]) => unknown)(...paths);
     return this;
   }
 
+  /**
+   * Sets the ordering for matching states by one registered column.
+   *
+   * @param column Registered state column used for ordering.
+   * @param direction Sort direction, ascending by default.
+   * @returns This query for fluent configuration.
+   */
   orderBy(column: EntityColumn<Schema>, direction: "asc" | "desc" = "asc"): this {
     this.#builder.orderBy(column as never, direction);
     return this;
   }
 
+  /**
+   * Sets the returned-state limit to at most 1,000 entries.
+   *
+   * @param value Maximum number of states to return.
+   * @returns This query for fluent configuration.
+   */
   limit(value: number): this {
     if (value > 1_000) {
       throw new TypeError("Process Manager query limit may be at most 1000.");
@@ -158,16 +196,35 @@ export class ProcessManagerQuery<
     return this;
   }
 
+  /**
+   * Reads matching state snapshots from the eventually consistent query projection.
+   *
+   * @returns Readonly state snapshots, subject to the configured result limit.
+   */
   async read(): Promise<readonly MessageShape<Schema>[]> {
     const capability = processManagerQueryAccess.require(this.#entity);
     return await capability.execute(this.#builder.buildPlan(), this.#schema, this.#builder.build());
   }
 
+  /**
+   * Reads the first state snapshot for one Entity ID.
+   *
+   * @param id Entity ID to read.
+   * @returns The eventually consistent state snapshot, or `undefined` when it is absent.
+   */
   async findById(id: unknown): Promise<MessageShape<Schema> | undefined> {
     const states = await this.byId(id).read();
     return states[0];
   }
 
+  /**
+   * Reads every matching state snapshot within the configured result limit.
+   *
+   * This can be more expensive than an ID-targeted read because the projection must evaluate all
+   * matching states.
+   *
+   * @returns Readonly eventually consistent state snapshots.
+   */
   async all(): Promise<readonly MessageShape<Schema>[]> {
     return await this.read();
   }

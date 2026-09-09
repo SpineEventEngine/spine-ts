@@ -85,7 +85,10 @@ export class SignalPublisher {
   }
 
   /**
-   * Redispatches one Aggregate Event after its producer commit and records its admission.
+   * Publishes one committed Aggregate Event and records its admission.
+   *
+   * Publishes the committed Event through stored-event handling without treating stored replay as
+   * newly produced output.
    *
    * @internal
    * @param event The committed Aggregate Event envelope.

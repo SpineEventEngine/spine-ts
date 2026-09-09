@@ -138,22 +138,82 @@ export type EntityPredicate<Column extends EntityColumn = EntityColumn> =
  * dependency on a client transport package.
  */
 export interface EntityQueryPlan {
+  // prettier-ignore
+
+  /**
+   * Optional filter that selects the states to read.
+   */
   readonly predicate?: EntityQueryPlanPredicate;
+
+  /**
+   * Optional ordered columns used to arrange matching states.
+   */
   readonly order?: readonly { readonly column: string; readonly direction: "asc" | "desc" }[];
+
+  /**
+   * Optional state-field paths included in each returned state.
+   */
   readonly mask?: { readonly paths: readonly string[] };
+
+  /**
+   * Optional maximum number of states returned by the read.
+   */
   readonly limit?: number;
 }
 
-/** A storage-neutral Entity query predicate. */
+/**
+ * A storage-neutral Entity query predicate.
+ */
 export type EntityQueryPlanPredicate =
-  | { readonly kind: "ids"; readonly ids: readonly unknown[] }
   | {
+      // prettier-ignore
+
+      /**
+       * Identifies this predicate as an ID filter.
+       */
+      readonly kind: "ids";
+
+      /**
+       * Lists the IDs accepted by this filter.
+       */
+      readonly ids: readonly unknown[];
+    }
+  | {
+      // prettier-ignore
+
+      /**
+       * Identifies this predicate as a leaf comparison.
+       */
       readonly kind: "comparison";
+
+      /**
+       * Names the state column compared by this predicate.
+       */
       readonly column: string;
+
+      /**
+       * Selects the comparison performed on the column.
+       */
       readonly operator: EntityColumnOperator<EntityColumn>;
+
+      /**
+       * Supplies the value compared with the column.
+       */
       readonly value: unknown;
     }
-  | { readonly kind: "all" | "either"; readonly predicates: readonly EntityQueryPlanPredicate[] };
+  | {
+      // prettier-ignore
+
+      /**
+       * Identifies the logical operation that combines nested predicates.
+       */
+      readonly kind: "all" | "either";
+
+      /**
+       * Lists the predicates combined by this operation.
+       */
+      readonly predicates: readonly EntityQueryPlanPredicate[];
+    };
 
 /**
  * Builds a typed Entity query for the frozen Spine wire contract.

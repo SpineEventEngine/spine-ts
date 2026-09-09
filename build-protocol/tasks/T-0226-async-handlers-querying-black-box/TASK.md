@@ -479,8 +479,12 @@ server/testing-only boundary functions now have narrow `necessity` records in
 the server partition: one keeps external-event intake confined to the testing
 entrypoint, and the other keeps produced-signal observation there. The cleanup
 gate passes without adding a production export or changing runtime behavior.
-The repository-wide TSDoc gate remains red on existing T-0226 public query and
-publisher documentation findings outside this ledger-only correction.
+The final TSDoc preflight correction adds beginner-clear, contract-accurate
+documentation for the storage-neutral query plan, the Process Manager query
+facade, the package-internal reader, and committed Aggregate-event publication.
+It explicitly preserves the query projection's eventual-consistency semantics,
+readonly results, the 1,000-result limit, and the potential cost of `all()`;
+no runtime behavior changed. The repository-wide TSDoc gate now passes.
 
 ## Review Waves And Dispositions
 
