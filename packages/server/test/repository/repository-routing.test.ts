@@ -12292,16 +12292,6 @@ function diagnosticTenants(events: readonly SpineEvent[]): readonly string[] {
   });
 }
 
-function createContextlessAggregateCommand(id: string, aggregateId: string, name = "Task") {
-  return create(CommandSchema, {
-    id: create(CommandIdSchema, { uuid: id }),
-    message: AnyMessages.pack(
-      AggregateStateSchema,
-      create(AggregateStateSchema, { id: aggregateId, name, archived: false }),
-    ),
-  });
-}
-
 function createContextlessGeneratedTaskCommand(id: string, aggregateId: string, name = "Task") {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
