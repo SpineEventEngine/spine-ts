@@ -46,43 +46,44 @@ before registering application handlers and storage.
 ## Async handlers and Process Manager queries
 
 An `@Assign`, `@Command`, `@React`, or `@Subscribe` handler may return its
-usual result through a standard `Promise`. Its transaction remains open until
-that promise settles. Rejection rolls back framework state and suppresses
-produced output; it cannot roll back an external HTTP request or other side
-effect.
+usual result directly or through exactly one built-in `Promise<T>` layer. Its
+transaction remains open until that promise settles. Nested `Promise<Promise<T>>`
+results and structural or imported thenable lookalikes are rejected during handler
+analysis. Rejection rolls back framework state and suppresses produced output; it
+cannot roll back an external HTTP request or other side effect.
 
-Process Managers, but not Aggregates, have protected read-only `select()`:
+Process Managers, but not Aggregates, have protected read-only `select()` during a handler:
 
 ```ts
-import { EntityQuery } from "@spine-event-engine/core";
+import { EntityQuery, type EntityColumn } from "@spine-event-engine/core";
+import { ProcessManager } from "@spine-event-engine/server";
 
-declare const RequestViewSchema: import("@spine-event-engine/core").MessageSchema;
+type RequestView = import("@bufbuild/protobuf").Message<"RequestView"> & {
+  id: string;
+  status: string;
+  createdAt: number;
+};
+declare const RequestViewSchema: import("@bufbuild/protobuf/codegenv2").GenMessage<RequestView>;
 declare const RequestViewColumns: {
-  readonly status: import("@spine-event-engine/core").EntityColumn;
-  readonly createdAt: import("@spine-event-engine/core").EntityColumn;
+  readonly status: EntityColumn<typeof RequestViewSchema, "status", string, "equal">;
+  readonly createdAt: EntityColumn<
+    typeof RequestViewSchema,
+    "createdAt",
+    number,
+    "equal" | "greaterThan"
+  >;
 };
-declare const processManager: {
-  select(
-    schema: typeof RequestViewSchema,
-    columns: typeof RequestViewColumns,
-  ): {
-    where(predicate: unknown): {
-      orderBy(
-        column: typeof RequestViewColumns.createdAt,
-        direction: "asc",
-      ): {
-        limit(value: number): { read(): Promise<readonly unknown[]> };
-      };
-    };
-  };
-};
-
-const pending = await processManager
-  .select(RequestViewSchema, RequestViewColumns)
-  .where(EntityQuery.eq(RequestViewColumns.status, "pending"))
-  .orderBy(RequestViewColumns.createdAt, "asc")
-  .limit(10)
-  .read();
+abstract class RequestCoordinator extends ProcessManager<string, typeof RequestViewSchema> {
+  protected async handleRequest(requestId: string): Promise<void> {
+    const pending = await this.select(RequestViewSchema, RequestViewColumns)
+      .where(EntityQuery.eq(RequestViewColumns.status, "pending"))
+      .orderBy(RequestViewColumns.createdAt, "asc")
+      .limit(10)
+      .read();
+    const one = await this.select(RequestViewSchema, RequestViewColumns).findById(requestId);
+    void [pending, one];
+  }
+}
 ```
 
 These reads are eventually consistent. `limit()` may not exceed 1,000, and

@@ -395,7 +395,12 @@ export class BlackBox {
         failures.push(error);
       }
     }
-    this.#observation.close();
+    try {
+      this.#observation.close();
+    } finally {
+      this.#commands.length = 0;
+      this.#events.length = 0;
+    }
     if (failures.length > 0) throw new AggregateError(failures, "BlackBox cleanup failed.");
   }
 }

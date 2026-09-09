@@ -238,6 +238,26 @@ It is the sole production-code writer, may not spawn subagents, and owns this
 entire batch. The immutable role profile and explicit dispatch fields are the
 available runtime metadata.
 
+### Independent round-one correction work log
+
+- Typed query ID filters now derive their accepted identifier from the selected Entity state
+  schema. Core and Process Manager public compile fixtures reject a wrong primitive; core also
+  rejects a generated-message shape for a string ID.
+- `byId()` rejects more than 1,000 values before it appends, clones, or serializes them. Process
+  Manager reads cap their returned immutable snapshots at 1,000, while the repository raises its
+  candidate scan budget so a 1,001-result read resolves with the documented deterministic cap.
+- BlackBox cleanup clears captured command and event arrays in a `finally` after observation close,
+  so cleanup failures cannot retain captured signals.
+- Core, server, and user/reference documentation now describe the canonical query builder and
+  generator-only `/codegen` subpath, exactly one built-in Promise layer, and a real protected
+  Process Manager query handler workflow.
+- Evidence: `pnpm typecheck:build` passed; `pnpm docs:snippets:check` passed; focused Vitest
+  coverage across core query, server repository/routing, and BlackBox lifecycle tests passed
+  312/312; Prettier and `git diff --check` passed. The legacy state-as-command routing helpers
+  remain only where those negative route tests register that state type itself; converting them to
+  the generated Task command changes the test's registered domain and is not a safe fixture-only
+  correction. The generated `TaskCommand` fixture is retained for the domain-correct command paths.
+
 ## Final P2 correction response
 
 - The final implementer used the explicitly dispatched existing `implementer`

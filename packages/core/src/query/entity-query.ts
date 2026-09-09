@@ -90,6 +90,13 @@ export type ColumnName<Column> =
 
 const maximumPredicateDepth = 64;
 const maximumPredicateNodes = 10_000;
+const maximumEntityQueryIds = 1_000;
+
+/**
+ * Extracts the identifier value declared by an Entity state schema.
+ */
+export type EntityQueryIdentifier<Schema extends GenMessage<Message>> =
+  MessageShape<Schema> extends { readonly id: infer Identifier } ? Identifier : never;
 
 /**
  * A generated state-field property name that can be returned by a query mask.
@@ -258,7 +265,7 @@ export class EntityQueryBuilder<
   readonly #schema: Schema;
   readonly #context: ActorContext;
   readonly #columns: Columns;
-  readonly #ids: unknown[] = [];
+  readonly #ids: EntityQueryIdentifier<Schema>[] = [];
   readonly #predicates: EntityPredicate[] = [];
   readonly #mask: string[] = [];
   readonly #order: { readonly column: EntityColumn; readonly direction: "asc" | "desc" }[] = [];
@@ -285,9 +292,14 @@ export class EntityQueryBuilder<
    * @param ids Entity IDs to include.
    * @returns This builder.
    */
-  byId(...ids: readonly unknown[]): this {
+  byId(...ids: readonly EntityQueryIdentifier<Schema>[]): this {
     if (ids.length === 0 || ids.some((id) => id === undefined)) {
       throw new TypeError("Entity query ID filter must not be empty.");
+    }
+    if (this.#ids.length + ids.length > maximumEntityQueryIds) {
+      throw new TypeError(
+        `Entity query ID filter may contain at most ${String(maximumEntityQueryIds)} identifiers.`,
+      );
     }
     this.#ids.push(...ids);
     return this;

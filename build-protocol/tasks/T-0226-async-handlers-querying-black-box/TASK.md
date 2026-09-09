@@ -1,6 +1,6 @@
 # T-0226: Async Handlers, Process Manager Queries, And BlackBox Signals
 
-Status: Ready for human review
+Status: Independent round-one corrections in progress
 Start: `2026-09-09 12:07 WEST`
 End: `2026-09-09 17:21 WEST`
 Baseline commit: `437cafcf380da33222d852f86a802200ef5ddc41`

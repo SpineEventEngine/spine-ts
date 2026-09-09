@@ -19,6 +19,7 @@ import {
   type EntityColumn,
   type EntityColumnOperator,
   type EntityQueryMaskPath,
+  type EntityQueryIdentifier,
   type EntityQueryPredicateFor,
   type EntityPredicate,
   type EntityQueryPlan,
@@ -146,7 +147,7 @@ export class ProcessManagerQuery<
    * @param ids Entity IDs to include.
    * @returns This query for fluent configuration.
    */
-  byId(...ids: readonly unknown[]): this {
+  byId(...ids: readonly EntityQueryIdentifier<Schema>[]): this {
     this.#builder.byId(...ids);
     return this;
   }
@@ -211,7 +212,12 @@ export class ProcessManagerQuery<
    */
   async read(): Promise<readonly MessageShape<Schema>[]> {
     const capability = processManagerQueryAccess.require(this.#entity);
-    return await capability.execute(this.#builder.buildPlan(), this.#schema, this.#builder.build());
+    const states = await capability.execute(
+      this.#builder.buildPlan(),
+      this.#schema,
+      this.#builder.build(),
+    );
+    return Object.freeze(states.slice(0, 1_000));
   }
 
   /**
@@ -220,7 +226,7 @@ export class ProcessManagerQuery<
    * @param id Entity ID to read.
    * @returns The eventually consistent state snapshot, or `undefined` when it is absent.
    */
-  async findById(id: unknown): Promise<MessageShape<Schema> | undefined> {
+  async findById(id: EntityQueryIdentifier<Schema>): Promise<MessageShape<Schema> | undefined> {
     const states = await this.byId(id).read();
     return states[0];
   }

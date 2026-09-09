@@ -37,6 +37,8 @@ describe("BlackBox lifecycle seams", () => {
       serverFailure,
     ]);
     expect(observationCloses).toBe(1);
+    expect(() => blackBox.assertCommands()).toThrow("closed");
+    expect(() => blackBox.assertEvents()).toThrow("closed");
     await blackBox.close().catch(() => undefined);
     expect(observationCloses).toBe(1);
   });

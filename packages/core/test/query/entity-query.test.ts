@@ -216,6 +216,20 @@ describe("EntityQuery", () => {
     expect(() =>
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(undefined),
     ).toThrow("must not be empty");
+    expect(() =>
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(
+        ...Array.from({ length: 1_001 }, (_, index) => `task-${String(index)}`),
+      ),
+    ).toThrow("at most 1000");
+  });
+
+  it("types ID filters from the selected Entity state", () => {
+    const query = EntityQuery.select({ schema: ProjectionStateSchema, columns, context });
+    query.byId("task-1");
+    // @ts-expect-error A number is not the selected ProjectionState string identifier.
+    query.byId(1);
+    // @ts-expect-error A generated message is not the selected ProjectionState string identifier.
+    query.byId(create(TimestampSchema));
   });
 
   it("packs descriptor and system column value families", () => {

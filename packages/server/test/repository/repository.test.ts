@@ -240,6 +240,9 @@ describe("repository identity", () => {
       .where(EntityQuery.eq(processManagerColumns.queue, "waiting"))
       .orderBy(processManagerColumns.queue);
 
+    // @ts-expect-error A number is not the selected ProcessManagerState string identifier.
+    processManager.query().byId(1);
+
     // @ts-expect-error equality-only lifecycle columns are not orderable.
     processManager.query().orderBy(processManagerColumns.archived);
 
@@ -255,6 +258,29 @@ describe("repository identity", () => {
       "select",
     );
     expect(() => query.limit(1_001)).toThrow("Process Manager query limit may be at most 1000.");
+    release();
+  });
+
+  it("caps an unlimited Process Manager read at 1,000 states", async () => {
+    const processManager = new QueryingProcessManager({
+      id: "process-1",
+      schema: ProcessManagerStateSchema,
+      state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
+      version: 1,
+      lifecycle: { archived: false, deleted: false },
+    });
+    const states = Object.freeze(
+      Array.from({ length: 1_001 }, (_, index) =>
+        create(ProcessManagerStateSchema, { id: `state-${String(index)}`, queue: "waiting" }),
+      ),
+    );
+    const release = processManagerQueryAccess.bind(
+      processManager,
+      () => Promise.resolve(states),
+      create(ActorContextSchema),
+    );
+
+    await expect(processManager.query().all()).resolves.toHaveLength(1_000);
     release();
   });
 

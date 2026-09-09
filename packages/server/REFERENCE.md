@@ -186,7 +186,8 @@ there is no exact route. This is TypeScript routing; it does not consume
 `(is).java_type` or `(every_is).java_type`, and it has no decorator-based
 route registration API.
 
-Handlers may return their established result directly or through `Promise`.
+Handlers may return their established result directly or through exactly one built-in `Promise<T>`.
+Nested promises and structural or imported thenable lookalikes are rejected during handler analysis.
 The entity transaction remains open until that promise settles; rejection rolls
 back framework state and suppresses produced output, but cannot undo external
 side effects. Process Managers may use their protected read-only query surface
