@@ -348,6 +348,11 @@ surface exposes no additional metadata.
   executes the asynchronous completion handler through a typed domain rejection,
   observes normal rejection dispatch, and proves the committed-event snapshot
   excludes that rollback-path output.
+- `2026-09-09 14:45 WEST`: Post-correction strict tooling identified that the
+  Process Manager facade's extracted generic `where()` parameters collapsed
+  valid registered-column predicates to `never`. A shared core compatibility
+  type restores inference without widening foreign-schema or unregistered-column
+  predicates; focused strict/build/test evidence is recorded in the work log.
 
 ## Decisions
 

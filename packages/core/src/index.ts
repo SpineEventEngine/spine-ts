@@ -104,6 +104,7 @@ export {
   type EntityQueryPlan,
   type EntityQueryPlanPredicate,
   type EntityQueryMaskPath,
+  type EntityQueryPredicateFor,
   type EntityPredicate,
 } from "./query/entity-query.js";
 

@@ -93,3 +93,7 @@ profile, no subagents, and no overlapping production writer.
   unchanged.
 - Generator containment, canonical core-test relocation, and reference/prose
   corrections are implemented; client-node retains compatibility/export tests.
+- Process Manager facade predicates now preserve the builder's method-level
+  generic inference through `EntityQueryPredicateFor`; the actual Projection
+  and Process Manager registered-column predicates compile under strict tooling
+  checks without weakening the existing negative cases.

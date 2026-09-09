@@ -64,12 +64,13 @@ import {
   type EntityColumnValue,
 } from "../entity/entity-column.js";
 
-type EntityColumnCollection<Schema extends GenMessage<Message>> = Readonly<
+export type EntityColumnCollection<Schema extends GenMessage<Message>> = Readonly<
   Record<string, EntityColumn<Schema>>
 >;
-type PredicateColumn<Predicate> = Predicate extends EntityPredicate<infer Column> ? Column : never;
-type ColumnSchema<Column> = Column extends EntityColumn<infer Schema> ? Schema : never;
-type ColumnName<Column> =
+export type PredicateColumn<Predicate> =
+  Predicate extends EntityPredicate<infer Column> ? Column : never;
+export type ColumnSchema<Column> = Column extends EntityColumn<infer Schema> ? Schema : never;
+export type ColumnName<Column> =
   Column extends EntityColumn<GenMessage<Message>, infer Name> ? Name : never;
 
 const maximumPredicateDepth = 64;
@@ -80,6 +81,18 @@ export type EntityQueryMaskPath<Schema extends GenMessage<Message>> = Exclude<
   "$typeName" | "$unknown"
 > &
   string;
+
+/** A predicate whose columns belong to one query schema and registered column collection. */
+export type EntityQueryPredicateFor<
+  Schema extends GenMessage<Message>,
+  Columns extends EntityColumnCollection<Schema>,
+  Predicate extends EntityPredicate,
+> =
+  ColumnSchema<PredicateColumn<Predicate>> extends Schema
+    ? ColumnName<PredicateColumn<Predicate>> extends keyof Columns
+      ? Predicate
+      : never
+    : never;
 
 /**
  * Represents one typed leaf comparison in an Entity query predicate.
@@ -267,11 +280,7 @@ export class EntityQueryBuilder<
    * @returns This builder.
    */
   where<Predicate extends EntityPredicate>(
-    predicate: ColumnSchema<PredicateColumn<Predicate>> extends Schema
-      ? ColumnName<PredicateColumn<Predicate>> extends keyof Columns
-        ? Predicate
-        : never
-      : never,
+    predicate: EntityQueryPredicateFor<Schema, Columns, Predicate>,
   ): this {
     if (this.#predicates.length >= maximumPredicateNodes) {
       throw new TypeError(

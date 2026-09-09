@@ -18,6 +18,8 @@ import {
   EntityQuery,
   type EntityColumn,
   type EntityQueryMaskPath,
+  type EntityQueryPredicateFor,
+  type EntityPredicate,
   type EntityQueryPlan,
   type EntityQueryBuilder,
 } from "@spine-event-engine/core";
@@ -154,8 +156,10 @@ export class ProcessManagerQuery<
    * @param predicate Predicate evaluated against registered state columns.
    * @returns This query for fluent configuration.
    */
-  where(...args: Parameters<EntityQueryBuilder<Schema, Columns>["where"]>): this {
-    this.#builder.where(...args);
+  where<Predicate extends EntityPredicate>(
+    predicate: EntityQueryPredicateFor<Schema, Columns, Predicate>,
+  ): this {
+    this.#builder.where(predicate);
     return this;
   }
 
