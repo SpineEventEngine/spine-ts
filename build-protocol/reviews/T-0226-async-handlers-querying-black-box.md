@@ -88,9 +88,9 @@ profile, no subagents, and no overlapping production writer.
   without `as never`; focused query regression and affected builds passed.
 - Produced-event capture: rejection dispatch now has an explicit publisher
   path that bypasses produced-event observers; focused publisher regression
-  passed. The domain-correct To-Do BlackBox workflow now proves its asynchronous
-  `@Assign` rejection reaches the typed subscription but leaves `assertEvents()`
-  unchanged.
+  passed. A test-owned Project BlackBox fixture now proves its asynchronous
+  `@Assign` rejection reaches a typed test dispatcher but leaves `assertEvents()`
+  unchanged; public examples remain synchronous and cleanup-compliant.
 - Generator containment, canonical core-test relocation, and reference/prose
   corrections are implemented; client-node retains compatibility/export tests.
 - Process Manager facade predicates now preserve the builder's method-level

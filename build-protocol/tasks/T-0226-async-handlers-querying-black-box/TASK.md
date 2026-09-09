@@ -357,6 +357,11 @@ surface exposes no additional metadata.
   the BlackBox rejection proof now crosses one deterministic awaited microtask
   boundary before it evaluates state, retaining genuine async-handler coverage
   while preserving the typed rejection and committed-history assertions.
+- `2026-09-09 14:55 WEST`: Cleanup correctly rejected a regression-only async
+  handler in the public To-Do example. That source and its assertion change are
+  restored. The accepted proof now lives in the test-owned server BlackBox
+  Project model with a domain-specific rejection Proto, deterministic await,
+  observed rejection dispatch, and committed-history exclusion.
 
 ## Decisions
 

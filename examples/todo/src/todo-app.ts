@@ -172,9 +172,8 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
    * @returns The event that records the task completion.
    */
   @Assign
-  async completeTask(command: CompleteTask): Promise<TaskCompleted> {
+  completeTask(command: CompleteTask): TaskCompleted {
     void command;
-    await Promise.resolve();
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(this.state.taskListId);
     if (this.state.completed) {

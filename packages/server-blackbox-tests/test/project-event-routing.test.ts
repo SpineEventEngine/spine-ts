@@ -15,11 +15,17 @@
 import { create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { Any } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import {
+  AnyMessages,
+  RejectionThrowable,
+  SignalEnvelopes,
+  TypeUrls,
+} from "@spine-event-engine/core";
 import {
   CommandContextSchema,
   CommandIdSchema,
   type CommandContext,
+  type Event,
 } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
@@ -56,6 +62,7 @@ import {
   type ProjectCreated,
   type ProjectScheduled,
 } from "../generated/spine/server/testing/project_events_pb.js";
+import { ProjectSchedulingRejectedSchema } from "../generated/spine/server/testing/project_rejections_pb.js";
 import {
   CoordinationStateSchema,
   OrganizationIdSchema,
@@ -96,7 +103,11 @@ class Project extends Aggregate<ProjectId, typeof ProjectStateSchema, bigint> {
     });
   }
 
-  schedule(command: ScheduleProject): ProjectScheduled {
+  async schedule(command: ScheduleProject): Promise<ProjectScheduled> {
+    await Promise.resolve();
+    if (command.status === "rejected") {
+      throw RejectionThrowable.create(ProjectSchedulingRejectedSchema, { project: this.id });
+    }
     Project.scheduledStatuses.push(command.status);
     this.update((draft) => Object.assign(draft, { status: command.status }));
     return create(ProjectScheduledSchema, { project: this.id, status: command.status });
@@ -318,7 +329,7 @@ function projectRepository(): Repository<typeof Project> {
     entityType: Project,
     schema: ProjectStateSchema,
     handlers: handlersFor<Project, typeof ProjectStateSchema>(Project, ProjectStateSchema),
-    events: [ProjectCreatedSchema, ProjectScheduledSchema],
+    events: [ProjectCreatedSchema, ProjectScheduledSchema, ProjectSchedulingRejectedSchema],
   });
 }
 function planningRepository(
@@ -384,15 +395,25 @@ function context(
   portfolioRouting: EventRouting<PortfolioId>,
   planning: PlanningId,
   staffing: StaffingId,
+  deliveredRejections?: Event[],
 ): BoundedContext {
-  return BoundedContext.singleTenant("project event routing")
+  const builder = BoundedContext.singleTenant("project event routing")
     .add(projectRepository())
     .add(planningRepository(routeTo(planning)))
     .add(staffingRepository(routeTo(staffing)))
     .add(coordinationRepository())
     .add(portfolioRepository(portfolioRouting))
-    .add(projectProjectionRepository())
-    .build();
+    .add(projectProjectionRepository());
+  if (deliveredRejections !== undefined) {
+    builder.addEventDispatcher({
+      messageSchemas: () => [ProjectSchedulingRejectedSchema],
+      dispatch: (event) => {
+        deliveredRejections.push(event);
+        return Promise.resolve();
+      },
+    });
+  }
+  return builder.build();
 }
 async function awaitProjectWorkflowStates(
   boundedContext: BoundedContext,
@@ -718,6 +739,40 @@ describe("project workflow Event routing", () => {
         id: project,
         name: "roadmap",
       });
+    } finally {
+      await blackBox.close();
+    }
+  });
+
+  it("delivers an async domain rejection without capturing it as a committed event", async () => {
+    const { project, planning, staffing, portfolio } = ids();
+    const deliveredRejections: Event[] = [];
+    const boundedContext = context(routeTo(portfolio), planning, staffing, deliveredRejections);
+    const blackBox = await BlackBox.from(boundedContext);
+    try {
+      const scope = blackBox.asGuest();
+      await scope.post(
+        CreateProjectSchema,
+        create(CreateProjectSchema, { project, name: "roadmap" }),
+      );
+      await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
+      const eventsBeforeRejection = await blackBox.eventually(
+        () => blackBox.assertEvents(),
+        (events) => events.length === 2,
+      );
+
+      await scope.post(
+        ScheduleProjectSchema,
+        create(ScheduleProjectSchema, { project, status: "rejected" }),
+      );
+      const rejection = await blackBox.eventually(
+        () => deliveredRejections[0],
+        (event) => event !== undefined,
+      );
+      expect(AnyMessages.unpack(rejection.message, ProjectSchedulingRejectedSchema)).toEqual(
+        create(ProjectSchedulingRejectedSchema, { project }),
+      );
+      expect(blackBox.assertEvents()).toEqual(eventsBeforeRejection);
     } finally {
       await blackBox.close();
     }
