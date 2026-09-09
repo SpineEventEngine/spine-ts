@@ -469,6 +469,11 @@ They are resolved without changing runtime behavior: impossible descriptor
 branches and redundant assertions were removed, optional capability access is
 equivalent, and tests now use synchronous callbacks where no await occurs.
 
+That lint-only change briefly made two Process Manager query test readers return
+an immediate frozen empty array instead of the reader contract's Promise. They
+now return `Promise.resolve(Object.freeze([]))`, preserving both the required
+asynchronous shape and the lint rule against `async` callbacks with no await.
+
 ## Review Waves And Dispositions
 
 - One read-only architecture/requirements pass dispatched to the existing

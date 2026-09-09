@@ -230,7 +230,7 @@ describe("repository identity", () => {
 
     const release = processManagerQueryAccess.bind(
       processManager,
-      () => Object.freeze([]),
+      () => Promise.resolve(Object.freeze([])),
       create(ActorContextSchema),
     );
     const query = processManager
@@ -268,7 +268,7 @@ describe("repository identity", () => {
 
     const release = processManagerQueryAccess.bind(
       processManager,
-      () => Object.freeze([]),
+      () => Promise.resolve(Object.freeze([])),
       create(ActorContextSchema),
     );
     const retained = processManager.query();
