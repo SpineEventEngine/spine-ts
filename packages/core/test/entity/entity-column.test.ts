@@ -34,7 +34,7 @@ import {
   type EntityOrderingOperator,
 } from "../../src/index.js";
 import { GeneratedEntityColumns } from "../../src/codegen/index.js";
-import { EntityFieldClassification } from "../../codegen/entity-field-classification.mjs";
+import { EntityFieldClassification } from "../../src/query/entity-field-classification.js";
 
 const { classify: classifyEntityField } = EntityFieldClassification;
 

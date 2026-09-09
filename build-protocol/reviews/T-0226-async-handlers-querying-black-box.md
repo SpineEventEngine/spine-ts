@@ -88,6 +88,8 @@ profile, no subagents, and no overlapping production writer.
   without `as never`; focused query regression and affected builds passed.
 - Produced-event capture: rejection dispatch now has an explicit publisher
   path that bypasses produced-event observers; focused publisher regression
-  passed. A BlackBox end-to-end rejection fixture remains for re-review.
-- Generator containment, canonical test relocation, and reference/prose
-  corrections are implemented where applicable; focused package builds passed.
+  passed. The domain-correct To-Do BlackBox workflow now proves its asynchronous
+  `@Assign` rejection reaches the typed subscription but leaves `assertEvents()`
+  unchanged.
+- Generator containment, canonical core-test relocation, and reference/prose
+  corrections are implemented; client-node retains compatibility/export tests.

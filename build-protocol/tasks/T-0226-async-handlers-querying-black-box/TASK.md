@@ -342,6 +342,12 @@ surface exposes no additional metadata.
   affected package-build evidence is recorded in the work log; BlackBox
   rejection end-to-end proof and canonical test relocation remain follow-up
   review items.
+- `2026-09-09 14:41 WEST`: The two remaining review follow-ups are closed:
+  canonical EntityColumn/EntityQuery suites and fixtures live in core, while
+  client-node retains compatibility/export coverage; a real To-Do BlackBox
+  executes the asynchronous completion handler through a typed domain rejection,
+  observes normal rejection dispatch, and proves the committed-event snapshot
+  excludes that rollback-path output.
 
 ## Decisions
 

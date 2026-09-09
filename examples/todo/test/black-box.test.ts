@@ -1322,6 +1322,7 @@ describe("@spine-event-engine/example-todo", () => {
         (candidate) => taskCompleted(candidate, "task-refuse") === true,
       );
       const nextRejection = iterator.next();
+      const eventsBeforeRejection = fixture.assertEvents();
 
       const ack = await scope.post(CompleteTaskSchema, completeTask("task-refuse"));
       const update = await nextRejection;
@@ -1347,6 +1348,7 @@ describe("@spine-event-engine/example-todo", () => {
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       expect(event.context.rejection?.commandMessage).toBeUndefined();
       expect(event.context.rejection?.stacktrace).toBe("");
+      expect(fixture.assertEvents()).toEqual(eventsBeforeRejection);
       expect(task).toEqual(readTask(completedResponse, "task-refuse"));
       expect(readList(response, "task-refuse")?.openTaskCount).toBe(0);
     } finally {
