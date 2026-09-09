@@ -460,11 +460,11 @@ packages/server/test/repository/repository.test.ts` - the new full-dispatch
 
 | Risk/Follow-Up                                              | Owner                | Disposition           | Next Review Point              |
 | ----------------------------------------------------------- | -------------------- | --------------------- | ------------------------------ |
-| Query types could create `server -> client-node` dependency | Implementation owner | Must avoid            | Architecture and API review    |
-| Query capability could escape its active tenant/lifecycle   | Implementation owner | Must prevent          | Reliability/security review    |
-| Signal capture could include inputs or uncommitted output   | Implementation owner | Must prevent          | Correctness/reliability review |
-| `all()` may be costly on large projections                  | Documentation        | Accepted with warning | Documentation review           |
-| HTTP side effects cannot roll back                          | Documentation        | Accepted limitation   | Documentation review           |
+| Query types could create `server -> client-node` dependency | Implementation owner | Resolved: shared core contract; dependency gate passes | Architecture and API review |
+| Query capability could escape its active tenant/lifecycle   | Implementation owner | Resolved: bound access and lifecycle tests pass | Reliability/security review |
+| Signal capture could include inputs or uncommitted output   | Implementation owner | Resolved: committed-output and rollback tests pass | Correctness/reliability review |
+| `all()` may be costly on large projections                  | Documentation        | Accepted with documented 1,000-result bound and warning | Documentation review |
+| HTTP side effects cannot roll back                          | Documentation        | Accepted and documented limitation | Documentation review |
 
 ## Slice 2 Closure
 
@@ -589,9 +589,22 @@ generic type contracts are unchanged.
   both review waves is resolved; review is converged and release preparation may
   begin.
 
+## Release Preparation
+
+- The focused final API review reports no P0-P2. It confirms that emitted
+  declarations preserve selected-column membership and orderability for both
+  canonical and Process Manager query builders.
+- `2.0.0-snapshot.10` was checked against all 18 publishable workspace package
+  names and was unused.
+- Version-only commit `ec17ad40a`, dependency-pin/lockfile commit `4dc4d6f06`,
+  and Proto-manifest version commit `653ac420b` are pushed to the feature
+  branch.
+- Protobuf generation passes after the manifest version update.
+
 ## Integration Result
 
-Pending feature-branch commits, pushes, and human review.
+Pending final cheap preflight, the one release verification profile, final
+report commit, and human review.
 
 ## Final P2 Correction Record
 

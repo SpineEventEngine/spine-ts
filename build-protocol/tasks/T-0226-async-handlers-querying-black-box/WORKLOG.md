@@ -63,6 +63,7 @@ lint:tsdoc` passes.
 
 ## Next step
 
-The focused API P1 re-review, version-only commit, and release verification are
-outside this correction. The branch is ready for the orchestrator to schedule
-those remaining task steps after this correction commit and push.
+The focused API P1 re-review closed the finding and reported no P0-P2. Release
+preparation selected unused version `2.0.0-snapshot.10` and pushed the
+version-only, internal-pin/lockfile, and Proto-manifest updates as separate
+commits through `653ac420b`. Final preflight and release verification remain.
