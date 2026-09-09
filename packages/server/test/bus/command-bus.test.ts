@@ -379,8 +379,12 @@ describe("CommandBus", () => {
     const observed: string[] = [];
     publisher.observe({ onEvent: (event) => observed.push(event.id?.value ?? "missing") });
 
-    await publisher.publishRejectionEvent(create(EventSchema, { id: create(EventIdSchema, { value: "rejected" }) }));
-    await publisher.publishEvent(create(EventSchema, { id: create(EventIdSchema, { value: "committed" }) }));
+    await publisher.publishRejectionEvent(
+      create(EventSchema, { id: create(EventIdSchema, { value: "rejected" }) }),
+    );
+    await publisher.publishEvent(
+      create(EventSchema, { id: create(EventIdSchema, { value: "committed" }) }),
+    );
     await publisher.drain();
 
     expect(observed).toEqual(["committed"]);

@@ -610,9 +610,7 @@ const HandlerSources = Object.freeze({
     if (origin === undefined) return undefined;
     const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
     const emittedSchemas = HandlerSources.emittedSchemaUses(
-      node.type === undefined
-        ? undefined
-        : HandlerSources.unwrapOuterPromise(node.type, scope),
+      node.type === undefined ? undefined : HandlerSources.unwrapOuterPromise(node.type, scope),
       handler.name,
       scope.imports,
     )?.map((schema) => schema.reference);
