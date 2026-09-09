@@ -333,8 +333,8 @@ fields are the available runtime metadata.
   transaction output remain excluded. A server BlackBox integration proves the
   committed follow-up appears exactly once immediately after its source Event.
 - The storage-neutral query plan bridge moved from the public core root to the
-  explicit `@spine-event-engine/core/internal/entity-query-plan` subpath used by
-  the server. The public root retains the typed DSL and wire-query API.
+  deliberate server-facing `@spine-event-engine/core/spi/entity-query-plan`
+  subpath. The public root retains the typed DSL and wire-query API.
 - Accepted `Promise<void>` subscription fixtures are valid asynchronous
   TypeScript implementations.
 - Public Process Manager TSDoc describes its protected handler-scoped query
@@ -359,8 +359,9 @@ after this converged preflight.
   it retains stored follow-up dispatch while notifying BlackBox produced-signal observers exactly
   once. Repository reactor regression coverage was RED under ordinary committed-event dispatch and
   GREEN after the dedicated path.
-- Raw query-plan types no longer export from the core root. A deliberate
-  `@spine-event-engine/core/internal/entity-query-plan` subpath supplies the server-facing bridge.
+- Raw query-plan types no longer export from the core root. The deliberate
+  `@spine-event-engine/core/spi/entity-query-plan` subpath supplies the
+  server-facing bridge; the obsolete internal subpath is removed.
 - Both accepted Promise<void> Subscribe analyzer fixtures are real async implementations. Process
   Manager TSDoc and reader docs now describe protected handler-scoped reads, actor/tenant binding,
   no override, and `all`/`either` combinators.
@@ -369,6 +370,13 @@ after this converged preflight.
 - End-to-end BlackBox proof: a generated `ProjectCreated` Aggregate reactor returns generated
   `ProjectScheduled(status: "reacted")`; `assertEvents()` observes it once, immediately after the
   source Event in production order. The BlackBox integration suite passes 7/7.
+- Release package-boundary policy rejected the initial `internal` subpath, so the bridge was moved
+  to the established `spi` convention in `88d34acac`. The policy suite passes 7/7; the server now
+  imports only `@spine-event-engine/core/spi/entity-query-plan` and the core root still exposes no
+  raw execution-plan type.
+- SPI correction verification: generated strict build, core/server query tests (40/40), generated
+  cleanliness, API inventory, and TSDoc checks pass. The evidence-only checkpoint follows after a
+  clean diff check.
 
 ## Final P2 correction response
 
