@@ -1,6 +1,6 @@
 # T-0225: Command-to-Command Delivery
 
-Status: Release fixture correction in progress
+Status: Release verification pending
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`
@@ -201,7 +201,8 @@ to unversioned receivers is complete without runtime compatibility support.
 The exact managed reproduction and both affected integration files pass. The
 natural release retry then passed 4,616 tests and found one domain-invalid
 positive discovery fixture that uses framework Command/Event envelopes as
-application signals. Its domain-correct fixture replacement is in progress.
+application signals. Its domain-correct replacement and cheap preflight are
+complete; release verification is pending.
 
 ## Historical pre-standalone disposition
 

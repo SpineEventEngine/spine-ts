@@ -736,6 +736,12 @@ fixture rule and the strict runtime validator. The accepted correction replaces
 only that positive fixture with authentic domain Command/Event descriptors;
 production validation remains unchanged.
 
+Commit `12a6dd7d3` replaces the envelope misuse with authentic `StartReview`
+and `ReviewStarted` descriptors and updates the domain assignment lookup. The
+full discovery suite passes 16 tests. Its canonical cheap preflight passes all
+shared gates with a clean tree. This deterministic fixture correction does not
+reopen a specialist concern; release verification is pending.
+
 All six accepted contract-review findings were corrected on the existing
 implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
 now accept only discriminated `receivers`; Entity receivers require
