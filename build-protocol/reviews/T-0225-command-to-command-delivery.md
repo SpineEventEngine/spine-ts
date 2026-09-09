@@ -722,6 +722,12 @@ failure reproduces with the single concurrent-managed-fixture test. The fix is
 test-fixture migration to unversioned `receivers`; production compatibility is
 explicitly prohibited.
 
+Commit `598181acf` performs only that fixture migration. The exact failed
+managed test passes, both complete affected integration files pass 55 tests,
+the executable-fixture scan finds no other legacy producer, and no managed
+child remains. This deterministic test-fixture correction does not reopen a
+specialist concern. A cheap preflight precedes the required release retry.
+
 All six accepted contract-review findings were corrected on the existing
 implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
 now accept only discriminated `receivers`; Entity receivers require

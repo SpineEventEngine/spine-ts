@@ -1,6 +1,6 @@
 # T-0225: Command-to-Command Delivery
 
-Status: Release verification correction in progress
+Status: Release verification pending
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`
@@ -197,7 +197,8 @@ review closure is clean across correctness/reliability, style/OOP,
 TypeScript/API/TSDoc, and reader documentation. This task has no current
 release-verification claim. The first release run exposed two executable server
 fixtures that still emit the removed version-3 registry shape; their migration
-to unversioned receivers is in progress without runtime compatibility support.
+to unversioned receivers is complete without runtime compatibility support.
+The exact managed reproduction and both affected integration files pass.
 
 ## Historical pre-standalone disposition
 
