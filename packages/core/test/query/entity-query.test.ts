@@ -214,7 +214,9 @@ describe("EntityQuery", () => {
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(),
     ).toThrow("must not be empty");
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(undefined),
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(
+        undefined as never,
+      ),
     ).toThrow("must not be empty");
     expect(() =>
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(

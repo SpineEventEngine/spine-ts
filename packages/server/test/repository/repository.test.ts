@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
@@ -142,7 +142,7 @@ class QueryingProcessManager extends ProcessManager<
   number
 > {
   query() {
-    return this.select(ProcessManagerStateSchema, processManagerColumns);
+    return this.select(ProjectionStateSchema, projectionColumns);
   }
 }
 class RuntimeCheckedAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
@@ -212,10 +212,11 @@ class PlainEntityClass {
   }
 }
 
-const processManagerColumns = EntityColumn.register(
-  ProcessManagerStateSchema,
-  GeneratedEntityColumns.define(ProcessManagerStateSchema, {
-    queue: { field: ProcessManagerStateSchema.field.queue, comparison: "ordering" },
+const projectionColumns = EntityColumn.register(
+  ProjectionStateSchema,
+  GeneratedEntityColumns.define(ProjectionStateSchema, {
+    name: { field: ProjectionStateSchema.field.name, comparison: "ordering" },
+    priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" },
   }),
 );
 
@@ -237,14 +238,14 @@ describe("repository identity", () => {
     const query = processManager
       .query()
       .byId("projection-1")
-      .where(EntityQuery.eq(processManagerColumns.queue, "waiting"))
-      .orderBy(processManagerColumns.queue);
+      .where(EntityQuery.eq(projectionColumns.name, "waiting"))
+      .orderBy(projectionColumns.priority);
 
     // @ts-expect-error A number is not the selected ProcessManagerState string identifier.
     processManager.query().byId(1);
 
     // @ts-expect-error equality-only lifecycle columns are not orderable.
-    processManager.query().orderBy(processManagerColumns.archived);
+    processManager.query().orderBy(projectionColumns.archived);
 
     expect(query).toHaveProperty("read");
     expect(query).toHaveProperty("findById");
@@ -271,12 +272,26 @@ describe("repository identity", () => {
     });
     const states = Object.freeze(
       Array.from({ length: 1_001 }, (_, index) =>
-        create(ProcessManagerStateSchema, { id: `state-${String(index)}`, queue: "waiting" }),
+        create(ProjectionStateSchema, {
+          id: `state-${String(index)}`,
+          name: "waiting",
+          priority: index,
+        }),
       ),
     );
     const release = processManagerQueryAccess.bind(
       processManager,
-      () => Promise.resolve(states),
+      <Schema extends DescriptorMessageSchema>(
+        _plan: import("@spine-event-engine/core").EntityQueryPlan,
+        schema: Schema,
+      ): Promise<readonly MessageShape<Schema>[]> => {
+        if (schema.typeName !== ProjectionStateSchema.typeName) {
+          return Promise.reject(
+            new Error("Expected the Process Manager fixture to select Projection state."),
+          );
+        }
+        return Promise.resolve(states as unknown as readonly MessageShape<Schema>[]);
+      },
       create(ActorContextSchema),
     );
 

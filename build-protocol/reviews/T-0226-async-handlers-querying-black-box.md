@@ -264,6 +264,19 @@ available runtime metadata.
   and state writes. The generic inbox ID reader accepts its existing Aggregate-state fixtures and
   the new generated command fixture without conflating their domain message types.
 
+### Strict task-gate correction
+
+- The typed-ID invalid-input runtime regression now uses `undefined as never` only at the single
+  intentional invalid call; the public `byId()` signature remains identifier-typed.
+- The Process Manager cap fixture selects `ProjectionStateSchema` and its registered projection
+  columns. Its generic executor rejects a non-projection schema before returning the typed
+  projection snapshots.
+- Exact evidence: `pnpm verify:task -- --no-coverage packages/core/test/query/entity-query.test.ts
+packages/server/test/repository/repository-routing.test.ts
+packages/server/test/repository/repository.test.ts packages/testing/test/black-box.lifecycle.test.ts`
+  passed every deterministic gate and 312/312 focused tests. One prior unchanged-tree attempt had
+  a single unrelated default-timeout routing test; the permitted one-time rerun passed unchanged.
+
 ## Final P2 correction response
 
 - The final implementer used the explicitly dispatched existing `implementer`
