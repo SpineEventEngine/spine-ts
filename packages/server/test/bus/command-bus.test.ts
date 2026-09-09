@@ -390,6 +390,25 @@ describe("CommandBus", () => {
     expect(observed).toEqual(["committed"]);
   });
 
+  it("allows an event-only observer while publishing a produced command", async () => {
+    const observed: string[] = [];
+    const bus = new CommandBus([
+      createValidatedCommandDispatcher((command) => {
+        observed.push(command.id?.uuid ?? "missing");
+      }),
+    ]);
+    const events = eventBusAccess.createForgettingBus();
+    const publisher = new SignalPublisher(bus, events, events, "Tasks");
+    publisher.observe({ onEvent: () => observed.push("unexpected-event") });
+
+    await publisher.publishCommand(
+      createValidatedCommand("command-observed", "task-observed", "Observed"),
+    );
+    await publisher.drain();
+
+    expect(observed).toEqual(["command-observed"]);
+  });
+
   it("drains a gated produced command admitted while closing and contains post-finish rejection", async () => {
     const gate = createSignal();
     const observed: string[] = [];

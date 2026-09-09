@@ -285,6 +285,19 @@ describe("EntityColumn", () => {
     }
   });
 
+  it("recognizes 64-bit fields configured for string representation", () => {
+    const stringLong = {
+      ...ProjectionStateSchema.field.sequence,
+      longAsString: true,
+    };
+
+    expect(classifyEntityField(stringLong)).toMatchObject({
+      supported: true,
+      valueKind: "string",
+      comparison: "ordering",
+    });
+  });
+
   it("rejects incomplete, mismatched, and incorrectly classified definitions", () => {
     expect(() =>
       EntityColumn.register(
