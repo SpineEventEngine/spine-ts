@@ -3,8 +3,8 @@
 Task: `build-protocol/tasks/T-0226-async-handlers-querying-black-box/TASK.md`
 Branch: `feature/async-handlers-querying-black-box`
 Baseline: `437cafcf380da33222d852f86a802200ef5ddc41`
-Implementation checkpoint: `bf12f5cb1`
-Diff basis: `git diff origin/master...bf12f5cb1`
+Implementation checkpoint: `b3f56720e`
+Diff basis: `git diff origin/master...b3f56720e`
 Worktree: `.worktrees/t-0226`
 
 ## Pre-review state
@@ -13,7 +13,9 @@ Worktree: `.worktrees/t-0226`
 - `git diff --check origin/master...HEAD` passes.
 - Focused implementation evidence is recorded in the task work log.
 - The human-imposed requirements ledger is frozen in the task brief.
-- Deterministic documentation and affected-scope preflight are pending.
+- The complete affected-scope preflight passed: generated builds, strict
+  TypeScript, repository policy, TSDoc, copyright, formatting, docs/TypeDoc,
+  Proto, dependency/readiness checks, and 490 focused tests.
 
 ## Review assignments
 

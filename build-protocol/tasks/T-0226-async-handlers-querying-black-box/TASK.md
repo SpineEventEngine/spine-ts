@@ -11,8 +11,8 @@ Authoring sub-agents: `/root/t0226_implementer`,
 `/root/t0226_implementer_2`, and `/root/t0226_implementer_3` in sequential
 non-overlapping ownership; all use the existing `implementer` role configured
 `gpt-5.6-terra` / medium reasoning
-Reviewer sub-agents: Pending
-Implementation commit: `bf12f5cb1`
+Reviewer sub-agents: Formal wave pending dispatch
+Implementation commit: `b3f56720e`
 Final branch HEAD: Pending branch commit
 
 Task classification: High-risk
@@ -512,6 +512,10 @@ generic type contracts are unchanged.
   `gpt-5.6-sol` / high reasoning. The pass completed cleanly with no file edits;
   its dependency, lifecycle, and capture recommendations are accepted in
   `ARCHITECTURE_REVIEW.md`.
+- The mandatory affected-scope preflight passes at `b3f56720e`: generated and
+  strict TypeScript builds, ESLint and repository policy, TSDoc, copyright,
+  formatting, documentation/TypeDoc, Proto, dependency/readiness checks, and
+  490 focused tests are clean. Formal specialist review is ready to start.
 
 ## Integration Result
 
