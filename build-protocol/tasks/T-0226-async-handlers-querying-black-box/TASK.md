@@ -582,6 +582,9 @@ generic type contracts are unchanged.
   columns but still accepts a same-schema column absent from the selected
   collection. The canonical builder and facade require one final
   `Columns[keyof Columns]` constraint plus a public negative compile test.
+- Correction `9284db9cd` applies that selected-column constraint to both
+  ordering APIs and passes all four public compile cases plus 283 focused tests.
+  The same API reviewer now performs the P1-only closure check.
 
 ## Integration Result
 

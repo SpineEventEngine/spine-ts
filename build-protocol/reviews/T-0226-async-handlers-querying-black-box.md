@@ -164,6 +164,14 @@ while retaining the orderable-column conditional. A public consumer
 `@ts-expect-error` pins the non-selected same-schema case before the same API
 concern is checked again. No complete review wave reopens.
 
+Correction `9284db9cd` constrains both canonical and Process Manager ordering
+generics to `Columns[keyof Columns]` while retaining the orderability
+conditional and runtime ownership check. RED observed unused negative
+directives for the omitted same-schema column; GREEN proves selected orderable
+acceptance and rejection of equality-only, foreign-schema, and unselected
+same-schema columns. `/root/t0226_api_final` rechecks this P1 only under its
+previously explicit `gpt-5.6-terra` / high role profile.
+
 ## Final P2 correction response
 
 - The final implementer used the explicitly dispatched existing `implementer`
