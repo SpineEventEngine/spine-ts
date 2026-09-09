@@ -299,6 +299,33 @@ subagents, and receive only the task contract, repository rules, fixed
 immutable role profile and explicit dispatch fields, but no additional live
 self-introspection metadata.
 
+### Independent round two result
+
+All five fresh reviewer contexts completed. Security reported no P0-P2
+findings. The complete accepted correction batch is:
+
+- P1: include committed Events produced by Aggregate event-reactor handlers in
+  `BlackBox.assertEvents()` exactly once and in production order, while keeping
+  ordinary stored-event replay excluded.
+- P2: stop exporting the raw storage-neutral `EntityQueryPlan`, predicate, and
+  `buildPlan()` execution bridge from the public core root. Move it behind a
+  deliberate internal/server-facing subpath while keeping the typed query DSL
+  and wire-query construction public.
+- P2: make both accepted `Promise<void>` `@Subscribe` analyzer fixtures valid
+  asynchronous TypeScript implementations, not syntax-only false positives.
+- P2: update public `ProcessManager` TSDoc that incorrectly says the class adds
+  no query client; describe the restricted handler-scoped read-only capability.
+- P2: document the `EntityQuery.all(...)` and `EntityQuery.either(...)`
+  predicate combinators in the Process Manager query workflow.
+- P2: document that Process Manager queries are bound to the active handler's
+  actor and tenant and offer no tenant override.
+
+The round-two correction owner is the existing `implementer` role, dispatched
+explicitly with `gpt-5.6-terra` / medium reasoning and no inherited turn
+memory. It is the sole production-code writer, may not spawn subagents, and
+owns this entire batch. The immutable role profile and explicit dispatch
+fields are the available runtime metadata.
+
 ## Final P2 correction response
 
 - The final implementer used the explicitly dispatched existing `implementer`
