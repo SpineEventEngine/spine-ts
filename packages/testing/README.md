@@ -85,6 +85,13 @@ Post an imported event through an actor scope, then inspect snapshots of
 context-produced output:
 
 ```ts
+import type { MessageSchema } from "@spine-event-engine/core";
+import { BlackBox } from "@spine-event-engine/testing";
+
+declare const box: BlackBox;
+declare const PartnerEventSchema: MessageSchema;
+declare const partnerEvent: import("@bufbuild/protobuf").MessageShape<typeof PartnerEventSchema>;
+
 await box.onBehalfOf("partner").postExternalEvent(PartnerEventSchema, partnerEvent);
 const commands = box.assertCommands();
 const events = box.assertEvents();

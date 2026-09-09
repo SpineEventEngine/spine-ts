@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 import { EntityColumn, EntityQuery, EntityQueryBuilder } from "../dist/index.js";
 import * as clientRoot from "../dist/index.js";
 import { GeneratedEntityColumns } from "../dist/codegen/index.js";
-import { ProjectionStateSchema } from "../test-fixtures/entity-column-fixtures.js";
+import { ProjectionStateSchema } from "../../core/test-fixtures/entity-column-fixtures.js";
 import {
   EntityColumn as CoreEntityColumn,
   EntityQuery as CoreEntityQuery,

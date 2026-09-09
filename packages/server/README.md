@@ -54,7 +54,31 @@ effect.
 Process Managers, but not Aggregates, have protected read-only `select()`:
 
 ```ts
-const pending = await this.select(RequestViewSchema, RequestViewColumns)
+import { EntityQuery } from "@spine-event-engine/core";
+
+declare const RequestViewSchema: import("@spine-event-engine/core").MessageSchema;
+declare const RequestViewColumns: {
+  readonly status: import("@spine-event-engine/core").EntityColumn;
+  readonly createdAt: import("@spine-event-engine/core").EntityColumn;
+};
+declare const processManager: {
+  select(
+    schema: typeof RequestViewSchema,
+    columns: typeof RequestViewColumns,
+  ): {
+    where(predicate: unknown): {
+      orderBy(
+        column: typeof RequestViewColumns.createdAt,
+        direction: "asc",
+      ): {
+        limit(value: number): { read(): Promise<readonly unknown[]> };
+      };
+    };
+  };
+};
+
+const pending = await processManager
+  .select(RequestViewSchema, RequestViewColumns)
   .where(EntityQuery.eq(RequestViewColumns.status, "pending"))
   .orderBy(RequestViewColumns.createdAt, "asc")
   .limit(10)
