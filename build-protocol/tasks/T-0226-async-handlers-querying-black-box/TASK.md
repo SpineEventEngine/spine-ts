@@ -13,7 +13,9 @@ review-correction continuation in sequential non-overlapping ownership; all use
 the existing `implementer` role configured `gpt-5.6-terra` / medium reasoning
 Reviewer sub-agents: `/root/t0226_style_review`, `/root/t0226_api_review`,
 `/root/t0226_reliability_review`, `/root/t0226_docs_review`, and
-`/root/t0226_security_review`
+`/root/t0226_security_review`; targeted round two begins with
+`/root/t0226_style_r2`, `/root/t0226_api_r2`, and
+`/root/t0226_reliability_r2`
 Implementation commit: `b3f56720e`
 Final branch HEAD: Pending branch commit
 

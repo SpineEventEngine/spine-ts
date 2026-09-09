@@ -102,3 +102,19 @@ The correction tree converges through `31df88c1a`. The expanded preflight
 passes every generated/strict build and deterministic policy, documentation,
 Proto, and readiness gate plus 442 focused tests across 10 files. A second and
 final targeted review wave rechecks every substantively affected concern.
+
+## Targeted review round 2
+
+Frozen implementation: `31df88c1a`
+
+| Concern                 | Reviewer                     | Explicit profile        | Status  |
+| ----------------------- | ---------------------------- | ----------------------- | ------- |
+| Style/maintainability   | `/root/t0226_style_r2`       | `gpt-5.6-terra` / high  | Active  |
+| TypeScript/API docs     | `/root/t0226_api_r2`         | `gpt-5.6-terra` / high  | Active  |
+| Performance/reliability | `/root/t0226_reliability_r2` | `gpt-5.6-terra` / high  | Active  |
+| Reader documentation    | Pending capacity             | `gpt-5.6-luna` / medium | Pending |
+| Security                | Pending capacity             | `gpt-5.6-terra` / high  | Pending |
+
+All round-two reviewers are read-only, cannot spawn subagents, and recheck only
+their accepted findings plus P0-P2 regressions introduced by the corrections.
+The explicit role profiles are the available immutable runtime metadata.
