@@ -326,6 +326,33 @@ memory. It is the sole production-code writer, may not spawn subagents, and
 owns this entire batch. The immutable role profile and explicit dispatch
 fields are the available runtime metadata.
 
+### Independent round-two correction response
+
+- Aggregate event-reactor follow-ups now use a dedicated observable publisher
+  path after successful persistence. Ordinary stored-event replay and rejected
+  transaction output remain excluded. A server BlackBox integration proves the
+  committed follow-up appears exactly once immediately after its source Event.
+- The storage-neutral query plan bridge moved from the public core root to the
+  explicit `@spine-event-engine/core/internal/entity-query-plan` subpath used by
+  the server. The public root retains the typed DSL and wire-query API.
+- Accepted `Promise<void>` subscription fixtures are valid asynchronous
+  TypeScript implementations.
+- Public Process Manager TSDoc describes its protected handler-scoped query
+  capability. Beginner docs cover `EntityQuery.all(...)`,
+  `EntityQuery.either(...)`, actor/tenant binding, and the absence of a tenant
+  override.
+- Repository naming and TSDoc policy findings discovered by the mandatory
+  preflight were corrected without behavior changes.
+- Exact task preflight passed generated and tooling strict builds, cleanup,
+  TSDoc, copyright, logging containment, formatting, documentation audience,
+  TypeDoc/API inventory, Proto lint and cleanliness, release readiness, and
+  371/371 focused tests across six files.
+
+Both human-requested complete independent rounds are now closed. Every P0-P2
+finding from each round is fixed; both security reviews are clean. The shared
+runtime and public export changes require the release verification profile
+after this converged preflight.
+
 ### Independent round-two correction work log
 
 - Aggregate reactor follow-up Events now use a dedicated committed stored-follow-up publisher path:
