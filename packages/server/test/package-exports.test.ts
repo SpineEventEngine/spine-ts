@@ -100,6 +100,8 @@ describe("@spine-event-engine/server package exports", () => {
     }
     expect(Object.keys(serverTesting).sort()).toEqual([
       "ServerTests",
+      "observeProducedSignals",
+      "postExternalEvent",
       "resetServerEnvironmentForTest",
       "unpackExternalEvent",
       "wrapBoundedContextOnline",

@@ -85,16 +85,18 @@ Post an imported event through an actor scope, then inspect snapshots of
 context-produced output:
 
 ```ts
-import type { MessageSchema } from "@spine-event-engine/core";
+import type { Message, MessageShape } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { BlackBox } from "@spine-event-engine/testing";
 
-declare const box: BlackBox;
-declare const PartnerEventSchema: MessageSchema;
-declare const partnerEvent: import("@bufbuild/protobuf").MessageShape<typeof PartnerEventSchema>;
-
-await box.onBehalfOf("partner").postExternalEvent(PartnerEventSchema, partnerEvent);
-const commands = box.assertCommands();
-const events = box.assertEvents();
+async function inspectPartnerEvent<Schema extends GenMessage<Message>>(
+  box: BlackBox,
+  schema: Schema,
+  event: MessageShape<Schema>,
+) {
+  await box.onBehalfOf("partner").postExternalEvent(schema, event);
+  return { commands: box.assertCommands(), events: box.assertEvents() };
+}
 ```
 
 Snapshots are taken at the call time. Use `eventually()` when detached handling

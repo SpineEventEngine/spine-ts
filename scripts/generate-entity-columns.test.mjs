@@ -8,7 +8,7 @@ import {
   projectionFieldWithRawColumnOption,
   projectionSchemaWithRawEntityOption,
   ProcessManagerStateSchema,
-} from "../packages/client-node/test-fixtures/entity-column-fixtures.ts";
+} from "../packages/core/test-fixtures/entity-column-fixtures.ts";
 
 const columnOption = {
   $unknown: [{ no: column.number, wireType: 0, data: new Uint8Array([1]) }],

@@ -151,7 +151,7 @@ export function packedContentProblems(manifest, entries, texts, sourceFiles = []
       problems.push(name + " archive contains undeclared payload: " + file);
   }
   for (const value of texts) {
-    if (/workspace:|2\.0\.0-snapshot\.[12]/u.test(value))
+    if (/workspace:|2\.0\.0-snapshot\.(?:1|2)(?!\d)/u.test(value))
       problems.push(name + " archive text has prohibited specifier");
     if (/\/Users\/|\/private\/var\/|\.worktrees\//u.test(value))
       problems.push(name + " archive text has repository path");
