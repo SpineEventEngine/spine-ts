@@ -296,7 +296,14 @@ surface exposes no additional metadata.
 
 ## Tests Run
 
-- Baseline setup and verification pending.
+- `pnpm install --frozen-lockfile` - passed with an unchanged lockfile; expected
+  pre-build missing-bin warnings only.
+- `pnpm check:node` - passed.
+- `pnpm proto:generate` - passed all authored/frozen Proto checks.
+- `pnpm typecheck:build:generated` - passed.
+- Focused baseline Vitest run over build-time handler analysis, typed Entity
+  queries, Stand, repository routing, testing BlackBox, and the cross-package
+  BlackBox fixture - 5 files and 375 tests passed with zero failures.
 
 ## Coverage Result
 
@@ -338,7 +345,10 @@ surface exposes no additional metadata.
 
 ## Review Waves And Dispositions
 
-- Pending mechanical convergence.
+- One read-only architecture/requirements pass dispatched to the existing
+  `requirements_splitter` role with explicit configured profile
+  `gpt-5.6-sol` / high reasoning. Production implementation awaits its bounded
+  contract findings.
 
 ## Integration Result
 
