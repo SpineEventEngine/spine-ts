@@ -335,7 +335,7 @@ export class EntityQueryBuilder<
    * @param direction Sort direction, ascending by default.
    * @returns This builder.
    */
-  orderBy<Column extends EntityColumn<Schema>>(
+  orderBy<Column extends Columns[keyof Columns]>(
     column: "greaterThan" extends EntityColumnOperator<Column> ? Column : never,
     direction: "asc" | "desc" = "asc",
   ): this {

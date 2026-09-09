@@ -2162,6 +2162,22 @@ const projectionQueryColumns = EntityColumn.register(
     priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" },
   }),
 );
+const selectedProjectionQueryColumns: Pick<typeof projectionQueryColumns, "priority"> =
+  projectionQueryColumns;
+
+abstract class ProcessManagerQueryTypeFixture extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  protected orderBySelectedColumns(): void {
+    const query = this.select(ProjectionStateSchema, selectedProjectionQueryColumns);
+    query.orderBy(selectedProjectionQueryColumns.priority);
+    // @ts-expect-error same-schema columns omitted from the selected collection cannot be ordered.
+    query.orderBy(projectionQueryColumns.name);
+  }
+}
+void ProcessManagerQueryTypeFixture;
 
 class CommandSubstitutingProcessManager extends ProcessManager<
   string,

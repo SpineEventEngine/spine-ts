@@ -614,3 +614,9 @@ Pending feature-branch commits, pushes, and human review.
 - `2026-09-09 15:49 WEST`: The `ProcessManagerQuery.orderBy` TSDoc correction
   is task-scope, not baseline debt. Its explicit `column` and `direction`
   parameters now match the final generic signature; `pnpm lint:tsdoc` passes.
+- `2026-09-09 16:02 WEST`: The final API P1 is resolved: canonical
+  `EntityQueryBuilder.orderBy()` and `ProcessManagerQuery.orderBy()` restrict
+  their generic column to the selected collection while retaining the existing
+  orderable-column conditional and runtime ownership validation. Compile-only
+  public consumers cover selected orderable acceptance and selected
+  equality-only, foreign-schema, and omitted same-schema rejection.

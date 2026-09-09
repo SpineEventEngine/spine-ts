@@ -89,6 +89,7 @@ const scalarColumns = EntityColumn.register(
     },
   }),
 );
+const selectedColumns: Pick<typeof columns, "priority" | "status"> = columns;
 
 describe("EntityQuery", () => {
   it("compiles the shared DSL to a storage-neutral execution plan", () => {
@@ -408,6 +409,18 @@ describe("EntityQuery", () => {
       builder.orderBy(columns.status);
       // @ts-expect-error predicates from a different Projection cannot enter this builder.
       builder.where(eq(scalarColumns.doubleValue, 1));
+      const selectedBuilder = EntityQuery.select({
+        schema: ProjectionStateSchema,
+        columns: selectedColumns,
+        context,
+      });
+      selectedBuilder.orderBy(selectedColumns.priority);
+      // @ts-expect-error selected equality-only columns cannot be used for ordering.
+      selectedBuilder.orderBy(selectedColumns.status);
+      // @ts-expect-error foreign-schema columns cannot be used for ordering.
+      selectedBuilder.orderBy(scalarColumns.doubleValue);
+      // @ts-expect-error same-schema columns omitted from the selected collection cannot be ordered.
+      selectedBuilder.orderBy(columns.title);
     };
     void compileAssertions;
   });

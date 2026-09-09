@@ -182,7 +182,7 @@ export class ProcessManagerQuery<
    * @param direction Optional sort direction, ascending by default.
    * @returns This query for fluent configuration.
    */
-  orderBy<Column extends EntityColumn<Schema>>(
+  orderBy<Column extends Columns[keyof Columns]>(
     column: "greaterThan" extends EntityColumnOperator<Column> ? Column : never,
     direction: "asc" | "desc" = "asc",
   ): this {

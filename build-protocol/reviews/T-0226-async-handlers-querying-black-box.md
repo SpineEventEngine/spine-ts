@@ -194,3 +194,16 @@ lint:tsdoc` passes. The snippet limitation does not alter the final P2
 
 The focused API P1 re-review is still required and is intentionally not run in
 this correction context.
+
+## Final API P1 correction response
+
+The explicit generic forwarding signatures for canonical
+`EntityQueryBuilder.orderBy()` and `ProcessManagerQuery.orderBy()` now bind
+`Column` to `Columns[keyof Columns]` and retain the conditional that excludes
+equality-only columns. Existing runtime `requireOwnedColumn()` validation is
+unchanged. Compile-only public consumers prove valid selected ordering and
+rejection of selected equality-only, foreign-schema, and same-schema omitted
+columns; the Process Manager facade has its corresponding selected/omitted
+proof. Strict tooling, core/server builds, 283 focused query/repository tests,
+TSDoc, and API inventory checks pass. Focused API P1 re-review remains the next
+step and is intentionally not run in this correction context.

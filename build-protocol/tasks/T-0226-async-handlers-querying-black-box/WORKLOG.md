@@ -40,6 +40,9 @@ Branch: `feature/async-handlers-querying-black-box`
 - `node docs/check-typescript-snippets.mjs packages/server/REFERENCE.md` passed.
 - `pnpm lint` passed. Focused ESLint, cleanup enforcement, copyright,
   formatting, production-dependency, and `git diff --check` gates passed.
+- `pnpm exec tsc --noEmit -p tsconfig.eslint.json` passed after the P1
+  consumer assertions; core/server builds and 283 focused core/server query
+  tests passed. TSDoc and API inventory checks passed.
 
 ## Known limitations
 
@@ -50,6 +53,13 @@ Branch: `feature/async-handlers-querying-black-box`
   `ProcessManagerQuery.orderBy` TSDoc repair. It now documents the explicit
   `column` and `direction` parameters rather than stale `args`; `pnpm
 lint:tsdoc` passes.
+- `2026-09-09 16:02 WEST`: The final API P1 constrains both public
+  `orderBy()` generics to `Columns[keyof Columns]` while retaining the existing
+  orderable-column conditional and runtime ownership validation. Public
+  compile-only consumers prove selected orderable acceptance and reject
+  selected equality-only, foreign-schema, and same-schema omitted columns.
+  The Process Manager facade separately proves selected and omitted same-schema
+  behavior.
 
 ## Next step
 
