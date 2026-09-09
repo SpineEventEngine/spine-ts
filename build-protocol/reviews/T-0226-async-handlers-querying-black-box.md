@@ -172,6 +172,13 @@ acceptance and rejection of equality-only, foreign-schema, and unselected
 same-schema columns. `/root/t0226_api_final` rechecks this P1 only under its
 previously explicit `gpt-5.6-terra` / high role profile.
 
+The focused closure review reports no P0-P2 and closes the last P1. Both source
+and emitted declarations enforce selected-column membership and orderability;
+all four public compile cases pass, the runtime ownership guard remains, and 38
+focused tests plus TSDoc/API inventory are clean. Review is converged: all P1
+and accepted P2 findings are resolved, security is clean, and no third complete
+wave was run.
+
 ## Final P2 correction response
 
 - The final implementer used the explicitly dispatched existing `implementer`

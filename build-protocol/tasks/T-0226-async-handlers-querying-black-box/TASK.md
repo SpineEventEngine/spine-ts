@@ -585,6 +585,9 @@ generic type contracts are unchanged.
 - Correction `9284db9cd` applies that selected-column constraint to both
   ordering APIs and passes all four public compile cases plus 283 focused tests.
   The same API reviewer now performs the P1-only closure check.
+- The focused closure review reports no P0-P2. Every P1 and accepted P2 from
+  both review waves is resolved; review is converged and release preparation may
+  begin.
 
 ## Integration Result
 
