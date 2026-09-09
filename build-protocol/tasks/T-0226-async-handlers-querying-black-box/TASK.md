@@ -202,8 +202,9 @@ existing `blackBox.eventually(...)` operation explicitly.
    ordering, mask, and limit operations through one query abstraction.
 10. `findById()` returns `undefined` for a missing visible state; `all()` returns
     an immutable empty list when none are visible.
-11. Query execution observes lifecycle visibility and the active signal tenant;
-    equal IDs in another tenant are not visible.
+11. Query execution excludes deleted current records, leaves archived current
+    records visible/filterable under the existing contract, and observes the
+    active signal tenant; equal IDs in another tenant are not visible.
 12. Aggregate has no public or protected `select(...)` capability.
 13. Process Manager query types expose no state-changing Stand capability.
 14. Query access fails clearly before runtime attachment and after context
@@ -276,6 +277,8 @@ surface exposes no additional metadata.
 ## Decisions
 
 - `D-0120` records the Process Manager query and async-handler boundaries.
+- `ARCHITECTURE_REVIEW.md` records the accepted one-time high-risk architecture
+  pass and three-slice TDD order.
 
 ## Human Questions And Answers
 
@@ -347,8 +350,9 @@ surface exposes no additional metadata.
 
 - One read-only architecture/requirements pass dispatched to the existing
   `requirements_splitter` role with explicit configured profile
-  `gpt-5.6-sol` / high reasoning. Production implementation awaits its bounded
-  contract findings.
+  `gpt-5.6-sol` / high reasoning. The pass completed cleanly with no file edits;
+  its dependency, lifecycle, and capture recommendations are accepted in
+  `ARCHITECTURE_REVIEW.md`.
 
 ## Integration Result
 
