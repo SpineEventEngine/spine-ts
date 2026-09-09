@@ -62,8 +62,12 @@ The read side contains:
 
 Rules:
 
-- command handlers cannot query read-side projections as part of the write
-  transaction;
+- Aggregate command handlers cannot query read-side projections as part of a
+  write transaction. Process Managers may use their protected, read-only
+  `select()` capability to query eventually consistent projection state while a
+  repository invokes a handler; the capability carries the active actor and
+  tenant, exposes no Stand mutation or tenant override, and becomes invalid
+  after that invocation;
 - query handlers cannot mutate write-side entities;
 - projections are updated by delivered events, not by direct command calls;
 - service APIs may live in one process, but their internal dependencies must

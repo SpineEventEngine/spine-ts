@@ -132,6 +132,30 @@ export type EntityPredicate<Column extends EntityColumn = EntityColumn> =
   EntityComparisonPredicate<Column> | EntityGroup<Column>;
 
 /**
+ * Storage-neutral form of a descriptor-backed Entity query.
+ *
+ * Server-side callers use this plan to execute the same typed DSL without a
+ * dependency on a client transport package.
+ */
+export interface EntityQueryPlan {
+  readonly predicate?: EntityQueryPlanPredicate;
+  readonly order?: readonly { readonly column: string; readonly direction: "asc" | "desc" }[];
+  readonly mask?: { readonly paths: readonly string[] };
+  readonly limit?: number;
+}
+
+/** A storage-neutral Entity query predicate. */
+export type EntityQueryPlanPredicate =
+  | { readonly kind: "ids"; readonly ids: readonly unknown[] }
+  | {
+      readonly kind: "comparison";
+      readonly column: string;
+      readonly operator: EntityColumnOperator<EntityColumn>;
+      readonly value: unknown;
+    }
+  | { readonly kind: "all" | "either"; readonly predicates: readonly EntityQueryPlanPredicate[] };
+
+/**
  * Builds a typed Entity query for the frozen Spine wire contract.
  */
 export class EntityQueryBuilder<
@@ -267,6 +291,50 @@ export class EntityQueryBuilder<
       }),
       context: clone(ActorContextSchema, this.#context),
       ...(format === undefined ? {} : { format }),
+    });
+  }
+
+  /**
+   * Builds the storage-neutral execution plan for this typed query.
+   *
+   * @returns An immutable plan equivalent to {@link build}'s wire query.
+   */
+  buildPlan(): EntityQueryPlan {
+    if (this.#limit !== undefined && this.#order.length === 0) {
+      throw new TypeError("Entity query limit requires ordering.");
+    }
+    const predicates = EntityQueryCompiler.compilePlanGroups(
+      this.#predicates,
+      this.#schema,
+      this.#columns,
+    );
+    const all = [
+      ...(this.#ids.length === 0
+        ? []
+        : [Object.freeze({ kind: "ids" as const, ids: Object.freeze([...this.#ids]) })]),
+      ...predicates,
+    ];
+    const predicate =
+      all.length === 0
+        ? undefined
+        : all.length === 1
+          ? all[0]
+          : Object.freeze({ kind: "all" as const, predicates: Object.freeze(all) });
+    return Object.freeze({
+      ...(predicate === undefined ? {} : { predicate }),
+      ...(this.#mask.length === 0
+        ? {}
+        : { mask: Object.freeze({ paths: Object.freeze([...this.#mask]) }) }),
+      ...(this.#order.length === 0
+        ? {}
+        : {
+            order: Object.freeze(
+              this.#order.map(({ column, direction }) =>
+                Object.freeze({ column: column.name, direction }),
+              ),
+            ),
+          }),
+      ...(this.#limit === undefined ? {} : { limit: this.#limit }),
     });
   }
 
@@ -490,6 +558,45 @@ export const EntityQuery: Readonly<{
  * Internal compiler for predicates, descriptors, and wire query messages.
  */
 const EntityQueryCompiler = Object.freeze({
+  compilePlanGroups<Schema extends GenMessage<Message>>(
+    roots: readonly EntityPredicate[],
+    schema: Schema,
+    columns: EntityColumnCollection<Schema>,
+  ): readonly EntityQueryPlanPredicate[] {
+    return roots.map((predicate) =>
+      EntityQueryCompiler.compilePlanPredicate(predicate, schema, columns),
+    );
+  },
+
+  compilePlanPredicate<Schema extends GenMessage<Message>>(
+    value: unknown,
+    schema: Schema,
+    columns: EntityColumnCollection<Schema>,
+  ): EntityQueryPlanPredicate {
+    const predicate = EntityQueryWire.requirePredicate(value);
+    if (predicate.kind === "comparison") {
+      EntityQueryWire.requireOwnedColumn(schema, columns, predicate.column);
+      EntityQueryWire.requireValue(predicate.column, predicate.value);
+      return Object.freeze({
+        kind: "comparison",
+        column: predicate.column.name,
+        operator: predicate.operator,
+        value: predicate.value,
+      });
+    }
+    if (predicate.predicates.length === 0) {
+      throw new TypeError(`${predicate.kind.toUpperCase()} predicate must not be empty.`);
+    }
+    return Object.freeze({
+      kind: predicate.kind,
+      predicates: Object.freeze(
+        predicate.predicates.map((child) =>
+          EntityQueryCompiler.compilePlanPredicate(child, schema, columns),
+        ),
+      ),
+    });
+  },
+
   comparison<Column extends EntityColumn>(
     column: Column,
     operator: EntityColumnOperator<Column>,

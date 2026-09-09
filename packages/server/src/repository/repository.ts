@@ -34,6 +34,7 @@ import {
 } from "@spine-event-engine/core";
 import {
   CommandContextSchema,
+  ActorContextSchema,
   CommandIdSchema,
   CommandSchema,
   EventContextSchema,
@@ -57,6 +58,7 @@ import {
   type StorageContext,
   type StorageFactory,
   type StorageMode,
+  type NormalizedQueryPlan,
 } from "@spine-event-engine/storage";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import type {
@@ -97,6 +99,7 @@ import {
   Projection,
   type EntityFamily,
   entityHistoryAccess,
+  processManagerQueryAccess,
   transactionalEntityAccess,
 } from "../entity/entity.js";
 import {
@@ -127,6 +130,7 @@ import {
   type EventHandlerFilterPlan,
 } from "../handler/event-handler-filter.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
+import { QueryReader } from "../services/query-reader.js";
 import {
   HandlerMetadataRegistry,
   HandlerMetadataValues,
@@ -2309,6 +2313,37 @@ class ProjectionEventExecution {
   }
 }
 
+const ProcessManagerQueries = Object.freeze({
+  bind(
+    entity: object,
+    runtime: RepositoryRuntime,
+    actorContext: NonNullable<Command["context"]>["actorContext"] | undefined,
+    tenantId: TenantId | undefined,
+  ): () => void {
+    const context =
+      actorContext === undefined
+        ? create(ActorContextSchema)
+        : clone(ActorContextSchema, actorContext);
+    if (tenantId !== undefined) {
+      context.tenantId = RepositoryTenants.require(tenantId);
+    }
+    return processManagerQueryAccess.bind(
+      entity,
+      async (plan, schema) => {
+        const results = await QueryReader.read(
+          runtime.stand,
+          schema,
+          plan as NormalizedQueryPlan<unknown>,
+          tenantId,
+          1_000,
+        );
+        return Object.freeze(results.map((result) => clone(schema, result.state)));
+      },
+      context,
+    );
+  },
+});
+
 class ProcessManagerExecutionSupport {
   readonly #repository: RepositoryView;
   readonly #runtime: RepositoryRuntime;
@@ -2509,7 +2544,12 @@ class ProcessManagerCommandExecution {
       intake.route.entityId,
     );
     try {
-      const produced = await this.#invoke(loaded.entity, intake.assignee, intake.message);
+      const produced = await this.#invoke(
+        loaded.entity,
+        intake.assignee,
+        intake.message,
+        tenantOptions.tenantId,
+      );
       return await this.#commitAndPublish(loaded, tenantOptions, intake, produced);
     } catch (error) {
       if (!RejectionThrowable.is(error)) throw error;
@@ -2610,7 +2650,14 @@ class ProcessManagerCommandExecution {
     entity: object,
     assignee: RepositoryCommandAssignee,
     message: unknown,
+    tenantId: TenantId | undefined,
   ): Promise<readonly unknown[]> {
+    const releaseQuery = ProcessManagerQueries.bind(
+      entity,
+      this.#runtime,
+      this.#command.context?.actorContext,
+      tenantId,
+    );
     transactionalEntityAccess.start(entity);
     try {
       const produced = await EntityInvocation.invokeEntityMethod(
@@ -2631,6 +2678,8 @@ class ProcessManagerCommandExecution {
     } catch (error) {
       transactionalEntityAccess.rollback(entity);
       throw error;
+    } finally {
+      releaseQuery();
     }
   }
 
@@ -2823,7 +2872,12 @@ class ProcessManagerEventExecution {
   ): Promise<void> {
     const tenantOptions = RepositoryTenants.standTenantOptions(this.#runtime.context, this.#event);
     const loaded = await this.#support.load(entityId, tenantOptions);
-    const produced = await this.#invokeHandlers(entityId, loaded.entity, intake);
+    const produced = await this.#invokeHandlers(
+      entityId,
+      loaded.entity,
+      intake,
+      tenantOptions.tenantId,
+    );
 
     const events = this.#bindProducedEvents(produced.events, entityId);
     const diagnostics = [
@@ -2884,10 +2938,17 @@ class ProcessManagerEventExecution {
       readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
       readonly commanders: readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
     },
+    tenantId: TenantId | undefined,
   ): Promise<{ readonly commands: readonly unknown[]; readonly events: readonly unknown[] }> {
     const eventContext = EntityInvocation.eventHandlerContext(this.#event);
     const commands: unknown[] = [];
     const events: unknown[] = [];
+    const releaseQuery = ProcessManagerQueries.bind(
+      entity,
+      this.#runtime,
+      this.#runtime.signalMetadata.originFromEvent(this.#event).actorContext,
+      tenantId,
+    );
 
     transactionalEntityAccess.start(entity);
     try {
@@ -2930,6 +2991,8 @@ class ProcessManagerEventExecution {
     } catch (error) {
       transactionalEntityAccess.rollback(entity);
       throw error;
+    } finally {
+      releaseQuery();
     }
   }
 

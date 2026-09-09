@@ -12,12 +12,13 @@
  * the License.
  */
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { file_spine_options } from "@spine-event-engine/proto";
+import { ActorContextSchema, file_spine_options } from "@spine-event-engine/proto";
+import { EntityColumn, EntityQuery, GeneratedEntityColumns } from "@spine-event-engine/core";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import {
@@ -37,6 +38,7 @@ import {
   type RepositoryOptions,
 } from "../../src/index.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
+import { processManagerQueryAccess } from "../../src/entity/entity.js";
 
 function expectRepositoryIdentityError(
   error: unknown,
@@ -133,6 +135,15 @@ const ProcessManagerStateSchema = messageDesc(
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
+class QueryingProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  query() {
+    return this.select(ProcessManagerStateSchema, processManagerColumns);
+  }
+}
 class RuntimeCheckedAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class HandlerBackedNumberAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
   assignTask(command: AggregateState): void {
@@ -200,7 +211,42 @@ class PlainEntityClass {
   }
 }
 
+const processManagerColumns = EntityColumn.register(
+  ProcessManagerStateSchema,
+  GeneratedEntityColumns.define(ProcessManagerStateSchema, {
+    queue: { field: ProcessManagerStateSchema.field.queue, comparison: "ordering" },
+  }),
+);
+
 describe("repository identity", () => {
+  it("offers a Process Manager a typed read-only Entity query", () => {
+    const processManager = new QueryingProcessManager({
+      id: "process-1",
+      schema: ProcessManagerStateSchema,
+      state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
+      version: 1,
+      lifecycle: { archived: false, deleted: false },
+    });
+
+    const release = processManagerQueryAccess.bind(
+      processManager,
+      async () => Object.freeze([]),
+      create(ActorContextSchema),
+    );
+    const query = processManager
+      .query()
+      .byId("projection-1")
+      .where(EntityQuery.eq(processManagerColumns.queue, "waiting"));
+
+    expect(query).toHaveProperty("read");
+    expect(query).toHaveProperty("findById");
+    expect(query).toHaveProperty("all");
+    expect(query).not.toHaveProperty("update");
+    expect(query).not.toHaveProperty("stand");
+    expect(query).not.toHaveProperty("tenant");
+    release();
+  });
+
   it("rejects command substitutions on Aggregates", () => {
     expect(() =>
       HandlerMetadataValues.defineArity(

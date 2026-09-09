@@ -91,6 +91,29 @@ const scalarColumns = EntityColumn.register(
 );
 
 describe("EntityQuery", () => {
+  it("compiles the shared DSL to a storage-neutral execution plan", () => {
+    const plan = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
+      .byId("task-1")
+      .where(EntityQuery.eq(columns.title, "Awaiting"))
+      .mask("title")
+      .orderBy(columns.priority, "desc")
+      .limit(10)
+      .buildPlan();
+
+    expect(plan).toEqual({
+      predicate: {
+        kind: "all",
+        predicates: [
+          { kind: "ids", ids: ["task-1"] },
+          { kind: "comparison", column: "title", operator: "equal", value: "Awaiting" },
+        ],
+      },
+      mask: { paths: ["title"] },
+      order: [{ column: "priority", direction: "desc" }],
+      limit: 10,
+    });
+  });
+
   it("compiles IDs, nested predicates, masks, repeated ordering, and a limit", () => {
     const query = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
       .byId("task-1", "task-2")

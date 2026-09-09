@@ -102,6 +102,8 @@ export {
   EntityQueryBuilder,
   type EntityComparisonPredicate,
   type EntityGroup,
+  type EntityQueryPlan,
+  type EntityQueryPlanPredicate,
   type EntityPredicate,
 } from "./query/entity-query.js";
 

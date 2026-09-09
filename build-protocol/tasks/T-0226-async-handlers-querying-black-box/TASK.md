@@ -300,6 +300,13 @@ surface exposes no additional metadata.
   `/root/t0226_implementer_2`, the same existing role with explicit configured
   `gpt-5.6-terra` / medium reasoning, for Process Manager queries and the
   remaining approved work.
+- `2026-09-09 12:49 WEST`: Process Manager query RED/GREEN increments added a
+  protected `select()` surface and shared storage-neutral query plan. The
+  repository binds a cloned signal actor context and resolved tenant to each
+  freshly loaded Process Manager before command/event handler invocation, then
+  releases it in `finally`. Focused core/server typechecks and 37 focused tests
+  passed. Remaining behavior coverage must exercise repository dispatch,
+  lifecycle visibility, and concurrent tenant isolation before review.
 
 ## Decisions
 
@@ -340,7 +347,7 @@ surface exposes no additional metadata.
     rejected and invalid inner types bypassed existing schema diagnostics.
 - GREEN: combined focused analyzer and repository-routing run - 314 passing
   tests; affected proto-tools and server TypeScript builds passed; `git diff
-  --check` passed. A rejected handler promise is intentionally suppressed at
+--check` passed. A rejected handler promise is intentionally suppressed at
   command intake after rollback, as characterized by the runtime regression.
 
 ## Coverage Result
