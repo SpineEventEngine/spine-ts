@@ -179,6 +179,7 @@ export class BlackBox {
     server: RunningServer,
     client: ClientKernel,
     options: NormalizedBlackBoxOptions,
+    observation?: { readonly close: () => void },
   ) {
     this.#context = context;
     this.#server = server;
@@ -187,10 +188,12 @@ export class BlackBox {
     this.#zoneId = clone(ZoneIdSchema, options.zoneId);
     this.#timeoutMs = options.timeoutMs;
     this.#intervalMs = options.intervalMs;
-    this.#observation = observeProducedSignals(context, {
-      onCommand: (command) => this.#commands.push(clone(CommandSchema, command)),
-      onEvent: (event) => this.#events.push(clone(EventSchema, event)),
-    });
+    this.#observation =
+      observation ??
+      observeProducedSignals(context, {
+        onCommand: (command) => this.#commands.push(clone(CommandSchema, command)),
+        onEvent: (event) => this.#events.push(clone(EventSchema, event)),
+      });
     BlackBoxAccess.set(this, {
       assertOpen: () => {
         this.#assertOpen();
@@ -476,6 +479,7 @@ export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
       resources.server as RunningServer,
       resources.client as ClientKernel,
       BlackBoxOptionsValues.defaults(),
+      Object.freeze({ close: () => undefined }),
     );
     for (const subscription of resources.subscriptions ?? [])
       BlackBoxAccess.get(blackBox).track(subscription);
@@ -559,14 +563,16 @@ const BlackBoxLifecycle = Object.freeze({
     server: RunningServer,
     client: ClientKernel,
     options: NormalizedBlackBoxOptions,
+    observation?: { readonly close: () => void },
   ): BlackBox {
     const Constructor = BlackBox as unknown as new (
       context: BoundedContext,
       server: RunningServer,
       client: ClientKernel,
       options: NormalizedBlackBoxOptions,
+      observation?: { readonly close: () => void },
     ) => BlackBox;
-    return new Constructor(context, server, client, options);
+    return new Constructor(context, server, client, options, observation);
   },
 });
 
