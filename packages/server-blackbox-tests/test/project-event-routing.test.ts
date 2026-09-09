@@ -14,6 +14,7 @@
 
 import { create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import type { Any } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   CommandContextSchema,
@@ -300,6 +301,17 @@ function queryState<Schema extends GenMessage<Message>>(
   if (unpacked === undefined)
     throw new Error(`Query response does not contain ${schema.typeName}.`);
   return unpacked;
+}
+
+function producedMessage<Signal extends { readonly message?: Any | undefined }>(
+  signal: Signal | undefined,
+  name: string,
+): Any {
+  expect(signal, `${name} envelope is required.`).toBeDefined();
+  if (signal === undefined) throw new Error(`${name} envelope is required.`);
+  expect(signal.message, `${name} payload is required.`).toBeDefined();
+  if (signal.message === undefined) throw new Error(`${name} payload is required.`);
+  return signal.message;
 }
 function projectRepository(): Repository<typeof Project> {
   return new Repository({
@@ -626,13 +638,21 @@ describe("project workflow Event routing", () => {
         () => blackBox.assertEvents(),
         (events) => events.length === 2,
       );
-      expect(AnyMessages.unpack(producedEvents[0]?.message, ProjectCreatedSchema)).toMatchObject({
+      expect(
+        AnyMessages.unpack(
+          producedMessage(producedEvents[0], "ProjectCreated"),
+          ProjectCreatedSchema,
+        ),
+      ).toMatchObject({
         project,
         name: "roadmap",
       });
-      expect(AnyMessages.unpack(producedEvents[1]?.message, ProjectScheduledSchema)).toEqual(
-        create(ProjectScheduledSchema, { project, status: "scheduled" }),
-      );
+      expect(
+        AnyMessages.unpack(
+          producedMessage(producedEvents[1], "ProjectScheduled"),
+          ProjectScheduledSchema,
+        ),
+      ).toEqual(create(ProjectScheduledSchema, { project, status: "scheduled" }));
       const approved = await scope.post(
         ApproveProjectSchema,
         create(ApproveProjectSchema, { project, status: "approved" }),
@@ -642,12 +662,18 @@ describe("project workflow Event routing", () => {
         () => blackBox.assertCommands(),
         (commands) => commands.length === 2,
       );
-      expect(AnyMessages.unpack(producedCommands[0]?.message, ScheduleProjectSchema)).toEqual(
-        create(ScheduleProjectSchema, { project, status: "scheduled" }),
-      );
-      expect(AnyMessages.unpack(producedCommands[1]?.message, ScheduleProjectSchema)).toEqual(
-        create(ScheduleProjectSchema, { project, status: "approved" }),
-      );
+      expect(
+        AnyMessages.unpack(
+          producedMessage(producedCommands[0], "scheduled ScheduleProject"),
+          ScheduleProjectSchema,
+        ),
+      ).toEqual(create(ScheduleProjectSchema, { project, status: "scheduled" }));
+      expect(
+        AnyMessages.unpack(
+          producedMessage(producedCommands[1], "approved ScheduleProject"),
+          ScheduleProjectSchema,
+        ),
+      ).toEqual(create(ScheduleProjectSchema, { project, status: "approved" }));
       const results = await blackBox.eventually(
         () =>
           Promise.all([
