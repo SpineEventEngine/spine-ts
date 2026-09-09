@@ -479,7 +479,7 @@ export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
       resources.server as RunningServer,
       resources.client as ClientKernel,
       BlackBoxOptionsValues.defaults(),
-      Object.freeze({ close: () => undefined }),
+      resources.observation ?? Object.freeze({ close: () => undefined }),
     );
     for (const subscription of resources.subscriptions ?? [])
       BlackBoxAccess.get(blackBox).track(subscription);
@@ -596,6 +596,11 @@ export interface BlackBoxTestResources {
    * Lists subscriptions to close with the BlackBox.
    */
   readonly subscriptions?: readonly { cancel(): Promise<void> }[];
+
+  /**
+   * Stops produced-signal observation during BlackBox cleanup.
+   */
+  readonly observation?: { close(): void };
 }
 
 /**

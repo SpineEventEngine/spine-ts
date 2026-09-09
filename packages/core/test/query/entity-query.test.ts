@@ -326,7 +326,7 @@ describe("EntityQuery", () => {
     expect(() =>
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
         .where(wide as never)
-        .build(),
+        .buildPlan(),
     ).toThrow("maximum node count 10000");
   });
 
