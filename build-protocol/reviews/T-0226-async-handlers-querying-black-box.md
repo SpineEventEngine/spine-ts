@@ -179,6 +179,32 @@ focused tests plus TSDoc/API inventory are clean. Review is converged: all P1
 and accepted P2 findings are resolved, security is clean, and no third complete
 wave was run.
 
+## Human-Requested Independent Review Reset
+
+The human requested two additional consecutive review rounds with no reviewer
+memory. Each assignment uses `fork_turns: none` and receives only repository
+paths, the fixed comparison `origin/master...HEAD`, and the task contract. Every
+confirmed finding is fixed and verified after round one before round two starts.
+
+Estimated remaining effort: 3-6 active agent-hours, plus approximately 20-45
+minutes of elapsed verification time per correction cycle. This includes five
+specialist lanes per round, aggregation, all confirmed fixes, focused and
+release-proportionate verification, pushes, and final records.
+
+Round one assignments at endpoint `f09b24eee`:
+
+| Concern                        | Existing role                      | Explicit profile        | Memory |
+| ------------------------------ | ---------------------------------- | ----------------------- | ------ |
+| Style and maintainability      | `style_maintainability_reviewer`   | `gpt-5.6-terra` / high  | None   |
+| TypeScript and public API      | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` / high  | None   |
+| Performance and reliability    | `performance_reliability_reviewer` | `gpt-5.6-terra` / high  | None   |
+| Reader documentation           | `documentation_reviewer`           | `gpt-5.6-luna` / medium | None   |
+| Security and tenant boundaries | `security_reviewer`                | `gpt-5.6-terra` / high  | None   |
+
+All reviewers are read-only senior specialists and may not spawn subagents.
+Desktop exposes the immutable configured role/profile and explicit dispatch
+fields, but no additional live self-introspection metadata.
+
 ## Final P2 correction response
 
 - The final implementer used the explicitly dispatched existing `implementer`
