@@ -8,9 +8,9 @@ Task log path: `build-protocol/tasks/T-0226-async-handlers-querying-black-box/TA
 Branch: `feature/async-handlers-querying-black-box`
 Worktree: `.worktrees/t-0226`
 Authoring sub-agents: `/root/t0226_implementer`,
-`/root/t0226_implementer_2`, and `/root/t0226_implementer_3` in sequential
-non-overlapping ownership; all use the existing `implementer` role configured
-`gpt-5.6-terra` / medium reasoning
+`/root/t0226_implementer_2`, `/root/t0226_implementer_3`, and the pending
+review-correction continuation in sequential non-overlapping ownership; all use
+the existing `implementer` role configured `gpt-5.6-terra` / medium reasoning
 Reviewer sub-agents: `/root/t0226_style_review`, `/root/t0226_api_review`,
 `/root/t0226_reliability_review`, `/root/t0226_docs_review`, and
 `/root/t0226_security_review`
@@ -523,6 +523,10 @@ generic type contracts are unchanged.
   beginner-documentation P1 omissions, and four related P2 export, test-layout,
   and reference corrections. Details and role dispositions are recorded in
   `build-protocol/reviews/T-0226-async-handlers-querying-black-box.md`.
+- The original correction owner pushed the BlackBox lifecycle-test fix at
+  `45b57685f`, then exhausted its execution window with a clean worktree. A
+  fresh existing implementer receives the remaining frozen batch with the same
+  explicit `gpt-5.6-terra` / medium profile and no overlapping writer.
 
 ## Integration Result
 

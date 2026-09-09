@@ -71,3 +71,9 @@ All findings are task-scope and accepted. No P0 was reported. The duplicated
 typed-query and shadowed-Promise findings are fixed once each. The existing
 implementation owner receives this whole batch; re-review is limited to
 substantively affected concerns after focused mechanical evidence is clean.
+
+The first correction checkpoint `45b57685f` closes the BlackBox lifecycle-test
+P1 with a testing-only no-op observation handle and 3/3 focused tests. The
+owner's execution window then ended cleanly. A fresh existing `implementer`
+continues the remaining frozen batch with explicit `gpt-5.6-terra` / medium
+profile, no subagents, and no overlapping production writer.
