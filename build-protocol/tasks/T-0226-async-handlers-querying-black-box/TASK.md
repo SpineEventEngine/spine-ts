@@ -366,6 +366,10 @@ surface exposes no additional metadata.
   for the delivered test rejection Event and its `Any` payload before unpacking.
   The focused BlackBox proof now makes those contract checks explicit without
   weakening the domain rejection assertion.
+- `2026-09-09 15:00 WEST`: Post-correction TSDoc cleanup refreshed exported
+  core query utility summaries, the generated-code entry-point block, and the
+  Process Manager ordering rest argument. Documentation gates and affected
+  validation pass without runtime changes.
 
 ## Decisions
 

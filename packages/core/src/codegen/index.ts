@@ -12,7 +12,9 @@
  * the License.
  */
 
-/** Generated-code-only Entity column declaration helpers. */
+/**
+ * Generated-code-only Entity column declaration helpers.
+ */
 export { GeneratedEntityColumns } from "../entity/entity-column.js";
 export type {
   EntityColumnDefinition,

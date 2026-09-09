@@ -64,25 +64,45 @@ import {
   type EntityColumnValue,
 } from "../entity/entity-column.js";
 
+/**
+ * Registered Entity columns available to a query for one state schema.
+ */
 export type EntityColumnCollection<Schema extends GenMessage<Message>> = Readonly<
   Record<string, EntityColumn<Schema>>
 >;
+
+/**
+ * Extracts the column type used by a query predicate.
+ */
 export type PredicateColumn<Predicate> =
   Predicate extends EntityPredicate<infer Column> ? Column : never;
+
+/**
+ * Extracts the state schema that declares an Entity column.
+ */
 export type ColumnSchema<Column> = Column extends EntityColumn<infer Schema> ? Schema : never;
+
+/**
+ * Extracts the generated field name declared by an Entity column.
+ */
 export type ColumnName<Column> =
   Column extends EntityColumn<GenMessage<Message>, infer Name> ? Name : never;
 
 const maximumPredicateDepth = 64;
 const maximumPredicateNodes = 10_000;
 
+/**
+ * A generated state-field property name that can be returned by a query mask.
+ */
 export type EntityQueryMaskPath<Schema extends GenMessage<Message>> = Exclude<
   keyof MessageShape<Schema>,
   "$typeName" | "$unknown"
 > &
   string;
 
-/** A predicate whose columns belong to one query schema and registered column collection. */
+/**
+ * A predicate whose columns belong to one query schema and registered column collection.
+ */
 export type EntityQueryPredicateFor<
   Schema extends GenMessage<Message>,
   Columns extends EntityColumnCollection<Schema>,
