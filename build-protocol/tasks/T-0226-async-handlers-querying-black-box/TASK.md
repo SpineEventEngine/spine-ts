@@ -458,13 +458,13 @@ packages/server/test/repository/repository.test.ts` - the new full-dispatch
 
 ## Open Risks And Follow-Up Routing
 
-| Risk/Follow-Up                                              | Owner                | Disposition           | Next Review Point              |
-| ----------------------------------------------------------- | -------------------- | --------------------- | ------------------------------ |
-| Query types could create `server -> client-node` dependency | Implementation owner | Resolved: shared core contract; dependency gate passes | Architecture and API review |
-| Query capability could escape its active tenant/lifecycle   | Implementation owner | Resolved: bound access and lifecycle tests pass | Reliability/security review |
-| Signal capture could include inputs or uncommitted output   | Implementation owner | Resolved: committed-output and rollback tests pass | Correctness/reliability review |
-| `all()` may be costly on large projections                  | Documentation        | Accepted with documented 1,000-result bound and warning | Documentation review |
-| HTTP side effects cannot roll back                          | Documentation        | Accepted and documented limitation | Documentation review |
+| Risk/Follow-Up                                              | Owner                | Disposition                                             | Next Review Point              |
+| ----------------------------------------------------------- | -------------------- | ------------------------------------------------------- | ------------------------------ |
+| Query types could create `server -> client-node` dependency | Implementation owner | Resolved: shared core contract; dependency gate passes  | Architecture and API review    |
+| Query capability could escape its active tenant/lifecycle   | Implementation owner | Resolved: bound access and lifecycle tests pass         | Reliability/security review    |
+| Signal capture could include inputs or uncommitted output   | Implementation owner | Resolved: committed-output and rollback tests pass      | Correctness/reliability review |
+| `all()` may be costly on large projections                  | Documentation        | Accepted with documented 1,000-result bound and warning | Documentation review           |
+| HTTP side effects cannot roll back                          | Documentation        | Accepted and documented limitation                      | Documentation review           |
 
 ## Slice 2 Closure
 
