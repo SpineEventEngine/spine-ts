@@ -20,7 +20,7 @@ import {
   type EntityComparisonPredicate as CoreEntityComparisonPredicate,
   type EntityGroup as CoreEntityGroup,
   type EntityPredicate as CoreEntityPredicate,
-  type EntityQueryBuilder as CoreEntityQueryBuilderType,
+  type EntityQueryBuilder as CoreQueryBuilderType,
 } from "@spine-event-engine/core";
 
 import type { EntityColumn } from "../entity/entity-column.js";
@@ -57,7 +57,7 @@ export type EntityPredicate<Column extends EntityColumn = EntityColumn> =
 export type EntityQueryBuilder<
   Schema extends GenMessage<Message>,
   Columns extends Readonly<Record<string, EntityColumn<Schema>>>,
-> = CoreEntityQueryBuilderType<Schema, Columns>;
+> = CoreQueryBuilderType<Schema, Columns>;
 
 /**
  * Exposes the canonical Entity query builder through this compatibility package.

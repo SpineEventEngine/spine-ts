@@ -500,6 +500,11 @@ runtime object identity while core remains the only implementation. Built
 package tests pin the three runtime identities and the complete declaration
 inventory; TypeDoc now includes every expected compatibility export.
 
+The final cleanup correction shortens three private core-import aliases in the
+client-node forwarding modules to satisfy the four-component semantic-name
+limit. Exported compatibility names, documentation, runtime identities, and
+generic type contracts are unchanged.
+
 ## Review Waves And Dispositions
 
 - One read-only architecture/requirements pass dispatched to the existing

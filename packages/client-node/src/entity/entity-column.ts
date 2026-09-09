@@ -19,10 +19,10 @@ import {
   GeneratedEntityColumns,
   type EntityColumn as CoreEntityColumnType,
   type EntityColumnDefinition as CoreEntityColumnDefinition,
-  type EntityColumnDefinitionEntry as CoreEntityColumnDefinitionEntry,
+  type EntityColumnDefinitionEntry as CoreColumnDefinitionEntry,
   type EntityColumnOperator as CoreEntityColumnOperator,
   type EntityColumnValue as CoreEntityColumnValue,
-  type EntityColumnValueKind as CoreEntityColumnValueKind,
+  type EntityColumnValueKind as CoreColumnValueKind,
   type EntityColumns as CoreEntityColumns,
   type EntityComparison as CoreEntityComparison,
   type EntityEqualityOperator as CoreEntityEqualityOperator,
@@ -47,7 +47,7 @@ export type EntityComparison = CoreEntityComparison;
 /**
  * Runtime value category derived from a column's Protobuf field descriptor.
  */
-export type EntityColumnValueKind = CoreEntityColumnValueKind;
+export type EntityColumnValueKind = CoreColumnValueKind;
 
 /**
  * Represents one generated column declaration paired with its descriptor.
@@ -55,7 +55,7 @@ export type EntityColumnValueKind = CoreEntityColumnValueKind;
  * @typeParam Comparison Comparison family supported by the column.
  */
 export type EntityColumnDefinitionEntry<Comparison extends EntityComparison = EntityComparison> =
-  CoreEntityColumnDefinitionEntry<Comparison>;
+  CoreColumnDefinitionEntry<Comparison>;
 
 /**
  * Describes descriptor-backed column metadata emitted next to an Entity schema.
