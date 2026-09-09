@@ -1,6 +1,6 @@
 # T-0225: Command-to-Command Delivery
 
-Status: Release verification pending
+Status: Ready for human review
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`
@@ -202,7 +202,9 @@ The exact managed reproduction and both affected integration files pass. The
 natural release retry then passed 4,616 tests and found one domain-invalid
 positive discovery fixture that uses framework Command/Event envelopes as
 application signals. Its domain-correct replacement and cheap preflight are
-complete; release verification is pending.
+complete. The authoritative release run at `e334359aa` passed every gate, all
+289 test files, and all 4,617 tests. Coverage passed at 93.30% statements,
+90.06% branches, 92.93% functions, and 94.47% lines.
 
 ## Historical pre-standalone disposition
 

@@ -1137,3 +1137,16 @@ Focused V8 coverage passed the 363-test execution and covered
 `signal-publisher.ts` at 92.1% lines. Its process exits nonzero only because
 the repository's global 90% threshold is evaluated against all workspaces for
 this narrowed test selection; no source-level test failed.
+
+## Final release verification after standalone correction
+
+The authoritative `pnpm verify:release` run completed naturally at clean
+behavior HEAD `e334359aa` with exit code 0. Every build, type, lint, cleanup,
+TSDoc, copyright, format, documentation/API, TypeDoc, Proto, generated-output,
+logging, dependency, package, and release-readiness gate passed. All 289 test
+files and 4,617 tests passed. Coverage passed at 93.30% statements
+(22,546/24,165), 90.06% branches (13,397/14,875), 92.93% functions
+(5,541/5,962), and 94.47% lines (20,896/22,119). No managed child or test
+process remained. Version-only commit `9aece05d4` sets all 27 manifests to the
+unused `2.0.0-snapshot.9` version. This record-only commit advances HEAD without
+changing verified behavior.
