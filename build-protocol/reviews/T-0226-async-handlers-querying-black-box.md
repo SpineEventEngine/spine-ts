@@ -141,3 +141,10 @@ correction batch:
 
 This is the second complete wave. After the batch, only the remaining P1's API
 concern is re-reviewed; deterministic checks close the accepted P2 findings.
+
+The round-two owner pushed the `orderBy()` P1 fix, direct `buildPlan()` node
+test, observer-close proof, fixture deduplication, and runnable README snippets.
+Its execution window ended while validating an uncommitted TypeDoc entrypoint
+and server-reference example draft. A fresh existing `implementer` with explicit
+`gpt-5.6-terra` / medium profile receives the intact draft and the remaining
+Process Manager guard-path tests; it may not spawn subagents.

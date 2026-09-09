@@ -8,9 +8,10 @@ Task log path: `build-protocol/tasks/T-0226-async-handlers-querying-black-box/TA
 Branch: `feature/async-handlers-querying-black-box`
 Worktree: `.worktrees/t-0226`
 Authoring sub-agents: `/root/t0226_implementer`,
-`/root/t0226_implementer_2`, `/root/t0226_implementer_3`, and the pending
-review-correction continuation in sequential non-overlapping ownership; all use
-the existing `implementer` role configured `gpt-5.6-terra` / medium reasoning
+`/root/t0226_implementer_2`, `/root/t0226_implementer_3`,
+`/root/t0226_implementer_4`, and the pending final P2 continuation in sequential
+non-overlapping ownership; all use the existing `implementer` role configured
+`gpt-5.6-terra` / medium reasoning
 Reviewer sub-agents: `/root/t0226_style_review`, `/root/t0226_api_review`,
 `/root/t0226_reliability_review`, `/root/t0226_docs_review`, and
 `/root/t0226_security_review`; targeted round two begins with
@@ -572,6 +573,10 @@ generic type contracts are unchanged.
   canonical generic orderable-column constraint. Six accepted P2
   proof/maintenance/documentation items join the final correction batch. No
   third complete wave will run; the P1 receives one focused API re-review.
+- The round-two owner closed the P1 and four P2 increments, then left an
+  uncommitted TypeDoc/server-reference draft when its execution window ended.
+  A fresh implementer receives that exact tree plus the remaining Process
+  Manager guard-path tests, with no overlapping writer.
 
 ## Integration Result
 
