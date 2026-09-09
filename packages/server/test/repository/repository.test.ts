@@ -237,7 +237,11 @@ describe("repository identity", () => {
     const query = processManager
       .query()
       .byId("projection-1")
-      .where(EntityQuery.eq(processManagerColumns.queue, "waiting"));
+      .where(EntityQuery.eq(processManagerColumns.queue, "waiting"))
+      .orderBy(processManagerColumns.queue);
+
+    // @ts-expect-error equality-only lifecycle columns are not orderable.
+    processManager.query().orderBy(processManagerColumns.archived);
 
     expect(query).toHaveProperty("read");
     expect(query).toHaveProperty("findById");

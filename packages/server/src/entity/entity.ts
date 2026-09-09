@@ -17,6 +17,7 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   EntityQuery,
   type EntityColumn,
+  type EntityColumnOperator,
   type EntityQueryMaskPath,
   type EntityQueryPredicateFor,
   type EntityPredicate,
@@ -180,8 +181,11 @@ export class ProcessManagerQuery<
    * @param args The registered orderable column followed by an optional sort direction.
    * @returns This query for fluent configuration.
    */
-  orderBy(...args: Parameters<EntityQueryBuilder<Schema, Columns>["orderBy"]>): this {
-    this.#builder.orderBy(...args);
+  orderBy<Column extends EntityColumn<Schema>>(
+    column: "greaterThan" extends EntityColumnOperator<Column> ? Column : never,
+    direction: "asc" | "desc" = "asc",
+  ): this {
+    this.#builder.orderBy(column, direction);
     return this;
   }
 
