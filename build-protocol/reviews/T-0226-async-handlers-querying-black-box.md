@@ -107,14 +107,37 @@ final targeted review wave rechecks every substantively affected concern.
 
 Frozen implementation: `31df88c1a`
 
-| Concern                 | Reviewer                     | Explicit profile        | Status  |
-| ----------------------- | ---------------------------- | ----------------------- | ------- |
-| Style/maintainability   | `/root/t0226_style_r2`       | `gpt-5.6-terra` / high  | Active  |
-| TypeScript/API docs     | `/root/t0226_api_r2`         | `gpt-5.6-terra` / high  | Active  |
-| Performance/reliability | `/root/t0226_reliability_r2` | `gpt-5.6-terra` / high  | Active  |
-| Reader documentation    | Pending capacity             | `gpt-5.6-luna` / medium | Pending |
-| Security                | Pending capacity             | `gpt-5.6-terra` / high  | Pending |
+| Concern                 | Reviewer                     | Explicit profile        | Status   |
+| ----------------------- | ---------------------------- | ----------------------- | -------- |
+| Style/maintainability   | `/root/t0226_style_r2`       | `gpt-5.6-terra` / high  | Complete |
+| TypeScript/API docs     | `/root/t0226_api_r2`         | `gpt-5.6-terra` / high  | Complete |
+| Performance/reliability | `/root/t0226_reliability_r2` | `gpt-5.6-terra` / high  | Complete |
+| Reader documentation    | `/root/t0226_docs_r2`        | `gpt-5.6-luna` / medium | Complete |
+| Security                | `/root/t0226_security_r2`    | `gpt-5.6-terra` / high  | Complete |
 
 All round-two reviewers are read-only, cannot spawn subagents, and recheck only
 their accepted findings plus P0-P2 regressions introduced by the corrections.
 The explicit role profiles are the available immutable runtime metadata.
+
+Round two reports no P0. Security is clean; Promise provenance, rollback
+capture, lifecycle implementation, query-plan implementation, test ownership,
+generator containment, and the original documentation content findings close.
+One P1 and the accepted P2 evidence/usability findings form the final targeted
+correction batch:
+
+- P1: replace `Parameters<EntityQueryBuilder["orderBy"]>` with an explicit
+  generic forwarding signature so equality-only columns remain compile-time
+  errors while valid orderable columns infer correctly.
+- P2: exercise the node-count limit through `buildPlan()` and add Process
+  Manager-path cycle, depth, and node-count rejection proofs before Stand read.
+- P2: make the lifecycle seam expose a close spy and prove the real observation
+  handle closes once even when other cleanup fails.
+- P2: remove the duplicated 285-line client-node fixture; use a small
+  compatibility-only fixture or one canonical source.
+- P2: make the server/testing README examples standalone snippet-checkable and
+  add the requested typed code example to the server reference.
+- P2: add TypeDoc/API-inventory coverage for the new `core/codegen` subpath and
+  the preserved `client-node/codegen` compatibility subpath.
+
+This is the second complete wave. After the batch, only the remaining P1's API
+concern is re-reviewed; deterministic checks close the accepted P2 findings.

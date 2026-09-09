@@ -568,6 +568,10 @@ generic type contracts are unchanged.
   affected-scope preflight passes all generated/strict builds, deterministic
   policy/docs/Proto/readiness gates, and 442 focused tests. The second and final
   targeted review wave is ready.
+- Targeted round two has no P0 and one open P1: `orderBy()` must preserve the
+  canonical generic orderable-column constraint. Six accepted P2
+  proof/maintenance/documentation items join the final correction batch. No
+  third complete wave will run; the P1 receives one focused API re-review.
 
 ## Integration Result
 
