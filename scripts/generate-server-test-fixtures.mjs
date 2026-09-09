@@ -50,6 +50,22 @@ const fixtureDefinitions = [
     key: "visibility",
     protoPath: "packages/server/test-fixtures/proto/entity-metadata/visibility.proto",
   },
+  {
+    key: "handlerRegistryCommands",
+    protoPath: "packages/server/test-fixtures/proto/handler-registry/commands.proto",
+  },
+  {
+    key: "handlerRegistryEvents",
+    protoPath: "packages/server/test-fixtures/proto/handler-registry/events.proto",
+  },
+  {
+    key: "handlerRegistryRejections",
+    protoPath: "packages/server/test-fixtures/proto/handler-registry/rejections.proto",
+  },
+  {
+    key: "handlerRegistryStates",
+    protoPath: "packages/server/test-fixtures/proto/handler-registry/states.proto",
+  },
 ];
 const checkMode = process.argv.includes("--check");
 

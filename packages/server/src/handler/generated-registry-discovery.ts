@@ -24,7 +24,6 @@ import { HandlerMetadataRegistry } from "./handler-metadata.js";
 const defaultExportName = "generatedHandlerRegistry";
 const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
-const registryVersion = 3;
 
 /**
  * Stable error code for generated registry discovery failures.
@@ -281,10 +280,9 @@ const RegistryModules = Object.freeze({
       return false;
     }
 
-    const version = (value as { readonly version?: unknown }).version;
-    const entities = (value as { readonly entities?: unknown }).entities;
+    const receivers = (value as { readonly receivers?: unknown }).receivers;
 
-    return version === registryVersion && Array.isArray(entities);
+    return Array.isArray(receivers);
   },
 
   normalize(moduleRef: string | URL): string {

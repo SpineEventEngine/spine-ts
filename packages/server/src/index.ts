@@ -25,8 +25,6 @@ export {
   type ReadCatchUpResult,
   type EventEndpoint,
   type GeneratedRepositoryOptions,
-  type DispatchErrorSnapshot,
-  type StoredEventDispatchFailure,
   type TenantMode,
 } from "./context/bounded-context.js";
 export { ThirdPartyContext } from "./integration/third-party-context.js";
@@ -281,6 +279,13 @@ export {
 export type { External } from "./handler/external.js";
 
 export {
+  AbstractAssignee,
+  AbstractCommander,
+  AbstractEventReactor,
+  AbstractEventSubscriber,
+} from "./handler/standalone.js";
+
+export {
   GeneratedRegistryDiscovery,
   GeneratedRegistryDiscoveryError,
   type GeneratedRegistryDiscoveryOptions,
@@ -296,6 +301,7 @@ export {
 export {
   type BaseHandlerMetadata,
   type CommandAssignmentHandlerMetadata,
+  type CommandSubstitutionHandlerMetadata,
   type CommandReactionHandlerMetadata,
   type EntityClass,
   type EntityHandlersMetadata,

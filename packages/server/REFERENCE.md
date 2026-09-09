@@ -21,10 +21,24 @@ the server root API and does not independently create delivery work.
 
 Generated model modules import only their registry data types from
 `@spine-event-engine/server/spi/handler-registry`. The stable contract is the
-version-3 `GeneratedHandlerRegistry`, its entity groups, handler records, kinds,
-arity, and optional `where` data. The subpath has no runtime values. Server-side
-ingestion, validation errors, and their error codes are implementation details;
-generated code must not depend on them.
+unversioned `GeneratedHandlerRegistry` receiver collection, receiver records,
+handler records, kinds, arity, and optional `where` data. The subpath has no
+runtime values. Server-side ingestion, validation errors, and their error codes
+are implementation details; generated code must not depend on them. Retired
+versioned registries are rejected and must be regenerated.
+
+## Standalone handlers
+
+Generated standalone handlers extend `AbstractAssignee`, `AbstractCommander`,
+`AbstractEventReactor`, or `AbstractEventSubscriber`. Register instances with
+`addAssignee()`, `addCommandDispatcher()`, or `addEventDispatcher()` as their
+role requires, then use `buildAsync()` to load generated receiver metadata and
+match the exact constructor. Assignees consume Commands and produce Events;
+commanders consume Commands, Events, or rejections and produce Commands;
+reactors consume Events or rejections and may produce Events; subscribers
+consume Events, rejections, or Entity states and produce no signal. State
+subscribers use the System Event Bus. Produced signals are published in-process
+on a best-effort basis; this is not an exactly-once contract.
 
 ## Integration broker and event origin
 
@@ -172,6 +186,122 @@ there is no exact route. This is TypeScript routing; it does not consume
 `(is).java_type` or `(every_is).java_type`, and it has no decorator-based
 route registration API.
 
+A command-input `@Command` method is a command substitution receptor: it is
+the one effective receptor for that Command type (instead of an `@Assign`),
+commits its Entity state before its one-or-more returned Commands are detached
+for in-process produced-command enqueue, and receives an optional `CommandContext`.
+Only Process Manager repositories support `@Command` handlers. Aggregate and
+Projection repositories reject command-input substitutions and event- or
+rejection-input command reactions during generated metadata ingestion and
+repository construction.
+Event- and rejection-input `@Command` methods remain Event- or
+rejection-to-command reactions on Event Bus.
+Produced commands retain the source actor, tenant, origin, and causal lineage.
+The enqueue is post-commit best effort, not an atomic outbox or exactly-once
+delivery: a process crash between commit and enqueue can lose a child. Accepted
+produced commands drain during context close. A contained child failure is diagnosed,
+but does not retroactively fail an already accepted source command or durably
+retry that child.
+
+For a generated Process Manager, a command-input handler uses distinct domain
+Command input and output types, and the generated registry supplies those
+schemas. This self-contained example explicitly ingests the unversioned data that an
+application build normally emits, then assembles a repository from it; it does
+not claim that its fixture discovers a registry artifact automatically:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/project-event-routing.test.ts -->
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { SignalEnvelopes } from "@spine-event-engine/core";
+import {
+  CommandContextSchema,
+  CommandIdSchema,
+  type CommandContext,
+} from "@spine-event-engine/proto";
+import {
+  BoundedContext,
+  Command,
+  type EntityHandlersMetadata,
+  HandlerRegistryIngestor,
+  ProcessManager,
+  Repository,
+} from "@spine-event-engine/server";
+import type { GeneratedHandlerRegistry } from "@spine-event-engine/server/spi/handler-registry";
+
+import {
+  ApproveProjectSchema,
+  ScheduleProjectSchema,
+  type ApproveProject,
+  type ScheduleProject,
+} from "../generated/spine/server/testing/project_commands_pb.js";
+import {
+  CoordinationStateSchema,
+  OrganizationIdSchema,
+  ProjectIdSchema,
+  type ProjectId,
+} from "../generated/spine/server/testing/project_workflow_pb.js";
+
+class ApprovalCoordinator extends ProcessManager<
+  ProjectId,
+  typeof CoordinationStateSchema,
+  number
+> {
+  @Command
+  approve(command: ApproveProject, context: CommandContext): ScheduleProject {
+    this.update((draft) => Object.assign(draft, { id: this.id, projectName: command.status }));
+    return create(ScheduleProjectSchema, { project: command.project, status: command.status });
+  }
+}
+
+const project = create(ProjectIdSchema, {
+  organization: create(OrganizationIdSchema, { code: "org-a" }),
+  number: 1,
+});
+const registry: GeneratedHandlerRegistry = {
+  receivers: [
+    {
+      receiverKind: "entity",
+      receiverType: ApprovalCoordinator,
+      stateSchema: CoordinationStateSchema,
+      handlers: [
+        {
+          kind: "command-substitution",
+          methodName: "approve",
+          signalSchema: ApproveProjectSchema,
+          emittedSchemas: [ScheduleProjectSchema],
+          parameterCount: 2,
+          origin: "domestic",
+        },
+      ],
+    },
+  ],
+};
+const [handlers] = new HandlerRegistryIngestor().ingest(registry);
+if (handlers === undefined) throw new Error("Generated Process Manager metadata is missing.");
+const repository = new Repository({
+  entityType: ApprovalCoordinator,
+  schema: CoordinationStateSchema,
+  handlers: handlers as EntityHandlersMetadata<ApprovalCoordinator, typeof CoordinationStateSchema>,
+});
+const context = BoundedContext.singleTenant("Projects").add(repository).build();
+await context.commandBus().post(
+  SignalEnvelopes.command({
+    id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
+    context: create(CommandContextSchema),
+    schema: ApproveProjectSchema,
+    message: create(ApproveProjectSchema, { project, status: "approved" }),
+  }),
+);
+```
+
+The generated record declares `ApproveProjectSchema` as the input and
+`ScheduleProjectSchema` as the emitted Command schema; registry ingestion, not
+manual decorator materialization, constructs the output-bearing metadata.
+Application builds emit the record to
+`generated/handler/generated-handler-registry.js`; those applications use
+`buildAsync()` with their compiled package root.
+
 One `@Where({ eventField, equals })` equality filter may narrow an event- or
 rejection-consuming `@Subscribe`, `@React`, or `@Command` handler after type
 routing. `eventField` and `equals` are typed string literals; invalid or
@@ -193,6 +323,10 @@ handler registry for classes registered with `add(EntityClass)`;
 `buildAsync()` performs that discovery and assembly. `build()` remains for
 explicit `Repository` registration. A built context contains `CommandBus`,
 `EventBus`, `Stand`, repositories, and its storage lifecycle.
+
+Generated writer output is an unversioned receiver collection and records
+command substitutions explicitly. The ingestor rejects retired versioned
+registry shapes with an instruction to regenerate.
 
 ### Stand subscription registry
 

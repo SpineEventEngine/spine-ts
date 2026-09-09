@@ -26,4 +26,6 @@ export type {
   GeneratedHandlerRecord,
   GeneratedHandlerRecordInput,
   GeneratedHandlerRegistry,
+  GeneratedReceiver,
+  GeneratedStandaloneHandlerGroup,
 } from "../handler/generated-handler-registry.js";

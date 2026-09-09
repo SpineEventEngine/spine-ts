@@ -17,8 +17,8 @@ import { closeSync, constants, lstatSync, mkdirSync, openSync, writeFileSync } f
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type {
-  BuildEntityHandlers,
   BuildHandlerAnalysis,
+  BuildReceiverHandlers,
   SchemaReference,
 } from "./build-time-handler-analyzer.js";
 
@@ -81,6 +81,7 @@ interface ImportRef {
   readonly importedName: string;
   readonly localName: string;
   readonly moduleSpecifier: string;
+  readonly defaultExport?: boolean;
 }
 
 interface RenderRefs {
@@ -135,7 +136,7 @@ export interface RegistryWriteOptions extends RegistryRenderOptions {
 }
 
 /**
- * Build-time writer for version-3 generated handler registry source.
+ * Build-time writer for unversioned generated handler registry source.
  */
 export class GeneratedRegistryWriter {
   // prettier-ignore
@@ -143,7 +144,7 @@ export class GeneratedRegistryWriter {
   /**
    * Renders generated registry source without writing to disk.
    *
-   * @param analysis Analyzed entity handlers to render.
+   * @param analysis Analyzed receiver handlers to render.
    * @param options Caller-owned output and registry naming options.
    * @returns Deterministic generated TypeScript source.
    */
@@ -151,14 +152,15 @@ export class GeneratedRegistryWriter {
     const outputFile = resolve(options.outputFile);
     const registryName = options.registryName ?? defaultRegistryConst;
     const registryModule = options.registryModuleSpecifier ?? defaultRegistryModule;
-    const refs = RegistrySource.buildRefs(analysis.entities, outputFile);
+    const receivers = analysis.receivers;
+    const refs = RegistrySource.buildRefs(receivers, outputFile);
 
     RegistrySource.assertRegistryName(registryName, RegistrySource.importNames(refs));
     const lines = [
       `import type { ${registryTypeName} } from ${RegistrySource.stringLiteral(registryModule)};`,
       ...refs.imports,
       "",
-      ...RegistrySource.renderRegistry(analysis.entities, outputFile, registryName, refs),
+      ...RegistrySource.renderRegistry(receivers, outputFile, registryName, refs),
       "",
     ];
 
@@ -168,7 +170,7 @@ export class GeneratedRegistryWriter {
   /**
    * Validates and writes generated registry source only when explicitly invoked.
    *
-   * @param analysis Analyzed entity handlers to render and validate.
+   * @param analysis Analyzed receiver handlers to render and validate.
    * @param options Guarded output location and registry naming options.
    * @returns Generated TypeScript source written to the output file.
    */
@@ -199,7 +201,7 @@ const RegistrySource = Object.freeze({
   importNames(refs: RenderRefs): ReadonlySet<string> {
     return new Set([registryTypeName, ...refs.localNames]);
   },
-  buildRefs(entities: readonly BuildEntityHandlers[], outputFile: string): RenderRefs {
+  buildRefs(receivers: readonly BuildReceiverHandlers[], outputFile: string): RenderRefs {
     const entityRefs = new Map<string, string>();
     const schemaRefs = new Map<string, string>();
     const entityRaw = new Map<string, ImportRef>();
@@ -207,17 +209,18 @@ const RegistrySource = Object.freeze({
     const used = new Set<string>();
     const entityImports: ImportRef[] = [];
 
-    for (const entity of entities) {
-      const moduleSpecifier = RegistrySource.entityModule(outputFile, entity.sourceFile);
-      const key = RegistrySource.entityKey(moduleSpecifier, entity.className);
+    for (const receiver of receivers) {
+      const moduleSpecifier = RegistrySource.entityModule(outputFile, receiver.sourceFile);
+      const key = RegistrySource.entityKey(moduleSpecifier, receiver.className);
       const existing = entityRaw.get(key);
       const ref =
         existing ??
         RegistrySource.bindRef(
           {
-            importedName: entity.className,
+            importedName: receiver.className,
             localName: "",
             moduleSpecifier,
+            ...(receiver.defaultExport === true ? { defaultExport: true } : {}),
           },
           used,
         );
@@ -231,12 +234,24 @@ const RegistrySource = Object.freeze({
         RegistrySource.entityKey(ref.moduleSpecifier, ref.importedName),
         ref.localName,
       );
-      RegistrySource.addSchemaRef(schemaRaw, outputFile, entity.sourceFile, entity.stateSchema);
+      if (receiver.receiverKind === "entity") {
+        RegistrySource.addSchemaRef(
+          schemaRaw,
+          outputFile,
+          receiver.sourceFile,
+          receiver.stateSchema,
+        );
+      }
 
-      for (const handler of entity.handlers) {
-        RegistrySource.addSchemaRef(schemaRaw, outputFile, entity.sourceFile, handler.signalSchema);
+      for (const handler of receiver.handlers) {
+        RegistrySource.addSchemaRef(
+          schemaRaw,
+          outputFile,
+          receiver.sourceFile,
+          handler.signalSchema,
+        );
         handler.emittedSchemas.forEach((schema) => {
-          RegistrySource.addSchemaRef(schemaRaw, outputFile, entity.sourceFile, schema);
+          RegistrySource.addSchemaRef(schemaRaw, outputFile, receiver.sourceFile, schema);
         });
       }
     }
@@ -261,51 +276,47 @@ const RegistrySource = Object.freeze({
     };
   },
   renderRegistry(
-    entities: readonly BuildEntityHandlers[],
+    receivers: readonly BuildReceiverHandlers[],
     outputFile: string,
     registryName: string,
     refs: RenderRefs,
   ): readonly string[] {
-    const lines = [
-      `export const ${registryName}: GeneratedHandlerRegistry = {`,
-      "  version: 3,",
-      "  entities: [",
-    ];
+    const lines = [`export const ${registryName}: GeneratedHandlerRegistry = {`, "  receivers: ["];
 
-    entities.forEach((entity) => {
-      lines.push(...RegistrySource.renderEntity(entity, outputFile, refs));
+    receivers.forEach((receiver) => {
+      lines.push(...RegistrySource.renderReceiver(receiver, outputFile, refs));
     });
     lines.push("  ],", "};");
 
     return lines;
   },
-  renderEntity(
-    entity: BuildEntityHandlers,
+  renderReceiver(
+    receiver: BuildReceiverHandlers,
     outputFile: string,
     refs: RenderRefs,
   ): readonly string[] {
-    const entityType = RegistrySource.entityName(refs, outputFile, entity);
-    const stateSchema = RegistrySource.schemaName(
-      refs,
-      outputFile,
-      entity.sourceFile,
-      entity.stateSchema,
-    );
+    const entityType = RegistrySource.entityName(refs, outputFile, receiver);
+    const receiverKind = receiver.receiverKind;
+    const stateSchema =
+      receiver.receiverKind === "entity"
+        ? RegistrySource.schemaName(refs, outputFile, receiver.sourceFile, receiver.stateSchema)
+        : undefined;
     const lines = [
       "    {",
-      `      entityType: ${entityType},`,
-      `      stateSchema: ${stateSchema},`,
+      `      receiverKind: ${RegistrySource.stringLiteral(receiverKind)},`,
+      `      receiverType: ${entityType},`,
+      ...(stateSchema === undefined ? [] : [`      stateSchema: ${stateSchema},`]),
       "      handlers: [",
     ];
 
-    entity.handlers.forEach((handler) => {
+    receiver.handlers.forEach((handler) => {
       const emitted = handler.emittedSchemas
-        .map((schema) => RegistrySource.schemaName(refs, outputFile, entity.sourceFile, schema))
+        .map((schema) => RegistrySource.schemaName(refs, outputFile, receiver.sourceFile, schema))
         .join(", ");
       const signalSchema = RegistrySource.schemaName(
         refs,
         outputFile,
-        entity.sourceFile,
+        receiver.sourceFile,
         handler.signalSchema,
       );
 
@@ -415,6 +426,9 @@ const RegistrySource = Object.freeze({
     return next;
   },
   renderImport(ref: ImportRef): string {
+    if (ref.defaultExport === true) {
+      return `import ${ref.localName} from ${RegistrySource.stringLiteral(ref.moduleSpecifier)};`;
+    }
     const local =
       ref.importedName === ref.localName
         ? ref.importedName
@@ -445,7 +459,7 @@ const RegistrySource = Object.freeze({
         `import { ${names.join(", ")} } from ${RegistrySource.stringLiteral(moduleSpecifier)};`,
     );
   },
-  entityName(refs: RenderRefs, outputFile: string, entity: BuildEntityHandlers): string {
+  entityName(refs: RenderRefs, outputFile: string, entity: BuildReceiverHandlers): string {
     return RegistrySource.refName(
       refs.entityNames,
       RegistrySource.entityKey(

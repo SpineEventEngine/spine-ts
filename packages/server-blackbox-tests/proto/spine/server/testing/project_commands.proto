@@ -1,0 +1,48 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.server.testing;
+
+import "spine/options.proto";
+import "spine/server/testing/project_workflow.proto";
+
+option (type_url_prefix) = "type.spine.server.testing";
+
+// Requests creation of a project.
+message CreateProject {
+  // Identifies the project to create.
+  ProjectId project = 1 [(required) = true, (validate) = true];
+
+  // Provides the project name.
+  string name = 2 [(required) = true];
+}
+
+// Requests a change to the project schedule.
+message ScheduleProject {
+  // Identifies the project to schedule.
+  ProjectId project = 1 [(required) = true, (validate) = true];
+
+  // Provides the new scheduling status.
+  string status = 2 [(required) = true];
+}
+
+// Requests approval before a project is scheduled.
+message ApproveProject {
+  // Identifies the project to approve.
+  ProjectId project = 1 [(required) = true, (validate) = true];
+
+  // Provides the scheduling status to apply after approval.
+  string status = 2 [(required) = true];
+}

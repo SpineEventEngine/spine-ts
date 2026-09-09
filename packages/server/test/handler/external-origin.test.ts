@@ -72,7 +72,7 @@ describe("Wave 13 external receptor origin", () => {
     const server = await import("../../src/index.js");
     expect(server).not.toHaveProperty("External");
     const result = BuildHandlerAnalyzer.analyze(programWithSource(externalCommandSource));
-    const records = result.entities[0]?.handlers as
+    const records = result.receivers[0]?.handlers as
       readonly { readonly methodName: string; readonly origin?: string }[] | undefined;
 
     expect(result.diagnostics.map(({ code }) => code)).toContain("EXTERNAL_COMMAND_RECEIVER");
@@ -83,7 +83,7 @@ describe("Wave 13 external receptor origin", () => {
   });
   it("RED-19 emits first-parameter External<T> origin metadata and rejects untrusted shapes", () => {
     const result = BuildHandlerAnalyzer.analyze(programWithSource(externalOriginSource));
-    const records = result.entities[0]?.handlers as
+    const records = result.receivers[0]?.handlers as
       readonly { readonly methodName: string; readonly origin?: string }[] | undefined;
 
     expect(records).toEqual(
@@ -102,7 +102,8 @@ describe("Wave 13 external receptor origin", () => {
     const generated = new GeneratedRegistryWriter().render(result, {
       outputFile: "/tmp/wave13/generated/handler/generated-handler-registry.ts",
     });
-    expect(generated).toContain("version: 3");
+    expect(generated).toContain("GeneratedHandlerRegistry");
+    expect(generated).toContain("receivers: [");
     expect(generated).toContain('origin: "external"');
     expect(generated).toContain('origin: "domestic"');
     void EventIdSchema;
@@ -111,7 +112,7 @@ describe("Wave 13 external receptor origin", () => {
   it("rejects a same-spelled External from a resolved counterfeit module", () => {
     const result = BuildHandlerAnalyzer.analyze(programWithSource(externalOriginSource, true));
     expect(result.diagnostics.map(({ code }) => code)).toContain("INVALID_SIGNAL_TYPE");
-    expect(result.entities.flatMap((entity) => entity.handlers)).not.toContainEqual(
+    expect(result.receivers.flatMap((receiver) => receiver.handlers)).not.toContainEqual(
       expect.objectContaining({ origin: "external" }),
     );
   });
@@ -186,19 +187,19 @@ function generatedModule(protoSource: string, ...names: string[]): string {
 }
 
 const externalCommandSource = `
-  import { Aggregate, Assign, Command, type External } from "@spine-event-engine/server";
+  import { Assign, Command, ProcessManager, type External } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask, type RenameTask } from "../generated/task_commands_pb.js";
   import { type TaskCreated } from "../generated/task_events_pb.js";
 
-  export class TaskAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema, number> {
     @Assign assign(command: External<CreateTask>): TaskCreated { throw new Error(String(command)); }
     @Command onEvent(event: External<TaskCreated>): RenameTask { throw new Error(String(event)); }
   }
 `;
 
 const externalOriginSource = `
-  import { Command, Projection, React, Subscribe, type External } from "@spine-event-engine/server";
+  import { Command, ProcessManager, React, Subscribe, type External } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type RenameTask } from "../generated/task_commands_pb.js";
   import { type TaskCreated, type TaskRenamed } from "../generated/task_events_pb.js";
@@ -206,7 +207,7 @@ const externalOriginSource = `
 
   type IndirectExternal<T> = External<T>;
   type LocalEvent = TaskCreated;
-  export class TaskProjection extends Projection<string, typeof TaskSchema, number> {
+  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema, number> {
     @Subscribe externalEvent(event: External<TaskCreated>): void { void event; }
     @Subscribe domesticEvent(event: TaskRenamed): void { void event; }
     @React externalReaction(event: External<TaskCreated>): TaskRenamed { throw new Error(String(event)); }
@@ -234,8 +235,8 @@ const publicOriginContract = `
   type Assert<Value extends true> = Value;
   type IsRequired<Value, Key extends keyof Value> =
     {} extends Pick<Value, Key> ? false : true;
-  type RegistryVersionIsExactlyThree = Assert<
-    Equal<GeneratedHandlerRegistry["version"], 3>
+  type RegistryReceiversAreRequired = Assert<
+    Equal<IsRequired<GeneratedHandlerRegistry, "receivers">, true>
   >;
   type GeneratedOriginIsExact = Assert<
     Equal<GeneratedHandlerRecordInput["origin"], "domestic" | "external">
@@ -249,7 +250,6 @@ const publicOriginContract = `
   type CanonicalOriginIsRequired = Assert<
     Equal<IsRequired<BaseHandlerMetadata, "origin">, true>
   >;
-
   declare const message: Message;
   declare const external: External<Message>;
   const transparentForward: External<Message> = message;
@@ -259,16 +259,14 @@ const publicOriginContract = `
     externalEventSchemas: (): readonly MessageSchema[] => [],
     dispatch: async (_event: Event): Promise<void> => undefined,
   };
-  const registryVersion: GeneratedHandlerRegistry["version"] = 3;
   const generatedOrigin: GeneratedHandlerRecordInput["origin"] = "external";
   const canonicalOrigin: BaseHandlerMetadata["origin"] = "domestic";
   void transparentForward;
   void transparentBackward;
   void dispatcher.externalEventSchemas?.();
-  void registryVersion;
   void generatedOrigin;
   void canonicalOrigin;
-  void (undefined as unknown as RegistryVersionIsExactlyThree);
+  void (undefined as unknown as RegistryReceiversAreRequired);
   void (undefined as unknown as GeneratedOriginIsExact);
   void (undefined as unknown as CanonicalOriginIsExact);
   void (undefined as unknown as GeneratedOriginIsRequired);

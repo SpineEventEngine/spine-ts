@@ -36,6 +36,7 @@ import {
   type RepositoryIdentitySnapshot,
   type RepositoryOptions,
 } from "../../src/index.js";
+import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 
 function expectRepositoryIdentityError(
   error: unknown,
@@ -74,6 +75,11 @@ type ProcessManagerState = Message<"ProcessManagerState"> & {
   queue: string;
 };
 
+type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
+  id: string;
+  name: string;
+};
+
 function createFixtureFileDescriptor(descriptorSetBase64: string) {
   const descriptorSet = fromBinary(
     FileDescriptorSetSchema,
@@ -102,6 +108,19 @@ const AggregateStateSchema = messageDesc(
   1,
 ) as GenMessage<AggregateState>;
 const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
+
+const fileValidatedTaskCommandFixture = fileDesc(
+  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
+    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
+    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
+    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
+    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
+  [file_spine_options],
+);
+const ValidatedTaskCommandSchema = messageDesc(
+  fileValidatedTaskCommandFixture,
+  1,
+) as GenMessage<ValidatedTaskCommand>;
 
 const fileEntityVisibilityFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
@@ -143,6 +162,28 @@ class HandlerBackedBigintProjection extends Projection<
     void event;
   }
 }
+class CommandTransformingProjection extends Projection<
+  string,
+  typeof ProjectionStateSchema,
+  number
+> {
+  transformTask(command: ValidatedTaskCommand): ValidatedTaskCommand {
+    return command;
+  }
+
+  reactWithCommand(command: ValidatedTaskCommand): ValidatedTaskCommand {
+    return command;
+  }
+}
+class CommandTransformingAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+  transformTask(command: ValidatedTaskCommand): ValidatedTaskCommand {
+    return command;
+  }
+
+  reactWithCommand(command: ValidatedTaskCommand): ValidatedTaskCommand {
+    return command;
+  }
+}
 const DomainEntityBase = {
   Aggregate,
 };
@@ -160,6 +201,47 @@ class PlainEntityClass {
 }
 
 describe("repository identity", () => {
+  it("rejects command substitutions on Aggregates", () => {
+    expect(() =>
+      HandlerMetadataValues.defineArity(
+        CommandTransformingAggregate,
+        AggregateStateSchema,
+        (builder) => [builder.substitute(ValidatedTaskCommandSchema, "transformTask")],
+        [{ kind: "command-substitution", methodName: "transformTask", parameterCount: 1 }],
+      ),
+    ).toThrow(/Process Manager/);
+  });
+
+  it("rejects command substitutions on projections before command readiness is exposed", () => {
+    expect(() =>
+      HandlerMetadataValues.defineArity(
+        CommandTransformingProjection,
+        ProjectionStateSchema,
+        (builder) => [builder.substitute(ValidatedTaskCommandSchema, "transformTask")],
+        [{ kind: "command-substitution", methodName: "transformTask", parameterCount: 1 }],
+      ),
+    ).toThrow(/Process Manager/);
+  });
+
+  it("rejects command reactions on non-Process-Manager metadata", () => {
+    expect(() =>
+      HandlerMetadataValues.defineArity(
+        CommandTransformingAggregate,
+        AggregateStateSchema,
+        (builder) => [builder.command(ValidatedTaskCommandSchema, "reactWithCommand")],
+        [{ kind: "command-reaction", methodName: "reactWithCommand", parameterCount: 1 }],
+      ),
+    ).toThrow(/Process Manager/);
+    expect(() =>
+      HandlerMetadataValues.defineArity(
+        CommandTransformingProjection,
+        ProjectionStateSchema,
+        (builder) => [builder.command(ValidatedTaskCommandSchema, "reactWithCommand")],
+        [{ kind: "command-reaction", methodName: "reactWithCommand", parameterCount: 1 }],
+      ),
+    ).toThrow(/Process Manager/);
+  });
+
   it("constructs metadata-only identity for aggregate, projection, and process-manager entities", () => {
     const aggregate = new Repository({
       entityType: TaskAggregate,

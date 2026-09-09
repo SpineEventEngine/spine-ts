@@ -13,6 +13,13 @@
  */
 
 import { isEntitySchema, type DescriptorMessageSchema } from "../entity/entity-metadata.js";
+import { ProcessManager } from "../entity/entity.js";
+import {
+  AbstractAssignee,
+  AbstractCommander,
+  AbstractEventReactor,
+  AbstractEventSubscriber,
+} from "./standalone.js";
 import {
   HandlerMetadataValues,
   HandlerMetadataRegistry,
@@ -21,27 +28,111 @@ import {
   type HandlerMethodName,
   type HandlerOrigin,
   type HandlerMetadata,
-  type HandlerRegistrationBuilder,
+  type GeneratedHandlerRegistrationBuilder,
   type WhereOptions,
 } from "./handler-metadata.js";
 import { RejectionSources } from "./rejection-source.js";
 
+interface DescriptorCandidate {
+  readonly file?: unknown;
+  readonly fields?: unknown;
+  readonly kind?: unknown;
+  readonly members?: unknown;
+  readonly messages?: unknown;
+  readonly name?: unknown;
+  readonly nestedEnums?: unknown;
+  readonly nestedExtensions?: unknown;
+  readonly nestedMessages?: unknown;
+  readonly oneofs?: unknown;
+  readonly proto?: unknown;
+  readonly toString?: unknown;
+  readonly typeName?: unknown;
+}
+
+interface DescriptorValidationOperations {
+  isMessage(value: unknown): value is DescriptorMessageSchema;
+  hasProtoType(value: unknown, typeName: string): boolean;
+  isFile(value: unknown): value is DescriptorCandidate;
+  fileContainsMessage(file: DescriptorCandidate, target: object): boolean;
+}
+
 /**
- * Describes the generated handler registry module shape accepted by the framework ingestor.
+ * Cohesive fail-closed validation for generated Protobuf-ES descriptor objects.
+ */
+const DescriptorValidation: DescriptorValidationOperations = Object.freeze({
+  isMessage(value: unknown): value is DescriptorMessageSchema {
+    if (value === null || typeof value !== "object") return false;
+    const message = value as DescriptorCandidate;
+    if (
+      message.kind !== "message" ||
+      typeof message.typeName !== "string" ||
+      message.typeName.trim().length === 0 ||
+      typeof message.name !== "string" ||
+      message.name.trim().length === 0 ||
+      message.typeName.split(".").at(-1) !== message.name ||
+      !Array.isArray(message.fields) ||
+      !Array.isArray(message.members) ||
+      !Array.isArray(message.oneofs) ||
+      !Array.isArray(message.nestedEnums) ||
+      !Array.isArray(message.nestedExtensions) ||
+      !Array.isArray(message.nestedMessages) ||
+      !DescriptorValidation.hasProtoType(message.proto, "google.protobuf.DescriptorProto") ||
+      typeof message.toString !== "function" ||
+      !DescriptorValidation.isFile(message.file)
+    ) {
+      return false;
+    }
+    return DescriptorValidation.fileContainsMessage(message.file, value);
+  },
+
+  hasProtoType(value: unknown, typeName: string): boolean {
+    return (
+      value !== null &&
+      typeof value === "object" &&
+      (value as { readonly $typeName?: unknown }).$typeName === typeName
+    );
+  },
+
+  isFile(value: unknown): value is DescriptorCandidate {
+    if (value === null || typeof value !== "object") return false;
+    const file = value as DescriptorCandidate;
+    return (
+      file.kind === "file" &&
+      typeof file.name === "string" &&
+      file.name.trim().length > 0 &&
+      Array.isArray(file.messages) &&
+      DescriptorValidation.hasProtoType(file.proto, "google.protobuf.FileDescriptorProto") &&
+      typeof file.toString === "function"
+    );
+  },
+
+  fileContainsMessage(file: DescriptorCandidate, target: object): boolean {
+    const visited = new Set<object>();
+    const contains = (messages: unknown): boolean => {
+      if (!Array.isArray(messages)) return false;
+      return (messages as readonly unknown[]).some((message) => {
+        if (message === target) return true;
+        if (message === null || typeof message !== "object" || visited.has(message)) return false;
+        visited.add(message);
+        return contains((message as DescriptorCandidate).nestedMessages);
+      });
+    };
+    return contains(file.messages);
+  },
+});
+
+/**
+ * Generated registry metadata consumed by the framework.
  *
+ * Application code regenerates this data whenever the handler contract changes.
  */
 export interface GeneratedHandlerRegistry {
   // prettier-ignore
 
   /**
-   * Generated registry contract version.
+   * Unversioned Entity and standalone receiver declarations.
    */
-  readonly version: 3;
-
-  /**
-   * Entity handler groups declared by the generated module.
-   */
-  readonly entities: readonly GeneratedEntityHandlerGroup[];
+  readonly receivers: readonly GeneratedReceiver[];
 }
 
 /**
@@ -58,9 +149,7 @@ export class HandlerRegistryIngestor {
    */
   ingest(registry: unknown): readonly EntityHandlersMetadata[] {
     GeneratedRegistry.assert(registry);
-    GeneratedRegistry.validateVersion(registry);
-
-    return Object.freeze(registry.entities.map((entity) => GeneratedRegistry.materialize(entity)));
+    return GeneratedRegistry.materializeAll(registry);
   }
 
   /**
@@ -126,10 +215,10 @@ export class HandlerRegistryIngestionError extends Error {
 
 /**
  * Describes handler categories supported by generated registry ingestion.
- *
  */
 export type GeneratedHandlerKind =
   | "command-assignment"
+  | "command-substitution"
   | "command-reaction"
   | "event-subscription"
   | "state-subscription"
@@ -137,13 +226,11 @@ export type GeneratedHandlerKind =
 
 /**
  * Describes public handler arity recorded by generated registry tooling.
- *
  */
 export type GeneratedHandlerParameterCount = 1 | 2;
 
 /**
- * Describes a type-erased generated entity group accepted by a top-level registry.
- *
+ * Describes a type-erased generated Entity group accepted by a top-level registry.
  */
 export interface GeneratedEntityHandlerGroup {
   // prettier-ignore
@@ -151,7 +238,12 @@ export interface GeneratedEntityHandlerGroup {
   /**
    * Entity class whose prototype owns the generated handler methods.
    */
-  readonly entityType: EntityClass;
+  readonly receiverKind: "entity";
+
+  /**
+   * Entity constructor matched to the generated receiver declaration.
+   */
+  readonly receiverType: EntityClass;
 
   /**
    * Generated Protobuf-ES schema for the entity state.
@@ -163,6 +255,63 @@ export interface GeneratedEntityHandlerGroup {
    */
   readonly handlers: readonly GeneratedHandlerRecordInput[];
 }
+
+type StandaloneReceiver =
+  AbstractAssignee | AbstractCommander | AbstractEventReactor | AbstractEventSubscriber;
+
+interface NominalStandaloneReceiverConstructor<Instance extends StandaloneReceiver> {
+  // prettier-ignore
+
+  /**
+   * Prototype carrying the standalone receiver's nominal base-class brand.
+   */
+  readonly prototype: Instance;
+
+  /**
+   * Creates a standalone receiver instance.
+   *
+   * @param args Application-defined constructor arguments.
+   * @returns A nominal standalone receiver instance.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DI arguments vary.
+  new (...args: any[]): Instance;
+}
+
+/**
+ * Nominal constructor for a supported standalone handler receiver.
+ */
+export type StandaloneReceiverConstructor =
+  | NominalStandaloneReceiverConstructor<AbstractAssignee>
+  | NominalStandaloneReceiverConstructor<AbstractCommander>
+  | NominalStandaloneReceiverConstructor<AbstractEventReactor>
+  | NominalStandaloneReceiverConstructor<AbstractEventSubscriber>;
+
+/**
+ * Metadata for one decorated standalone application receiver.
+ */
+export interface GeneratedStandaloneHandlerGroup {
+  // prettier-ignore
+
+  /**
+   * Marks this declaration as a standalone receiver.
+   */
+  readonly receiverKind: "standalone";
+
+  /**
+   * Constructor used to match a registered standalone application instance.
+   */
+  readonly receiverType: StandaloneReceiverConstructor;
+
+  /**
+   * Generated handler declarations in source order.
+   */
+  readonly handlers: readonly GeneratedHandlerRecordInput[];
+}
+
+/**
+ * One generated Entity or standalone receiver declaration.
+ */
+export type GeneratedReceiver = GeneratedEntityHandlerGroup | GeneratedStandaloneHandlerGroup;
 
 /**
  * Describes generated handler records for one entity class.
@@ -177,7 +326,7 @@ export interface GeneratedEntityHandlers<
   /**
    * Entity class whose prototype owns the generated handler methods.
    */
-  readonly entityType: EntityClass<Instance>;
+  readonly receiverType: EntityClass<Instance>;
 
   /**
    * Generated Protobuf-ES schema for the entity state.
@@ -203,7 +352,7 @@ export interface GeneratedHandlerRecordInput {
   readonly kind: GeneratedHandlerKind;
 
   /**
-   * Entity instance method name selected by generated metadata.
+   * Receiver instance method name selected by generated metadata.
    */
   readonly methodName: string;
 
@@ -248,22 +397,25 @@ export interface GeneratedHandlerRecord<
   readonly methodName: HandlerMethodName<Instance>;
 }
 
-const registryVersion = 3;
-
 interface GeneratedRegistryOperations {
   assert(registry: unknown): asserts registry is GeneratedHandlerRegistry;
-  validateVersion(registry: GeneratedHandlerRegistry): void;
+  materializeAll(registry: GeneratedHandlerRegistry): readonly EntityHandlersMetadata[];
   materialize(entity: GeneratedEntityHandlerGroup): EntityHandlersMetadata;
   build<Instance extends object>(
-    builder: HandlerRegistrationBuilder<Instance>,
+    builder: GeneratedHandlerRegistrationBuilder<Instance>,
     handler: GeneratedHandlerRecordInput,
   ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>;
   validateHandler(handler: GeneratedHandlerRecordInput): void;
+  validateReceiver(receiver: unknown): asserts receiver is GeneratedReceiver;
+  validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void;
+  validateStandalone(receiver: GeneratedStandaloneHandlerGroup): void;
   validateSchema(schema: DescriptorMessageSchema, label: string): void;
   validateEmits(handler: GeneratedHandlerRecordInput): void;
+  validateCommandRoles(handler: GeneratedHandlerRecordInput): void;
   validateSubscription(handler: GeneratedHandlerRecordInput): void;
   validateWhere(handler: GeneratedHandlerRecordInput): void;
-  isEventInputSchema(schema: DescriptorMessageSchema): boolean;
+  isCommandSchema(schema: DescriptorMessageSchema): boolean;
+  isLegacyEventSchema(schema: DescriptorMessageSchema): boolean;
   isKind(kind: string): kind is GeneratedHandlerKind;
 }
 
@@ -275,18 +427,70 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
         "Generated handler registry must be an object.",
       );
     }
+
+    const receivers = (registry as { readonly receivers?: unknown }).receivers;
+    if (!Array.isArray(receivers)) {
+      throw new HandlerRegistryIngestionError(
+        "UNSUPPORTED_REGISTRY_VERSION",
+        "Generated handler registry must declare an unversioned receivers array; " +
+          "regenerate generated handler metadata.",
+      );
+    }
+    receivers.forEach((receiver) => {
+      GeneratedRegistry.validateReceiver(receiver);
+    });
   },
 
-  validateVersion(registry: GeneratedHandlerRegistry): void {
-    const version: number = registry.version;
-
-    if (version === registryVersion) {
-      return;
+  validateReceiver(receiver: unknown): asserts receiver is GeneratedReceiver {
+    if (receiver === null || typeof receiver !== "object") {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated receiver must be an object.",
+      );
     }
+    const value = receiver as Record<string, unknown>;
+    if (value.receiverKind !== "entity" && value.receiverKind !== "standalone") {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated receiver must declare a supported receiver kind.",
+      );
+    }
+    if (typeof value.receiverType !== "function" || value.receiverType.prototype === undefined) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated receiver must declare a constructor.",
+      );
+    }
+    if (!Array.isArray(value.handlers)) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated receiver must declare a handlers array.",
+      );
+    }
+    if (
+      value.receiverKind === "entity" &&
+      (value.stateSchema === undefined || value.stateSchema === null)
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated Entity receiver must declare a state schema.",
+      );
+    }
+    value.handlers.forEach((handler) => {
+      GeneratedRegistry.validateHandler(handler as GeneratedHandlerRecordInput);
+    });
+  },
 
-    throw new HandlerRegistryIngestionError(
-      "UNSUPPORTED_REGISTRY_VERSION",
-      `Generated handler registry version ${String(version)} is not supported.`,
+  materializeAll(registry: GeneratedHandlerRegistry): readonly EntityHandlersMetadata[] {
+    registry.receivers.forEach((receiver) => {
+      if (receiver.receiverKind === "standalone") GeneratedRegistry.validateStandalone(receiver);
+    });
+    return Object.freeze(
+      registry.receivers
+        .filter(
+          (receiver): receiver is GeneratedEntityHandlerGroup => receiver.receiverKind === "entity",
+        )
+        .map((receiver) => GeneratedRegistry.materialize(receiver)),
     );
   },
 
@@ -295,9 +499,10 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     entity.handlers.forEach((handler) => {
       GeneratedRegistry.validateHandler(handler);
     });
+    GeneratedRegistry.validateCommandHandlers(entity);
 
     return HandlerMetadataValues.defineArity(
-      entity.entityType,
+      entity.receiverType,
       entity.stateSchema,
       (builder) => entity.handlers.map((handler) => GeneratedRegistry.build(builder, handler)),
       entity.handlers.map((handler) => ({
@@ -313,13 +518,90 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     );
   },
 
+  validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void {
+    if (
+      entity.handlers.some(
+        (handler) => handler.kind === "command-substitution" || handler.kind === "command-reaction",
+      ) &&
+      !(entity.receiverType.prototype instanceof ProcessManager)
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "UNSUPPORTED_HANDLER_KIND",
+        "Generated @Command handlers are supported only by Process Manager entities.",
+      );
+    }
+  },
+
+  validateStandalone(receiver: GeneratedStandaloneHandlerGroup): void {
+    const prototype = receiver.receiverType.prototype;
+    const role =
+      prototype instanceof AbstractAssignee
+        ? "assignee"
+        : prototype instanceof AbstractCommander
+          ? "commander"
+          : prototype instanceof AbstractEventReactor
+            ? "reactor"
+            : prototype instanceof AbstractEventSubscriber
+              ? "subscriber"
+              : undefined;
+    if (role === undefined) {
+      throw new HandlerRegistryIngestionError(
+        "UNSUPPORTED_HANDLER_KIND",
+        "Standalone receiver must extend a supported nominal handler base class.",
+      );
+    }
+    for (const handler of receiver.handlers) {
+      GeneratedRegistry.validateHandler(handler);
+      const valid =
+        (role === "assignee" && handler.kind === "command-assignment") ||
+        (role === "commander" &&
+          (handler.kind === "command-substitution" || handler.kind === "command-reaction")) ||
+        (role === "reactor" && handler.kind === "event-reaction") ||
+        (role === "subscriber" &&
+          (handler.kind === "event-subscription" || handler.kind === "state-subscription"));
+      if (!valid) {
+        throw new HandlerRegistryIngestionError(
+          "UNSUPPORTED_HANDLER_KIND",
+          `Generated handler "${handler.methodName}" is not legal for standalone ${role}.`,
+        );
+      }
+      if (role === "assignee" || role === "reactor") {
+        if (
+          handler.emittedSchemas.some(
+            (schema) => !GeneratedRegistry.isLegacyEventSchema(schema) || isEntitySchema(schema),
+          )
+        ) {
+          throw new HandlerRegistryIngestionError(
+            "INVALID_SCHEMA",
+            `Standalone ${role} "${handler.methodName}" must produce Events.`,
+          );
+        }
+      }
+      if (
+        role === "subscriber" &&
+        handler.origin === "external" &&
+        handler.kind === "state-subscription"
+      ) {
+        throw new HandlerRegistryIngestionError(
+          "INVALID_SIGNAL_ORIGIN",
+          `Standalone state subscriber "${handler.methodName}" cannot accept External state.`,
+        );
+      }
+    }
+  },
+
   build<Instance extends object>(
-    builder: HandlerRegistrationBuilder<Instance>,
+    builder: GeneratedHandlerRegistrationBuilder<Instance>,
     handler: GeneratedHandlerRecordInput,
   ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>> {
     switch (handler.kind) {
       case "command-assignment":
         return builder.assign(
+          handler.signalSchema,
+          handler.methodName as HandlerMethodName<Instance>,
+        );
+      case "command-substitution":
+        return builder.substitute(
           handler.signalSchema,
           handler.methodName as HandlerMethodName<Instance>,
         );
@@ -352,6 +634,26 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   validateHandler(handler: GeneratedHandlerRecordInput): void {
+    const untrustedHandler: unknown = handler;
+    if (untrustedHandler === null || typeof untrustedHandler !== "object") {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated handler must be an object.",
+      );
+    }
+    const value = untrustedHandler as Record<string, unknown>;
+    if (
+      typeof value.kind !== "string" ||
+      typeof value.methodName !== "string" ||
+      !Array.isArray(value.emittedSchemas) ||
+      typeof value.parameterCount !== "number" ||
+      typeof value.origin !== "string"
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        "Generated handler has an invalid record shape.",
+      );
+    }
     if (!GeneratedRegistry.isKind(handler.kind)) {
       throw new HandlerRegistryIngestionError(
         "UNSUPPORTED_HANDLER_KIND",
@@ -368,9 +670,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
     if (
       handler.origin === "external" &&
-      (handler.kind === "command-assignment" ||
-        (handler.kind === "command-reaction" &&
-          !GeneratedRegistry.isEventInputSchema(handler.signalSchema)))
+      (handler.kind === "command-assignment" || handler.kind === "command-substitution")
     ) {
       throw new HandlerRegistryIngestionError(
         "EXTERNAL_COMMAND_RECEIVER",
@@ -398,6 +698,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
         `emitted schema ${String(index)} for generated handler "${handler.methodName}"`,
       );
     });
+    GeneratedRegistry.validateCommandRoles(handler);
     GeneratedRegistry.validateWhere(handler);
 
     if (handler.kind === "event-subscription" || handler.kind === "state-subscription") {
@@ -417,30 +718,21 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       return;
     }
 
-    if (handler.kind === "command-assignment" || handler.kind === "command-reaction") {
+    if (
+      handler.kind === "command-assignment" ||
+      handler.kind === "command-substitution" ||
+      handler.kind === "command-reaction"
+    ) {
       GeneratedRegistry.validateEmits(handler);
     }
   },
 
   validateSchema(schema: DescriptorMessageSchema, label: string): void {
-    const value: unknown = schema;
-
-    if (value === null || typeof value !== "object") {
-      throw new HandlerRegistryIngestionError(
-        "INVALID_SCHEMA",
-        `Generated handler registry ${label} must be an object with a non-empty typeName.`,
-      );
-    }
-
-    const typeName = (value as { readonly typeName?: unknown }).typeName;
-
-    if (typeof typeName === "string" && typeName.trim().length > 0) {
-      return;
-    }
+    if (DescriptorValidation.isMessage(schema)) return;
 
     throw new HandlerRegistryIngestionError(
       "INVALID_SCHEMA",
-      `Generated handler registry ${label} must be an object with a non-empty typeName.`,
+      `Generated handler registry ${label} must be a generated Protobuf message descriptor.`,
     );
   },
 
@@ -452,6 +744,33 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     throw new HandlerRegistryIngestionError(
       "MISSING_EMITTED_SCHEMAS",
       `Generated handler "${handler.methodName}" must declare at least one emitted schema.`,
+    );
+  },
+
+  validateCommandRoles(handler: GeneratedHandlerRecordInput): void {
+    if (
+      (handler.kind === "command-assignment" || handler.kind === "command-substitution") &&
+      !GeneratedRegistry.isCommandSchema(handler.signalSchema)
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        `Generated command receiver "${handler.methodName}" must declare a Command input schema.`,
+      );
+    }
+    if (
+      (handler.kind === "command-reaction" || handler.kind === "event-reaction") &&
+      !GeneratedRegistry.isLegacyEventSchema(handler.signalSchema)
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        `Generated Event reactor "${handler.methodName}" must declare an Event or rejection input schema.`,
+      );
+    }
+    if (handler.kind !== "command-substitution" && handler.kind !== "command-reaction") return;
+    if (handler.emittedSchemas.every((schema) => GeneratedRegistry.isCommandSchema(schema))) return;
+    throw new HandlerRegistryIngestionError(
+      "INVALID_SCHEMA",
+      `Generated @Command handler "${handler.methodName}" must declare Command outputs.`,
     );
   },
 
@@ -489,7 +808,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       typeof filter.eventField !== "string" ||
       filter.eventField.trim().length === 0 ||
       typeof filter.equals !== "string" ||
-      !GeneratedRegistry.isEventInputSchema(handler.signalSchema) ||
+      !GeneratedRegistry.isLegacyEventSchema(handler.signalSchema) ||
       (handler.kind !== "event-subscription" &&
         handler.kind !== "event-reaction" &&
         handler.kind !== "command-reaction")
@@ -501,7 +820,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
-  isEventInputSchema(schema: DescriptorMessageSchema): boolean {
+  isLegacyEventSchema(schema: DescriptorMessageSchema): boolean {
     const fileName = schema.file.name.split(/[\\/]/u).at(-1);
     return (
       fileName === "events" ||
@@ -515,9 +834,21 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     );
   },
 
+  isCommandSchema(schema: DescriptorMessageSchema): boolean {
+    const fileName = schema.file.name.split(/[\\/]/u).at(-1);
+    return (
+      schema.typeName !== "spine.core.Command" &&
+      (fileName === "commands" ||
+        fileName === "commands.proto" ||
+        fileName?.endsWith("_commands") === true ||
+        fileName?.endsWith("_commands.proto") === true)
+    );
+  },
+
   isKind(kind: string): kind is GeneratedHandlerKind {
     return (
       kind === "command-assignment" ||
+      kind === "command-substitution" ||
       kind === "command-reaction" ||
       kind === "event-subscription" ||
       kind === "state-subscription" ||

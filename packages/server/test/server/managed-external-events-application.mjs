@@ -169,10 +169,10 @@ async function generatedRegistryRoot() {
   const slot = `__spineT0210Registry_${process.pid}`;
   await mkdir(directory, { recursive: true });
   globalThis[slot] = {
-    version: 3,
-    entities: [
+    receivers: [
       {
-        entityType: ExternalTaskProjection,
+        receiverKind: "entity",
+        receiverType: ExternalTaskProjection,
         stateSchema: ExternalStateSchema,
         handlers: [
           {

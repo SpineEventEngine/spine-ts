@@ -17,11 +17,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { CommandSchema, EventSchema, file_spine_options } from "@spine-event-engine/proto";
+import { file_spine_options } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -38,10 +38,13 @@ type ProjectionState = Message<"ProjectionState"> & {
   name: string;
   priority: number;
 };
+type StartReview = Message<"spine.server.testing.StartReview">;
+type ReviewStarted = Message<"spine.server.testing.ReviewStarted">;
 
 class DiscoveredProjection {
-  assignCreate(command: Message<"spine.core.Command">): void {
+  assignCreate(command: StartReview): ReviewStarted {
     void command;
+    return create(ReviewStartedSchema);
   }
 }
 
@@ -69,24 +72,36 @@ const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
 ) as GenMessage<ProjectionState>;
+const StartReviewSchema = messageDesc(
+  createFixtureFileDescriptor(
+    serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
+  ),
+  0,
+) as GenMessage<StartReview>;
+const ReviewStartedSchema = messageDesc(
+  createFixtureFileDescriptor(
+    serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64,
+  ),
+  0,
+) as GenMessage<ReviewStarted>;
 
 describe("generated registry discovery", () => {
   it("loads generated registries from explicit file URLs", async () => {
     const module = createModuleFixture(
       "generated-registry.js",
-      "export const generatedHandlerRegistry = { version: 3, entities: [] };\n",
+      "export const generatedHandlerRegistry = { receivers: [] };\n",
     );
     const discovery = new GeneratedRegistryDiscovery();
 
     const registries = await discovery.load({ modules: [module.moduleUrl] });
 
-    expect(registries).toEqual([{ version: 3, entities: [] }]);
+    expect(registries).toEqual([{ receivers: [] }]);
   });
 
   it("loads generated registries with a custom export and cache-busting token", async () => {
     const module = createModuleFixture(
       "custom-export.js",
-      "export const customRegistry = { version: 3, entities: [] };\n",
+      "export const customRegistry = { receivers: [] };\n",
     );
     const discovery = new GeneratedRegistryDiscovery();
 
@@ -96,7 +111,7 @@ describe("generated registry discovery", () => {
       cacheBust: "coverage",
     });
 
-    expect(registries).toEqual([{ version: 3, entities: [] }]);
+    expect(registries).toEqual([{ receivers: [] }]);
   });
 
   it("loads the conventional generated registry module from a package root path", async () => {
@@ -106,13 +121,13 @@ describe("generated registry discovery", () => {
 
     writeFileSync(
       modulePath,
-      "export const generatedHandlerRegistry = { version: 3, entities: [] };\n",
+      "export const generatedHandlerRegistry = { receivers: [] };\n",
       "utf8",
     );
 
     const registries = await discovery.load({ modules: [modulePath] });
 
-    expect(registries).toEqual([{ version: 3, entities: [] }]);
+    expect(registries).toEqual([{ receivers: [] }]);
     expect(GeneratedRegistryDiscovery.conventionalModuleUrl(packageRoot).href).toBe(
       pathToFileURL(modulePath).href,
     );
@@ -169,7 +184,7 @@ describe("generated registry discovery", () => {
     const slot = `__spineBlockedDataModule_${Math.random().toString(36).slice(2)}`;
     const source = [
       `globalThis[${JSON.stringify(slot)}] = true;`,
-      "export const generatedHandlerRegistry = { version: 3, entities: [] };",
+      "export const generatedHandlerRegistry = { receivers: [] };",
     ].join(" ");
     const moduleUrl = new URL(`data:text/javascript,${encodeURIComponent(source)}`);
     const discovery = new GeneratedRegistryDiscovery();
@@ -184,7 +199,7 @@ describe("generated registry discovery", () => {
   it("rejects file URL query aliases before importing them", async () => {
     const module = createModuleFixture(
       "query-alias.js",
-      "export const generatedHandlerRegistry = { version: 3, entities: [] };\n",
+      "export const generatedHandlerRegistry = { receivers: [] };\n",
     );
     const moduleUrl = new URL(module.moduleUrl.href);
     const discovery = new GeneratedRegistryDiscovery();
@@ -200,7 +215,7 @@ describe("generated registry discovery", () => {
   it("rejects file URL hash aliases before importing them", async () => {
     const module = createModuleFixture(
       "hash-alias.js",
-      "export const generatedHandlerRegistry = { version: 3, entities: [] };\n",
+      "export const generatedHandlerRegistry = { receivers: [] };\n",
     );
     const moduleUrl = new URL(module.moduleUrl.href);
     const discovery = new GeneratedRegistryDiscovery();
@@ -244,7 +259,7 @@ describe("generated registry discovery", () => {
   it("rejects duplicate normalized generated registry module refs", async () => {
     const module = createModuleFixture(
       "duplicate-registry.js",
-      "export const generatedHandlerRegistry = { version: 3, entities: [] };\n",
+      "export const generatedHandlerRegistry = { receivers: [] };\n",
     );
     const discovery = new GeneratedRegistryDiscovery();
 
@@ -258,17 +273,17 @@ describe("generated registry discovery", () => {
 
   it("registers discovered generated registries into a new handler metadata registry", async () => {
     const module = createRegistryValueModule({
-      version: 3,
-      entities: [
+      receivers: [
         {
-          entityType: DiscoveredProjection,
+          receiverKind: "entity",
+          receiverType: DiscoveredProjection,
           stateSchema: ProjectionStateSchema,
           handlers: [
             {
               kind: "command-assignment",
               methodName: "assignCreate",
-              signalSchema: CommandSchema,
-              emittedSchemas: [EventSchema],
+              signalSchema: StartReviewSchema,
+              emittedSchemas: [ReviewStartedSchema],
               parameterCount: 1,
               origin: "domestic",
             },
@@ -282,7 +297,7 @@ describe("generated registry discovery", () => {
       const registry = await discovery.register({ modules: [module.modulePath] });
 
       expect(registry).toBeInstanceOf(HandlerMetadataRegistry);
-      expect(registry.findCommandAssignment("spine.core.Command")?.entityType).toBe(
+      expect(registry.findCommandAssignment(StartReviewSchema.typeName)?.entityType).toBe(
         DiscoveredProjection,
       );
       expect(registry.listEntityHandlers()).toHaveLength(1);
@@ -293,10 +308,10 @@ describe("generated registry discovery", () => {
 
   it("wraps ingestion failures in a deterministic discovery error", async () => {
     const module = createRegistryValueModule({
-      version: 3,
-      entities: [
+      receivers: [
         {
-          entityType: DiscoveredProjection,
+          receiverKind: "entity",
+          receiverType: DiscoveredProjection,
           stateSchema: {},
           handlers: [],
         },

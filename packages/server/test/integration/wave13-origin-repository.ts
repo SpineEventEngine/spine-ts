@@ -92,10 +92,10 @@ export function createWave13OriginRegistry(): { readonly clear: () => void; read
   const directory = join(root, "generated/handler");
   const slot = `__spineWave13Origin_${crypto.randomUUID().replaceAll("-", "")}`;
   const registry = {
-    version: 3,
-    entities: [
+    receivers: [
       {
-        entityType: Wave13OriginProjection,
+        receiverKind: "entity",
+        receiverType: Wave13OriginProjection,
         stateSchema: Wave13OriginStateSchema,
         handlers: [
           {

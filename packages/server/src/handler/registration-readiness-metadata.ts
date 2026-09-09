@@ -180,6 +180,11 @@ class ReadinessMetadataOwner {
         clonedHandlers,
         clonedSchemas,
       ),
+      commandSubstitutions: this.#cloneHandlers(
+        entityHandlers.commandSubstitutions,
+        clonedHandlers,
+        clonedSchemas,
+      ),
       commandReactions: this.#cloneHandlers(
         entityHandlers.commandReactions,
         clonedHandlers,

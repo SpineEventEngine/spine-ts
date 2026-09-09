@@ -23,6 +23,7 @@ import ts from "typescript";
 
 type GeneratedHandlerKind =
   | "command-assignment"
+  | "command-substitution"
   | "command-reaction"
   | "event-subscription"
   | "state-subscription"
@@ -30,15 +31,15 @@ type GeneratedHandlerKind =
 type GeneratedHandlerParameterCount = 1 | 2;
 
 /**
- * Build-time analysis result for bare decorated entity handler methods.
+ * Build-time analysis result for bare decorated receiver handler methods.
  */
 export interface BuildHandlerAnalysis {
   // prettier-ignore
 
   /**
-   * Entity groups in source-file and class declaration order.
+   * All generated Entity and standalone receiver declarations.
    */
-  readonly entities: readonly BuildEntityHandlers[];
+  readonly receivers: readonly BuildReceiverHandlers[];
 
   /**
    * Deterministic diagnostics for unsupported handler declarations.
@@ -58,6 +59,16 @@ export interface BuildEntityHandlers {
   readonly className: string;
 
   /**
+   * Whether the class is imported from a default export.
+   */
+  readonly defaultExport?: boolean;
+
+  /**
+   * Marks this declaration as an Entity receiver.
+   */
+  readonly receiverKind: "entity";
+
+  /**
    * Source file where the entity class is declared.
    */
   readonly sourceFile: string;
@@ -72,6 +83,43 @@ export interface BuildEntityHandlers {
    */
   readonly handlers: readonly BuildHandlerRecord[];
 }
+
+/**
+ * Build-time standalone receiver declaration.
+ */
+export interface BuildStandaloneHandlers {
+  // prettier-ignore
+
+  /**
+   * Marks this declaration as a standalone receiver.
+   */
+  readonly receiverKind: "standalone";
+
+  /**
+   * Standalone receiver class declaration name.
+   */
+  readonly className: string;
+
+  /**
+   * Indicates that the receiver class is a default export.
+   */
+  readonly defaultExport?: boolean;
+
+  /**
+   * Source file that declares the standalone receiver class.
+   */
+  readonly sourceFile: string;
+
+  /**
+   * Analyzed decorated handler records in declaration order.
+   */
+  readonly handlers: readonly BuildHandlerRecord[];
+}
+
+/**
+ * One generated receiver declaration.
+ */
+export type BuildReceiverHandlers = BuildEntityHandlers | BuildStandaloneHandlers;
 
 /**
  * Importable generated schema reference used by later source rendering.
@@ -157,6 +205,7 @@ export type BuildHandlerDiagnosticCode =
   | "FRAMEWORK_ENVELOPE_RETURN"
   | "INVALID_EMITTED_SCHEMA"
   | "INVALID_HANDLER_NAME"
+  | "INVALID_HANDLER_CONTEXT"
   | "INVALID_HANDLER_VISIBILITY"
   | "INVALID_PARAMETER_COUNT"
   | "INVALID_SIGNAL_TYPE"
@@ -168,10 +217,10 @@ export type BuildHandlerDiagnosticCode =
   | "MISSING_ENTITY_STATE_SCHEMA"
   | "MISSING_RETURN_TYPE"
   | "MISSING_SIGNAL_TYPE"
-  | "NON_EXPORTED_ENTITY_CLASS"
+  | "NON_EXPORTED_RECEIVER_CLASS"
   | "SCHEMA_BEARING_DECORATOR"
   | "TYPESCRIPT_SYNTAX_ERROR"
-  | "UNSUPPORTED_ENTITY_EXPORT"
+  | "UNSUPPORTED_COMMAND_HANDLER"
   | "UNSUPPORTED_RETURN_TYPE";
 
 /**
@@ -223,11 +272,11 @@ export interface BuildHandlerAnalyzer {
   // prettier-ignore
 
   /**
-   * Inspects source files and returns entity handler records with deterministic diagnostics.
+   * Inspects source files and returns receiver handler records with deterministic diagnostics.
    *
    * @param program TypeScript program that owns the source files and diagnostics.
    * @param sourceFiles Application source files to inspect; defaults to program files.
-   * @returns Entity handler records and deterministic diagnostics.
+   * @returns Receiver handler records and deterministic diagnostics.
    */
   analyze(program: ts.Program, sourceFiles?: readonly ts.SourceFile[]): BuildHandlerAnalysis;
 }
@@ -239,18 +288,18 @@ export const BuildHandlerAnalyzer: BuildHandlerAnalyzer = Object.freeze({
   // prettier-ignore
 
   /**
-   * Inspects source files and returns entity handler records with deterministic diagnostics.
+   * Inspects source files and returns receiver handler records with deterministic diagnostics.
    *
    * @param program TypeScript program that owns the source files and diagnostics.
    * @param sourceFiles Application source files to inspect; defaults to program files.
-   * @returns Entity handler records and deterministic diagnostics.
+   * @returns Receiver handler records and deterministic diagnostics.
    */
   analyze(
     program: ts.Program,
     sourceFiles: readonly ts.SourceFile[] = HandlerSources.appSourceFiles(program),
   ): BuildHandlerAnalysis {
     PackageDependencies.load(program);
-    const entities: BuildEntityHandlers[] = [];
+    const receivers: BuildReceiverHandlers[] = [];
     const diagnostics: BuildHandlerDiagnostic[] = [];
 
     for (const source of sourceFiles) {
@@ -270,10 +319,11 @@ export const BuildHandlerAnalyzer: BuildHandlerAnalyzer = Object.freeze({
         imports: HandlerSources.buildImportState(source, program),
         diagnostics,
       };
-      entities.push(...HandlerSources.analyzeSource(scope));
+      const sourceReceivers = HandlerSources.analyzeSource(scope);
+      receivers.push(...sourceReceivers);
     }
 
-    return { entities, diagnostics };
+    return { receivers, diagnostics };
   },
 });
 
@@ -292,6 +342,7 @@ interface ImportState {
   readonly serverSymbols: ReadonlyMap<string, string>;
   readonly protoNamespaces: ReadonlySet<string>;
   readonly protoSymbols: ReadonlySet<string>;
+  readonly protoContextSymbols: ReadonlyMap<string, "CommandContext" | "EventContext">;
 }
 
 interface MutableImportState {
@@ -302,6 +353,7 @@ interface MutableImportState {
   readonly serverSymbols: Map<string, string>;
   readonly protoNamespaces: Set<string>;
   readonly protoSymbols: Set<string>;
+  readonly protoContextSymbols: Map<string, "CommandContext" | "EventContext">;
 }
 
 interface GeneratedNamespace {
@@ -364,6 +416,12 @@ interface HandlerDecoratorUse extends DecoratorUse {
 
 const handlerDecorators = new Set<HandlerDecorator>(["Assign", "Command", "React", "Subscribe"]);
 const entityBaseNames = new Set(["Aggregate", "Projection", "ProcessManager"]);
+const standaloneBaseNames = new Set([
+  "AbstractAssignee",
+  "AbstractCommander",
+  "AbstractEventReactor",
+  "AbstractEventSubscriber",
+]);
 const maxAliasDepth = 50;
 // `spine.options.entity` in the frozen `spine/options.proto` contract.
 const entityOptionFieldNumber = 73903;
@@ -375,26 +433,30 @@ const HandlerSources = Object.freeze({
     return program.getSourceFiles().filter((source) => !source.isDeclarationFile);
   },
 
-  analyzeSource(scope: AnalyzerScope): readonly BuildEntityHandlers[] {
-    const entities: BuildEntityHandlers[] = [];
+  analyzeSource(scope: AnalyzerScope): readonly BuildReceiverHandlers[] {
+    const receivers: BuildReceiverHandlers[] = [];
 
     for (const statement of scope.source.statements) {
-      if (!ts.isClassDeclaration(statement) || statement.name === undefined) {
+      if (
+        !ts.isClassDeclaration(statement) ||
+        (statement.name === undefined &&
+          !HandlerTypes.hasModifier(statement, ts.SyntaxKind.DefaultKeyword))
+      ) {
         continue;
       }
 
-      const entity = HandlerSources.analyzeClass(statement, scope);
-      if (entity !== undefined) {
-        entities.push(entity);
+      const receiver = HandlerSources.analyzeClass(statement, scope);
+      if (receiver !== undefined) {
+        receivers.push(receiver);
       }
     }
 
-    return entities;
+    return receivers;
   },
 
-  analyzeClass(node: ts.ClassDeclaration, scope: AnalyzerScope): BuildEntityHandlers | undefined {
-    const className = node.name?.text ?? "(anonymous)";
-    const exportIssue = HandlerSources.entityExportIssue(node, scope.source);
+  analyzeClass(node: ts.ClassDeclaration, scope: AnalyzerScope): BuildReceiverHandlers | undefined {
+    const className = node.name?.text ?? "DefaultReceiver";
+    const exportIssue = HandlerSources.receiverExportIssue(node, scope.source);
     if (HandlerSources.hasDecoratedMethod(node, scope.imports) && exportIssue !== undefined) {
       HandlerTypes.pushDiagnostic(
         scope,
@@ -406,7 +468,9 @@ const HandlerSources = Object.freeze({
       return undefined;
     }
 
-    const stateSchema = HandlerSources.entityStateSchema(node, scope.imports);
+    const lineage = HandlerSources.receiverLineage(node, scope);
+    const entityBase = lineage?.base;
+    const stateSchema = lineage?.stateSchema;
     const handlers: BuildHandlerRecord[] = [];
 
     for (const member of node.members) {
@@ -414,23 +478,53 @@ const HandlerSources = Object.freeze({
         continue;
       }
 
-      const handler = HandlerSources.analyzeMethod(member, className, stateSchema, scope);
+      const handler = HandlerSources.analyzeMethod(
+        member,
+        className,
+        entityBase,
+        stateSchema,
+        lineage?.receiverKind,
+        scope,
+      );
       if (handler !== undefined) {
         handlers.push(handler);
       }
     }
 
-    if (stateSchema === undefined || handlers.length === 0) {
+    if (lineage === undefined || handlers.length === 0) {
       return undefined;
     }
 
-    return { className, sourceFile: scope.source.fileName, stateSchema, handlers };
+    return lineage.receiverKind === "entity"
+      ? stateSchema === undefined
+        ? undefined
+        : {
+            receiverKind: "entity",
+            className,
+            ...(HandlerTypes.hasModifier(node, ts.SyntaxKind.DefaultKeyword)
+              ? { defaultExport: true }
+              : {}),
+            sourceFile: scope.source.fileName,
+            stateSchema,
+            handlers,
+          }
+      : {
+          receiverKind: "standalone",
+          className,
+          ...(HandlerTypes.hasModifier(node, ts.SyntaxKind.DefaultKeyword)
+            ? { defaultExport: true }
+            : {}),
+          sourceFile: scope.source.fileName,
+          handlers,
+        };
   },
 
   analyzeMethod(
     node: ts.MethodDeclaration,
     className: string,
+    entityBase: string | undefined,
     stateSchema: SchemaReference | undefined,
+    receiverKind: "entity" | "standalone" | undefined,
     scope: AnalyzerScope,
   ): BuildHandlerRecord | undefined {
     const decorators = HandlerSources.methodDecorators(node, scope.imports);
@@ -463,10 +557,36 @@ const HandlerSources = Object.freeze({
     }
 
     const method = HandlerTypes.methodName(node);
+    if ((entityBase === "Aggregate" || entityBase === "Projection") && handler.name === "Command") {
+      HandlerTypes.pushDiagnostic(
+        scope,
+        "UNSUPPORTED_COMMAND_HANDLER",
+        handler.node,
+        "Only Process Managers support @Command handlers.",
+        className,
+        method,
+      );
+      return undefined;
+    }
+    if (
+      receiverKind === "standalone" &&
+      !HandlerSources.allowsStandaloneDecorator(entityBase, handler.name)
+    ) {
+      HandlerTypes.pushDiagnostic(
+        scope,
+        "UNSUPPORTED_COMMAND_HANDLER",
+        handler.node,
+        `@${handler.name} is not legal for standalone ${entityBase ?? "receiver"}.`,
+        className,
+        method,
+      );
+      return undefined;
+    }
     const invalid = HandlerSources.validateHandlerNode(
       node,
       handler.name,
-      stateSchema,
+      receiverKind === "entity" ? stateSchema : undefined,
+      receiverKind !== "standalone",
       scope,
       className,
       method,
@@ -489,19 +609,23 @@ const HandlerSources = Object.freeze({
     const origin = HandlerSources.externalOrigin(node.parameters, scope, className, method);
     if (origin === undefined) return undefined;
     const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
-    const signalSchema = signal?.reference;
     const emittedSchemas = HandlerSources.emittedSchemaUses(
       node.type,
       handler.name,
       scope.imports,
     )?.map((schema) => schema.reference);
-    if (signalSchema === undefined || emittedSchemas === undefined || method === undefined) {
+    if (signal === undefined || emittedSchemas === undefined || method === undefined) {
+      return undefined;
+    }
+    if (
+      !HandlerSources.validContextParameter(node.parameters, signal.kind, scope, className, method)
+    ) {
       return undefined;
     }
     const where = HandlerSources.whereDeclaration(
       whereUses,
       handler,
-      signal?.kind,
+      signal.kind,
       scope,
       className,
       method,
@@ -511,9 +635,9 @@ const HandlerSources = Object.freeze({
     }
 
     return {
-      kind: HandlerSources.handlerKind(handler.name, signal?.kind),
+      kind: HandlerSources.handlerKind(handler.name, signal.kind),
       methodName: method,
-      signalSchema,
+      signalSchema: signal.reference,
       emittedSchemas,
       parameterCount: node.parameters.length as GeneratedHandlerParameterCount,
       origin: origin.value,
@@ -627,16 +751,11 @@ const HandlerSources = Object.freeze({
     );
   },
 
-  entityExportIssue(
+  receiverExportIssue(
     node: ts.ClassDeclaration,
     source: ts.SourceFile,
   ): { readonly code: BuildHandlerDiagnosticCode; readonly message: string } | undefined {
-    if (HandlerTypes.hasModifier(node, ts.SyntaxKind.DefaultKeyword)) {
-      return {
-        code: "UNSUPPORTED_ENTITY_EXPORT",
-        message: "Decorated entity classes must use named exports, not default exports.",
-      };
-    }
+    if (HandlerTypes.hasModifier(node, ts.SyntaxKind.DefaultKeyword)) return undefined;
     if (HandlerTypes.hasModifier(node, ts.SyntaxKind.ExportKeyword)) {
       return undefined;
     }
@@ -645,8 +764,8 @@ const HandlerSources = Object.freeze({
     }
 
     return {
-      code: "NON_EXPORTED_ENTITY_CLASS",
-      message: "Decorated entity classes must be exported for generated registry imports.",
+      code: "NON_EXPORTED_RECEIVER_CLASS",
+      message: "Decorated receiver classes must be exported for generated registry imports.",
     };
   },
 
@@ -675,12 +794,20 @@ const HandlerSources = Object.freeze({
     node: ts.MethodDeclaration,
     decorator: HandlerDecorator,
     stateSchema: SchemaReference | undefined,
+    requiresEntityState: boolean,
     scope: AnalyzerScope,
     className: string,
     method: string | undefined,
   ): boolean {
     return [
-      HandlerSources.validateEntityState(node, stateSchema, scope, className, method),
+      HandlerSources.validateEntityState(
+        node,
+        stateSchema,
+        requiresEntityState,
+        scope,
+        className,
+        method,
+      ),
       HandlerSources.validateName(node, scope, className),
       HandlerSources.validateVisibility(node, scope, className, method),
       HandlerSources.validateParameters(node, decorator, scope, className, method),
@@ -691,11 +818,12 @@ const HandlerSources = Object.freeze({
   validateEntityState(
     node: ts.MethodDeclaration,
     stateSchema: SchemaReference | undefined,
+    requiresEntityState: boolean,
     scope: AnalyzerScope,
     className: string,
     method: string | undefined,
   ): boolean {
-    if (stateSchema !== undefined) {
+    if (!requiresEntityState || stateSchema !== undefined) {
       return false;
     }
 
@@ -962,41 +1090,156 @@ const HandlerSources = Object.freeze({
     return handlerDecorators.has(decorator.name as HandlerDecorator);
   },
 
-  entityStateSchema(node: ts.ClassDeclaration, imports: ImportState): SchemaReference | undefined {
+  allowsStandaloneDecorator(base: string | undefined, decorator: HandlerDecorator): boolean {
+    return (
+      (base === "AbstractAssignee" && decorator === "Assign") ||
+      (base === "AbstractCommander" && decorator === "Command") ||
+      (base === "AbstractEventReactor" && decorator === "React") ||
+      (base === "AbstractEventSubscriber" && decorator === "Subscribe")
+    );
+  },
+
+  receiverLineage(
+    node: ts.ClassDeclaration,
+    scope: AnalyzerScope,
+    seen: ReadonlySet<ts.ClassDeclaration> = new Set(),
+  ):
+    | {
+        readonly receiverKind: "entity";
+        readonly base: string;
+        readonly stateSchema: SchemaReference | undefined;
+      }
+    | {
+        readonly receiverKind: "standalone";
+        readonly base: string;
+        readonly stateSchema: undefined;
+      }
+    | undefined {
+    if (seen.has(node)) return undefined;
+    const nextSeen = new Set(seen);
+    nextSeen.add(node);
+
     for (const clause of node.heritageClauses ?? []) {
       for (const type of clause.types) {
-        if (!HandlerSources.isEntityBase(type.expression, imports)) {
-          continue;
-        }
-
-        const stateType = type.typeArguments?.[1];
-        const reference =
-          stateType === undefined
-            ? undefined
-            : HandlerSources.schemaFromTypeQuery(stateType, imports, HandlerSources.newTypeWalk());
-        if (reference !== undefined) {
-          return reference;
-        }
+        const direct = HandlerSources.directReceiverLineage(type, scope);
+        if (direct !== undefined) return direct;
+        const inherited = HandlerSources.inheritedReceiverLineage(type.expression, scope, nextSeen);
+        if (inherited !== undefined) return inherited;
       }
     }
 
     return undefined;
   },
 
-  isEntityBase(expression: ts.Expression, imports: ImportState): boolean {
+  directReceiverLineage(
+    type: ts.ExpressionWithTypeArguments,
+    scope: AnalyzerScope,
+  ):
+    | {
+        readonly receiverKind: "entity";
+        readonly base: string;
+        readonly stateSchema: SchemaReference | undefined;
+      }
+    | {
+        readonly receiverKind: "standalone";
+        readonly base: string;
+        readonly stateSchema: undefined;
+      }
+    | undefined {
+    const base = HandlerSources.directEntityBaseName(type.expression, scope.imports);
+    if (base !== undefined) {
+      const stateType = type.typeArguments?.[1];
+      const stateSchema =
+        stateType === undefined
+          ? undefined
+          : HandlerSources.schemaFromTypeQuery(
+              stateType,
+              scope.imports,
+              HandlerSources.newTypeWalk(),
+            );
+      return { receiverKind: "entity", base, stateSchema };
+    }
+    const standalone = HandlerSources.directStandaloneBaseName(type.expression, scope.imports);
+    if (standalone !== undefined)
+      return { receiverKind: "standalone", base: standalone, stateSchema: undefined };
+  },
+
+  inheritedReceiverLineage(
+    expression: ts.Expression,
+    scope: AnalyzerScope,
+    seen: ReadonlySet<ts.ClassDeclaration>,
+  ):
+    | {
+        readonly receiverKind: "entity";
+        readonly base: string;
+        readonly stateSchema: SchemaReference | undefined;
+      }
+    | {
+        readonly receiverKind: "standalone";
+        readonly base: string;
+        readonly stateSchema: undefined;
+      }
+    | undefined {
+    const parent = HandlerSources.classDeclarationFor(expression, scope);
+    if (parent === undefined) return undefined;
+    const source = parent.getSourceFile();
+    return HandlerSources.receiverLineage(
+      parent,
+      { ...scope, source, imports: HandlerSources.buildImportState(source, scope.program) },
+      seen,
+    );
+  },
+
+  directEntityBaseName(expression: ts.Expression, imports: ImportState): string | undefined {
     if (ts.isIdentifier(expression)) {
-      return entityBaseNames.has(imports.serverSymbols.get(expression.text) ?? "");
+      const base = imports.serverSymbols.get(expression.text);
+      return base !== undefined && entityBaseNames.has(base) ? base : undefined;
     }
     if (ts.isPropertyAccessExpression(expression)) {
       const namespace = HandlerTypes.expressionName(expression.expression);
-      return (
-        namespace !== undefined &&
+      return namespace !== undefined &&
         imports.serverNamespaces.has(namespace) &&
         entityBaseNames.has(expression.name.text)
-      );
+        ? expression.name.text
+        : undefined;
     }
+    return undefined;
+  },
 
-    return false;
+  directStandaloneBaseName(expression: ts.Expression, imports: ImportState): string | undefined {
+    if (ts.isIdentifier(expression)) {
+      const base = imports.serverSymbols.get(expression.text);
+      return base !== undefined && standaloneBaseNames.has(base) ? base : undefined;
+    }
+    if (ts.isPropertyAccessExpression(expression)) {
+      const namespace = HandlerTypes.expressionName(expression.expression);
+      return namespace !== undefined &&
+        imports.serverNamespaces.has(namespace) &&
+        standaloneBaseNames.has(expression.name.text)
+        ? expression.name.text
+        : undefined;
+    }
+    return undefined;
+  },
+
+  classDeclarationFor(
+    expression: ts.Expression,
+    scope: AnalyzerScope,
+  ): ts.ClassDeclaration | undefined {
+    const checker = scope.program.getTypeChecker();
+    const location = ts.isPropertyAccessExpression(expression) ? expression.name : expression;
+    let symbol = checker.getSymbolAtLocation(location);
+    if (symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0) {
+      symbol = checker.getAliasedSymbol(symbol);
+    }
+    const declaration = symbol?.declarations?.find(ts.isClassDeclaration);
+    if (declaration !== undefined) return declaration;
+    const declarations = checker.getTypeAtLocation(expression).getSymbol()?.declarations;
+    return declarations === undefined ? undefined : declarations.find(ts.isClassDeclaration);
+  },
+
+  isEntityBase(expression: ts.Expression, imports: ImportState): boolean {
+    return HandlerSources.directEntityBaseName(expression, imports) !== undefined;
   },
 
   schemaFromTypeQuery(
@@ -1253,7 +1496,7 @@ const HandlerSources = Object.freeze({
       case "Assign":
         return "command-assignment";
       case "Command":
-        return "command-reaction";
+        return signalKind === "command" ? "command-substitution" : "command-reaction";
       case "React":
         return "event-reaction";
       case "Subscribe":
@@ -1331,6 +1574,48 @@ const HandlerSources = Object.freeze({
       return { value: "external", type: marker.type };
     }
     return { value: "domestic", type: first };
+  },
+
+  validContextParameter(
+    parameters: readonly ts.ParameterDeclaration[],
+    signalKind: SignalKind | undefined,
+    scope: AnalyzerScope,
+    className: string,
+    method: string,
+  ): boolean {
+    if (parameters.length !== 2) return true;
+    const context = parameters[1]?.type;
+    const expected = signalKind === "command" ? "CommandContext" : "EventContext";
+    if (context !== undefined && HandlerSources.isCanonicalContext(context, expected, scope)) {
+      return true;
+    }
+    HandlerTypes.pushDiagnostic(
+      scope,
+      "INVALID_HANDLER_CONTEXT",
+      context ?? parameters[1] ?? scope.source,
+      `Two-argument handlers receiving ${
+        signalKind === "command" ? "Commands" : "Events, rejections, or Entity states"
+      } must declare ${expected} as their second parameter.`,
+      className,
+      method,
+    );
+    return false;
+  },
+
+  isCanonicalContext(
+    type: ts.TypeNode,
+    expected: "CommandContext" | "EventContext",
+    scope: AnalyzerScope,
+  ): boolean {
+    if (!ts.isTypeReferenceNode(type)) return false;
+    if (ts.isIdentifier(type.typeName)) {
+      return scope.imports.protoContextSymbols.get(type.typeName.text) === expected;
+    }
+    return (
+      ts.isIdentifier(type.typeName.left) &&
+      scope.imports.protoNamespaces.has(type.typeName.left.text) &&
+      type.typeName.right.text === expected
+    );
   },
 
   externalMarker(
@@ -1436,6 +1721,7 @@ const HandlerSources = Object.freeze({
       serverSymbols: new Map(),
       protoNamespaces: new Set(),
       protoSymbols: new Set(),
+      protoContextSymbols: new Map(),
     };
 
     for (const statement of source.statements) {
@@ -1515,6 +1801,9 @@ const HandlerSources = Object.freeze({
       const imported = element.propertyName?.text ?? element.name.text;
       if (imported === "Event" || imported === "Command") {
         state.protoSymbols.add(element.name.text);
+      }
+      if (imported === "CommandContext" || imported === "EventContext") {
+        state.protoContextSymbols.set(element.name.text, imported);
       }
     }
   },
@@ -1843,10 +2132,10 @@ const HandlerSources = Object.freeze({
     if (sourceName === "rejections.proto" || sourceName?.endsWith("_rejections.proto") === true) {
       return messageIndexes?.length === 1 ? "rejection" : undefined;
     }
-    if (sourceFile.endsWith("commands.proto")) {
+    if (sourceName === "commands.proto" || sourceName?.endsWith("_commands.proto") === true) {
       return "command";
     }
-    if (sourceFile.endsWith("events.proto")) {
+    if (sourceName === "events.proto" || sourceName?.endsWith("_events.proto") === true) {
       return "event";
     }
 

@@ -131,13 +131,18 @@ channel.
 ### Command Bus
 
 The command bus accepts packed Spine `Command` messages. It validates command
-metadata and dispatches commands through repository routes to matching command
-assignee/reactor endpoints.
+metadata and dispatches each command through repository routes to its one
+effective `@Assign` or command-input `@Command` receptor; event- and
+rejection-input `@Command` reactions remain on EventBus.
 
 Requirements:
 
-- command assignees and command reactors may both observe the same command type
-  when registered in one bounded context;
+- one command input has one receptor: either an `@Assign` assignee or a
+  command-input `@Command` substitution; event- and rejection-input
+  `@Command` handlers remain EventBus reactions;
+- `@Command` handlers are supported only by Process Manager repositories;
+  Aggregate and Projection repositories reject both command-input
+  substitutions and event- or rejection-input reactions during construction;
 - default entity route by the first command field in Protobuf declaration
   order, not by numeric field index;
 - Entity state declares the target ID type in its first field; complete

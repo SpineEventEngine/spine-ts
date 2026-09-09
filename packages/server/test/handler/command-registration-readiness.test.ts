@@ -93,6 +93,12 @@ const AggregateStateSchema = messageDesc(
 ) as GenMessage<AggregateState>;
 
 describe("command registration readiness", () => {
+  it("rejects non-readiness values as inauthentic", () => {
+    expect(CommandRegistrationReadiness.isAuthentic(null)).toBe(false);
+    expect(CommandRegistrationReadiness.isAuthentic("readiness")).toBe(false);
+    expect(CommandRegistrationReadiness.isAuthentic({})).toBe(false);
+  });
+
   it("treats an empty handler registry as valid command readiness", () => {
     const readiness = CommandRegistrationReadiness.fromRegistry(new HandlerMetadataRegistry());
 
@@ -257,6 +263,7 @@ describe("command registration readiness", () => {
       entity: createProjectionEntityMetadata(),
       handlers: [mutableHandler],
       commandAssignments: [mutableHandler],
+      commandSubstitutions: [],
       commandReactions: [],
       eventSubscriptions: [],
       stateSubscriptions: [],
@@ -300,6 +307,7 @@ describe("command registration readiness", () => {
       handler: { methodName: "assignCreate" },
       entityHandlers: {
         commandAssignments: [{ methodName: "assignCreate" }],
+        commandSubstitutions: [],
       },
       registeredHandler: {
         handler: { methodName: "assignCreate" },
@@ -324,6 +332,7 @@ describe("command registration readiness", () => {
       entity: createProjectionEntityMetadata(),
       handlers: [mutableHandler],
       commandAssignments: [mutableHandler],
+      commandSubstitutions: [],
       commandReactions: [],
       eventSubscriptions: [],
       stateSubscriptions: [],
@@ -375,6 +384,7 @@ describe("command registration readiness", () => {
       entity: metadataWithTags(Object.freeze([null])),
       handlers: [handler],
       commandAssignments: [handler],
+      commandSubstitutions: [],
       commandReactions: [],
       eventSubscriptions: [],
       stateSubscriptions: [],
@@ -446,6 +456,7 @@ function createRegistryLookupForCommandNames(
       entity: createProjectionEntityMetadata(),
       handlers: [handler],
       commandAssignments: [handler],
+      commandSubstitutions: [],
       commandReactions: [],
       eventSubscriptions: [],
       stateSubscriptions: [],

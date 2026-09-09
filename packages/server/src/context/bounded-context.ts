@@ -82,7 +82,14 @@ import {
   HandlerRegistryIngestor,
   type GeneratedEntityHandlerGroup,
   type GeneratedHandlerRegistry,
+  type GeneratedStandaloneHandlerGroup,
 } from "../handler/generated-handler-registry.js";
+import {
+  AbstractAssignee,
+  AbstractCommander,
+  AbstractEventReactor,
+  AbstractEventSubscriber,
+} from "../handler/standalone.js";
 import {
   HandlerMetadataRegistry,
   type EntityHandlersMetadata,
@@ -98,9 +105,13 @@ import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import { InboxTargets } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
-import { emitServerError } from "../server/server-log.js";
 import { IntegrationBroker } from "../integration/integration-broker.js";
 import { ServerEnvironment } from "../server/server-environment.js";
+import { SignalPublisher } from "../runtime/signal-publisher.js";
+import {
+  StandaloneHandlerRuntime,
+  type StandaloneBinding,
+} from "../runtime/standalone-handler-runtime.js";
 
 /**
  * Tenant isolation mode declared by a bounded context specification.
@@ -217,19 +228,9 @@ interface RepositoryRegistration {
   readonly projectionInbox: ProjectionInbox;
 
   /**
-   * Stored-event dispatch callback into the owning context event bus.
+   * Context-owned contained publisher for signals produced by repository work.
    */
-  readonly dispatchStored: (event: Event) => Promise<void>;
-
-  /**
-   * Stored-event follow-up dispatch callback into the owning context event bus.
-   */
-  readonly dispatchStoredFollowUp: (event: Event) => Promise<void>;
-
-  /**
-   * Follow-up event posting callback into the owning context event bus.
-   */
-  readonly postEventFollowUp: (event: Event) => Promise<void>;
+  readonly publisher: SignalPublisher;
 
   /**
    * Registers a schema for a framework-produced event before it enters the event bus.
@@ -240,21 +241,6 @@ interface RepositoryRegistration {
    * Registers a schema for an internal system event.
    */
   readonly registerSystemEventSchema: (schema: MessageSchema) => void;
-
-  /**
-   * Posts a committed system event without affecting domain event storage.
-   */
-  readonly postSystemFollowUp: (event: Event) => Promise<void>;
-
-  /**
-   * Command posting callback into the owning context command bus.
-   */
-  readonly onPostCommand: (command: Command) => Promise<void>;
-
-  /**
-   * Records asynchronous event follow-up failures for diagnostics.
-   */
-  readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
 interface RegisteredEntityInbox extends EntityInbox {
@@ -445,48 +431,6 @@ export interface ReadCatchUpResult {
 type CatchUpReplayCode = "READ_SIDE_CATCH_UP_REPLAY_FAILED";
 
 /**
- * Observable failure from asynchronous event follow-up processing.
- *
- * This covers dispatch of already-stored events and independent follow-up
- * posts whose acceptance, storage, or dispatch failed.
- */
-export interface StoredEventDispatchFailure {
-  // prettier-ignore
-
-  /**
-   * Event snapshot associated with the failure; it may not have reached storage.
-   */
-  readonly event: Event;
-
-  /**
-   * Frozen scalar snapshot of the thrown failure.
-   */
-  readonly error: DispatchErrorSnapshot;
-}
-
-/**
- * Copy-safe event follow-up error diagnostic.
- */
-export interface DispatchErrorSnapshot {
-  // prettier-ignore
-
-  /**
-   * Error class/name, or a stable label for non-Error throws.
-   */
-  readonly name: string;
-
-  /**
-   * Bounded diagnostic message.
-   */
-  readonly message: string;
-
-  /**
-   * Bounded stack string when the thrown value is an Error with a stack.
-   */
-  readonly stack?: string;
-}
-
-/**
  * Error thrown when a bounded context name cannot be accepted.
  */
 export class BoundedContextNameError extends Error {
@@ -517,10 +461,8 @@ interface FrameworkConstructionToken {
 const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
   frameworkConstructionToken: true,
 });
-const dispatchFailureLimit = 10;
-const dispatchErrorMessageLimit = 500;
-const dispatchErrorStackLimit = 2_000;
 const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
+const errorDetailLimit = 500;
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 const internalStoragePrefix = "__spine/";
 const generatedRegistryLoadAttempts = new Map<string, number>();
@@ -534,12 +476,9 @@ const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDescriptor>();
 const contextSubscriptionRuntimes = new WeakMap<BoundedContext, SubscriptionRuntime>();
 const contextLoggers = new WeakMap<BoundedContext, ILogLayer>();
+const contextSignalPublishers = new WeakMap<BoundedContext, SignalPublisher>();
 const contextEventBuses = new WeakMap<BoundedContext, readonly [EventBus, EventBus]>();
 const closingContexts = new WeakSet<BoundedContext>();
-const contextDispatchFailureRecorders = new WeakMap<
-  BoundedContext,
-  (event: Event, error: unknown) => void
->();
 const contextIntegrations = new WeakMap<
   BoundedContext,
   { readonly broker: IntegrationBroker; readonly ready: Promise<void> }
@@ -573,7 +512,6 @@ interface BoundedContextAccess {
   ): Promise<import("../stand/stand.js").StandSubscription>;
   installLogger(context: BoundedContext, logger: ILogLayer): void;
   loggerFor(context: BoundedContext): ILogLayer;
-  recordDispatchFailure(context: BoundedContext, event: Event, error: unknown): void;
   delivery(context: BoundedContext): ContextDeliveryDescriptor;
 }
 let constructBoundedContext:
@@ -582,6 +520,7 @@ let constructBoundedContext:
       commandBus: CommandBus,
       eventBus: EventBus,
       systemEventBus: EventBus,
+      publisher: SignalPublisher,
       stand: Stand,
       systemStand: Stand,
       runtime: SubscriptionRuntime,
@@ -606,13 +545,13 @@ export class BoundedContext {
   readonly #commandBus: CommandBus;
   readonly #eventBus: EventBus;
   readonly #systemEventBus: EventBus;
+  readonly #publisher: SignalPublisher;
   readonly #commandEndpoint: CommandEndpoint;
   readonly #eventEndpoint: EventEndpoint;
   readonly #entityInbox: RegisteredEntityInbox;
   readonly #projectionInbox: PrjInbox;
   readonly #deliveryStrategy: DeliveryStrategy;
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
-  readonly #storedEventDispatchFailures: StoredEventDispatchFailure[] = [];
   readonly #repositoryViews = new Set<RepositoryView>();
   readonly #storageFactory: StorageFactory;
   readonly #stand: Stand;
@@ -629,6 +568,7 @@ export class BoundedContext {
       commandBus,
       eventBus,
       systemEventBus,
+      publisher,
       stand,
       systemStand,
       runtime,
@@ -643,6 +583,7 @@ export class BoundedContext {
         commandBus,
         eventBus,
         systemEventBus,
+        publisher,
         stand,
         systemStand,
         runtime,
@@ -661,6 +602,7 @@ export class BoundedContext {
    * @param commandBus Dispatches commands accepted by this context.
    * @param eventBus Dispatches events accepted by this context.
    * @param systemEventBus Dispatches framework-only System events.
+   * @param publisher Publishes signals produced by context handlers.
    * @param stand Stores read-side state for this context.
    * @param systemStand Stores read-side state for the paired System Context.
    * @param subscriptionRuntime Coordinates pair-owned subscription delivery.
@@ -675,6 +617,7 @@ export class BoundedContext {
     commandBus: CommandBus,
     eventBus: EventBus,
     systemEventBus: EventBus,
+    publisher: SignalPublisher,
     stand: Stand,
     systemStand: Stand,
     subscriptionRuntime: SubscriptionRuntime,
@@ -692,6 +635,7 @@ export class BoundedContext {
     this.#commandBus = commandBus;
     this.#eventBus = eventBus;
     this.#systemEventBus = systemEventBus;
+    this.#publisher = publisher;
     contextEventBuses.set(this, [eventBus, systemEventBus]);
     this.#stand = stand;
     this.#systemStand = systemStand;
@@ -705,9 +649,6 @@ export class BoundedContext {
     this.#eventEndpoint = Object.freeze({
       acceptedEventTypes: () => ContextParts.exposedEventTypeUrls(this.#eventBus),
       post: (event: Event) => ContextParts.postContextEvent(this, event),
-    });
-    contextDispatchFailureRecorders.set(this, (event, error) => {
-      this.#recordDispatchFailure(event, error);
     });
     const deliveryReadiness = new DeliveryReadiness();
     const tenantIndex = TenantIndexes.create({
@@ -730,11 +671,12 @@ export class BoundedContext {
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
-    systemEventPosters.set(this, (event) => this.#systemEventBus.post(event));
+    systemEventPosters.set(this, (event) => this.#publisher.publishSystemEvent(event));
     contextSystemPairings.set(this, ContextParts.createSystemPairing(this.#snapshot, systemSpec));
     contextTenantIndexes.set(this, tenantIndex);
     contextStorageFactories.set(this, storageFactory);
     contextSubscriptionRuntimes.set(this, subscriptionRuntime);
+    contextSignalPublishers.set(this, publisher);
     contextDeliveryDescriptors.set(
       this,
       ContextParts.createDeliveryDescriptor(
@@ -797,19 +739,12 @@ export class BoundedContext {
       stand: this.#stand,
       entityInbox: this.#entityInbox,
       projectionInbox: this.#projectionInbox,
-      dispatchStored: (event) => eventBusAccess.postStored(this.#eventBus, event),
-      dispatchStoredFollowUp: (event) => eventBusAccess.postStoredFollowUp(this.#eventBus, event),
-      postEventFollowUp: (event) => eventBusAccess.postFollowUp(this.#eventBus, event),
+      publisher: this.#publisher,
       registerEventSchema: (schema) => {
         eventBusAccess.registerSchemas(this.#eventBus, [schema]);
       },
       registerSystemEventSchema: (schema) => {
         eventBusAccess.registerSchemas(this.#systemEventBus, [schema]);
-      },
-      postSystemFollowUp: (event) => eventBusAccess.postFollowUp(this.#systemEventBus, event),
-      onPostCommand: (command) => commandBusAccess.postInternal(this.#commandBus, command),
-      recordDispatchFailure: (event, error) => {
-        this.#recordDispatchFailure(event, error);
       },
     };
     const preparedRepositories: PreparedRepository[] = [];
@@ -940,18 +875,6 @@ export class BoundedContext {
   }
 
   /**
-   * Returns copy-safe diagnostics for asynchronous event follow-up failures.
-   *
-   * Entries can describe already-stored event dispatch or an independent
-   * follow-up post that failed before storage.
-   *
-   * @returns Returns immutable failure diagnostics.
-   */
-  storedEventDispatchFailures(): readonly StoredEventDispatchFailure[] {
-    return this.#storedEventDispatchFailures.map(ContextParts.cloneDispatchFailure);
-  }
-
-  /**
    * Clears and locally replays every registered Projection from already-stored events.
    *
    * Despite its legacy name, this method is not Projection catch-up. It is a
@@ -1028,7 +951,10 @@ export class BoundedContext {
    */
   close(): Promise<void> {
     closingContexts.add(this);
+    this.#publisher.beginClose();
+    commandBusAccess.beginClose(this.#commandBus);
     eventBusAccess.beginClose(this.#eventBus);
+    eventBusAccess.beginClose(this.#systemEventBus);
     this.#closed ??= this.#closeOnce();
     return this.#closed;
   }
@@ -1038,19 +964,23 @@ export class BoundedContext {
 
     await ContextParts.closeContextPart(() => ContextParts.closeIntegration(this), errors);
 
-    commandBusAccess.beginClose(this.#commandBus);
-    eventBusAccess.beginClose(this.#eventBus);
     await ContextParts.closeContextPart(
-      () => ContextParts.drainContextBuses(this.#commandBus, this.#eventBus),
+      () =>
+        ContextParts.drainContextWork(
+          this.#commandBus,
+          this.#eventBus,
+          this.#systemEventBus,
+          this.#publisher,
+        ),
       errors,
     );
+    this.#publisher.finishClose();
     await ContextParts.closeContextPart(
       () => commandBusAccess.finishClose(this.#commandBus),
       errors,
     );
     await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
     this.#subscriptionRuntime.beginClose();
-    eventBusAccess.beginClose(this.#systemEventBus);
     await ContextParts.closeContextPart(() => eventBusAccess.drain(this.#systemEventBus), errors);
     await ContextParts.closeContextPart(() => this.#subscriptionRuntime.drainClose(), errors);
     await ContextParts.closeContextPart(
@@ -1076,30 +1006,6 @@ export class BoundedContext {
     }
     ContextParts.clearContextMetadata(this);
   }
-
-  #recordDispatchFailure(event: Event, error: unknown): void {
-    this.#storedEventDispatchFailures.push(
-      Object.freeze({
-        event: clone(EventSchema, event),
-        error: ContextParts.snapshotDispatchError(error),
-      }),
-    );
-    if (this.#storedEventDispatchFailures.length > dispatchFailureLimit) {
-      this.#storedEventDispatchFailures.splice(
-        0,
-        this.#storedEventDispatchFailures.length - dispatchFailureLimit,
-      );
-    }
-    const logger = contextLoggers.get(this);
-    const eventType = event.message?.typeUrl;
-    if (logger !== undefined && eventType !== undefined && eventType.length > 0) {
-      emitServerError(logger, "Repository follow-up dispatch failed.", {
-        eventType,
-        operation: "repository.follow_up",
-        reasonCode: "dispatch_failed",
-      });
-    }
-  }
 }
 
 /**
@@ -1117,6 +1023,10 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     }
     eventBusAccess.installLogger(buses[0], logger);
     eventBusAccess.installLogger(buses[1], logger);
+    const publisher = contextSignalPublishers.get(context);
+    if (publisher === undefined)
+      throw new TypeError("Context logger requires a built BoundedContext instance.");
+    publisher.installLogger(logger);
     const runtime = contextSubscriptionRuntimes.get(context);
     if (runtime === undefined) {
       throw new TypeError("Context logger requires a built BoundedContext instance.");
@@ -1130,14 +1040,6 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
       throw new TypeError("Context logger requires a built BoundedContext instance.");
     }
     return logger;
-  },
-
-  recordDispatchFailure(context: BoundedContext, event: Event, error: unknown): void {
-    const record = contextDispatchFailureRecorders.get(context);
-    if (record === undefined) {
-      throw new TypeError("Dispatch failure recording requires a built BoundedContext instance.");
-    }
-    record(event, error);
   },
 
   isBuilder(value: unknown): value is BoundedContextBuilder {
@@ -1253,6 +1155,9 @@ export class BoundedContextBuilder {
   readonly #specSnapshot: ContextSpecSnapshot;
   readonly #commandDispatchers = new Set<CommandDispatcher>();
   readonly #eventDispatchers = new Set<EventDispatcher>();
+  readonly #assignees: AbstractAssignee[] = [];
+  readonly #commanders: AbstractCommander[] = [];
+  readonly #eventReceivers: (AbstractEventReactor | AbstractEventSubscriber)[] = [];
   readonly #repositories = new Set<RepositoryView>();
   readonly #entityTypes = new Set<RepositoryEntityType>();
   readonly #generatedRepositoryOptions = new Map<RepositoryEntityType, object>();
@@ -1388,10 +1293,17 @@ export class BoundedContextBuilder {
   /**
    * Adds a command dispatcher to the context being built.
    *
-   * @param dispatcher Dispatches commands accepted by this context.
-   * @returns Returns this builder for further configuration.
+   * @param dispatcher Raw command dispatcher, or an `AbstractCommander` instance.
+   *   A standalone commander requires generated receiver metadata and therefore
+   *   this builder's `buildAsync()` path. It installs its Command and Event sides
+   *   exactly once.
+   * @returns This builder for further configuration.
    */
-  addCommandDispatcher(dispatcher: CommandDispatcher): this {
+  addCommandDispatcher(dispatcher: CommandDispatcher | AbstractCommander): this {
+    if (dispatcher instanceof AbstractCommander) {
+      this.#commanders.push(dispatcher);
+      return this;
+    }
     this.#commandDispatchers.add(dispatcher);
     return this;
   }
@@ -1410,11 +1322,35 @@ export class BoundedContextBuilder {
   /**
    * Adds an event dispatcher to the context being built.
    *
-   * @param dispatcher Dispatches events accepted by this context.
-   * @returns Returns this builder for further configuration.
+   * @param dispatcher Raw event dispatcher, or a standalone reactor/subscriber.
+   *   Standalone receivers require generated receiver metadata and `buildAsync()`.
+   * @returns This builder for further configuration.
    */
-  addEventDispatcher(dispatcher: EventDispatcher): this {
+  addEventDispatcher(
+    dispatcher: EventDispatcher | AbstractEventReactor | AbstractEventSubscriber,
+  ): this {
+    if (
+      dispatcher instanceof AbstractEventReactor ||
+      dispatcher instanceof AbstractEventSubscriber
+    ) {
+      this.#eventReceivers.push(dispatcher);
+      return this;
+    }
     this.#eventDispatchers.add(dispatcher);
+    return this;
+  }
+
+  /**
+   * Adds a generated standalone command assignee.
+   *
+   * The registered instance is matched by exact constructor to generated
+   * receiver metadata when `buildAsync()` assembles the context.
+   *
+   * @param assignee Generated standalone assignee instance.
+   * @returns This builder for further configuration.
+   */
+  addAssignee(assignee: AbstractAssignee): this {
+    this.#assignees.push(assignee);
     return this;
   }
 
@@ -1495,6 +1431,9 @@ export class BoundedContextBuilder {
    * @returns Returns the built context.
    */
   build(): BoundedContext {
+    if (this.#standaloneInstances().length > 0) {
+      throw new Error("Standalone generated handlers require buildAsync().");
+    }
     ContextParts.rejectSyncEntityAssembly(this.#entityTypes);
     return this.#buildWith(
       [...this.#repositories],
@@ -1503,7 +1442,12 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Builds a context after loading generated metadata for added entity classes.
+   * Builds a context after loading generated metadata for added entity classes
+   * and registered standalone handlers.
+   *
+   * Standalone assignees, commanders, reactors, and subscribers require this
+   * asynchronous path so their exact constructors can be matched to generated
+   * receiver metadata.
    *
    * @returns Resolves to the built context.
    */
@@ -1512,14 +1456,13 @@ export class BoundedContextBuilder {
   }
 
   async #buildAsyncWith(defaultStorageFactory?: StorageFactory): Promise<BoundedContext> {
-    const repositories = [
-      ...this.#repositories,
-      ...(await this.#loadGeneratedRepositories([...this.#entityTypes])),
-    ];
+    const generated = await this.#loadGeneratedArtifacts([...this.#entityTypes]);
+    const repositories = [...this.#repositories, ...generated.repositories];
 
     const context = this.#buildWith(
       repositories,
       this.#storageFactory ?? defaultStorageFactory ?? new InMemoryStorageFactory(),
+      generated.standalone,
     );
     try {
       await ContextParts.integrationReady(context);
@@ -1540,15 +1483,18 @@ export class BoundedContextBuilder {
   #buildWith(
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
+    standalone: readonly GeneratedStandaloneHandlerGroup[] = [],
   ): BoundedContext {
     let registry = this.#subscriptionRegistry;
     this.#subscriptionRegistry = undefined;
 
     const registeredRepositories = [...repositories];
+    let commandBus: CommandBus | undefined;
     let eventStore: EventStore | undefined;
     let systemEventStore: EventStore | undefined;
     let eventBus: EventBus | undefined;
     let systemEventBus: EventBus | undefined;
+    let publisher: SignalPublisher | undefined;
     let stand: Stand | undefined;
     let systemStand: Stand | undefined;
     let runtime: SubscriptionRuntime | undefined;
@@ -1565,7 +1511,7 @@ export class BoundedContextBuilder {
         ...ContextParts.systemEventDispatchers(eventDispatchers),
         ...repositorySystemEventDispatchers,
       ];
-      const commandBus = new CommandBus([
+      commandBus = new CommandBus([
         ...this.#commandDispatchers,
         ...ContextParts.repositoryCommandDispatchers(registeredRepositories),
       ]);
@@ -1584,6 +1530,29 @@ export class BoundedContextBuilder {
       });
       eventStore = this.createEventStore(storageFactory);
       eventBus = new EventBus(eventStore);
+      publisher = new SignalPublisher(
+        commandBus,
+        eventBus,
+        systemEventBus,
+        this.#specSnapshot.name.value,
+      );
+      ContextParts.assertUniqueCommandReceptors(standalone);
+      const standaloneRuntime =
+        standalone.length === 0
+          ? undefined
+          : new StandaloneHandlerRuntime(
+              ContextParts.matchStandaloneHandlers(
+                standalone,
+                this.#standaloneInstances(),
+                publisher,
+              ),
+            );
+      const standaloneCommand = standaloneRuntime?.commandDispatcher();
+      const standaloneEvent = standaloneRuntime?.eventDispatcher();
+      const standaloneState = standaloneRuntime?.stateDispatcher();
+      if (standaloneCommand !== undefined) commandBus.register(standaloneCommand);
+      if (standaloneEvent !== undefined) eventBus.register(standaloneEvent);
+      if (standaloneState !== undefined) systemEventBus.register(standaloneState);
       for (const dispatcher of domainEventDispatchers) eventBus.register(dispatcher);
       eventBusAccess.registerSchemas(
         eventBus,
@@ -1603,6 +1572,7 @@ export class BoundedContextBuilder {
         commandBus,
         eventBus,
         systemEventBus,
+        publisher,
         stand,
         systemStand,
         runtime,
@@ -1615,12 +1585,16 @@ export class BoundedContextBuilder {
         context,
         eventBus,
         systemSpec,
-        ContextParts.externalEventSchemas(domainEventDispatchers),
+        ContextParts.externalEventSchemas([
+          ...domainEventDispatchers,
+          ...(standaloneEvent === undefined ? [] : [standaloneEvent]),
+        ]),
       );
       return context;
     } catch (error) {
       const cleanupErrors: unknown[] = [];
       ContextParts.attemptCleanup(() => runtime?.abortClose(), cleanupErrors);
+      ContextParts.attemptCleanup(() => publisher?.abortAssembly(), cleanupErrors);
       if (runtime === undefined) {
         ContextParts.attemptCleanup(
           () => void registry?.close().catch(() => undefined),
@@ -1632,6 +1606,9 @@ export class BoundedContextBuilder {
         () => void systemStand?.close().catch(() => undefined),
         cleanupErrors,
       );
+      ContextParts.attemptCleanup(() => {
+        if (commandBus !== undefined) commandBusAccess.abortClose(commandBus);
+      }, cleanupErrors);
       ContextParts.attemptCleanup(() => {
         if (systemEventBus !== undefined) eventBusAccess.abortClose(systemEventBus);
         else if (systemEventStore !== undefined) systemEventStore.close();
@@ -1650,11 +1627,12 @@ export class BoundedContextBuilder {
     }
   }
 
-  async #loadGeneratedRepositories(
-    entityTypes: readonly RepositoryEntityType[],
-  ): Promise<readonly RepositoryView[]> {
-    if (entityTypes.length === 0) {
-      return Object.freeze([]);
+  async #loadGeneratedArtifacts(entityTypes: readonly RepositoryEntityType[]): Promise<{
+    readonly repositories: readonly RepositoryView[];
+    readonly standalone: readonly GeneratedStandaloneHandlerGroup[];
+  }> {
+    if (entityTypes.length === 0 && this.#standaloneInstances().length === 0) {
+      return Object.freeze({ repositories: Object.freeze([]), standalone: Object.freeze([]) });
     }
 
     const root = ContextParts.requireGeneratedRegistryRoot(this.#generatedRegistryRoot);
@@ -1672,7 +1650,7 @@ export class BoundedContextBuilder {
       })) as readonly GeneratedHandlerRegistry[];
     const metadata = ContextParts.ingestGeneratedRegistries(registries);
 
-    return Object.freeze(
+    const repositories = Object.freeze(
       entityTypes.map((entityType) =>
         ContextParts.createGeneratedRepository(
           entityType,
@@ -1682,6 +1660,19 @@ export class BoundedContextBuilder {
         ),
       ),
     );
+    const standalone = Object.freeze(
+      registries.flatMap((registry) =>
+        registry.receivers.filter(
+          (receiver): receiver is GeneratedStandaloneHandlerGroup =>
+            receiver.receiverKind === "standalone",
+        ),
+      ),
+    );
+    return Object.freeze({ repositories, standalone });
+  }
+
+  #standaloneInstances(): readonly object[] {
+    return Object.freeze([...this.#assignees, ...this.#commanders, ...this.#eventReceivers]);
   }
 
   private createEventStore(storageFactory: StorageFactory): EventStore {
@@ -1810,6 +1801,60 @@ class CatchUpReplayError extends Error {
  * Assembles private bounded-context lifecycle and replay details.
  */
 const ContextParts = Object.freeze({
+  assertUniqueCommandReceptors(receivers: readonly GeneratedStandaloneHandlerGroup[]): void {
+    const receptorByType = new Map<string, string>();
+    for (const receiver of receivers) {
+      for (const handler of receiver.handlers) {
+        if (handler.kind !== "command-assignment" && handler.kind !== "command-substitution")
+          continue;
+        const typeName = TypeUrls.derive(handler.signalSchema);
+        const prior = receptorByType.get(typeName);
+        if (prior !== undefined)
+          throw new Error(
+            `Standalone command receptors conflict for "${typeName}": ${prior} and ${
+              (receiver.receiverType as unknown as StandaloneConstructor).name
+            }.`,
+          );
+        receptorByType.set(
+          typeName,
+          (receiver.receiverType as unknown as StandaloneConstructor).name,
+        );
+      }
+    }
+  },
+  matchStandaloneHandlers(
+    generated: readonly GeneratedStandaloneHandlerGroup[],
+    instances: readonly object[],
+    publisher: SignalPublisher,
+  ): readonly StandaloneBinding[] {
+    const byConstructor = new Map<StandaloneConstructor, object>();
+    for (const instance of instances) {
+      const constructor = instance.constructor as StandaloneConstructor;
+      if (byConstructor.has(constructor)) {
+        throw new Error(`Standalone receiver ${constructor.name} is registered more than once.`);
+      }
+      byConstructor.set(constructor, instance);
+    }
+    const bindings: StandaloneBinding[] = [];
+    for (const receiver of generated) {
+      const receiverType = receiver.receiverType as unknown as StandaloneConstructor;
+      const instance = byConstructor.get(receiverType);
+      if (instance === undefined) {
+        throw new Error(
+          `Generated standalone receiver ${receiverType.name} has no explicitly registered instance.`,
+        );
+      }
+      bindings.push(Object.freeze({ group: receiver, instance, publisher }));
+      byConstructor.delete(receiverType);
+    }
+    if (byConstructor.size > 0) {
+      throw new Error(
+        `Registered standalone receiver ${[...byConstructor.keys()][0]?.name ?? "unknown"} has no generated metadata.`,
+      );
+    }
+    return Object.freeze(bindings);
+  },
+
   attemptCleanup(onCleanup: () => void, errors: unknown[]): void {
     try {
       onCleanup();
@@ -1841,6 +1886,7 @@ const ContextParts = Object.freeze({
     commandBus: CommandBus,
     eventBus: EventBus,
     systemEventBus: EventBus,
+    publisher: SignalPublisher,
     stand: Stand,
     systemStand: Stand,
     runtime: SubscriptionRuntime,
@@ -1858,6 +1904,7 @@ const ContextParts = Object.freeze({
       commandBus,
       eventBus,
       systemEventBus,
+      publisher,
       stand,
       systemStand,
       runtime,
@@ -2285,7 +2332,10 @@ const ContextParts = Object.freeze({
     registries: readonly GeneratedHandlerRegistry[],
   ): GeneratedEntityHandlerGroup {
     for (const registry of registries) {
-      const generated = registry.entities.find((entity) => entity.entityType === entityType);
+      const generated = registry.receivers.find(
+        (receiver): receiver is GeneratedEntityHandlerGroup =>
+          receiver.receiverKind === "entity" && receiver.receiverType === entityType,
+      );
       if (generated !== undefined) {
         return generated;
       }
@@ -2471,7 +2521,8 @@ const ContextParts = Object.freeze({
     }
     const runtime = contextSubscriptionRuntimes.get(context);
     if (runtime !== undefined) subscriptionRuntimeAccess.clearLogger(runtime);
-    contextDispatchFailureRecorders.delete(context);
+    contextSignalPublishers.get(context)?.clearLogger();
+    contextSignalPublishers.delete(context);
     contextLoggers.delete(context);
     contextSystemPairings.delete(context);
     contextTenantIndexes.delete(context);
@@ -2565,18 +2616,28 @@ const ContextParts = Object.freeze({
     }
   },
 
-  async drainContextBuses(commandBus: CommandBus, eventBus: EventBus): Promise<void> {
+  async drainContextWork(
+    commandBus: CommandBus,
+    eventBus: EventBus,
+    systemEventBus: EventBus,
+    publisher: SignalPublisher,
+  ): Promise<void> {
     let observedCommandWork = -1;
     let observedEventWork = -1;
+    let observedSystemEventWork = -1;
 
     do {
       observedCommandWork = commandBusAccess.acceptedWorkCount(commandBus);
       observedEventWork = eventBusAccess.acceptedWorkCount(eventBus);
+      observedSystemEventWork = eventBusAccess.acceptedWorkCount(systemEventBus);
       await commandBusAccess.drain(commandBus);
       await eventBusAccess.drain(eventBus);
+      await eventBusAccess.drain(systemEventBus);
+      await publisher.drain();
     } while (
       commandBusAccess.acceptedWorkCount(commandBus) !== observedCommandWork ||
-      eventBusAccess.acceptedWorkCount(eventBus) !== observedEventWork
+      eventBusAccess.acceptedWorkCount(eventBus) !== observedEventWork ||
+      eventBusAccess.acceptedWorkCount(systemEventBus) !== observedSystemEventWork
     );
   },
 
@@ -2605,14 +2666,9 @@ const ContextParts = Object.freeze({
       signalMetadata: new SignalMetadata(),
       entityInbox: registration.entityInbox,
       projectionInbox: registration.projectionInbox,
-      dispatchStored: registration.dispatchStored,
-      dispatchStoredFollowUp: registration.dispatchStoredFollowUp,
-      postEventFollowUp: registration.postEventFollowUp,
+      publisher: registration.publisher,
       registerEventSchema: registration.registerEventSchema,
       registerSystemEventSchema: registration.registerSystemEventSchema,
-      postSystemFollowUp: registration.postSystemFollowUp,
-      onPostCommand: registration.onPostCommand,
-      recordDispatchFailure: registration.recordDispatchFailure,
     });
 
     const entityInboxTarget = repositoryAccess.entityInboxTarget(repository);
@@ -2676,39 +2732,6 @@ const ContextParts = Object.freeze({
       stateFullTypeName: snapshot.stateFullTypeName,
       idField: snapshot.idField,
       snapshot: snapshot.snapshot,
-    });
-  },
-
-  cloneDispatchFailure(failure: StoredEventDispatchFailure): StoredEventDispatchFailure {
-    return Object.freeze({
-      event: clone(EventSchema, failure.event),
-      error: ContextParts.cloneDispatchError(failure.error),
-    });
-  },
-
-  snapshotDispatchError(error: unknown): DispatchErrorSnapshot {
-    if (error instanceof Error) {
-      const snapshot: DispatchErrorSnapshot = {
-        name: ContextParts.boundedErrorString(error.name, dispatchErrorMessageLimit) || "Error",
-        message: ContextParts.boundedErrorString(error.message, dispatchErrorMessageLimit),
-        ...(typeof error.stack === "string"
-          ? { stack: ContextParts.boundedErrorString(error.stack, dispatchErrorStackLimit) }
-          : {}),
-      };
-      return Object.freeze(snapshot);
-    }
-
-    return Object.freeze({
-      name: "NonErrorThrow",
-      message: ContextParts.boundedErrorString(String(error), dispatchErrorMessageLimit),
-    });
-  },
-
-  cloneDispatchError(error: DispatchErrorSnapshot): DispatchErrorSnapshot {
-    return Object.freeze({
-      name: error.name,
-      message: error.message,
-      ...(error.stack === undefined ? {} : { stack: error.stack }),
     });
   },
 
@@ -2859,14 +2882,14 @@ const ContextParts = Object.freeze({
   catchUpReplayDetail(error: unknown): CatchUpReplayDetail {
     if (error instanceof Error) {
       return Object.freeze({
-        name: ContextParts.boundedErrorString(error.name, dispatchErrorMessageLimit) || "Error",
-        message: ContextParts.boundedErrorString(error.message, dispatchErrorMessageLimit),
+        name: ContextParts.boundedErrorString(error.name, errorDetailLimit) || "Error",
+        message: ContextParts.boundedErrorString(error.message, errorDetailLimit),
       });
     }
 
     return Object.freeze({
       name: "NonErrorThrow",
-      message: ContextParts.boundedErrorString(String(error), dispatchErrorMessageLimit),
+      message: ContextParts.boundedErrorString(String(error), errorDetailLimit),
     });
   },
 
@@ -2886,6 +2909,10 @@ const ContextParts = Object.freeze({
     return (record as Record<string, unknown>)[localName];
   },
 });
+
+interface StandaloneConstructor {
+  readonly name: string;
+}
 
 /**
  * Exposes broker-only operations for the owning integration package.

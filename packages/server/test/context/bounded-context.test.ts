@@ -31,6 +31,7 @@ import {
   CommandSchema,
   type Event,
   EventContextSchema,
+  type EventContext,
   EventIdSchema,
   EventSchema,
   TenantIdSchema,
@@ -53,6 +54,10 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   Aggregate,
+  AbstractAssignee,
+  AbstractCommander,
+  AbstractEventReactor,
+  AbstractEventSubscriber,
   BoundedContext,
   BoundedContextBuilder,
   BoundedContextNameError,
@@ -68,6 +73,7 @@ import {
   type RepositoryView,
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
+import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
 import { Delivery } from "../../src/delivery/delivery.js";
 import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
 import type { InboxMessage } from "../../src/delivery/inbox.js";
@@ -130,6 +136,21 @@ type AggregateState = Message<"AggregateState"> & {
   archived: boolean;
 };
 
+type TaskCommand = Message<"TaskCommand"> & {
+  id: string;
+  name: string;
+};
+
+type ProcessManagerTaskCommand = Message<"ProcessManagerTaskCommand"> & {
+  id: string;
+  name: string;
+};
+
+type TaskEvent = Message<"TaskEvent"> & {
+  id: string;
+  name: string;
+};
+
 type ProcessManagerState = Message<"ProcessManagerState"> & {
   id: string;
   queue: string;
@@ -163,6 +184,25 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
+const fileHandlerRegistryCommandsFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
+);
+const TaskCommandSchema = messageDesc(
+  fileHandlerRegistryCommandsFixture,
+  2,
+) as GenMessage<TaskCommand>;
+const ProcessManagerTaskCommandSchema = messageDesc(
+  fileHandlerRegistryCommandsFixture,
+  3,
+) as GenMessage<ProcessManagerTaskCommand>;
+const fileHandlerRegistryEventsFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64,
+);
+const TaskEventSchema = messageDesc(fileHandlerRegistryEventsFixture, 1) as GenMessage<TaskEvent>;
+const ReviewStartedSchema = messageDesc(
+  fileHandlerRegistryEventsFixture,
+  0,
+) as GenMessage<TaskEvent>;
 
 const fileEntityVisibilityFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
@@ -175,7 +215,7 @@ const ProcessManagerStateSchema = messageDesc(
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class DuplicateTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class ReplayTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
-  assignTask(command: ProjectionState): AggregateState {
+  assignTask(command: TaskCommand): AggregateState {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -186,7 +226,7 @@ class ReplayTaskAggregate extends Aggregate<string, typeof AggregateStateSchema,
   }
 }
 class GeneratedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignProjection(command: ProjectionState): ProjectionState {
+  assignProjection(command: TaskCommand): ProjectionState {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -198,7 +238,7 @@ class GeneratedTaskAggregate extends Aggregate<string, typeof AggregateStateSche
       ),
     );
 
-    return create(ProjectionStateSchema, command);
+    return create(ProjectionStateSchema, { id: command.id, name: command.name });
   }
 }
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
@@ -216,12 +256,79 @@ class TaskProjection extends Projection<string, typeof ProjectionStateSchema, nu
   }
 }
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
+class StandaloneAssignee extends AbstractAssignee {
+  assign(): TaskEvent {
+    return create(TaskEventSchema, { id: "event-1", name: "assigned" });
+  }
+}
+class OtherStandaloneAssignee extends AbstractAssignee {
+  assign(): TaskEvent {
+    return create(TaskEventSchema, { id: "event-2", name: "other" });
+  }
+}
+class StandaloneCommander extends AbstractCommander {
+  substitute(command: ProcessManagerTaskCommand): TaskCommand {
+    return create(TaskCommandSchema, { id: command.id, name: command.name });
+  }
+}
+class DependencyInjectedStandaloneCommander extends AbstractCommander {
+  constructor(readonly dependency: string) {
+    super();
+  }
+
+  substitute(command: ProcessManagerTaskCommand): TaskCommand {
+    return create(TaskCommandSchema, {
+      id: command.id,
+      name: `${command.name} ${this.dependency}`,
+    });
+  }
+}
+class CollidingStandaloneCommander extends AbstractCommander {
+  substitute(command: TaskCommand): TaskCommand {
+    return create(TaskCommandSchema, { id: command.id, name: command.name });
+  }
+}
+class SiblingStandaloneCommander extends AbstractCommander {
+  substitute(): readonly TaskCommand[] {
+    return [
+      create(TaskCommandSchema, { id: "failing-produced-command", name: "Failing" }),
+      create(TaskCommandSchema, { id: "later-produced-command", name: "Later" }),
+    ];
+  }
+}
+class StandaloneReactor extends AbstractEventReactor {
+  calls = 0;
+  react(_event: TaskEvent, _context: EventContext): void {
+    void _event;
+    void _context;
+    this.calls += 1;
+  }
+}
+class StandaloneSubscriber extends AbstractEventSubscriber {
+  calls = 0;
+  subscribe(_event: TaskEvent, _context: EventContext): void {
+    void _event;
+    void _context;
+    this.calls += 1;
+  }
+}
+class ProducingStandaloneReactor extends AbstractEventReactor {
+  react(): TaskEvent {
+    return create(ReviewStartedSchema, { id: "produced-event" });
+  }
+}
+class StateOutputSubscriber extends AbstractEventSubscriber {
+  subscribe(_state: AggregateState): TaskEvent {
+    void _state;
+    return create(TaskEventSchema, { id: "illegal", name: "illegal output" });
+  }
+}
 class GeneratedTaskProcessManager extends ProcessManager<
   string,
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: AggregateState): ProjectionState {
+  assignTask(command: TaskCommand): ProjectionState {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -245,7 +352,7 @@ class ReplayTaskProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: AggregateState): AggregateState {
+  assignTask(command: ProcessManagerTaskCommand): AggregateState {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -255,10 +362,10 @@ class ReplayTaskProcessManager extends ProcessManager<
         }),
       ),
     );
-    return create(AggregateStateSchema, command);
+    return create(AggregateStateSchema, { id: command.id, name: command.name, archived: false });
   }
 
-  reactToProjection(event: ProjectionState): AggregateState {
+  reactToProjection(event: TaskEvent): AggregateState {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -279,7 +386,7 @@ class FailingRecoveryProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: AggregateState): void {
+  assignTask(command: TaskCommand): void {
     void command;
     throw pendingFreshRecovery;
   }
@@ -290,7 +397,7 @@ class FreshRecoveryProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: AggregateState): ProjectionState {
+  assignTask(command: TaskCommand): ProjectionState {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -498,7 +605,7 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AggregateStateSchema,
+            signalSchema: TaskCommandSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
             origin: "domestic",
@@ -614,6 +721,314 @@ describe("BoundedContext assembly", () => {
     );
   });
 
+  it("matches standalone generated metadata by exact registered constructor", async () => {
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
+        TaskEventSchema,
+      ]),
+    ]);
+
+    await expect(
+      BoundedContext.singleTenant("StandaloneExact")
+        .withGeneratedRegistryRoot(registryRoot)
+        .addAssignee(new OtherStandaloneAssignee())
+        .buildAsync(),
+    ).rejects.toThrow(
+      "Generated standalone receiver StandaloneAssignee has no explicitly registered instance",
+    );
+  });
+
+  it("rejects duplicate standalone instances during generated assembly", async () => {
+    const instance = new StandaloneAssignee();
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
+        TaskEventSchema,
+      ]),
+    ]);
+
+    await expect(
+      BoundedContext.singleTenant("StandaloneDuplicate")
+        .withGeneratedRegistryRoot(registryRoot)
+        .addAssignee(instance)
+        .addAssignee(instance)
+        .buildAsync(),
+    ).rejects.toThrow("Standalone receiver StandaloneAssignee is registered more than once");
+  });
+
+  it("installs assignee and commander through their public registration paths", async () => {
+    const assignee = new StandaloneAssignee();
+    const commander = new StandaloneCommander();
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
+        TaskEventSchema,
+      ]),
+      standaloneReceiver(
+        StandaloneCommander,
+        "command-substitution",
+        "substitute",
+        ProcessManagerTaskCommandSchema,
+        [TaskCommandSchema],
+      ),
+    ]);
+    const context = await BoundedContext.singleTenant("StandalonePaths")
+      .withGeneratedRegistryRoot(registryRoot)
+      .addAssignee(assignee)
+      .addCommandDispatcher(commander)
+      .buildAsync();
+
+    try {
+      await context.commandBus().post(createAggregateCommand("standalone-assignee"));
+      await context.commandBus().post(createProcessManagerTaskCommand("standalone-commander"));
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("rejects an assignee and commander generated for the same Command before intake", async () => {
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
+        TaskEventSchema,
+      ]),
+      standaloneReceiver(
+        CollidingStandaloneCommander,
+        "command-substitution",
+        "substitute",
+        TaskCommandSchema,
+        [TaskCommandSchema],
+      ),
+    ]);
+
+    await expect(
+      BoundedContext.singleTenant("StandaloneMixedReceptor")
+        .withGeneratedRegistryRoot(registryRoot)
+        .addAssignee(new StandaloneAssignee())
+        .addCommandDispatcher(new CollidingStandaloneCommander())
+        .buildAsync(),
+    ).rejects.toThrow("Standalone command receptors conflict");
+  });
+
+  it("installs reactor and subscriber through the public Event dispatcher path", async () => {
+    const reactor = new StandaloneReactor();
+    const subscriber = new StandaloneSubscriber();
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(StandaloneReactor, "event-reaction", "react", TaskEventSchema, []),
+      standaloneReceiver(
+        StandaloneSubscriber,
+        "event-subscription",
+        "subscribe",
+        TaskEventSchema,
+        [],
+      ),
+    ]);
+    const context = await BoundedContext.singleTenant("StandaloneEvents")
+      .withGeneratedRegistryRoot(registryRoot)
+      .addEventDispatcher(reactor)
+      .addEventDispatcher(subscriber)
+      .buildAsync();
+    try {
+      await context.eventBus().post(createTaskEvent("standalone-event"));
+      expect(reactor.calls).toBe(1);
+      expect(subscriber.calls).toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("delivers standalone-produced Commands and Events through this context buses", async () => {
+    const commands: string[] = [];
+    const events: string[] = [];
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(
+        StandaloneCommander,
+        "command-substitution",
+        "substitute",
+        ProcessManagerTaskCommandSchema,
+        [TaskCommandSchema],
+      ),
+      standaloneReceiver(ProducingStandaloneReactor, "event-reaction", "react", TaskEventSchema, [
+        ReviewStartedSchema,
+      ]),
+    ]);
+    const context = await BoundedContext.singleTenant("StandaloneProducedSignals")
+      .withGeneratedRegistryRoot(registryRoot)
+      .addCommandDispatcher(new StandaloneCommander())
+      .addCommandDispatcher(
+        createCommandDispatcher([TaskCommandSchema], (command) => {
+          commands.push(command.id?.uuid ?? "missing");
+        }),
+      )
+      .addEventDispatcher(new ProducingStandaloneReactor())
+      .addEventDispatcher(
+        createEventDispatcher([ReviewStartedSchema], (event) => {
+          events.push(event.id?.value ?? "missing");
+        }),
+      )
+      .buildAsync();
+
+    try {
+      await context.commandBus().post(createProcessManagerTaskCommand("standalone-command"));
+      await context.eventBus().post(createTaskEvent("standalone-event"));
+    } finally {
+      await context.close();
+    }
+
+    expect(commands).toHaveLength(1);
+    expect(events).toHaveLength(1);
+  });
+
+  it("matches a dependency-injected standalone commander by its registered constructor", async () => {
+    const names: string[] = [];
+    const commander = new DependencyInjectedStandaloneCommander("dependency");
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(
+        DependencyInjectedStandaloneCommander,
+        "command-substitution",
+        "substitute",
+        ProcessManagerTaskCommandSchema,
+        [TaskCommandSchema],
+      ),
+    ]);
+    const context = await BoundedContext.singleTenant("DependencyInjectedStandalone")
+      .withGeneratedRegistryRoot(registryRoot)
+      .addCommandDispatcher(commander)
+      .addCommandDispatcher(
+        createCommandDispatcher([TaskCommandSchema], (command) => {
+          if (command.message === undefined)
+            throw new Error("Expected a produced TaskCommand payload.");
+          const message = AnyMessages.unpack(command.message, TaskCommandSchema);
+          if (message === undefined) throw new Error("Expected a produced TaskCommand.");
+          names.push(message.name);
+        }),
+      )
+      .buildAsync();
+
+    try {
+      await context.commandBus().post(createProcessManagerTaskCommand("standalone-command"));
+    } finally {
+      await context.close();
+    }
+
+    expect(names).toEqual(["Task Ready dependency"]);
+  });
+
+  it("drains accepted standalone-produced Commands when close starts immediately", async () => {
+    const commands: string[] = [];
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(
+        StandaloneCommander,
+        "command-substitution",
+        "substitute",
+        ProcessManagerTaskCommandSchema,
+        [TaskCommandSchema],
+      ),
+    ]);
+    const context = await BoundedContext.singleTenant("StandaloneCloseDrain")
+      .withGeneratedRegistryRoot(registryRoot)
+      .addCommandDispatcher(new StandaloneCommander())
+      .addCommandDispatcher(
+        createCommandDispatcher([TaskCommandSchema], (command) => {
+          commands.push(command.id?.uuid ?? "missing");
+        }),
+      )
+      .buildAsync();
+
+    await context.commandBus().post(createProcessManagerTaskCommand("closing-command"));
+    await context.close();
+
+    expect(commands).toHaveLength(1);
+  });
+
+  it("contains one standalone-produced Command failure without suppressing its later sibling", async () => {
+    const delivered: string[] = [];
+    const unhandled: unknown[] = [];
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(
+        SiblingStandaloneCommander,
+        "command-substitution",
+        "substitute",
+        ProcessManagerTaskCommandSchema,
+        [TaskCommandSchema],
+      ),
+    ]);
+    const context = await BoundedContext.singleTenant("StandaloneSiblingFailure")
+      .withGeneratedRegistryRoot(registryRoot)
+      .addCommandDispatcher(new SiblingStandaloneCommander())
+      .addCommandDispatcher(
+        createCommandDispatcher([TaskCommandSchema], (command) => {
+          const message =
+            command.message === undefined
+              ? undefined
+              : AnyMessages.unpack(command.message, TaskCommandSchema);
+          if (message?.id === "failing-produced-command")
+            throw new Error("expected produced failure");
+          delivered.push(message?.id ?? "missing");
+        }),
+      )
+      .buildAsync();
+    const observeUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", observeUnhandled);
+    try {
+      await context.commandBus().post(createProcessManagerTaskCommand("sibling-source"));
+      await context.close();
+      await Promise.resolve();
+    } finally {
+      process.off("unhandledRejection", observeUnhandled);
+      await context.close();
+    }
+
+    expect(delivered).toEqual(["later-produced-command"]);
+    expect(unhandled).toEqual([]);
+  });
+
+  it("rejects signals returned by a standalone state subscriber", async () => {
+    const runtime = new StandaloneHandlerRuntime([
+      {
+        group: standaloneReceiver(
+          StateOutputSubscriber,
+          "state-subscription",
+          "subscribe",
+          AggregateStateSchema,
+          [],
+        ) as never,
+        instance: new StateOutputSubscriber(),
+        publisher: {} as never,
+      },
+    ]);
+    const dispatcher = runtime.stateDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected a state dispatcher.");
+
+    await expect(
+      dispatcher.dispatch(
+        createEntityStateChangedEvent(
+          AggregateStateSchema,
+          create(AggregateStateSchema, {
+            id: "state-output",
+            name: "State",
+            archived: false,
+          }),
+        ),
+      ),
+    ).rejects.toThrow('Standalone subscriber "subscribe" must not return signals.');
+  });
+
+  it("rejects a raw command dispatcher that collides with generated standalone metadata", async () => {
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
+        TaskEventSchema,
+      ]),
+    ]);
+    await expect(
+      BoundedContext.singleTenant("StandaloneCollision")
+        .withGeneratedRegistryRoot(registryRoot)
+        .addAssignee(new StandaloneAssignee())
+        .addCommandDispatcher({
+          messageSchemas: () => [TaskCommandSchema],
+          dispatch: () => Promise.resolve(),
+        })
+        .buildAsync(),
+    ).rejects.toThrow();
+  });
+
   it("enumerates every configured entity inbox shard from the context delivery strategy", async () => {
     const registryRoot = createGeneratedRegistryRoot([
       {
@@ -623,7 +1038,7 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AggregateStateSchema,
+            signalSchema: TaskCommandSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
             origin: "domestic",
@@ -656,7 +1071,7 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AggregateStateSchema,
+            signalSchema: TaskCommandSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
             origin: "domestic",
@@ -715,9 +1130,9 @@ describe("BoundedContext assembly", () => {
       const aggregateId = targetForShard(strategy, aggregateType, 1, "aggregate");
       const commandId = targetForShard(strategy, processManagerType, 2, "pm-command");
       const eventId = targetForShard(strategy, processManagerType, 1, "pm-event");
-      const aggregateCommand = createProjectionCommand("aggregate-row", aggregateId);
-      const processManagerCommand = createAggregateCommand("pm-command-row", commandId);
-      const processManagerEvent = createProjectionEvent("pm-event-row", eventId);
+      const aggregateCommand = createAggregateCommand("aggregate-row", aggregateId);
+      const processManagerCommand = createProcessManagerTaskCommand("pm-command-row", commandId);
+      const processManagerEvent = createTaskEvent("pm-event-row", eventId);
 
       const aggregateRow = await persistDescriptorRow({
         descriptor,
@@ -756,7 +1171,7 @@ describe("BoundedContext assembly", () => {
 
       await expect(context.stand().read(AggregateStateSchema, aggregateId)).resolves.toMatchObject({
         id: aggregateId,
-        name: "Task",
+        name: "Task Ready",
       });
       await expect(
         context.stand().read(ProcessManagerStateSchema, commandId),
@@ -822,7 +1237,7 @@ describe("BoundedContext assembly", () => {
         label: "HANDLE_COMMAND",
         signal: AnyMessages.pack(
           CommandSchema,
-          createAggregateCommand("forged-pm", processManagerId),
+          createProcessManagerTaskCommand("forged-pm", processManagerId),
           { validate: false },
         ),
         shard: new ShardIndex(0, 3),
@@ -878,10 +1293,14 @@ describe("BoundedContext assembly", () => {
           const signalId = `${label}-${String(index)}`;
           const signal =
             label === "HANDLE_COMMAND"
-              ? AnyMessages.pack(CommandSchema, createAggregateCommand(signalId, targetId), {
-                  validate: false,
-                })
-              : AnyMessages.pack(EventSchema, createProjectionEvent(signalId, targetId), {
+              ? AnyMessages.pack(
+                  CommandSchema,
+                  createProcessManagerTaskCommand(signalId, targetId),
+                  {
+                    validate: false,
+                  },
+                )
+              : AnyMessages.pack(EventSchema, createTaskEvent(signalId, targetId), {
                   validate: false,
                 });
           rows.push(
@@ -1271,7 +1690,7 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignProjection",
-            signalSchema: ProjectionStateSchema,
+            signalSchema: TaskCommandSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
             origin: "domestic",
@@ -1304,10 +1723,10 @@ describe("BoundedContext assembly", () => {
       TaskProjection,
     ]);
     expect(context.commandBus().acceptedCommandTypes()).toEqual([
-      TypeUrls.derive(ProjectionStateSchema),
+      TypeUrls.derive(TaskCommandSchema),
     ]);
 
-    await expect(context.commandBus().post(createProjectionCommand("command-4"))).resolves.toBe(
+    await expect(context.commandBus().post(createAggregateCommand("command-4"))).resolves.toBe(
       undefined,
     );
   });
@@ -1322,7 +1741,7 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AggregateStateSchema,
+            signalSchema: TaskCommandSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
             origin: "domestic",
@@ -1349,11 +1768,10 @@ describe("BoundedContext assembly", () => {
               actor: create(UserIdSchema, { value: "user-1" }),
             }),
           }),
-          schema: AggregateStateSchema,
-          message: create(AggregateStateSchema, {
+          schema: TaskCommandSchema,
+          message: create(TaskCommandSchema, {
             id: "generated-pm",
             name: "Generated PM",
-            archived: false,
           }),
         }),
       ),
@@ -1388,7 +1806,7 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AggregateStateSchema,
+            signalSchema: TaskCommandSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
             origin: "domestic",
@@ -1413,11 +1831,10 @@ describe("BoundedContext assembly", () => {
             actor: create(UserIdSchema, { value: "user-1" }),
           }),
         }),
-        schema: AggregateStateSchema,
-        message: create(AggregateStateSchema, {
+        schema: TaskCommandSchema,
+        message: create(TaskCommandSchema, {
           id: "producer-only",
           name: "Producer only",
-          archived: false,
         }),
       }),
     );
@@ -1449,6 +1866,23 @@ describe("BoundedContext assembly", () => {
     await expect(
       BoundedContext.singleTenant("Tasks")
         .withGeneratedRegistryRoot(registryRoot.href)
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).resolves.toBeInstanceOf(BoundedContext);
+  });
+
+  it("discovers receiver-only generated registries", async () => {
+    const registryRoot = createGeneratedRegistryRoot([
+      {
+        entityType: GeneratedTaskAggregate,
+        stateSchema: AggregateStateSchema,
+        handlers: [],
+      },
+    ]);
+
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot(registryRoot)
         .add(GeneratedTaskAggregate)
         .buildAsync(),
     ).resolves.toBeInstanceOf(BoundedContext);
@@ -2434,12 +2868,24 @@ function createAggregateCommand(id: string, targetId = "task-ready", tenantId?: 
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    schema: AggregateStateSchema,
-    message: create(AggregateStateSchema, {
+    schema: TaskCommandSchema,
+    message: create(TaskCommandSchema, {
       id: targetId,
       name: "Task Ready",
-      archived: false,
     }),
+  });
+}
+
+function createProcessManagerTaskCommand(id: string, targetId = "task-ready") {
+  return SignalEnvelopes.command({
+    id: create(CommandIdSchema, { uuid: id }),
+    context: create(CommandContextSchema, {
+      actorContext: create(ActorContextSchema, {
+        actor: create(UserIdSchema, { value: "user-1" }),
+      }),
+    }),
+    schema: ProcessManagerTaskCommandSchema,
+    message: create(ProcessManagerTaskCommandSchema, { id: targetId, name: "Task Ready" }),
   });
 }
 
@@ -2467,8 +2913,17 @@ function createProjectionEvent(id: string, targetId = "task-1", tenantId?: Tenan
   });
 }
 
+function createTaskEvent(id: string, targetId = "task-1") {
+  return SignalEnvelopes.event({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema),
+    schema: TaskEventSchema,
+    message: create(TaskEventSchema, { id: targetId, name: "Task" }),
+  });
+}
+
 function createGeneratedRegistryFixture(
-  entities: readonly {
+  receivers: readonly {
     readonly entityType: object;
     readonly stateSchema: GenMessage<Message>;
     readonly handlers: readonly {
@@ -2493,7 +2948,11 @@ function createGeneratedRegistryFixture(
   const values = globalThis as Record<string, unknown>;
 
   mkdirSync(moduleDir, { recursive: true });
-  values[slot] = Object.freeze({ version: 3, entities });
+  values[slot] = Object.freeze({
+    receivers: receivers.map(({ entityType, ...receiver }) =>
+      Object.freeze({ receiverKind: "entity" as const, receiverType: entityType, ...receiver }),
+    ),
+  });
   writeFileSync(
     registryPath,
     `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
@@ -2507,9 +2966,79 @@ function createGeneratedRegistryFixture(
 }
 
 function createGeneratedRegistryRoot(
-  entities: Parameters<typeof createGeneratedRegistryFixture>[0],
+  receivers: Parameters<typeof createGeneratedRegistryFixture>[0],
 ): URL {
-  return createGeneratedRegistryFixture(entities).root;
+  return createGeneratedRegistryFixture(receivers).root;
+}
+
+function createStandaloneGeneratedRegistryRoot(receivers: readonly object[]): URL {
+  const slot = `__spineStandaloneRegistry_${Math.random().toString(36).slice(2)}`;
+  const root = mkdtempSync(join(tmpdir(), "spine-standalone-generated-registry-"));
+  const moduleDir = join(root, "generated/handler");
+  mkdirSync(moduleDir, { recursive: true });
+  (globalThis as Record<string, unknown>)[slot] = Object.freeze({
+    receivers: Object.freeze(receivers),
+  });
+  writeFileSync(
+    join(moduleDir, "generated-handler-registry.js"),
+    `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
+    "utf8",
+  );
+  return pathToFileURL(root);
+}
+
+function standaloneReceiver(
+  receiverType: object,
+  kind:
+    | "command-assignment"
+    | "command-substitution"
+    | "event-reaction"
+    | "event-subscription"
+    | "state-subscription",
+  methodName: string,
+  signalSchema: GenMessage<Message>,
+  emittedSchemas: readonly GenMessage<Message>[],
+  parameterCount: 1 | 2 = 1,
+) {
+  return Object.freeze({
+    receiverKind: "standalone" as const,
+    receiverType,
+    handlers: Object.freeze([
+      Object.freeze({
+        kind,
+        methodName,
+        signalSchema,
+        emittedSchemas,
+        parameterCount,
+        origin: "domestic" as const,
+      }),
+    ]),
+  });
+}
+
+function createEntityStateChangedEvent(schema: GenMessage<Message>, state: Message): Event {
+  return create(EventSchema, {
+    id: create(EventIdSchema, { value: "state-change" }),
+    message: AnyMessages.pack(
+      EntityLog.EntityStateChangedSchema,
+      create(EntityLog.EntityStateChangedSchema, {
+        entity: {
+          id: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: "1" })),
+          typeUrl: TypeUrls.derive(schema),
+        },
+        newState: AnyMessages.pack(schema, state as never),
+        signalId: [
+          {
+            id: AnyMessages.pack(
+              StringValueSchema,
+              create(StringValueSchema, { value: "state-change" }),
+            ),
+            typeUrl: TypeUrls.derive(StringValueSchema),
+          },
+        ],
+      }),
+    ),
+  });
 }
 
 function processManagerRegistry(
@@ -2522,7 +3051,7 @@ function processManagerRegistry(
       {
         kind: "command-assignment" as const,
         methodName: "assignTask",
-        signalSchema: AggregateStateSchema,
+        signalSchema: TaskCommandSchema,
         emittedSchemas: [ProjectionStateSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,
@@ -2539,7 +3068,7 @@ function aggregateReplayRegistry(entityType: typeof ReplayTaskAggregate) {
       {
         kind: "command-assignment" as const,
         methodName: "assignTask",
-        signalSchema: ProjectionStateSchema,
+        signalSchema: TaskCommandSchema,
         emittedSchemas: [AggregateStateSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,
@@ -2556,7 +3085,7 @@ function replayProcessManagerRegistry(entityType: typeof ReplayTaskProcessManage
       {
         kind: "command-assignment" as const,
         methodName: "assignTask",
-        signalSchema: AggregateStateSchema,
+        signalSchema: ProcessManagerTaskCommandSchema,
         emittedSchemas: [AggregateStateSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,
@@ -2564,7 +3093,7 @@ function replayProcessManagerRegistry(entityType: typeof ReplayTaskProcessManage
       {
         kind: "event-reaction" as const,
         methodName: "reactToProjection",
-        signalSchema: ProjectionStateSchema,
+        signalSchema: TaskEventSchema,
         emittedSchemas: [AggregateStateSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,

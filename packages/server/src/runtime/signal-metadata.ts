@@ -421,6 +421,28 @@ export class SignalMetadata {
   }
 
   /**
+   * Creates command metadata from a command substitution.
+   *
+   * @param command Source command.
+   * @param sequence Causal sequence number.
+   * @returns Derived command identifier and context.
+   */
+  commandFromCommand(
+    command: Command,
+    sequence: number,
+  ): { readonly id: CommandId; readonly context: CommandContext } {
+    return {
+      id: this.commandId(this.#causalId(this.#commandId(command).uuid, sequence)),
+      context: this.commandContext({
+        ...(command.context?.actorContext === undefined
+          ? {}
+          : { actorContext: command.context.actorContext }),
+        origin: this.originFromCommand(command),
+      }),
+    };
+  }
+
+  /**
    * Creates event metadata from a command.
    *
    * @param command Source command.

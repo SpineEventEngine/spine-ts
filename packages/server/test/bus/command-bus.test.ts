@@ -30,7 +30,9 @@ import { fromBinary, toBinary } from "@bufbuild/protobuf";
 
 import { CommandBus, type CommandDispatcher } from "../../src/index.js";
 import { commandBusAccess } from "../../src/bus/command-bus.js";
+import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
+import { SignalPublisher } from "../../src/runtime/signal-publisher.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -323,17 +325,132 @@ describe("CommandBus", () => {
     expect(observed).toEqual(["outer:command-3", "after-rejection"]);
   });
 
+  it("queues an internal follow-up command after active command dispatch", async () => {
+    const observed: string[] = [];
+    const context: { bus?: CommandBus } = {};
+    const dispatcher = createCommandDispatcher([ValidatedTaskCommandSchema], (command) => {
+      observed.push(command.id?.uuid ?? "missing");
+      if (command.id?.uuid === "command-outer") {
+        const bus = context.bus;
+        if (bus === undefined) throw new Error("Expected command bus.");
+        void commandBusAccess.postInternalFollowUp(
+          bus,
+          createValidatedCommand("command-follow-up", "task-follow-up", "Follow up"),
+        );
+      }
+    });
+    const bus = new CommandBus([dispatcher]);
+    context.bus = bus;
+
+    await bus.post(createValidatedCommand("command-outer", "task-outer", "Outer"));
+    await commandBusAccess.drain(bus);
+
+    expect(observed).toEqual(["command-outer", "command-follow-up"]);
+  });
+
+  it("contains one produced command failure while admitting its later sibling", async () => {
+    const observed: string[] = [];
+    const bus = new CommandBus([
+      createValidatedCommandDispatcher((command) => {
+        observed.push(command.id?.uuid ?? "missing");
+        if (command.id?.uuid === "command-failing") {
+          throw new Error("produced command failed");
+        }
+      }),
+    ]);
+    const events = eventBusAccess.createForgettingBus();
+    const publisher = new SignalPublisher(bus, events, events, "Tasks");
+
+    void publisher.publishCommand(
+      createValidatedCommand("command-failing", "task-failing", "Failing"),
+    );
+    void publisher.publishCommand(createValidatedCommand("command-later", "task-later", "Later"));
+    await publisher.drain();
+
+    expect(observed).toEqual(["command-failing", "command-later"]);
+  });
+
+  it("drains a gated produced command admitted while closing and contains post-finish rejection", async () => {
+    const gate = createSignal();
+    const observed: string[] = [];
+    const bus = new CommandBus([
+      createValidatedCommandDispatcher(async (command) => {
+        observed.push(command.id?.uuid ?? "missing");
+        await gate.promise;
+      }),
+    ]);
+    const events = eventBusAccess.createForgettingBus();
+    const publisher = new SignalPublisher(bus, events, events, "Tasks");
+
+    publisher.beginClose();
+    commandBusAccess.beginClose(bus);
+    const child = publisher.publishCommand(
+      createValidatedCommand("command-closing-child", "task-closing-child", "Closing child"),
+    );
+    await waitUntil(() => observed.length === 1);
+
+    let drained = false;
+    const drain = publisher.drain().then(() => {
+      drained = true;
+    });
+    await waitForRuntimeTurn();
+    expect(drained).toBe(false);
+
+    gate.resolve();
+    await Promise.all([child, drain]);
+    expect(observed).toEqual(["command-closing-child"]);
+
+    publisher.finishClose();
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      await expect(
+        publisher.publishCommand(
+          createValidatedCommand("command-after-publisher-finish", "task-finished", "Finished"),
+        ),
+      ).rejects.toThrow("SignalPublisher is closed.");
+      await waitForRuntimeTurn();
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+      await commandBusAccess.finishClose(bus);
+    }
+  });
+
   it("rejects public and internal command intake after close", async () => {
     const bus = new CommandBus();
 
     await bus.close();
     await bus.close();
 
-    await expect(bus.post(createProjectionCommand("command-after-close"))).rejects.toThrow(
-      /closed/,
-    );
     await expect(
-      commandBusAccess.postInternal(bus, createProjectionCommand("command-internal-after-close")),
+      bus.post(createValidatedCommand("command-after-close", "task-after-close", "After close")),
+    ).rejects.toThrow(/closed/);
+    await expect(
+      commandBusAccess.postInternal(
+        bus,
+        createValidatedCommand("command-internal-after-close", "task-after-close", "After close"),
+      ),
+    ).rejects.toThrow(/closed/);
+    await expect(
+      commandBusAccess.postInternalFollowUp(
+        bus,
+        createValidatedCommand("command-follow-up-after-close", "task-follow-up", "Follow up"),
+      ),
+    ).rejects.toThrow(/closed/);
+  });
+
+  it("aborts an assembling command bus without leaving its runtime open", async () => {
+    const bus = new CommandBus();
+
+    commandBusAccess.abortClose(bus);
+
+    await expect(
+      commandBusAccess.postInternalFollowUp(
+        bus,
+        createValidatedCommand("command-aborted", "task-aborted", "Aborted"),
+      ),
     ).rejects.toThrow(/closed/);
   });
 
@@ -341,13 +458,29 @@ describe("CommandBus", () => {
     const bus = {} as CommandBus;
 
     expect(() =>
-      commandBusAccess.postInternal(bus, createProjectionCommand("command-internal")),
+      commandBusAccess.postInternal(
+        bus,
+        createValidatedCommand("command-internal", "task-internal", "Internal"),
+      ),
+    ).toThrow(/CommandBus instance/);
+    expect(() =>
+      commandBusAccess.postInternalFollowUp(
+        bus,
+        createValidatedCommand("command-follow-up", "task-follow-up", "Follow up"),
+      ),
     ).toThrow(/CommandBus instance/);
     expect(() => {
       commandBusAccess.beginClose(bus);
     }).toThrow(/CommandBus instance/);
-    expect(() => commandBusAccess.drain(bus)).toThrow(/CommandBus instance/);
-    expect(() => commandBusAccess.finishClose(bus)).toThrow(/CommandBus instance/);
+    expect(() => {
+      void commandBusAccess.drain(bus);
+    }).toThrow(/CommandBus instance/);
+    expect(() => {
+      void commandBusAccess.finishClose(bus);
+    }).toThrow(/CommandBus instance/);
+    expect(() => {
+      commandBusAccess.abortClose(bus);
+    }).toThrow(/CommandBus instance/);
     expect(() => commandBusAccess.acceptedWorkCount(bus)).toThrow(/CommandBus instance/);
   });
 });

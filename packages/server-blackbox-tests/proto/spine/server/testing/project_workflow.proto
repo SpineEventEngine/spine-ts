@@ -61,24 +61,6 @@ message PortfolioId {
   int32 number = 2;
 }
 
-// Requests creation of a project.
-message CreateProject {
-  // Identifies the project to create.
-  ProjectId project = 1 [(required) = true, (validate) = true];
-
-  // Provides the project name.
-  string name = 2 [(required) = true];
-}
-
-// Requests a change to the project schedule.
-message ScheduleProject {
-  // Identifies the project to schedule.
-  ProjectId project = 1 [(required) = true, (validate) = true];
-
-  // Provides the new scheduling status.
-  string status = 2 [(required) = true];
-}
-
 // Stores a project and its current schedule.
 message ProjectState {
   option (entity).kind = AGGREGATE;
@@ -91,27 +73,6 @@ message ProjectState {
 
   // Stores the current scheduling status.
   string status = 3 [(required) = true];
-}
-
-// Records creation of a project.
-message ProjectCreated {
-  // Identifies the organization in which the project was created.
-  OrganizationId organization = 1 [(required) = true, (validate) = true];
-
-  // Identifies the created project.
-  ProjectId project = 2 [(required) = true, (validate) = true];
-
-  // Stores the project name.
-  string name = 3 [(required) = true];
-}
-
-// Records a change to the project schedule.
-message ProjectScheduled {
-  // Identifies the scheduled project.
-  ProjectId project = 1 [(required) = true, (validate) = true];
-
-  // Stores the new scheduling status.
-  string status = 2 [(required) = true];
 }
 
 // Tracks project-planning work.

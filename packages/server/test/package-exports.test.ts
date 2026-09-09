@@ -164,8 +164,7 @@ describe("@spine-event-engine/server package exports", () => {
 
   it("exposes generated handler-registry data only through its SPI subpath", async () => {
     expectTypeOf<GeneratedHandlerRegistry>().toExtend<{
-      readonly version: 3;
-      readonly entities: readonly unknown[];
+      readonly receivers: readonly unknown[];
     }>();
     expectTypeOf<ForbiddenHandlerRegistrySpiTypes>().toEqualTypeOf<ForbiddenHandlerRegistrySpiTypes>();
 

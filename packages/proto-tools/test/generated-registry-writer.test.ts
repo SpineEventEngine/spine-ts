@@ -34,6 +34,106 @@ import {
 } from "../src/generation/generated-registry-writer.js";
 
 describe("generated registry writer", () => {
+  it("renders a standalone receiver without an Entity state schema", () => {
+    const repoRoot = "/workspace/repo";
+    const source = new GeneratedRegistryWriter().render(
+      {
+        diagnostics: [],
+        receivers: [
+          {
+            receiverKind: "standalone",
+            className: "TaskCommander",
+            sourceFile: join(repoRoot, "src/task-commander.ts"),
+            handlers: [
+              {
+                kind: "command-substitution",
+                methodName: "replace",
+                signalSchema: schema("../generated/commands_pb.js", "CreateTaskSchema"),
+                emittedSchemas: [schema("../generated/commands_pb.js", "RenameTaskSchema")],
+                parameterCount: 1,
+                origin: "domestic",
+              },
+            ],
+          },
+        ],
+      },
+      { outputFile: join(repoRoot, "generated/handler-registry.ts") },
+    );
+
+    expect(source).toContain('receiverKind: "standalone"');
+    expect(source).toContain("receiverType: TaskCommander,");
+    expect(source).not.toContain("stateSchema:");
+  });
+
+  it("renders named and anonymous default standalone receivers as default imports", () => {
+    const repoRoot = "/workspace/repo";
+    const source = new GeneratedRegistryWriter().render(
+      {
+        diagnostics: [],
+        receivers: [
+          {
+            receiverKind: "standalone",
+            className: "NamedCommander",
+            defaultExport: true,
+            sourceFile: join(repoRoot, "src/named-commander.ts"),
+            handlers: [],
+          },
+          {
+            receiverKind: "standalone",
+            className: "AnonymousCommander",
+            defaultExport: true,
+            sourceFile: join(repoRoot, "src/anonymous-commander.ts"),
+            handlers: [],
+          },
+        ],
+      },
+      { outputFile: join(repoRoot, "generated/handler-registry.ts") },
+    );
+
+    expect(source).toContain('import NamedCommander from "../src/named-commander.js";');
+    expect(source).toContain('import AnonymousCommander from "../src/anonymous-commander.js";');
+  });
+
+  it("typechecks named and anonymous default standalone receiver imports", () => {
+    const repoRoot = createCompileFixture();
+    const outputFile = join(
+      repoRoot,
+      "packages/demo/generated/handler/generated-handler-registry.ts",
+    );
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/named-commander.ts"),
+      "export default class NamedCommander {}\n",
+    );
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/anonymous-commander.ts"),
+      "export default class {}\n",
+    );
+    const source = new GeneratedRegistryWriter().render(
+      {
+        diagnostics: [],
+        receivers: [
+          {
+            receiverKind: "standalone",
+            className: "NamedCommander",
+            defaultExport: true,
+            sourceFile: join(repoRoot, "packages/demo/src/named-commander.ts"),
+            handlers: [],
+          },
+          {
+            receiverKind: "standalone",
+            className: "AnonymousCommander",
+            defaultExport: true,
+            sourceFile: join(repoRoot, "packages/demo/src/anonymous-commander.ts"),
+            handlers: [],
+          },
+        ],
+      },
+      { outputFile },
+    );
+    writeFileSync(outputFile, source);
+    expect(compileIsolatedDeclarations(outputFile)).toEqual([]);
+  }, 20_000);
+
   it("renders deterministic registry source from analyzed handlers", () => {
     const repoRoot = "/workspace/repo";
     const outputFile = join(
@@ -54,10 +154,10 @@ describe("generated registry writer", () => {
         'import { TaskSchema } from "../spine/examples/todo/tasks_pb.js";',
         "",
         "export const generatedHandlerRegistry: GeneratedHandlerRegistry = {",
-        "  version: 3,",
-        "  entities: [",
+        "  receivers: [",
         "    {",
-        "      entityType: TaskAggregate,",
+        '      receiverKind: "entity",',
+        "      receiverType: TaskAggregate,",
         "      stateSchema: TaskSchema,",
         "      handlers: [",
         "        {",
@@ -79,7 +179,8 @@ describe("generated registry writer", () => {
         "      ],",
         "    },",
         "    {",
-        "      entityType: TaskProjection,",
+        '      receiverKind: "entity",',
+        "      receiverType: TaskProjection,",
         "      stateSchema: TaskSchema,",
         "      handlers: [",
         "        {",
@@ -114,9 +215,10 @@ describe("generated registry writer", () => {
     const source = new GeneratedRegistryWriter().render(
       {
         diagnostics: [],
-        entities: [
+        receivers: [
           {
             className: "RejectionConsumers",
+            receiverKind: "entity",
             sourceFile: join(repoRoot, "src/rejection-consumers.ts"),
             stateSchema: schema("../generated/task_list_pb.js", "TaskListSchema"),
             handlers: [
@@ -163,9 +265,10 @@ describe("generated registry writer", () => {
     const source = new GeneratedRegistryWriter().render(
       {
         diagnostics: [],
-        entities: [
+        receivers: [
           {
             className: "TaskProjection",
+            receiverKind: "entity",
             sourceFile: join(repoRoot, "src/task-projection.ts"),
             stateSchema: schema("../generated/task_pb.js", "TaskSchema"),
             handlers: [
@@ -201,9 +304,10 @@ describe("generated registry writer", () => {
     const source = new GeneratedRegistryWriter().render(
       {
         diagnostics: [],
-        entities: [
+        receivers: [
           {
             className: "TaskAggregate",
+            receiverKind: "entity",
             sourceFile: join(repoRoot, "src/task-aggregate.ts"),
             stateSchema: schema("../generated/task_pb.js", "TaskSchema"),
             handlers: [
@@ -277,9 +381,10 @@ describe("generated registry writer", () => {
     const source = new GeneratedRegistryWriter().render(
       {
         diagnostics: [],
-        entities: [
+        receivers: [
           {
             className: "TaskEntity",
+            receiverKind: "entity",
             sourceFile: join(repoRoot, "src/alpha/task.ts"),
             stateSchema: schema("../../generated/alpha_pb.js", "TaskSchema"),
             handlers: [
@@ -295,6 +400,7 @@ describe("generated registry writer", () => {
           },
           {
             className: "TaskEntity",
+            receiverKind: "entity",
             sourceFile: join(repoRoot, "src/beta/task.ts"),
             stateSchema: schema("../../generated/beta_pb.js", "TaskSchema"),
             handlers: [
@@ -319,8 +425,8 @@ describe("generated registry writer", () => {
     );
     expect(source).toContain('import { TaskSchema } from "../alpha_pb.js";');
     expect(source).toContain('import { TaskSchema as TaskSchema_2 } from "../beta_pb.js";');
-    expect(source).toContain("      entityType: TaskEntity,");
-    expect(source).toContain("      entityType: TaskEntity_2,");
+    expect(source).toContain("      receiverType: TaskEntity,");
+    expect(source).toContain("      receiverType: TaskEntity_2,");
     expect(source).toContain("      stateSchema: TaskSchema,");
     expect(source).toContain("      stateSchema: TaskSchema_2,");
   });
@@ -330,6 +436,7 @@ describe("generated registry writer", () => {
     const outputFile = join(repoRoot, "generated/handler/generated-handler-registry.ts");
     const repeatedEntity = {
       className: "TaskAggregate",
+      receiverKind: "entity" as const,
       sourceFile: join(repoRoot, "src/task-aggregate.ts"),
       stateSchema: schema("../generated/task_pb.js", "TaskSchema"),
       handlers: [
@@ -346,14 +453,14 @@ describe("generated registry writer", () => {
     const source = new GeneratedRegistryWriter().render(
       {
         diagnostics: [],
-        entities: [repeatedEntity, repeatedEntity],
+        receivers: [repeatedEntity, repeatedEntity],
       },
       { outputFile },
     );
 
     expect(source).toContain('import { TaskAggregate } from "../../src/task-aggregate.js";');
     expect(source).not.toContain("TaskAggregate_2");
-    expect(source.match(/entityType: TaskAggregate,/g)).toHaveLength(2);
+    expect(source.match(/receiverType: TaskAggregate,/g)).toHaveLength(2);
   });
 
   it("writes a generated registry file only inside an ignored generated root", () => {
@@ -515,7 +622,7 @@ describe("generated registry writer", () => {
     const source = new GeneratedRegistryWriter().render(
       {
         diagnostics: [],
-        entities: [
+        receivers: [
           entity("CommonJsEntity", join(repoRoot, "src/commonjs.cts")),
           entity("EsmEntity", join(repoRoot, "src/esm.mts")),
           entity("ExtensionlessEntity", join(repoRoot, "src/extensionless")),
@@ -748,9 +855,10 @@ describe("generated registry writer", () => {
 
     try {
       const { GeneratedRegistryWriter: MockedWriter } =
-        await import("@spine-event-engine/proto-tools/testing");
+        await import("../src/generation/generated-registry-writer.js");
 
-      new MockedWriter().write(analysis(repoRoot), {
+      const analyzed = analysis(repoRoot);
+      new MockedWriter().write(analyzed, {
         generatedRoot,
         outputFile,
         repoRoot,
@@ -772,9 +880,10 @@ describe("generated registry writer", () => {
     const source = new GeneratedRegistryWriter().render(
       {
         diagnostics: [],
-        entities: [
+        receivers: [
           {
             className: "TaskAggregate",
+            receiverKind: "entity",
             sourceFile: join(repoRoot, "packages/demo/src/task-aggregate.ts"),
             stateSchema: schema("@acme/generated/task_pb.js", "TaskSchema"),
             handlers: [
@@ -807,9 +916,10 @@ describe("generated registry writer", () => {
 function analysis(repoRoot: string): BuildHandlerAnalysis {
   return {
     diagnostics: [],
-    entities: [
+    receivers: [
       {
         className: "TaskAggregate",
+        receiverKind: "entity",
         sourceFile: join(repoRoot, "examples/todo/src/task-aggregate.ts"),
         stateSchema: schema("../generated/spine/examples/todo/tasks_pb.js", "TaskSchema"),
         handlers: [
@@ -843,6 +953,7 @@ function analysis(repoRoot: string): BuildHandlerAnalysis {
       },
       {
         className: "TaskProjection",
+        receiverKind: "entity",
         sourceFile: join(repoRoot, "examples/todo/src/task-projection.ts"),
         stateSchema: schema("../generated/spine/examples/todo/tasks_pb.js", "TaskSchema"),
         handlers: [
@@ -880,6 +991,7 @@ function analysis(repoRoot: string): BuildHandlerAnalysis {
 function entity(className: string, sourceFile: string) {
   return {
     className,
+    receiverKind: "entity" as const,
     sourceFile,
     stateSchema: schema("../generated/task_pb.js", "TaskSchema"),
     handlers: [
@@ -930,13 +1042,15 @@ function createCompileFixture(): string {
   writeFileSync(
     join(repoRoot, "node_modules/@spine-event-engine/server/spi/handler-registry.d.ts"),
     [
-      "export interface GeneratedHandlerRegistry {",
-      "  readonly version: 3;",
-      "  readonly entities: readonly {",
-      "    readonly entityType: new (...args: never[]) => object;",
-      "    readonly stateSchema: object;",
+      'export type GeneratedHandlerKind = "command-assignment" | "command-substitution" | ' +
+        '"command-reaction" | "event-subscription" | "event-reaction";',
+      "export type GeneratedHandlerRegistry = {",
+      "  readonly receivers: readonly {",
+      '    readonly receiverKind: "entity" | "standalone";',
+      "    readonly receiverType: { readonly prototype: object; };",
+      "    readonly stateSchema?: object;",
       "    readonly handlers: readonly {",
-      '      readonly kind: "command-assignment" | "command-reaction" | "event-subscription" | "event-reaction";',
+      "      readonly kind: GeneratedHandlerKind;",
       "      readonly methodName: string;",
       "      readonly signalSchema: object;",
       "      readonly emittedSchemas: readonly object[];",

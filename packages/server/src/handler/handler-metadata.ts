@@ -14,6 +14,7 @@
 
 import type { EntityMetadata, DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import { describeEntityMetadata, isEntitySchema } from "../entity/entity-metadata.js";
+import { ProcessManager } from "../entity/entity.js";
 
 /**
  * Entity class value accepted by explicit handler metadata registration.
@@ -35,6 +36,7 @@ export interface EntityClass<Instance extends object = object> {
  */
 export type HandlerKind =
   | "command-assignment"
+  | "command-substitution"
   | "command-reaction"
   | "event-subscription"
   | "state-subscription"
@@ -71,7 +73,8 @@ export type HandlerMethodName<Instance extends object> = Extract<
 /**
  * Error code for explicit handler metadata registration failures.
  */
-export type HandlerMetadataErrorCode = "UNKNOWN_HANDLER_METHOD" | "INVALID_PARAMETER_COUNT";
+export type HandlerMetadataErrorCode =
+  "UNKNOWN_HANDLER_METHOD" | "INVALID_PARAMETER_COUNT" | "UNSUPPORTED_COMMAND_HANDLER";
 
 /**
  * Error thrown when explicit handler metadata cannot be defined.
@@ -183,6 +186,14 @@ export type CommandReactionHandlerMetadata<
 > = BaseHandlerMetadata<"command-reaction", Schema, MethodName>;
 
 /**
+ * Command-input `@Command` metadata that produces Commands after commit.
+ */
+export type CommandSubstitutionHandlerMetadata<
+  Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
+  MethodName extends string = string,
+> = BaseHandlerMetadata<"command-substitution", Schema, MethodName>;
+
+/**
  * Metadata for an event subscription method.
  */
 export type EventSubscriptionHandlerMetadata<
@@ -241,6 +252,7 @@ export type HandlerMetadata<
   MethodName extends string = string,
 > =
   | CommandAssignmentHandlerMetadata<Schema, MethodName>
+  | CommandSubstitutionHandlerMetadata<Schema, MethodName>
   | CommandReactionHandlerMetadata<Schema, MethodName>
   | EventSubscriptionHandlerMetadata<Schema, MethodName>
   | StateSubscriptionHandlerMetadata<Schema, MethodName>
@@ -267,18 +279,6 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
     schema: Schema,
     methodName: HandlerMethodName<Instance>,
   ): CommandAssignmentHandlerMetadata<Schema, HandlerMethodName<Instance>>;
-
-  /**
-   * Registers a command reactor method.
-   *
-   * @param schema Command schema accepted by the method.
-   * @param methodName Entity method name.
-   * @returns The registered command-reaction metadata.
-   */
-  command<Schema extends DescriptorMessageSchema>(
-    schema: Schema,
-    methodName: HandlerMethodName<Instance>,
-  ): CommandReactionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 
   /**
    * Registers an Event/rejection or Entity-state subscriber method.
@@ -324,6 +324,41 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
 }
 
 /**
+ * Registers generated command substitution metadata during registry ingestion.
+ *
+ * @internal
+ */
+export interface GeneratedHandlerRegistrationBuilder<
+  Instance extends object,
+> extends HandlerRegistrationBuilder<Instance> {
+  // prettier-ignore
+
+  /**
+   * Registers a generated command-input substitution with emitted schemas.
+   *
+   * @param schema Generated command input schema.
+   * @param methodName Process Manager method selected by generated metadata.
+   * @returns Generated command-substitution handler metadata.
+   */
+  substitute<Schema extends DescriptorMessageSchema>(
+    schema: Schema,
+    methodName: HandlerMethodName<Instance>,
+  ): CommandSubstitutionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
+
+  /**
+   * Registers a generated event- or rejection-input command reaction.
+   *
+   * @param schema Generated Event or rejection input schema.
+   * @param methodName Process Manager method selected by generated metadata.
+   * @returns Generated command-reaction handler metadata.
+   */
+  command<Schema extends DescriptorMessageSchema>(
+    schema: Schema,
+    methodName: HandlerMethodName<Instance>,
+  ): CommandReactionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
+}
+
+/**
  * Frozen handler metadata for one explicitly registered entity class.
  */
 export interface EntityHandlersMetadata<
@@ -351,6 +386,11 @@ export interface EntityHandlersMetadata<
    * Command assignees in declaration order.
    */
   readonly commandAssignments: readonly CommandAssignmentHandlerMetadata[];
+
+  /**
+   * Command substitutions in declaration order.
+   */
+  readonly commandSubstitutions: readonly CommandSubstitutionHandlerMetadata[];
 
   /**
    * Command reactors in declaration order.
@@ -518,6 +558,10 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     string,
     RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>
   >();
+  readonly #commandReceptors = new Map<
+    string,
+    RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata>
+  >();
   readonly #eventApplications = new Map<
     string,
     RegisteredHandlerMetadata<EventApplicationHandlerMetadata>
@@ -542,9 +586,11 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
    */
   register<Metadata extends EntityHandlersMetadata>(metadata: Metadata): Metadata {
     const entries = metadata.handlers.map((handler) => this.#entry(metadata, handler));
-    const commandAssignments = new Map<
+    const commandReceptors = new Map<
       string,
-      RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>
+      RegisteredHandlerMetadata<
+        CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
+      >
     >();
     const eventApplications = new Map<
       string,
@@ -552,14 +598,19 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     >();
 
     for (const entry of entries) {
-      if (entry.handler.kind === "command-assignment") {
-        const commandEntry = entry as RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>;
+      if (
+        entry.handler.kind === "command-assignment" ||
+        entry.handler.kind === "command-substitution"
+      ) {
+        const commandEntry = entry as RegisteredHandlerMetadata<
+          CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
+        >;
         this.#validateAssignment(
           commandEntry,
-          this.#commandAssignments.get(entry.handler.messageFullTypeName) ??
-            commandAssignments.get(entry.handler.messageFullTypeName),
+          this.#commandReceptors.get(entry.handler.messageFullTypeName) ??
+            commandReceptors.get(entry.handler.messageFullTypeName),
         );
-        commandAssignments.set(entry.handler.messageFullTypeName, commandEntry);
+        commandReceptors.set(entry.handler.messageFullTypeName, commandEntry);
       }
 
       if (entry.handler.kind === "event-application") {
@@ -586,8 +637,14 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
       this.#push(this.#byMessage, entry.handler.messageFullTypeName, entry);
     }
 
-    for (const [messageFullTypeName, entry] of commandAssignments) {
-      this.#commandAssignments.set(messageFullTypeName, entry);
+    for (const [messageFullTypeName, entry] of commandReceptors) {
+      this.#commandReceptors.set(messageFullTypeName, entry);
+      if (entry.handler.kind === "command-assignment") {
+        this.#commandAssignments.set(
+          messageFullTypeName,
+          entry as RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>,
+        );
+      }
     }
 
     for (const [key, entry] of eventApplications) {
@@ -664,6 +721,22 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   }
 
   /**
+   * Finds the effective command assignment or substitution receptor.
+   *
+   * @param commandTypeName Fully qualified command type name.
+   * @returns The receptor when registered.
+   */
+  findCommandReceptor(
+    commandTypeName: string,
+  ):
+    | RegisteredHandlerMetadata<
+        CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
+      >
+    | undefined {
+    return this.#commandReceptors.get(commandTypeName);
+  }
+
+  /**
    * Finds the unique event applier for a state and event type.
    *
    * @param stateTypeName Fully qualified entity state type name.
@@ -690,8 +763,14 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   }
 
   #validateAssignment(
-    entry: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>,
-    duplicate: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined,
+    entry: RegisteredHandlerMetadata<
+      CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
+    >,
+    duplicate:
+      | RegisteredHandlerMetadata<
+          CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
+        >
+      | undefined,
   ): void {
     if (duplicate !== undefined) {
       throw new HandlerMetadataRegistryError(
@@ -844,7 +923,7 @@ class EntityHandlersOwner {
     entityType: EntityClass<Instance>,
     stateSchema: StateSchema,
     define: (
-      builder: HandlerRegistrationBuilder<Instance>,
+      builder: GeneratedHandlerRegistrationBuilder<Instance>,
     ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
     arities: Iterable<HandlerArity>,
   ): EntityHandlersMetadata<Instance, StateSchema> {
@@ -855,19 +934,21 @@ class EntityHandlersOwner {
     entityType: EntityClass<Instance>,
     stateSchema: StateSchema,
     define: (
-      builder: HandlerRegistrationBuilder<Instance>,
+      builder: GeneratedHandlerRegistrationBuilder<Instance>,
     ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
     arities: Iterable<HandlerArity>,
   ): EntityHandlersMetadata<Instance, StateSchema> {
     const built = new WeakSet<HandlerMetadata>();
     const builder = this.#builder(entityType, built, this.#arityMap(arities));
     const handlers = Object.freeze([...define(builder)]);
+    this.#validateCommandHandlers(entityType, handlers);
     this.#validateBuilt(handlers, built);
     const metadata: EntityHandlersMetadata<Instance, StateSchema> = {
       entityType,
       entity: describeEntityMetadata(stateSchema),
       handlers,
       commandAssignments: this.#ofKind(handlers, "command-assignment"),
+      commandSubstitutions: this.#ofKind(handlers, "command-substitution"),
       commandReactions: this.#ofKind(handlers, "command-reaction"),
       eventSubscriptions: this.#ofKind(handlers, "event-subscription"),
       stateSubscriptions: this.#ofKind(handlers, "state-subscription"),
@@ -882,12 +963,16 @@ class EntityHandlersOwner {
     entityType: EntityClass<Instance>,
     built: WeakSet<HandlerMetadata>,
     arities: ReadonlyMap<string, HandlerGeneratedData>,
-  ): HandlerRegistrationBuilder<Instance> {
+  ): GeneratedHandlerRegistrationBuilder<Instance> {
     return Object.freeze({
       assign: <Schema extends DescriptorMessageSchema>(
         schema: Schema,
         methodName: HandlerMethodName<Instance>,
       ) => this.#handler(entityType, "command-assignment", schema, methodName, built, arities),
+      substitute: <Schema extends DescriptorMessageSchema>(
+        schema: Schema,
+        methodName: HandlerMethodName<Instance>,
+      ) => this.#handler(entityType, "command-substitution", schema, methodName, built, arities),
       command: <Schema extends DescriptorMessageSchema>(
         schema: Schema,
         methodName: HandlerMethodName<Instance>,
@@ -987,6 +1072,20 @@ class EntityHandlersOwner {
 
   #arityKey(kind: HandlerKind, methodName: string): string {
     return `${kind}\u0000${methodName}`;
+  }
+
+  #validateCommandHandlers(entityType: EntityClass, handlers: readonly HandlerMetadata[]): void {
+    if (
+      handlers.some(
+        (handler) => handler.kind === "command-substitution" || handler.kind === "command-reaction",
+      ) &&
+      !(entityType.prototype instanceof ProcessManager)
+    ) {
+      throw new HandlerMetadataError(
+        "UNSUPPORTED_COMMAND_HANDLER",
+        "Only Process Manager entities support @Command handlers.",
+      );
+    }
   }
 
   #validateBuilt(handlers: readonly HandlerMetadata[], built: WeakSet<HandlerMetadata>): void {

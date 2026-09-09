@@ -1329,7 +1329,6 @@ describe("@spine-event-engine/example-todo", () => {
       if (update.value.kind !== "update")
         throw new Error("Expected a task rejection event update.");
       const event = unpackSubscribedTaskAlreadyDone(update.value.update);
-      expect(context.storedEventDispatchFailures()).toEqual([]);
       const response = await expectTaskListEventuallyUnchanged(
         fixture,
         scope,

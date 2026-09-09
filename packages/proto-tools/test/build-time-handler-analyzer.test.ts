@@ -25,28 +25,472 @@ import { BuildHandlerAnalyzer } from "../src/generation/build-time-handler-analy
 const analyzeBuildHandlers = (...args: Parameters<typeof BuildHandlerAnalyzer.analyze>) =>
   BuildHandlerAnalyzer.analyze(...args);
 
+function entityReceivers(analysis: ReturnType<typeof BuildHandlerAnalyzer.analyze>) {
+  return analysis.receivers
+    .filter((receiver) => receiver.receiverKind === "entity")
+    .map(({ receiverKind, ...receiver }) => {
+      void receiverKind;
+      return receiver;
+    });
+}
+
 describe("build-time handler analyzer", () => {
+  it("requires canonical handler contexts that match the input signal role", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/context-contract.ts",
+        `
+          import { Assign, Command, ProcessManager, Subscribe } from "@spine-event-engine/server";
+          import { type CommandContext, type EventContext } from "@spine-event-engine/proto";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+          import { type TaskCreated } from "../generated/events_pb.js";
+
+          export class ContextContract extends ProcessManager<string, typeof TaskSchema, bigint> {
+            @Assign assign(command: CreateTask, context: EventContext): TaskCreated {
+              throw new Error(String(command) + String(context));
+            }
+            @Command substitute(command: CreateTask, context: CommandContext): RenameTask {
+              throw new Error(String(command) + String(context));
+            }
+            @Subscribe observe(event: TaskCreated, context: CommandContext): void { void event; void context; }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_HANDLER_CONTEXT",
+      "INVALID_HANDLER_CONTEXT",
+    ]);
+    expect(entityReceivers(result)[0]?.handlers).toEqual([
+      expect.objectContaining({ methodName: "substitute", parameterCount: 2 }),
+    ]);
+  });
+
+  it("accepts aliased and namespace-imported canonical handler contexts", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/canonical-context.ts",
+        `
+          import { Assign, Command, ProcessManager, Subscribe } from "@spine-event-engine/server";
+          import { type CommandContext as CommandMetadata } from "@spine-event-engine/proto";
+          import * as proto from "@spine-event-engine/proto";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+          import { type TaskCreated } from "../generated/events_pb.js";
+
+          export class CanonicalContext extends ProcessManager<string, typeof TaskSchema, bigint> {
+            @Assign assign(command: CreateTask, context: CommandMetadata): TaskCreated {
+              throw new Error(String(command) + String(context));
+            }
+            @Command substitute(command: CreateTask, context: CommandMetadata): RenameTask {
+              throw new Error(String(command) + String(context));
+            }
+            @Subscribe observe(event: TaskCreated, context: proto.EventContext): void { void event; void context; }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it("rejects primitive and untyped second handler parameters", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/invalid-handler-contexts.ts",
+        `
+          import { Command, ProcessManager } from "@spine-event-engine/server";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+
+          export class InvalidHandlerContexts extends ProcessManager<string, typeof TaskSchema, bigint> {
+            @Command primitive(command: CreateTask, context: string): RenameTask {
+              throw new Error(String(command) + context);
+            }
+            @Command untyped(command: CreateTask, context): RenameTask {
+              throw new Error(String(command) + String(context));
+            }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_HANDLER_CONTEXT",
+      "INVALID_HANDLER_CONTEXT",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
+      "primitive",
+      "untyped",
+    ]);
+  });
+
+  it("analyzes nominal standalone command receivers without an Entity state schema", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/standalone-commander.ts",
+        `
+          import { AbstractCommander, Command } from "@spine-event-engine/server";
+          import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+          export class TaskCommander extends AbstractCommander {
+            @Command replace(command: CreateTask): RenameTask { throw new Error(String(command)); }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.receivers).toMatchObject([
+      {
+        receiverKind: "standalone",
+        className: "TaskCommander",
+        handlers: [{ kind: "command-substitution" }],
+      },
+    ]);
+  });
+
+  it("analyzes a named default-export standalone receiver", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/default-commander.ts",
+        `
+      import { AbstractCommander, Command } from "@spine-event-engine/server";
+      import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+      export default class DefaultCommander extends AbstractCommander {
+        @Command replace(command: CreateTask): RenameTask { throw new Error(String(command)); }
+      }
+    `,
+      ),
+    );
+    expect(result.diagnostics).toEqual([]);
+    expect(result.receivers[0]).toMatchObject({ receiverKind: "standalone", defaultExport: true });
+  });
+
+  it("analyzes an anonymous default-export standalone receiver", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/anonymous-commander.ts",
+        `
+      import { AbstractCommander, Command } from "@spine-event-engine/server";
+      import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+      export default class extends AbstractCommander {
+        @Command replace(command: CreateTask): RenameTask { throw new Error(String(command)); }
+      }
+    `,
+      ),
+    );
+    expect(result.diagnostics).toEqual([]);
+    expect(result.receivers[0]).toMatchObject({ receiverKind: "standalone", defaultExport: true });
+  });
+
+  it.each([
+    ["AbstractAssignee", "Command"],
+    ["AbstractCommander", "Assign"],
+    ["AbstractEventReactor", "Subscribe"],
+    ["AbstractEventSubscriber", "React"],
+  ])("rejects @%s methods with @%s outside the standalone role matrix", (base, decorator) => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/invalid-standalone.ts",
+        `
+      import { ${base}, ${decorator} } from "@spine-event-engine/server";
+      import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+      export class InvalidReceiver extends ${base} {
+        @${decorator} handle(signal: CreateTask): RenameTask { throw new Error(String(signal)); }
+      }
+    `,
+      ),
+    );
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+      "UNSUPPORTED_COMMAND_HANDLER",
+    );
+  });
+
+  it("analyzes the standalone handler contract and rejects invalid standalone declarations", () => {
+    const valid = analyzeBuildHandlers(
+      standaloneContractProgram(
+        "src/standalone-contract.ts",
+        `
+      import {
+        AbstractAssignee, AbstractCommander, AbstractEventReactor, AbstractEventSubscriber,
+        Assign, Command, React, Subscribe,
+      } from "@spine-event-engine/server";
+      import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+      import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+      import { type TaskAlreadyDone } from "../generated/rejections_pb.js";
+      import { type Task } from "../generated/task_pb.js";
+
+      export class TaskAssignee extends AbstractAssignee {
+        @Assign
+        assign(command: CreateTask): TaskCreated {
+          throw new Error(String(command));
+        }
+      }
+      export class TaskCommander extends AbstractCommander {
+        @Command
+        replace(command: CreateTask): RenameTask {
+          throw new Error(String(command));
+        }
+        @Command
+        reactToEvent(event: TaskCreated): RenameTask {
+          throw new Error(String(event));
+        }
+        @Command
+        reactToRejection(rejection: TaskAlreadyDone): RenameTask {
+          throw new Error(String(rejection));
+        }
+      }
+      export class TaskReactor extends AbstractEventReactor {
+        @React
+        react(event: TaskCreated): TaskRenamed {
+          throw new Error(String(event));
+        }
+        @React
+        observeRejection(rejection: TaskAlreadyDone): void {
+          void rejection;
+        }
+      }
+      export class TaskSubscriber extends AbstractEventSubscriber {
+        @Subscribe
+        observeEvent(event: TaskCreated): void {
+          void event;
+        }
+        @Subscribe
+        observeRejection(rejection: TaskAlreadyDone): void {
+          void rejection;
+        }
+        @Subscribe
+        observeState(state: Task): void {
+          void state;
+        }
+      }
+    `,
+      ),
+    );
+
+    expect(valid.diagnostics).toEqual([]);
+    expect(valid.receivers).toHaveLength(4);
+
+    const invalid = analyzeBuildHandlers(
+      standaloneContractProgram(
+        "src/invalid-standalone-contract.ts",
+        `
+      import {
+        AbstractAssignee, AbstractCommander, AbstractEventReactor, AbstractEventSubscriber,
+        Assign, Command, External, React, Subscribe, Where,
+      } from "@spine-event-engine/server";
+      import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+      import { type TaskCreated } from "../generated/events_pb.js";
+      import { type Task } from "../generated/task_pb.js";
+
+      export class InvalidAssignee extends AbstractAssignee {
+        @Assign
+        assign(event: TaskCreated): TaskCreated {
+          throw new Error(String(event));
+        }
+      }
+      export class InvalidCommander extends AbstractCommander {
+        @Command
+        replace(command: CreateTask): TaskCreated {
+          throw new Error(String(command));
+        }
+      }
+      export class InvalidReactor extends AbstractEventReactor {
+        @React
+        react(command: CreateTask): RenameTask {
+          throw new Error(String(command));
+        }
+      }
+      export class InvalidSubscriber extends AbstractEventSubscriber {
+        @Subscribe
+        observe(event: TaskCreated): TaskCreated {
+          throw new Error(String(event));
+        }
+        @Subscribe
+        observeExternalState(state: External<Task>): void {
+          void state;
+        }
+        @Where({ eventField: "id", equals: "task-1" })
+        @Subscribe
+        observeFilteredState(state: Task): void {
+          void state;
+        }
+      }
+    `,
+      ),
+    );
+
+    expect(invalid.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_SIGNAL_TYPE",
+      "INVALID_EMITTED_SCHEMA",
+      "INVALID_SIGNAL_TYPE",
+      "INVALID_EMITTED_SCHEMA",
+      "INVALID_SUBSCRIBE_RETURN",
+      "INVALID_SIGNAL_TYPE",
+      "INVALID_WHERE",
+    ]);
+  });
+
+  it("rejects every @Command handler declared on an Aggregate", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/aggregate-command.ts",
+        handlerFixtureSource(
+          "Aggregate",
+          "TaskSchema",
+          `
+            @Command
+            transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
+
+            @Command
+            react(event: TaskCreated): RenameTask { throw new Error(String(event)); }
+          `,
+          `
+            import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+            import { type TaskCreated } from "../generated/events_pb.js";
+          `,
+        ),
+      ),
+    );
+
+    expect(entityReceivers(result)).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_COMMAND_HANDLER",
+      "UNSUPPORTED_COMMAND_HANDLER",
+    ]);
+  });
+
+  it("rejects every @Command handler declared on a Projection", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/projection-command.ts",
+        handlerFixtureSource(
+          "Projection",
+          "TaskListSchema",
+          `
+            @Command
+            transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
+
+            @Command
+            react(event: TaskCreated): RenameTask { throw new Error(String(event)); }
+          `,
+          `
+            import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+            import { type TaskCreated } from "../generated/events_pb.js";
+          `,
+        ),
+      ),
+    );
+
+    expect(entityReceivers(result)).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_COMMAND_HANDLER",
+      "UNSUPPORTED_COMMAND_HANDLER",
+    ]);
+  });
+
+  it("rejects @Command inherited through Aggregate and Projection domain bases", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/inherited-command.ts",
+        `
+          import { Aggregate, Command, Projection } from "@spine-event-engine/server";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { TaskListSchema } from "../generated/task_list_pb.js";
+          import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+
+          abstract class DomainAggregate extends Aggregate<string, typeof TaskSchema, bigint> {}
+          abstract class DomainProjection extends Projection<string, typeof TaskListSchema, number> {}
+
+          export class InheritedAggregate extends DomainAggregate {
+            @Command transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
+          }
+          export class InheritedProjection extends DomainProjection {
+            @Command transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
+          }
+        `,
+      ),
+    );
+
+    expect(entityReceivers(result)).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_COMMAND_HANDLER",
+      "UNSUPPORTED_COMMAND_HANDLER",
+    ]);
+  });
+
+  it("accepts @Command inherited through a Process Manager domain base", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/inherited-process-manager-command.ts",
+        `
+          import { Command, ProcessManager } from "@spine-event-engine/server";
+          import { TaskListSchema } from "../generated/task_list_pb.js";
+          import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+
+          abstract class DomainProcessManager extends ProcessManager<string, typeof TaskListSchema, number> {}
+          export class InheritedProcessManager extends DomainProcessManager {
+            @Command transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers[0]?.kind).toBe("command-substitution");
+  });
+
+  it("ignores unrelated classes whose heritage type has no symbol", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/message-board-shape.ts",
+        `
+          import { ProcessManager, Subscribe } from "@spine-event-engine/server";
+          import { TaskListSchema } from "../generated/task_list_pb.js";
+          import { type TaskCreated } from "../generated/events_pb.js";
+
+          declare const BootstrapBase: any;
+          class MessageBoardBootstrap extends BootstrapBase {}
+          export class InvalidBootstrapHandler extends BootstrapBase {
+            @Subscribe observe(): void {}
+          }
+          export class TaskProcessManager extends ProcessManager<string, typeof TaskListSchema, number> {
+            @Subscribe observe(event: TaskCreated): void { void event; }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "MISSING_ENTITY_STATE_SCHEMA",
+      "INVALID_PARAMETER_COUNT",
+    ]);
+    expect(entityReceivers(result).map((entity) => entity.className)).toEqual([
+      "TaskProcessManager",
+    ]);
+  });
+
   it("discovers bare handler decorators and generated schema references", () => {
     const result = analyzeBuildHandlers(programWithSource("src/task.ts", validTaskSource));
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities).toEqual([
+    expect(entityReceivers(result)).toEqual([
       {
-        className: "TaskAggregate",
+        className: "TaskProcessManager",
         sourceFile: "src/task.ts",
         stateSchema: schema("../generated/spine/examples/todo/tasks_pb.js", "TaskSchema"),
         handlers: [
           {
-            kind: "command-assignment",
-            methodName: "createTask",
+            kind: "event-subscription",
+            methodName: "observeCreated",
             origin: "domestic",
             signalSchema: schema(
-              "../generated/spine/examples/todo/task_commands_pb.js",
-              "CreateTaskSchema",
+              "../generated/spine/examples/todo/task_events_pb.js",
+              "TaskCreatedSchema",
             ),
-            emittedSchemas: [
-              schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
-            ],
+            emittedSchemas: [],
             parameterCount: 1,
           },
           {
@@ -112,7 +556,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers[0]).toEqual({
+    expect(entityReceivers(result)[0]?.handlers[0]).toEqual({
       kind: "command-assignment",
       methodName: "create",
       origin: "domestic",
@@ -138,7 +582,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers[0]).toEqual({
+    expect(entityReceivers(result)[0]?.handlers[0]).toEqual({
       kind: "event-subscription",
       methodName: "observe",
       origin: "domestic",
@@ -160,7 +604,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers).toEqual([
+    expect(entityReceivers(result)[0]?.handlers).toEqual([
       {
         kind: "state-subscription",
         methodName: "observe",
@@ -191,7 +635,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities[0]?.handlers).toEqual([
+    expect(entityReceivers(result)[0]?.handlers).toEqual([
       {
         kind: "state-subscription",
         methodName: "observeForeign",
@@ -216,7 +660,9 @@ describe("build-time handler analyzer", () => {
       .map(
         ([decorator, methodName, returnType, , , parameterCount]) => `
           @${decorator}
-          ${methodName}(rejection: TaskAlreadyDone${parameterCount === 2 ? ", context: unknown" : ""}): ${returnType} {
+          ${methodName}(rejection: TaskAlreadyDone${
+            parameterCount === 2 ? ", context: EventContext" : ""
+          }): ${returnType} {
             throw new Error(String(rejection));
           }`,
       )
@@ -224,12 +670,12 @@ describe("build-time handler analyzer", () => {
     const result = analyzeBuildHandlers(
       programWithSource(
         "src/rejection-consumers.ts",
-        handlerFixtureSource("Projection", "TaskListSchema", methods, rejectionRoleImports),
+        handlerFixtureSource("ProcessManager", "TaskListSchema", methods, rejectionRoleImports),
       ),
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers).toEqual(
+    expect(entityReceivers(result)[0]?.handlers).toEqual(
       roles.map(([, methodName, , kind, emittedSchemas, parameterCount]) => ({
         kind,
         methodName,
@@ -264,7 +710,7 @@ describe("build-time handler analyzer", () => {
       programWithSource(
         "src/where-handlers.ts",
         handlerFixtureSource(
-          "Projection",
+          "ProcessManager",
           "TaskListSchema",
           methods,
           `
@@ -276,7 +722,9 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers.map(({ kind, where }) => ({ kind, where }))).toEqual([
+    expect(
+      entityReceivers(result)[0]?.handlers.map(({ kind, where }) => ({ kind, where })),
+    ).toEqual([
       {
         kind: "event-subscription",
         where: { eventField: "board", equals: "announcements" },
@@ -338,7 +786,7 @@ describe("build-time handler analyzer", () => {
         `
           const filter = { eventField: "board", equals: "one" };
           ${handlerFixtureSource(
-            "Projection",
+            "ProcessManager",
             "TaskListSchema",
             methods,
             `
@@ -350,7 +798,7 @@ describe("build-time handler analyzer", () => {
       ),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual(
       [
         "variable",
@@ -392,7 +840,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics).toEqual([
       expect.objectContaining({ code: "INVALID_WHERE", methodName: "state" }),
     ]);
@@ -421,7 +869,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers[0]).toMatchObject({
+    expect(entityReceivers(result)[0]?.handlers[0]).toMatchObject({
       kind: "event-subscription",
       where: { eventField: "board", equals: "announcements" },
     });
@@ -446,11 +894,11 @@ describe("build-time handler analyzer", () => {
     const result = analyzeBuildHandlers(
       programWithSource(
         "src/rejection-roles.ts",
-        handlerFixtureSource("Aggregate", "TaskSchema", methods, rejectionRoleImports),
+        handlerFixtureSource("ProcessManager", "TaskSchema", methods, rejectionRoleImports),
       ),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual(
       roles.map(([, methodName, , , code]) => [code, methodName]),
     );
@@ -496,7 +944,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual(
       roles.map(([methodName]) => ["INVALID_SIGNAL_TYPE", methodName]),
     );
@@ -525,7 +973,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
       ["INVALID_SIGNAL_TYPE", "observe"],
     ]);
@@ -547,11 +995,39 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_SIGNAL_TYPE",
     ]);
     expect(result.diagnostics[0]?.methodName).toBe("create");
+  });
+
+  it("requires exact generated command and event source basenames", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/misnamed.ts", {
+        "src/misnamed.ts": `
+          import { Aggregate, Assign, React } from "@spine-event-engine/server";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { type NotACommand } from "../generated/notcommands_pb.js";
+          import { type NotAnEvent } from "../generated/notevents_pb.js";
+          export class MisnamedAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+            @Assign command(command: NotACommand): NotAnEvent { throw new Error(String(command)); }
+            @React event(event: NotAnEvent): NotAnEvent { throw new Error(String(event)); }
+          }
+        `,
+        "generated/notcommands_pb.ts": generatedModule("example/notcommands.proto", "NotACommand"),
+        "generated/notevents_pb.ts": generatedModule("example/notevents.proto", "NotAnEvent"),
+        "generated/task_pb.ts": generatedModule("example/tasks.proto", "Task"),
+      }),
+    );
+
+    expect(entityReceivers(result)).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_SIGNAL_TYPE",
+      "INVALID_EMITTED_SCHEMA",
+      "INVALID_SIGNAL_TYPE",
+      "INVALID_EMITTED_SCHEMA",
+    ]);
   });
 
   it("ties descriptor roles to the imported schema export", () => {
@@ -567,7 +1043,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_SIGNAL_TYPE",
     ]);
@@ -590,7 +1066,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_SIGNAL_TYPE",
       "INVALID_EMITTED_SCHEMA",
@@ -617,7 +1093,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_SIGNAL_TYPE",
       "INVALID_SIGNAL_TYPE",
@@ -645,7 +1121,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.stateSchema).toEqual(
+    expect(entityReceivers(result)[0]?.stateSchema).toEqual(
       schema("../generated/state_pb.js", "TaskSchema"),
     );
   });
@@ -671,7 +1147,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers[0]?.signalSchema).toEqual(
+    expect(entityReceivers(result)[0]?.handlers[0]?.signalSchema).toEqual(
       schema("../generated/domain_pb.js", "CreateTaskSchema"),
     );
   });
@@ -680,7 +1156,7 @@ describe("build-time handler analyzer", () => {
     const result = analyzeBuildHandlers(programWithSource("src/reaction.ts", noEmissionSource));
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities).toEqual([
+    expect(entityReceivers(result)).toEqual([
       {
         className: "TaskProjection",
         sourceFile: "src/reaction.ts",
@@ -702,7 +1178,7 @@ describe("build-time handler analyzer", () => {
   it("rejects void Assign and Command handlers", () => {
     const result = analyzeBuildHandlers(programWithSource("src/void.ts", voidEmissionSource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_EMITTED_SCHEMAS",
       "MISSING_EMITTED_SCHEMAS",
@@ -716,7 +1192,7 @@ describe("build-time handler analyzer", () => {
   it("rejects no-emission React handlers with empty tuple returns", () => {
     const result = analyzeBuildHandlers(programWithSource("src/tuple.ts", emptyTupleReactSource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_EMITTED_SCHEMAS",
     ]);
@@ -727,7 +1203,7 @@ describe("build-time handler analyzer", () => {
     const result = analyzeBuildHandlers(programWithSource("src/string-name.ts", stringNameSource));
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers).toEqual([
+    expect(entityReceivers(result)[0]?.handlers).toEqual([
       {
         kind: "command-assignment",
         methodName: 'create\u2028"task"\nnext',
@@ -742,7 +1218,7 @@ describe("build-time handler analyzer", () => {
   it("reports deterministic diagnostics for unsupported decorator and signature shapes", () => {
     const result = analyzeBuildHandlers(programWithSource("src/bad.ts", invalidSource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_ENTITY_STATE_SCHEMA",
       "SCHEMA_BEARING_DECORATOR",
@@ -770,9 +1246,9 @@ describe("build-time handler analyzer", () => {
   it("requires decorated entity classes to be exported", () => {
     const result = analyzeBuildHandlers(programWithSource("src/local.ts", localEntitySource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      "NON_EXPORTED_ENTITY_CLASS",
+      "NON_EXPORTED_RECEIVER_CLASS",
     ]);
     expect(result.diagnostics[0]?.className).toBe("LocalAggregate");
   });
@@ -786,18 +1262,18 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(namedResult.diagnostics).toEqual([]);
-    expect(namedResult.entities[0]?.className).toBe("ListedAggregate");
-    expect(defaultResult.entities).toEqual([]);
-    expect(defaultResult.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      "UNSUPPORTED_ENTITY_EXPORT",
-    ]);
-    expect(defaultResult.diagnostics[0]?.className).toBe("DefaultAggregate");
+    expect(entityReceivers(namedResult)[0]?.className).toBe("ListedAggregate");
+    expect(defaultResult.diagnostics).toEqual([]);
+    expect(entityReceivers(defaultResult)[0]).toMatchObject({
+      className: "DefaultAggregate",
+      defaultExport: true,
+    });
   });
 
   it("reports deterministic diagnostics for cyclic aliases", () => {
     const result = analyzeBuildHandlers(programWithSource("src/cyclic.ts", cyclicAliasSource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_ENTITY_STATE_SCHEMA",
       "INVALID_SIGNAL_TYPE",
@@ -815,7 +1291,7 @@ describe("build-time handler analyzer", () => {
       programWithSource("src/invalid-generated.ts", invalidGeneratedSource),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_SIGNAL_TYPE",
       "INVALID_SIGNAL_TYPE",
@@ -846,7 +1322,7 @@ describe("build-time handler analyzer", () => {
       }),
     );
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_ENTITY_STATE_SCHEMA",
       "UNSUPPORTED_RETURN_TYPE",
@@ -864,7 +1340,7 @@ describe("build-time handler analyzer", () => {
   it("validates emitted schema roles for each handler decorator", () => {
     const result = analyzeBuildHandlers(programWithSource("src/roles.ts", invalidRoleSource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_EMITTED_SCHEMA",
       "INVALID_EMITTED_SCHEMA",
@@ -880,7 +1356,7 @@ describe("build-time handler analyzer", () => {
   it("handles namespace imports, aliases, readonly wrappers, and computed method diagnostics", () => {
     const result = analyzeBuildHandlers(programWithSource("src/oddball.ts", oddballSource));
 
-    expect(result.entities).toEqual([
+    expect(entityReceivers(result)).toEqual([
       {
         className: "OddballAggregate",
         sourceFile: "src/oddball.ts",
@@ -895,7 +1371,7 @@ describe("build-time handler analyzer", () => {
             parameterCount: 1,
           },
           {
-            kind: "command-reaction",
+            kind: "command-substitution",
             methodName: "rename",
             origin: "domestic",
             signalSchema: schema("../generated/commands_pb", "CreateTaskSchema"),
@@ -931,7 +1407,7 @@ describe("build-time handler analyzer", () => {
   it("reports edge diagnostics for tuple members, missing generics, and proto envelopes", () => {
     const result = analyzeBuildHandlers(programWithSource("src/edge.ts", edgeSource));
 
-    expect(result.entities).toEqual([
+    expect(entityReceivers(result)).toEqual([
       {
         className: "EdgeAggregate",
         sourceFile: "src/edge.ts",
@@ -971,7 +1447,7 @@ describe("build-time handler analyzer", () => {
   it("surfaces TypeScript syntax diagnostics for malformed source", () => {
     const result = analyzeBuildHandlers(programWithSource("src/malformed.ts", malformedSource));
 
-    expect(result.entities).toEqual([]);
+    expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "TYPESCRIPT_SYNTAX_ERROR",
     ]);
@@ -1018,6 +1494,30 @@ function programWithSource(fileName: string, source: string): ts.Program {
   });
 }
 
+function standaloneContractProgram(fileName: string, source: string): ts.Program {
+  return programWithSources(fileName, {
+    [fileName]: source,
+    "generated/commands_pb.ts": generatedModule(
+      "spine/examples/todo/task_commands.proto",
+      "CreateTask",
+      "RenameTask",
+    ),
+    "generated/events_pb.ts": generatedModule(
+      "spine/examples/todo/task_events.proto",
+      "TaskCreated",
+      "TaskRenamed",
+    ),
+    "generated/rejections_pb.ts": generatedModule(
+      "spine/examples/todo/task_rejections.proto",
+      "TaskAlreadyDone",
+    ),
+    "generated/task_pb.ts": generatedModuleWithDescriptorMessages(
+      "spine/examples/todo/tasks.proto",
+      [{ exportName: "Task", descriptorName: "Task", entityState: true }],
+    ),
+  });
+}
+
 function programWithSources(rootFileName: string, sources: Record<string, string>): ts.Program {
   const options: ts.CompilerOptions = {
     experimentalDecorators: true,
@@ -1042,6 +1542,7 @@ function schema(moduleSpecifier: string, exportName: string) {
 }
 
 const rejectionRoleImports = `
+  import { type EventContext } from "@spine-event-engine/proto";
   import { type TaskAlreadyDone } from "../generated/rejections_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
   import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";`;
@@ -1055,7 +1556,9 @@ function handlerFixtureSource(
   const stateModule = stateSchema === "TaskSchema" ? "task_pb" : "task_list_pb";
   const versionType = entityBase === "Aggregate" ? "bigint" : "number";
   return `
-    import { Aggregate, Assign, Command, Projection, React, Subscribe, Where } from "@spine-event-engine/server";
+    import {
+      Aggregate, Assign, Command, ProcessManager, Projection, React, Subscribe, Where,
+    } from "@spine-event-engine/server";
     import { ${stateSchema} } from "../generated/${stateModule}.js";
     ${imports}
 
@@ -1184,20 +1687,21 @@ function fileDescriptor(
 }
 
 const validTaskSource = `
-  import { Aggregate, Assign as HandleCommand, Command, Subscribe } from "@spine-event-engine/server";
+  import { Command, ProcessManager, Subscribe } from "@spine-event-engine/server";
+  import { type EventContext } from "@spine-event-engine/proto";
   import * as server from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/spine/examples/todo/tasks_pb.js";
-  import { type CreateTask, type RenameTask } from "../generated/spine/examples/todo/task_commands_pb.js";
+  import { type RenameTask } from "../generated/spine/examples/todo/task_commands_pb.js";
   import * as events from "../generated/spine/examples/todo/task_events_pb.js";
 
-  export class TaskAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
-    @HandleCommand
-    createTask(command: CreateTask): events.TaskCreated {
-      throw new Error(String(command));
+  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema, bigint> {
+    @Subscribe
+    observeCreated(event: events.TaskCreated): void {
+      void event;
     }
 
     @Command
-    renameAgain(event: events.TaskCreated, context: unknown): Array<RenameTask> {
+    renameAgain(event: events.TaskCreated, context: EventContext): Array<RenameTask> {
       throw new Error(String(event) + String(context));
     }
 
@@ -1474,12 +1978,12 @@ const typeOnlySchemaSource = `
 `;
 
 const invalidRoleSource = `
-  import { Aggregate, Assign, Command, React } from "@spine-event-engine/server";
+  import { Assign, Command, ProcessManager, React } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class InvalidRoleAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class InvalidRoleAggregate extends ProcessManager<string, typeof TaskSchema, bigint> {
     @Assign
     assignCommand(command: CreateTask): RenameTask {
       throw new Error(String(command));
@@ -1507,7 +2011,7 @@ const oddballSource = `
   type State = (typeof StateSchema);
   const computed = "computed";
 
-  export class OddballAggregate extends spine.Aggregate<string, State, bigint> {
+  export class OddballAggregate extends spine.ProcessManager<string, State, bigint> {
     @spine.Assign
     create(command: commands.CreateTask): readonly events.TaskCreated[] {
       throw new Error(String(command));
@@ -1618,12 +2122,12 @@ const noEmissionSource = `
 `;
 
 const voidEmissionSource = `
-  import { Aggregate, Assign, Command } from "@spine-event-engine/server";
+  import { Assign, Command, ProcessManager } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class TaskAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class TaskAggregate extends ProcessManager<string, typeof TaskSchema, bigint> {
     @Assign
     silentAssign(command: CreateTask): void {
       void command;
@@ -1665,7 +2169,7 @@ const stringNameSource = `
 `;
 
 const invalidSource = `
-  import { Aggregate, Apply, Assign, Command, Subscribe } from "@spine-event-engine/server";
+  import { Apply, Assign, Command, ProcessManager, Subscribe } from "@spine-event-engine/server";
   import { type Event } from "@spine-event-engine/proto";
   import { TaskSchema } from "../generated/task_pb.js";
   import { CreateTaskSchema, type CreateTask } from "../generated/commands_pb.js";
@@ -1678,7 +2182,7 @@ const invalidSource = `
     }
   }
 
-  export class BadAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class BadAggregate extends ProcessManager<string, typeof TaskSchema, bigint> {
     @Assign(CreateTaskSchema)
     schemaDecorator(command: CreateTask): TaskCreated {
       throw new Error(String(command));

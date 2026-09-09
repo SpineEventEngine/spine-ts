@@ -23,6 +23,14 @@ a Command, treats a Command as an Event, or substitutes one identifier type for
 another is invalid because it hides contract mistakes and teaches the wrong
 API.
 
+## Wording
+
+Avoid `own`, `owns`, `owned`, `owner`, and `ownership` unless the possession or
+responsibility distinction is necessary for technical accuracy. Prefer direct
+wording that names the responsible class, module, package, agent, or person.
+This rule applies to code, documentation, review records, and user-facing chat
+responses.
+
 ## Model Allocation
 
 Use Standard speed. Do not enable Fast/boost mode. Do not use Max or Ultra in

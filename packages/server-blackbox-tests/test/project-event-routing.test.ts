@@ -15,7 +15,11 @@
 import { create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
-import { CommandContextSchema, CommandIdSchema } from "@spine-event-engine/proto";
+import {
+  CommandContextSchema,
+  CommandIdSchema,
+  type CommandContext,
+} from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
   type QueryResponse,
@@ -38,33 +42,44 @@ import { describe, expect, it } from "vitest";
 
 import { BlackBox } from "@spine-event-engine/testing";
 import {
-  CoordinationStateSchema,
+  ApproveProjectSchema,
   CreateProjectSchema,
+  ScheduleProjectSchema,
+  type ApproveProject,
+  type CreateProject,
+  type ScheduleProject,
+} from "../generated/spine/server/testing/project_commands_pb.js";
+import {
+  ProjectCreatedSchema,
+  ProjectScheduledSchema,
+  type ProjectCreated,
+  type ProjectScheduled,
+} from "../generated/spine/server/testing/project_events_pb.js";
+import {
+  CoordinationStateSchema,
   OrganizationIdSchema,
   PlanningIdSchema,
   PlanningStateSchema,
   PortfolioIdSchema,
   PortfolioStateSchema,
-  ProjectCreatedSchema,
   ProjectIdSchema,
   ProjectProjectionStateSchema,
-  ProjectScheduledSchema,
   ProjectStateSchema,
-  ScheduleProjectSchema,
   StaffingIdSchema,
   StaffingStateSchema,
-  type CreateProject,
   type OrganizationId,
   type PlanningId,
   type PortfolioId,
-  type ProjectCreated,
   type ProjectId,
-  type ProjectScheduled,
-  type ScheduleProject,
   type StaffingId,
 } from "../generated/spine/server/testing/project_workflow_pb.js";
 
 class Project extends Aggregate<ProjectId, typeof ProjectStateSchema, bigint> {
+  static scheduledStatuses: string[] = [];
+
+  static reset(): void {
+    this.scheduledStatuses = [];
+  }
   create(command: CreateProject): ProjectCreated {
     const project = command.project;
     if (project === undefined) throw new Error("CreateProject requires a project.");
@@ -81,6 +96,7 @@ class Project extends Aggregate<ProjectId, typeof ProjectStateSchema, bigint> {
   }
 
   schedule(command: ScheduleProject): ProjectScheduled {
+    Project.scheduledStatuses.push(command.status);
     this.update((draft) => Object.assign(draft, { status: command.status }));
     return create(ProjectScheduledSchema, { project: this.id, status: command.status });
   }
@@ -101,6 +117,12 @@ class ProjectCoordinator extends ProcessManager<ProjectId, typeof CoordinationSt
     this.update((draft) => Object.assign(draft, { id: this.id, projectName: event.name }));
     return create(ScheduleProjectSchema, { project: this.id, status: "scheduled" });
   }
+
+  approve(command: ApproveProject, context: CommandContext): ScheduleProject {
+    this.update((draft) => Object.assign(draft, { id: this.id, projectName: command.status }));
+    expect(context.$typeName).toBe(CommandContextSchema.typeName);
+    return create(ScheduleProjectSchema, { project: command.project, status: command.status });
+  }
 }
 class Portfolio extends Projection<PortfolioId, typeof PortfolioStateSchema, number> {
   subscribe(event: ProjectCreated): void {
@@ -114,10 +136,10 @@ class ProjectProjection extends Projection<ProjectId, typeof ProjectProjectionSt
 }
 
 const generatedHandlerRegistry: GeneratedHandlerRegistry = {
-  version: 3,
-  entities: [
+  receivers: [
     {
-      entityType: Project,
+      receiverKind: "entity",
+      receiverType: Project,
       stateSchema: ProjectStateSchema,
       handlers: [
         {
@@ -139,7 +161,8 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
       ],
     },
     {
-      entityType: ProjectPlanning,
+      receiverKind: "entity",
+      receiverType: ProjectPlanning,
       stateSchema: PlanningStateSchema,
       handlers: [
         {
@@ -153,7 +176,8 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
       ],
     },
     {
-      entityType: ProjectStaffing,
+      receiverKind: "entity",
+      receiverType: ProjectStaffing,
       stateSchema: StaffingStateSchema,
       handlers: [
         {
@@ -167,7 +191,8 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
       ],
     },
     {
-      entityType: ProjectCoordinator,
+      receiverKind: "entity",
+      receiverType: ProjectCoordinator,
       stateSchema: CoordinationStateSchema,
       handlers: [
         {
@@ -178,10 +203,19 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
           parameterCount: 1,
           origin: "domestic",
         },
+        {
+          kind: "command-substitution",
+          methodName: "approve",
+          signalSchema: ApproveProjectSchema,
+          emittedSchemas: [ScheduleProjectSchema],
+          parameterCount: 2,
+          origin: "domestic",
+        },
       ],
     },
     {
-      entityType: Portfolio,
+      receiverKind: "entity",
+      receiverType: Portfolio,
       stateSchema: PortfolioStateSchema,
       handlers: [
         {
@@ -195,7 +229,8 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
       ],
     },
     {
-      entityType: ProjectProjection,
+      receiverKind: "entity",
+      receiverType: ProjectProjection,
       stateSchema: ProjectProjectionStateSchema,
       handlers: [
         {
@@ -353,7 +388,10 @@ async function awaitProjectWorkflowStates(
   planning: PlanningId,
   staffing: StaffingId,
   portfolio: PortfolioId,
-  options: { readonly portfolioExpected: boolean } = { portfolioExpected: true },
+  options: { readonly portfolioExpected: boolean; readonly projectStatus?: string } = {
+    portfolioExpected: true,
+    projectStatus: "scheduled",
+  },
 ): Promise<void> {
   const deadline = Date.now() + 1_000;
   while (Date.now() < deadline) {
@@ -374,7 +412,7 @@ async function awaitProjectWorkflowStates(
     ]);
     if (
       projectState?.name === "roadmap" &&
-      projectState.status === "scheduled" &&
+      projectState.status === (options.projectStatus ?? "scheduled") &&
       planningState !== undefined &&
       staffingState !== undefined &&
       coordinationState !== undefined &&
@@ -394,6 +432,16 @@ async function createProject(boundedContext: BoundedContext, id: ProjectId): Pro
       context: create(CommandContextSchema),
       schema: CreateProjectSchema,
       message: create(CreateProjectSchema, { project: id, name: "roadmap" }),
+    }),
+  );
+}
+async function approveProject(boundedContext: BoundedContext, id: ProjectId): Promise<void> {
+  await boundedContext.commandBus().post(
+    SignalEnvelopes.command({
+      id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
+      context: create(CommandContextSchema),
+      schema: ApproveProjectSchema,
+      message: create(ApproveProjectSchema, { project: id, status: "approved" }),
     }),
   );
 }
@@ -431,6 +479,46 @@ function expectProjectWorkflowIds(
 }
 
 describe("project workflow Event routing", () => {
+  it("delivers a client and server-context Command through a command-substituting Process Manager", async () => {
+    const { project, planning, staffing, portfolio } = ids();
+    const boundedContext = context(routeTo(portfolio), planning, staffing);
+    try {
+      await createProject(boundedContext, project);
+      await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
+      await approveProject(boundedContext, project);
+      await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio, {
+        portfolioExpected: true,
+        projectStatus: "approved",
+      });
+      await expect(boundedContext.stand().read(ProjectStateSchema, project)).resolves.toMatchObject(
+        {
+          id: project,
+          name: "roadmap",
+          status: "approved",
+        },
+      );
+      await expect(
+        boundedContext.stand().read(CoordinationStateSchema, project),
+      ).resolves.toMatchObject({
+        id: project,
+        projectName: "approved",
+      });
+    } finally {
+      await boundedContext.close();
+    }
+  });
+
+  it("drains a command substitution's produced command when the context closes immediately", async () => {
+    const { project, planning, staffing, portfolio } = ids();
+    const boundedContext = context(routeTo(portfolio), planning, staffing);
+    Project.reset();
+    await createProject(boundedContext, project);
+    await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
+    await approveProject(boundedContext, project);
+    await boundedContext.close();
+    expect(Project.scheduledStatuses).toContain("approved");
+  });
+
   it("updates custom- and producer-ID-routed persisted Entity states", async () => {
     const { project, planning, staffing, portfolio } = ids();
     expectProjectWorkflowIds(project, planning, staffing, portfolio);
@@ -533,6 +621,11 @@ describe("project workflow Event routing", () => {
         create(CreateProjectSchema, { project, name: "roadmap" }),
       );
       expect(posted.kind).toBe("ok");
+      const approved = await scope.post(
+        ApproveProjectSchema,
+        create(ApproveProjectSchema, { project, status: "approved" }),
+      );
+      expect(approved.kind).toBe("ok");
       const results = await blackBox.eventually(
         () =>
           Promise.all([
@@ -548,14 +641,14 @@ describe("project workflow Event routing", () => {
           return (
             candidate.every((response) => response.message.length === 1) &&
             state !== undefined &&
-            AnyMessages.unpack(state, ProjectStateSchema)?.status === "scheduled"
+            AnyMessages.unpack(state, ProjectStateSchema)?.status === "approved"
           );
         },
       );
       expect(queryState(results[0], ProjectStateSchema)).toMatchObject({
         id: project,
         name: "roadmap",
-        status: "scheduled",
+        status: "approved",
       });
       expect(queryState(results[1], PlanningStateSchema)).toMatchObject({
         id: planning,
@@ -567,7 +660,7 @@ describe("project workflow Event routing", () => {
       });
       expect(queryState(results[3], CoordinationStateSchema)).toMatchObject({
         id: project,
-        projectName: "roadmap",
+        projectName: "approved",
       });
       expect(queryState(results[4], PortfolioStateSchema)).toMatchObject({
         id: portfolio,

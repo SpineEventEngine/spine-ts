@@ -63,6 +63,10 @@ import {
   type StandSubscription,
   type StandUpdate,
   Aggregate,
+  AbstractAssignee,
+  AbstractCommander,
+  AbstractEventReactor,
+  AbstractEventSubscriber,
   type EntityVersionMetadata,
   Inbox,
   type InboxMessage,
@@ -168,6 +172,17 @@ const AggregateStateSchema = messageDesc(
 ) as GenMessage<AggregateState>;
 const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
 
+it("exports nominal standalone handler base classes", () => {
+  class Assignee extends AbstractAssignee {}
+  class Commander extends AbstractCommander {}
+  class Reactor extends AbstractEventReactor {}
+  class Subscriber extends AbstractEventSubscriber {}
+  expect(new Assignee()).toBeInstanceOf(AbstractAssignee);
+  expect(new Commander()).toBeInstanceOf(AbstractCommander);
+  expect(new Reactor()).toBeInstanceOf(AbstractEventReactor);
+  expect(new Subscriber()).toBeInstanceOf(AbstractEventSubscriber);
+});
+
 class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignCommand(command: Message<"spine.core.Command">): void {
     void command;
@@ -224,6 +239,10 @@ describe("@spine-event-engine/server", () => {
   it("exports the descriptor-derived entity and handler metadata surface", () => {
     expect(Object.keys(serverRoot).sort()).toEqual(
       [
+        "AbstractAssignee",
+        "AbstractCommander",
+        "AbstractEventReactor",
+        "AbstractEventSubscriber",
         "Aggregate",
         "AlreadyPickedUp",
         "Apply",
