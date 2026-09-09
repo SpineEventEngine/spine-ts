@@ -88,7 +88,11 @@ abstract class RequestCoordinator extends ProcessManager<string, typeof RequestV
 
 These reads are eventually consistent. `limit()` may not exceed 1,000, and
 `all()` can be expensive for a large Projection; prefer a targeted, ordered,
-bounded query.
+bounded query. Queries inherit the active handler's actor and tenant; there is
+no tenant override.
+
+Use `EntityQuery.all(...)` when every predicate must match and
+`EntityQuery.either(...)` when any branch may match.
 
 ## Native lifecycle and routing
 

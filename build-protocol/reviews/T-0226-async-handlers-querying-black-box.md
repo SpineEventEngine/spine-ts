@@ -326,6 +326,20 @@ memory. It is the sole production-code writer, may not spawn subagents, and
 owns this entire batch. The immutable role profile and explicit dispatch
 fields are the available runtime metadata.
 
+### Independent round-two correction work log
+
+- Aggregate reactor follow-up Events now use a dedicated committed stored-follow-up publisher path:
+  it retains stored follow-up dispatch while notifying BlackBox produced-signal observers exactly
+  once. Repository reactor regression coverage was RED under ordinary committed-event dispatch and
+  GREEN after the dedicated path.
+- Raw query-plan types no longer export from the core root. A deliberate
+  `@spine-event-engine/core/internal/entity-query-plan` subpath supplies the server-facing bridge.
+- Both accepted Promise<void> Subscribe analyzer fixtures are real async implementations. Process
+  Manager TSDoc and reader docs now describe protected handler-scoped reads, actor/tenant binding,
+  no override, and `all`/`either` combinators.
+- Evidence so far: repository routing 269/269, analyzer suite 52/52, generated strict build, and
+  tooling typecheck pass.
+
 ## Final P2 correction response
 
 - The final implementer used the explicitly dispatched existing `implementer`

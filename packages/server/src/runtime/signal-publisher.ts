@@ -112,6 +112,19 @@ export class SignalPublisher {
   }
 
   /**
+   * Publishes a committed Aggregate reactor Event as stored follow-up work and records it.
+   *
+   * @internal
+   * @param event The committed follow-up Event envelope.
+   * @returns A promise that settles after stored follow-up dispatch is contained.
+   */
+  publishCommittedFollowUpEvent(event: Event): Promise<void> {
+    return this.#publish("event", event, () =>
+      eventBusAccess.postStoredFollowUp(this.#eventBus, event),
+    );
+  }
+
+  /**
    * Publishes a produced System Event for detached handling.
    *
    * @param event The produced System Event envelope.

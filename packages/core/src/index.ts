@@ -101,8 +101,6 @@ export {
   EntityQueryBuilder,
   type EntityComparisonPredicate,
   type EntityGroup,
-  type EntityQueryPlan,
-  type EntityQueryPlanPredicate,
   type EntityQueryMaskPath,
   type EntityQueryIdentifier,
   type EntityQueryPredicateFor,

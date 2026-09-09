@@ -22,9 +22,9 @@ import {
   type EntityQueryIdentifier,
   type EntityQueryPredicateFor,
   type EntityPredicate,
-  type EntityQueryPlan,
   type EntityQueryBuilder,
 } from "@spine-event-engine/core";
+import type { EntityQueryPlan } from "@spine-event-engine/core/internal/entity-query-plan";
 import {
   type ConstraintViolation,
   type Event,
@@ -1142,9 +1142,9 @@ export abstract class Projection<
 /**
  * Abstract process manager family marker over the common transactional entity shell.
  *
- * This class intentionally adds only stable family identity. It does not add
- * process workflow execution, command posting, query clients, repositories,
- * bounded-context injection, or handler invocation.
+ * This class adds a protected, handler-scoped, read-only Projection query
+ * capability. It does not add command posting, repositories, bounded-context
+ * injection, or handler invocation.
  */
 export abstract class ProcessManager<
   Id,

@@ -199,6 +199,10 @@ not use projection reads for invariants.
 1,000 states. `all()` is a convenience and can be costly on a large Projection;
 prefer an ID-targeted or ordered bounded query.
 
+Use `EntityQuery.all(...)` to require every predicate and `EntityQuery.either(...)`
+to accept any branch. Query execution inherits the active handler's actor and
+tenant; the protected read-only facade has no tenant override.
+
 ```ts
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";

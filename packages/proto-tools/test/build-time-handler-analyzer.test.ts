@@ -1764,7 +1764,7 @@ const validTaskSource = `
 
   export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema, bigint> {
     @Subscribe
-    observeCreated(event: events.TaskCreated): Promise<void> {
+    async observeCreated(event: events.TaskCreated): Promise<void> {
       void event;
     }
 
@@ -1779,7 +1779,7 @@ const validTaskSource = `
     }
 
     @Subscribe
-    onRenamed(event: events.TaskRenamed): Promise<void> {
+    async onRenamed(event: events.TaskRenamed): Promise<void> {
       void event;
     }
   }

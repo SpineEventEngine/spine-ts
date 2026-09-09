@@ -282,7 +282,7 @@ describe("repository identity", () => {
     const release = processManagerQueryAccess.bind(
       processManager,
       <Schema extends DescriptorMessageSchema>(
-        _plan: import("@spine-event-engine/core").EntityQueryPlan,
+        _plan: import("@spine-event-engine/core/internal/entity-query-plan").EntityQueryPlan,
         schema: Schema,
       ): Promise<readonly MessageShape<Schema>[]> => {
         if (schema.typeName !== ProjectionStateSchema.typeName) {
