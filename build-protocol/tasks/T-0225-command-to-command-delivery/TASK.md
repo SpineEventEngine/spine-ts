@@ -1,6 +1,6 @@
 # T-0225: Command-to-Command Delivery
 
-Status: Release verification pending
+Status: Release fixture correction in progress
 Baseline: `origin/master@e37ec8a1fed84f11e0df07c78846d5607a698ede`
 Branch: `fix-command-to-command-delivery`
 Worktree: `/Users/armiol/development/experiments/spine-ts-fix-command-to-command-delivery`
@@ -198,7 +198,10 @@ TypeScript/API/TSDoc, and reader documentation. This task has no current
 release-verification claim. The first release run exposed two executable server
 fixtures that still emit the removed version-3 registry shape; their migration
 to unversioned receivers is complete without runtime compatibility support.
-The exact managed reproduction and both affected integration files pass.
+The exact managed reproduction and both affected integration files pass. The
+natural release retry then passed 4,616 tests and found one domain-invalid
+positive discovery fixture that uses framework Command/Event envelopes as
+application signals. Its domain-correct fixture replacement is in progress.
 
 ## Historical pre-standalone disposition
 

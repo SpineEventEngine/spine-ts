@@ -728,6 +728,14 @@ the executable-fixture scan finds no other legacy producer, and no managed
 child remains. This deterministic test-fixture correction does not reopen a
 specialist concern. A cheap preflight precedes the required release retry.
 
+The next release run completed naturally after 805 seconds. All pre-test gates
+and 4,616 tests passed; one positive generated-registry discovery test failed
+because it models `spine.core.Command` and `spine.core.Event` envelopes as an
+application command/event pair. This violates the repository's domain-correct
+fixture rule and the strict runtime validator. The accepted correction replaces
+only that positive fixture with authentic domain Command/Event descriptors;
+production validation remains unchanged.
+
 All six accepted contract-review findings were corrected on the existing
 implementation branch. `BuildHandlerAnalysis` and `GeneratedRegistryWriter`
 now accept only discriminated `receivers`; Entity receivers require
