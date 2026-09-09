@@ -277,6 +277,28 @@ packages/server/test/repository/repository.test.ts packages/testing/test/black-b
   passed every deterministic gate and 312/312 focused tests. One prior unchanged-tree attempt had
   a single unrelated default-timeout routing test; the permitted one-time rerun passed unchanged.
 
+### Independent round two assignments
+
+Frozen endpoint: `99f327726`
+
+Round two starts only after every round-one finding is closed and the exact
+task gate passes. These are new reviewer contexts with no inherited turns or
+round-one finding list:
+
+| Concern                        | Existing role                      | Explicit profile        | Memory |
+| ------------------------------ | ---------------------------------- | ----------------------- | ------ |
+| Style and maintainability      | `style_maintainability_reviewer`   | `gpt-5.6-terra` / high  | None   |
+| TypeScript and public API      | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` / high  | None   |
+| Performance and reliability    | `performance_reliability_reviewer` | `gpt-5.6-terra` / high  | None   |
+| Reader documentation           | `documentation_reviewer`           | `gpt-5.6-luna` / medium | None   |
+| Security and tenant boundaries | `security_reviewer`                | `gpt-5.6-terra` / high  | None   |
+
+All round-two reviewers are read-only senior specialists, may not spawn
+subagents, and receive only the task contract, repository rules, fixed
+`origin/master...99f327726` diff, and their concern. Desktop exposes the
+immutable role profile and explicit dispatch fields, but no additional live
+self-introspection metadata.
+
 ## Final P2 correction response
 
 - The final implementer used the explicitly dispatched existing `implementer`
