@@ -19,13 +19,13 @@ Worktree: `.worktrees/t-0226`
 
 ## Review assignments
 
-| Concern                        | Existing role                      | Explicit profile        | Status                                  |
-| ------------------------------ | ---------------------------------- | ----------------------- | --------------------------------------- |
-| Code style and maintainability | `style_maintainability_reviewer`   | `gpt-5.6-terra` / high  | `/root/t0226_style_review` active       |
-| TypeScript/API documentation   | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` / high  | `/root/t0226_api_review` active         |
-| Performance and reliability    | `performance_reliability_reviewer` | `gpt-5.6-terra` / high  | `/root/t0226_reliability_review` active |
-| Reader documentation           | `documentation_reviewer`           | `gpt-5.6-luna` / medium | Pending dispatch                        |
-| Security and tenant boundary   | `security_reviewer`                | `gpt-5.6-terra` / high  | Pending final readiness dispatch        |
+| Concern                        | Existing role                      | Explicit profile        | Status                                    |
+| ------------------------------ | ---------------------------------- | ----------------------- | ----------------------------------------- |
+| Code style and maintainability | `style_maintainability_reviewer`   | `gpt-5.6-terra` / high  | `/root/t0226_style_review` complete       |
+| TypeScript/API documentation   | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` / high  | `/root/t0226_api_review` complete         |
+| Performance and reliability    | `performance_reliability_reviewer` | `gpt-5.6-terra` / high  | `/root/t0226_reliability_review` complete |
+| Reader documentation           | `documentation_reviewer`           | `gpt-5.6-luna` / medium | `/root/t0226_docs_review` active          |
+| Security and tenant boundary   | `security_reviewer`                | `gpt-5.6-terra` / high  | `/root/t0226_security_review` active      |
 
 Every reviewer is read-only, may not spawn subagents, and must inspect the
 human-imposed requirements ledger. The Desktop surface does not expose separate
@@ -43,5 +43,21 @@ the available runtime metadata.
 
 ## Findings and author response
 
-Pending completion of the whole review wave. No fixes begin from a partial
-wave.
+The first three lanes are complete. Preliminary findings are held without fixes
+until documentation and security complete:
+
+- P1: restore BlackBox lifecycle-test construction after observation became
+  mandatory.
+- P1: verify Promise symbol provenance so shadowed/imported arbitrary types are
+  not treated as the built-in Promise.
+- P1: exclude rollback-path rejection Events from committed BlackBox history.
+- P1: preserve core query predicate, mask, ordering, and registered-column type
+  constraints through the Process Manager facade.
+- P1: share cycle, depth, and node-count guards with query plan compilation.
+- P2: keep the generator-only columns helper out of the core root API.
+- P2: add beginner package documentation for the new APIs.
+- P2: move canonical query behavior tests to the core package, leaving
+  client-node compatibility tests in client-node.
+
+Documentation and security findings remain pending. No fixes begin from this
+partial wave.
