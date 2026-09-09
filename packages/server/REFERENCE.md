@@ -186,6 +186,13 @@ there is no exact route. This is TypeScript routing; it does not consume
 `(is).java_type` or `(every_is).java_type`, and it has no decorator-based
 route registration API.
 
+Handlers may return their established result directly or through `Promise`.
+The entity transaction remains open until that promise settles; rejection rolls
+back framework state and suppresses produced output, but cannot undo external
+side effects. Process Managers may use their protected read-only query surface
+for eventually consistent projection state during a handler. Aggregates must
+not use projection reads for invariants.
+
 A command-input `@Command` method is a command substitution receptor: it is
 the one effective receptor for that Command type (instead of an `@Assign`),
 commits its Entity state before its one-or-more returned Commands are detached

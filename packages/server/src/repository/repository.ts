@@ -1620,7 +1620,7 @@ class AggregateCommandExecution {
       route.entityId,
       committedVersion,
       events,
-      (event) => this.#runtime.publisher.redispatchStored(event),
+      (event) => this.#runtime.publisher.publishCommittedEvent(event),
       () => {
         if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
         EntityStateChangePublisher.command(

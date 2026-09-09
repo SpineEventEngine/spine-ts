@@ -24,6 +24,13 @@ are fixed for its lifetime:
 immutable actor scope; actor text is validated by the client contract.
 `BlackBoxScope` includes the Node client request operations and adds
 `postEvent(schema, message)` for a direct event post in a test.
+`postExternalEvent(schema, message)` preserves the scope actor, tenant, zone,
+timestamp, and external marker, reaches only external handlers, and is not
+captured as produced output. `assertCommands()` and `assertEvents()` return
+independently cloned snapshots of admitted produced signals in admission order.
+They exclude test inputs, external inputs, system events, stored-event replay,
+and rolled-back output. Use `eventually()` when detached handling has not yet
+admitted a produced signal.
 
 ## Waiting and lifecycle
 

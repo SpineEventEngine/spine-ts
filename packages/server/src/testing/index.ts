@@ -13,6 +13,8 @@
  */
 
 import { ServerEnvironmentLifecycle } from "../server/server-environment.js";
+import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
+import type { Command, Event } from "@spine-event-engine/proto";
 
 export {
   unpackExternalEvent,
@@ -41,3 +43,31 @@ export const ServerTests: { readonly resetEnvironment: () => Promise<void> } = O
 const serverTestReset: () => Promise<void> = ServerTests.resetEnvironment;
 
 export { serverTestReset as resetServerEnvironmentForTest };
+
+/**
+ * Posts a locally constructed Event through the bounded context's external intake path.
+ *
+ * @param context Receives the external Event.
+ * @param event Event envelope whose external origin is preserved.
+ * @returns Completion after external dispatch admission.
+ */
+export function postExternalEvent(context: BoundedContext, event: Event): Promise<void> {
+  return boundedContextAccess.postExternalEvent(context, event);
+}
+
+/**
+ * Observes produced signals admitted by one bounded context.
+ *
+ * @param context Produces the observed signals.
+ * @param observer Receives cloned admitted Command and Event envelopes.
+ * @returns A handle that stops observation.
+ */
+export function observeProducedSignals(
+  context: BoundedContext,
+  observer: {
+    readonly onCommand?: (command: Readonly<Command>) => void;
+    readonly onEvent?: (event: Readonly<Event>) => void;
+  },
+): { readonly close: () => void } {
+  return boundedContextAccess.observeProducedSignals(context, observer);
+}

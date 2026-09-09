@@ -32,9 +32,8 @@ const fixtureSource = readFileSync(
   new URL("./fixtures/entity-metadata-fixture.ts", import.meta.url),
   "utf8",
 );
-const descriptorArray = /export const testingDescriptorSetBase64 = \[([\s\S]*?)\]\.join\(""\)/u.exec(
-  fixtureSource,
-);
+const descriptorArray =
+  /export const testingDescriptorSetBase64 = \[([\s\S]*?)\]\.join\(""\)/u.exec(fixtureSource);
 if (descriptorArray === null) throw new Error("testing descriptor fixture array is missing");
 const testingDescriptorSetBase64 = [...descriptorArray[1].matchAll(/"([^"]+)"/g)]
   .map((match) => match[1])
@@ -92,6 +91,18 @@ export function registerBlackBoxContract(test, testing) {
         create(AggregateStateSchema, { id: "task-1", name: "First" }),
       );
       if (posted.kind !== "ok") throw new Error("command was not accepted");
+      if (blackBox.assertCommands().length !== 0)
+        throw new Error("BlackBox captured its input command as produced output");
+      const produced = await blackBox.eventually(
+        () => blackBox.assertEvents(),
+        (events) => events.length === 1,
+      );
+      const event = produced[0];
+      if (AnyMessages.unpack(event?.message, ProjectionEventSchema)?.name !== "First")
+        throw new Error("BlackBox did not capture the committed produced event");
+      event.context = undefined;
+      if (blackBox.assertEvents()[0]?.context === undefined)
+        throw new Error("BlackBox returned a mutable produced-event snapshot");
       const result = await blackBox.eventually(
         () => scope.send(query("task-1")),
         (candidate) => candidate.message.length === 1,
@@ -263,6 +274,34 @@ export function registerBlackBoxContract(test, testing) {
     }
   });
 
+  test("posts an external event only to external handlers without capturing it as output", async () => {
+    const contexts = [];
+    const blackBox = await BlackBox.from(externalCapturingContext("External", contexts), {
+      tenant: "tenant-a",
+      zoneId: "Europe/Lisbon",
+    });
+    try {
+      await blackBox
+        .onBehalfOf("external-system")
+        .postExternalEvent(EventStateSchema, create(EventStateSchema, { id: "external" }));
+      const context = await blackBox.eventually(
+        () => contexts[0],
+        (value) => value !== undefined,
+      );
+      if (
+        context.external !== true ||
+        context.origin.value.actor?.value !== "external-system" ||
+        context.origin.value.tenantId?.kind.value !== "tenant-a" ||
+        context.origin.value.zoneId?.value !== "Europe/Lisbon" ||
+        blackBox.assertEvents().length !== 0
+      ) {
+        throw new Error("external event did not retain external intake semantics");
+      }
+    } finally {
+      await blackBox.close();
+    }
+  });
+
   test("keeps concurrent guest and actor direct-event contexts isolated with one fixed tenant and zone", async () => {
     const contexts = [];
     const blackBox = await BlackBox.from(capturingContext("Concurrent", contexts, true), {
@@ -348,6 +387,10 @@ export function registerBlackBoxContract(test, testing) {
     );
     await assertFailure(
       () => scope.postEvent(EventStateSchema, create(EventStateSchema, { id: "closed" })),
+      BlackBoxClosedError,
+    );
+    await assertFailure(
+      () => scope.postExternalEvent(EventStateSchema, create(EventStateSchema, { id: "closed" })),
       BlackBoxClosedError,
     );
   });
@@ -559,6 +602,18 @@ function capturingContext(name, contexts, multitenant) {
   return builder
     .addEventDispatcher({
       messageSchemas: () => [EventStateSchema],
+      dispatch: (event) => {
+        contexts.push(event.context);
+        return Promise.resolve();
+      },
+    })
+    .build();
+}
+function externalCapturingContext(name, contexts) {
+  return BoundedContext.multitenant(name)
+    .addEventDispatcher({
+      messageSchemas: () => [EventStateSchema],
+      externalEventSchemas: () => [EventStateSchema],
       dispatch: (event) => {
         contexts.push(event.context);
         return Promise.resolve();

@@ -422,6 +422,15 @@ mutation or tenant override at runtime or compile time, and rejects both
 unbound access and retained query execution after release with the established
 message. The observer is not exported from the server package entrypoint.
 
+## Slice 3 Progress
+
+RED: the BlackBox contract failed because produced-signal snapshots and scoped
+external-event posting did not exist. GREEN: a server/testing-only observer
+captures cloned SignalPublisher Command/Event admissions without affecting
+publication, and BlackBox attaches it at creation, returns cloned snapshots,
+and detaches it after server cleanup. `postExternalEvent()` now constructs the
+scoped envelope and uses the narrow server testing external-intake seam.
+
 ## Review Waves And Dispositions
 
 - One read-only architecture/requirements pass dispatched to the existing
