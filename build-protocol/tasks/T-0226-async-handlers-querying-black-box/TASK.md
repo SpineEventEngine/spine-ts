@@ -37,14 +37,14 @@ signals through BlackBox.
 
 Estimated active work: **14-20 uninterrupted agent-hours**.
 
-| Work | Estimate |
-| --- | ---: |
-| Task records and accepted contract | 1-2 hours |
-| Promise-aware handler analysis and tests | 2-3 hours |
-| Process Manager typed query API and runtime integration | 3-5 hours |
-| BlackBox external-event and signal-history additions | 3-4 hours |
-| Reader/API documentation | 1-2 hours |
-| Review, corrections, release verification, versioning, push, and report | 4 hours |
+| Work                                                                    |  Estimate |
+| ----------------------------------------------------------------------- | --------: |
+| Task records and accepted contract                                      | 1-2 hours |
+| Promise-aware handler analysis and tests                                | 2-3 hours |
+| Process Manager typed query API and runtime integration                 | 3-5 hours |
+| BlackBox external-event and signal-history additions                    | 3-4 hours |
+| Reader/API documentation                                                | 1-2 hours |
+| Review, corrections, release verification, versioning, push, and report |   4 hours |
 
 The largest uncertainties are sharing typed query concepts without a
 `server -> client-node` dependency, binding reads to the active tenant and
@@ -68,13 +68,13 @@ this estimate promptly if implementation evidence changes those assumptions.
 
 Selected skills read before task actions:
 
-| Skill | Source | Applicability | Instructions Applied |
-| --- | --- | --- | --- |
-| `using-git-worktrees` | `~/.agents/skills/using-git-worktrees/SKILL.md` | Required isolated feature work | Fresh official baseline and ignored project-local worktree |
-| `implement` | `~/.agents/skills/implement/SKILL.md` | Approved implementation task | Focused typechecks/tests, review, commits |
-| `test-driven-development` | `~/.agents/skills/test-driven-development/SKILL.md` | Runtime and API behavior changes | Observe focused RED before each production increment |
-| `user-story` | `~/.agents/skills/user-story/SKILL.md` | Development-ready task text | Human outcome and testable scenarios |
-| `api-design-principles` | `~/.agents/skills/api-design-principles/SKILL.md` | Public fluent query contract | Reuse one typed query abstraction rather than isolated methods |
+| Skill                     | Source                                              | Applicability                    | Instructions Applied                                           |
+| ------------------------- | --------------------------------------------------- | -------------------------------- | -------------------------------------------------------------- |
+| `using-git-worktrees`     | `~/.agents/skills/using-git-worktrees/SKILL.md`     | Required isolated feature work   | Fresh official baseline and ignored project-local worktree     |
+| `implement`               | `~/.agents/skills/implement/SKILL.md`               | Approved implementation task     | Focused typechecks/tests, review, commits                      |
+| `test-driven-development` | `~/.agents/skills/test-driven-development/SKILL.md` | Runtime and API behavior changes | Observe focused RED before each production increment           |
+| `user-story`              | `~/.agents/skills/user-story/SKILL.md`              | Development-ready task text      | Human outcome and testable scenarios                           |
+| `api-design-principles`   | `~/.agents/skills/api-design-principles/SKILL.md`   | Public fluent query contract     | Reuse one typed query abstraction rather than isolated methods |
 
 Skills passed to implementation and review roles must be recorded at dispatch.
 No task-specific skill conflicts override the repository protocol.
@@ -155,20 +155,17 @@ The exact generic spelling is resolved against existing declarations, but the
 approved behavior is equivalent to:
 
 ```ts
-const pending = await this
-  .select(AccessRequestViewSchema, AccessRequestViewColumns)
+const pending = await this.select(AccessRequestViewSchema, AccessRequestViewColumns)
   .where(EntityQuery.eq(AccessRequestViewColumns.status, Status.pending))
   .orderBy(AccessRequestViewColumns.createdAt, "asc")
   .limit(10)
   .read();
 
-const one = await this
-  .select(AccessRequestViewSchema, AccessRequestViewColumns)
-  .findById(requestId);
+const one = await this.select(AccessRequestViewSchema, AccessRequestViewColumns).findById(
+  requestId,
+);
 
-const all = await this
-  .select(AccessRequestViewSchema, AccessRequestViewColumns)
-  .all();
+const all = await this.select(AccessRequestViewSchema, AccessRequestViewColumns).all();
 ```
 
 The query object exposes no update, archive, delete, transaction, storage, or
@@ -177,9 +174,7 @@ cross-tenant override operation.
 BlackBox additions are equivalent to:
 
 ```ts
-await box
-  .onBehalfOf("external-system")
-  .postExternalEvent(AccessGrantedSchema, event);
+await box.onBehalfOf("external-system").postExternalEvent(AccessGrantedSchema, event);
 
 const commands = box.assertCommands();
 const events = box.assertEvents();
@@ -284,6 +279,13 @@ surface exposes no additional metadata.
   production implementation owner `/root/t0226_implementer`, using the existing
   `implementer` role with explicit configured `gpt-5.6-terra` / medium
   reasoning. The owner may not spawn subagents or revert concurrent work.
+- `2026-09-09 12:32 WEST`: Completed slice 1 analyzer RED/GREEN and runtime
+  settlement characterization. The analyzer unwraps exactly one outer built-in
+  `Promise<T>` (including local aliases), preserves existing validation and
+  generated metadata, and rejects promise-like, thenable, missing-generic, and
+  nested-Promise forms. Runtime regression coverage proves delayed fulfillment
+  does not expose state early, rejected promises roll back and suppress output,
+  and same-Aggregate command execution remains serial.
 
 ## Decisions
 
@@ -306,7 +308,8 @@ surface exposes no additional metadata.
 
 - This task and work log.
 - `build-protocol/DECISION_LOG.md` for the accepted architecture boundary.
-- Production, test, and documentation paths pending implementation.
+- `packages/proto-tools/src/generation/build-time-handler-analyzer.ts`.
+- Focused analyzer and repository-routing behavior tests.
 
 ## Tests Run
 
@@ -318,6 +321,13 @@ surface exposes no additional metadata.
 - Focused baseline Vitest run over build-time handler analysis, typed Entity
   queries, Stand, repository routing, testing BlackBox, and the cross-package
   BlackBox fixture - 5 files and 375 tests passed with zero failures.
+- RED: `pnpm exec vitest run packages/proto-tools/test/build-time-handler-analyzer.test.ts`
+  - 2 expected failures before implementation: legal Promise returns were
+    rejected and invalid inner types bypassed existing schema diagnostics.
+- GREEN: combined focused analyzer and repository-routing run - 314 passing
+  tests; affected proto-tools and server TypeScript builds passed; `git diff
+  --check` passed. A rejected handler promise is intentionally suppressed at
+  command intake after rollback, as characterized by the runtime regression.
 
 ## Coverage Result
 
@@ -325,37 +335,37 @@ surface exposes no additional metadata.
 
 ## Documentation And Public API Impact
 
-| Area | Impact |
-| --- | --- |
-| Package README impact | Server and testing usage require updates |
-| TypeDoc/API docs impact | New Process Manager query and BlackBox APIs; promise handler returns |
-| Public API additions/removals | Additive APIs; no approved removals |
-| Framework `USER_GUIDE.md` impact | Async handler/query/BlackBox examples required |
-| Example `USER_GUIDE.md` impact | Update only if an affected public example uses these APIs |
-| API examples | Add beginner-level Process Manager and BlackBox examples |
-| Compatibility notes | Existing synchronous handlers remain compatible |
+| Area                             | Impact                                                               |
+| -------------------------------- | -------------------------------------------------------------------- |
+| Package README impact            | Server and testing usage require updates                             |
+| TypeDoc/API docs impact          | New Process Manager query and BlackBox APIs; promise handler returns |
+| Public API additions/removals    | Additive APIs; no approved removals                                  |
+| Framework `USER_GUIDE.md` impact | Async handler/query/BlackBox examples required                       |
+| Example `USER_GUIDE.md` impact   | Update only if an affected public example uses these APIs            |
+| API examples                     | Add beginner-level Process Manager and BlackBox examples             |
+| Compatibility notes              | Existing synchronous handlers remain compatible                      |
 
 ## Security Impact
 
-| Area | Impact |
-| --- | --- |
-| Dependencies | No new dependency approved |
-| Secrets and credentials | No change |
-| IPC | External event remains within existing intake semantics |
-| Validation | Promise-unwrapped types retain existing schema validation |
-| Tenant boundaries | High-risk: query capability must bind the active tenant |
-| `Any`/deserialization | Existing query/envelope facilities only |
-| Logging | Existing handler/query failure diagnostics remain applicable |
+| Area                    | Impact                                                       |
+| ----------------------- | ------------------------------------------------------------ |
+| Dependencies            | No new dependency approved                                   |
+| Secrets and credentials | No change                                                    |
+| IPC                     | External event remains within existing intake semantics      |
+| Validation              | Promise-unwrapped types retain existing schema validation    |
+| Tenant boundaries       | High-risk: query capability must bind the active tenant      |
+| `Any`/deserialization   | Existing query/envelope facilities only                      |
+| Logging                 | Existing handler/query failure diagnostics remain applicable |
 
 ## Open Risks And Follow-Up Routing
 
-| Risk/Follow-Up | Owner | Disposition | Next Review Point |
-| --- | --- | --- | --- |
-| Query types could create `server -> client-node` dependency | Implementation owner | Must avoid | Architecture and API review |
-| Query capability could escape its active tenant/lifecycle | Implementation owner | Must prevent | Reliability/security review |
-| Signal capture could include inputs or uncommitted output | Implementation owner | Must prevent | Correctness/reliability review |
-| `all()` may be costly on large projections | Documentation | Accepted with warning | Documentation review |
-| HTTP side effects cannot roll back | Documentation | Accepted limitation | Documentation review |
+| Risk/Follow-Up                                              | Owner                | Disposition           | Next Review Point              |
+| ----------------------------------------------------------- | -------------------- | --------------------- | ------------------------------ |
+| Query types could create `server -> client-node` dependency | Implementation owner | Must avoid            | Architecture and API review    |
+| Query capability could escape its active tenant/lifecycle   | Implementation owner | Must prevent          | Reliability/security review    |
+| Signal capture could include inputs or uncommitted output   | Implementation owner | Must prevent          | Correctness/reliability review |
+| `all()` may be costly on large projections                  | Documentation        | Accepted with warning | Documentation review           |
+| HTTP side effects cannot roll back                          | Documentation        | Accepted limitation   | Documentation review           |
 
 ## Review Waves And Dispositions
 

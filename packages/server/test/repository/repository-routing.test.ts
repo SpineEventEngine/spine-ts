@@ -1444,6 +1444,69 @@ class AsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSche
   }
 }
 
+class RejectedAsyncAssigneeAggregate extends Aggregate<
+  string,
+  typeof AggregateStateSchema,
+  bigint
+> {
+  static rejectCommand: ((error: Error) => void) | undefined;
+
+  static reset(): void {
+    this.rejectCommand = undefined;
+  }
+
+  assignTask(command: AggregateState): Promise<SpineEvent> {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: command.id,
+          name: `${command.name} provisional`,
+          archived: command.archived,
+        }),
+      ),
+    );
+    return new Promise((_resolve, reject) => {
+      RejectedAsyncAssigneeAggregate.rejectCommand = reject;
+    });
+  }
+}
+
+class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static readonly started: string[] = [];
+  static readonly releases: (() => void)[] = [];
+
+  static reset(): void {
+    this.started.splice(0);
+    this.releases.splice(0);
+  }
+
+  static releaseNext(): void {
+    const release = this.releases.shift();
+    if (release === undefined) throw new Error("Expected a pending async assignment.");
+    release();
+  }
+
+  assignTask(command: AggregateState): Promise<SpineEvent> {
+    SerialAsyncAssigneeAggregate.started.push(command.name);
+    return new Promise<void>((resolve) => {
+      SerialAsyncAssigneeAggregate.releases.push(resolve);
+    }).then(() => {
+      this.update((draft) =>
+        Object.assign(
+          draft,
+          create(AggregateStateSchema, {
+            id: command.id,
+            name: `${command.name} (applied)`,
+            archived: command.archived,
+          }),
+        ),
+      );
+      return createAggregateEvent(`event-${command.name}`, command.id, 0, command.name);
+    });
+  }
+}
+
 class NoApplierAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState): AggregateState {
     this.update((draft) =>
@@ -3582,6 +3645,69 @@ describe("repository signal routing", () => {
       version: 1n,
       state: { name: "Async (applied)" },
     });
+  });
+
+  it("rolls back a rejected async aggregate assignment without publishing output", async () => {
+    RejectedAsyncAssigneeAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createRejectedAsyncAssigneeRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+    });
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const failure = new Error("async assignment failed");
+    const completion = context
+      .commandBus()
+      .post(createAggregateCommand("command-async-rejected", "task-async-rejected", "Async"));
+
+    await vi.waitFor(() => {
+      expect(RejectedAsyncAssigneeAggregate.rejectCommand).toBeTypeOf("function");
+    });
+    await expect(storage.readCurrent("task-async-rejected")).resolves.toBeUndefined();
+
+    RejectedAsyncAssigneeAggregate.rejectCommand?.(failure);
+    await expect(completion).resolves.toBeUndefined();
+    await expect(storage.readCurrent("task-async-rejected")).resolves.toBeUndefined();
+    await expect(eventStore.read()).resolves.toEqual([]);
+  });
+
+  it("serializes same-aggregate commands until each async assignment settles", async () => {
+    SerialAsyncAssigneeAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createSerialAsyncAssigneeRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const first = context
+      .commandBus()
+      .post(createAggregateCommand("command-first", "task-serial", "First"));
+
+    await vi.waitFor(() => {
+      expect(SerialAsyncAssigneeAggregate.started).toEqual(["First"]);
+    });
+    const second = context
+      .commandBus()
+      .post(createAggregateCommand("command-second", "task-serial", "Second"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(SerialAsyncAssigneeAggregate.started).toEqual(["First"]);
+
+    SerialAsyncAssigneeAggregate.releaseNext();
+    await vi.waitFor(() => {
+      expect(SerialAsyncAssigneeAggregate.started).toEqual(["First", "Second"]);
+    });
+    SerialAsyncAssigneeAggregate.releaseNext();
+    await Promise.all([first, second]);
+
+    await expect(eventStore.read()).resolves.toMatchObject([
+      { id: { value: "event-First" }, context: { version: { number: 1 } } },
+      { id: { value: "event-Second" }, context: { version: { number: 2 } } },
+    ]);
   });
 
   it("resolves aggregate command execution after commit when stored-event dispatch later throws", async () => {
@@ -11217,6 +11343,36 @@ function createAsyncAssigneeRepository(): Repository<typeof AsyncAssigneeAggrega
 
   return new Repository({
     entityType: AsyncAssigneeAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createRejectedAsyncAssigneeRepository(): Repository<
+  typeof RejectedAsyncAssigneeAggregate
+> {
+  const handlers = EntityHandlers.define(
+    RejectedAsyncAssigneeAggregate,
+    AggregateStateSchema,
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+  );
+
+  return new Repository({
+    entityType: RejectedAsyncAssigneeAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createSerialAsyncAssigneeRepository(): Repository<typeof SerialAsyncAssigneeAggregate> {
+  const handlers = EntityHandlers.define(
+    SerialAsyncAssigneeAggregate,
+    AggregateStateSchema,
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+  );
+
+  return new Repository({
+    entityType: SerialAsyncAssigneeAggregate,
     schema: AggregateStateSchema,
     handlers,
   });
