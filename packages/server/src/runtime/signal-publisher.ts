@@ -118,7 +118,7 @@ export class SignalPublisher {
    * @param event The committed follow-up Event envelope.
    * @returns A promise that settles after stored follow-up dispatch is contained.
    */
-  publishCommittedFollowUpEvent(event: Event): Promise<void> {
+  publishReactorEvent(event: Event): Promise<void> {
     return this.#publish("event", event, () =>
       eventBusAccess.postStoredFollowUp(this.#eventBus, event),
     );

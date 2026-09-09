@@ -1816,7 +1816,7 @@ class AggregateEventExecution {
         entityId,
         loaded.version + BigInt(produced.length),
         produced,
-        (event) => this.#runtime.publisher.publishCommittedFollowUpEvent(event),
+        (event) => this.#runtime.publisher.publishReactorEvent(event),
         () => {
           if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
           EntityStateChangePublisher.event(
