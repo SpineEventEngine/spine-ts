@@ -100,7 +100,7 @@ export const processManagerQueryAccess: Readonly<{
 
   require(entity: object): ProcessManagerQueryCapability {
     const capability = processManagerQueries.get(entity);
-    if (capability === undefined || !capability.active) {
+    if (capability?.active !== true) {
       throw new Error(
         "Process Manager queries are available only during repository handler execution.",
       );

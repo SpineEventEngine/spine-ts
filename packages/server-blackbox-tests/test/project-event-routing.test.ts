@@ -303,8 +303,8 @@ function queryState<Schema extends GenMessage<Message>>(
   return unpacked;
 }
 
-function producedMessage<Signal extends { readonly message?: Any | undefined }>(
-  signal: Signal | undefined,
+function producedMessage(
+  signal: { readonly message?: Any | undefined } | undefined,
   name: string,
 ): Any {
   expect(signal, `${name} envelope is required.`).toBeDefined();

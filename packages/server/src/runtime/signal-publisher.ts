@@ -22,10 +22,10 @@ import { emitServerError } from "../server/server-log.js";
 
 type PublicationKind = "command" | "event" | "system-event" | "stored-event";
 type PublisherState = "open" | "closing" | "closed";
-type ProducedSignalObserver = {
+interface ProducedSignalObserver {
   readonly onCommand?: (command: Readonly<Command>) => void;
   readonly onEvent?: (event: Readonly<Event>) => void;
-};
+}
 
 /**
  * Publishes produced signals and contains their detached dispatch failures for one context.

@@ -36,8 +36,7 @@ export const EntityFieldClassification: Readonly<{
     if (field.fieldKind === "enum")
       return { supported: true, valueKind: "enum", comparison: "equality" };
     if (field.fieldKind === "message") {
-      const messageType = field.message?.typeName;
-      if (messageType === undefined) return { supported: false, reason: "message" };
+      const messageType = field.message.typeName;
       return {
         supported: true,
         valueKind: "message",
@@ -59,7 +58,7 @@ export const EntityFieldClassification: Readonly<{
         ScalarType.FIXED64,
         ScalarType.SFIXED64,
         ScalarType.SINT64,
-      ].includes(field.scalar as ScalarType)
+      ].includes(field.scalar)
     )
       return {
         supported: true,

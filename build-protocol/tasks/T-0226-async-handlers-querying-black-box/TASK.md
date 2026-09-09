@@ -463,6 +463,12 @@ payloads explicitly and the declaration fixture asserts exact
 `readonly Command[]` and `readonly Event[]` return types; no runtime contract
 was changed.
 
+The second pre-review lint pass found nine mechanical strictness/style findings
+across the changed query, repository, publisher, and BlackBox test paths.
+They are resolved without changing runtime behavior: impossible descriptor
+branches and redundant assertions were removed, optional capability access is
+equivalent, and tests now use synchronous callbacks where no await occurs.
+
 ## Review Waves And Dispositions
 
 - One read-only architecture/requirements pass dispatched to the existing

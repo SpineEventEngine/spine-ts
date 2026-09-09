@@ -58,7 +58,6 @@ import {
   type StorageContext,
   type StorageFactory,
   type StorageMode,
-  type NormalizedQueryPlan,
 } from "@spine-event-engine/storage";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import type {
@@ -2330,14 +2329,7 @@ const ProcessManagerQueries = Object.freeze({
     return processManagerQueryAccess.bind(
       entity,
       async (plan, schema, query) => {
-        const results = await QueryReader.read(
-          runtime.stand,
-          schema,
-          plan as NormalizedQueryPlan<unknown>,
-          tenantId,
-          1_000,
-          query,
-        );
+        const results = await QueryReader.read(runtime.stand, schema, plan, tenantId, 1_000, query);
         return Object.freeze(results.map((result) => clone(schema, result.state)));
       },
       context,
