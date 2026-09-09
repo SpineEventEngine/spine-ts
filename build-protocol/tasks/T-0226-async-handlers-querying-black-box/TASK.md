@@ -353,6 +353,10 @@ surface exposes no additional metadata.
   valid registered-column predicates to `never`. A shared core compatibility
   type restores inference without widening foreign-schema or unregistered-column
   predicates; focused strict/build/test evidence is recorded in the work log.
+- `2026-09-09 14:49 WEST`: The asynchronous To-Do completion fixture used by
+  the BlackBox rejection proof now crosses one deterministic awaited microtask
+  boundary before it evaluates state, retaining genuine async-handler coverage
+  while preserving the typed rejection and committed-history assertions.
 
 ## Decisions
 

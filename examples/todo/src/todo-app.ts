@@ -174,6 +174,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
   @Assign
   async completeTask(command: CompleteTask): Promise<TaskCompleted> {
     void command;
+    await Promise.resolve();
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(this.state.taskListId);
     if (this.state.completed) {
