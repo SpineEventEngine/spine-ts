@@ -12,5 +12,9 @@
  * the License.
  */
 
-/** @internal Server-facing execution-plan bridge for the typed Entity query builder. */
+/**
+ * Server-facing execution-plan bridge for the typed Entity query builder.
+ *
+ * @internal
+ */
 export type { EntityQueryPlan, EntityQueryPlanPredicate } from "../query/entity-query.js";
