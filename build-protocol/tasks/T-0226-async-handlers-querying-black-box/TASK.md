@@ -581,3 +581,30 @@ generic type contracts are unchanged.
 ## Integration Result
 
 Pending feature-branch commits, pushes, and human review.
+
+## Final P2 Correction Record
+
+- `2026-09-09 15:33-15:45 WEST`: The existing `implementer` role completed
+  the final bounded correction with explicit `gpt-5.6-terra` / medium reasoning;
+  Desktop exposes no separate live self-introspection beyond that configured
+  profile. It preserved the prior uncommitted TypeDoc and server-reference
+  drafts.
+- Process Manager handler-path tests now pass cyclic, 66-level, and 10,001-node
+  predicate graphs through `select().where()` and prove each is rejected before
+  `QueryReader` records a read. The test fixture captures the framework's
+  handler error because command intake dispatches its normal rejection path;
+  no production runtime behavior changed.
+- TypeDoc generates and audits exact inventories for both `core/codegen` and
+  preserved `client-node/codegen`. The client compatibility value is a typed
+  identity export so TypeDoc documents it while runtime identity remains core.
+- The server reference uses a standalone strict snippet for typed Process
+  Manager query chaining, and reiterates `all()`'s 1,000-state ceiling and
+  potential projection cost.
+- Focused evidence: 283/283 repository/core query tests, affected strict
+  TypeScript build, generated build, TypeDoc inventory, reference snippet,
+  lint, cleanup, copyright, formatting, production-dependency, and diff checks
+  pass. The durable detailed command record is in `WORKLOG.md`.
+- Limitations: the repository-wide snippet gate still has unrelated unresolved
+  package/example imports, while the changed reference passes directly; the
+  repository-wide TSDoc gate reports pre-existing obsolete `args` documentation
+  for `ProcessManagerQuery.orderBy` in the out-of-scope entity source.

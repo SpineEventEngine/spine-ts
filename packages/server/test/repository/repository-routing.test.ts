@@ -2040,6 +2040,8 @@ class RoutingProcessManager extends ProcessManager<
   static eventCalls = 0;
   static commandReactionCalls = 0;
   static queryResults: readonly ProjectionState[] = [];
+  static queryPredicate: unknown;
+  static queryFailure: unknown;
   static failure: Error | undefined;
 
   static reset(failure?: Error): void {
@@ -2047,6 +2049,8 @@ class RoutingProcessManager extends ProcessManager<
     this.eventCalls = 0;
     this.commandReactionCalls = 0;
     this.queryResults = [];
+    this.queryPredicate = undefined;
+    this.queryFailure = undefined;
     this.failure = failure;
   }
 
@@ -2054,15 +2058,23 @@ class RoutingProcessManager extends ProcessManager<
     RoutingProcessManager.commandCalls++;
     if (command.name.startsWith("query")) {
       const query = this.select(ProjectionStateSchema, projectionQueryColumns);
-      RoutingProcessManager.queryResults =
-        command.name === "query all"
-          ? await query.all()
-          : await query
-              .byId(command.id)
-              .where(
-                EntityQuery.eq(projectionQueryColumns.name, command.name.slice("query ".length)),
-              )
-              .read();
+      try {
+        if (RoutingProcessManager.queryPredicate !== undefined) {
+          query.where(RoutingProcessManager.queryPredicate as never);
+        }
+        RoutingProcessManager.queryResults =
+          command.name === "query all"
+            ? await query.all()
+            : await query
+                .byId(command.id)
+                .where(
+                  EntityQuery.eq(projectionQueryColumns.name, command.name.slice("query ".length)),
+                )
+                .read();
+      } catch (error) {
+        RoutingProcessManager.queryFailure = error;
+        throw error;
+      }
     }
     if (command.name.endsWith("-lifecycle")) {
       if (command.name === "archive-lifecycle") this.archiveDraft();
@@ -5818,6 +5830,91 @@ describe("repository signal routing", () => {
       });
     } finally {
       observation.close();
+      await context.close();
+    }
+  });
+
+  it("rejects a cyclic Process Manager predicate before QueryReader reads", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .add(createProcessManagerAssignRepository())
+      .build();
+    const cyclic: { kind: "all"; predicates: unknown[] } = { kind: "all", predicates: [] };
+    cyclic.predicates.push(cyclic);
+    RoutingProcessManager.queryPredicate = cyclic;
+    let reads = 0;
+    const observation = QueryReader.observe(() => {
+      reads += 1;
+    });
+
+    try {
+      await context.commandBus().post(createAggregateCommand("query-cycle", "query-id", "query cycle"));
+      expect(RoutingProcessManager.queryFailure).toMatchObject({
+        message: "Entity query predicate must not contain cycles.",
+      });
+      expect(reads).toBe(0);
+    } finally {
+      observation.close();
+      RoutingProcessManager.reset();
+      await context.close();
+    }
+  });
+
+  it("rejects an over-depth Process Manager predicate before QueryReader reads", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .add(createProcessManagerAssignRepository())
+      .build();
+    let predicate: unknown = EntityQuery.eq(projectionQueryColumns.name, "depth");
+    for (let depth = 0; depth < 66; depth += 1) {
+      predicate = { kind: "all", predicates: [predicate] };
+    }
+    RoutingProcessManager.queryPredicate = predicate;
+    let reads = 0;
+    const observation = QueryReader.observe(() => {
+      reads += 1;
+    });
+
+    try {
+      await context.commandBus().post(createAggregateCommand("query-depth", "query-id", "query depth"));
+      expect(RoutingProcessManager.queryFailure).toMatchObject({
+        message: "Entity query predicate exceeds maximum depth 64.",
+      });
+      expect(reads).toBe(0);
+    } finally {
+      observation.close();
+      RoutingProcessManager.reset();
+      await context.close();
+    }
+  });
+
+  it("rejects an over-wide Process Manager predicate before QueryReader reads", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .add(createProcessManagerAssignRepository())
+      .build();
+    const leaf = EntityQuery.eq(projectionQueryColumns.name, "wide");
+    RoutingProcessManager.queryPredicate = {
+      kind: "all",
+      predicates: Array.from({ length: 10_001 }, () => leaf),
+    };
+    let reads = 0;
+    const observation = QueryReader.observe(() => {
+      reads += 1;
+    });
+
+    try {
+      await context.commandBus().post(createAggregateCommand("query-wide", "query-id", "query wide"));
+      expect(RoutingProcessManager.queryFailure).toMatchObject({
+        message: "Entity query predicate exceeds maximum node count 10000.",
+      });
+      expect(reads).toBe(0);
+    } finally {
+      observation.close();
+      RoutingProcessManager.reset();
       await context.close();
     }
   });

@@ -288,6 +288,11 @@ const expectedCoreExports = [
   "SignalEnvelopes.command",
   "SignalEnvelopes.event",
 ];
+const expectedCoreCodegenExports = [
+  "EntityColumnDefinition",
+  "EntityColumnDefinitionEntry",
+  "GeneratedEntityColumns",
+];
 const expectedClientExports = [
   "Client",
   "ClientKernel",
@@ -316,6 +321,11 @@ const expectedClientExports = [
   "EntityPredicate",
   "EntityQuery",
   "EntityQueryBuilder",
+];
+const expectedClientCodegenExports = [
+  "EntityColumnDefinition",
+  "EntityColumnDefinitionEntry",
+  "GeneratedEntityColumns",
 ];
 const expectedClientWebExports = [
   "BearerBrowserSessionOptions",
@@ -892,6 +902,7 @@ const transportProtoPath = join(
 const protoToolsIndexPath = join("packages", "proto-tools", "src", "index.ts");
 const authIndexPath = join("packages", "auth", "src", "index.ts");
 const clientIndexPath = join("packages", "client-node", "src", "index.ts");
+const clientCodegenIndexPath = join("packages", "client-node", "src", "codegen", "index.ts");
 const clientWebIndexPath = join("packages", "client-web", "src", "index.ts");
 const clientReactIndexPath = join("packages", "client-react", "src", "index.ts");
 const deliveryClientIndexPath = join("packages", "delivery-client", "src", "index.ts");
@@ -907,6 +918,7 @@ const serverIndexPath = join("packages", "server", "src", "index.ts");
 const browserServerIndexPath = join("packages", "server", "src", "browser", "index.ts");
 const testingIndexPath = join("packages", "testing", "src", "index.ts");
 const transportIndexPath = join("packages", "transport", "src", "index.ts");
+const coreCodegenIndexPath = join("packages", "core", "src", "codegen", "index.ts");
 
 const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
 const typedocBin = join("node_modules", ".bin", typedocExecutable);
@@ -933,6 +945,10 @@ const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src
 const browserServerModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src/browser");
 const authModuleNames = collectDirectModuleNames(apiDocs, "packages/auth/src");
 const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client-node/src");
+const clientCodegenModuleNames = collectDirectModuleNames(
+  apiDocs,
+  "packages/client-node/src/codegen",
+);
 const clientWebModuleNames = collectDirectModuleNames(apiDocs, "packages/client-web/src");
 const clientReactModuleNames = collectDirectModuleNames(apiDocs, "packages/client-react/src");
 const deliveryClientModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-client/src");
@@ -952,6 +968,7 @@ const datastoreStorageModuleNames = collectDirectModuleNames(
 const rdbmsStorageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage-rdbms/src");
 const testingModuleNames = collectDirectModuleNames(apiDocs, "packages/testing/src");
 const transportModuleNames = collectDirectModuleNames(apiDocs, "packages/transport/src");
+const coreCodegenModuleNames = collectDirectModuleNames(apiDocs, "packages/core/src/codegen");
 const documentedSpiExports = publishedSpiInventories.map((inventory) => ({
   ...inventory,
   documentedExports: collectDirectModuleNames(apiDocs, inventory.documentedModulePath),
@@ -1219,6 +1236,9 @@ const forbiddenMatches = [];
 collectForbiddenMembers(apiDocs, undefined, forbiddenMatches);
 
 const missingCoreExports = expectedCoreExports.filter((name) => !documentedNames.has(name));
+const missingCoreCodegenExports = expectedCoreCodegenExports.filter(
+  (name) => !coreCodegenModuleNames.has(name),
+);
 const forbiddenTypeDocNames = [
   "BuiltInEntityConstructor",
   "BuiltInEntityConstructorBase",
@@ -1259,6 +1279,7 @@ const declaredBrowserServerExports = collectNamedExports(browserServerIndexPath)
 const declaredAuthExports = collectNamedExports(authIndexPath);
 const declaredProtoToolsExports = collectNamedExports(protoToolsIndexPath);
 const declaredClientExports = collectNamedExports(clientIndexPath);
+const declaredClientCodegenExports = collectNamedExports(clientCodegenIndexPath);
 const declaredClientWebExports = collectNamedExports(clientWebIndexPath);
 const declaredDeliveryClientExports = collectNamedExports(deliveryClientIndexPath);
 const declaredDeliveryServerExports = collectNamedExports(deliveryServerIndexPath);
@@ -1271,6 +1292,13 @@ const declaredDatastoreStorageExports = collectNamedExports(datastoreStorageInde
 const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
 const declaredTransportExports = collectNamedExports(transportIndexPath);
+const declaredCoreCodegenExports = collectNamedExports(coreCodegenIndexPath);
+const missingDeclaredCoreCodegenExports = expectedCoreCodegenExports.filter(
+  (name) => !declaredCoreCodegenExports.includes(name),
+);
+const unexpectedCoreCodegenExports = declaredCoreCodegenExports.filter(
+  (name) => !expectedCoreCodegenExports.includes(name),
+);
 const declaredSpiExports = documentedSpiExports.map((inventory) => ({
   ...inventory,
   declaredExports: collectModuleExports(inventory.sourcePath),
@@ -1319,6 +1347,15 @@ const unexpectedProtoToolsExports = declaredProtoToolsExports.filter(
   (name) => !expectedProtoToolsExports.includes(name),
 );
 const missingClientExports = expectedClientExports.filter((name) => !clientModuleNames.has(name));
+const missingClientCodegenExports = expectedClientCodegenExports.filter(
+  (name) => !clientCodegenModuleNames.has(name),
+);
+const missingDeclaredClientCodegenExports = expectedClientCodegenExports.filter(
+  (name) => !declaredClientCodegenExports.includes(name),
+);
+const unexpectedClientCodegenExports = declaredClientCodegenExports.filter(
+  (name) => !expectedClientCodegenExports.includes(name),
+);
 const missingClientWebExports = expectedClientWebExports.filter(
   (name) => !clientWebModuleNames.has(name),
 );
@@ -1515,9 +1552,41 @@ if (missingCoreExports.length > 0) {
   process.exit(1);
 }
 
+if (
+  missingCoreCodegenExports.length > 0 ||
+  missingDeclaredCoreCodegenExports.length > 0 ||
+  unexpectedCoreCodegenExports.length > 0
+) {
+  console.error(
+    "@spine-event-engine/core/codegen export inventory mismatch: " +
+      [
+        ...missingCoreCodegenExports,
+        ...missingDeclaredCoreCodegenExports,
+        ...unexpectedCoreCodegenExports,
+      ].join(", "),
+  );
+  process.exit(1);
+}
+
 if (missingClientExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-event-engine/client-node exports: ${missingClientExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (
+  missingClientCodegenExports.length > 0 ||
+  missingDeclaredClientCodegenExports.length > 0 ||
+  unexpectedClientCodegenExports.length > 0
+) {
+  console.error(
+    "@spine-event-engine/client-node/codegen export inventory mismatch: " +
+      [
+        ...missingClientCodegenExports,
+        ...missingDeclaredClientCodegenExports,
+        ...unexpectedClientCodegenExports,
+      ].join(", "),
   );
   process.exit(1);
 }
@@ -1961,7 +2030,9 @@ console.log(
     `${expectedIntegrationProtoExports.length} exact generated integration Proto exports`,
     `${expectedAuthExports.length} expected @spine-event-engine/auth exports`,
     `${expectedCoreExports.length} expected @spine-event-engine/core exports`,
+    `${expectedCoreCodegenExports.length} exact @spine-event-engine/core/codegen exports`,
     `${expectedClientExports.length} expected @spine-event-engine/client-node exports`,
+    `${expectedClientCodegenExports.length} exact @spine-event-engine/client-node/codegen exports`,
     `${expectedClientWebExports.length} expected @spine-event-engine/client-web exports`,
     `${expectedClientReactExports.length} expected @spine-event-engine/client-react exports`,
     `${expectedDeliveryClientExports.length} expected @spine-event-engine/delivery-client exports`,

@@ -198,6 +198,46 @@ not use projection reads for invariants.
 1,000 states. `all()` is a convenience and can be costly on a large Projection;
 prefer an ID-targeted or ordered bounded query.
 
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { EntityQuery, type EntityColumn } from "@spine-event-engine/core";
+import { ProcessManager } from "@spine-event-engine/server";
+
+type RequestView = Message<"RequestView"> & {
+  id: string;
+  status: string;
+  createdAt: number;
+};
+
+declare const RequestViewSchema: GenMessage<RequestView>;
+declare const RequestViewColumns: {
+  readonly status: EntityColumn<typeof RequestViewSchema, "status", string, "equal">;
+  readonly createdAt: EntityColumn<
+    typeof RequestViewSchema,
+    "createdAt",
+    number,
+    "equal" | "greaterThan"
+  >;
+};
+
+abstract class RequestCoordinator extends ProcessManager<string, typeof RequestViewSchema> {
+  protected async pendingRequests(requestId: string): Promise<void> {
+    const matching = await this.select(RequestViewSchema, RequestViewColumns)
+      .where(EntityQuery.eq(RequestViewColumns.status, "pending"))
+      .orderBy(RequestViewColumns.createdAt, "asc")
+      .limit(10)
+      .read();
+    const one = await this.select(RequestViewSchema, RequestViewColumns).findById(requestId);
+    const everyVisible = await this.select(RequestViewSchema, RequestViewColumns).all();
+    void [matching, one, everyVisible];
+  }
+}
+```
+
+`all()` remains capped at 1,000 states but may still be costly; use `findById()`
+or an ordered bounded `read()` where possible.
+
 A command-input `@Command` method is a command substitution receptor: it is
 the one effective receptor for that Command type (instead of an `@Assign`),
 commits its Entity state before its one-or-more returned Commands are detached

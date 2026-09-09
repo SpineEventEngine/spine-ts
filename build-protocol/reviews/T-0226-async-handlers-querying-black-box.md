@@ -148,3 +148,33 @@ Its execution window ended while validating an uncommitted TypeDoc entrypoint
 and server-reference example draft. A fresh existing `implementer` with explicit
 `gpt-5.6-terra` / medium profile receives the intact draft and the remaining
 Process Manager guard-path tests; it may not spawn subagents.
+
+## Final P2 correction response
+
+- The final implementer used the explicitly dispatched existing `implementer`
+  profile, `gpt-5.6-terra` / medium reasoning. Desktop does not expose further
+  live model metadata.
+- The direct Process Manager tests are complete. Cyclic, 66-level, and
+  10,001-node predicate graphs pass through a real handler's
+  `select().where().read()` path. The fixture records the compiler rejection,
+  while `QueryReader.observe` records zero reads in every case. Command intake
+  deliberately resolves after rejection dispatch, so the fixture captures the
+  internal handler error rather than asserting an incorrect rejected bus
+  promise. No production runtime change was needed.
+- TypeDoc entrypoints and deterministic inventories now cover exact exports of
+  `@spine-event-engine/core/codegen` and
+  `@spine-event-engine/client-node/codegen`. The preserved client value uses a
+  typed core identity export so TypeDoc includes it.
+- The server reference includes a standalone strict TypeScript Process Manager
+  query example and its focused snippet check passes. It describes the 1,000
+  ceiling and `all()` projection cost.
+- Mechanical evidence: focused repository/core query tests pass 283/283;
+  affected strict and generated builds, TypeDoc inventory, focused snippet,
+  lint, cleanup, copyright, formatting, production-dependency, and diff checks
+  pass. Repository-wide snippets still fail on unrelated unresolved package and
+  example imports; repository-wide TSDoc still reports an out-of-scope stale
+  `args` parameter comment for `ProcessManagerQuery.orderBy`. These two
+  limitations do not alter the final P2 correction behavior.
+
+The focused API P1 re-review is still required and is intentionally not run in
+this correction context.
