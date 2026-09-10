@@ -477,6 +477,18 @@ this correction context.
   4,642/4,642 tests with 93.22% statement, 90.00% branch, 92.76% function, and
   94.38% line coverage, followed by two clean audits. `release-cli preflight`
   and `release-cli prepare --check` both passed for all 18 packages.
+- Fresh targeted security review used the existing `security_reviewer` role
+  with explicitly dispatched `gpt-5.6-terra` / high reasoning. It reports no
+  P0-P2: every advisory is resolved at its first patched release, no vulnerable
+  resolution or audit suppression remains, production dependencies stay clean,
+  and the Node/Vite constraints are compatible.
+- Fresh targeted release-reliability review used the existing
+  `performance_reliability_reviewer` role with explicitly dispatched
+  `gpt-5.6-terra` / high reasoning. It reports no P0-P2: frozen offline install,
+  exact single-version resolution, and the focused policy test pass; publication
+  ordering, ignored scripts, serialized Lerna execution, and the strict audit
+  gate remain unchanged. Desktop exposed no additional runtime model metadata
+  for either fixed role.
 
 ## Final API P1 correction response
 
