@@ -401,6 +401,9 @@ cheap preflight is required again before another release attempt.
   the CLI-equivalent `typedoc.json` readers, then converts, validates, and writes its temporary JSON
   and HTML outputs fail-closed. A RED/GREEN regression removes the suspended child-process bridge;
   the real inventory check completes in 23.2 seconds with every exact export inventory intact.
+- Release metadata-policy correction: the policy now asserts the in-process TypeDoc bootstrap and
+  its JSON/reference temporary outputs while rejecting the retired bounded child-command boundary.
+  Its prior CLI-fragment assertion was RED; package metadata and API-doc checker tests pass 18/18.
 
 ## Final P2 correction response
 

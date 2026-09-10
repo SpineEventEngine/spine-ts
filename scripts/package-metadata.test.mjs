@@ -436,7 +436,10 @@ describe("package metadata", () => {
 
     const apiDocsChecker = readFileSync(join(repoRoot, "scripts/check-api-docs.mjs"), "utf8");
     expect(apiDocsChecker).not.toContain('"--out", htmlPath');
-    expect(apiDocsChecker).toContain('"--json", jsonPath');
+    expect(apiDocsChecker).toMatch(/Application\.bootstrapWithPlugins/u);
+    expect(apiDocsChecker).toMatch(/generateJson\(project, jsonPath\)/u);
+    expect(apiDocsChecker).toMatch(/generateDocs\(project, referencePath\)/u);
+    expect(apiDocsChecker).not.toMatch(/runBoundedCommand\(/u);
     expect(apiDocsChecker).not.toContain('"SubscriptionCapacityReservation"');
   });
 
