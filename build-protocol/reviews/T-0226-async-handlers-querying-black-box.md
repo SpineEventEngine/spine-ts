@@ -451,6 +451,28 @@ this correction context.
   Coverage: 93.22% statements, 90.00% branches, 92.76% functions, and 94.38%
   lines.
 
+## Post-review release incident disposition
+
+- GitHub Publish run `34338427115` failed before release preparation and npm
+  publication because `pnpm verify:publish` returned exit code 1.
+- Local reproduction identified the failing subcommand as the live full
+  dependency audit. Four development-tool findings were present; the production
+  audit was clean.
+- Correction `08d14a9fe` updates the direct Vitest family and overrides the two
+  affected transitive parsers. Its focused policy tests and Message Board web
+  smoke tests pass, and both full and production low-threshold audits now report
+  zero known vulnerabilities.
+- Style/maintainability: covered by the exact-version metadata regression and
+  focused five-file diff; no runtime source changed.
+- TypeScript/API: N/A because no public declaration, export, or runtime contract
+  changed.
+- Performance/reliability: the release gate is restored without weakening or
+  suppressing its live audit; no finding is waived.
+- Documentation: this task and review record explain the failure and correction;
+  end-user documentation is unaffected.
+- Security: the vulnerable dependency paths are removed from the lockfile and
+  both audit scopes are clean.
+
 ## Final API P1 correction response
 
 The explicit generic forwarding signatures for canonical

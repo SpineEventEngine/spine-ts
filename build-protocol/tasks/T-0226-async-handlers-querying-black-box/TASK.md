@@ -609,6 +609,32 @@ Implementation, correction, review, versioning, and release verification are
 complete on the official feature branch. No pull request or merge was created;
 the branch is ready for human review.
 
+## Post-review CI and publication correction
+
+The human added two release-blocking acceptance criteria after the independent
+review closed:
+
+- the draft pull request must finish with a green Build workflow at the current
+  branch tip; and
+- the dependency-audit cause of failed Publish run `34338427115` must be fixed
+  on this feature branch before it is merged.
+
+This is a standard dependency/tooling correction. The failed publication never
+reached artifact preparation or npm upload: its `prepare` job stopped in
+`pnpm verify:publish`. A fresh local reproduction isolated the failure to the
+live low-severity development-dependency audit. It reported vulnerable
+`js-yaml`, `smol-toml`, `vitest`, and `@vitest/mocker` versions; the production
+dependency audit remained clean.
+
+The existing `implementer` role was dispatched as the sole dependency writer
+with explicit configured profile `gpt-5.6-terra` / medium reasoning. Desktop
+exposes no additional live model self-introspection. Commit `08d14a9fe` pins
+Vitest and its coverage package to `4.1.11`, applies the patched transitive
+parser overrides `js-yaml@4.3.2` and `smol-toml@1.7.1`, and regenerates the
+lockfile. The package-policy regression was RED against the vulnerable pins and
+GREEN after the correction. Both release audit commands now report no known
+vulnerabilities; focused metadata and Message Board web tests pass.
+
 ## Final P2 Correction Record
 
 - `2026-09-09 15:33-15:45 WEST`: The existing `implementer` role completed
