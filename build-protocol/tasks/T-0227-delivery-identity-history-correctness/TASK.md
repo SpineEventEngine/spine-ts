@@ -202,6 +202,32 @@ verification and review may run concurrently only at stable boundaries.
   no-sequence event calls reached the obsolete third parameter and threw while reading
   `undefined.producerId` (10 passing, 4 failing). The revised API then passed the
   signal-metadata test (14 passing).
+- `2026-09-10 17:10 WEST`: HISTORY01-A RED confirmed after behavior tests changed
+  to require one version for all produced events and the committed Aggregate state.
+  The command case retained state version `2n` despite both events carrying version
+  `1`; the multi-event reactor case likewise retained the prior per-event state
+  advancement. GREEN changes commit each successful command or reactor transaction at
+  `loaded.version + 1n`, bind all command-produced events to that dispatch version,
+  and publish changed state with the same version. Rejections still return before
+  persistence and therefore do not advance a version.
+- `2026-09-10 17:11 WEST`: Repaired UUID and composite routing fixtures to use
+  Aggregate-tagged cloned state descriptors only for command assignment. The original
+  UUID and composite Projection descriptors remain Projection fixtures; composite
+  Event is optionless and event/state routing uses the Projection repository. No
+  option bytes were constructed manually or transferred between unrelated message
+  roles.
+- `2026-09-10 17:21 WEST`: F10 routing correction replaces stale child-event source-ID
+  assertions for Aggregate and Process Manager domain-event handlers with UUID-shaped,
+  source-distinct child IDs. Existing source-envelope IDs remain asserted in the same
+  stored-event sequences. The Aggregate command binding no longer carries an unused
+  sequence counter after its shared dispatch-version correction. The event-producing
+  Process Manager test now waits for its already-required asynchronous error log before
+  asserting it.
+- `2026-09-10 17:24 WEST`: Made the three F10 child/source stored-event checks
+  independent of asynchronous persistence ordering. Each requires exactly two records,
+  locates one by the retained source ID and one by UUID-shaped child ID, and keeps the
+  reactor origin, version, timestamp, producer, and message-context assertions on the
+  identified records.
 
 ## Decisions
 
@@ -222,6 +248,10 @@ verification and review may run concurrently only at stable boundaries.
 
 - `packages/server/src/runtime/signal-metadata.ts` — F10 fresh framework-created IDs.
 - `packages/server/test/runtime/signal-metadata.test.ts` — F10 focused regression test.
+- `packages/server/src/repository/repository.ts` — HISTORY01-A dispatch version binding
+  and one-version Aggregate persistence for command and event-reactor paths.
+- `packages/server/test/repository/repository-routing.test.ts` — domain-correct
+  UUID/composite Aggregate fixtures and HISTORY01-A command/reactor regression cases.
 - This task record.
 
 ## Tests Run
@@ -249,6 +279,33 @@ verification and review may run concurrently only at stable boundaries.
   Events have UUID-shaped, pairwise distinct IDs through the default `SignalIds`
   source. It does not add production UUID validation. The combined focused suites
   then passed 278 tests; Prettier and `git diff --check` remained clean.
+- HISTORY01-A RED: the two new command/reactor version tests failed as intended. The
+  command case observed committed state version `2n` where `1n` was required; the
+  reactor case showed three version-`1` stored events before its assertion was
+  narrowed to the two produced Aggregate events.
+- HISTORY01-A GREEN: targeted UUID/composite/version routing tests passed 8 tests;
+  full `repository-routing.test.ts` passed 264 tests; and
+  `delivery-worker.test.ts` passed 28 tests, including its commit-fence coverage.
+- A2 regression verification: `build-time-handler-analyzer`, handler metadata,
+  generated handler registry, and command-registration readiness suites passed 102
+  tests across 4 files. `pnpm typecheck:build` completed after generated-proto
+  validation. Focused Prettier and `git diff --check` passed.
+- `pnpm typecheck:build` regenerated the `generationId` in
+  `packages/server-blackbox-tests/spine-proto-manifest.json`. The unrelated generated
+  value was restored to the branch value with a focused patch; no manifest churn
+  remains.
+- F10 correction: the three focused domain-event ID cases passed (3 tests). The exact
+  serialized seven-file command
+  `pnpm exec vitest run packages/proto-tools/test/build-time-handler-analyzer.test.ts packages/server/test/runtime/signal-metadata.test.ts packages/server/test/handler/handler-metadata.test.ts packages/server/test/handler/generated-handler-registry.test.ts packages/server/test/handler/command-registration-readiness.test.ts packages/server/test/repository/repository-routing.test.ts packages/server/test/delivery/delivery-worker.test.ts --no-file-parallelism --passWithNoTests`
+  passed 409 tests across 7 files.
+- Final correction checks: standalone `repository-routing.test.ts` passed 264 tests;
+  focused Prettier and `git diff --check` passed.
+- Ordering correction: focused child/source identity cases passed 3 tests; the same
+  exact serialized seven-file command passed 409 tests across 7 files.
+- Independent Luna/low acceptance repeated the serialized seven-file gate with
+  409/409 tests passing and the standalone repository-routing suite with 264/264
+  tests passing. Focused Prettier, `git diff --check`, and the generated-manifest
+  churn check were clean.
 
 ## Coverage Result
 

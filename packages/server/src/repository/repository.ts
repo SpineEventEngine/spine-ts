@@ -1613,7 +1613,7 @@ class AggregateCommandExecution {
       throw new Error("Repository aggregate command handlers must return at least one event.");
     }
 
-    const committedVersion = loaded.version + BigInt(events.length);
+    const committedVersion = loaded.version + 1n;
     return await this.#support.persistAggregateAndDispatch(
       loaded,
       route.entityId,
@@ -1679,14 +1679,11 @@ class AggregateCommandExecution {
     allowEnvelopes: boolean,
   ): readonly Event[] {
     const dispatchVersion = lastVersion + 1n;
-    let sequence = 0;
 
     return Object.freeze(
-      produced.map((signal) => {
-        sequence += 1;
-        const version = allowEnvelopes ? lastVersion + BigInt(sequence) : dispatchVersion;
-        return this.#bindProducedEvent(signal, entityId, version, allowEnvelopes, sequence);
-      }),
+      produced.map((signal) =>
+        this.#bindProducedEvent(signal, entityId, dispatchVersion, allowEnvelopes),
+      ),
     );
   }
 
@@ -1695,7 +1692,6 @@ class AggregateCommandExecution {
     entityId: unknown,
     version: bigint,
     allowEnvelopes: boolean,
-    sequence: number,
   ): Event {
     const metadata = this.#runtime.signalMetadata.eventFromCommand(this.#command, {
       version: RepositorySignals.eventVersionNumber(version),
@@ -1814,7 +1810,7 @@ class AggregateEventExecution {
       const dispatch = await this.#support.persistAggregateAndDispatch(
         loaded,
         entityId,
-        loaded.version + BigInt(produced.length),
+        loaded.version + 1n,
         produced,
         (event) => this.#runtime.publisher.publishReactorEvent(event),
         () => {
@@ -1833,7 +1829,7 @@ class AggregateEventExecution {
                 },
             RepositoryEntities.repositoryState(loaded.entity) as Message,
             RepositoryEntities.repositoryLifecycle(loaded.entity),
-            RepositorySignals.eventVersionNumber(loaded.version + BigInt(produced.length)),
+            RepositorySignals.eventVersionNumber(loaded.version + 1n),
           );
         },
       );

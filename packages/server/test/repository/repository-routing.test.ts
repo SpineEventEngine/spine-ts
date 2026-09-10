@@ -208,6 +208,12 @@ type UuidMessageIdState = Message<"UuidMessageIdState"> & {
   priority: number;
 };
 
+type UuidMessageIdAggregateState = Message<"UuidMessageIdAggregateState"> & {
+  id?: CommandId;
+  name: string;
+  priority: number;
+};
+
 type ProcessManagerState = Message<"ProcessManagerState"> & {
   id: string;
   queue: string;
@@ -278,6 +284,11 @@ type CompositeRouteState = Message<"CompositeRouteState"> & {
   name: string;
 };
 
+type CompositeRouteAggregateState = Message<"CompositeRouteAggregateState"> & {
+  id?: CompositeRouteId;
+  name: string;
+};
+
 type CompositeRouteEvent = Message<"CompositeRouteEvent"> & {
   id?: CompositeRouteId;
   name: string;
@@ -300,6 +311,27 @@ type NumberRouteEvent = Message<"spine_ts.test.NumberRouteEvent"> & {
 type WrongIdRouteEvent = Message<"spine_ts.test.WrongIdRouteEvent"> & {
   id?: UserId;
 };
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function storedSourceAndFreshChild(
+  stored: readonly SpineEvent[],
+  sourceId: string,
+): { readonly source: SpineEvent; readonly child: SpineEvent } {
+  expect(stored).toHaveLength(2);
+  const source = stored.find((event) => event.id?.value === sourceId);
+  const children = stored.filter((event) => UUID_PATTERN.test(event.id?.value ?? ""));
+
+  expect(source).toBeDefined();
+  expect(children).toHaveLength(1);
+  const child = children[0];
+  if (source === undefined || child === undefined) {
+    throw new Error("Expected one stored source event and one fresh child event.");
+  }
+  expect(child.id?.value).not.toBe(sourceId);
+
+  return { source, child };
+}
 
 function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
   const descriptorSet = fromBinary(
@@ -333,15 +365,20 @@ const fileEntityMetadataFixture = createFixtureFileDescriptor(
 const fileUuidMessageIdFixture = (() => {
   const descriptor = clone(FileDescriptorProtoSchema, fileEntityMetadataFixture.proto);
   const state = descriptor.messageType.find((message) => message.name === "ProjectionState");
+  const aggregate = descriptor.messageType.find((message) => message.name === "AggregateState");
   const stateId = state?.field.find((field) => field.name === "id");
-  if (state === undefined || stateId === undefined) {
-    throw new Error("UUID message-ID state declaration is missing.");
+  if (state === undefined || aggregate === undefined || stateId === undefined) {
+    throw new Error("UUID message-ID fixture declarations are missing.");
   }
   descriptor.name = "uuid_message_id_state.proto";
   descriptor.dependency.push(CommandIdSchema.file.proto.name);
   state.name = "UuidMessageIdState";
   stateId.type = FieldDescriptorProto_Type.MESSAGE;
   stateId.typeName = ".spine.core.CommandId";
+  const aggregateState = clone(DescriptorProtoSchema, state);
+  aggregateState.name = "UuidMessageIdAggregateState";
+  aggregateState.options = clone(DescriptorProtoSchema, aggregate).options;
+  descriptor.messageType.push(aggregateState);
   return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
     file_spine_options,
     CommandIdSchema.file,
@@ -505,7 +542,8 @@ const fileCompositeRouteFixture = (() => {
   const state = descriptor.messageType.find(
     (message) => message.name === "MessageIdProjectionState",
   );
-  if (id === undefined || state === undefined) {
+  const aggregate = descriptor.messageType.find((message) => message.name === "AggregateState");
+  if (id === undefined || state === undefined || aggregate === undefined) {
     throw new Error("Composite message-ID fixture declarations are missing.");
   }
   const originalIdField = id.field[0];
@@ -538,7 +576,10 @@ const fileCompositeRouteFixture = (() => {
   event.options = undefined;
   const sourceState = clone(DescriptorProtoSchema, state);
   sourceState.name = "CompositeRouteSourceState";
-  descriptor.messageType.push(event, sourceState);
+  const aggregateState = clone(DescriptorProtoSchema, state);
+  aggregateState.name = "CompositeRouteAggregateState";
+  aggregateState.options = clone(DescriptorProtoSchema, aggregate).options;
+  descriptor.messageType.push(event, sourceState, aggregateState);
   descriptor.dependency.push(UserIdSchema.file.proto.name);
   return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
     file_spine_options,
@@ -552,6 +593,10 @@ const ProjectionStateSchema = messageDesc(
 const UuidMessageIdStateSchema = fixtureMessageSchema<UuidMessageIdState>(
   fileUuidMessageIdFixture,
   "UuidMessageIdState",
+);
+const UuidMessageIdAggregateStateSchema = fixtureMessageSchema<UuidMessageIdAggregateState>(
+  fileUuidMessageIdFixture,
+  "UuidMessageIdAggregateState",
 );
 const NeutralProjectionStateSchema = messageDesc(
   fileNeutralProjectionStateFixture,
@@ -760,6 +805,10 @@ const CompositeRouteStateSchema = fixtureMessageSchema<CompositeRouteState>(
   fileCompositeRouteFixture,
   "CompositeRouteState",
 );
+const CompositeRouteAggregateStateSchema = fixtureMessageSchema<CompositeRouteAggregateState>(
+  fileCompositeRouteFixture,
+  "CompositeRouteAggregateState",
+);
 const CompositeRouteEventSchema = fixtureMessageSchema<CompositeRouteEvent>(
   fileCompositeRouteFixture,
   "CompositeRouteEvent",
@@ -868,12 +917,12 @@ class Int64MessageIdProjection extends Projection<
   }
 }
 
-class UuidMessageIdProjection extends Projection<
+class UuidMessageIdAggregate extends Aggregate<
   CommandId,
-  typeof UuidMessageIdStateSchema,
+  typeof UuidMessageIdAggregateStateSchema,
   number
 > {
-  assign(command: UuidMessageIdState): void {
+  assign(command: UuidMessageIdAggregateState): void {
     this.update((draft) => Object.assign(draft, command));
   }
 }
@@ -883,12 +932,18 @@ class CompositeRouteProjection extends Projection<
   typeof CompositeRouteStateSchema,
   number
 > {
-  assign(command: CompositeRouteEvent): void {
-    this.update((draft) => Object.assign(draft, command));
-  }
-
   subscribe(event: CompositeRouteEvent | CompositeRouteSourceState): void {
     this.update((draft) => Object.assign(draft, event));
+  }
+}
+
+class CompositeRouteAggregate extends Aggregate<
+  CompositeRouteId,
+  typeof CompositeRouteAggregateStateSchema,
+  number
+> {
+  assign(command: CompositeRouteAggregateState): void {
+    this.update((draft) => Object.assign(draft, command));
   }
 }
 
@@ -1158,7 +1213,10 @@ class GeneratedReactorAggregate extends Aggregate<string, typeof AggregateStateS
     this.failure = failure;
   }
 
-  reactProjection(event: ProjectionEvent, context: EventContext): AggregateState {
+  reactProjection(
+    event: ProjectionEvent,
+    context: EventContext,
+  ): AggregateState | AggregateState[] {
     GeneratedReactorAggregate.argumentCounts.push(arguments.length);
     GeneratedReactorAggregate.contexts.push(context);
     if (GeneratedReactorAggregate.failure !== undefined) {
@@ -1174,11 +1232,14 @@ class GeneratedReactorAggregate extends Aggregate<string, typeof AggregateStateS
         }),
       ),
     );
-    return create(AggregateStateSchema, {
+    const produced = create(AggregateStateSchema, {
       id: event.id,
       name: `${event.name} reacted event`,
       archived: false,
     });
+    return event.name === "two events"
+      ? [produced, clone(AggregateStateSchema, produced)]
+      : produced;
   }
 }
 
@@ -3224,22 +3285,21 @@ describe("repository signal routing", () => {
       projectionEventOrigin({ pastMessageTenantId: "tenant-b" }),
     );
     const stored = await eventStore.read();
+    const { source, child } = storedSourceAndFreshChild(stored, "event-reactor-source");
 
-    expect(stored).toMatchObject([
-      { id: { value: expect.stringMatching(/.+/) }, context: { origin: { case: "pastMessage" } } },
-      {
-        id: { value: "event-reactor-source" },
-        context: {
-          version: { number: 1 },
-          origin: {
-            case: "pastMessage",
-          },
+    expect(child.context?.origin).toMatchObject({ case: "pastMessage" });
+    expect(source).toMatchObject({
+      id: { value: "event-reactor-source" },
+      context: {
+        version: { number: 1 },
+        origin: {
+          case: "pastMessage",
         },
       },
-    ]);
-    expect(stored[1]?.context?.timestamp).toBeDefined();
-    expect(readReadableProducerId(stored[1])).toBe("task-reactor");
-    expect(stored[1]?.context?.origin).toEqual({
+    });
+    expect(source.context?.timestamp).toBeDefined();
+    expect(readReadableProducerId(source)).toBe("task-reactor");
+    expect(source.context?.origin).toEqual({
       case: "pastMessage",
       value: create(OriginSchema, {
         message: create(MessageIdSchema, {
@@ -3259,6 +3319,44 @@ describe("repository signal routing", () => {
     await waitForCondition(() => observed.length === 1);
     expect(observed).toHaveLength(1);
     expect(observed[0]).toMatch(/.+/);
+  });
+
+  it("uses one committed version for every event and state from an aggregate event reaction", async () => {
+    GeneratedReactorAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedReactorRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+    });
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    try {
+      await context.eventBus().post(
+        createProjectionEvent("event-reactor-multi", "task-reactor-multi", {
+          name: "two events",
+        }),
+      );
+
+      const stored = await eventStore.read();
+      expect(
+        stored.filter(
+          (event) =>
+            event.context?.version?.number === 1 &&
+            AnyMessages.unpack(event.message as never, AggregateStateSchema) !== undefined,
+        ),
+      ).toHaveLength(2);
+      await expect(storage.readCurrent("task-reactor-multi")).resolves.toMatchObject({
+        entityId: "task-reactor-multi",
+        version: 1n,
+      });
+    } finally {
+      await context.close();
+    }
   });
 
   it("emits a System reactor-dispatch diagnostic after aggregate reactor admission", async () => {
@@ -3504,7 +3602,7 @@ describe("repository signal routing", () => {
     expect(commands[0]?.id?.uuid).toMatch(/.+/);
   });
 
-  it("assigns sequential producer versions to multiple direct aggregate events", async () => {
+  it("assigns one producer version to all events from an aggregate dispatch", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createMultiManagedRepository())
@@ -3523,7 +3621,7 @@ describe("repository signal routing", () => {
 
     const storedEvents = await eventStore.read();
     expect(storedEvents).toHaveLength(2);
-    expect(storedEvents.map((event) => event.context?.version?.number).sort()).toEqual([1, 2]);
+    expect(storedEvents.map((event) => event.context?.version?.number).sort()).toEqual([1, 1]);
     expect(storedEvents.map((event) => event.id?.value)).toEqual([
       expect.stringMatching(/.+/),
       expect.stringMatching(/.+/),
@@ -3531,7 +3629,7 @@ describe("repository signal routing", () => {
     expect(storedEvents[0]?.id?.value).not.toBe(storedEvents[1]?.id?.value);
     await expect(storage.readCurrent("task-managed-multi")).resolves.toMatchObject({
       entityId: "task-managed-multi",
-      version: 2n,
+      version: 1n,
       state: { id: "task-managed-multi", name: "Multi two (assigned)", archived: false },
     });
   });
@@ -3609,7 +3707,7 @@ describe("repository signal routing", () => {
     expect(ExecutingTaskAggregate.directUpdateCalls).toBe(1);
   });
 
-  it("persists array command output with sequential aggregate versions", async () => {
+  it("uses one committed version for every event and state from an aggregate command dispatch", async () => {
     ExecutingTaskAggregate.reset();
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
@@ -3628,11 +3726,11 @@ describe("repository signal routing", () => {
 
     await expect(eventStore.read()).resolves.toMatchObject([
       { id: { value: "event-Multi-1" }, context: { version: { number: 1 } } },
-      { id: { value: "event-Multi-2" }, context: { version: { number: 2 } } },
+      { id: { value: "event-Multi-2" }, context: { version: { number: 1 } } },
     ]);
     await expect(storage.readCurrent("task-multi")).resolves.toMatchObject({
       entityId: "task-multi",
-      version: 2n,
+      version: 1n,
       state: { id: "task-multi", name: "Multi two (applied)", archived: true },
     });
   });
@@ -4200,7 +4298,7 @@ describe("repository signal routing", () => {
   it("routes a generated UUID message ID", () => {
     const id = create(CommandIdSchema, { uuid: "uuid-message-id" });
     const publicMessageId: MessageId = id;
-    const repository = createUuidMessageIdRepository();
+    const repository = createUuidMessageIdAggregateRepository();
 
     expect(publicMessageId).toBe(id);
     expect(id).toEqual({ $typeName: CommandIdSchema.typeName, uuid: "uuid-message-id" });
@@ -4209,8 +4307,8 @@ describe("repository signal routing", () => {
         SignalEnvelopes.command({
           id: create(CommandIdSchema, { uuid: "command-uuid-message-id" }),
           context: create(CommandContextSchema),
-          schema: UuidMessageIdStateSchema,
-          message: create(UuidMessageIdStateSchema, { id, name: "UUID", priority: 1 }),
+          schema: UuidMessageIdAggregateStateSchema,
+          message: create(UuidMessageIdAggregateStateSchema, { id, name: "UUID", priority: 1 }),
         }),
       ).entityId,
     ).toEqual(id);
@@ -4225,21 +4323,22 @@ describe("repository signal routing", () => {
       reader: create(UserIdSchema, { value: "reader" }),
       number: 2,
     });
-    const repository = createCompositeRouteRepository();
-    const message = create(CompositeRouteEventSchema, { id: idA, name: "Composite" });
+    const commandRepository = createCompositeRouteAggregateRepository();
+    const projectionRepository = createCompositeRouteProjectionRepository();
+    const message = create(CompositeRouteAggregateStateSchema, { id: idA, name: "Composite" });
 
     expect(
-      repository.routeCommand(
+      commandRepository.routeCommand(
         SignalEnvelopes.command({
           id: create(CommandIdSchema, { uuid: "composite-command" }),
           context: create(CommandContextSchema),
-          schema: CompositeRouteEventSchema,
+          schema: CompositeRouteAggregateStateSchema,
           message,
         }),
       ).entityId,
     ).toEqual(idA);
     expect(
-      repository.routeEvent(
+      projectionRepository.routeEvent(
         SignalEnvelopes.event({
           id: create(EventIdSchema, { value: "composite-producer" }),
           context: create(EventContextSchema, {
@@ -4251,7 +4350,7 @@ describe("repository signal routing", () => {
       ).entityIds,
     ).toEqual([idA]);
     expect(
-      repository.routeEvent(
+      projectionRepository.routeEvent(
         SignalEnvelopes.event({
           id: create(EventIdSchema, { value: "composite-fallback" }),
           context: create(EventContextSchema, {
@@ -4264,7 +4363,7 @@ describe("repository signal routing", () => {
     ).toEqual([idB]);
     expect(
       repositoryAccess.routeStateUpdate(
-        repository,
+        projectionRepository,
         createStateChangedEvent(
           "composite-state",
           create(CompositeRouteSourceStateSchema, { id: idA, name: "State" }),
@@ -4283,10 +4382,8 @@ describe("repository signal routing", () => {
       number: 2,
     });
     let routeCalls = 0;
-    const repository = createCompositeRouteRepository(
-      undefined,
-      undefined,
-      CommandRouting.create<CompositeRouteId>().route(CompositeRouteEventSchema, () => {
+    const repository = createCompositeRouteAggregateRepository(
+      CommandRouting.create<CompositeRouteId>().route(CompositeRouteAggregateStateSchema, () => {
         routeCalls += 1;
         return routedId;
       }),
@@ -4297,8 +4394,11 @@ describe("repository signal routing", () => {
         SignalEnvelopes.command({
           id: create(CommandIdSchema, { uuid: "command-composite-custom" }),
           context: create(CommandContextSchema),
-          schema: CompositeRouteEventSchema,
-          message: create(CompositeRouteEventSchema, { id: declarationId, name: "Custom" }),
+          schema: CompositeRouteAggregateStateSchema,
+          message: create(CompositeRouteAggregateStateSchema, {
+            id: declarationId,
+            name: "Custom",
+          }),
         }),
       ).entityId,
     ).toEqual(routedId);
@@ -4322,7 +4422,7 @@ describe("repository signal routing", () => {
       CompositeRouteSourceStateSchema,
       () => [idA, clone(CompositeRouteIdSchema, idA), idB],
     );
-    const repository = createCompositeRouteRepository(eventRouting, stateUpdateRouting);
+    const repository = createCompositeRouteProjectionRepository(eventRouting, stateUpdateRouting);
 
     expect(
       repository.routeEvent(
@@ -7622,11 +7722,10 @@ describe("repository signal routing", () => {
       dispatchAttempted.promise,
       "process-manager event produced-event dispatch attempt",
     );
-    await expect(eventStore.read()).resolves.toMatchObject([
-      { id: { value: expect.stringMatching(/.+/) } },
-      { id: { value: "event-pm-produce" } },
-    ]);
+    const stored = await eventStore.read();
+    storedSourceAndFreshChild(stored, "event-pm-produce");
     expect("storedEventDispatchFailures" in context).toBe(false);
+    await waitForCondition(() => errors.length === 1);
     expect(errors).toEqual([
       {
         message: "Produced signal handling failed.",
@@ -7711,10 +7810,8 @@ describe("repository signal routing", () => {
     expect(commandDispatches).toHaveLength(1);
     expect(commandDispatches[0]).toMatch(/.+/);
     await waitForCondition(() => eventDispatches.length === 1);
-    await expect(eventStore.read()).resolves.toMatchObject([
-      { id: { value: expect.stringMatching(/.+/) } },
-      { id: { value: "event-pm-mixed" } },
-    ]);
+    const stored = await eventStore.read();
+    storedSourceAndFreshChild(stored, "event-pm-mixed");
     expect("storedEventDispatchFailures" in context).toBe(false);
   });
 
@@ -10618,16 +10715,14 @@ function createInt64MessageIdProjectionRepository(
   });
 }
 
-function createCompositeRouteRepository(
+function createCompositeRouteProjectionRepository(
   eventRouting?: EventRouting<CompositeRouteId>,
   stateUpdateRouting?: StateUpdateRouting<CompositeRouteId>,
-  commandRouting?: CommandRouting<CompositeRouteId>,
 ): Repository<typeof CompositeRouteProjection> {
   const handlers = EntityHandlers.define(
     CompositeRouteProjection,
     CompositeRouteStateSchema,
     (builder) => [
-      builder.assign(CompositeRouteEventSchema, "assign"),
       builder.subscribe(CompositeRouteEventSchema, "subscribe"),
       builder.subscribe(CompositeRouteSourceStateSchema, "subscribe"),
     ],
@@ -10638,20 +10733,36 @@ function createCompositeRouteRepository(
     handlers,
     ...(eventRouting === undefined ? {} : { eventRouting }),
     ...(stateUpdateRouting === undefined ? {} : { stateUpdateRouting }),
+  });
+}
+
+function createCompositeRouteAggregateRepository(
+  commandRouting?: CommandRouting<CompositeRouteId>,
+): Repository<typeof CompositeRouteAggregate> {
+  const handlers = EntityHandlers.define(
+    CompositeRouteAggregate,
+    CompositeRouteAggregateStateSchema,
+    (builder) => [builder.assign(CompositeRouteAggregateStateSchema, "assign")],
+  );
+
+  return new Repository({
+    entityType: CompositeRouteAggregate,
+    schema: CompositeRouteAggregateStateSchema,
+    handlers,
     ...(commandRouting === undefined ? {} : { commandRouting }),
   });
 }
 
-function createUuidMessageIdRepository(): Repository<typeof UuidMessageIdProjection> {
+function createUuidMessageIdAggregateRepository(): Repository<typeof UuidMessageIdAggregate> {
   const handlers = EntityHandlers.define(
-    UuidMessageIdProjection,
-    UuidMessageIdStateSchema,
-    (builder) => [builder.assign(UuidMessageIdStateSchema, "assign")],
+    UuidMessageIdAggregate,
+    UuidMessageIdAggregateStateSchema,
+    (builder) => [builder.assign(UuidMessageIdAggregateStateSchema, "assign")],
   );
 
   return new Repository({
-    entityType: UuidMessageIdProjection,
-    schema: UuidMessageIdStateSchema,
+    entityType: UuidMessageIdAggregate,
+    schema: UuidMessageIdAggregateStateSchema,
     handlers,
   });
 }
