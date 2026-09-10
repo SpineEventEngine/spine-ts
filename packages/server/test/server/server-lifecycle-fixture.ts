@@ -25,10 +25,11 @@ import {
   FileDescriptorSetSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
+  EventSchema,
   UserIdSchema,
   VersionSchema,
   file_spine_options,
@@ -143,14 +144,13 @@ export async function lifecycleFixture(
       })
       .build();
   const createEvent = (id: string) =>
-    SignalEnvelopes.event({
+    create(EventSchema, {
       id: create(EventIdSchema, { value: id }),
       context: create(EventContextSchema, {
         producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: id })),
         version: create(VersionSchema, { number: 1 }),
       }),
-      schema: StringValueSchema,
-      message: create(StringValueSchema, { value: id }),
+      message: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
     });
   const context = await createContext("Lifecycle");
 

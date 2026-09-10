@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { SignalEnvelopes, spineCoreRegistry } from "@spine-event-engine/core";
-import { EventContextSchema, EventIdSchema } from "@spine-event-engine/proto";
+import { EventContextSchema } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
 import { InMemoryTransportFactory } from "@spine-event-engine/transport";
 
@@ -96,7 +96,6 @@ describe("ServerEnvironment delivery lifecycle", () => {
     try {
       await producer.eventBus().post(
         SignalEnvelopes.event({
-          id: create(EventIdSchema, { value: "default-channel-event" }),
           context: create(EventContextSchema),
           schema: StringValueSchema,
           message: create(StringValueSchema, { value: "default-channel-event" }),
