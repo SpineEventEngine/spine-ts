@@ -184,6 +184,18 @@ describe("package metadata", () => {
     expect(workspace.overrides?.pacote).toBe("21.5.1");
   });
 
+  it("pins patched Vitest and parser dependencies", () => {
+    const workspace = parse(readFileSync(join(repoRoot, "pnpm-workspace.yaml"), "utf8"));
+    const rootPackage = readJson("package.json");
+    const messageBoardWeb = readJson("examples/message-board/web/package.json");
+
+    expect(rootPackage.devDependencies.vitest).toBe("4.1.11");
+    expect(rootPackage.devDependencies["@vitest/coverage-v8"]).toBe("4.1.11");
+    expect(messageBoardWeb.devDependencies.vitest).toBe("4.1.11");
+    expect(workspace.overrides?.["js-yaml"]).toBe("4.3.2");
+    expect(workspace.overrides?.["smol-toml"]).toBe("1.7.1");
+  });
+
   it("declares Apache-2.0 for every framework package without classifying examples as publishable", () => {
     const frameworkPackages = productionPackagePaths(repoRoot);
 
