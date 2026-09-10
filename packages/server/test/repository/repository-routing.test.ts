@@ -34,14 +34,11 @@ import {
 import {
   TypeUrls,
   AnyMessages,
-  EntityColumn,
-  EntityQuery,
   Identifiers,
   MessageInterfaces,
   SignalEnvelopes,
   StringifierRegistry,
 } from "@spine-event-engine/core";
-import { GeneratedEntityColumns } from "@spine-event-engine/core/codegen";
 import {
   ActorContextSchema,
   type CommandId,
@@ -63,7 +60,6 @@ import {
   type TenantId,
   UserIdSchema,
   VersionSchema,
-  ZoneIdSchema,
   file_spine_options,
 } from "@spine-event-engine/proto";
 import type { UserId } from "@spine-event-engine/proto";
@@ -130,7 +126,6 @@ import {
   SpecScanner,
   StateUpdateRouting,
 } from "../../src/index.js";
-import { QueryReader } from "../../src/services/query-reader.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
@@ -2065,43 +2060,17 @@ class RoutingProcessManager extends ProcessManager<
   static commandCalls = 0;
   static eventCalls = 0;
   static commandReactionCalls = 0;
-  static queryResults: readonly ProjectionState[] = [];
-  static queryPredicate: unknown;
-  static queryFailure: unknown;
   static failure: Error | undefined;
 
   static reset(failure?: Error): void {
     this.commandCalls = 0;
     this.eventCalls = 0;
     this.commandReactionCalls = 0;
-    this.queryResults = [];
-    this.queryPredicate = undefined;
-    this.queryFailure = undefined;
     this.failure = failure;
   }
 
-  async assignTask(command: AggregateState): Promise<ProjectionEvent> {
+  assignTask(command: AggregateState): ProjectionEvent {
     RoutingProcessManager.commandCalls++;
-    if (command.name.startsWith("query")) {
-      const query = this.select(ProjectionStateSchema, projectionQueryColumns);
-      try {
-        if (RoutingProcessManager.queryPredicate !== undefined) {
-          query.where(RoutingProcessManager.queryPredicate as never);
-        }
-        RoutingProcessManager.queryResults =
-          command.name === "query all"
-            ? await query.all()
-            : await query
-                .byId(command.id)
-                .where(
-                  EntityQuery.eq(projectionQueryColumns.name, command.name.slice("query ".length)),
-                )
-                .read();
-      } catch (error) {
-        RoutingProcessManager.queryFailure = error;
-        throw error;
-      }
-    }
     if (command.name.endsWith("-lifecycle")) {
       if (command.name === "archive-lifecycle") this.archiveDraft();
       if (command.name === "unarchive-lifecycle") this.unarchiveDraft();
@@ -2180,30 +2149,6 @@ class RoutingProcessManager extends ProcessManager<
     });
   }
 }
-
-const projectionQueryColumns = EntityColumn.register(
-  ProjectionStateSchema,
-  GeneratedEntityColumns.define(ProjectionStateSchema, {
-    name: { field: ProjectionStateSchema.field.name, comparison: "ordering" },
-    priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" },
-  }),
-);
-const selectedProjectionQueryColumns: Pick<typeof projectionQueryColumns, "priority"> =
-  projectionQueryColumns;
-
-abstract class ProcessManagerQueryTypeFixture extends ProcessManager<
-  string,
-  typeof ProcessManagerStateSchema,
-  number
-> {
-  protected orderBySelectedColumns(): void {
-    const query = this.select(ProjectionStateSchema, selectedProjectionQueryColumns);
-    query.orderBy(selectedProjectionQueryColumns.priority);
-    // @ts-expect-error same-schema columns omitted from the selected collection cannot be ordered.
-    query.orderBy(projectionQueryColumns.name);
-  }
-}
-void ProcessManagerQueryTypeFixture;
 
 class CommandSubstitutingProcessManager extends ProcessManager<
   string,
@@ -5796,220 +5741,6 @@ describe("repository signal routing", () => {
         .stand()
         .read(ProcessManagerStateSchema, "pm-tenant", { tenantId: createTenantId("tenant-b") }),
     ).resolves.toBeUndefined();
-  });
-
-  it("binds Process Manager reads to the active tenant for equal projection IDs", async () => {
-    RoutingProcessManager.reset();
-    const context = BoundedContext.multitenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .add(createProcessManagerAssignRepository())
-      .build();
-    const tenantA = createTenantId("query-tenant-a");
-    const tenantB = createTenantId("query-tenant-b");
-
-    await context
-      .stand()
-      .update(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema, { id: "shared-query", name: "A", priority: 1 }),
-        { tenantId: tenantA },
-      );
-    await context
-      .stand()
-      .update(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema, { id: "shared-query", name: "B", priority: 2 }),
-        { tenantId: tenantB },
-      );
-
-    await context
-      .commandBus()
-      .post(createAggregateCommand("query-a", "shared-query", "query A", "query-tenant-a"));
-    expect(RoutingProcessManager.queryResults).toEqual([
-      create(ProjectionStateSchema, { id: "shared-query", name: "A", priority: 1 }),
-    ]);
-
-    await context
-      .commandBus()
-      .post(createAggregateCommand("query-b", "shared-query", "query B", "query-tenant-b"));
-    expect(RoutingProcessManager.queryResults).toEqual([
-      create(ProjectionStateSchema, { id: "shared-query", name: "B", priority: 2 }),
-    ]);
-
-    await context.close();
-  });
-
-  it("preserves the source actor, tenant, and zone in the Process Manager wire query", async () => {
-    RoutingProcessManager.reset();
-    const context = BoundedContext.multitenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .add(createProcessManagerAssignRepository())
-      .build();
-    const captured: unknown[] = [];
-    const reader = QueryReader as typeof QueryReader & {
-      observe(onRead: (query: unknown) => void): { close(): void };
-    };
-    const observation = reader.observe((query) => captured.push(query));
-    const command = createAggregateCommand("query-context", "shared-query", "query A", "tenant-a");
-    const actorContext = command.context?.actorContext;
-    if (actorContext === undefined || command.context === undefined) {
-      throw new Error("Expected a command actor context.");
-    }
-    command.context.actorContext = create(ActorContextSchema, {
-      ...actorContext,
-      zoneId: create(ZoneIdSchema, { value: "Europe/Lisbon" }),
-    });
-
-    try {
-      await context.commandBus().post(command);
-      expect(captured).toHaveLength(1);
-      expect(captured[0]).toMatchObject({
-        context: {
-          actor: create(UserIdSchema, { value: "user-1" }),
-          tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
-          zoneId: create(ZoneIdSchema, { value: "Europe/Lisbon" }),
-        },
-      });
-    } finally {
-      observation.close();
-      await context.close();
-    }
-  });
-
-  it("rejects a cyclic Process Manager predicate before QueryReader reads", async () => {
-    RoutingProcessManager.reset();
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .add(createProcessManagerAssignRepository())
-      .build();
-    const cyclic: { kind: "all"; predicates: unknown[] } = { kind: "all", predicates: [] };
-    cyclic.predicates.push(cyclic);
-    RoutingProcessManager.queryPredicate = cyclic;
-    let reads = 0;
-    const observation = QueryReader.observe(() => {
-      reads += 1;
-    });
-
-    try {
-      await context
-        .commandBus()
-        .post(createAggregateCommand("query-cycle", "query-id", "query cycle"));
-      expect(RoutingProcessManager.queryFailure).toMatchObject({
-        message: "Entity query predicate must not contain cycles.",
-      });
-      expect(reads).toBe(0);
-    } finally {
-      observation.close();
-      RoutingProcessManager.reset();
-      await context.close();
-    }
-  });
-
-  it("rejects an over-depth Process Manager predicate before QueryReader reads", async () => {
-    RoutingProcessManager.reset();
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .add(createProcessManagerAssignRepository())
-      .build();
-    let predicate: unknown = EntityQuery.eq(projectionQueryColumns.name, "depth");
-    for (let depth = 0; depth < 66; depth += 1) {
-      predicate = { kind: "all", predicates: [predicate] };
-    }
-    RoutingProcessManager.queryPredicate = predicate;
-    let reads = 0;
-    const observation = QueryReader.observe(() => {
-      reads += 1;
-    });
-
-    try {
-      await context
-        .commandBus()
-        .post(createAggregateCommand("query-depth", "query-id", "query depth"));
-      expect(RoutingProcessManager.queryFailure).toMatchObject({
-        message: "Entity query predicate exceeds maximum depth 64.",
-      });
-      expect(reads).toBe(0);
-    } finally {
-      observation.close();
-      RoutingProcessManager.reset();
-      await context.close();
-    }
-  });
-
-  it("rejects an over-wide Process Manager predicate before QueryReader reads", async () => {
-    RoutingProcessManager.reset();
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .add(createProcessManagerAssignRepository())
-      .build();
-    const leaf = EntityQuery.eq(projectionQueryColumns.name, "wide");
-    RoutingProcessManager.queryPredicate = {
-      kind: "all",
-      predicates: Array.from({ length: 10_001 }, () => leaf),
-    };
-    let reads = 0;
-    const observation = QueryReader.observe(() => {
-      reads += 1;
-    });
-
-    try {
-      await context
-        .commandBus()
-        .post(createAggregateCommand("query-wide", "query-id", "query wide"));
-      expect(RoutingProcessManager.queryFailure).toMatchObject({
-        message: "Entity query predicate exceeds maximum node count 10000.",
-      });
-      expect(reads).toBe(0);
-    } finally {
-      observation.close();
-      RoutingProcessManager.reset();
-      await context.close();
-    }
-  });
-
-  it("keeps archived projections queryable, excludes deleted projections, and clones query results", async () => {
-    RoutingProcessManager.reset();
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .add(createProcessManagerAssignRepository())
-      .build();
-
-    await context
-      .stand()
-      .update(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema, { id: "query-live", name: "live", priority: 1 }),
-      );
-    await context
-      .stand()
-      .update(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema, { id: "query-archived", name: "archived", priority: 2 }),
-        { lifecycle: { archived: true, deleted: false } },
-      );
-    await context
-      .stand()
-      .update(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema, { id: "query-deleted", name: "deleted", priority: 3 }),
-        { lifecycle: { archived: false, deleted: true } },
-      );
-
-    await context.commandBus().post(createAggregateCommand("query-all-1", "pm-query", "query all"));
-    expect(RoutingProcessManager.queryResults.map((state) => state.name).sort()).toEqual([
-      "archived",
-      "live",
-    ]);
-
-    const live = RoutingProcessManager.queryResults.find((state) => state.id === "query-live");
-    if (live === undefined) throw new Error("Expected live Process Manager query result.");
-    live.name = "mutated by handler";
-
-    await context.commandBus().post(createAggregateCommand("query-all-2", "pm-query", "query all"));
-    expect(RoutingProcessManager.queryResults.find((state) => state.id === "query-live")).toEqual(
-      create(ProjectionStateSchema, { id: "query-live", name: "live", priority: 1 }),
-    );
-    await context.close();
   });
 
   it("rejects multitenant process-manager handoff without a tenant before inbox write", async () => {

@@ -683,3 +683,18 @@ artifact preparation checks also passed for the 18-package snapshot graph.
 - Final release verification passes 289/289 test files and 4,641/4,641 tests.
   Coverage is 93.22% statements, 90.00% branches, 92.76% functions, and 94.38%
   lines.
+
+## Process Manager query test placement correction
+
+The human rejected placing Process Manager query behavior in the repository
+routing suite because routing and querying are independent concerns. The query
+fixture and all query-specific behavior tests now live in
+`packages/server/test/entity/process-manager-querying.test.ts`, mirroring the
+production `entity` module that owns the Process Manager query capability.
+
+The dedicated suite covers the typed read-only API, handler-only lifecycle,
+1,000-result cap, real command-bus execution, tenant isolation, actor/tenant/zone
+propagation, predicate complexity guards, archived/deleted visibility, and
+result cloning. Query-specific state, imports, handler branches, and assertions
+were removed from both repository routing and repository identity tests. The
+three affected suites pass independently and together.

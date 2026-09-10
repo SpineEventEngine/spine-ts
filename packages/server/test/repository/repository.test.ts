@@ -12,14 +12,12 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
+import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { ActorContextSchema, file_spine_options } from "@spine-event-engine/proto";
-import { EntityColumn, EntityQuery } from "@spine-event-engine/core";
-import { GeneratedEntityColumns } from "@spine-event-engine/core/codegen";
+import { file_spine_options } from "@spine-event-engine/proto";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import {
@@ -39,7 +37,6 @@ import {
   type RepositoryOptions,
 } from "../../src/index.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
-import { processManagerQueryAccess } from "../../src/entity/entity.js";
 
 function expectRepositoryIdentityError(
   error: unknown,
@@ -136,15 +133,6 @@ const ProcessManagerStateSchema = messageDesc(
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
-class QueryingProcessManager extends ProcessManager<
-  string,
-  typeof ProcessManagerStateSchema,
-  number
-> {
-  query() {
-    return this.select(ProjectionStateSchema, projectionColumns);
-  }
-}
 class RuntimeCheckedAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class HandlerBackedNumberAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
   assignTask(command: AggregateState): void {
@@ -212,119 +200,7 @@ class PlainEntityClass {
   }
 }
 
-const projectionColumns = EntityColumn.register(
-  ProjectionStateSchema,
-  GeneratedEntityColumns.define(ProjectionStateSchema, {
-    name: { field: ProjectionStateSchema.field.name, comparison: "ordering" },
-    priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" },
-  }),
-);
-
 describe("repository identity", () => {
-  it("offers a Process Manager a typed read-only Entity query", () => {
-    const processManager = new QueryingProcessManager({
-      id: "process-1",
-      schema: ProcessManagerStateSchema,
-      state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
-      version: 1,
-      lifecycle: { archived: false, deleted: false },
-    });
-
-    const release = processManagerQueryAccess.bind(
-      processManager,
-      () => Promise.resolve(Object.freeze([])),
-      create(ActorContextSchema),
-    );
-    const query = processManager
-      .query()
-      .byId("projection-1")
-      .where(EntityQuery.eq(projectionColumns.name, "waiting"))
-      .orderBy(projectionColumns.priority);
-
-    // @ts-expect-error A number is not the selected ProcessManagerState string identifier.
-    processManager.query().byId(1);
-
-    // @ts-expect-error equality-only lifecycle columns are not orderable.
-    processManager.query().orderBy(projectionColumns.archived);
-
-    expect(query).toHaveProperty("read");
-    expect(query).toHaveProperty("findById");
-    expect(query).toHaveProperty("all");
-    expect(query).not.toHaveProperty("update");
-    expect(query).not.toHaveProperty("stand");
-    expect(query).not.toHaveProperty("tenant");
-    expectTypeOf(query).not.toHaveProperty("update");
-    expectTypeOf(query).not.toHaveProperty("tenant");
-    expectTypeOf<Aggregate<string, typeof AggregateStateSchema, number>>().not.toHaveProperty(
-      "select",
-    );
-    expect(() => query.limit(1_001)).toThrow("Process Manager query limit may be at most 1000.");
-    release();
-  });
-
-  it("caps an unlimited Process Manager read at 1,000 states", async () => {
-    const processManager = new QueryingProcessManager({
-      id: "process-1",
-      schema: ProcessManagerStateSchema,
-      state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
-      version: 1,
-      lifecycle: { archived: false, deleted: false },
-    });
-    const states = Object.freeze(
-      Array.from({ length: 1_001 }, (_, index) =>
-        create(ProjectionStateSchema, {
-          id: `state-${String(index)}`,
-          name: "waiting",
-          priority: index,
-        }),
-      ),
-    );
-    const release = processManagerQueryAccess.bind(
-      processManager,
-      <Schema extends DescriptorMessageSchema>(
-        _plan: import("@spine-event-engine/core/spi/entity-query-plan").EntityQueryPlan,
-        schema: Schema,
-      ): Promise<readonly MessageShape<Schema>[]> => {
-        if (schema.typeName !== ProjectionStateSchema.typeName) {
-          return Promise.reject(
-            new Error("Expected the Process Manager fixture to select Projection state."),
-          );
-        }
-        return Promise.resolve(states as unknown as readonly MessageShape<Schema>[]);
-      },
-      create(ActorContextSchema),
-    );
-
-    await expect(processManager.query().all()).resolves.toHaveLength(1_000);
-    release();
-  });
-
-  it("rejects Process Manager reads before binding and after release", async () => {
-    const processManager = new QueryingProcessManager({
-      id: "process-1",
-      schema: ProcessManagerStateSchema,
-      state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
-      version: 1,
-      lifecycle: { archived: false, deleted: false },
-    });
-
-    expect(() => processManager.query()).toThrow(
-      "Process Manager queries are available only during repository handler execution.",
-    );
-
-    const release = processManagerQueryAccess.bind(
-      processManager,
-      () => Promise.resolve(Object.freeze([])),
-      create(ActorContextSchema),
-    );
-    const retained = processManager.query();
-    release();
-
-    await expect(retained.read()).rejects.toThrow(
-      "Process Manager queries are available only during repository handler execution.",
-    );
-  });
-
   it("rejects command substitutions on Aggregates", () => {
     expect(() =>
       HandlerMetadataValues.defineArity(

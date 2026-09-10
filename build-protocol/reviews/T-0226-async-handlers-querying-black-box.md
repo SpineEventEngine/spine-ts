@@ -502,3 +502,13 @@ columns; the Process Manager facade has its corresponding selected/omitted
 proof. Strict tooling, core/server builds, 283 focused query/repository tests,
 TSDoc, and API inventory checks pass. Focused API P1 re-review remains the next
 step and is intentionally not run in this correction context.
+
+## Query test ownership correction
+
+The Process Manager query integration tests were incorrectly embedded in
+`repository-routing.test.ts`, coupling two independently failing concerns. They
+now form the self-contained `entity/process-manager-querying.test.ts` suite.
+The routing suite retains no Process Manager query reader, predicate, result,
+or `select()` behavior, and the repository identity suite retains no query API
+tests. This is a test-ownership refactor only; production code and public APIs
+are unchanged.
