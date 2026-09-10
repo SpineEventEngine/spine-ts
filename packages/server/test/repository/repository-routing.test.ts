@@ -2818,7 +2818,7 @@ describe("repository signal routing", () => {
     expect(ManagedTaskAggregate.assigneeCalls).toBe(1);
     await expect(eventStore.read()).resolves.toMatchObject([
       {
-        context: { version: { number: 1 } },
+        context: { version: { number: 0 } },
       },
     ]);
     const [stored] = await eventStore.read();
@@ -3335,7 +3335,7 @@ describe("repository signal routing", () => {
       expect(
         stored.filter(
           (event) =>
-            event.context?.version?.number === 1 &&
+            event.context?.version?.number === 0 &&
             AnyMessages.unpack(event.message as never, AggregateStateSchema) !== undefined,
         ),
       ).toHaveLength(2);
@@ -3610,7 +3610,7 @@ describe("repository signal routing", () => {
 
     const storedEvents = await eventStore.read();
     expect(storedEvents).toHaveLength(2);
-    expect(storedEvents.map((event) => event.context?.version?.number).sort()).toEqual([1, 1]);
+    expect(storedEvents.map((event) => event.context?.version?.number).sort()).toEqual([0, 0]);
     expect(storedEvents.map((event) => event.id?.value)).toEqual([
       expect.stringMatching(/.+/),
       expect.stringMatching(/.+/),
@@ -3714,8 +3714,8 @@ describe("repository signal routing", () => {
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(eventStore.read()).resolves.toMatchObject([
-      { id: { value: "event-Multi-1" }, context: { version: { number: 1 } } },
-      { id: { value: "event-Multi-2" }, context: { version: { number: 1 } } },
+      { id: { value: "event-Multi-1" }, context: { version: { number: 0 } } },
+      { id: { value: "event-Multi-2" }, context: { version: { number: 0 } } },
     ]);
     await expect(storage.readCurrent("task-multi")).resolves.toMatchObject({
       entityId: "task-multi",
@@ -3813,8 +3813,8 @@ describe("repository signal routing", () => {
     await Promise.all([first, second]);
 
     await expect(eventStore.read()).resolves.toMatchObject([
-      { id: { value: "event-First" }, context: { version: { number: 1 } } },
-      { id: { value: "event-Second" }, context: { version: { number: 2 } } },
+      { id: { value: "event-First" }, context: { version: { number: 0 } } },
+      { id: { value: "event-Second" }, context: { version: { number: 1 } } },
     ]);
   });
 
@@ -3925,7 +3925,7 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
     await expect(eventStore.read()).resolves.toMatchObject([
       {
-        context: { version: { number: 1 } },
+        context: { version: { number: 0 } },
       },
     ]);
     expect((await eventStore.read())[0]?.id?.value).toMatch(UUID_PATTERN);

@@ -739,8 +739,8 @@ environment: attachment supervisors and their source reads belong to that facili
 Projection handlers cannot use `@Assign`; explicit metadata rejects that unsupported
 handler shape. Framework-created child Commands and Events receive fresh IDs. Existing
 Command or Event envelopes retain their IDs through transport and storage, including
-when returned or passed as envelopes. A successful Aggregate dispatch uses one version
-for all emitted Events and state changes. History caching accepts descending retained
+when returned or passed as envelopes. Aggregate domain Events use the loaded pre-dispatch
+version, while persisted Aggregate state advances to the next version. History caching accepts descending retained
 versions with gaps, while continuing to reject equal or newer continuations.
 
 # Dynamic unary discovery

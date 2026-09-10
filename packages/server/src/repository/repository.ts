@@ -1678,7 +1678,7 @@ class AggregateCommandExecution {
     lastVersion: bigint,
     allowEnvelopes: boolean,
   ): readonly Event[] {
-    const dispatchVersion = lastVersion + 1n;
+    const dispatchVersion = lastVersion;
 
     return Object.freeze(
       produced.map((signal) =>
@@ -1892,7 +1892,7 @@ class AggregateEventExecution {
     entityId: unknown,
     lastVersion: bigint,
   ): readonly Event[] {
-    const version = lastVersion + 1n;
+    const version = lastVersion;
     return Object.freeze(
       produced.map((signal) => this.#bindProducedEvent(signal, entityId, version)),
     );
