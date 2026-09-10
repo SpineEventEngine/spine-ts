@@ -91,7 +91,7 @@ describe("project-management load example", () => {
     try {
       const acknowledgement = await commands.post(
         SignalEnvelopes.command({
-          id: metadata.commandId("project-grpc-command"),
+          id: metadata.commandId(),
           context: metadata.commandContext({ actorContext }),
           schema: CreateProjectSchema,
           message: create(CreateProjectSchema, { id, name: "gRPC project" }),

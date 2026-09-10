@@ -82,7 +82,7 @@ describe("datastore orders test app", () => {
     try {
       const acknowledgement = await commands.post(
         create(CommandSchema, {
-          id: metadata.commandId("order-grpc-command"),
+          id: metadata.commandId(),
           context: metadata.commandContext({ actorContext }),
           message: AnyMessages.pack(
             CreateOrderSchema,
@@ -93,7 +93,7 @@ describe("datastore orders test app", () => {
       expect(acknowledgement.status?.status.case).toBe("ok");
       const skuAcknowledgement = await commands.post(
         create(CommandSchema, {
-          id: metadata.commandId("sku-grpc-command"),
+          id: metadata.commandId(),
           context: metadata.commandContext({ actorContext }),
           message: AnyMessages.pack(
             RegisterSkuSchema,
