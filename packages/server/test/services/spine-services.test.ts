@@ -37,7 +37,6 @@ import {
   type MessageSchema,
   TypeUrls,
   AnyMessages,
-  SignalEnvelopes,
 } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -4373,28 +4372,25 @@ function createRollingBackTransitionRepository(): Repository<
 }
 
 function createProjectionCommand(id: string, tenantId?: TenantInput, name = "Task") {
-  return SignalEnvelopes.command({
+  return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: createActorContext(tenantId),
     }),
-    schema: ProjectionStateSchema,
-    message: createState("task-1", name),
+    message: AnyMessages.pack(ProjectionStateSchema, createState("task-1", name)),
   });
 }
 
 function createAggregateCommand(id: string, aggregateId: string, name = "Task") {
-  return SignalEnvelopes.command({
+  return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: createActorContext(),
     }),
-    schema: AggregateStateSchema,
-    message: create(AggregateStateSchema, {
-      id: aggregateId,
-      name,
-      archived: false,
-    }),
+    message: AnyMessages.pack(
+      AggregateStateSchema,
+      create(AggregateStateSchema, { id: aggregateId, name, archived: false }),
+    ),
   });
 }
 
@@ -4421,20 +4417,18 @@ function createAggregateEvent(
   name: string,
   tenantId?: TenantInput,
 ) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: createEventContext(aggregateId, tenantId),
-    schema: AggregateStateSchema,
-    message: create(AggregateStateSchema, {
-      id: aggregateId,
-      name,
-      archived: false,
-    }),
+    message: AnyMessages.pack(
+      AggregateStateSchema,
+      create(AggregateStateSchema, { id: aggregateId, name, archived: false }),
+    ),
   });
 }
 
 function createPastMessageAggregateEvent(id: string, tenantId: string) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       origin: {
@@ -4442,12 +4436,14 @@ function createPastMessageAggregateEvent(id: string, tenantId: string) {
         value: create(OriginSchema, { actorContext: createActorContext(tenantId) }),
       },
     }),
-    schema: AggregateStateSchema,
-    message: create(AggregateStateSchema, {
-      id: `aggregate-${id}`,
-      name: "Past message",
-      archived: false,
-    }),
+    message: AnyMessages.pack(
+      AggregateStateSchema,
+      create(AggregateStateSchema, {
+        id: `aggregate-${id}`,
+        name: "Past message",
+        archived: false,
+      }),
+    ),
   });
 }
 
@@ -4455,7 +4451,7 @@ function createRejectionEvent(
   command: ReturnType<typeof createAggregateCommand>,
   stacktrace: string,
 ) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: "event-rejected" }),
     context: create(EventContextSchema, {
       timestamp: create(TimestampSchema, { seconds: 123n, nanos: 456 }),
@@ -4476,10 +4472,12 @@ function createRejectionEvent(
         stacktrace,
       }),
     }),
-    schema: TaskAlreadyDoneSchema,
-    message: create(TaskAlreadyDoneSchema, {
-      id: create(GeneratedTaskIdSchema, { value: "task-rejected" }),
-    }),
+    message: AnyMessages.pack(
+      TaskAlreadyDoneSchema,
+      create(TaskAlreadyDoneSchema, {
+        id: create(GeneratedTaskIdSchema, { value: "task-rejected" }),
+      }),
+    ),
   });
 }
 
@@ -4502,7 +4500,7 @@ function createEventContext(producerId: string, tenantId?: TenantInput) {
 }
 
 function createValidatedEvent(id: string, aggregateId: string, name: string) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       producerId: AnyMessages.pack(
@@ -4510,16 +4508,16 @@ function createValidatedEvent(id: string, aggregateId: string, name: string) {
         create(StringValueSchema, { value: aggregateId }),
       ),
     }),
-    schema: ValidatedAggregateStateSchema,
-    message: create(ValidatedAggregateStateSchema, {
-      id: aggregateId,
-      name,
-    }),
+    message: AnyMessages.pack(
+      ValidatedAggregateStateSchema,
+      create(ValidatedAggregateStateSchema, { id: aggregateId, name }),
+      { validate: false },
+    ),
   });
 }
 
 function createProjectionEvent(id: string, entityId: string) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       producerId: AnyMessages.pack(
@@ -4528,12 +4526,14 @@ function createProjectionEvent(id: string, entityId: string) {
       ),
       version: create(VersionSchema, { number: 1 }),
     }),
-    schema: TaskCreatedSchema,
-    message: create(TaskCreatedSchema, {
-      id: create(GeneratedTaskIdSchema, { value: entityId }),
-      title: "Task",
-      taskListId: create(TodoTaskListIdSchema, { value: entityId }),
-    }),
+    message: AnyMessages.pack(
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id: create(GeneratedTaskIdSchema, { value: entityId }),
+        title: "Task",
+        taskListId: create(TodoTaskListIdSchema, { value: entityId }),
+      }),
+    ),
   });
 }
 
