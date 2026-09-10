@@ -1,8 +1,8 @@
 {
   "formatVersion": 2,
-  "generationId": "cc333943-1f58-4710-b0d8-873526c9ecd5",
+  "generationId": "0b0542d8-d8c7-4065-a03f-0302ba9f77ef",
   "packageName": "@spine-event-engine/server-blackbox-tests",
-  "packageVersion": "2.0.0-snapshot.10",
+  "packageVersion": "2.0.0-snapshot.11",
   "protoFiles": [
     "spine/server/testing/project_commands.proto",
     "spine/server/testing/project_events.proto",
