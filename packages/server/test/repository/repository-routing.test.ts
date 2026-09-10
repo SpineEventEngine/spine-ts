@@ -8168,11 +8168,13 @@ describe("repository signal routing", () => {
 
     try {
       await context.eventBus().post(
-        SignalEnvelopes.event({
+        create(EventSchema, {
           id: create(EventIdSchema, { value: "subscriber-unmatched" }),
           context: create(EventContextSchema),
-          schema: NumberRouteEventSchema,
-          message: create(NumberRouteEventSchema, { id: 7 }),
+          message: AnyMessages.pack(
+            NumberRouteEventSchema,
+            create(NumberRouteEventSchema, { id: 7 }),
+          ),
         }),
       );
       await context.close();
@@ -9105,15 +9107,17 @@ describe("repository signal routing", () => {
 
     await context.eventBus().post(createProjectionEvent("event-primary", "task-primary"));
     await context.eventBus().post(
-      SignalEnvelopes.event({
+      create(EventSchema, {
         id: create(EventIdSchema, { value: "event-alternate" }),
         context: create(EventContextSchema),
-        schema: TaskCreatedSchema,
-        message: create(TaskCreatedSchema, {
-          id: create(TodoIdSchema, { value: "task-alternate" }),
-          taskListId: create(TodoTaskListIdSchema, { value: "task-alternate" }),
-          title: "Alternate task",
-        }),
+        message: AnyMessages.pack(
+          TaskCreatedSchema,
+          create(TaskCreatedSchema, {
+            id: create(TodoIdSchema, { value: "task-alternate" }),
+            taskListId: create(TodoTaskListIdSchema, { value: "task-alternate" }),
+            title: "Alternate task",
+          }),
+        ),
       }),
     );
     await context.stand().update(
@@ -9168,15 +9172,17 @@ describe("repository signal routing", () => {
 
     await context.eventBus().post(createProjectionEvent("event-shared-state", "task-shared-state"));
     await context.eventBus().post(
-      SignalEnvelopes.event({
+      create(EventSchema, {
         id: create(EventIdSchema, { value: "event-unmatched-state" }),
         context: create(EventContextSchema, {
           version: create(VersionSchema, { number: 1 }),
         }),
-        schema: NumberRouteEventSchema,
-        message: create(NumberRouteEventSchema, {
-          id: 7,
-        }),
+        message: AnyMessages.pack(
+          NumberRouteEventSchema,
+          create(NumberRouteEventSchema, {
+            id: 7,
+          }),
+        ),
       }),
     );
     await context.stand().update(
@@ -9829,13 +9835,15 @@ describe("repository signal routing", () => {
     ).rejects.toThrow();
     const invalidPayload = await storePmInboxEvent(
       delivery,
-      SignalEnvelopes.event({
+      create(EventSchema, {
         id: create(EventIdSchema, { value: "event-projection-invalid-payload" }),
         context: create(EventContextSchema, {
           ...(tenantAOrigin === undefined ? {} : { origin: tenantAOrigin }),
         }),
-        schema: ProjectionEventSchema,
-        message: create(ProjectionEventSchema, { id: "projection-replay", name: "Task" }),
+        message: AnyMessages.pack(
+          ProjectionEventSchema,
+          create(ProjectionEventSchema, { id: "projection-replay", name: "Task" }),
+        ),
       }),
       new Date("2026-07-24T21:20:02.000Z"),
       3n,
@@ -10464,14 +10472,16 @@ describe("repository signal routing", () => {
 
     expect(() =>
       repository.routeEvent(
-        SignalEnvelopes.event({
+        create(EventSchema, {
           id: create(EventIdSchema, { value: "event-non-finite-field" }),
           context: create(EventContextSchema, {
             producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "source" })),
             version: create(VersionSchema, { number: 1 }),
           }),
-          schema: NumberRouteEventSchema,
-          message: create(NumberRouteEventSchema, { id: Number.POSITIVE_INFINITY }),
+          message: AnyMessages.pack(
+            NumberRouteEventSchema,
+            create(NumberRouteEventSchema, { id: Number.POSITIVE_INFINITY }),
+          ),
         }),
       ),
     ).toThrow(/ID compatible with the Entity state/);
