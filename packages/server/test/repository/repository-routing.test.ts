@@ -6190,11 +6190,13 @@ describe("repository signal routing", () => {
       .add(repository)
       .withStorageFactory(factory)
       .build();
-    const command = SignalEnvelopes.command({
+    const command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "command-composite-handoff" }),
       context: create(CommandContextSchema),
-      schema: CompositeRouteEventSchema,
-      message: create(CompositeRouteEventSchema, { id, name: "Composite command" }),
+      message: AnyMessages.pack(
+        CompositeRouteEventSchema,
+        create(CompositeRouteEventSchema, { id, name: "Composite command" }),
+      ),
     });
     try {
       await context.commandBus().post(command);
@@ -6308,11 +6310,13 @@ describe("repository signal routing", () => {
       .add(int32Repository)
       .withStorageFactory(int32Factory)
       .build();
-    const int32Command = SignalEnvelopes.command({
+    const int32Command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "command-numeric-int32" }),
       context: create(CommandContextSchema),
-      schema: Int32AggregateStateSchema,
-      message: create(Int32AggregateStateSchema, { id: 42, name: "Int32" }),
+      message: AnyMessages.pack(
+        Int32AggregateStateSchema,
+        create(Int32AggregateStateSchema, { id: 42, name: "Int32" }),
+      ),
     });
     const int32Message = await storeEntityInboxCommand(
       new Delivery({
@@ -6339,11 +6343,13 @@ describe("repository signal routing", () => {
       .add(int64Repository)
       .withStorageFactory(int64Factory)
       .build();
-    const int64Command = SignalEnvelopes.command({
+    const int64Command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "command-numeric-int64" }),
       context: create(CommandContextSchema),
-      schema: Int64ProcessManagerStateSchema,
-      message: create(Int64ProcessManagerStateSchema, { id: 42n, queue: "Int64" }),
+      message: AnyMessages.pack(
+        Int64ProcessManagerStateSchema,
+        create(Int64ProcessManagerStateSchema, { id: 42n, queue: "Int64" }),
+      ),
     });
     const int64Message = await storeEntityInboxCommand(
       new Delivery({
@@ -6391,19 +6397,23 @@ describe("repository signal routing", () => {
 
     try {
       await int32Context.commandBus().post(
-        SignalEnvelopes.command({
+        create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: "command-int32-producer" }),
           context: create(CommandContextSchema),
-          schema: Int32AggregateStateSchema,
-          message: create(Int32AggregateStateSchema, { id: 42, name: "Int32" }),
+          message: AnyMessages.pack(
+            Int32AggregateStateSchema,
+            create(Int32AggregateStateSchema, { id: 42, name: "Int32" }),
+          ),
         }),
       );
       await int64Context.commandBus().post(
-        SignalEnvelopes.command({
+        create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: "command-int64-producer" }),
           context: create(CommandContextSchema),
-          schema: Int64ProcessManagerStateSchema,
-          message: create(Int64ProcessManagerStateSchema, { id: 42n, queue: "Int64" }),
+          message: AnyMessages.pack(
+            Int64ProcessManagerStateSchema,
+            create(Int64ProcessManagerStateSchema, { id: 42n, queue: "Int64" }),
+          ),
         }),
       );
       await waitForCondition(() => int32Events.length === 2 && int64Events.length === 2);
