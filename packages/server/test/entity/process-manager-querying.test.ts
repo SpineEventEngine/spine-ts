@@ -23,10 +23,11 @@ import {
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { EntityColumn, EntityQuery, SignalEnvelopes } from "@spine-event-engine/core";
+import { AnyMessages, EntityColumn, EntityQuery } from "@spine-event-engine/core";
 import { GeneratedEntityColumns } from "@spine-event-engine/core/codegen";
 import {
   ActorContextSchema,
+  CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
   TenantIdSchema,
@@ -238,7 +239,7 @@ function processManagerRepository(): Repository<typeof QueryProcessManager> {
 }
 
 function queryCommand(id: string, name: string, tenant?: string, suffix?: string) {
-  return SignalEnvelopes.command({
+  return create(CommandSchema, {
     id: create(CommandIdSchema, {
       uuid: `query-${id}-${name}${suffix === undefined ? "" : `-${suffix}`}`,
     }),
@@ -254,8 +255,10 @@ function queryCommand(id: string, name: string, tenant?: string, suffix?: string
             }),
       }),
     }),
-    schema: ValidatedTaskCommandSchema,
-    message: create(ValidatedTaskCommandSchema, { id, name }),
+    message: AnyMessages.pack(
+      ValidatedTaskCommandSchema,
+      create(ValidatedTaskCommandSchema, { id, name }),
+    ),
   });
 }
 

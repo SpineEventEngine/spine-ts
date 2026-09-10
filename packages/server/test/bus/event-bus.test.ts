@@ -221,7 +221,6 @@ describe("EventBus", () => {
     await bus.post(external);
     await bus.post(
       SignalEnvelopes.event({
-        id: create(EventIdSchema, { value: "domestic-route" }),
         context: create(EventContextSchema),
         schema: AggregateStateSchema,
         message: create(AggregateStateSchema, { id: "domestic-route", name: "route" }),
@@ -1265,31 +1264,31 @@ function createEventDispatcher(
 }
 
 function createProjectionEvent(id: string) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
       version: create(VersionSchema, { number: 1 }),
     }),
-    schema: ProjectionStateSchema,
-    message: create(ProjectionStateSchema, {
-      id: "task-1",
-      name: "Task",
-      priority: 1,
-    }),
+    message: AnyMessages.pack(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, { id: "task-1", name: "Task", priority: 1 }),
+    ),
   });
 }
 
 function createValidatedEvent(id: string, name: string) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
       version: create(VersionSchema, { number: 1 }),
     }),
-    schema: ValidatedTaskEventSchema,
-    message: create(ValidatedTaskEventSchema, { id: "task-1", name }),
-    validate: false,
+    message: AnyMessages.pack(
+      ValidatedTaskEventSchema,
+      create(ValidatedTaskEventSchema, { id: "task-1", name }),
+      { validate: false },
+    ),
   });
 }
 

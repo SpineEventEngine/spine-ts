@@ -1761,7 +1761,6 @@ describe("BoundedContext assembly", () => {
     await expect(
       context.commandBus().post(
         SignalEnvelopes.command({
-          id: create(CommandIdSchema, { uuid: "command-generated-pm" }),
           context: create(CommandContextSchema, {
             actorContext: create(ActorContextSchema, {
               actor: create(UserIdSchema, { value: "user-1" }),
@@ -1827,7 +1826,6 @@ describe("BoundedContext assembly", () => {
 
     await context.commandBus().post(
       SignalEnvelopes.command({
-        id: create(CommandIdSchema, { uuid: "command-producer-only" }),
         context: create(CommandContextSchema, {
           actorContext: create(ActorContextSchema, {
             actor: create(UserIdSchema, { value: "user-1" }),
@@ -2839,24 +2837,22 @@ function createEventDispatcher(
 }
 
 function createProjectionCommand(id: string, targetId = "task-1") {
-  return SignalEnvelopes.command({
+  return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    schema: ProjectionStateSchema,
-    message: create(ProjectionStateSchema, {
-      id: targetId,
-      name: "Task",
-      priority: 1,
-    }),
+    message: AnyMessages.pack(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, { id: targetId, name: "Task", priority: 1 }),
+    ),
   });
 }
 
 function createAggregateCommand(id: string, targetId = "task-ready", tenantId?: string) {
-  return SignalEnvelopes.command({
+  return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
@@ -2870,29 +2866,30 @@ function createAggregateCommand(id: string, targetId = "task-ready", tenantId?: 
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    schema: TaskCommandSchema,
-    message: create(TaskCommandSchema, {
-      id: targetId,
-      name: "Task Ready",
-    }),
+    message: AnyMessages.pack(
+      TaskCommandSchema,
+      create(TaskCommandSchema, { id: targetId, name: "Task Ready" }),
+    ),
   });
 }
 
 function createProcessManagerTaskCommand(id: string, targetId = "task-ready") {
-  return SignalEnvelopes.command({
+  return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    schema: ProcessManagerTaskCommandSchema,
-    message: create(ProcessManagerTaskCommandSchema, { id: targetId, name: "Task Ready" }),
+    message: AnyMessages.pack(
+      ProcessManagerTaskCommandSchema,
+      create(ProcessManagerTaskCommandSchema, { id: targetId, name: "Task Ready" }),
+    ),
   });
 }
 
 function createProjectionEvent(id: string, targetId = "task-1", tenantId?: TenantId) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       ...(tenantId === undefined
@@ -2906,21 +2903,21 @@ function createProjectionEvent(id: string, targetId = "task-1", tenantId?: Tenan
       producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
       version: create(VersionSchema, { number: 1 }),
     }),
-    schema: ProjectionStateSchema,
-    message: create(ProjectionStateSchema, {
-      id: targetId,
-      name: "Task",
-      priority: 1,
-    }),
+    message: AnyMessages.pack(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, { id: targetId, name: "Task", priority: 1 }),
+    ),
   });
 }
 
 function createTaskEvent(id: string, targetId = "task-1") {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema),
-    schema: TaskEventSchema,
-    message: create(TaskEventSchema, { id: targetId, name: "Task" }),
+    message: AnyMessages.pack(
+      TaskEventSchema,
+      create(TaskEventSchema, { id: targetId, name: "Task" }),
+    ),
   });
 }
 

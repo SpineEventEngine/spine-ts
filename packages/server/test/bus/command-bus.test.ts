@@ -16,7 +16,7 @@ import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandSchema,
@@ -544,19 +544,17 @@ function createValidatedCommandDispatcher(
 }
 
 function createProjectionCommand(id: string) {
-  return SignalEnvelopes.command({
+  return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    schema: ProjectionStateSchema,
-    message: create(ProjectionStateSchema, {
-      id: "task-1",
-      name: "Task",
-      priority: 1,
-    }),
+    message: AnyMessages.pack(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, { id: "task-1", name: "Task", priority: 1 }),
+    ),
   });
 }
 
