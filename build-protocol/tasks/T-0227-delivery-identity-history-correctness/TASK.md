@@ -1,8 +1,8 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: In progress
+Status: Complete
 Start: `2026-09-10 16:26 WEST`
-End: Pending
+End: `2026-09-10 20:06 WEST`
 Baseline commit: `6d64848e0`
 Task log path: `build-protocol/tasks/T-0227-delivery-identity-history-correctness/TASK.md`
 Branch: `fix-delivery-identity-history-correctness`
@@ -13,8 +13,11 @@ Authoring sub-agent: Existing implementer role, explicitly dispatched as
 Reviewer sub-agents: Existing performance/reliability, style/maintainability,
 TypeScript/API, documentation, and final security reviewer roles
 Implementation commits: `094316a06`, `6a7edf4d6`, `054174f06`, `00f27b8f6`,
-`e1772bacf`, and `8c0d06a01`
-Final branch HEAD: Pending
+`e1772bacf`, `8c0d06a01`, `12980eb50`, `8ff5c1116`, `bf05955be`,
+`80b344a62`, `2f0f24075`, and `47c77cde6`
+Release-verified implementation HEAD: `47c77cde6`
+Final branch HEAD: closure record commit on
+`fix-delivery-identity-history-correctness`
 
 Task classification: High-risk
 Classification reason: the corrections affect new-signal identity, generated
@@ -447,7 +450,21 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   branch coverage inspection were all clean. `pnpm install --frozen-lockfile` then
   refreshed the dependency-state marker from the committed lockfile, and the pnpm-
   mediated server typecheck passed.
-- Final `verify:release` remains pending.
+- Release triage corrected stale version expectations, remaining new-signal factory
+  callers, tooling-only test types, dead Command sequence counters, and TSDoc policy
+  coverage. Delivery integration triage then corrected suppressed-row acknowledgement
+  and Admin pending-work accounting, including last-write-wins batch coalescing.
+- Final strengthened preflight passed 660/660 focused tests across 25 files, all four
+  affected-package typechecks, generated-build and tooling typechecks, ESLint across
+  36 changed TypeScript/MJS files, Proto source/current-output checks, TSDoc/API/audience
+  and release-readiness checks, formatting, diff hygiene, and changed-path coverage
+  inspection.
+- Final `pnpm verify:release` passed at `47c77cde6`: 290 files and 4,657/4,657 tests;
+  93.21% statements, 90.05% branches, 92.77% functions, and 94.37% lines. Proto,
+  generated build/tooling, lint, TSDoc, copyright, formatting, documentation, generated
+  cleanliness, logging containment, production dependencies, and release readiness all
+  passed. Expected volatile stand-registry warnings and two deprecated transitive
+  dependencies were non-failing.
 
 ## Open Risks And Follow-Up Routing
 
@@ -474,7 +491,23 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   were reviewed. `pnpm audit --prod --json` reported no advisories. Existing
   cleartext behavior when a loopback-default server is deliberately exposed and the
   bounded paging availability tradeoff are unchanged, documented residual constraints.
+- Post-release-failure reliability re-review: clean after retained suppression reports a
+  durable acknowledgement without endpoint dispatch and Admin counts only pending
+  `TO_DELIVER` transitions. Rebuilt managed readiness passed, including RED-28; assembly
+  regressions cover retained delivered upserts and repeated-identity batch coalescing.
+- Post-correction style/maintainability and documentation re-reviews: clean after exact
+  durable acknowledgement-ID assertions and pending-work TSDoc. A proposed edit to the
+  frozen upstream Admin Proto comments was rejected; the source was restored and all 50
+  pinned checksums passed.
+- Repeat final security review at release-verified `47c77cde6`: clean. The reviewer
+  reconfirmed durable-before-acknowledgement behavior, no endpoint dispatch for suppressed
+  duplicates, bounded local/remote admission, coalesced Admin transitions, and unchanged
+  tenant/session/shard boundaries.
 
 ## Integration Result
 
-Pending.
+Completed in the human-selected current checkout without a separate worktree. Version
+`2.0.0-snapshot.11` is unused at the verified registry boundary, all 27 workspace
+manifests and fixed internal pins are aligned, generated Proto package metadata is
+aligned, and the release-verified implementation tree is pushed to
+`origin/fix-delivery-identity-history-correctness`. No pull request or merge was created.
