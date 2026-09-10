@@ -138,6 +138,21 @@ that generated `BoardId`. An application can register another reversible
 mapping in `StringifierRegistry`. If compact Proto JSON encounters an `Any`,
 also call `setTypeRegistry()` with the application's generated `TypeRegistry`.
 
+## Query Projection state
+
+`EntityQuery` is the canonical typed query builder for descriptor-backed Entity state. Register
+only the generated columns a caller may use, then build predicates, masks, ordering, and an
+optional limit from that collection. The generated-column helper is intentionally generator-only:
+
+```ts
+import { EntityQuery } from "@spine-event-engine/core";
+import { GeneratedEntityColumns } from "@spine-event-engine/core/codegen";
+```
+
+Do not import `GeneratedEntityColumns` from the core root entry point. Application generator output
+uses the `/codegen` subpath to define columns; application code uses `EntityQuery` and those
+registered columns to build the query.
+
 ## 🚫 Throw a generated domain rejection
 
 The model generator creates typed rejection factories for top-level messages in

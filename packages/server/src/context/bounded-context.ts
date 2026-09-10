@@ -23,6 +23,7 @@ import type { Any } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   EventSchema,
+  EventContextSchema,
   BoundedContextNameSchema,
   TenantIdSchema,
   type Command,
@@ -501,6 +502,14 @@ interface BoundedContextAccess {
     subscriber: EventSubscriber,
   ): EventSubscription;
   postSystemEvent(context: BoundedContext, event: Event): Promise<void>;
+  postExternalEvent(context: BoundedContext, event: Event): Promise<void>;
+  observeProducedSignals(
+    context: BoundedContext,
+    observer: {
+      readonly onCommand?: (command: Readonly<Command>) => void;
+      readonly onEvent?: (event: Readonly<Event>) => void;
+    },
+  ): { readonly close: () => void };
   systemPairing(context: BoundedContext): SystemPairingSnapshot;
   tenantIndex(context: BoundedContext): TenantIndex;
   storageFactory(context: BoundedContext): StorageFactory;
@@ -1083,6 +1092,27 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
       throw new TypeError("System event posting requires a built BoundedContext instance.");
     }
     return post(event);
+  },
+
+  postExternalEvent(context: BoundedContext, event: Event): Promise<void> {
+    const imported = clone(EventSchema, event);
+    imported.context = clone(EventContextSchema, imported.context ?? create(EventContextSchema));
+    imported.context.external = true;
+    return context.eventBus().post(imported);
+  },
+
+  observeProducedSignals(
+    context: BoundedContext,
+    observer: {
+      readonly onCommand?: (command: Readonly<Command>) => void;
+      readonly onEvent?: (event: Readonly<Event>) => void;
+    },
+  ): { readonly close: () => void } {
+    const publisher = contextSignalPublishers.get(context);
+    if (publisher === undefined) {
+      throw new TypeError("Produced signal observation requires a built BoundedContext instance.");
+    }
+    return publisher.observe(observer);
   },
 
   systemPairing(context: BoundedContext): SystemPairingSnapshot {

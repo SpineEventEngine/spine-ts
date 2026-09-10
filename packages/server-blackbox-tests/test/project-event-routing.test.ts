@@ -14,11 +14,18 @@
 
 import { create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import type { Any } from "@bufbuild/protobuf/wkt";
+import {
+  AnyMessages,
+  RejectionThrowable,
+  SignalEnvelopes,
+  TypeUrls,
+} from "@spine-event-engine/core";
 import {
   CommandContextSchema,
   CommandIdSchema,
   type CommandContext,
+  type Event,
 } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
@@ -55,6 +62,7 @@ import {
   type ProjectCreated,
   type ProjectScheduled,
 } from "../generated/spine/server/testing/project_events_pb.js";
+import { ProjectSchedulingRejectedSchema } from "../generated/spine/server/testing/project_rejections_pb.js";
 import {
   CoordinationStateSchema,
   OrganizationIdSchema,
@@ -95,10 +103,19 @@ class Project extends Aggregate<ProjectId, typeof ProjectStateSchema, bigint> {
     });
   }
 
-  schedule(command: ScheduleProject): ProjectScheduled {
+  async schedule(command: ScheduleProject): Promise<ProjectScheduled> {
+    await Promise.resolve();
+    if (command.status === "rejected") {
+      throw RejectionThrowable.create(ProjectSchedulingRejectedSchema, { project: this.id });
+    }
     Project.scheduledStatuses.push(command.status);
     this.update((draft) => Object.assign(draft, { status: command.status }));
     return create(ProjectScheduledSchema, { project: this.id, status: command.status });
+  }
+
+  react(event: ProjectCreated): ProjectScheduled | undefined {
+    if (event.name !== "reactor-output") return undefined;
+    return create(ProjectScheduledSchema, { project: this.id, status: "reacted" });
   }
 }
 
@@ -147,6 +164,14 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
           methodName: "create",
           signalSchema: CreateProjectSchema,
           emittedSchemas: [ProjectCreatedSchema],
+          parameterCount: 1,
+          origin: "domestic",
+        },
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          signalSchema: ProjectCreatedSchema,
+          emittedSchemas: [ProjectScheduledSchema],
           parameterCount: 1,
           origin: "domestic",
         },
@@ -301,12 +326,23 @@ function queryState<Schema extends GenMessage<Message>>(
     throw new Error(`Query response does not contain ${schema.typeName}.`);
   return unpacked;
 }
+
+function producedMessage(
+  signal: { readonly message?: Any | undefined } | undefined,
+  name: string,
+): Any {
+  expect(signal, `${name} envelope is required.`).toBeDefined();
+  if (signal === undefined) throw new Error(`${name} envelope is required.`);
+  expect(signal.message, `${name} payload is required.`).toBeDefined();
+  if (signal.message === undefined) throw new Error(`${name} payload is required.`);
+  return signal.message;
+}
 function projectRepository(): Repository<typeof Project> {
   return new Repository({
     entityType: Project,
     schema: ProjectStateSchema,
     handlers: handlersFor<Project, typeof ProjectStateSchema>(Project, ProjectStateSchema),
-    events: [ProjectCreatedSchema, ProjectScheduledSchema],
+    events: [ProjectCreatedSchema, ProjectScheduledSchema, ProjectSchedulingRejectedSchema],
   });
 }
 function planningRepository(
@@ -372,15 +408,25 @@ function context(
   portfolioRouting: EventRouting<PortfolioId>,
   planning: PlanningId,
   staffing: StaffingId,
+  deliveredRejections?: Event[],
 ): BoundedContext {
-  return BoundedContext.singleTenant("project event routing")
+  const builder = BoundedContext.singleTenant("project event routing")
     .add(projectRepository())
     .add(planningRepository(routeTo(planning)))
     .add(staffingRepository(routeTo(staffing)))
     .add(coordinationRepository())
     .add(portfolioRepository(portfolioRouting))
-    .add(projectProjectionRepository())
-    .build();
+    .add(projectProjectionRepository());
+  if (deliveredRejections !== undefined) {
+    builder.addEventDispatcher({
+      messageSchemas: () => [ProjectSchedulingRejectedSchema],
+      dispatch: (event) => {
+        deliveredRejections.push(event);
+        return Promise.resolve();
+      },
+    });
+  }
+  return builder.build();
 }
 async function awaitProjectWorkflowStates(
   boundedContext: BoundedContext,
@@ -621,11 +667,47 @@ describe("project workflow Event routing", () => {
         create(CreateProjectSchema, { project, name: "roadmap" }),
       );
       expect(posted.kind).toBe("ok");
+      await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
+      const producedEvents = await blackBox.eventually(
+        () => blackBox.assertEvents(),
+        (events) => events.length === 2,
+      );
+      expect(
+        AnyMessages.unpack(
+          producedMessage(producedEvents[0], "ProjectCreated"),
+          ProjectCreatedSchema,
+        ),
+      ).toMatchObject({
+        project,
+        name: "roadmap",
+      });
+      expect(
+        AnyMessages.unpack(
+          producedMessage(producedEvents[1], "ProjectScheduled"),
+          ProjectScheduledSchema,
+        ),
+      ).toEqual(create(ProjectScheduledSchema, { project, status: "scheduled" }));
       const approved = await scope.post(
         ApproveProjectSchema,
         create(ApproveProjectSchema, { project, status: "approved" }),
       );
       expect(approved.kind).toBe("ok");
+      const producedCommands = await blackBox.eventually(
+        () => blackBox.assertCommands(),
+        (commands) => commands.length === 2,
+      );
+      expect(
+        AnyMessages.unpack(
+          producedMessage(producedCommands[0], "scheduled ScheduleProject"),
+          ScheduleProjectSchema,
+        ),
+      ).toEqual(create(ScheduleProjectSchema, { project, status: "scheduled" }));
+      expect(
+        AnyMessages.unpack(
+          producedMessage(producedCommands[1], "approved ScheduleProject"),
+          ScheduleProjectSchema,
+        ),
+      ).toEqual(create(ScheduleProjectSchema, { project, status: "approved" }));
       const results = await blackBox.eventually(
         () =>
           Promise.all([
@@ -670,6 +752,82 @@ describe("project workflow Event routing", () => {
         id: project,
         name: "roadmap",
       });
+    } finally {
+      await blackBox.close();
+    }
+  });
+
+  it("captures a committed Aggregate reactor Event once in production order", async () => {
+    const { project, planning, staffing, portfolio } = ids();
+    const blackBox = await BlackBox.from(context(routeTo(portfolio), planning, staffing));
+    try {
+      const posted = await blackBox
+        .asGuest()
+        .post(
+          CreateProjectSchema,
+          create(CreateProjectSchema, { project, name: "reactor-output" }),
+        );
+      expect(posted.kind).toBe("ok");
+      const events = await blackBox.eventually(
+        () => blackBox.assertEvents(),
+        (candidate) => candidate.length >= 3,
+      );
+      expect(
+        AnyMessages.unpack(producedMessage(events[0], "ProjectCreated"), ProjectCreatedSchema),
+      ).toMatchObject({ project, name: "reactor-output" });
+      expect(
+        AnyMessages.unpack(
+          producedMessage(events[1], "reacted ProjectScheduled"),
+          ProjectScheduledSchema,
+        ),
+      ).toEqual(create(ProjectScheduledSchema, { project, status: "reacted" }));
+      expect(
+        events.filter(
+          (event) =>
+            event.message !== undefined &&
+            AnyMessages.unpack(event.message, ProjectScheduledSchema)?.status === "reacted",
+        ),
+      ).toHaveLength(1);
+    } finally {
+      await blackBox.close();
+    }
+  });
+
+  it("delivers an async domain rejection without capturing it as a committed event", async () => {
+    const { project, planning, staffing, portfolio } = ids();
+    const deliveredRejections: Event[] = [];
+    const boundedContext = context(routeTo(portfolio), planning, staffing, deliveredRejections);
+    const blackBox = await BlackBox.from(boundedContext);
+    try {
+      const scope = blackBox.asGuest();
+      await scope.post(
+        CreateProjectSchema,
+        create(CreateProjectSchema, { project, name: "roadmap" }),
+      );
+      await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
+      const eventsBeforeRejection = await blackBox.eventually(
+        () => blackBox.assertEvents(),
+        (events) => events.length === 2,
+      );
+
+      await scope.post(
+        ScheduleProjectSchema,
+        create(ScheduleProjectSchema, { project, status: "rejected" }),
+      );
+      const rejection = await blackBox.eventually(
+        () => deliveredRejections[0],
+        (event) => event !== undefined,
+      );
+      expect(rejection, "ProjectSchedulingRejected envelope is required.").toBeDefined();
+      if (rejection === undefined)
+        throw new Error("ProjectSchedulingRejected envelope is required.");
+      expect(rejection.message, "ProjectSchedulingRejected payload is required.").toBeDefined();
+      if (rejection.message === undefined)
+        throw new Error("ProjectSchedulingRejected payload is required.");
+      expect(AnyMessages.unpack(rejection.message, ProjectSchedulingRejectedSchema)).toEqual(
+        create(ProjectSchedulingRejectedSchema, { project }),
+      );
+      expect(blackBox.assertEvents()).toEqual(eventsBeforeRejection);
     } finally {
       await blackBox.close();
     }

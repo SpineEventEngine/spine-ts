@@ -1175,6 +1175,74 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
+  it("rejects unsupported promise-like handler returns without weakening inner validation", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/invalid-promise-returns.ts",
+        handlerFixtureSource(
+          "ProcessManager",
+          "TaskListSchema",
+          `
+            @Assign
+            promiseLike(command: CreateTask): PromiseLike<TaskCreated> { throw new Error(String(command)); }
+
+            @Assign
+            thenable(command: CreateTask): { then(): void } { throw new Error(String(command)); }
+
+            @Assign
+            missingArgument(command: CreateTask): Promise { throw new Error(String(command)); }
+
+            @Assign
+            nested(command: CreateTask): Promise<Promise<TaskCreated>> { throw new Error(String(command)); }
+
+            @Assign
+            invalidInner(command: CreateTask): Promise<CreateTask> { throw new Error(String(command)); }
+          `,
+          `import { type CreateTask } from "../generated/commands_pb.js";`,
+        ),
+      ),
+    );
+
+    expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
+      ["UNSUPPORTED_RETURN_TYPE", "promiseLike"],
+      ["UNSUPPORTED_RETURN_TYPE", "thenable"],
+      ["UNSUPPORTED_RETURN_TYPE", "missingArgument"],
+      ["UNSUPPORTED_RETURN_TYPE", "nested"],
+      ["INVALID_EMITTED_SCHEMA", "invalidInner"],
+    ]);
+  });
+
+  it("rejects locally declared and imported Promise lookalikes", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/promise-lookalikes.ts", {
+        "src/promise-lookalikes.ts": handlerFixtureSource(
+          "ProcessManager",
+          "TaskListSchema",
+          `
+            @Assign
+            local(command: CreateTask): Promise<TaskCreated> { throw new Error(String(command)); }
+
+            @Assign
+            imported(command: CreateTask): ImportedPromise<TaskCreated> { throw new Error(String(command)); }
+          `,
+          `
+            import { type CreateTask } from "../generated/commands_pb.js";
+            interface Promise<Value> { readonly value: Value; }
+            import { type Promise as ImportedPromise } from "../promise-lookalike.js";
+          `,
+        ),
+        "promise-lookalike.ts": `export interface Promise<Value> { readonly value: Value; }`,
+      }),
+    );
+
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "UNSUPPORTED_RETURN_TYPE", methodName: "local" }),
+        expect.objectContaining({ code: "UNSUPPORTED_RETURN_TYPE", methodName: "imported" }),
+      ]),
+    );
+  });
+
   it("rejects void Assign and Command handlers", () => {
     const result = analyzeBuildHandlers(programWithSource("src/void.ts", voidEmissionSource));
 
@@ -1696,22 +1764,22 @@ const validTaskSource = `
 
   export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema, bigint> {
     @Subscribe
-    observeCreated(event: events.TaskCreated): void {
+    async observeCreated(event: events.TaskCreated): Promise<void> {
       void event;
     }
 
     @Command
-    renameAgain(event: events.TaskCreated, context: EventContext): Array<RenameTask> {
+    renameAgain(event: events.TaskCreated, context: EventContext): Promise<Array<RenameTask>> {
       throw new Error(String(event) + String(context));
     }
 
     @server.React
-    reactToCreated(event: events.TaskCreated): readonly [events.TaskRenamed, events.TaskCompleted] {
+    reactToCreated(event: events.TaskCreated): Promise<readonly [events.TaskRenamed, events.TaskCompleted]> {
       throw new Error(String(event));
     }
 
     @Subscribe
-    onRenamed(event: events.TaskRenamed): void {
+    async onRenamed(event: events.TaskRenamed): Promise<void> {
       void event;
     }
   }

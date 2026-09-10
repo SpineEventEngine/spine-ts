@@ -5746,3 +5746,52 @@ Consequences: Command, Event, state-update, Inbox, persistence, and duplicate-
 delivery paths preserve the same complete typed ID. Wrong message types and
 malformed packed data remain rejected. Existing durable encoding is retained,
 so this decision requires no storage migration.
+
+## D-0120: Permit Async Handlers And Read-Only Process Manager Queries
+
+Status: Accepted
+
+Date: 2026-09-09
+
+Task: T-0226 async handlers, Process Manager queries, and BlackBox signals
+
+Context:
+
+- Persistent projection reads and external service calls are asynchronous in
+  TypeScript, while build-time handler analysis currently accepts only direct
+  return types even though runtime invocation already awaits results.
+- Spine JVM `ProcessManager` implements `Querying` and may select eventually
+  consistent view state from its Bounded Context. Aggregate does not expose
+  that facility.
+- Spine TS already has typed Entity-query concepts and Stand execution, while
+  exposing the whole Stand would also expose forbidden state mutation.
+- The runner-neutral BlackBox lacks external-event intake and observation of
+  Commands and Events produced by the tested context.
+
+Decision:
+
+- Every signal-handler decorator accepts its existing legal return shape either
+  directly or through `Promise`; generated metadata does not distinguish the
+  two forms, and commit or rollback follows promise settlement.
+- `ProcessManager`, but not Aggregate, exposes a protected typed read-only query
+  capability. It includes the established ID, predicate, grouping, ordering,
+  mask, and limit concepts plus asynchronous execution; `findById()` and
+  `all()` are convenience operations rather than the complete contract.
+- Query execution uses Stand internally, binds the active bounded-context actor
+  and tenant, remains eventually consistent, and exposes no Stand mutation or
+  tenant-override operation. Shared query types must not introduce a
+  `server -> client-node` dependency or a second incompatible query language.
+- BlackBox gains scoped external-event posting and immutable snapshots of
+  context-produced Commands and committed Events. Inputs, received external
+  Events, and rolled-back output are excluded.
+
+Consequences:
+
+- Process Managers can await projection state while coordinating workflows;
+  Aggregates continue to base invariants on their own transactional state.
+- Entity transactions may remain open during asynchronous handler work.
+  External side effects are not rolled back and require idempotent or outbox
+  design where correctness depends on retry safety.
+- BlackBox can verify external routing and produced signals without depending
+  on a particular test runner. Snapshot reads are immediate; callers use the
+  existing eventual helper when background processing has not settled.

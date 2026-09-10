@@ -610,7 +610,7 @@ const HandlerSources = Object.freeze({
     if (origin === undefined) return undefined;
     const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
     const emittedSchemas = HandlerSources.emittedSchemaUses(
-      node.type,
+      node.type === undefined ? undefined : HandlerSources.unwrapOuterPromise(node.type, scope),
       handler.name,
       scope.imports,
     )?.map((schema) => schema.reference);
@@ -959,7 +959,8 @@ const HandlerSources = Object.freeze({
       return true;
     }
 
-    const envelope = HandlerSources.frameworkEnvelope(node.type, scope.imports);
+    const returnType = HandlerSources.unwrapOuterPromise(node.type, scope);
+    const envelope = HandlerSources.frameworkEnvelope(returnType, scope.imports);
     if (envelope !== undefined) {
       HandlerTypes.pushDiagnostic(
         scope,
@@ -972,7 +973,14 @@ const HandlerSources = Object.freeze({
       return true;
     }
 
-    return HandlerSources.validateEmittedReturn(node, decorator, scope, className, method);
+    return HandlerSources.validateEmittedReturn(
+      node,
+      decorator,
+      scope,
+      className,
+      method,
+      returnType,
+    );
   },
 
   validateSubscribeReturn(
@@ -981,7 +989,10 @@ const HandlerSources = Object.freeze({
     className: string,
     method: string | undefined,
   ): boolean {
-    if (node.type?.kind === ts.SyntaxKind.VoidKeyword) {
+    if (
+      node.type !== undefined &&
+      HandlerSources.isExplicitVoidType(HandlerSources.unwrapOuterPromise(node.type, scope))
+    ) {
       return false;
     }
 
@@ -1002,13 +1013,14 @@ const HandlerSources = Object.freeze({
     scope: AnalyzerScope,
     className: string,
     method: string | undefined,
+    returnType = node.type,
   ): boolean {
-    const schemas = HandlerSources.emittedSchemaUses(node.type, decorator, scope.imports);
+    const schemas = HandlerSources.emittedSchemaUses(returnType, decorator, scope.imports);
     if (schemas === undefined) {
       HandlerTypes.pushDiagnostic(
         scope,
         "UNSUPPORTED_RETURN_TYPE",
-        node.type ?? node,
+        returnType ?? node,
         `@${decorator} return type must resolve to generated schema references.`,
         className,
         method,
@@ -1020,7 +1032,7 @@ const HandlerSources = Object.freeze({
       HandlerTypes.pushDiagnostic(
         scope,
         "INVALID_EMITTED_SCHEMA",
-        node.type ?? node,
+        returnType ?? node,
         `@${decorator} return type must emit generated ${expected} schemas.`,
         className,
         method,
@@ -1031,7 +1043,7 @@ const HandlerSources = Object.freeze({
       HandlerTypes.pushDiagnostic(
         scope,
         "MISSING_EMITTED_SCHEMAS",
-        node.type ?? node,
+        returnType ?? node,
         `@${decorator} handlers must emit at least one schema.`,
         className,
         method,
@@ -1041,12 +1053,12 @@ const HandlerSources = Object.freeze({
     if (
       decorator === "React" &&
       schemas.length === 0 &&
-      !HandlerSources.isExplicitVoidType(node.type)
+      !HandlerSources.isExplicitVoidType(returnType)
     ) {
       HandlerTypes.pushDiagnostic(
         scope,
         "MISSING_EMITTED_SCHEMAS",
-        node.type ?? node,
+        returnType ?? node,
         "@React handlers must emit at least one schema unless they return explicit void.",
         className,
         method,
@@ -1468,6 +1480,47 @@ const HandlerSources = Object.freeze({
     }
 
     return typeNode;
+  },
+
+  unwrapOuterPromise(
+    typeNode: ts.TypeNode,
+    scope: AnalyzerScope,
+    walk: TypeWalk = HandlerSources.newTypeWalk(),
+  ): ts.TypeNode {
+    if (!HandlerSources.consumeTypeWalk(walk)) {
+      return typeNode;
+    }
+    const unwrapped = HandlerSources.unwrapReadonly(typeNode);
+    if (!ts.isTypeReferenceNode(unwrapped) || !ts.isIdentifier(unwrapped.typeName)) {
+      return typeNode;
+    }
+    const alias = scope.imports.localTypeAliases.get(unwrapped.typeName.text);
+    if (alias !== undefined) {
+      return (
+        HandlerSources.resolveAlias(unwrapped.typeName.text, alias, walk, (resolved) =>
+          HandlerSources.unwrapOuterPromise(resolved, scope, walk),
+        ) ?? typeNode
+      );
+    }
+    if (
+      unwrapped.typeName.text !== "Promise" ||
+      unwrapped.typeArguments?.length !== 1 ||
+      !HandlerSources.isBuiltInPromise(unwrapped, scope.program)
+    ) {
+      return typeNode;
+    }
+
+    return unwrapped.typeArguments[0] ?? typeNode;
+  },
+
+  isBuiltInPromise(typeNode: ts.TypeReferenceNode, program: ts.Program): boolean {
+    const symbol = program.getTypeChecker().getTypeFromTypeNode(typeNode).getSymbol();
+    return (
+      symbol?.getName() === "Promise" &&
+      symbol.declarations?.some((declaration) =>
+        program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
+      ) === true
+    );
   },
 
   isExplicitVoidType(typeNode: ts.TypeNode | undefined): boolean {

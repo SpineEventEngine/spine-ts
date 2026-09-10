@@ -89,8 +89,32 @@ const scalarColumns = EntityColumn.register(
     },
   }),
 );
+const selectedColumns: Pick<typeof columns, "priority" | "status"> = columns;
 
 describe("EntityQuery", () => {
+  it("compiles the shared DSL to a storage-neutral execution plan", () => {
+    const plan = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
+      .byId("task-1")
+      .where(EntityQuery.eq(columns.title, "Awaiting"))
+      .mask("title")
+      .orderBy(columns.priority, "desc")
+      .limit(10)
+      .buildPlan();
+
+    expect(plan).toEqual({
+      predicate: {
+        kind: "all",
+        predicates: [
+          { kind: "ids", ids: ["task-1"] },
+          { kind: "comparison", column: "title", operator: "equal", value: "Awaiting" },
+        ],
+      },
+      mask: { paths: ["title"] },
+      order: [{ column: "priority", direction: "desc" }],
+      limit: 10,
+    });
+  });
+
   it("compiles IDs, nested predicates, masks, repeated ordering, and a limit", () => {
     const query = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
       .byId("task-1", "task-2")
@@ -178,7 +202,7 @@ describe("EntityQuery", () => {
     expect(() =>
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
         .mask("missing" as "title")
-        .build(),
+        .buildPlan(),
     ).toThrow('Entity query mask path "missing" is not a state field.');
     expect(() =>
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).limit(0),
@@ -190,8 +214,24 @@ describe("EntityQuery", () => {
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(),
     ).toThrow("must not be empty");
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(undefined),
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(
+        undefined as never,
+      ),
     ).toThrow("must not be empty");
+    expect(() =>
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(
+        ...Array.from({ length: 1_001 }, (_, index) => `task-${String(index)}`),
+      ),
+    ).toThrow("at most 1000");
+  });
+
+  it("types ID filters from the selected Entity state", () => {
+    const query = EntityQuery.select({ schema: ProjectionStateSchema, columns, context });
+    query.byId("task-1");
+    // @ts-expect-error A number is not the selected ProjectionState string identifier.
+    query.byId(1);
+    // @ts-expect-error A generated message is not the selected ProjectionState string identifier.
+    query.byId(create(TimestampSchema));
   });
 
   it("packs descriptor and system column value families", () => {
@@ -286,7 +326,7 @@ describe("EntityQuery", () => {
     expect(() =>
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
         .where(cyclic as never)
-        .build(),
+        .buildPlan(),
     ).toThrow("must not contain cycles");
 
     let deep: unknown = leaf;
@@ -296,14 +336,14 @@ describe("EntityQuery", () => {
     expect(() =>
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
         .where(deep as never)
-        .build(),
+        .buildPlan(),
     ).toThrow("maximum depth 64");
 
     const wide = { kind: "all", predicates: new Array(10_001).fill(leaf) };
     expect(() =>
       EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
         .where(wide as never)
-        .build(),
+        .buildPlan(),
     ).toThrow("maximum node count 10000");
   });
 
@@ -385,6 +425,18 @@ describe("EntityQuery", () => {
       builder.orderBy(columns.status);
       // @ts-expect-error predicates from a different Projection cannot enter this builder.
       builder.where(eq(scalarColumns.doubleValue, 1));
+      const selectedBuilder = EntityQuery.select({
+        schema: ProjectionStateSchema,
+        columns: selectedColumns,
+        context,
+      });
+      selectedBuilder.orderBy(selectedColumns.priority);
+      // @ts-expect-error selected equality-only columns cannot be used for ordering.
+      selectedBuilder.orderBy(selectedColumns.status);
+      // @ts-expect-error foreign-schema columns cannot be used for ordering.
+      selectedBuilder.orderBy(scalarColumns.doubleValue);
+      // @ts-expect-error same-schema columns omitted from the selected collection cannot be ordered.
+      selectedBuilder.orderBy(columns.title);
     };
     void compileAssertions;
   });

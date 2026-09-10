@@ -21,10 +21,12 @@ describe("BlackBox lifecycle seams", () => {
     const subscriptionFailure = new Error("subscription");
     const clientFailure = new Error("client");
     const serverFailure = new Error("server");
+    let observationCloses = 0;
     const blackBox = BlackBoxTestAccess.create({
       client: { close: async () => Promise.reject(clientFailure) },
       server: { close: async () => Promise.reject(serverFailure) },
       subscriptions: [{ cancel: async () => Promise.reject(subscriptionFailure) }],
+      observation: { close: () => observationCloses++ },
     });
 
     const failure = await blackBox.close().catch((error: unknown) => error);
@@ -34,6 +36,11 @@ describe("BlackBox lifecycle seams", () => {
       clientFailure,
       serverFailure,
     ]);
+    expect(observationCloses).toBe(1);
+    expect(() => blackBox.assertCommands()).toThrow("closed");
+    expect(() => blackBox.assertEvents()).toThrow("closed");
+    await blackBox.close().catch(() => undefined);
+    expect(observationCloses).toBe(1);
   });
 
   it("cleans an acquired server when connection startup fails", async () => {

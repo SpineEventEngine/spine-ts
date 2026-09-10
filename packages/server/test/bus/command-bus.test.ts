@@ -22,6 +22,8 @@ import {
   CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
+  EventIdSchema,
+  EventSchema,
   UserIdSchema,
   file_spine_options,
 } from "@spine-event-engine/proto";
@@ -368,6 +370,43 @@ describe("CommandBus", () => {
     await publisher.drain();
 
     expect(observed).toEqual(["command-failing", "command-later"]);
+  });
+
+  it("does not observe rejection dispatch as committed produced output", async () => {
+    const bus = new CommandBus();
+    const events = eventBusAccess.createForgettingBus();
+    const publisher = new SignalPublisher(bus, events, events, "Tasks");
+    const observed: string[] = [];
+    publisher.observe({ onEvent: (event) => observed.push(event.id?.value ?? "missing") });
+
+    await publisher.publishRejectionEvent(
+      create(EventSchema, { id: create(EventIdSchema, { value: "rejected" }) }),
+    );
+    await publisher.publishEvent(
+      create(EventSchema, { id: create(EventIdSchema, { value: "committed" }) }),
+    );
+    await publisher.drain();
+
+    expect(observed).toEqual(["committed"]);
+  });
+
+  it("allows an event-only observer while publishing a produced command", async () => {
+    const observed: string[] = [];
+    const bus = new CommandBus([
+      createValidatedCommandDispatcher((command) => {
+        observed.push(command.id?.uuid ?? "missing");
+      }),
+    ]);
+    const events = eventBusAccess.createForgettingBus();
+    const publisher = new SignalPublisher(bus, events, events, "Tasks");
+    publisher.observe({ onEvent: () => observed.push("unexpected-event") });
+
+    await publisher.publishCommand(
+      createValidatedCommand("command-observed", "task-observed", "Observed"),
+    );
+    await publisher.drain();
+
+    expect(observed).toEqual(["command-observed"]);
   });
 
   it("drains a gated produced command admitted while closing and contains post-finish rejection", async () => {

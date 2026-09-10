@@ -43,6 +43,57 @@ Add generated entities with `BoundedContext.add(...)` and use
 context is single-tenant or multitenant by construction; select that mode
 before registering application handlers and storage.
 
+## Async handlers and Process Manager queries
+
+An `@Assign`, `@Command`, `@React`, or `@Subscribe` handler may return its
+usual result directly or through exactly one built-in `Promise<T>` layer. Its
+transaction remains open until that promise settles. Nested `Promise<Promise<T>>`
+results and structural or imported thenable lookalikes are rejected during handler
+analysis. Rejection rolls back framework state and suppresses produced output; it
+cannot roll back an external HTTP request or other side effect.
+
+Process Managers, but not Aggregates, have protected read-only `select()` during a handler:
+
+```ts
+import { EntityQuery, type EntityColumn } from "@spine-event-engine/core";
+import { ProcessManager } from "@spine-event-engine/server";
+
+type RequestView = import("@bufbuild/protobuf").Message<"RequestView"> & {
+  id: string;
+  status: string;
+  createdAt: number;
+};
+declare const RequestViewSchema: import("@bufbuild/protobuf/codegenv2").GenMessage<RequestView>;
+declare const RequestViewColumns: {
+  readonly status: EntityColumn<typeof RequestViewSchema, "status", string, "equal">;
+  readonly createdAt: EntityColumn<
+    typeof RequestViewSchema,
+    "createdAt",
+    number,
+    "equal" | "greaterThan"
+  >;
+};
+abstract class RequestCoordinator extends ProcessManager<string, typeof RequestViewSchema> {
+  protected async handleRequest(requestId: string): Promise<void> {
+    const pending = await this.select(RequestViewSchema, RequestViewColumns)
+      .where(EntityQuery.eq(RequestViewColumns.status, "pending"))
+      .orderBy(RequestViewColumns.createdAt, "asc")
+      .limit(10)
+      .read();
+    const one = await this.select(RequestViewSchema, RequestViewColumns).findById(requestId);
+    void [pending, one];
+  }
+}
+```
+
+These reads are eventually consistent. `limit()` may not exceed 1,000, and
+`all()` can be expensive for a large Projection; prefer a targeted, ordered,
+bounded query. Queries inherit the active handler's actor and tenant; there is
+no tenant override.
+
+Use `EntityQuery.all(...)` when every predicate must match and
+`EntityQuery.either(...)` when any branch may match.
+
 ## Native lifecycle and routing
 
 `Server.run()` is the standalone process form: it handles `SIGINT`/`SIGTERM`

@@ -84,6 +84,29 @@ import {
   type ValidationError,
 } from "@spine-event-engine/proto";
 
+export {
+  EntityColumn,
+  type EntityColumnDefinition,
+  type EntityColumnDefinitionEntry,
+  type EntityColumnOperator,
+  type EntityColumnValue,
+  type EntityColumnValueKind,
+  type EntityColumns,
+  type EntityComparison,
+  type EntityEqualityOperator,
+  type EntityOrderingOperator,
+} from "./entity/entity-column.js";
+export {
+  EntityQuery,
+  EntityQueryBuilder,
+  type EntityComparisonPredicate,
+  type EntityGroup,
+  type EntityQueryMaskPath,
+  type EntityQueryIdentifier,
+  type EntityQueryPredicateFor,
+  type EntityPredicate,
+} from "./query/entity-query.js";
+
 const EMPTY_VIOLATIONS: readonly [] = Object.freeze([]);
 const REDACTED_VALIDATION_DETAIL = "[redacted]";
 const VALIDATION_RUNTIME_FAILURE_MESSAGE = "Validation runtime failed.";

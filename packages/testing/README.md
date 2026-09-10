@@ -79,6 +79,31 @@ async function waitForReady(box: import("@spine-event-engine/testing").BlackBox)
 subscriptions created by the box, closes its client, and then closes the local
 server.
 
+## External events and produced signals
+
+Post an imported event through an actor scope, then inspect snapshots of
+context-produced output:
+
+```ts
+import type { Message, MessageShape } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { BlackBox } from "@spine-event-engine/testing";
+
+async function inspectPartnerEvent<Schema extends GenMessage<Message>>(
+  box: BlackBox,
+  schema: Schema,
+  event: MessageShape<Schema>,
+) {
+  await box.onBehalfOf("partner").postExternalEvent(schema, event);
+  return { commands: box.assertCommands(), events: box.assertEvents() };
+}
+```
+
+Snapshots are taken at the call time. Use `eventually()` when detached handling
+may produce output later. Input Commands, setup Events, received external
+Events, and rollback-path rejection Events are excluded; only admitted produced
+Commands and committed produced Events appear in their production order.
+
 ## ⚠️ Test boundary
 
 `BlackBox` tests one local Node process. It does not prove browser behavior,

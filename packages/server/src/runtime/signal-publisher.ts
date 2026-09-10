@@ -12,15 +12,20 @@
  * the License.
  */
 
-import type { Command, Event } from "@spine-event-engine/proto";
+import { clone } from "@bufbuild/protobuf";
+import { CommandSchema, EventSchema, type Command, type Event } from "@spine-event-engine/proto";
 import type { ILogLayer } from "loglayer";
 
 import { commandBusAccess, CommandBus } from "../bus/command-bus.js";
 import { eventBusAccess, EventBus } from "../bus/event-bus.js";
 import { emitServerError } from "../server/server-log.js";
 
-type PublicationKind = "command" | "event" | "system-event" | "stored-event";
+type PublicationKind = "command" | "event" | "rejection-event" | "system-event" | "stored-event";
 type PublisherState = "open" | "closing" | "closed";
+interface ProducedSignalObserver {
+  readonly onCommand?: (command: Readonly<Command>) => void;
+  readonly onEvent?: (event: Readonly<Event>) => void;
+}
 
 /**
  * Publishes produced signals and contains their detached dispatch failures for one context.
@@ -33,6 +38,7 @@ export class SignalPublisher {
   readonly #systemEventBus: EventBus;
   readonly #contextName: string;
   readonly #inFlight = new Set<Promise<void>>();
+  readonly #observers = new Set<ProducedSignalObserver>();
   #logger: ILogLayer | undefined;
   #state: PublisherState = "open";
 
@@ -76,6 +82,46 @@ export class SignalPublisher {
    */
   publishEvent(event: Event): Promise<void> {
     return this.#publish("event", event, () => eventBusAccess.postFollowUp(this.#eventBus, event));
+  }
+
+  /**
+   * Dispatches a rejection Event without recording it as committed produced output.
+   *
+   * @internal
+   * @param event The rejection Event envelope.
+   * @returns A promise that settles after detached rejection handling is contained.
+   */
+  publishRejectionEvent(event: Event): Promise<void> {
+    return this.#publish("rejection-event", event, () =>
+      eventBusAccess.postFollowUp(this.#eventBus, event),
+    );
+  }
+
+  /**
+   * Publishes one committed Aggregate Event and records its admission.
+   *
+   * Publishes the committed Event through stored-event handling without treating stored replay as
+   * newly produced output.
+   *
+   * @internal
+   * @param event The committed Aggregate Event envelope.
+   * @returns A promise that settles after stored dispatch handling is contained.
+   */
+  publishCommittedEvent(event: Event): Promise<void> {
+    return this.#publish("event", event, () => eventBusAccess.postStored(this.#eventBus, event));
+  }
+
+  /**
+   * Publishes a committed Aggregate reactor Event as stored follow-up work and records it.
+   *
+   * @internal
+   * @param event The committed follow-up Event envelope.
+   * @returns A promise that settles after stored follow-up dispatch is contained.
+   */
+  publishReactorEvent(event: Event): Promise<void> {
+    return this.#publish("event", event, () =>
+      eventBusAccess.postStoredFollowUp(this.#eventBus, event),
+    );
   }
 
   /**
@@ -185,6 +231,18 @@ export class SignalPublisher {
     this.#inFlight.clear();
   }
 
+  /**
+   * Observes admitted produced Commands and Events for package testing.
+   *
+   * @internal
+   * @param observer Receives cloned admitted signal envelopes.
+   * @returns A handle that stops this observation.
+   */
+  observe(observer: ProducedSignalObserver): { readonly close: () => void } {
+    this.#observers.add(observer);
+    return Object.freeze({ close: () => this.#observers.delete(observer) });
+  }
+
   #publish(
     kind: PublicationKind,
     signal: Command | Event,
@@ -197,6 +255,7 @@ export class SignalPublisher {
       });
       return rejected;
     }
+    this.#observe(kind, signal);
     const handled = Promise.resolve()
       .then(publish)
       .catch((error: unknown) => {
@@ -207,6 +266,17 @@ export class SignalPublisher {
       this.#inFlight.delete(handled);
     });
     return handled;
+  }
+
+  #observe(kind: PublicationKind, signal: Command | Event): void {
+    for (const observer of this.#observers) {
+      try {
+        if (kind === "command") observer.onCommand?.(clone(CommandSchema, signal as Command));
+        if (kind === "event") observer.onEvent?.(clone(EventSchema, signal as Event));
+      } catch {
+        // Testing observation cannot change produced-signal publication.
+      }
+    }
   }
 
   /**

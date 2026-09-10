@@ -27,13 +27,17 @@ import {
 import { SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
+  CommandSchema,
   EventContextSchema,
   EventIdSchema,
+  EventSchema,
   TenantIdSchema,
   UserIdSchema,
   ZoneIdSchema,
   type TenantId,
   type ZoneId,
+  type Command,
+  type Event,
 } from "@spine-event-engine/proto";
 import type { Query, Topic } from "@spine-event-engine/proto/client";
 import {
@@ -42,6 +46,7 @@ import {
   Server,
   type RunningServer,
 } from "@spine-event-engine/server";
+import { observeProducedSignals, postExternalEvent } from "@spine-event-engine/server/testing";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -120,11 +125,28 @@ export interface BlackBoxScope extends ClientRequest {
     schema: Schema,
     message: MessageShape<Schema>,
   ): Promise<void>;
+
+  /**
+   * Posts an Event through this scope's external-event intake path.
+   *
+   * @param schema The schema of the external event message.
+   * @param message The external event message.
+   * @returns A promise that resolves after external event admission.
+   */
+  postExternalEvent<Schema extends GenMessage<Message>>(
+    schema: Schema,
+    message: MessageShape<Schema>,
+  ): Promise<void>;
 }
 
 interface BlackBoxInternal {
   assertOpen(): void;
   postEvent<Schema extends GenMessage<Message>>(
+    actor: string,
+    schema: Schema,
+    message: MessageShape<Schema>,
+  ): Promise<void>;
+  postExternalEvent<Schema extends GenMessage<Message>>(
     actor: string,
     schema: Schema,
     message: MessageShape<Schema>,
@@ -146,6 +168,9 @@ export class BlackBox {
   readonly #intervalMs: number;
   readonly #waits = new AbortController();
   readonly #subscriptions = new Set<{ cancel(): Promise<void> }>();
+  readonly #commands: Command[] = [];
+  readonly #events: Event[] = [];
+  readonly #observation: { readonly close: () => void };
   #admitting = true;
   #closing: Promise<void> | undefined;
 
@@ -154,6 +179,7 @@ export class BlackBox {
     server: RunningServer,
     client: ClientKernel,
     options: NormalizedBlackBoxOptions,
+    observation?: { readonly close: () => void },
   ) {
     this.#context = context;
     this.#server = server;
@@ -162,11 +188,19 @@ export class BlackBox {
     this.#zoneId = clone(ZoneIdSchema, options.zoneId);
     this.#timeoutMs = options.timeoutMs;
     this.#intervalMs = options.intervalMs;
+    this.#observation =
+      observation ??
+      observeProducedSignals(context, {
+        onCommand: (command) => this.#commands.push(clone(CommandSchema, command)),
+        onEvent: (event) => this.#events.push(clone(EventSchema, event)),
+      });
     BlackBoxAccess.set(this, {
       assertOpen: () => {
         this.#assertOpen();
       },
       postEvent: (actor, schema, message) => this.#postEvent(actor, schema, message),
+      postExternalEvent: (actor, schema, message) =>
+        this.#postExternalEvent(actor, schema, message),
       track: (handle) => this.#track(handle),
       onRelease: (handle) => {
         this.#release(handle);
@@ -221,6 +255,26 @@ export class BlackBox {
   onBehalfOf(actor: string): BlackBoxScope {
     this.#assertOpen();
     return new Request(this, this.#client.onBehalfOf(actor), actor);
+  }
+
+  /**
+   * Returns cloned snapshots of produced Commands in admission order.
+   *
+   * @returns The Commands produced by this context.
+   */
+  assertCommands(): readonly Command[] {
+    this.#assertOpen();
+    return Object.freeze(this.#commands.map((command) => clone(CommandSchema, command)));
+  }
+
+  /**
+   * Returns cloned snapshots of committed produced Events in admission order.
+   *
+   * @returns The Events produced by this context.
+   */
+  assertEvents(): readonly Event[] {
+    this.#assertOpen();
+    return Object.freeze(this.#events.map((event) => clone(EventSchema, event)));
   }
 
   /**
@@ -289,6 +343,26 @@ export class BlackBox {
     );
   }
 
+  async #postExternalEvent<Schema extends GenMessage<Message>>(
+    actor: string,
+    schema: Schema,
+    message: MessageShape<Schema>,
+  ): Promise<void> {
+    this.#assertOpen();
+    await postExternalEvent(
+      this.#context,
+      SignalEnvelopes.event({
+        id: create(EventIdSchema, { value: randomUUID() }),
+        context: create(EventContextSchema, {
+          timestamp: BlackBoxClock.timestamp(),
+          origin: { case: "importContext", value: this.#actorContext(actor) },
+        }),
+        schema,
+        message,
+      }),
+    );
+  }
+
   #track<Handle extends { cancel(): Promise<void> }>(handle: Handle): Handle {
     this.#assertOpen();
     this.#subscriptions.add(handle);
@@ -320,6 +394,12 @@ export class BlackBox {
       } catch (error) {
         failures.push(error);
       }
+    }
+    try {
+      this.#observation.close();
+    } finally {
+      this.#commands.length = 0;
+      this.#events.length = 0;
     }
     if (failures.length > 0) throw new AggregateError(failures, "BlackBox cleanup failed.");
   }
@@ -404,6 +484,7 @@ export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
       resources.server as RunningServer,
       resources.client as ClientKernel,
       BlackBoxOptionsValues.defaults(),
+      resources.observation ?? Object.freeze({ close: () => undefined }),
     );
     for (const subscription of resources.subscriptions ?? [])
       BlackBoxAccess.get(blackBox).track(subscription);
@@ -487,14 +568,16 @@ const BlackBoxLifecycle = Object.freeze({
     server: RunningServer,
     client: ClientKernel,
     options: NormalizedBlackBoxOptions,
+    observation?: { readonly close: () => void },
   ): BlackBox {
     const Constructor = BlackBox as unknown as new (
       context: BoundedContext,
       server: RunningServer,
       client: ClientKernel,
       options: NormalizedBlackBoxOptions,
+      observation?: { readonly close: () => void },
     ) => BlackBox;
-    return new Constructor(context, server, client, options);
+    return new Constructor(context, server, client, options, observation);
   },
 });
 
@@ -518,6 +601,11 @@ export interface BlackBoxTestResources {
    * Lists subscriptions to close with the BlackBox.
    */
   readonly subscriptions?: readonly { cancel(): Promise<void> }[];
+
+  /**
+   * Stops produced-signal observation during BlackBox cleanup.
+   */
+  readonly observation?: { close(): void };
 }
 
 /**
@@ -581,6 +669,13 @@ class Request implements BlackBoxScope {
     message: MessageShape<Schema>,
   ): Promise<void> {
     return this.#internals.postEvent(this.#actor, schema, message);
+  }
+
+  postExternalEvent<Schema extends GenMessage<Message>>(
+    schema: Schema,
+    message: MessageShape<Schema>,
+  ): Promise<void> {
+    return this.#internals.postExternalEvent(this.#actor, schema, message);
   }
 
   send(query: Query | { build(): Query }, options?: ClientOperationOptions) {

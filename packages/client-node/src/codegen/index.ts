@@ -12,10 +12,12 @@
  * the License.
  */
 
+import { GeneratedEntityColumns as CoreGeneratedEntityColumns } from "@spine-event-engine/core/codegen";
+
 /**
  * Generated-code-only helpers for descriptor-backed Entity metadata.
  */
-export { GeneratedEntityColumns } from "../entity/entity-column.js";
+export const GeneratedEntityColumns: typeof CoreGeneratedEntityColumns = CoreGeneratedEntityColumns;
 export type {
   EntityColumnDefinition,
   EntityColumnDefinitionEntry,

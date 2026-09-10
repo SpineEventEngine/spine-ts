@@ -104,6 +104,7 @@ import { CommandValidationError } from "../bus/command-errors.js";
 import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
 import { type StandReadResult, type StandUpdate } from "../stand/stand.js";
+import { QueryReader } from "./query-reader.js";
 import { emitServerWarning } from "../server/server-log.js";
 import { managedChildSubscriptionAccess } from "../server/managed-child-subscription.js";
 import {
@@ -331,13 +332,13 @@ export class SpineServices {
     plan: NormalizedQueryPlan<unknown>,
     tenantId: TenantId | undefined,
   ): Promise<QueryResponse> {
-    const boundedPlan: NormalizedQueryPlan<unknown> = {
-      ...plan,
-      candidateLimit: ServiceValues.queryResultLimit,
-    };
-    const results = await route.context
-      .stand()
-      .queryPlanVersioned(route.schema, boundedPlan, ServiceValues.tenantOptions(tenantId));
+    const results = await QueryReader.read(
+      route.context.stand(),
+      route.schema,
+      plan,
+      tenantId,
+      ServiceValues.queryResultLimit,
+    );
 
     return create(QueryResponseSchema, {
       response: ServiceValues.okResponse(),

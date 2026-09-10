@@ -34,7 +34,7 @@ import {
   type EntityOrderingOperator,
 } from "../../src/index.js";
 import { GeneratedEntityColumns } from "../../src/codegen/index.js";
-import { EntityFieldClassification } from "../../codegen/entity-field-classification.mjs";
+import { EntityFieldClassification } from "../../src/query/entity-field-classification.js";
 
 const { classify: classifyEntityField } = EntityFieldClassification;
 
@@ -283,6 +283,19 @@ describe("EntityColumn", () => {
         messageType: classified.messageType,
       });
     }
+  });
+
+  it("recognizes 64-bit fields configured for string representation", () => {
+    const stringLong = {
+      ...ProjectionStateSchema.field.sequence,
+      longAsString: true,
+    };
+
+    expect(classifyEntityField(stringLong)).toMatchObject({
+      supported: true,
+      valueKind: "string",
+      comparison: "ordering",
+    });
   });
 
   it("rejects incomplete, mismatched, and incorrectly classified definitions", () => {

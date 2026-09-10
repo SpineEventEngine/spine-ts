@@ -135,6 +135,13 @@ describe("package artifacts", () => {
         ['export { core } from "@spine-event-engine/core@2.0.0-snapshot.2";\n'],
       ),
     ).toEqual(["@spine-event-engine/example archive text has prohibited specifier"]);
+    expect(
+      packedContentProblems(
+        { name: "@spine-event-engine/example" },
+        ["dist/index.js"],
+        ['export { core } from "@spine-event-engine/core@2.0.0-snapshot.10";\n'],
+      ),
+    ).toEqual([]);
   });
 
   it("orders internal runtime dependencies before dependents", () => {

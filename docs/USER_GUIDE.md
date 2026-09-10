@@ -270,6 +270,19 @@ their own focused tests.
 Continue with the [testing reference](../packages/testing/REFERENCE.md) for
 the complete BlackBox contract and limits.
 
+### Async handlers and Process Manager reads
+
+Handlers may return their normal result directly or as exactly one built-in `Promise<T>`.
+Nested promises and thenable lookalikes are rejected during handler analysis.
+The Entity transaction stays open until the promise settles. A rejected promise
+rolls back framework state and produced output, but it cannot undo an HTTP call
+or another external side effect already started by the handler.
+
+Only a Process Manager may use its protected `select()` read API. It reads an
+eventually consistent Projection, so an Aggregate must never use that data for
+an invariant. Order a bounded query before applying `limit()`; Process Manager
+reads have a maximum of 1,000 results.
+
 ## 7a. Connect bounded contexts with external events
 
 An integration broker is created privately for every bounded context. Declare

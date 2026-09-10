@@ -82,7 +82,15 @@ describe("storage API documentation inventory", () => {
     const checker = readFileSync(checkerPath, "utf8");
 
     expect(checker).toContain('const referencePath = join(outputDir, "reference");');
-    expect(checker).toContain('"--out", referencePath');
+    expect(checker).toContain("await application.generateDocs(project, referencePath)");
+  });
+
+  it("generates TypeDoc in the checker process", () => {
+    const checker = readFileSync(checkerPath, "utf8");
+
+    expect(checker).toContain("Application.bootstrapWithPlugins");
+    expect(checker).toContain("await application.convert()");
+    expect(checker).not.toContain("runBoundedCommand(");
   });
 
   it("includes every published SPI subpath in TypeDoc", () => {

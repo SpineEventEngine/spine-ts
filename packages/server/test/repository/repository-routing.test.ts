@@ -779,6 +779,32 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigin
   }
 }
 
+class TaskCommandRoutingAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignTask(command: TaskCommand): void {
+    void command;
+  }
+}
+
+class IdlessCommandProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  assignTask(command: TaskCommand): void {
+    void command;
+  }
+}
+
+class IdlessCommandProjectionAggregate extends Aggregate<
+  string,
+  typeof AggregateStateSchema,
+  bigint
+> {
+  assignTask(command: TaskCommand): void {
+    void command;
+  }
+}
+
 class ImplicitIdAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static calls = 0;
 
@@ -1440,6 +1466,69 @@ class AsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSche
         );
         resolve(createAggregateEvent(`event-${eventName}`, command.id, 0, eventName));
       };
+    });
+  }
+}
+
+class RejectedAsyncAssigneeAggregate extends Aggregate<
+  string,
+  typeof AggregateStateSchema,
+  bigint
+> {
+  static rejectCommand: ((error: Error) => void) | undefined;
+
+  static reset(): void {
+    this.rejectCommand = undefined;
+  }
+
+  assignTask(command: AggregateState): Promise<SpineEvent> {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: command.id,
+          name: `${command.name} provisional`,
+          archived: command.archived,
+        }),
+      ),
+    );
+    return new Promise((_resolve, reject) => {
+      RejectedAsyncAssigneeAggregate.rejectCommand = reject;
+    });
+  }
+}
+
+class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static readonly started: string[] = [];
+  static readonly releases: (() => void)[] = [];
+
+  static reset(): void {
+    this.started.splice(0);
+    this.releases.splice(0);
+  }
+
+  static releaseNext(): void {
+    const release = this.releases.shift();
+    if (release === undefined) throw new Error("Expected a pending async assignment.");
+    release();
+  }
+
+  assignTask(command: AggregateState): Promise<SpineEvent> {
+    SerialAsyncAssigneeAggregate.started.push(command.name);
+    return new Promise<void>((resolve) => {
+      SerialAsyncAssigneeAggregate.releases.push(resolve);
+    }).then(() => {
+      this.update((draft) =>
+        Object.assign(
+          draft,
+          create(AggregateStateSchema, {
+            id: command.id,
+            name: `${command.name} (applied)`,
+            archived: command.archived,
+          }),
+        ),
+      );
+      return createAggregateEvent(`event-${command.name}`, command.id, 0, command.name);
     });
   }
 }
@@ -3584,6 +3673,69 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("rolls back a rejected async aggregate assignment without publishing output", async () => {
+    RejectedAsyncAssigneeAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createRejectedAsyncAssigneeRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+    });
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const failure = new Error("async assignment failed");
+    const completion = context
+      .commandBus()
+      .post(createAggregateCommand("command-async-rejected", "task-async-rejected", "Async"));
+
+    await vi.waitFor(() => {
+      expect(RejectedAsyncAssigneeAggregate.rejectCommand).toBeTypeOf("function");
+    });
+    await expect(storage.readCurrent("task-async-rejected")).resolves.toBeUndefined();
+
+    RejectedAsyncAssigneeAggregate.rejectCommand?.(failure);
+    await expect(completion).resolves.toBeUndefined();
+    await expect(storage.readCurrent("task-async-rejected")).resolves.toBeUndefined();
+    await expect(eventStore.read()).resolves.toEqual([]);
+  });
+
+  it("serializes same-aggregate commands until each async assignment settles", async () => {
+    SerialAsyncAssigneeAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createSerialAsyncAssigneeRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const first = context
+      .commandBus()
+      .post(createAggregateCommand("command-first", "task-serial", "First"));
+
+    await vi.waitFor(() => {
+      expect(SerialAsyncAssigneeAggregate.started).toEqual(["First"]);
+    });
+    const second = context
+      .commandBus()
+      .post(createAggregateCommand("command-second", "task-serial", "Second"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(SerialAsyncAssigneeAggregate.started).toEqual(["First"]);
+
+    SerialAsyncAssigneeAggregate.releaseNext();
+    await vi.waitFor(() => {
+      expect(SerialAsyncAssigneeAggregate.started).toEqual(["First", "Second"]);
+    });
+    SerialAsyncAssigneeAggregate.releaseNext();
+    await Promise.all([first, second]);
+
+    await expect(eventStore.read()).resolves.toMatchObject([
+      { id: { value: "event-First" }, context: { version: { number: 1 } } },
+      { id: { value: "event-Second" }, context: { version: { number: 2 } } },
+    ]);
+  });
+
   it("resolves aggregate command execution after commit when stored-event dispatch later throws", async () => {
     const factory = new InMemoryStorageFactory();
     const dispatchAttempted = createSignal();
@@ -4363,14 +4515,14 @@ describe("repository signal routing", () => {
 
   it("supplies a default Command context to custom routing", () => {
     let observed: CommandContext | undefined;
-    const repository = createRoutingRepository(
-      CommandRouting.create<string>().route(AggregateStateSchema, (message, context) => {
+    const repository = createTaskCommandRoutingRepository(
+      CommandRouting.create<string>().route(TaskCommandSchema, (message, context) => {
         observed = context;
         return message.id;
       }),
     );
 
-    repository.routeCommand(createContextlessAggregateCommand("command-context-route", "task"));
+    repository.routeCommand(createContextlessGeneratedTaskCommand("command-context-route", "task"));
 
     expect(observed).toEqual(create(CommandContextSchema));
   });
@@ -5537,7 +5689,7 @@ describe("repository signal routing", () => {
   it("rejects idless process-manager commands before route, handler, or Stand write", async () => {
     RoutingProcessManager.reset();
     const context = BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
+      .add(createIdlessCommandProcessManagerRepository())
       .build();
 
     await expect(
@@ -6294,7 +6446,7 @@ describe("repository signal routing", () => {
   it("rejects idless Entity Inbox replay before handler or Stand write", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    const repository = createProcessManagerAssignRepository();
+    const repository = createIdlessCommandProcessManagerRepository();
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .withStorageFactory(factory)
@@ -9934,7 +10086,7 @@ describe("repository signal routing", () => {
 
   it("rejects aggregate commands without ids before tenant projection updates", async () => {
     const context = BoundedContext.multitenant("Tasks")
-      .add(createProjectionProducingRepository())
+      .add(createIdlessCommandProjectionRepository())
       .add(createExecutingProjectionRepository())
       .build();
 
@@ -10259,6 +10411,21 @@ function createRoutingRepository(
     handlers,
     ...(commandRouting === undefined ? {} : { commandRouting }),
     ...(eventRouting === undefined ? {} : { eventRouting }),
+  });
+}
+
+function createTaskCommandRoutingRepository(
+  commandRouting?: CommandRouting<string>,
+): Repository<typeof TaskCommandRoutingAggregate> {
+  return new Repository({
+    entityType: TaskCommandRoutingAggregate,
+    schema: AggregateStateSchema,
+    handlers: EntityHandlers.define(
+      TaskCommandRoutingAggregate,
+      AggregateStateSchema,
+      (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ),
+    ...(commandRouting === undefined ? {} : { commandRouting }),
   });
 }
 
@@ -11222,6 +11389,36 @@ function createAsyncAssigneeRepository(): Repository<typeof AsyncAssigneeAggrega
   });
 }
 
+function createRejectedAsyncAssigneeRepository(): Repository<
+  typeof RejectedAsyncAssigneeAggregate
+> {
+  const handlers = EntityHandlers.define(
+    RejectedAsyncAssigneeAggregate,
+    AggregateStateSchema,
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+  );
+
+  return new Repository({
+    entityType: RejectedAsyncAssigneeAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createSerialAsyncAssigneeRepository(): Repository<typeof SerialAsyncAssigneeAggregate> {
+  const handlers = EntityHandlers.define(
+    SerialAsyncAssigneeAggregate,
+    AggregateStateSchema,
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+  );
+
+  return new Repository({
+    entityType: SerialAsyncAssigneeAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
 function createBigintVersionRepository(): Repository<typeof BigintVersionAggregate> {
   const handlers = EntityHandlers.define(
     BigintVersionAggregate,
@@ -11299,6 +11496,34 @@ function createProcessManagerAssignRepository(
     handlers,
     events: [ProjectionEventSchema, TaskAlreadyDoneSchema],
     ...(commandRouting === undefined ? {} : { commandRouting }),
+  });
+}
+
+function createIdlessCommandProcessManagerRepository(): Repository<
+  typeof IdlessCommandProcessManager
+> {
+  return new Repository({
+    entityType: IdlessCommandProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers: EntityHandlers.define(
+      IdlessCommandProcessManager,
+      ProcessManagerStateSchema,
+      (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ),
+  });
+}
+
+function createIdlessCommandProjectionRepository(): Repository<
+  typeof IdlessCommandProjectionAggregate
+> {
+  return new Repository({
+    entityType: IdlessCommandProjectionAggregate,
+    schema: AggregateStateSchema,
+    handlers: EntityHandlers.define(
+      IdlessCommandProjectionAggregate,
+      AggregateStateSchema,
+      (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ),
   });
 }
 
@@ -11798,20 +12023,6 @@ function diagnosticTenants(events: readonly SpineEvent[]): readonly string[] {
   });
 }
 
-function createContextlessAggregateCommand(id: string, aggregateId: string, name = "Task") {
-  return create(CommandSchema, {
-    id: create(CommandIdSchema, { uuid: id }),
-    message: AnyMessages.pack(
-      AggregateStateSchema,
-      create(AggregateStateSchema, {
-        id: aggregateId,
-        name,
-        archived: false,
-      }),
-    ),
-  });
-}
-
 function createContextlessGeneratedTaskCommand(id: string, aggregateId: string, name = "Task") {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
@@ -11889,12 +12100,8 @@ function createIdlessAggregateCommand(aggregateId: string, name = "Task", tenant
       }),
     }),
     message: AnyMessages.pack(
-      AggregateStateSchema,
-      create(AggregateStateSchema, {
-        id: aggregateId,
-        name,
-        archived: false,
-      }),
+      TaskCommandSchema,
+      create(TaskCommandSchema, { id: aggregateId, name }),
     ),
   });
 }
@@ -11986,7 +12193,8 @@ function readAggregateId(command: SpineCommand): string {
   const message =
     command.message === undefined
       ? undefined
-      : AnyMessages.unpack(command.message, AggregateStateSchema);
+      : (AnyMessages.unpack(command.message, AggregateStateSchema) ??
+        AnyMessages.unpack(command.message, TaskCommandSchema));
 
   if (message === undefined) {
     const validated =
