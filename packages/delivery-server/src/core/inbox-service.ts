@@ -73,8 +73,11 @@ export const InboxHandlers: Readonly<{
     writeOne: async (request, context) => {
       const message = InboxMessages.required(request.message);
       await admission.run(context.signal, () => {
-        for (const inserted of state.putAll([message]))
-          onMessageTransition?.(InboxShards.required(inserted.id?.index), 1);
+        const prior = state.messages.get(DeliveryMessages.key(message.message));
+        state.putAll([message]);
+        const delta = InboxTransitions.delta(prior, message.message);
+        if (delta !== 0)
+          onMessageTransition?.(InboxShards.required(message.message.id?.index), delta);
       });
       return {};
     },
@@ -87,15 +90,23 @@ export const InboxHandlers: Readonly<{
         shard,
       );
       await admission.run(context.signal, () => {
-        for (const inserted of state.putAll(messages))
-          onMessageTransition?.(InboxShards.required(inserted.id?.index), 1);
+        const final = new Map<string, (typeof messages)[number]>();
+        for (const message of messages) final.set(DeliveryMessages.key(message.message), message);
+        const prior = new Map([...final.entries()].map(([key]) => [key, state.messages.get(key)]));
+        state.putAll(messages);
+        for (const [key, message] of final) {
+          const delta = InboxTransitions.delta(prior.get(key), message.message);
+          if (delta !== 0)
+            onMessageTransition?.(InboxShards.required(message.message.id?.index), delta);
+        }
       });
       return {};
     },
     removeOne: async (request, context) => {
       const message = InboxMessages.required(request.message);
       await admission.run(context.signal, () => {
-        if (state.delete(message.message))
+        const prior = state.messages.get(DeliveryMessages.key(message.message));
+        if (state.delete(message.message) && prior?.status === InboxMessageStatus.TO_DELIVER)
           onMessageTransition?.(InboxShards.required(message.message.id?.index), -1);
       });
       return {};
@@ -109,9 +120,11 @@ export const InboxHandlers: Readonly<{
         shard,
       );
       await admission.run(context.signal, () => {
-        for (const message of messages)
-          if (state.delete(message.message))
+        for (const message of messages) {
+          const prior = state.messages.get(DeliveryMessages.key(message.message));
+          if (state.delete(message.message) && prior?.status === InboxMessageStatus.TO_DELIVER)
             onMessageTransition?.(InboxShards.required(message.message.id?.index), -1);
+        }
       });
       return {};
     },
@@ -400,6 +413,14 @@ const InboxTime: Readonly<{
 /**
  * Bounds Inbox responses and creates RPC errors.
  */
+const InboxTransitions = Object.freeze({
+  delta(prior: InboxMessage | undefined, next: InboxMessage): 1 | -1 | 0 {
+    const wasPending = prior?.status === InboxMessageStatus.TO_DELIVER;
+    const isPending = next.status === InboxMessageStatus.TO_DELIVER;
+    return isPending === wasPending ? 0 : isPending ? 1 : -1;
+  },
+});
+
 const InboxResponses: Readonly<{
   // prettier-ignore
 

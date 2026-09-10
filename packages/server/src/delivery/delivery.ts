@@ -426,7 +426,11 @@ export class Delivery {
             blockedTargets.add(target);
             continue;
           }
-          if (admitted === undefined) continue;
+          if (admitted === undefined) {
+            statistics.delivered += 1;
+            options.onDelivered?.(message);
+            continue;
+          }
           try {
             statistics.accepted += 1;
             await dispatch(admitted);

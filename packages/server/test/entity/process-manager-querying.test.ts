@@ -237,9 +237,11 @@ function processManagerRepository(): Repository<typeof QueryProcessManager> {
   });
 }
 
-function queryCommand(id: string, name: string, tenant?: string) {
+function queryCommand(id: string, name: string, tenant?: string, suffix?: string) {
   return SignalEnvelopes.command({
-    id: create(CommandIdSchema, { uuid: `query-${id}-${name}` }),
+    id: create(CommandIdSchema, {
+      uuid: `query-${id}-${name}${suffix === undefined ? "" : `-${suffix}`}`,
+    }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
         actor: create(UserIdSchema, { value: "query-user" }),
@@ -488,7 +490,7 @@ describe("Process Manager querying", () => {
           { lifecycle: { archived: false, deleted: true } },
         );
 
-      await context.commandBus().post(queryCommand("manager", "all"));
+      await context.commandBus().post(queryCommand("manager", "all", undefined, "second"));
       expect(QueryProcessManager.results.map((state) => state.name).sort()).toEqual([
         "archived",
         "live",

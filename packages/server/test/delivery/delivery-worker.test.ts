@@ -51,22 +51,23 @@ describe("Delivery direct worker", () => {
     await delivery.inbox.receive({
       ...firstInput,
       signal,
-      keepUntil: new Date(Date.now() + 60_000),
     });
     await delivery.inbox.receive({
       ...duplicateInput,
       signal,
-      keepUntil: new Date(Date.now() + 60_000),
     });
 
     const delivered: string[] = [];
+    const acknowledged: string[] = [];
     await delivery.drain(shard, {
       onMessage: (row) => {
         delivered.push(row.id.value);
       },
+      onDelivered: (row) => acknowledged.push(row.id.value),
     });
 
     expect(delivered).toHaveLength(1);
+    expect(acknowledged).toHaveLength(2);
   });
 
   it("retains an admission failure without endpoint dispatch or acknowledgement", async () => {

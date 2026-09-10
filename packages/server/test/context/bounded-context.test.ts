@@ -1122,7 +1122,6 @@ describe("BoundedContext assembly", () => {
       .add(ReplayTaskAggregate)
       .add(ReplayTaskProcessManager)
       .buildAsync();
-
     try {
       const descriptor = internalDeliveryDescriptor(context);
       const aggregateType = TypeUrls.derive(AggregateStateSchema);
@@ -1788,7 +1787,10 @@ describe("BoundedContext assembly", () => {
       "generated process-manager produced event dispatch",
     );
     expect(observed).toHaveLength(1);
-    expect(observed[0]?.id).toEqual(create(EventIdSchema, { value: "command-generated-pm-1" }));
+    expect(observed[0]?.id?.value).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(observed[0]?.id?.value).not.toBe("command-generated-pm-1");
     const message = observed[0]?.message;
     if (message === undefined) {
       throw new Error("Expected a generated process-manager produced event.");
