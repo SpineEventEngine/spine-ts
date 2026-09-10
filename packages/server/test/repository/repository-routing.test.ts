@@ -5299,18 +5299,20 @@ describe("repository signal routing", () => {
     const repository = createMessageIdTaskRepository();
     const taskId = create(TaskIdSchema, { value: "message-id-task" });
     const route = repository.routeEvent(
-      SignalEnvelopes.event({
+      create(EventSchema, {
         id: create(EventIdSchema, { value: "event-message-id-task" }),
         context: create(EventContextSchema, {
           producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "producer" })),
           version: create(VersionSchema, { number: 1 }),
         }),
-        schema: TaskCreatedSchema,
-        message: create(TaskCreatedSchema, {
-          id: taskId,
-          taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
-          title: "Message ID task",
-        }),
+        message: AnyMessages.pack(
+          TaskCreatedSchema,
+          create(TaskCreatedSchema, {
+            id: taskId,
+            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
+            title: "Message ID task",
+          }),
+        ),
       }),
     );
 
@@ -5326,18 +5328,20 @@ describe("repository signal routing", () => {
     const repository = createMessageIdTaskRepository();
     const taskId = create(TaskIdSchema, { value: "message-producer-task" });
     const route = repository.routeEvent(
-      SignalEnvelopes.event({
+      create(EventSchema, {
         id: create(EventIdSchema, { value: "event-message-producer-task" }),
         context: create(EventContextSchema, {
           producerId: AnyMessages.pack(TaskIdSchema, taskId),
           version: create(VersionSchema, { number: 1 }),
         }),
-        schema: TaskCreatedSchema,
-        message: create(TaskCreatedSchema, {
-          id: taskId,
-          taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
-          title: "Message producer task",
-        }),
+        message: AnyMessages.pack(
+          TaskCreatedSchema,
+          create(TaskCreatedSchema, {
+            id: taskId,
+            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
+            title: "Message producer task",
+          }),
+        ),
       }),
     );
 
@@ -5351,18 +5355,20 @@ describe("repository signal routing", () => {
 
     expect(
       repository.routeEvent(
-        SignalEnvelopes.event({
+        create(EventSchema, {
           id: create(EventIdSchema, { value: "event-message-producer-mismatch" }),
           context: create(EventContextSchema, {
             producerId: AnyMessages.pack(TaskIdSchema, producerId),
             version: create(VersionSchema, { number: 1 }),
           }),
-          schema: TaskCreatedSchema,
-          message: create(TaskCreatedSchema, {
-            id: targetId,
-            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
-            title: "Mismatched message producer task",
-          }),
+          message: AnyMessages.pack(
+            TaskCreatedSchema,
+            create(TaskCreatedSchema, {
+              id: targetId,
+              taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
+              title: "Mismatched message producer task",
+            }),
+          ),
         }),
       ).entityIds,
     ).toEqual([producerId]);
@@ -5373,7 +5379,7 @@ describe("repository signal routing", () => {
 
     expect(() =>
       repository.routeEvent(
-        SignalEnvelopes.event({
+        create(EventSchema, {
           id: create(EventIdSchema, { value: "event-malformed-message-producer" }),
           context: create(EventContextSchema, {
             producerId: create(AnySchema, {
@@ -5381,12 +5387,14 @@ describe("repository signal routing", () => {
               value: new Uint8Array([255]),
             }),
           }),
-          schema: TaskCreatedSchema,
-          message: create(TaskCreatedSchema, {
-            id: create(TaskIdSchema, { value: "first-field-task" }),
-            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
-            title: "Malformed producer",
-          }),
+          message: AnyMessages.pack(
+            TaskCreatedSchema,
+            create(TaskCreatedSchema, {
+              id: create(TaskIdSchema, { value: "first-field-task" }),
+              taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
+              title: "Malformed producer",
+            }),
+          ),
         }),
       ),
     ).toThrow(/readable compatible producer ID/);
@@ -5398,7 +5406,7 @@ describe("repository signal routing", () => {
 
     expect(() =>
       repository.routeEvent(
-        SignalEnvelopes.event({
+        create(EventSchema, {
           id: create(EventIdSchema, { value: "event-scalar-producer-mismatch" }),
           context: create(EventContextSchema, {
             producerId: AnyMessages.pack(
@@ -5407,12 +5415,14 @@ describe("repository signal routing", () => {
             ),
             version: create(VersionSchema, { number: 1 }),
           }),
-          schema: TaskCreatedSchema,
-          message: create(TaskCreatedSchema, {
-            id: targetId,
-            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
-            title: "Mismatched scalar producer task",
-          }),
+          message: AnyMessages.pack(
+            TaskCreatedSchema,
+            create(TaskCreatedSchema, {
+              id: targetId,
+              taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
+              title: "Mismatched scalar producer task",
+            }),
+          ),
         }),
       ),
     ).toThrow(/compatible with the Entity state/);
@@ -5424,18 +5434,20 @@ describe("repository signal routing", () => {
 
     expect(() =>
       repository.routeEvent(
-        SignalEnvelopes.event({
+        create(EventSchema, {
           id: create(EventIdSchema, { value: "event-scalar-producer-match" }),
           context: create(EventContextSchema, {
             producerId: AnyMessages.pack(TaskIdSchema, id),
             version: create(VersionSchema, { number: 1 }),
           }),
-          schema: TaskCreatedSchema,
-          message: create(TaskCreatedSchema, {
-            id,
-            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
-            title: "Matching scalar producer task",
-          }),
+          message: AnyMessages.pack(
+            TaskCreatedSchema,
+            create(TaskCreatedSchema, {
+              id,
+              taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
+              title: "Matching scalar producer task",
+            }),
+          ),
         }),
       ),
     ).toThrow(/compatible with the Entity state/);
@@ -5446,16 +5458,18 @@ describe("repository signal routing", () => {
 
     expect(() =>
       repository.routeEvent(
-        SignalEnvelopes.event({
+        create(EventSchema, {
           id: create(EventIdSchema, { value: "event-wrong-message-id-type" }),
           context: create(EventContextSchema, {
             producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "producer" })),
             version: create(VersionSchema, { number: 1 }),
           }),
-          schema: WrongIdRouteEventSchema,
-          message: create(WrongIdRouteEventSchema, {
-            id: create(UserIdSchema, { value: "message-id-task" }),
-          }),
+          message: AnyMessages.pack(
+            WrongIdRouteEventSchema,
+            create(WrongIdRouteEventSchema, {
+              id: create(UserIdSchema, { value: "message-id-task" }),
+            }),
+          ),
         }),
       ),
     ).toThrow(/TaskId/);
