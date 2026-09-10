@@ -202,12 +202,6 @@ type MapIdCommand = Message<"MapIdCommand"> & {
   id: Record<string, string>;
 };
 
-type UuidMessageIdState = Message<"UuidMessageIdState"> & {
-  id?: CommandId;
-  name: string;
-  priority: number;
-};
-
 type UuidMessageIdAggregateState = Message<"UuidMessageIdAggregateState"> & {
   id?: CommandId;
   name: string;
@@ -590,10 +584,6 @@ const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
 ) as GenMessage<ProjectionState>;
-const UuidMessageIdStateSchema = fixtureMessageSchema<UuidMessageIdState>(
-  fileUuidMessageIdFixture,
-  "UuidMessageIdState",
-);
 const UuidMessageIdAggregateStateSchema = fixtureMessageSchema<UuidMessageIdAggregateState>(
   fileUuidMessageIdFixture,
   "UuidMessageIdAggregateState",
@@ -920,7 +910,7 @@ class Int64MessageIdProjection extends Projection<
 class UuidMessageIdAggregate extends Aggregate<
   CommandId,
   typeof UuidMessageIdAggregateStateSchema,
-  number
+  bigint
 > {
   assign(command: UuidMessageIdAggregateState): void {
     this.update((draft) => Object.assign(draft, command));
@@ -940,7 +930,7 @@ class CompositeRouteProjection extends Projection<
 class CompositeRouteAggregate extends Aggregate<
   CompositeRouteId,
   typeof CompositeRouteAggregateStateSchema,
-  number
+  bigint
 > {
   assign(command: CompositeRouteAggregateState): void {
     this.update((draft) => Object.assign(draft, command));
@@ -2828,11 +2818,11 @@ describe("repository signal routing", () => {
     expect(ManagedTaskAggregate.assigneeCalls).toBe(1);
     await expect(eventStore.read()).resolves.toMatchObject([
       {
-        id: { value: expect.stringMatching(/.+/) },
         context: { version: { number: 1 } },
       },
     ]);
     const [stored] = await eventStore.read();
+    expect(stored?.id?.value).toMatch(UUID_PATTERN);
     expect(readReadableProducerId(stored)).toBe("task-managed");
     await expect(storage.readCurrent("task-managed")).resolves.toMatchObject({
       entityId: "task-managed",
@@ -2951,9 +2941,8 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
 
     expect(ExecutingTaskAggregate.directUpdateCalls).toBe(0);
-    await expect(waitForStoredEvents(eventStore, 1)).resolves.toMatchObject([
-      { id: { value: expect.stringMatching(/.+/) } },
-    ]);
+    const [stored] = await waitForStoredEvents(eventStore, 1);
+    expect(stored?.id?.value).toMatch(UUID_PATTERN);
     await expect(storage.readCurrent("task-applier-rejected")).resolves.toBeUndefined();
     ExecutingTaskAggregate.reset();
   });
@@ -3936,10 +3925,10 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
     await expect(eventStore.read()).resolves.toMatchObject([
       {
-        id: { value: expect.stringMatching(/.+/) },
         context: { version: { number: 1 } },
       },
     ]);
+    expect((await eventStore.read())[0]?.id?.value).toMatch(UUID_PATTERN);
   });
 
   it("preserves a returned framework envelope without reconstructing aggregate state", async () => {
@@ -4197,7 +4186,6 @@ describe("repository signal routing", () => {
     const producedCommand = produced.at(0);
     if (producedCommand === undefined) throw new Error("Expected a produced command.");
     expect(producedCommand).toMatchObject({
-      id: { uuid: expect.stringMatching(/.+/) },
       context: create(CommandContextSchema, {
         actorContext,
         origin: create(OriginSchema, {
@@ -4213,6 +4201,7 @@ describe("repository signal routing", () => {
         }),
       }),
     });
+    expect(producedCommand.id?.uuid).toMatch(UUID_PATTERN);
     if (producedCommand.message === undefined) throw new Error("Expected a produced payload.");
     expect(AnyMessages.unpack(producedCommand.message, ProducedTaskCommandSchema)).toEqual(
       create(ProducedTaskCommandSchema, {
@@ -6625,7 +6614,8 @@ describe("repository signal routing", () => {
     );
     const stored = await eventStore.read();
 
-    expect(stored).toMatchObject([{ id: { value: expect.stringMatching(/.+/) } }]);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]?.id?.value).toMatch(UUID_PATTERN);
     expect(stored[0]?.context?.timestamp).toBeDefined();
     expect(readReadableProducerId(stored[0])).toBe("pm-dispatch");
     expect(stored[0]?.context?.version).toEqual(create(VersionSchema, { number: 1 }));
@@ -6703,13 +6693,13 @@ describe("repository signal routing", () => {
     expect(storedEvents).toHaveLength(eventsBeforeRejection.length + 1);
     expect(rejectionEvents).toHaveLength(1);
     expect(event).toMatchObject({
-      id: { value: expect.stringMatching(/.+/) },
       context: {
         rejection: {
           command: { id: { uuid: "command-pm-rejected" } },
         },
       },
     });
+    expect(event?.id?.value).toMatch(UUID_PATTERN);
     expect(readReadableProducerId(event)).toBe("pm-rejected");
     expect(event?.context?.version).toBeUndefined();
     await expect(

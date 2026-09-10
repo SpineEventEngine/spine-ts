@@ -60,7 +60,11 @@ describe("Delivery direct worker", () => {
     });
 
     const delivered: string[] = [];
-    await delivery.drain(shard, { onMessage: (row) => delivered.push(row.id.value) });
+    await delivery.drain(shard, {
+      onMessage: (row) => {
+        delivered.push(row.id.value);
+      },
+    });
 
     expect(delivered).toHaveLength(1);
   });

@@ -19,6 +19,7 @@ import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-no
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ErrorSchema,
+  CommandIdSchema,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
@@ -2064,7 +2065,7 @@ async function expectTaskAssigneeEventually(
 
 function createCommandMetadata(commandId: string) {
   return {
-    id: signalMetadata.commandId(commandId),
+    id: create(CommandIdSchema, { uuid: commandId }),
     context: signalMetadata.commandContext({
       actorContext: createActorContext(),
     }),
