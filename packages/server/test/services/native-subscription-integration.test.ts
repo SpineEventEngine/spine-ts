@@ -16,7 +16,6 @@ import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import {
   AnyMessages,
-  SignalEnvelopes,
   TypeUrls,
   type MessageSchema,
 } from "@spine-event-engine/core";
@@ -24,8 +23,10 @@ import {
   ActorContextSchema,
   CommandContextSchema,
   CommandIdSchema,
+  CommandSchema,
   EventContextSchema,
   EventIdSchema,
+  EventSchema,
   TenantIdSchema,
   UserIdSchema,
 } from "@spine-event-engine/proto";
@@ -297,51 +298,59 @@ function createEntityTopic(schema: MessageSchema, id: string): Topic {
 }
 
 function createAggregateCommand(id: string, name: string) {
-  return SignalEnvelopes.command({
+  return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: `command-${id}` }),
     context: create(CommandContextSchema, { actorContext: createActorContext() }),
-    schema: NativeAggregateStateSchema,
-    message: create(NativeAggregateStateSchema, { id, name, archived: false }),
+    message: AnyMessages.pack(
+      NativeAggregateStateSchema,
+      create(NativeAggregateStateSchema, { id, name, archived: false }),
+    ),
   });
 }
 
 function createProjectionEvent(id: string, name: string) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
       producerId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
     }),
-    schema: NativeProjectionStateSchema,
-    message: create(NativeProjectionStateSchema, { id, name, priority: 1 }),
+    message: AnyMessages.pack(
+      NativeProjectionStateSchema,
+      create(NativeProjectionStateSchema, { id, name, priority: 1 }),
+    ),
   });
 }
 
 function createProjectionTriggerEvent(id: string, title: string) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
       producerId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
     }),
-    schema: TaskCreatedSchema,
-    message: create(TaskCreatedSchema, {
-      id: create(TaskIdSchema, { value: id }),
-      title,
-      taskListId: create(TaskListIdSchema, { value: id }),
-    }),
+    message: AnyMessages.pack(
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id: create(TaskIdSchema, { value: id }),
+        title,
+        taskListId: create(TaskListIdSchema, { value: id }),
+      }),
+    ),
   });
 }
 
 function createAggregateEvent(id: string, name: string) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
       producerId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
     }),
-    schema: NativeAggregateStateSchema,
-    message: create(NativeAggregateStateSchema, { id, name, archived: false }),
+    message: AnyMessages.pack(
+      NativeAggregateStateSchema,
+      create(NativeAggregateStateSchema, { id, name, archived: false }),
+    ),
   });
 }
 
