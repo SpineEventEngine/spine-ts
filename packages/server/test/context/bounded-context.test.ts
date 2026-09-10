@@ -151,6 +151,10 @@ type TaskEvent = Message<"TaskEvent"> & {
   name: string;
 };
 
+type ReviewStarted = Message<"ReviewStarted"> & {
+  id: string;
+};
+
 type ProcessManagerState = Message<"ProcessManagerState"> & {
   id: string;
   queue: string;
@@ -202,7 +206,7 @@ const TaskEventSchema = messageDesc(fileHandlerRegistryEventsFixture, 1) as GenM
 const ReviewStartedSchema = messageDesc(
   fileHandlerRegistryEventsFixture,
   0,
-) as GenMessage<TaskEvent>;
+) as GenMessage<ReviewStarted>;
 
 const fileEntityVisibilityFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
@@ -215,18 +219,18 @@ const ProcessManagerStateSchema = messageDesc(
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class DuplicateTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class ReplayTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
-  assignTask(command: TaskCommand): AggregateState {
+  assignTask(command: TaskCommand): ReviewStarted {
     this.update((draft) =>
       Object.assign(
         draft,
         create(AggregateStateSchema, { id: command.id, name: command.name, archived: false }),
       ),
     );
-    return create(AggregateStateSchema, { id: command.id, name: command.name, archived: false });
+    return create(ReviewStartedSchema, { id: command.id });
   }
 }
 class GeneratedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignProjection(command: TaskCommand): ProjectionState {
+  assignProjection(command: TaskCommand): TaskEvent {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -238,7 +242,7 @@ class GeneratedTaskAggregate extends Aggregate<string, typeof AggregateStateSche
       ),
     );
 
-    return create(ProjectionStateSchema, { id: command.id, name: command.name });
+    return create(TaskEventSchema, { id: command.id, name: command.name });
   }
 }
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
@@ -313,7 +317,7 @@ class StandaloneSubscriber extends AbstractEventSubscriber {
   }
 }
 class ProducingStandaloneReactor extends AbstractEventReactor {
-  react(): TaskEvent {
+  react(): ReviewStarted {
     return create(ReviewStartedSchema, { id: "produced-event" });
   }
 }
@@ -328,7 +332,7 @@ class GeneratedTaskProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: TaskCommand): ProjectionState {
+  assignTask(command: TaskCommand): TaskEvent {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -339,10 +343,9 @@ class GeneratedTaskProcessManager extends ProcessManager<
       ),
     );
 
-    return create(ProjectionStateSchema, {
+    return create(TaskEventSchema, {
       id: command.id,
       name: `${command.name} event`,
-      priority: 1,
     });
   }
 }
@@ -352,7 +355,7 @@ class ReplayTaskProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: ProcessManagerTaskCommand): AggregateState {
+  assignTask(command: ProcessManagerTaskCommand): ReviewStarted {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -362,10 +365,10 @@ class ReplayTaskProcessManager extends ProcessManager<
         }),
       ),
     );
-    return create(AggregateStateSchema, { id: command.id, name: command.name, archived: false });
+    return create(ReviewStartedSchema, { id: command.id });
   }
 
-  reactToProjection(event: TaskEvent): AggregateState {
+  reactToProjection(event: TaskEvent): ReviewStarted {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -375,7 +378,7 @@ class ReplayTaskProcessManager extends ProcessManager<
         }),
       ),
     );
-    return create(AggregateStateSchema, { id: event.id, name: event.name, archived: false });
+    return create(ReviewStartedSchema, { id: event.id });
   }
 }
 
@@ -397,7 +400,7 @@ class FreshRecoveryProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: TaskCommand): ProjectionState {
+  assignTask(command: TaskCommand): TaskEvent {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -407,10 +410,9 @@ class FreshRecoveryProcessManager extends ProcessManager<
         }),
       ),
     );
-    return create(ProjectionStateSchema, {
+    return create(TaskEventSchema, {
       id: command.id,
       name: command.name,
-      priority: 1,
     });
   }
 }
@@ -606,7 +608,7 @@ describe("BoundedContext assembly", () => {
             kind: "command-assignment",
             methodName: "assignTask",
             signalSchema: TaskCommandSchema,
-            emittedSchemas: [ProjectionStateSchema],
+            emittedSchemas: [TaskEventSchema],
             parameterCount: 1,
             origin: "domestic",
           },
@@ -695,7 +697,7 @@ describe("BoundedContext assembly", () => {
         ],
       },
     ]);
-    const eventRouting = EventRouting.create<string>().route(ProjectionStateSchema, () => [
+    const eventRouting = EventRouting.create<string>().route(TaskEventSchema, () => [
       "custom-target",
     ]);
     await expect(
@@ -703,7 +705,9 @@ describe("BoundedContext assembly", () => {
         .withGeneratedRegistryRoot(registryRoot)
         .add(TaskProjection, { eventRouting })
         .buildAsync(),
-    ).rejects.toThrow('unregistered exact route for "ProjectionState"');
+    ).rejects.toThrow(
+      'unregistered exact route for "spine.server.testing.handlerregistry.TaskEvent"',
+    );
   });
 
   it("rejects generated options for an explicitly assembled repository", () => {
@@ -1039,7 +1043,7 @@ describe("BoundedContext assembly", () => {
             kind: "command-assignment",
             methodName: "assignTask",
             signalSchema: TaskCommandSchema,
-            emittedSchemas: [ProjectionStateSchema],
+            emittedSchemas: [TaskEventSchema],
             parameterCount: 1,
             origin: "domestic",
           },
@@ -1072,7 +1076,7 @@ describe("BoundedContext assembly", () => {
             kind: "command-assignment",
             methodName: "assignTask",
             signalSchema: TaskCommandSchema,
-            emittedSchemas: [ProjectionStateSchema],
+            emittedSchemas: [TaskEventSchema],
             parameterCount: 1,
             origin: "domestic",
           },
@@ -1393,7 +1397,7 @@ describe("BoundedContext assembly", () => {
         .withStorageFactory(storageFactory)
         .withGeneratedRegistryRoot(failingRegistry.root)
         .add(FailingRecoveryProcessManager)
-        .addEventDispatcher(createEventDispatcher([ProjectionStateSchema], () => undefined))
+        .addEventDispatcher(createEventDispatcher([TaskEventSchema], () => undefined))
         .buildAsync();
 
       await expect(
@@ -1422,7 +1426,7 @@ describe("BoundedContext assembly", () => {
         .withStorageFactory(storageFactory)
         .withGeneratedRegistryRoot(recoveryRegistry.root)
         .add(FreshRecoveryProcessManager)
-        .addEventDispatcher(createEventDispatcher([ProjectionStateSchema], () => undefined))
+        .addEventDispatcher(createEventDispatcher([TaskEventSchema], () => undefined))
         .buildAsync();
       const descriptor = internalDeliveryDescriptor(recovered);
 
@@ -1525,7 +1529,7 @@ describe("BoundedContext assembly", () => {
 
   it("registers command dispatchers added to the builder", async () => {
     const observed: string[] = [];
-    const dispatcher = createCommandDispatcher([ProjectionStateSchema], (command) => {
+    const dispatcher = createCommandDispatcher([TaskCommandSchema], (command) => {
       observed.push(command.id?.uuid ?? "missing");
     });
     const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
@@ -1536,20 +1540,20 @@ describe("BoundedContext assembly", () => {
   });
 
   it("does not register command dispatchers removed before build", async () => {
-    const dispatcher = createCommandDispatcher([ProjectionStateSchema], () => undefined);
+    const dispatcher = createCommandDispatcher([TaskCommandSchema], () => undefined);
     const context = BoundedContext.singleTenant("Tasks")
       .addCommandDispatcher(dispatcher)
       .removeCommandDispatcher(dispatcher)
       .build();
 
     await expect(context.commandBus().post(createProjectionCommand("command-2"))).rejects.toThrow(
-      `No command dispatcher registered for "${TypeUrls.derive(ProjectionStateSchema)}".`,
+      `No command dispatcher registered for "${TypeUrls.derive(TaskCommandSchema)}".`,
     );
   });
 
   it("registers event dispatchers added to the builder", async () => {
     const observed: string[] = [];
-    const dispatcher = createEventDispatcher([ProjectionStateSchema], (event) => {
+    const dispatcher = createEventDispatcher([TaskEventSchema], (event) => {
       observed.push(event.id?.value ?? "missing");
     });
     const context = BoundedContext.singleTenant("Tasks").addEventDispatcher(dispatcher).build();
@@ -1560,19 +1564,17 @@ describe("BoundedContext assembly", () => {
   });
 
   it("does not expose internal event types accepted by framework dispatchers", () => {
-    const dispatcher = createEventDispatcher([EventSchema, ProjectionStateSchema], () => undefined);
+    const dispatcher = createEventDispatcher([EventSchema, TaskEventSchema], () => undefined);
     const context = BoundedContext.singleTenant("Tasks").addEventDispatcher(dispatcher).build();
 
-    expect(context.eventBus().acceptedEventTypes()).toEqual([
-      TypeUrls.derive(ProjectionStateSchema),
-    ]);
+    expect(context.eventBus().acceptedEventTypes()).toEqual([TypeUrls.derive(TaskEventSchema)]);
   });
 
   it("rejects package-local event subscriptions for non-context values", () => {
     expect(() =>
       boundedContextAccess.subscribeToEvent(
         {} as BoundedContext,
-        TypeUrls.derive(ProjectionStateSchema),
+        TypeUrls.derive(TaskEventSchema),
         { onEvent: () => undefined },
       ),
     ).toThrow("Event subscription requires a built BoundedContext instance.");
@@ -1580,7 +1582,7 @@ describe("BoundedContext assembly", () => {
 
   it("rejects events whose only dispatcher was removed before build", async () => {
     const observed: string[] = [];
-    const dispatcher = createEventDispatcher([ProjectionStateSchema], (event) => {
+    const dispatcher = createEventDispatcher([TaskEventSchema], (event) => {
       observed.push(event.id?.value ?? "missing");
     });
     const context = BoundedContext.singleTenant("Tasks")
@@ -1598,7 +1600,7 @@ describe("BoundedContext assembly", () => {
   it("stores events in the context EventStore before dispatch", async () => {
     const observed: string[] = [];
     const storageFactory = new ObservingStorageFactory(observed);
-    const dispatcher = createEventDispatcher([ProjectionStateSchema], (event) => {
+    const dispatcher = createEventDispatcher([TaskEventSchema], (event) => {
       observed.push(`dispatch:${event.id?.value ?? "missing"}`);
     });
     const context = BoundedContext.singleTenant("Tasks")
@@ -1613,7 +1615,7 @@ describe("BoundedContext assembly", () => {
 
   it("rejects event dispatcher classification before acquiring event storage", () => {
     const storageFactory = new ObservingStorageFactory([]);
-    const dispatcher = createEventDispatcher([ProjectionStateSchema], () => undefined);
+    const dispatcher = createEventDispatcher([TaskEventSchema], () => undefined);
     const brokenDispatcher = {
       messageSchemas: () => {
         throw new Error("Cannot read event schemas.");
@@ -1690,7 +1692,7 @@ describe("BoundedContext assembly", () => {
             kind: "command-assignment",
             methodName: "assignProjection",
             signalSchema: TaskCommandSchema,
-            emittedSchemas: [ProjectionStateSchema],
+            emittedSchemas: [TaskEventSchema],
             parameterCount: 1,
             origin: "domestic",
           },
@@ -1741,7 +1743,7 @@ describe("BoundedContext assembly", () => {
             kind: "command-assignment",
             methodName: "assignTask",
             signalSchema: TaskCommandSchema,
-            emittedSchemas: [ProjectionStateSchema],
+            emittedSchemas: [TaskEventSchema],
             parameterCount: 1,
             origin: "domestic",
           },
@@ -1752,7 +1754,7 @@ describe("BoundedContext assembly", () => {
       .withGeneratedRegistryRoot(registryRoot)
       .add(GeneratedTaskProcessManager)
       .addEventDispatcher(
-        createEventDispatcher([ProjectionStateSchema], (event) => {
+        createEventDispatcher([TaskEventSchema], (event) => {
           observed.push(event);
         }),
       )
@@ -1794,7 +1796,7 @@ describe("BoundedContext assembly", () => {
     if (message === undefined) {
       throw new Error("Expected a generated process-manager produced event.");
     }
-    expect(message.typeUrl).toBe(TypeUrls.derive(ProjectionStateSchema));
+    expect(message.typeUrl).toBe(TypeUrls.derive(TaskEventSchema));
   });
 
   it("keeps producer-only event schemas off external routes while admitting follow-ups", async () => {
@@ -1808,7 +1810,7 @@ describe("BoundedContext assembly", () => {
             kind: "command-assignment",
             methodName: "assignTask",
             signalSchema: TaskCommandSchema,
-            emittedSchemas: [ProjectionStateSchema],
+            emittedSchemas: [TaskEventSchema],
             parameterCount: 1,
             origin: "domestic",
           },
@@ -1844,7 +1846,7 @@ describe("BoundedContext assembly", () => {
       "producer-only event",
     );
     await expect(eventStore.read()).resolves.toMatchObject([
-      { message: { typeUrl: TypeUrls.derive(ProjectionStateSchema) } },
+      { message: { typeUrl: TypeUrls.derive(TaskEventSchema) } },
     ]);
   });
 
@@ -2463,7 +2465,7 @@ describe("BoundedContext assembly", () => {
     const systemDispatcher = createEventDispatcher([EntityLog.EntityStateChangedSchema], () => {
       order.push("system event dispatched");
     });
-    const commandDispatcher = createCommandDispatcher([ProjectionStateSchema], async () => {
+    const commandDispatcher = createCommandDispatcher([TaskCommandSchema], async () => {
       order.push("domain command accepted");
       await commandReleased;
       await (
@@ -2845,8 +2847,8 @@ function createProjectionCommand(id: string, targetId = "task-1") {
       }),
     }),
     message: AnyMessages.pack(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, { id: targetId, name: "Task", priority: 1 }),
+      TaskCommandSchema,
+      create(TaskCommandSchema, { id: targetId, name: "Task" }),
     ),
   });
 }
@@ -2904,8 +2906,8 @@ function createProjectionEvent(id: string, targetId = "task-1", tenantId?: Tenan
       version: create(VersionSchema, { number: 1 }),
     }),
     message: AnyMessages.pack(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, { id: targetId, name: "Task", priority: 1 }),
+      TaskEventSchema,
+      create(TaskEventSchema, { id: targetId, name: "Task" }),
     ),
   });
 }
@@ -3051,7 +3053,7 @@ function processManagerRegistry(
         kind: "command-assignment" as const,
         methodName: "assignTask",
         signalSchema: TaskCommandSchema,
-        emittedSchemas: [ProjectionStateSchema],
+        emittedSchemas: [TaskEventSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,
       },
@@ -3068,7 +3070,7 @@ function aggregateReplayRegistry(entityType: typeof ReplayTaskAggregate) {
         kind: "command-assignment" as const,
         methodName: "assignTask",
         signalSchema: TaskCommandSchema,
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [ReviewStartedSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,
       },
@@ -3085,7 +3087,7 @@ function replayProcessManagerRegistry(entityType: typeof ReplayTaskProcessManage
         kind: "command-assignment" as const,
         methodName: "assignTask",
         signalSchema: ProcessManagerTaskCommandSchema,
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [ReviewStartedSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,
       },
@@ -3093,7 +3095,7 @@ function replayProcessManagerRegistry(entityType: typeof ReplayTaskProcessManage
         kind: "event-reaction" as const,
         methodName: "reactToProjection",
         signalSchema: TaskEventSchema,
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [ReviewStartedSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,
       },
