@@ -4802,17 +4802,21 @@ describe("repository signal routing", () => {
       reader: create(UserIdSchema, { value: "reader" }),
       number: 2,
     });
-    const eventA = SignalEnvelopes.event({
+    const eventA = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-composite-inbox-a" }),
       context: create(EventContextSchema),
-      schema: CompositeRouteEventSchema,
-      message: create(CompositeRouteEventSchema, { id: idA, name: "A delivered" }),
+      message: AnyMessages.pack(
+        CompositeRouteEventSchema,
+        create(CompositeRouteEventSchema, { id: idA, name: "A delivered" }),
+      ),
     });
-    const eventB = SignalEnvelopes.event({
+    const eventB = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-composite-inbox-b" }),
       context: create(EventContextSchema),
-      schema: CompositeRouteEventSchema,
-      message: create(CompositeRouteEventSchema, { id: idB, name: "B delivered" }),
+      message: AnyMessages.pack(
+        CompositeRouteEventSchema,
+        create(CompositeRouteEventSchema, { id: idB, name: "B delivered" }),
+      ),
     });
 
     try {
@@ -4880,11 +4884,13 @@ describe("repository signal routing", () => {
       reader: create(UserIdSchema, { value: "producer" }),
       number: 7,
     });
-    const command = SignalEnvelopes.command({
+    const command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "command-composite-producer" }),
       context: create(CommandContextSchema),
-      schema: CompositeRouteEventSchema,
-      message: create(CompositeRouteEventSchema, { id, name: "Produce" }),
+      message: AnyMessages.pack(
+        CompositeRouteEventSchema,
+        create(CompositeRouteEventSchema, { id, name: "Produce" }),
+      ),
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -4912,17 +4918,19 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
-    const event = SignalEnvelopes.event({
+    const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-composite-inbox-invalid" }),
       context: create(EventContextSchema),
-      schema: CompositeRouteEventSchema,
-      message: create(CompositeRouteEventSchema, {
-        id: create(CompositeRouteIdSchema, {
-          reader: create(UserIdSchema, { value: "valid" }),
-          number: 3,
+      message: AnyMessages.pack(
+        CompositeRouteEventSchema,
+        create(CompositeRouteEventSchema, {
+          id: create(CompositeRouteIdSchema, {
+            reader: create(UserIdSchema, { value: "valid" }),
+            number: 3,
+          }),
+          name: "Invalid target",
         }),
-        name: "Invalid target",
-      }),
+      ),
     });
 
     try {
@@ -4986,25 +4994,29 @@ describe("repository signal routing", () => {
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined)
       throw new Error("Expected a composite Process Manager dispatcher.");
-    const duplicate = SignalEnvelopes.event({
+    const duplicate = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-composite-guarded" }),
       context: create(EventContextSchema, {
         producerId: Identifiers.pack(CompositeRouteIdSchema, idA),
         version: create(VersionSchema, { number: 1 }),
         timestamp: create(TimestampSchema, { seconds: 1n }),
       }),
-      schema: CompositeRouteEventSchema,
-      message: create(CompositeRouteEventSchema, { id: idA, name: "Guarded" }),
+      message: AnyMessages.pack(
+        CompositeRouteEventSchema,
+        create(CompositeRouteEventSchema, { id: idA, name: "Guarded" }),
+      ),
     });
-    const distinct = SignalEnvelopes.event({
+    const distinct = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-composite-guarded-distinct" }),
       context: create(EventContextSchema, {
         producerId: Identifiers.pack(CompositeRouteIdSchema, idA),
         version: create(VersionSchema, { number: 2 }),
         timestamp: create(TimestampSchema, { seconds: 2n }),
       }),
-      schema: CompositeRouteEventSchema,
-      message: create(CompositeRouteEventSchema, { id: idA, name: "Distinct" }),
+      message: AnyMessages.pack(
+        CompositeRouteEventSchema,
+        create(CompositeRouteEventSchema, { id: idA, name: "Distinct" }),
+      ),
     });
 
     try {
