@@ -6991,6 +6991,17 @@ describe("repository signal routing", () => {
     const firstDispatcher = repositoryAccess.eventDispatcher(firstRepository);
     if (firstDispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
     await firstDispatcher.dispatch(event);
+    const firstChildren = (
+      await new EventStore({ name: "Tasks", multitenant: false }, factory).read()
+    ).filter((stored) => UUID_PATTERN.test(stored.id?.value ?? ""));
+    expect(firstChildren).toHaveLength(2);
+    expect(firstChildren.map((child) => child.id?.value)).toEqual(
+      expect.arrayContaining([expect.any(String), expect.any(String)]),
+    );
+    const [firstChild, secondChild] = firstChildren;
+    expect(firstChild?.id?.value).not.toBe(event.id?.value);
+    expect(secondChild?.id?.value).not.toBe(event.id?.value);
+    expect(firstChild?.id?.value).not.toBe(secondChild?.id?.value);
     await firstContext.close();
 
     const secondRepository = createProducingGuardedAggregateRepository();
@@ -7039,7 +7050,7 @@ describe("repository signal routing", () => {
     if (pmDispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
     const pmEvent = createProjectionEvent("event-pm-probe", "pm-probe");
 
-    await pmDispatcher.dispatch(pmEvent);
+    await pmDispatcher.dispatch(createProjectionEvent("event-pm-probe-retry", "pm-probe"));
     expect(pmFactory.closedProbes).toBe(1);
     await pmDispatcher.dispatch(createProjectionEvent("event-pm-probe-other", "pm-probe-other"));
     expect(pmFactory.closedProbes).toBe(2);
@@ -7137,7 +7148,9 @@ describe("repository signal routing", () => {
     });
     await expect(preJournal.readEvents("pm-guard-before-journal")).resolves.toEqual([]);
     RoutingProcessManager.reset();
-    await preJournalDispatcher.dispatch(preJournalEvent);
+    await preJournalDispatcher.dispatch(
+      createProjectionEvent("event-guard-before-journal-retry", "pm-guard-before-journal"),
+    );
     expect(RoutingProcessManager.eventCalls).toBe(1);
     await expect(preJournal.readEvents("pm-guard-before-journal")).resolves.toEqual([]);
     await preJournalContext.close();
@@ -7166,9 +7179,11 @@ describe("repository signal routing", () => {
 
     RoutingProcessManager.reset();
     await expect(postJournalDispatcher.dispatch(postJournalEvent)).resolves.toBeUndefined();
-    await postJournalDispatcher.dispatch(postJournalEvent);
-    expect(RoutingProcessManager.commandReactionCalls).toBe(1);
-    expect(publicationAttempts).toBe(1);
+    await postJournalDispatcher.dispatch(
+      createProjectionEvent("event-guard-after-journal-retry", "pm-guard-after-journal"),
+    );
+    expect(RoutingProcessManager.commandReactionCalls).toBe(2);
+    expect(publicationAttempts).toBe(2);
     const postJournal = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: postJournalFactory,
@@ -9876,7 +9891,7 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("delivers duplicate live projection messages without a local retention cache", async () => {
+  it("suppresses duplicate live projection messages during retained delivery", async () => {
     ExecutingTaskProjection.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createExecutingProjectionRepository();
@@ -9898,7 +9913,7 @@ describe("repository signal routing", () => {
     await dispatcher.dispatch(event);
     await dispatcher.dispatch(event);
 
-    expect(ExecutingTaskProjection.subscriberCalls).toBe(2);
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
     await expect(
       context.stand().read(ProjectionStateSchema, "task-duplicate-inbox"),
     ).resolves.toMatchObject({

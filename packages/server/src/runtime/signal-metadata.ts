@@ -103,7 +103,7 @@ export class FixedClock implements Clock {
 }
 
 /**
- * Creates validated command and event identifiers.
+ * Creates fresh framework command and event identifiers.
  */
 export class SignalIds {
   readonly #next: () => string;
@@ -111,14 +111,14 @@ export class SignalIds {
   /**
    * Creates an identifier source.
    *
-   * @param next Function that supplies a new identifier when one is omitted.
+   * @param next Function that supplies each fresh identifier; only a non-empty result is required.
    */
   constructor(next: () => string = randomUUID) {
     this.#next = next;
   }
 
   /**
-   * Creates a validated command identifier.
+   * Creates a fresh command identifier.
    *
    * @returns Command identifier.
    */
@@ -127,7 +127,7 @@ export class SignalIds {
   }
 
   /**
-   * Creates a validated event identifier.
+   * Creates a fresh event identifier.
    *
    * @returns Event identifier.
    */

@@ -734,6 +734,15 @@ shard-update hints; when absent, the existing local source remains the fallback.
 Applications configure and close only the delivery facility through the
 environment: attachment supervisors and their source reads belong to that facility.
 
+## Signal identity and Aggregate semantics
+
+Projection handlers cannot use `@Assign`; explicit metadata rejects that unsupported
+handler shape. Framework-created child Commands and Events receive fresh IDs. Existing
+Command or Event envelopes retain their IDs through transport and storage, including
+when returned or passed as envelopes. A successful Aggregate dispatch uses one version
+for all emitted Events and state changes. History caching accepts descending retained
+versions with gaps, while continuing to reject equal or newer continuations.
+
 # Dynamic unary discovery
 
 `BrowserServerOptions.discovery` from `@spine-event-engine/server/browser` may supply changing complete application-node snapshots alongside fixed `backend` configuration. Both unary routing and native subscription streams use the same current membership. Empty membership retains durable definitions and later nodes reactivate them; a new backend-dependent subscription is unavailable until a node exists.

@@ -104,6 +104,8 @@ export class RemoteInbox implements DeliveryInbox {
       });
       const start = after === undefined ? 0 : RemoteValues.exactAfter(page, after);
       const raw = page.slice(start);
+      if (after !== undefined && page.length === limit && raw.length === 0)
+        throw new DeliveryPagingError();
       scanned += raw.length;
       if (scanned > 1_000 + limit) throw new DeliveryPagingError();
       const last = page.at(-1);
@@ -143,6 +145,10 @@ export class RemoteInbox implements DeliveryInbox {
   /**
    * Admits a pending remote row unless a live delivered row has the same
    * signal ID and typed Inbox target.
+   *
+   * @param message Supplies the pending row snapshot.
+   * @param options Bounds remote reads and the retained delivered upsert.
+   * @returns The row to dispatch, or `undefined` when retained delivery suppresses it.
    */
   async admit(
     message: InboxMessage,
@@ -185,7 +191,7 @@ export class RemoteInbox implements DeliveryInbox {
    * Persists one exact authoritative pending row as a delivered fact.
    *
    * @param message Supplies the expected pending message snapshot.
-   * @param options Bounds or cancels remote reads and removal.
+   * @param options Bounds or cancels the remote read and delivered upsert.
    * @returns The delivered acknowledgement, including an exact retained
    * acknowledgement after a committed response loss, or `undefined` when the
    * row is absent or no longer matches.
@@ -205,6 +211,14 @@ export class RemoteInbox implements DeliveryInbox {
     return delivered;
   }
 
+  /**
+   * Removes an exact expired delivered row while its exclusive shard session remains current.
+   *
+   * @param message Supplies the delivered snapshot.
+   * @param session Supplies the matching exclusive shard session.
+   * @param options Bounds remote reads and removal.
+   * @returns Whether the exact expired snapshot was removed.
+   */
   async removeDelivered(
     message: InboxMessage,
     session: DeliveryWorkSession,

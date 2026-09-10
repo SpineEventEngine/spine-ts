@@ -358,6 +358,31 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   retained cleanup also requires its `EXCLUSIVE` session and matching shard before any
   remote read or removal. The focused delivery command above passed 75 tests across 5
   files; `pnpm typecheck:build`, focused Prettier, and `git diff --check` passed.
+- Consolidated review dispositions: Aggregate multi-target child Events now preserve
+  their fresh framework metadata ID (no target suffix); `UNSUPPORTED_ASSIGN_HANDLER`
+  is exported in handler metadata; remote timestamp-only pagination rejects a full
+  non-progressing cursor page while retaining its existing finite 1000-row scan bound.
+  No RPC or arbitrary-depth indexed lookup is claimed. SignalIds documentation now
+  states only the non-empty generated-value requirement. Remote retention, handler
+  rejection, Aggregate dispatch version, and sparse history behavior are recorded in
+  package references.
+- Consolidated acceptance profile: existing implementer, configured `gpt-5.6-terra`
+  medium (runtime metadata unavailable). Accepted: fresh Aggregate child IDs, exported
+  Assign rejection code, non-progressing remote page rejection, corrected SignalIds and
+  RemoteInbox TSDoc, and package references. Rejected: a retained-lookup RPC or indexed
+  arbitrary-depth remote lookup; JVM remote pagination is timestamp-only and the TS
+  retained scan remains finite (1000 rows). The serialized affected-suite command passed
+  473 tests across 12 files.
+- Final re-review corrected stale remote acknowledgement/removal wording and its
+  TSDoc. Duplicate guard tests now distinguish exact retained-signal suppression from
+  a new-source-ID retry without a journal marker; package references avoid placing
+  handler and repository semantics under dynamic unary discovery.
+- The multi-target Aggregate restart regression reads only UUID-shaped stored child
+  Events, requires exactly two for one dispatch, and proves they differ from the source
+  Event ID and from each other. `repository-routing.test.ts` passed 264 tests.
+- Final documentation correction adds a focused Signal identity and Aggregate semantics
+  heading, distinguishing fresh framework child Command/Event IDs from preserved
+  existing envelope IDs through transport, storage, and envelope returns.
 - Independent Luna/low acceptance repeated the serialized seven-file gate with
   409/409 tests passing and the standalone repository-routing suite with 264/264
   tests passing. Focused Prettier, `git diff --check`, and the generated-manifest
@@ -365,7 +390,9 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
 
 ## Coverage Result
 
-- Pending.
+- No separate coverage-percentage profile was required for this behavior correction.
+  Focused production-path regressions cover every accepted issue and preservation case;
+  the release profile remains the final integration gate.
 
 ## Documentation And Public API Impact
 
@@ -373,7 +400,7 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
 | ----------------------------- | ------------------------------------------------------------------------------------------------- |
 | Package README                | Update only if current public behavior claims conflict with the correction.                       |
 | TypeDoc/API docs              | Correct ID-creation and supported-handler claims where affected.                                  |
-| Public API additions/removals | None planned.                                                                                     |
+| Public API additions/removals | New-signal metadata factories no longer accept caller IDs; `DeliveryInbox` gains an optional retained-admission seam. |
 | Framework `USER_GUIDE.md`     | Update only if it documents affected behavior.                                                    |
 | Example `USER_GUIDE.md`       | N/A unless an affected example fails.                                                             |
 | API examples                  | Preserve public Delivery client usage; adjust only invalid Projection assignment examples if any. |
@@ -393,7 +420,6 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
 
 ## Verification
 
-- Pending focused RED/GREEN evidence.
 - A2 analyzer RED: `build-time-handler-analyzer.test.ts` reported a Projection
   `@Assign` as `command-assignment`; GREEN: 53 analyzer tests passed after
   `UNSUPPORTED_ASSIGN_HANDLER` was added.
@@ -404,21 +430,31 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   confirms centralized metadata rejection of generated `command-assignment` input.
   Final analyzer, metadata, generated-registry, and readiness verification passed
   102 tests; focused Prettier and `git diff --check` passed with no generated churn.
-- Pending affected-package checks and cheap preflight.
-- Pending specialist review wave.
-- Pending final `verify:release`.
+- Affected serialized verification passed 473 tests across 12 files;
+  `pnpm typecheck:build`, `pnpm docs:api:check`, `pnpm docs:audience:check`, focused
+  Prettier, and `git diff --check` passed with generated manifest churn removed.
+- Pending cheap release preflight and final `verify:release` after version selection.
 
 ## Open Risks And Follow-Up Routing
 
 | Risk/Follow-Up                               | Owner                   | Disposition                                                                   | Next Review Point       |
 | -------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------- | ----------------------- |
-| Exact shared remote duplicate-admission seam | Implementer             | Resolve inside existing delivery protocol; no new subsystem                   | F02 RED test            |
-| Provider continuation semantics              | Implementer             | Inspect first; change only on demonstrated violation                          | HISTORY01 focused tests |
-| Public Signal ID creation signatures         | TypeScript/API reviewer | Preserve envelope transport; remove caller choice only at new-signal creation | Review wave             |
+| Remote scan depth and timestamp continuation | Reliability reviewer | Existing finite bound retained; non-progress fails closed; no non-JVM lookup RPC | Release verification |
+| Provider continuation semantics              | Implementer          | Existing exclusive older-than queries accepted unchanged                         | Closed               |
+| Public Signal ID creation signatures         | TypeScript/API reviewer | Fresh child IDs and preserved envelopes documented and reviewed clean            | Closed               |
 
 ## Review Waves And Dispositions
 
-- Pending.
+- Performance/reliability: clean after admission-failure isolation, idempotent remote
+  acknowledgement, session checks, and the remote paging progress guard. The proposed
+  indexed retained-lookup RPC was rejected because current JVM has no equivalent.
+- Style/maintainability: clean after removing multi-target ID suffix plumbing, restoring
+  duplicate-test intent, and correcting reference placement.
+- TypeScript/API docs: clean after exporting `UNSUPPORTED_ASSIGN_HANDLER`, correcting
+  SignalIds/RemoteInbox TSDoc, and adding direct multi-target UUID coverage.
+- Documentation: clean after replacing stale remote-removal text and documenting handler,
+  identity, Aggregate-version, and sparse-history behavior.
+- Final security review remains pending at release readiness.
 
 ## Integration Result
 

@@ -74,7 +74,10 @@ export type HandlerMethodName<Instance extends object> = Extract<
  * Error code for explicit handler metadata registration failures.
  */
 export type HandlerMetadataErrorCode =
-  "UNKNOWN_HANDLER_METHOD" | "INVALID_PARAMETER_COUNT" | "UNSUPPORTED_COMMAND_HANDLER";
+  | "UNKNOWN_HANDLER_METHOD"
+  | "INVALID_PARAMETER_COUNT"
+  | "UNSUPPORTED_COMMAND_HANDLER"
+  | "UNSUPPORTED_ASSIGN_HANDLER";
 
 /**
  * Error thrown when explicit handler metadata cannot be defined.

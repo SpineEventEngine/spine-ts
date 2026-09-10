@@ -51,6 +51,18 @@ describe("RemoteInbox direct behavior", () => {
     await expect(inbox.read(ShardIndex.single(), { offset: 2 })).rejects.toBeInstanceOf(
       DeliveryPagingError,
     );
+    client.pageSize = 1;
+    client.readPage.mockReset().mockResolvedValueOnce([first]);
+    await expect(
+      inbox.read(ShardIndex.single(), {
+        after: {
+          messageId: first.id.value,
+          whenReceived: first.whenReceived,
+          version: first.version,
+        },
+      }),
+    ).rejects.toBeInstanceOf(DeliveryPagingError);
+    client.pageSize = 2;
     client.readPage
       .mockReset()
       .mockResolvedValueOnce([first, { ...first, id: { ...first.id, value: "tied" } }]);

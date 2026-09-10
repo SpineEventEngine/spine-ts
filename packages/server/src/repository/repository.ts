@@ -1799,12 +1799,7 @@ class AggregateEventExecution {
     },
   ): Promise<void> {
     const loaded = await this.#support.loadAggregate(entityId);
-    const produced = await this.#invokeHandlers(
-      entityId,
-      loaded,
-      intake,
-      intake.route.entityIds.length > 1,
-    );
+    const produced = await this.#invokeHandlers(entityId, loaded, intake);
 
     if (produced.length > 0) {
       const dispatch = await this.#support.persistAggregateAndDispatch(
@@ -1852,7 +1847,6 @@ class AggregateEventExecution {
       readonly message: unknown;
       readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
     },
-    multiTarget: boolean,
   ): Promise<readonly Event[]> {
     const eventContext = EntityInvocation.eventHandlerContext(this.#event);
     const events: Event[] = [];
@@ -1875,7 +1869,6 @@ class AggregateEventExecution {
             this.#support.normalizeProducedSignals(produced),
             entityId,
             loaded.version,
-            multiTarget,
           ),
         );
       }
@@ -1898,26 +1891,14 @@ class AggregateEventExecution {
     produced: readonly unknown[],
     entityId: unknown,
     lastVersion: bigint,
-    multiTarget: boolean,
   ): readonly Event[] {
     const version = lastVersion + 1n;
-    let sequence = 0;
-
     return Object.freeze(
-      produced.map((signal) => {
-        sequence += 1;
-        return this.#bindProducedEvent(signal, entityId, version, sequence, multiTarget);
-      }),
+      produced.map((signal) => this.#bindProducedEvent(signal, entityId, version)),
     );
   }
 
-  #bindProducedEvent(
-    signal: unknown,
-    entityId: unknown,
-    version: bigint,
-    sequence: number,
-    multiTarget: boolean,
-  ): Event {
+  #bindProducedEvent(signal: unknown, entityId: unknown, version: bigint): Event {
     const typeName = EntityInvocation.messageTypeName(signal);
     const schema = this.#routing.producedEventSchemas.find(
       (candidate) => candidate.typeName === typeName,
@@ -1932,13 +1913,7 @@ class AggregateEventExecution {
     });
 
     return create(EventSchema, {
-      id: multiTarget
-        ? create(EventIdSchema, {
-            value:
-              `${metadata.id.value}.target.` +
-              encodeURIComponent(DispatchGuards.canonicalEntityIdKey(this.#repository, entityId)),
-          })
-        : metadata.id,
+      id: metadata.id,
       message: AnyMessages.pack(schema, signal as never),
       context: RepositorySignals.eventContextWithProducer(
         metadata.context,
