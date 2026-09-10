@@ -16,7 +16,7 @@ import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { Message, MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
@@ -43,6 +43,8 @@ import {
 import {
   DEFAULT_TYPE_URL_PREFIX,
   MessageInterfaces,
+  type PackCommandInput,
+  type PackEventInput,
   type MessageValidationResult,
   type TypeMetadata,
   TypeRegistry,
@@ -58,6 +60,7 @@ import {
 type SignalMessage = Message & {
   readonly $typeName: string;
 };
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 describe("MessageInterfaces", () => {
   it("creates immutable nominal tokens with copied, deduplicated membership", () => {
@@ -1174,66 +1177,143 @@ describe("@spine-event-engine/core envelope packing", () => {
     expect(AnyMessages.unpack(packed, RequiredNameSchema)).toEqual(invalidMessage);
   });
 
-  it("packs caller-supplied command IDs and contexts without generating runtime metadata", () => {
-    const id = create(CommandIdSchema, { uuid: "command-id-from-caller" });
+  it("creates distinct fresh command IDs and clones contexts", () => {
     const context = commandContext();
     const message = create(FieldPathSchema, { fieldName: ["task"] });
 
-    const command = SignalEnvelopes.command({
-      id,
+    const first = SignalEnvelopes.command({
       context,
       schema: FieldPathSchema,
       message,
     });
+    const second = SignalEnvelopes.command({ context, schema: FieldPathSchema, message });
 
-    expect(command.$typeName).toBe("spine.core.Command");
-    expect(command.id).toEqual(id);
-    expect(command.context).toEqual(context);
-    expect(command.systemProperties).toBeUndefined();
-    expect(command.message?.typeUrl).toBe(TypeUrls.derive(FieldPathSchema));
-    expect(command.message?.value).toEqual(toBinary(FieldPathSchema, message));
-    expect(AnyMessages.unpack(command.message ?? create(AnySchema), FieldPathSchema)).toEqual(
+    expect(first.$typeName).toBe("spine.core.Command");
+    expect(first.id?.uuid).toMatch(UUID_PATTERN);
+    expect(second.id?.uuid).toMatch(UUID_PATTERN);
+    expect(first.id?.uuid).not.toBe(second.id?.uuid);
+    expect(first.context).toEqual(context);
+    expect(first.systemProperties).toBeUndefined();
+    expect(first.message?.typeUrl).toBe(TypeUrls.derive(FieldPathSchema));
+    expect(first.message?.value).toEqual(toBinary(FieldPathSchema, message));
+    expect(AnyMessages.unpack(first.message ?? create(AnySchema), FieldPathSchema)).toEqual(
       message,
     );
 
-    id.uuid = "mutated-command-id";
     if (context.actorContext?.actor === undefined) {
       throw new Error("Expected command context actor fixture.");
     }
     context.actorContext.actor.value = "mutated-user";
 
-    expect(command.id?.uuid).toBe("command-id-from-caller");
-    expect(command.context?.actorContext?.actor?.value).toBe("user-1");
+    expect(first.context?.actorContext?.actor?.value).toBe("user-1");
   });
 
-  it("packs caller-supplied event IDs and contexts without generating producer policy", () => {
-    const id = create(EventIdSchema, { value: "event-id-from-caller" });
+  it("creates distinct fresh event IDs and clones contexts", () => {
     const context = eventContext();
     const message = create(FieldPathSchema, { fieldName: ["task", "created"] });
 
-    const event = SignalEnvelopes.event({
-      id,
+    const first = SignalEnvelopes.event({
       context,
       schema: FieldPathSchema,
       message,
     });
+    const second = SignalEnvelopes.event({ context, schema: FieldPathSchema, message });
 
-    expect(event.$typeName).toBe("spine.core.Event");
-    expect(event.id).toEqual(id);
-    expect(event.context).toEqual(context);
-    expect(event.message?.typeUrl).toBe(TypeUrls.derive(FieldPathSchema));
-    expect(event.message?.value).toEqual(toBinary(FieldPathSchema, message));
-    expect(AnyMessages.unpack(event.message ?? create(AnySchema), FieldPathSchema)).toEqual(
+    expect(first.$typeName).toBe("spine.core.Event");
+    expect(first.id?.value).toMatch(UUID_PATTERN);
+    expect(second.id?.value).toMatch(UUID_PATTERN);
+    expect(first.id?.value).not.toBe(second.id?.value);
+    expect(first.context).toEqual(context);
+    expect(first.message?.typeUrl).toBe(TypeUrls.derive(FieldPathSchema));
+    expect(first.message?.value).toEqual(toBinary(FieldPathSchema, message));
+    expect(AnyMessages.unpack(first.message ?? create(AnySchema), FieldPathSchema)).toEqual(
       message,
     );
 
-    id.value = "mutated-event-id";
     if (context.version === undefined) {
       throw new Error("Expected event context version fixture.");
     }
     context.version.number = 99;
 
-    expect(event.id?.value).toBe("event-id-from-caller");
-    expect(event.context?.version?.number).toBe(1);
+    expect(first.context?.version?.number).toBe(1);
+  });
+
+  it("prefers crypto.randomUUID for fresh envelope IDs", () => {
+    const originalCrypto = globalThis.crypto;
+    const randomUUID = vi.fn(() => "6f75b67a-5f23-4b64-8a35-6ce5f8f97cf5");
+    const getRandomValues = vi.fn();
+    vi.stubGlobal("crypto", { randomUUID, getRandomValues });
+    try {
+      const command = SignalEnvelopes.command({
+        context: commandContext(),
+        schema: FieldPathSchema,
+        message: create(FieldPathSchema),
+      });
+
+      expect(command.id?.uuid).toBe("6f75b67a-5f23-4b64-8a35-6ce5f8f97cf5");
+      expect(randomUUID).toHaveBeenCalledOnce();
+      expect(getRandomValues).not.toHaveBeenCalled();
+    } finally {
+      vi.stubGlobal("crypto", originalCrypto);
+    }
+  });
+
+  it("falls back to secure crypto.getRandomValues for UUID v4 envelope IDs", () => {
+    const originalCrypto = globalThis.crypto;
+    const getRandomValues = vi.fn((bytes: Uint8Array) => {
+      bytes.fill(0);
+      return bytes;
+    });
+    vi.stubGlobal("crypto", { getRandomValues });
+    try {
+      const event = SignalEnvelopes.event({
+        context: eventContext(),
+        schema: FieldPathSchema,
+        message: create(FieldPathSchema),
+      });
+
+      expect(event.id?.value).toBe("00000000-0000-4000-8000-000000000000");
+      expect(getRandomValues).toHaveBeenCalledOnce();
+    } finally {
+      vi.stubGlobal("crypto", originalCrypto);
+    }
+  });
+
+  it("rejects envelope creation when secure crypto is unavailable", () => {
+    const originalCrypto = globalThis.crypto;
+    vi.stubGlobal("crypto", undefined);
+    try {
+      expect(() =>
+        SignalEnvelopes.command({
+          context: commandContext(),
+          schema: FieldPathSchema,
+          message: create(FieldPathSchema),
+        }),
+      ).toThrow(/secure random/i);
+    } finally {
+      vi.stubGlobal("crypto", originalCrypto);
+    }
+  });
+
+  it("rejects caller-provided envelope IDs at the type boundary", () => {
+    const commandInput: PackCommandInput = {
+      context: commandContext(),
+      schema: FieldPathSchema,
+      message: create(FieldPathSchema),
+    };
+    const eventInput: PackEventInput = {
+      context: eventContext(),
+      schema: FieldPathSchema,
+      message: create(FieldPathSchema),
+    };
+    expectTypeOf(commandInput).toExtend<PackCommandInput>();
+    expectTypeOf(eventInput).toExtend<PackEventInput>();
+    const rejectsCallerIds = () => {
+      // @ts-expect-error Public envelope inputs do not accept caller-provided IDs.
+      SignalEnvelopes.command({ ...commandInput, id: create(CommandIdSchema) });
+      // @ts-expect-error Public envelope inputs do not accept caller-provided IDs.
+      SignalEnvelopes.event({ ...eventInput, id: create(EventIdSchema) });
+    };
+    void rejectsCallerIds;
   });
 });

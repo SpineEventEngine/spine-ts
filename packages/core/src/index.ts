@@ -47,7 +47,6 @@ import {
   type Command,
   type CommandContext,
   CommandContextSchema,
-  type CommandId,
   CommandIdSchema,
   CommandSchema,
   CommandContext_ScheduleSchema,
@@ -59,7 +58,6 @@ import {
   type Event,
   type EventContext,
   EventContextSchema,
-  type EventId,
   EventIdSchema,
   EventSchema,
   FieldPathSchema,
@@ -126,6 +124,10 @@ export type MessageSchema = GenMessage<Message>;
 
 type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
 type InterfaceMember<Schemas extends InterfaceSchemas> = MessageShape<Schemas[number]>;
+interface SecureRandomCrypto {
+  readonly randomUUID?: () => string;
+  readonly getRandomValues?: (bytes: Uint8Array) => Uint8Array;
+}
 
 declare const MESSAGE_INTERFACE_BRAND: unique symbol;
 const MESSAGE_INTERFACE_TOKENS = new WeakSet<object>();
@@ -766,11 +768,6 @@ export interface PackCommandInput<
   // prettier-ignore
 
   /**
-   * Caller-supplied generated command ID.
-   */
-  readonly id: CommandId;
-
-  /**
    * Caller-supplied generated command context.
    */
   readonly context: CommandContext;
@@ -793,11 +790,6 @@ export interface PackEventInput<
   Schema extends MessageSchema = MessageSchema,
 > extends PackAnyOptions {
   // prettier-ignore
-
-  /**
-   * Caller-supplied generated event ID.
-   */
-  readonly id: EventId;
 
   /**
    * Caller-supplied generated event context.
@@ -1545,6 +1537,24 @@ function unpackIdentifier(
   }
 }
 
+function freshSignalId(): string {
+  const crypto = Reflect.get(globalThis, "crypto") as SecureRandomCrypto | undefined;
+  if (crypto === undefined) throw new Error("Secure random crypto is unavailable for signal IDs.");
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  if (typeof crypto.getRandomValues !== "function")
+    throw new Error("Secure random crypto is unavailable for signal IDs.");
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const version = bytes.at(6);
+  const variant = bytes.at(8);
+  if (version === undefined || variant === undefined)
+    throw new Error("Secure random crypto is unavailable for signal IDs.");
+  bytes[6] = (version & 0x0f) | 0x40;
+  bytes[8] = (variant & 0x3f) | 0x80;
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 /**
  * Creates generated Spine command and event envelopes.
  */
@@ -1552,26 +1562,26 @@ export const SignalEnvelopes = {
   // prettier-ignore
 
   /**
-   * Packs a generated Spine command envelope from caller-supplied data.
+   * Packs a generated Spine command envelope with a fresh secure ID.
    * @param input The command envelope input.
    * @returns The packed command.
    */
   command<Schema extends MessageSchema>(input: PackCommandInput<Schema>): Command {
     return create(CommandSchema, {
-      id: clone(CommandIdSchema, input.id),
+      id: create(CommandIdSchema, { uuid: freshSignalId() }),
       message: AnyMessages.pack(input.schema, input.message, input),
       context: clone(CommandContextSchema, input.context),
     });
   },
 
   /**
-   * Packs a generated Spine event envelope from caller-supplied data.
+   * Packs a generated Spine event envelope with a fresh secure ID.
    * @param input The event envelope input.
    * @returns The packed event.
    */
   event<Schema extends MessageSchema>(input: PackEventInput<Schema>): Event {
     return create(EventSchema, {
-      id: clone(EventIdSchema, input.id),
+      id: create(EventIdSchema, { value: freshSignalId() }),
       message: AnyMessages.pack(input.schema, input.message, input),
       context: clone(EventContextSchema, input.context),
     });
