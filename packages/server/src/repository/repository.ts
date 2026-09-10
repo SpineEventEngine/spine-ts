@@ -2692,10 +2692,8 @@ class ProcessManagerCommandExecution {
   }
 
   #bindProducedCommands(produced: readonly unknown[]): readonly Command[] {
-    let sequence = 0;
     return Object.freeze(
       produced.map((signal) => {
-        sequence += 1;
         const typeName = EntityInvocation.messageTypeName(signal);
         const schema = this.#routing.producedCommandSchemas.find(
           (candidate) => candidate.typeName === typeName,
@@ -3005,10 +3003,8 @@ class ProcessManagerEventExecution {
   }
 
   #bindProducedCommands(produced: readonly unknown[]): readonly Command[] {
-    let sequence = 0;
     return Object.freeze(
       produced.map((signal) => {
-        sequence += 1;
         const typeName = EntityInvocation.messageTypeName(signal);
         const schema = this.#routing.producedCommandSchemas.find(
           (candidate) => candidate.typeName === typeName,
