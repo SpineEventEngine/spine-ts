@@ -85,8 +85,7 @@ export interface DeliveryInbox {
   ): Promise<InboxMessage | undefined>;
 
   /**
-   * Admits one pending row unless a retained delivered row already represents
-   * the same signal at the same typed target.
+   * Admits one pending row unless a retained delivered row already represents the same signal at the same typed target.
    *
    * @param message Supplies the pending row snapshot.
    * @param options Propagates cancellation and a delivery deadline.

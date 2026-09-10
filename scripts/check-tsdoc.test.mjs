@@ -605,6 +605,26 @@ describe("check-tsdoc", () => {
     expect(result.stderr).toContain("void-returns");
   });
 
+  it("accepts Admits as a third-person callable summary", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/**",
+        " * Admits an item by name.",
+        " * @param name The item name.",
+        " * @returns The admitted item name.",
+        " */",
+        "export function admitItem(name: string): string { return name; }",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
   it("rejects adjacent declaration TSDoc blocks", () => {
     const repoRoot = createFixture();
     writeSource(

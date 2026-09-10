@@ -143,8 +143,7 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Admits a pending remote row unless a live delivered row has the same
-   * signal ID and typed Inbox target.
+   * Admits a pending remote row unless a live delivered row has the same signal ID and typed Inbox target.
    *
    * @param message Supplies the pending row snapshot.
    * @param options Bounds remote reads and the retained delivered upsert.

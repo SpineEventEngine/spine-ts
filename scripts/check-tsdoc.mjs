@@ -30,6 +30,7 @@ const callableVerbs = new Set([
   "validates",
   "writes",
   "accepts",
+  "admits",
   "acquires",
   "asserts",
   "attaches",
