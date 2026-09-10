@@ -436,6 +436,21 @@ lint:tsdoc` passes. The snippet limitation does not alter the final P2
 The focused API P1 re-review is still required and is intentionally not run in
 this correction context.
 
+## Human-Requested Independent Review Final Evidence
+
+- Two complete no-memory specialist waves finished. Every reported P0-P2
+  finding was fixed after its wave; both security lanes reported clean.
+- The query-plan execution bridge is available only from the permitted core
+  SPI subpath. The repository package-boundary policy passes.
+- TypeDoc/API inventory now runs in process, avoiding the reproducible nested
+  child-process suspension. Its RED/GREEN checker and metadata-policy
+  regressions pass.
+- Final affected-scope preflight passed every deterministic gate and 396/396
+  focused tests across nine files.
+- Final release verification passed 289/289 test files and 4,641/4,641 tests.
+  Coverage: 93.22% statements, 90.00% branches, 92.76% functions, and 94.38%
+  lines.
+
 ## Final API P1 correction response
 
 The explicit generic forwarding signatures for canonical

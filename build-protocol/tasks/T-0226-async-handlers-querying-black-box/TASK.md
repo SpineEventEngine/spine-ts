@@ -642,3 +642,11 @@ the branch is ready for human review.
   orderable-column conditional and runtime ownership validation. Compile-only
   public consumers cover selected orderable acceptance and selected
   equality-only, foreign-schema, and omitted same-schema rejection.
+- `2026-09-10`: The human-requested two additional independent no-memory review
+  waves are complete. Every P0-P2 finding was fixed after its wave; both
+  security reviews are clean.
+- Final affected-scope preflight passes all deterministic gates and 396/396
+  focused tests across nine files.
+- Final release verification passes 289/289 test files and 4,641/4,641 tests.
+  Coverage is 93.22% statements, 90.00% branches, 92.76% functions, and 94.38%
+  lines.
