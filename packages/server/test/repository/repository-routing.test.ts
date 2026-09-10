@@ -4562,11 +4562,13 @@ describe("repository signal routing", () => {
       createInt32RoutingRepository(
         CommandRouting.create<number>().route(Int32AggregateStateSchema, () => 2 ** 31),
       ).routeCommand(
-        SignalEnvelopes.command({
+        create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: "command-range-custom" }),
           context: create(CommandContextSchema),
-          schema: Int32AggregateStateSchema,
-          message: create(Int32AggregateStateSchema, { id: 1, name: "Range" }),
+          message: AnyMessages.pack(
+            Int32AggregateStateSchema,
+            create(Int32AggregateStateSchema, { id: 1, name: "Range" }),
+          ),
         }),
       ),
     ).toThrow(/ID compatible with the Entity state/);
@@ -4637,17 +4639,21 @@ describe("repository signal routing", () => {
 
   it("rejects repeated and map declaration-first Command IDs", () => {
     const repository = createMalformedFirstFieldRepository();
-    const repeated = SignalEnvelopes.command({
+    const repeated = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "command-repeated-id" }),
       context: create(CommandContextSchema),
-      schema: RepeatedIdCommandSchema,
-      message: create(RepeatedIdCommandSchema, { id: ["one"] }),
+      message: AnyMessages.pack(
+        RepeatedIdCommandSchema,
+        create(RepeatedIdCommandSchema, { id: ["one"] }),
+      ),
     });
-    const mapped = SignalEnvelopes.command({
+    const mapped = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "command-map-id" }),
       context: create(CommandContextSchema),
-      schema: MapIdCommandSchema,
-      message: create(MapIdCommandSchema, { id: { one: "one" } }),
+      message: AnyMessages.pack(
+        MapIdCommandSchema,
+        create(MapIdCommandSchema, { id: { one: "one" } }),
+      ),
     });
 
     expect(() => repository.routeCommand(repeated)).toThrow(/singular non-map first field/);
@@ -4656,11 +4662,13 @@ describe("repository signal routing", () => {
 
   it("rejects a default-valued declaration-first numeric Command ID", () => {
     const repository = createInt32RoutingRepository();
-    const command = SignalEnvelopes.command({
+    const command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "command-default-int32" }),
       context: create(CommandContextSchema),
-      schema: Int32AggregateStateSchema,
-      message: create(Int32AggregateStateSchema, { id: 0, name: "Default" }),
+      message: AnyMessages.pack(
+        Int32AggregateStateSchema,
+        create(Int32AggregateStateSchema, { id: 0, name: "Default" }),
+      ),
     });
 
     expect(() => repository.routeCommand(command)).toThrow(/non-default first field/);
@@ -4670,18 +4678,20 @@ describe("repository signal routing", () => {
     const repository = createRoutingRepository();
 
     const producerRoute = repository.routeEvent(
-      SignalEnvelopes.event({
+      create(EventSchema, {
         id: create(EventIdSchema, { value: "event-1" }),
         context: create(EventContextSchema, {
           producerId: Identifiers.pack("string", "producer-task"),
           version: create(VersionSchema, { number: 1 }),
         }),
-        schema: ProjectionEventSchema,
-        message: create(ProjectionEventSchema, {
-          id: "field-task",
-          name: "Task",
-          priority: 1,
-        }),
+        message: AnyMessages.pack(
+          ProjectionEventSchema,
+          create(ProjectionEventSchema, {
+            id: "field-task",
+            name: "Task",
+            priority: 1,
+          }),
+        ),
       }),
     );
     const firstFieldRoute = repository.routeEvent(
@@ -4733,11 +4743,13 @@ describe("repository signal routing", () => {
       .withStorageFactory(factory)
       .build();
     const id = create(Int64ProjectionIdSchema, { value: 42n });
-    const event = SignalEnvelopes.event({
+    const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-int64-message-id" }),
       context: create(EventContextSchema),
-      schema: Int64MessageIdProjectionEventSchema,
-      message: create(Int64MessageIdProjectionEventSchema, { id, name: "Int64 ID" }),
+      message: AnyMessages.pack(
+        Int64MessageIdProjectionEventSchema,
+        create(Int64MessageIdProjectionEventSchema, { id, name: "Int64 ID" }),
+      ),
     });
 
     try {
