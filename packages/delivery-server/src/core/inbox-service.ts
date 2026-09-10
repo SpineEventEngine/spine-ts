@@ -56,7 +56,7 @@ export const InboxHandlers: Readonly<{
    *
    * @param state Stores Inbox messages served by the handlers.
    * @param admission Controls write admission and cancellation.
-   * @param onMessageTransition Observes retained-message count transitions.
+   * @param onMessageTransition Observes pending deliverable-message count transitions.
    * @returns The Inbox service implementation.
    */
   create: (
@@ -411,7 +411,7 @@ const InboxTime: Readonly<{
 });
 
 /**
- * Bounds Inbox responses and creates RPC errors.
+ * Computes a pending-message count delta from an Inbox status transition.
  */
 const InboxTransitions = Object.freeze({
   delta(prior: InboxMessage | undefined, next: InboxMessage): 1 | -1 | 0 {
@@ -421,6 +421,9 @@ const InboxTransitions = Object.freeze({
   },
 });
 
+/**
+ * Bounds Inbox responses and creates RPC errors.
+ */
 const InboxResponses: Readonly<{
   // prettier-ignore
 

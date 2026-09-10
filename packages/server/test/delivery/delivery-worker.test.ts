@@ -48,11 +48,11 @@ describe("Delivery direct worker", () => {
       typeUrl: "type.spine.io/spine.core.Event",
       value: toBinary(EventSchema, create(EventSchema)),
     });
-    await delivery.inbox.receive({
+    const firstWrite = await delivery.inbox.receive({
       ...firstInput,
       signal,
     });
-    await delivery.inbox.receive({
+    const duplicateWrite = await delivery.inbox.receive({
       ...duplicateInput,
       signal,
     });
@@ -63,11 +63,13 @@ describe("Delivery direct worker", () => {
       onMessage: (row) => {
         delivered.push(row.id.value);
       },
-      onDelivered: (row) => acknowledged.push(row.id.value),
+      onDelivered: (row) => {
+        acknowledged.push(row.id.value);
+      },
     });
 
     expect(delivered).toHaveLength(1);
-    expect(acknowledged).toHaveLength(2);
+    expect(acknowledged).toEqual([firstWrite.message.id.value, duplicateWrite.message.id.value]);
   });
 
   it("retains an admission failure without endpoint dispatch or acknowledgement", async () => {
