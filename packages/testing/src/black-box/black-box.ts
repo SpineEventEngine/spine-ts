@@ -29,7 +29,6 @@ import {
   ActorContextSchema,
   CommandSchema,
   EventContextSchema,
-  EventIdSchema,
   EventSchema,
   TenantIdSchema,
   UserIdSchema,
@@ -47,7 +46,6 @@ import {
   type RunningServer,
 } from "@spine-event-engine/server";
 import { observeProducedSignals, postExternalEvent } from "@spine-event-engine/server/testing";
-import { randomUUID } from "node:crypto";
 
 /**
  * Fixed configuration for one runner-neutral BlackBox session.
@@ -329,10 +327,8 @@ export class BlackBox {
     message: MessageShape<Schema>,
   ): Promise<void> {
     this.#assertOpen();
-    const id = create(EventIdSchema, { value: randomUUID() });
     await this.#context.eventBus().post(
       SignalEnvelopes.event({
-        id,
         context: create(EventContextSchema, {
           timestamp: BlackBoxClock.timestamp(),
           origin: { case: "importContext", value: this.#actorContext(actor) },
@@ -352,7 +348,6 @@ export class BlackBox {
     await postExternalEvent(
       this.#context,
       SignalEnvelopes.event({
-        id: create(EventIdSchema, { value: randomUUID() }),
         context: create(EventContextSchema, {
           timestamp: BlackBoxClock.timestamp(),
           origin: { case: "importContext", value: this.#actorContext(actor) },

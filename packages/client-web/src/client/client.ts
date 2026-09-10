@@ -380,7 +380,7 @@ export interface BrowserClientOptions extends ClientOptions {
 }
 
 /**
- * Transport and request-ID source injected by an application or platform adapter.
+ * Transport injected by an application or platform adapter.
  */
 export interface ClientTransport {
   // prettier-ignore
@@ -389,12 +389,6 @@ export interface ClientTransport {
    * Carries the Connect transport used for RPC calls.
    */
   readonly transport: Transport;
-
-  /**
-   * Creates a non-empty identifier for each outbound command.
-   * @returns Returns the new request identifier.
-   */
-  createRequestId(): string;
 
   /**
    * Closes a platform transport owned by this client after work settles.
@@ -459,7 +453,7 @@ class SubscriptionBufferOverflowError extends ClientProtocolError {}
 class SubscriptionStreamEndedError extends ClientProtocolError {}
 
 /**
- * Browser-safe Spine client whose transport and ID source are supplied by the caller.
+ * Browser-safe Spine client whose transport is supplied by the caller.
  */
 export class Client {
   readonly #owner: ClientOwner;
@@ -470,7 +464,7 @@ export class Client {
   /**
    * Creates a browser client from a supplied transport and immutable options.
    *
-   * @param source Supplies the browser-safe transport and request-ID source.
+   * @param source Supplies the browser-safe transport.
    * @param options Supplies optional tenant, zone, reconnect, and subscription settings.
    */
   protected constructor(source: ClientTransport, options: ClientOptions) {
@@ -481,8 +475,8 @@ export class Client {
   }
 
   /**
-   * Creates a client from an injected transport and request-ID source.
-   * @param source Supplies the transport and request-ID source.
+   * Creates a client from an injected transport.
+   * @param source Supplies the transport.
    * @param options Supplies immutable client options.
    * @returns Returns the created client.
    */
@@ -616,10 +610,7 @@ class Request implements ClientRequest {
     options: ClientOperationOptions = {},
   ): Promise<ClientOutcome> {
     return this.#owner.run(options.signal, async (signal) => {
-      const id = this.#owner.createRequestId();
-      if (id.length === 0) throw new ClientProtocolError("request ID is missing or invalid.");
       const command = SignalEnvelopes.command({
-        id: create(CommandIdSchema, { uuid: id }),
         context: create(CommandContextSchema, { actorContext: this.#context() }),
         schema,
         message,
@@ -628,7 +619,7 @@ class Request implements ClientRequest {
       const ack = await createClient(CommandService, this.#owner.transport).post(command, {
         signal,
       });
-      BrowserClientValues.validateAckId(ack.messageId, id);
+      BrowserClientValues.validateAckId(ack.messageId, command.id?.uuid ?? "");
       return BrowserClientValues.outcome(ack.status?.status);
     });
   }
@@ -689,9 +680,6 @@ class ClientOwner {
     this.#source = source;
     this.#onReauthenticateBeforeReconnect = onReauthenticateBeforeReconnect;
     this.transport = source.transport;
-  }
-  createRequestId(): string {
-    return this.#source.createRequestId();
   }
   async onReauthenticateBeforeReconnect(signal: AbortSignal, remainingMs: number): Promise<void> {
     this.assertOpen();
@@ -1542,7 +1530,7 @@ const BrowserClientValues = Object.freeze({
   },
 
   browserSource(transport: Transport): ClientTransport {
-    return { transport, createRequestId: BrowserClientValues.browserRequestId };
+    return { transport };
   },
 
   browserTransportOptions(
@@ -1573,27 +1561,6 @@ const BrowserClientValues = Object.freeze({
       for (const [name, value] of metadata) request.header.set(name, value);
       return next(request);
     };
-  },
-
-  browserRequestId(): string {
-    const crypto: unknown = globalThis.crypto;
-    if (!BrowserClientValues.isBrowserCrypto(crypto))
-      throw new ClientProtocolError("secure random browser API is unavailable for request IDs.");
-    if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
-    const bytes = crypto.getRandomValues(new Uint8Array(16));
-    bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
-    bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
-    const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-  },
-
-  isBrowserCrypto(value: unknown): value is Crypto {
-    return (
-      value !== null &&
-      typeof value === "object" &&
-      "getRandomValues" in value &&
-      typeof value.getRandomValues === "function"
-    );
   },
 
   cloneTopic(topic: Topic, context: ActorContext): Topic {

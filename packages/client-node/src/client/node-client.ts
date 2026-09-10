@@ -13,7 +13,6 @@
  */
 
 import { Http2SessionManager, createGrpcTransport } from "@connectrpc/connect-node";
-import { randomUUID } from "node:crypto";
 import {
   Client as WebClient,
   type ClientOptions,
@@ -79,11 +78,9 @@ const NodeClientTransport = Object.freeze({
    *
    * @param transport Connect transport used for client operations.
    * @param onClose Optional cleanup for a transport owned by this package.
-   * @returns Shared transport contract with a UUID request-ID source.
+   * @returns Shared transport contract.
    */
   create(transport: Transport, onClose?: () => void): ClientTransport {
-    return onClose === undefined
-      ? { transport, createRequestId: randomUUID }
-      : { transport, createRequestId: randomUUID, close: onClose };
+    return onClose === undefined ? { transport } : { transport, close: onClose };
   },
 });
