@@ -1043,11 +1043,10 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
     if (command.name.startsWith("restore-lifecycle")) this.restoreDraft();
 
     if (command.name.includes("-lifecycle")) {
-      return SignalEnvelopes.event({
+      return create(EventSchema, {
         id: create(EventIdSchema, { value: `event-${command.name}` }),
         context: create(EventContextSchema),
-        schema: AggregateStateSchema,
-        message: command,
+        message: AnyMessages.pack(AggregateStateSchema, command),
       });
     }
 
@@ -1071,15 +1070,17 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
       ];
     }
 
-    return SignalEnvelopes.event({
+    return create(EventSchema, {
       id: create(EventIdSchema, { value: `event-${command.name}` }),
       context: create(EventContextSchema),
-      schema: AggregateStateSchema,
-      message: create(AggregateStateSchema, {
-        id: command.id,
-        name: command.name,
-        archived: false,
-      }),
+      message: AnyMessages.pack(
+        AggregateStateSchema,
+        create(AggregateStateSchema, {
+          id: command.id,
+          name: command.name,
+          archived: false,
+        }),
+      ),
     });
   }
 }
@@ -3437,11 +3438,13 @@ describe("repository signal routing", () => {
     try {
       await expect(
         context.eventBus().post(
-          SignalEnvelopes.event({
+          create(EventSchema, {
             id: create(EventIdSchema, { value: "aggregate-reactor-unmatched" }),
             context: create(EventContextSchema),
-            schema: NumberRouteEventSchema,
-            message: create(NumberRouteEventSchema, { id: 7 }),
+            message: AnyMessages.pack(
+              NumberRouteEventSchema,
+              create(NumberRouteEventSchema, { id: 7 }),
+            ),
           }),
         ),
       ).rejects.toThrow(/event schema/i);
