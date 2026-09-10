@@ -5173,7 +5173,7 @@ describe("repository signal routing", () => {
 
   it("uses a compatible producer without requiring first-field equality", () => {
     const repository = createRoutingRepository();
-    const event = SignalEnvelopes.event({
+    const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-primitive-unknown" }),
       context: create(EventContextSchema, {
         producerId: AnyMessages.pack(
@@ -5182,10 +5182,12 @@ describe("repository signal routing", () => {
         ),
         rejection: {},
       }),
-      schema: ProjectionEventSchema,
-      message: create(ProjectionEventSchema, {
-        id: "mismatched-task",
-      }),
+      message: AnyMessages.pack(
+        ProjectionEventSchema,
+        create(ProjectionEventSchema, {
+          id: "mismatched-task",
+        }),
+      ),
     });
 
     expect(repository.routeEvent(event).entityIds).toEqual(["Unknown"]);
@@ -5197,21 +5199,25 @@ describe("repository signal routing", () => {
 
     expect(
       int32.routeEvent(
-        SignalEnvelopes.event({
+        create(EventSchema, {
           id: create(EventIdSchema, { value: "event-int32-producer" }),
           context: create(EventContextSchema, { producerId: Identifiers.pack("int32", 0) }),
-          schema: Int32AggregateStateSchema,
-          message: create(Int32AggregateStateSchema, { id: 42, name: "Int32" }),
+          message: AnyMessages.pack(
+            Int32AggregateStateSchema,
+            create(Int32AggregateStateSchema, { id: 42, name: "Int32" }),
+          ),
         }),
       ).entityIds,
     ).toEqual([0]);
     expect(
       int64.routeEvent(
-        SignalEnvelopes.event({
+        create(EventSchema, {
           id: create(EventIdSchema, { value: "event-int64-producer" }),
           context: create(EventContextSchema, { producerId: Identifiers.pack("int64", 0n) }),
-          schema: Int64ProcessManagerStateSchema,
-          message: create(Int64ProcessManagerStateSchema, { id: 42n, queue: "Int64" }),
+          message: AnyMessages.pack(
+            Int64ProcessManagerStateSchema,
+            create(Int64ProcessManagerStateSchema, { id: 42n, queue: "Int64" }),
+          ),
         }),
       ).entityIds,
     ).toEqual([0n]);
@@ -5220,14 +5226,13 @@ describe("repository signal routing", () => {
   it("routes a primitive first field from a message signal to a primitive Entity target", () => {
     const repository = createUserIdProjectionRepository();
     const route = repository.routeEvent(
-      SignalEnvelopes.event({
+      create(EventSchema, {
         id: create(EventIdSchema, { value: "event-user-id" }),
         context: create(EventContextSchema, {
           producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "producer" })),
           version: create(VersionSchema, { number: 1 }),
         }),
-        schema: UserIdSchema,
-        message: create(UserIdSchema, { value: "user-id-task" }),
+        message: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "user-id-task" })),
       }),
     );
 
@@ -5244,18 +5249,20 @@ describe("repository signal routing", () => {
 
     expect(() =>
       repository.routeEvent(
-        SignalEnvelopes.event({
+        create(EventSchema, {
           id: create(EventIdSchema, { value: "event-implicit-scalar-task" }),
           context: create(EventContextSchema, {
             producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "producer" })),
             version: create(VersionSchema, { number: 1 }),
           }),
-          schema: TaskCreatedSchema,
-          message: create(TaskCreatedSchema, {
-            id,
-            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
-            title: "Implicit scalar task",
-          }),
+          message: AnyMessages.pack(
+            TaskCreatedSchema,
+            create(TaskCreatedSchema, {
+              id,
+              taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
+              title: "Implicit scalar task",
+            }),
+          ),
         }),
       ),
     ).toThrow(/compatible with the Entity state/);
@@ -5272,15 +5279,17 @@ describe("repository signal routing", () => {
 
     expect(
       repository.routeCommand(
-        SignalEnvelopes.command({
+        create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: "command-explicit-scalar-task" }),
           context: create(CommandContextSchema),
-          schema: TaskCreatedSchema,
-          message: create(TaskCreatedSchema, {
-            id,
-            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
-            title: "Explicit scalar task",
-          }),
+          message: AnyMessages.pack(
+            TaskCreatedSchema,
+            create(TaskCreatedSchema, {
+              id,
+              taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
+              title: "Explicit scalar task",
+            }),
+          ),
         }),
       ).entityId,
     ).toBe(id.value);
