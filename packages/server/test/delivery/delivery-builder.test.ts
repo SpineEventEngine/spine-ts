@@ -29,6 +29,7 @@ import {
   DeliveryMonitor,
   FailedPickUp,
   FailedReception,
+  type InboxMessage,
   ShardIndex,
   ShardedWorkRegistry,
   UniformAcrossAllShards,
@@ -77,6 +78,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
+        admit: async (message) => message,
         markDelivered: async (value) => {
           acknowledgements += 1;
           return value;
@@ -255,6 +257,7 @@ describe("DeliveryMonitor delivery", () => {
       },
       read: async () => [],
       readMessage: async () => undefined,
+      admit: async (message: InboxMessage) => message,
       markDelivered: async () => undefined,
     };
     const skipped = await build()
@@ -301,6 +304,7 @@ describe("DeliveryMonitor delivery", () => {
           },
           read: async () => (reads++ === 0 ? [message("pending", "target", shard)] : []),
           readMessage: async () => undefined,
+          admit: async (message) => message,
           markDelivered: async (value) => value,
         })
         .withWorkRegistry(registry(shard))
@@ -323,6 +327,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
+        admit: async (message) => message,
         markDelivered: async (value) => (acknowledgements++ === 0 ? undefined : value),
       })
       .withWorkRegistry(registry(shard))
@@ -345,6 +350,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => [pending],
         readMessage: async () => undefined,
+        admit: async (message) => message,
         markDelivered: async (value) => value,
       },
       workRegistry: registry(shard),
@@ -420,6 +426,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
+        admit: async (message) => message,
         markDelivered: async (value) => value,
       },
       workRegistry: {
@@ -453,6 +460,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? messages : []),
         readMessage: async () => undefined,
+        admit: async (message) => message,
         markDelivered: async (value) => {
           if (value.signalId === "first") throw new Error("acknowledgement failed");
           return value;
@@ -484,6 +492,7 @@ describe("DeliveryMonitor delivery", () => {
           return [pending];
         },
         readMessage: async () => undefined,
+        admit: async (message) => message,
         markDelivered: async () => {
           throw new Error("mark failed");
         },
@@ -509,6 +518,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => [message("pending", "target", shard)],
         readMessage: async () => undefined,
+        admit: async (message) => message,
         markDelivered: async () => {
           throw new Error("must not acknowledge");
         },
@@ -534,6 +544,7 @@ describe("DeliveryMonitor delivery", () => {
           },
           read: async () => [],
           readMessage: async () => undefined,
+          admit: async (message) => message,
           markDelivered: async () => undefined,
         })
         .withWorkRegistry(registry(shard))

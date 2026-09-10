@@ -416,10 +416,7 @@ export class Delivery {
           if (!(await validate())) return complete("STOPPED");
           let admitted: InboxMessage | undefined;
           try {
-            admitted =
-              this.inbox.admit === undefined
-                ? message
-                : await this.inbox.admit(message, options.operation);
+            admitted = await this.inbox.admit(message, options.operation);
           } catch (error) {
             statistics.failed += 1;
             failures.push(Object.freeze({ message: snapshot(message), error }));

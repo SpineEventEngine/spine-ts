@@ -92,7 +92,7 @@ export interface DeliveryInbox {
    * @returns The canonical admitted row for dispatch and recovery, or `undefined`
    * when retained delivery suppresses it.
    */
-  admit?(
+  admit(
     message: InboxMessage,
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined>;

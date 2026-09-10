@@ -34,6 +34,7 @@ describe("Delivery fencing", () => {
         receive: () => Promise.reject(new Error("not used")),
         read: () => Promise.resolve([]),
         readMessage: () => Promise.resolve(undefined),
+        admit: (message) => Promise.resolve(message),
         markDelivered: () => Promise.resolve(undefined),
       },
       workRegistry: {
@@ -71,6 +72,7 @@ describe("Delivery fencing", () => {
         receive: () => Promise.reject(new Error("not used")),
         read: () => Promise.resolve([]),
         readMessage: () => Promise.resolve(undefined),
+        admit: (message) => Promise.resolve(message),
         markDelivered: () => Promise.resolve(undefined),
       },
       workRegistry: {

@@ -99,6 +99,24 @@ describe("Delivery direct worker", () => {
     expect(acknowledged).toBe(0);
   });
 
+  it("fails closed when a structural inbox port omits admission", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("missing-admit", "target", shard);
+    let dispatched = 0;
+    const delivery = createDelivery({ rows: [pending] });
+    const incomplete = delivery.inbox as { admit?: unknown };
+    delete incomplete.admit;
+
+    await expect(
+      delivery.drain(shard, {
+        onMessage: () => {
+          dispatched += 1;
+        },
+      }),
+    ).resolves.toMatchObject({ status: "DRAINED", failed: 1, delivered: 0 });
+    expect(dispatched).toBe(0);
+  });
+
   it("reports exact acknowledgement through the callback shorthand", async () => {
     const shard = ShardIndex.single();
     const target = message("target", "target", shard);
@@ -850,7 +868,7 @@ function createDelivery(config: {
       },
       read: async (_shard, options) => config.read?.(options) ?? [...rows],
       readMessage: async () => undefined,
-      ...(config.admit === undefined ? {} : { admit: async (row) => config.admit!(row) }),
+      admit: async (row) => config.admit?.(row) ?? row,
       markDelivered: async (row) => config.mark?.(row) ?? row,
       ...(config.remove === undefined
         ? {}

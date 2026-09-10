@@ -1188,6 +1188,13 @@ class AdmissionInbox implements DeliveryInbox {
     return this.#delegate.readMessage(id, options);
   }
 
+  admit(
+    message: InboxMessage,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxMessage | undefined> {
+    return this.#delegate.admit(message, options);
+  }
+
   markDelivered(
     message: InboxMessage,
     options?: DeliveryOperationOptions,
@@ -1320,6 +1327,10 @@ class RunnerInbox implements DeliveryInbox {
 
   readMessage(): Promise<undefined> {
     return Promise.resolve(undefined);
+  }
+
+  admit(message: InboxMessage): Promise<InboxMessage> {
+    return Promise.resolve(message);
   }
 
   markDelivered(): Promise<undefined> {
