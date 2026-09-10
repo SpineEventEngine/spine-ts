@@ -89,7 +89,8 @@ export interface DeliveryInbox {
    *
    * @param message Supplies the pending row snapshot.
    * @param options Propagates cancellation and a delivery deadline.
-   * @returns The admitted row, or `undefined` when retained delivery suppresses it.
+   * @returns The canonical admitted row for dispatch and recovery, or `undefined`
+   * when retained delivery suppresses it.
    */
   admit?(
     message: InboxMessage,

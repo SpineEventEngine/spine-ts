@@ -431,6 +431,8 @@ export class Delivery {
             options.onDelivered?.(message);
             continue;
           }
+          const admittedTarget = `${admitted.inboxId.targetTypeUrl}:${InboxTargets.key(admitted.inboxId.targetId)}`;
+          if (blockedTargets.has(admittedTarget)) continue;
           try {
             statistics.accepted += 1;
             await dispatch(admitted);
@@ -439,18 +441,18 @@ export class Delivery {
             await markDelivered(admitted);
           } catch (error) {
             statistics.failed += 1;
-            failures.push(Object.freeze({ message: snapshot(message), error }));
+            failures.push(Object.freeze({ message: snapshot(admitted), error }));
             const reception = new FailedReception(
-              message,
+              admitted,
               error,
               async () => {
                 if (!(await validate())) throw new Error("Shard ownership was lost.");
-                await markDelivered(message);
+                await markDelivered(admitted);
               },
               async () => {
-                await dispatch(message);
+                await dispatch(admitted);
                 if (!(await validate())) throw new Error("Shard ownership was lost.");
-                await markDelivered(message);
+                await markDelivered(admitted);
               },
             );
             const action = await safelyValue(
@@ -461,7 +463,7 @@ export class Delivery {
               !(await safely(() => action.execute())) &&
               !(await safely(() => reception.markDelivered().execute()))
             ) {
-              blockedTargets.add(target);
+              blockedTargets.add(admittedTarget);
             }
             if (ownership.lost) return complete("STOPPED");
           }

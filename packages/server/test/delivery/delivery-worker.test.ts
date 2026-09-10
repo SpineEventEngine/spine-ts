@@ -624,6 +624,42 @@ describe("Delivery direct worker", () => {
     expect(calls).toBe(2);
   });
 
+  it("retries and acknowledges the canonical admitted snapshot after dispatch failure", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("pending", "target", shard);
+    const admitted = { ...pending, id: { ...pending.id, value: "canonical" }, version: 2n };
+    const rows = [pending];
+    const dispatched: string[] = [];
+    const acknowledged: string[] = [];
+    const delivery = createDelivery({
+      rows,
+      admit: async () => admitted,
+      mark: async (row) => {
+        acknowledged.push(row.id.value);
+        remove(rows, pending);
+        return row;
+      },
+      monitor: new (class extends DeliveryMonitor {
+        override onReceptionFailure(
+          reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0],
+        ) {
+          return reception.repeatDispatching();
+        }
+      })(),
+    });
+    let attempts = 0;
+    const run = await delivery.drain(shard, {
+      onMessage: (row) => {
+        dispatched.push(row.id.value);
+        attempts += 1;
+        if (attempts === 1) throw new Error("dispatch failed");
+      },
+    });
+    expect(run.failures[0]?.message.id.value).toBe("canonical");
+    expect(dispatched).toEqual(["canonical", "canonical"]);
+    expect(acknowledged).toEqual(["canonical"]);
+  });
+
   it.each([false, new Error("release failed")])(
     "contains unsuccessful shard release and does not complete the monitor",
     async (release) => {
@@ -644,10 +680,12 @@ describe("Delivery direct worker", () => {
 
   it("blocks only a target after acknowledgement failure and does not spin", async () => {
     const shard = ShardIndex.single();
-    const first = message("first", "same", shard);
-    const blocked = message("blocked", "same", shard);
+    const first = message("first", "input", shard);
+    const admitted = message("first", "canonical", shard);
+    const input = message("input", "input", shard);
+    const blocked = message("blocked", "canonical", shard);
     const other = message("other", "other", shard);
-    const rows = [first, blocked, other];
+    const rows = [first, input, blocked, other];
     const seen: string[] = [];
     let reads = 0;
     const delivery = createDelivery({
@@ -656,6 +694,7 @@ describe("Delivery direct worker", () => {
         reads += 1;
         return [...rows];
       },
+      admit: async (row) => (row.signalId === "first" ? admitted : row),
       mark: async (row) => {
         if (row.signalId === "first") throw new Error("durable mark failed");
         remove(rows, row);
@@ -668,7 +707,7 @@ describe("Delivery direct worker", () => {
         if (row.signalId === "first") throw new Error("dispatch failed");
       },
     });
-    expect(seen).toEqual(["first", "other"]);
+    expect(seen).toEqual(["first", "input", "other"]);
     expect(reads).toBe(2);
     expect(rows.map((row) => row.signalId)).toEqual(["first", "blocked"]);
   });
