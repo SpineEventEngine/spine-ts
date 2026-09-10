@@ -4158,14 +4158,16 @@ describe("repository signal routing", () => {
       }),
       actorContext,
     });
-    const source = SignalEnvelopes.command({
+    const source = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "transform-source" }),
       context: create(CommandContextSchema, { actorContext, origin: grandOrigin }),
-      schema: ValidatedTaskCommandSchema,
-      message: create(ValidatedTaskCommandSchema, {
-        id: "declared-source-id",
-        name: "Transform",
-      }),
+      message: AnyMessages.pack(
+        ValidatedTaskCommandSchema,
+        create(ValidatedTaskCommandSchema, {
+          id: "declared-source-id",
+          name: "Transform",
+        }),
+      ),
     });
 
     await context.commandBus().post(source);
@@ -4239,14 +4241,16 @@ describe("repository signal routing", () => {
     } as unknown as ILogLayer);
     try {
       await context.commandBus().post(
-        SignalEnvelopes.command({
+        create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: "siblings-source" }),
           context: create(CommandContextSchema),
-          schema: ValidatedTaskCommandSchema,
-          message: create(ValidatedTaskCommandSchema, {
-            id: "source",
-            name: "Siblings",
-          }),
+          message: AnyMessages.pack(
+            ValidatedTaskCommandSchema,
+            create(ValidatedTaskCommandSchema, {
+              id: "source",
+              name: "Siblings",
+            }),
+          ),
         }),
       );
       await context.close();
@@ -4296,11 +4300,13 @@ describe("repository signal routing", () => {
     expect(id).toEqual({ $typeName: CommandIdSchema.typeName, uuid: "uuid-message-id" });
     expect(
       repository.routeCommand(
-        SignalEnvelopes.command({
+        create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: "command-uuid-message-id" }),
           context: create(CommandContextSchema),
-          schema: UuidMessageIdAggregateStateSchema,
-          message: create(UuidMessageIdAggregateStateSchema, { id, name: "UUID", priority: 1 }),
+          message: AnyMessages.pack(
+            UuidMessageIdAggregateStateSchema,
+            create(UuidMessageIdAggregateStateSchema, { id, name: "UUID", priority: 1 }),
+          ),
         }),
       ).entityId,
     ).toEqual(id);
@@ -4321,35 +4327,38 @@ describe("repository signal routing", () => {
 
     expect(
       commandRepository.routeCommand(
-        SignalEnvelopes.command({
+        create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: "composite-command" }),
           context: create(CommandContextSchema),
-          schema: CompositeRouteAggregateStateSchema,
-          message,
+          message: AnyMessages.pack(CompositeRouteAggregateStateSchema, message),
         }),
       ).entityId,
     ).toEqual(idA);
     expect(
       projectionRepository.routeEvent(
-        SignalEnvelopes.event({
+        create(EventSchema, {
           id: create(EventIdSchema, { value: "composite-producer" }),
           context: create(EventContextSchema, {
             producerId: Identifiers.pack(CompositeRouteIdSchema, idA),
           }),
-          schema: CompositeRouteEventSchema,
-          message: create(CompositeRouteEventSchema, { id: idB, name: "Producer" }),
+          message: AnyMessages.pack(
+            CompositeRouteEventSchema,
+            create(CompositeRouteEventSchema, { id: idB, name: "Producer" }),
+          ),
         }),
       ).entityIds,
     ).toEqual([idA]);
     expect(
       projectionRepository.routeEvent(
-        SignalEnvelopes.event({
+        create(EventSchema, {
           id: create(EventIdSchema, { value: "composite-fallback" }),
           context: create(EventContextSchema, {
             producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "other" })),
           }),
-          schema: CompositeRouteEventSchema,
-          message: create(CompositeRouteEventSchema, { id: idB, name: "Fallback" }),
+          message: AnyMessages.pack(
+            CompositeRouteEventSchema,
+            create(CompositeRouteEventSchema, { id: idB, name: "Fallback" }),
+          ),
         }),
       ).entityIds,
     ).toEqual([idB]);
@@ -4383,14 +4392,16 @@ describe("repository signal routing", () => {
 
     expect(
       repository.routeCommand(
-        SignalEnvelopes.command({
+        create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: "command-composite-custom" }),
           context: create(CommandContextSchema),
-          schema: CompositeRouteAggregateStateSchema,
-          message: create(CompositeRouteAggregateStateSchema, {
-            id: declarationId,
-            name: "Custom",
-          }),
+          message: AnyMessages.pack(
+            CompositeRouteAggregateStateSchema,
+            create(CompositeRouteAggregateStateSchema, {
+              id: declarationId,
+              name: "Custom",
+            }),
+          ),
         }),
       ).entityId,
     ).toEqual(routedId);
@@ -4418,13 +4429,15 @@ describe("repository signal routing", () => {
 
     expect(
       repository.routeEvent(
-        SignalEnvelopes.event({
+        create(EventSchema, {
           id: create(EventIdSchema, { value: "composite-custom" }),
           context: create(EventContextSchema, {
             producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "other" })),
           }),
-          schema: CompositeRouteEventSchema,
-          message: create(CompositeRouteEventSchema, { id: idA, name: "Custom" }),
+          message: AnyMessages.pack(
+            CompositeRouteEventSchema,
+            create(CompositeRouteEventSchema, { id: idA, name: "Custom" }),
+          ),
         }),
       ).entityIds,
     ).toEqual([idA, idB]);
