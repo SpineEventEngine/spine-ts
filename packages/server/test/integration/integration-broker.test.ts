@@ -12,18 +12,19 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import {
+  AnySchema,
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+} from "@bufbuild/protobuf/wkt";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import {
-  BoolValueSchema,
-  Int32ValueSchema,
-  StringValueSchema,
-  TimestampSchema,
-} from "@bufbuild/protobuf/wkt";
+import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
 import { TypeUrls } from "@spine-event-engine/core";
 import {
@@ -31,6 +32,7 @@ import {
   EventIdSchema,
   EventSchema,
   type Event,
+  type EventContext,
   BoundedContextNameSchema,
   ChannelIdSchema,
   ExternalEventsWantedSchema,
@@ -42,6 +44,8 @@ import {
   AbstractEventSubscriber,
   BoundedContext,
   EnvironmentType,
+  EventRouting,
+  Projection,
   ServerEnvironment,
 } from "@spine-event-engine/server";
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
@@ -52,12 +56,67 @@ import {
   RecordingTransportFactory,
   requireContractMember,
 } from "./wave13-red-support.js";
-import {
-  createWave13OriginRegistry,
-  wave13OriginRouting,
-  Wave13OriginProjection,
-  Wave13OriginStateSchema,
-} from "./wave13-origin-repository.js";
+import { Wave13OriginStateSchema } from "./wave13-origin-repository.js";
+import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+
+type TaskEvent = Message<"TaskEvent"> & { id: string; name: string };
+type ReviewStarted = Message<"ReviewStarted"> & { id: string };
+type ValidatedTaskEvent = Message<"spine.server.testing.handlerregistry.ValidatedTaskEvent"> & {
+  id: string;
+  name: string;
+};
+
+function fixtureFile(descriptorSetBase64: string) {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(descriptorSetBase64, "base64"),
+  );
+  const descriptor = descriptorSet.file[0];
+  if (descriptor === undefined) throw new Error("Integration broker event fixture is empty.");
+  return fileDesc(
+    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
+    [],
+  );
+}
+
+const handlerRegistryEventsFixture = fixtureFile(
+  serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64,
+);
+const TaskEventSchema = messageDesc(handlerRegistryEventsFixture, 1) as GenMessage<TaskEvent>;
+const ReviewStartedSchema = messageDesc(
+  handlerRegistryEventsFixture,
+  0,
+) as GenMessage<ReviewStarted>;
+const ValidatedTaskEventSchema = messageDesc(
+  handlerRegistryEventsFixture,
+  2,
+) as GenMessage<ValidatedTaskEvent>;
+
+class TaskEventOriginProjection extends Projection<string, typeof Wave13OriginStateSchema, number> {
+  static externalContexts: EventContext[] = [];
+
+  static reset(): void {
+    this.externalContexts = [];
+  }
+
+  onExternal(event: TaskEvent, context: EventContext): void {
+    TaskEventOriginProjection.externalContexts.push(context);
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(Wave13OriginStateSchema, {
+          id: event.id,
+          name: `external:${event.id}`,
+          priority: 1,
+        }),
+      ),
+    );
+  }
+}
+
+const taskEventOriginRouting = EventRouting.create<string>().route(TaskEventSchema, (event) => [
+  event.id,
+]);
 
 const brokerModule = new URL("../../src/integration/integration-broker.js", import.meta.url).href;
 const external = (schemas: readonly MessageSchema[], received: unknown[]) => ({
@@ -70,21 +129,23 @@ const domestic = (schemas: readonly MessageSchema[], received: unknown[] = []) =
   dispatch: (event: Event) => Promise.resolve(received.push(event)).then(() => undefined),
 });
 function event(
-  schema?: typeof StringValueSchema,
+  schema?: typeof TaskEventSchema,
   id?: string,
   tenantId?: string,
-): ReturnType<typeof stringEvent>;
+): ReturnType<typeof taskEvent>;
 function event(
-  schema: typeof Int32ValueSchema,
+  schema: typeof ReviewStartedSchema,
   id?: string,
   tenantId?: string,
-): ReturnType<typeof int32Event>;
+): ReturnType<typeof reviewStartedEvent>;
 function event(
-  schema: typeof StringValueSchema | typeof Int32ValueSchema = StringValueSchema,
+  schema: typeof TaskEventSchema | typeof ReviewStartedSchema = TaskEventSchema,
   id = "wave13-event",
   tenantId?: string,
 ) {
-  return schema === Int32ValueSchema ? int32Event(id, tenantId) : stringEvent(id, tenantId);
+  return schema === ReviewStartedSchema
+    ? reviewStartedEvent(id, tenantId)
+    : taskEvent(id, tenantId);
 }
 function eventContext(tenantId?: string) {
   return create(
@@ -101,18 +162,18 @@ function eventContext(tenantId?: string) {
         },
   );
 }
-function stringEvent(id: string, tenantId?: string) {
+function taskEvent(id: string, tenantId?: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: eventContext(tenantId),
-    message: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+    message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema, { id, name: id })),
   });
 }
-function int32Event(id: string, tenantId?: string) {
+function reviewStartedEvent(id: string, tenantId?: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: eventContext(tenantId),
-    message: AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: id.length })),
+    message: AnyMessages.pack(ReviewStartedSchema, create(ReviewStartedSchema, { id })),
   });
 }
 async function broker(behavior: string) {
@@ -149,10 +210,10 @@ describe("Wave 13 IntegrationBroker", () => {
     await broker("one producer / one consumer delivery");
     const seen: unknown[] = [];
     const consumer = BoundedContext.singleTenant("Red01Consumer")
-      .addEventDispatcher(external([StringValueSchema], seen))
+      .addEventDispatcher(external([TaskEventSchema], seen))
       .build();
     const producer = BoundedContext.singleTenant("Red01Producer")
-      .addEventDispatcher(domestic([StringValueSchema]))
+      .addEventDispatcher(domestic([TaskEventSchema]))
       .build();
     try {
       const original = event();
@@ -181,7 +242,7 @@ describe("Wave 13 IntegrationBroker", () => {
           {
             kind: "event-subscription",
             methodName: "subscribe",
-            signalSchema: StringValueSchema,
+            signalSchema: TaskEventSchema,
             emittedSchemas: [],
             parameterCount: 1,
             origin: "external",
@@ -194,14 +255,14 @@ describe("Wave 13 IntegrationBroker", () => {
       .addEventDispatcher(subscriber)
       .buildAsync();
     const producer = BoundedContext.singleTenant("StandaloneExternalProducer")
-      .addEventDispatcher(domestic([StringValueSchema]))
+      .addEventDispatcher(domestic([TaskEventSchema]))
       .build();
     try {
-      await producer.eventBus().post(event(StringValueSchema, "standalone-external"));
+      await producer.eventBus().post(event(TaskEventSchema, "standalone-external"));
       expect(subscriber.calls).toBe(1);
       const wanted = await decodeWantedFrames(factory, "StandaloneExternalConsumer");
       expect(wanted.flatMap(({ message }) => wantedTypeUrls(message))).toContain(
-        TypeUrls.derive(StringValueSchema),
+        TypeUrls.derive(TaskEventSchema),
       );
     } finally {
       await close(producer, consumer);
@@ -213,13 +274,13 @@ describe("Wave 13 IntegrationBroker", () => {
     const first: unknown[] = [],
       second: unknown[] = [];
     const producer = BoundedContext.singleTenant("Red02Producer")
-      .addEventDispatcher(domestic([StringValueSchema]))
+      .addEventDispatcher(domestic([TaskEventSchema]))
       .build();
     const one = BoundedContext.singleTenant("Red02One")
-      .addEventDispatcher(external([StringValueSchema], first))
+      .addEventDispatcher(external([TaskEventSchema], first))
       .build();
     const two = BoundedContext.singleTenant("Red02Two")
-      .addEventDispatcher(external([StringValueSchema], second))
+      .addEventDispatcher(external([TaskEventSchema], second))
       .build();
     try {
       await producer.eventBus().post(event());
@@ -233,14 +294,14 @@ describe("Wave 13 IntegrationBroker", () => {
     await broker("wanted-type-only domestic publication");
     const seen: unknown[] = [];
     const consumer = BoundedContext.singleTenant("Red05Consumer")
-      .addEventDispatcher(external([StringValueSchema], seen))
+      .addEventDispatcher(external([TaskEventSchema], seen))
       .build();
     const producer = BoundedContext.singleTenant("Red05Producer")
-      .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema]))
+      .addEventDispatcher(domestic([TaskEventSchema, ReviewStartedSchema]))
       .build();
     try {
-      await producer.eventBus().post(event(Int32ValueSchema, "unwanted"));
-      await producer.eventBus().post(event(StringValueSchema, "wanted"));
+      await producer.eventBus().post(event(ReviewStartedSchema, "unwanted"));
+      await producer.eventBus().post(event(TaskEventSchema, "wanted"));
       expect(seen).toHaveLength(1);
       expect(seen[0]).toMatchObject({ id: { value: "wanted" } });
     } finally {
@@ -254,23 +315,23 @@ describe("Wave 13 IntegrationBroker", () => {
     const a: unknown[] = [],
       b: unknown[] = [];
     const left = BoundedContext.singleTenant("Red06A")
-      .addEventDispatcher(domestic([StringValueSchema]))
-      .addEventDispatcher(external([Int32ValueSchema], a))
+      .addEventDispatcher(domestic([TaskEventSchema]))
+      .addEventDispatcher(external([ReviewStartedSchema], a))
       .build();
     const right = BoundedContext.singleTenant("Red06B")
-      .addEventDispatcher(domestic([Int32ValueSchema]))
-      .addEventDispatcher(external([StringValueSchema], b))
+      .addEventDispatcher(domestic([ReviewStartedSchema]))
+      .addEventDispatcher(external([TaskEventSchema], b))
       .build();
     try {
-      await left.eventBus().post(event(StringValueSchema, "a"));
-      await right.eventBus().post(event(Int32ValueSchema, "b"));
+      await left.eventBus().post(event(TaskEventSchema, "a"));
+      await right.eventBus().post(event(ReviewStartedSchema, "b"));
       expect(a).toHaveLength(1);
       expect(a[0]).toMatchObject({ id: { value: "b" } });
       expect(b).toHaveLength(1);
       expect(b[0]).toMatchObject({ id: { value: "a" } });
       expect(
         factory.published.filter(({ channel }) =>
-          [TypeUrls.derive(StringValueSchema), TypeUrls.derive(Int32ValueSchema)].includes(
+          [TypeUrls.derive(TaskEventSchema), TypeUrls.derive(ReviewStartedSchema)].includes(
             (channel as { targetType?: string }).targetType ?? "",
           ),
         ),
@@ -284,26 +345,26 @@ describe("Wave 13 IntegrationBroker", () => {
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const producer = await BoundedContext.singleTenant(`Red07${crypto.randomUUID()}`)
-      .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema]))
+      .addEventDispatcher(domestic([TaskEventSchema, ReviewStartedSchema]))
       .buildAsync();
     try {
-      await publishWanted(factory, "Red07Peer", [StringValueSchema]);
+      await publishWanted(factory, "Red07Peer", [TaskEventSchema]);
       const initialConfigCount = configPublications(factory).length;
-      const duplicate = publishWanted(factory, "Red07Peer", [StringValueSchema]);
+      const duplicate = publishWanted(factory, "Red07Peer", [TaskEventSchema]);
       await waitForConfigPublications(factory, initialConfigCount + 1);
-      const expansion = publishWanted(factory, "Red07Peer", [StringValueSchema, Int32ValueSchema]);
+      const expansion = publishWanted(factory, "Red07Peer", [TaskEventSchema, ReviewStartedSchema]);
       await waitForConfigPublications(factory, initialConfigCount + 2);
-      const replacement = publishWanted(factory, "Red07Peer", [Int32ValueSchema]);
+      const replacement = publishWanted(factory, "Red07Peer", [ReviewStartedSchema]);
       await Promise.all([duplicate, expansion, replacement]);
       const before = eventPublications(factory).length;
-      await producer.eventBus().post(event(StringValueSchema, "replaced"));
-      await producer.eventBus().post(event(Int32ValueSchema, "final"));
+      await producer.eventBus().post(event(TaskEventSchema, "replaced"));
+      await producer.eventBus().post(event(ReviewStartedSchema, "final"));
       expect(eventPublications(factory).slice(before)).toHaveLength(1);
       expect(eventPublications(factory)[before]).toMatchObject({
-        channel: { targetType: TypeUrls.derive(Int32ValueSchema) },
+        channel: { targetType: TypeUrls.derive(ReviewStartedSchema) },
       });
-      expect(eventPublisherCreations(factory, StringValueSchema)).toHaveLength(1);
-      expect(eventPublisherCreations(factory, Int32ValueSchema)).toHaveLength(1);
+      expect(eventPublisherCreations(factory, TaskEventSchema)).toHaveLength(1);
+      expect(eventPublisherCreations(factory, ReviewStartedSchema)).toHaveLength(1);
     } finally {
       await producer.close();
       await ServerEnvironment.instance().close();
@@ -314,16 +375,16 @@ describe("Wave 13 IntegrationBroker", () => {
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const producer = await BoundedContext.singleTenant(`Red08${crypto.randomUUID()}`)
-      .addEventDispatcher(domestic([StringValueSchema]))
+      .addEventDispatcher(domestic([TaskEventSchema]))
       .buildAsync();
     try {
-      await publishWanted(factory, "Red08First", [StringValueSchema]);
-      await publishWanted(factory, "Red08Second", [StringValueSchema]);
+      await publishWanted(factory, "Red08First", [TaskEventSchema]);
+      await publishWanted(factory, "Red08Second", [TaskEventSchema]);
       await publishWanted(factory, "Red08First", []);
       const before = eventPublications(factory).length;
-      await producer.eventBus().post(event(StringValueSchema, "retained"));
+      await producer.eventBus().post(event(TaskEventSchema, "retained"));
       expect(eventPublications(factory)).toHaveLength(before + 1);
-      expect(eventPublisherCreations(factory, StringValueSchema)).toHaveLength(1);
+      expect(eventPublisherCreations(factory, TaskEventSchema)).toHaveLength(1);
     } finally {
       await producer.close();
       await ServerEnvironment.instance().close();
@@ -341,8 +402,8 @@ describe("Wave 13 IntegrationBroker", () => {
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const context = await BoundedContext.singleTenant(`Red10${crypto.randomUUID()}`)
-      .addEventDispatcher(external([StringValueSchema], []))
-      .addEventDispatcher(external([StringValueSchema], []))
+      .addEventDispatcher(external([TaskEventSchema], []))
+      .addEventDispatcher(external([TaskEventSchema], []))
       .buildAsync();
     try {
       expect(await decodeWantedFrames(factory)).toHaveLength(1);
@@ -374,14 +435,14 @@ describe("Wave 13 IntegrationBroker", () => {
     await broker("full Event identity and order");
     const seen: unknown[] = [];
     const c = BoundedContext.singleTenant("Red13C")
-      .addEventDispatcher(external([StringValueSchema], seen))
+      .addEventDispatcher(external([TaskEventSchema], seen))
       .build();
     const p = BoundedContext.singleTenant("Red13P")
-      .addEventDispatcher(domestic([StringValueSchema]))
+      .addEventDispatcher(domestic([TaskEventSchema]))
       .build();
     try {
-      const one = event(StringValueSchema, "one"),
-        two = event(StringValueSchema, "two");
+      const one = event(TaskEventSchema, "one"),
+        two = event(TaskEventSchema, "two");
       await p.eventBus().post(one);
       await p.eventBus().post(two);
       expect(seen).toEqual([
@@ -394,21 +455,37 @@ describe("Wave 13 IntegrationBroker", () => {
   });
   it("RED-15 validates the existing tenant boundary and isolates imported tenants", async () => {
     await broker("tenant-aware imported intake");
-    const registry = createWave13OriginRegistry();
-    Wave13OriginProjection.reset();
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      {
+        receiverKind: "entity",
+        receiverType: TaskEventOriginProjection,
+        stateSchema: Wave13OriginStateSchema,
+        handlers: [
+          {
+            kind: "event-subscription",
+            methodName: "onExternal",
+            signalSchema: TaskEventSchema,
+            emittedSchemas: [],
+            parameterCount: 2,
+            origin: "external",
+          },
+        ],
+      },
+    ]);
+    TaskEventOriginProjection.reset();
     const c = await BoundedContext.multitenant("Red15")
-      .withGeneratedRegistryRoot(registry.root)
-      .add(Wave13OriginProjection, { eventRouting: wave13OriginRouting })
+      .withGeneratedRegistryRoot(registryRoot)
+      .add(TaskEventOriginProjection, { eventRouting: taskEventOriginRouting })
       .buildAsync();
     const p = await BoundedContext.multitenant("Red15P")
-      .addEventDispatcher(domestic([StringValueSchema]))
+      .addEventDispatcher(domestic([TaskEventSchema]))
       .buildAsync();
     const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } });
     const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-b" } });
     try {
-      await p.eventBus().post(event(StringValueSchema, "a", "tenant-a"));
-      await p.eventBus().post(event(StringValueSchema, "b", "tenant-b"));
-      expect(Wave13OriginProjection.externalContexts.map(tenantValue)).toEqual([
+      await p.eventBus().post(event(TaskEventSchema, "a", "tenant-a"));
+      await p.eventBus().post(event(TaskEventSchema, "b", "tenant-b"));
+      expect(TaskEventOriginProjection.externalContexts.map(tenantValue)).toEqual([
         "tenant-a",
         "tenant-b",
       ]);
@@ -421,22 +498,19 @@ describe("Wave 13 IntegrationBroker", () => {
       await expect(
         c.stand().read(Wave13OriginStateSchema, "a", { tenantId: tenantB }),
       ).resolves.toBeUndefined();
-      await expect(p.eventBus().post(event(StringValueSchema, "missing"))).rejects.toThrow(
-        /tenant/u,
-      );
+      await expect(p.eventBus().post(event(TaskEventSchema, "missing"))).rejects.toThrow(/tenant/u);
       const single = await BoundedContext.singleTenant("Red15Single")
-        .addEventDispatcher(external([StringValueSchema], []))
+        .addEventDispatcher(external([TaskEventSchema], []))
         .buildAsync();
       const forbidden = await BoundedContext.singleTenant("Red15Forbidden")
-        .addEventDispatcher(domestic([StringValueSchema]))
+        .addEventDispatcher(domestic([TaskEventSchema]))
         .buildAsync();
       await expect(
-        forbidden.eventBus().post(event(StringValueSchema, "forbidden", "tenant-a")),
+        forbidden.eventBus().post(event(TaskEventSchema, "forbidden", "tenant-a")),
       ).rejects.toThrow(/tenant/u);
       await close(forbidden, single);
     } finally {
       await close(p, c);
-      registry.clear();
     }
   });
   it("RED-16 changes only EventContext.external before posting through the normal EventBus", async () => {
@@ -445,10 +519,10 @@ describe("Wave 13 IntegrationBroker", () => {
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const seen: unknown[] = [];
     const c = await BoundedContext.singleTenant("Red16C")
-      .addEventDispatcher(external([StringValueSchema], seen))
+      .addEventDispatcher(external([TaskEventSchema], seen))
       .buildAsync();
     const p = await BoundedContext.singleTenant("Red16P")
-      .addEventDispatcher(domestic([StringValueSchema]))
+      .addEventDispatcher(domestic([TaskEventSchema]))
       .buildAsync();
     try {
       const original = create(EventSchema, {
@@ -468,8 +542,8 @@ describe("Wave 13 IntegrationBroker", () => {
           }),
         }),
         message: AnyMessages.pack(
-          StringValueSchema,
-          create(StringValueSchema, { value: "preserved" }),
+          TaskEventSchema,
+          create(TaskEventSchema, { id: "preserved", name: "preserved" }),
         ),
       });
       await p.eventBus().post(original);
@@ -502,14 +576,14 @@ async function assertWantedLifecycle(options: {
   const factory = new RecordingTransportFactory();
   ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
   const producer = await BoundedContext.singleTenant(`WantedProducer${crypto.randomUUID()}`)
-    .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema]))
+    .addEventDispatcher(domestic([TaskEventSchema, ReviewStartedSchema]))
     .buildAsync();
   // RED-07 exercises producer-before-consumer; the peer-online branch creates
   // a consumer before its producer to retain the reverse construction order.
   const consumers = await Promise.all(
     Array.from({ length: options.requesters }, (_, index) =>
       BoundedContext.singleTenant(`WantedConsumer${String(index)}${crypto.randomUUID()}`)
-        .addEventDispatcher(external([StringValueSchema], []) as never)
+        .addEventDispatcher(external([TaskEventSchema], []) as never)
         .buildAsync(),
     ),
   );
@@ -520,7 +594,7 @@ async function assertWantedLifecycle(options: {
     if (options.closeFirst) await required(consumers[0], "first consumer").close();
 
     const eventPublicationsBefore = eventPublications(factory).length;
-    if (options.closeFirst) await producer.eventBus().post(event(StringValueSchema, "after-close"));
+    if (options.closeFirst) await producer.eventBus().post(event(TaskEventSchema, "after-close"));
 
     const wantedFrames = await decodeWantedFrames(factory, "WantedConsumer");
     expect(wantedFrames).toHaveLength(options.expectedWantedFrames);
@@ -530,7 +604,7 @@ async function assertWantedLifecycle(options: {
       ),
     ).toHaveLength(options.expectedPublishers);
     expect(wantedFrames.map((entry) => wantedTypeUrls(entry.message))).toEqual(
-      expect.arrayContaining([expect.arrayContaining([TypeUrls.derive(StringValueSchema)])]),
+      expect.arrayContaining([expect.arrayContaining([TypeUrls.derive(TaskEventSchema)])]),
     );
     if (options.assertCloseOrder) {
       const emptyWithdrawal = required(wantedFrames.at(-1), "final wanted frame");
@@ -555,27 +629,27 @@ async function assertFailedReplacementKeepsPriorWantedSet(): Promise<void> {
   const factory = new RecordingTransportFactory();
   ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
   const producer = await BoundedContext.singleTenant(`RollbackProducer${crypto.randomUUID()}`)
-    .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema, BoolValueSchema]))
+    .addEventDispatcher(domestic([TaskEventSchema, ReviewStartedSchema, ValidatedTaskEventSchema]))
     .buildAsync();
   try {
-    await publishWanted(factory, "RollbackPeer", [StringValueSchema]);
+    await publishWanted(factory, "RollbackPeer", [TaskEventSchema]);
     factory.failPublisherCreationAfter(
       1,
-      (channel) => isEventChannel(channel) && !isStringEventChannel(channel),
+      (channel) => isEventChannel(channel) && !isTaskEventChannel(channel),
     );
     await expect(
-      publishWanted(factory, "RollbackPeer", [Int32ValueSchema, BoolValueSchema]),
+      publishWanted(factory, "RollbackPeer", [ReviewStartedSchema, ValidatedTaskEventSchema]),
     ).rejects.toThrow(/injected publisher creation failure/u);
-    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(StringValueSchema));
-    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(Int32ValueSchema));
-    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(BoolValueSchema));
+    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(TaskEventSchema));
+    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(ReviewStartedSchema));
+    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(ValidatedTaskEventSchema));
     const before = eventPublications(factory).length;
-    await producer.eventBus().post(event(StringValueSchema, "prior-still-active"));
+    await producer.eventBus().post(event(TaskEventSchema, "prior-still-active"));
     expect(eventPublications(factory)).toHaveLength(before + 1);
     await publishWanted(factory, "RollbackPeer", []);
-    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(StringValueSchema));
+    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(TaskEventSchema));
     const afterWithdrawal = eventPublications(factory).length;
-    await producer.eventBus().post(event(StringValueSchema, "withdrawn"));
+    await producer.eventBus().post(event(TaskEventSchema, "withdrawn"));
     expect(eventPublications(factory)).toHaveLength(afterWithdrawal);
   } finally {
     await producer.close();
@@ -622,9 +696,9 @@ function wantedTypeUrls(message: {
 function isEventChannel(channel: unknown): boolean {
   const target = (channel as { targetType?: string }).targetType;
   return [
-    TypeUrls.derive(StringValueSchema),
-    TypeUrls.derive(Int32ValueSchema),
-    TypeUrls.derive(BoolValueSchema),
+    TypeUrls.derive(TaskEventSchema),
+    TypeUrls.derive(ReviewStartedSchema),
+    TypeUrls.derive(ValidatedTaskEventSchema),
   ].includes(target ?? "");
 }
 
@@ -643,13 +717,13 @@ function configPublications(factory: RecordingTransportFactory) {
   return factory.published.filter(({ channel }) => isConfigChannel(channel));
 }
 
-function isStringEventChannel(channel: unknown): boolean {
-  return (channel as { targetType?: string }).targetType === TypeUrls.derive(StringValueSchema);
+function isTaskEventChannel(channel: unknown): boolean {
+  return (channel as { targetType?: string }).targetType === TypeUrls.derive(TaskEventSchema);
 }
 
 function eventPublisherCreations(
   factory: RecordingTransportFactory,
-  schema: typeof StringValueSchema | typeof Int32ValueSchema,
+  schema: typeof TaskEventSchema | typeof ReviewStartedSchema,
 ) {
   return factory.created.filter(
     ({ kind, channel }) =>
@@ -661,7 +735,9 @@ function eventPublisherCreations(
 async function publishWanted(
   factory: RecordingTransportFactory,
   source: string,
-  schemas: readonly (typeof StringValueSchema | typeof Int32ValueSchema | typeof BoolValueSchema)[],
+  schemas: readonly (
+    typeof TaskEventSchema | typeof ReviewStartedSchema | typeof ValidatedTaskEventSchema
+  )[],
 ): Promise<void> {
   const wanted = create(ExternalEventsWantedSchema, {
     type: schemas.map((schema) => ({ typeUrl: TypeUrls.derive(schema) })),
@@ -703,7 +779,7 @@ async function publishExternalEvent(
     value: toBinary(EventIdSchema, required(original.id, "external event identity")),
   });
   const publisher = await factory.createPublisher(
-    create(ChannelIdSchema, { targetType: TypeUrls.derive(StringValueSchema) }),
+    create(ChannelIdSchema, { targetType: TypeUrls.derive(TaskEventSchema) }),
   );
   try {
     await publisher.publish(
