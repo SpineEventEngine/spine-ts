@@ -17,7 +17,7 @@ import type { Message, MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -60,6 +60,27 @@ import {
 type SignalMessage = Message & {
   readonly $typeName: string;
 };
+type TestTaskCommand = Message<"example.signal.TaskCommand"> & { fieldName: string[] };
+type TestTaskEvent = Message<"example.signal.TaskEvent"> & { fieldName: string[] };
+function signalFixture(name: "TaskCommand" | "TaskEvent") {
+  return fileDesc(
+    Buffer.from(
+      toBinary(
+        FileDescriptorProtoSchema,
+        create(FileDescriptorProtoSchema, {
+          name: `${name}.proto`,
+          package: "example.signal",
+          messageType: [{ name, field: [{ name: "field_name", number: 1, label: 3, type: 9 }] }],
+        }),
+      ),
+    ).toString("base64"),
+  );
+}
+const TestTaskCommandSchema = messageDesc(
+  signalFixture("TaskCommand"),
+  0,
+) as GenMessage<TestTaskCommand>;
+const TestTaskEventSchema = messageDesc(signalFixture("TaskEvent"), 0) as GenMessage<TestTaskEvent>;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 describe("MessageInterfaces", () => {
@@ -1179,14 +1200,14 @@ describe("@spine-event-engine/core envelope packing", () => {
 
   it("creates distinct fresh command IDs and clones contexts", () => {
     const context = commandContext();
-    const message = create(FieldPathSchema, { fieldName: ["task"] });
+    const message = create(TestTaskCommandSchema, { fieldName: ["task"] });
 
     const first = SignalEnvelopes.command({
       context,
-      schema: FieldPathSchema,
+      schema: TestTaskCommandSchema,
       message,
     });
-    const second = SignalEnvelopes.command({ context, schema: FieldPathSchema, message });
+    const second = SignalEnvelopes.command({ context, schema: TestTaskCommandSchema, message });
 
     expect(first.$typeName).toBe("spine.core.Command");
     expect(first.id?.uuid).toMatch(UUID_PATTERN);
@@ -1194,9 +1215,9 @@ describe("@spine-event-engine/core envelope packing", () => {
     expect(first.id?.uuid).not.toBe(second.id?.uuid);
     expect(first.context).toEqual(context);
     expect(first.systemProperties).toBeUndefined();
-    expect(first.message?.typeUrl).toBe(TypeUrls.derive(FieldPathSchema));
-    expect(first.message?.value).toEqual(toBinary(FieldPathSchema, message));
-    expect(AnyMessages.unpack(first.message ?? create(AnySchema), FieldPathSchema)).toEqual(
+    expect(first.message?.typeUrl).toBe(TypeUrls.derive(TestTaskCommandSchema));
+    expect(first.message?.value).toEqual(toBinary(TestTaskCommandSchema, message));
+    expect(AnyMessages.unpack(first.message ?? create(AnySchema), TestTaskCommandSchema)).toEqual(
       message,
     );
 
@@ -1210,23 +1231,23 @@ describe("@spine-event-engine/core envelope packing", () => {
 
   it("creates distinct fresh event IDs and clones contexts", () => {
     const context = eventContext();
-    const message = create(FieldPathSchema, { fieldName: ["task", "created"] });
+    const message = create(TestTaskEventSchema, { fieldName: ["task", "created"] });
 
     const first = SignalEnvelopes.event({
       context,
-      schema: FieldPathSchema,
+      schema: TestTaskEventSchema,
       message,
     });
-    const second = SignalEnvelopes.event({ context, schema: FieldPathSchema, message });
+    const second = SignalEnvelopes.event({ context, schema: TestTaskEventSchema, message });
 
     expect(first.$typeName).toBe("spine.core.Event");
     expect(first.id?.value).toMatch(UUID_PATTERN);
     expect(second.id?.value).toMatch(UUID_PATTERN);
     expect(first.id?.value).not.toBe(second.id?.value);
     expect(first.context).toEqual(context);
-    expect(first.message?.typeUrl).toBe(TypeUrls.derive(FieldPathSchema));
-    expect(first.message?.value).toEqual(toBinary(FieldPathSchema, message));
-    expect(AnyMessages.unpack(first.message ?? create(AnySchema), FieldPathSchema)).toEqual(
+    expect(first.message?.typeUrl).toBe(TypeUrls.derive(TestTaskEventSchema));
+    expect(first.message?.value).toEqual(toBinary(TestTaskEventSchema, message));
+    expect(AnyMessages.unpack(first.message ?? create(AnySchema), TestTaskEventSchema)).toEqual(
       message,
     );
 
@@ -1246,8 +1267,8 @@ describe("@spine-event-engine/core envelope packing", () => {
     try {
       const command = SignalEnvelopes.command({
         context: commandContext(),
-        schema: FieldPathSchema,
-        message: create(FieldPathSchema),
+        schema: TestTaskCommandSchema,
+        message: create(TestTaskCommandSchema),
       });
 
       expect(command.id?.uuid).toBe("6f75b67a-5f23-4b64-8a35-6ce5f8f97cf5");
@@ -1268,8 +1289,8 @@ describe("@spine-event-engine/core envelope packing", () => {
     try {
       const event = SignalEnvelopes.event({
         context: eventContext(),
-        schema: FieldPathSchema,
-        message: create(FieldPathSchema),
+        schema: TestTaskEventSchema,
+        message: create(TestTaskEventSchema),
       });
 
       expect(event.id?.value).toBe("00000000-0000-4000-8000-000000000000");
@@ -1286,8 +1307,8 @@ describe("@spine-event-engine/core envelope packing", () => {
       expect(() =>
         SignalEnvelopes.command({
           context: commandContext(),
-          schema: FieldPathSchema,
-          message: create(FieldPathSchema),
+          schema: TestTaskCommandSchema,
+          message: create(TestTaskCommandSchema),
         }),
       ).toThrow(/secure random/i);
     } finally {
@@ -1298,13 +1319,13 @@ describe("@spine-event-engine/core envelope packing", () => {
   it("rejects caller-provided envelope IDs at the type boundary", () => {
     const commandInput: PackCommandInput = {
       context: commandContext(),
-      schema: FieldPathSchema,
-      message: create(FieldPathSchema),
+      schema: TestTaskCommandSchema,
+      message: create(TestTaskCommandSchema),
     };
     const eventInput: PackEventInput = {
       context: eventContext(),
-      schema: FieldPathSchema,
-      message: create(FieldPathSchema),
+      schema: TestTaskEventSchema,
+      message: create(TestTaskEventSchema),
     };
     expectTypeOf(commandInput).toExtend<PackCommandInput>();
     expectTypeOf(eventInput).toExtend<PackEventInput>();

@@ -12,13 +12,17 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
   BoolValueSchema,
   DoubleValueSchema,
   Int64ValueSchema,
   StringValueSchema,
   TimestampSchema,
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
 } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import {
@@ -33,10 +37,31 @@ import {
   OriginSchema,
   TenantIdSchema,
   UserIdSchema,
+  file_spine_options,
 } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import { FixedClock, SignalMetadata } from "../../src/runtime/signal-metadata.js";
+import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+
+type TaskCommand = Message<"TaskCommand"> & { id: string; name: string };
+type TaskEvent = Message<"TaskEvent"> & { id: string; name: string };
+function fixtureFile(descriptorSetBase64: string) {
+  const descriptor = fromBinary(FileDescriptorSetSchema, Buffer.from(descriptorSetBase64, "base64"))
+    .file[0];
+  if (descriptor === undefined) throw new Error("Signal metadata fixture descriptor set is empty.");
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+}
+const TaskCommandSchema = messageDesc(
+  fixtureFile(serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64),
+  2,
+) as GenMessage<TaskCommand>;
+const TaskEventSchema = messageDesc(
+  fixtureFile(serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64),
+  1,
+) as GenMessage<TaskEvent>;
 
 describe("SignalMetadata", () => {
   it("creates fresh ids, timestamps, and actor/tenant command contexts", () => {
@@ -83,7 +108,7 @@ describe("SignalMetadata", () => {
     const grandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-        typeUrl: TypeUrls.derive(UserIdSchema),
+        typeUrl: TypeUrls.derive(TaskCommandSchema),
       }),
       actorContext,
     });
@@ -93,7 +118,10 @@ describe("SignalMetadata", () => {
         actorContext,
         origin: grandOrigin,
       }),
-      message: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "payload-user" })),
+      message: AnyMessages.pack(
+        TaskCommandSchema,
+        create(TaskCommandSchema, { id: "task-1", name: "Task" }),
+      ),
     });
 
     const eventMetadata = metadata.eventFromCommand(command, {
@@ -118,7 +146,7 @@ describe("SignalMetadata", () => {
             CommandIdSchema,
             create(CommandIdSchema, { uuid: "source-command" }),
           ),
-          typeUrl: TypeUrls.derive(UserIdSchema),
+          typeUrl: TypeUrls.derive(TaskCommandSchema),
         }),
         actorContext,
         grandOrigin,
@@ -133,7 +161,10 @@ describe("SignalMetadata", () => {
           value: actorContext,
         },
       }),
-      message: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "payload-user" })),
+      message: AnyMessages.pack(
+        TaskEventSchema,
+        create(TaskEventSchema, { id: "task-1", name: "Task" }),
+      ),
     });
 
     const commandMetadata = metadata.commandFromEvent(sourceEvent);
@@ -144,7 +175,7 @@ describe("SignalMetadata", () => {
         origin: create(OriginSchema, {
           message: create(MessageIdSchema, {
             id: AnyMessages.pack(EventIdSchema, create(EventIdSchema, { value: "source-event" })),
-            typeUrl: TypeUrls.derive(UserIdSchema),
+            typeUrl: TypeUrls.derive(TaskEventSchema),
           }),
           actorContext,
         }),
@@ -208,7 +239,7 @@ describe("SignalMetadata", () => {
     const origin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-origin" })),
-        typeUrl: TypeUrls.derive(UserIdSchema),
+        typeUrl: TypeUrls.derive(TaskCommandSchema),
       }),
     });
 
@@ -250,8 +281,8 @@ describe("SignalMetadata", () => {
   it("rejects missing or empty event ids before deriving causality", () => {
     const metadata = new SignalMetadata();
     const eventMessage = AnyMessages.pack(
-      UserIdSchema,
-      create(UserIdSchema, { value: "payload-user" }),
+      TaskEventSchema,
+      create(TaskEventSchema, { id: "task-1", name: "Task" }),
     );
 
     expect(() =>
@@ -274,8 +305,8 @@ describe("SignalMetadata", () => {
   it("rejects missing or empty command ids before deriving event metadata", () => {
     const metadata = new SignalMetadata();
     const commandMessage = AnyMessages.pack(
-      UserIdSchema,
-      create(UserIdSchema, { value: "payload-user" }),
+      TaskCommandSchema,
+      create(TaskCommandSchema, { id: "task-1", name: "Task" }),
     );
 
     expect(() =>
@@ -301,7 +332,10 @@ describe("SignalMetadata", () => {
     const metadata = new SignalMetadata();
     const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "   " }),
-      message: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "payload-user" })),
+      message: AnyMessages.pack(
+        TaskEventSchema,
+        create(TaskEventSchema, { id: "task-1", name: "Task" }),
+      ),
     });
 
     expect(() => metadata.commandFromEvent(event)).toThrow(/event ID/i);
@@ -322,7 +356,7 @@ describe("SignalMetadata", () => {
     const grandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "grand-command" })),
-        typeUrl: TypeUrls.derive(UserIdSchema),
+        typeUrl: TypeUrls.derive(TaskCommandSchema),
       }),
     });
     const event = create(EventSchema, {
@@ -333,14 +367,17 @@ describe("SignalMetadata", () => {
           value: grandOrigin,
         },
       }),
-      message: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "payload-user" })),
+      message: AnyMessages.pack(
+        TaskEventSchema,
+        create(TaskEventSchema, { id: "task-1", name: "Task" }),
+      ),
     });
 
     expect(metadata.originFromEvent(event)).toEqual(
       create(OriginSchema, {
         message: create(MessageIdSchema, {
           id: AnyMessages.pack(EventIdSchema, create(EventIdSchema, { value: "past-event" })),
-          typeUrl: TypeUrls.derive(UserIdSchema),
+          typeUrl: TypeUrls.derive(TaskEventSchema),
         }),
         grandOrigin,
       }),
