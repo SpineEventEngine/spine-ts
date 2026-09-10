@@ -238,6 +238,14 @@ verification and review may run concurrently only at stable boundaries.
   `requireContiguousVersions` to `requireDescendingVersions` so its name matches the
   sparse-history rule. This seam is not re-exported from a package index, so no public
   compatibility layer is required.
+- `2026-09-10 17:33 WEST`: Superseded F02 blocker. Binding JVM evidence establishes
+  `DispatchingId` as signal ID plus typed Inbox target; `LiveDeliveryStation` suppresses
+  both current-conveyor and retained `DELIVERED` duplicates. Successful normal rows
+  remain `DELIVERED` through their existing `keep_until`, and cleanup removes them only
+  after expiry. `TargetDelivery.deliverDirectly` bypasses this mechanism and remains
+  outside F02. Distributed/shared-storage nodes use the same normal delivery pipeline.
+  The existing TS delivery-server `writeOne` upsert supports the required remote
+  delivered snapshot, so no new wire or storage lifecycle concept is needed.
 
 ## Decisions
 
@@ -319,6 +327,37 @@ verification and review may run concurrently only at stable boundaries.
   focused Prettier and `git diff --check` passed.
 - HISTORY01-B naming correction: `history-cache.test.ts` passed 17 tests; focused
   Prettier and `git diff --check` passed.
+- F02 RED/GREEN: the initial local production-entry test failed because normal drain
+  never called retained-row admission, and the remote adapter removed its acknowledgement
+  rather than retaining `DELIVERED`. GREEN adds the shared normal-drain `admit` seam:
+  local `Inbox` delegates to `InboxStorage.admit`; remote scans bounded delivered pages
+  for exact signal ID plus typed target and upserts a duplicate as `DELIVERED`. Remote
+  acknowledgement now upserts the authoritative `DELIVERED` snapshot, while cleanup
+  removes only expired exact snapshots. Focused command `pnpm exec vitest run
+packages/server/test/delivery/delivery-worker.test.ts
+packages/server/test/delivery/direct-inbox-records.test.ts
+packages/server/test/delivery/inbox-provider-cleanup.test.ts
+packages/delivery-client/test/remote-inbox-direct.test.ts
+packages/delivery-client/test/in-memory-core-response-loss.test.ts
+packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` passed
+  72 tests across 5 files. The remote adapter/core transport path persists, retains,
+  and suppresses the duplicate through real RPC codecs. `pnpm typecheck:build` passed.
+  Direct delivery bypass is not
+  covered or claimed.
+- F02 correction acceptance: after separating admission failures from endpoint
+  reception recovery and making remote delivered-status retries idempotent, the
+  focused delivery command passed 75/75 tests across 5 active files. The runtime
+  companion passed 9/9 tests. Independent Luna/low verification repeated both runs;
+  focused Prettier, `git diff --check`, and generated-manifest checks were clean.
+- F02 pre-acceptance correction: RED showed that an admission exception entered
+  reception recovery and its default acknowledgement could mark an undispatched row
+  `DELIVERED`. GREEN records the failure and blocks that target without endpoint
+  dispatch, acknowledgement, or monitor recovery, leaving the pending row durable.
+  Remote `markDelivered` now idempotently returns an exact current `DELIVERED` snapshot
+  after a committed response loss; the transport/core fixture covers that retry. Remote
+  retained cleanup also requires its `EXCLUSIVE` session and matching shard before any
+  remote read or removal. The focused delivery command above passed 75 tests across 5
+  files; `pnpm typecheck:build`, focused Prettier, and `git diff --check` passed.
 - Independent Luna/low acceptance repeated the serialized seven-file gate with
   409/409 tests passing and the standalone repository-routing suite with 264/264
   tests passing. Focused Prettier, `git diff --check`, and the generated-manifest

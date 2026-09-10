@@ -141,11 +141,53 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Removes one exact authoritative pending row and returns its delivered fact.
+   * Admits a pending remote row unless a live delivered row has the same
+   * signal ID and typed Inbox target.
+   */
+  async admit(
+    message: InboxMessage,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxMessage | undefined> {
+    let after: InboxReadOptions["after"];
+    for (let page = 0; page < 500; page += 1) {
+      const delivered = await this.read(message.shard, {
+        statuses: ["DELIVERED"],
+        limit: this.client.pageSize,
+        ...(after === undefined ? {} : { after }),
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+        ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+      });
+      if (
+        delivered.some(
+          (candidate) =>
+            candidate.signalId === message.signalId &&
+            candidate.inboxId.targetTypeUrl === message.inboxId.targetTypeUrl &&
+            RemoteValues.sameAny(candidate.inboxId.targetId, message.inboxId.targetId) &&
+            (candidate.keepUntil === undefined || candidate.keepUntil.getTime() > Date.now()),
+        )
+      ) {
+        await this.client.writeOne({ ...message, status: "DELIVERED" }, options);
+        return undefined;
+      }
+      if (delivered.length < this.client.pageSize) return message;
+      const last = delivered.at(-1);
+      if (last === undefined) return message;
+      after = {
+        messageId: last.id.value,
+        whenReceived: last.whenReceived,
+        version: last.version,
+      };
+    }
+    throw new DeliveryPagingError();
+  }
+
+  /**
+   * Persists one exact authoritative pending row as a delivered fact.
    *
    * @param message Supplies the expected pending message snapshot.
    * @param options Bounds or cancels remote reads and removal.
-   * @returns The delivered acknowledgement, or `undefined` when the pending
+   * @returns The delivered acknowledgement, including an exact retained
+   * acknowledgement after a committed response loss, or `undefined` when the
    * row is absent or no longer matches.
    */
   async markDelivered(
@@ -153,10 +195,32 @@ export class RemoteInbox implements DeliveryInbox {
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined> {
     const current = await this.client.findOne(message.id, options);
+    const expected = DeliveryMessageCodec.snapshot({ ...message, status: "DELIVERED" });
+    if (current?.status === "DELIVERED" && RemoteValues.sameMessage(current, expected))
+      return current;
     if (current?.status !== "TO_DELIVER" || !RemoteValues.sameMessage(current, message))
       return undefined;
+    const delivered = DeliveryMessageCodec.snapshot({ ...current, status: "DELIVERED" });
+    await this.client.writeOne(delivered, options);
+    return delivered;
+  }
+
+  async removeDelivered(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<boolean> {
+    if (session.kind !== this.sessionKind || session.shard.key() !== message.shard.key())
+      return false;
+    if (
+      message.status !== "DELIVERED" ||
+      (message.keepUntil !== undefined && message.keepUntil.getTime() > Date.now())
+    )
+      return false;
+    const current = await this.client.findOne(message.id, options);
+    if (current === undefined || !RemoteValues.sameMessage(current, message)) return false;
     await this.client.removeOne(current, options);
-    return DeliveryMessageCodec.snapshot({ ...current, status: "DELIVERED" });
+    return true;
   }
 }
 

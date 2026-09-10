@@ -85,6 +85,19 @@ export interface DeliveryInbox {
   ): Promise<InboxMessage | undefined>;
 
   /**
+   * Admits one pending row unless a retained delivered row already represents
+   * the same signal at the same typed target.
+   *
+   * @param message Supplies the pending row snapshot.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns The admitted row, or `undefined` when retained delivery suppresses it.
+   */
+  admit?(
+    message: InboxMessage,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxMessage | undefined>;
+
+  /**
    * Marks one exact pending Inbox row delivered.
    *
    * @param message Supplies the expected pending row snapshot.
@@ -102,8 +115,8 @@ export interface DeliveryInbox {
    *
    * Built-in direct Inbox storage implements this through its provider-owned
    * ownership-and-delete operation. Custom structural ports may omit this
-   * optional retention capability. RemoteInbox omits it because acknowledgement
-   * already removes its pending row.
+   * optional retention capability. Remote inboxes retain delivered rows until
+   * their existing expiration and then remove the exact snapshot.
    *
    * @param message Supplies the expected delivered row snapshot.
    * @param session Supplies the currently owned shard session.

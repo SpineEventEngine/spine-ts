@@ -15,9 +15,10 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/require-await */
 
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { Identifiers } from "@spine-event-engine/core";
+import { EventSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
@@ -30,6 +31,67 @@ import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
 
 describe("Delivery direct worker", () => {
+  it("suppresses a retained duplicate through the normal local delivery drain", async () => {
+    const shard = ShardIndex.single();
+    const delivery = new Delivery({
+      context: { name: "RetainedDelivery", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const first = message("signal", "target", shard);
+    const duplicate = { ...message("signal", "target", shard), version: 2n };
+    const { id: _firstId, ...firstInput } = first;
+    const { id: _duplicateId, ...duplicateInput } = duplicate;
+    void _firstId;
+    void _duplicateId;
+
+    const signal = create(AnySchema, {
+      typeUrl: "type.spine.io/spine.core.Event",
+      value: toBinary(EventSchema, create(EventSchema)),
+    });
+    await delivery.inbox.receive({
+      ...firstInput,
+      signal,
+      keepUntil: new Date(Date.now() + 60_000),
+    });
+    await delivery.inbox.receive({
+      ...duplicateInput,
+      signal,
+      keepUntil: new Date(Date.now() + 60_000),
+    });
+
+    const delivered: string[] = [];
+    await delivery.drain(shard, { onMessage: (row) => delivered.push(row.id.value) });
+
+    expect(delivered).toHaveLength(1);
+  });
+
+  it("retains an admission failure without endpoint dispatch or acknowledgement", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("admission-failure", "target", shard);
+    let dispatched = 0;
+    let acknowledged = 0;
+    const delivery = createDelivery({
+      rows: [pending],
+      admit: async () => {
+        throw new Error("admission unavailable");
+      },
+      mark: async () => {
+        acknowledged += 1;
+        return pending;
+      },
+    });
+
+    await expect(
+      delivery.drain(shard, {
+        onMessage: () => {
+          dispatched += 1;
+        },
+      }),
+    ).resolves.toMatchObject({ status: "DRAINED", failed: 1, delivered: 0 });
+    expect(dispatched).toBe(0);
+    expect(acknowledged).toBe(0);
+  });
+
   it("reports exact acknowledgement through the callback shorthand", async () => {
     const shard = ShardIndex.single();
     const target = message("target", "target", shard);
@@ -723,6 +785,7 @@ function createDelivery(config: {
     options?: InboxReadOptions & DeliveryOperationOptions,
   ) => Promise<DeliveryEndpointMessage[]>;
   mark?: (row: DeliveryEndpointMessage) => Promise<DeliveryEndpointMessage | undefined>;
+  admit?: (row: DeliveryEndpointMessage) => Promise<DeliveryEndpointMessage | undefined>;
   remove?: (row: DeliveryEndpointMessage) => Promise<boolean>;
   monitor?: DeliveryMonitor;
   pageSize?: number;
@@ -741,6 +804,7 @@ function createDelivery(config: {
       },
       read: async (_shard, options) => config.read?.(options) ?? [...rows],
       readMessage: async () => undefined,
+      ...(config.admit === undefined ? {} : { admit: async (row) => config.admit!(row) }),
       markDelivered: async (row) => config.mark?.(row) ?? row,
       ...(config.remove === undefined
         ? {}

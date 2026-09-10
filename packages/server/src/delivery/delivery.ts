@@ -414,12 +414,25 @@ export class Delivery {
           if (!(await safelyBoolean(() => this.#monitor.shouldContinueAfter("PAGE"))))
             return complete("STOPPED");
           if (!(await validate())) return complete("STOPPED");
+          let admitted: InboxMessage | undefined;
+          try {
+            admitted =
+              this.inbox.admit === undefined
+                ? message
+                : await this.inbox.admit(message, options.operation);
+          } catch (error) {
+            statistics.failed += 1;
+            failures.push(Object.freeze({ message: snapshot(message), error }));
+            blockedTargets.add(target);
+            continue;
+          }
+          if (admitted === undefined) continue;
           try {
             statistics.accepted += 1;
-            await dispatch(message);
+            await dispatch(admitted);
             if (options.operation?.signal?.aborted) return complete("STOPPED");
             if (!(await validate())) return complete("STOPPED");
-            await markDelivered(message);
+            await markDelivered(admitted);
           } catch (error) {
             statistics.failed += 1;
             failures.push(Object.freeze({ message: snapshot(message), error }));

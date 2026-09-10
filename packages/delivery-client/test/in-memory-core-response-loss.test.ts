@@ -21,9 +21,58 @@ import { create } from "@bufbuild/protobuf";
 import { ShardIndex } from "@spine-event-engine/server";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
 import { DeliveryClient, DeliveryOutcomeUnknownError, RemoteWorkRegistry } from "../src/index.js";
+import { RemoteInbox } from "../src/remote/adapters.js";
 import { domainMessage } from "./shared-fixtures.js";
 
 describe("in-memory delivery core response loss", () => {
+  it("suppresses a retained duplicate through the remote adapter and core", async () => {
+    const core = InMemoryDelivery.create();
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+    );
+    const inbox = new RemoteInbox(client);
+    const retained = {
+      ...domainMessage("retained"),
+      keepUntil: new Date(Date.now() + 60_000),
+    };
+    const duplicate = {
+      ...domainMessage("duplicate"),
+      signalId: retained.signalId,
+      keepUntil: retained.keepUntil,
+    };
+
+    await client.writeOne(retained);
+    await expect(inbox.markDelivered(retained)).resolves.toMatchObject({ status: "DELIVERED" });
+    await client.writeOne(duplicate);
+    await expect(inbox.admit(duplicate)).resolves.toBeUndefined();
+    await expect(client.findOne(duplicate.id)).resolves.toMatchObject({ status: "DELIVERED" });
+  });
+
+  it("recognizes a delivered acknowledgement committed before a lost response", async () => {
+    const core = InMemoryDelivery.create();
+    const normal = DeliveryClient.usingTransport(
+      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+    );
+    const pending = domainMessage("lost-delivered");
+    await normal.writeOne(pending);
+    const lost = new RemoteInbox(
+      DeliveryClient.usingTransport(
+        createRouterTransport((router) => {
+          router.service(InboxService, {
+            ...core.inbox,
+            writeOne: async (request, context) => {
+              await core.inbox.writeOne(request, context);
+              throw new ConnectError("lost", Code.Unavailable);
+            },
+          });
+        }),
+      ),
+    );
+
+    await expect(lost.markDelivered(pending)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    await expect(lost.markDelivered(pending)).resolves.toMatchObject({ status: "DELIVERED" });
+  });
+
   it("makes a committed write reconcilable after its response is lost", async () => {
     const core = InMemoryDelivery.create();
     const transport = createRouterTransport((router) => {
