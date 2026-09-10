@@ -36,6 +36,7 @@ import {
   AnyMessages,
   Identifiers,
   MessageInterfaces,
+  SignalEnvelopes,
   StringifierRegistry,
 } from "@spine-event-engine/core";
 import {
@@ -10000,6 +10001,66 @@ describe("repository signal routing", () => {
           message.status === "DELIVERED",
       ),
     ).toBe(true);
+  });
+
+  it("delivers an independently created matching projection event after suppressing an exact replay", async () => {
+    ExecutingTaskProjection.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createExecutingProjectionRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) {
+      throw new Error("Expected projection repository to expose an event dispatcher.");
+    }
+    const input = {
+      context: create(EventContextSchema, {
+        producerId: Identifiers.pack("string", "task-distinct-inbox"),
+        version: create(VersionSchema, { number: 1 }),
+      }),
+      schema: ProjectionEventSchema,
+      message: create(ProjectionEventSchema, {
+        id: "task-distinct-inbox",
+        name: "Same payload",
+        priority: 1,
+      }),
+    };
+    const first = SignalEnvelopes.event(input);
+    const second = SignalEnvelopes.event(input);
+    const firstId = first.id?.value;
+    const secondId = second.id?.value;
+    if (firstId === undefined || secondId === undefined) {
+      throw new Error("Expected generated event IDs.");
+    }
+
+    try {
+      expect(firstId).not.toBe(secondId);
+      await dispatcher.dispatch(first);
+      await dispatcher.dispatch(first);
+      await dispatcher.dispatch(second);
+
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(2);
+      const delivered = await new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: factory,
+      }).inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
+      expect(delivered).toHaveLength(3);
+      expect(delivered.filter((row) => row.signalId === firstId)).toHaveLength(2);
+      expect(delivered.filter((row) => row.signalId === secondId)).toHaveLength(1);
+      expect(
+        delivered.every(
+          (row) =>
+            row.label === "UPDATE_SUBSCRIBER" &&
+            row.status === "DELIVERED" &&
+            row.inboxId.targetTypeUrl === TypeUrls.derive(ProjectionStateSchema) &&
+            Identifiers.unpack("string", row.inboxId.targetId) === "task-distinct-inbox",
+        ),
+      ).toBe(true);
+    } finally {
+      await context.close();
+    }
   });
 
   it("waits for concurrent duplicate live projection delivery on the repository handoff path", async () => {
