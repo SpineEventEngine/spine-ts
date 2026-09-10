@@ -56,12 +56,17 @@ import { serverEnvironmentAccess } from "../../src/server/server-environment.js"
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type LifecycleState = Message<"ProjectionState"> & { readonly id: string };
+type LifecycleEvent = Message<"TaskEvent"> & { readonly id: string; readonly name: string };
 
 const lifecycleFile = fixtureFile(serverEntityMetadataTestFixtures.main.descriptorSetBase64);
 const LifecycleStateSchema = messageDesc(lifecycleFile, 0) as GenMessage<LifecycleState>;
+const LifecycleEventSchema = messageDesc(
+  fixtureFile(serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64),
+  1,
+) as GenMessage<LifecycleEvent>;
 
 class LifecycleProjection extends Projection<string, typeof LifecycleStateSchema, number> {
-  onEvent(event: LifecycleState): void {
+  onEvent(event: LifecycleEvent): void {
     void event;
   }
 }
@@ -105,7 +110,7 @@ export async function lifecycleFixture(
           kind: "event-subscription" as const,
           methodName: "onEvent",
           origin: "domestic" as const,
-          signalSchema: StringValueSchema,
+          signalSchema: LifecycleEventSchema,
           emittedSchemas: [],
           parameterCount: 1 as const,
         },
@@ -124,7 +129,7 @@ export async function lifecycleFixture(
         dispatch: () => Promise.resolve(),
       })
       .addEventDispatcher({
-        messageSchemas: () => [StringValueSchema],
+        messageSchemas: () => [LifecycleEventSchema],
         dispatch: () => Promise.resolve(),
       })
       .build();
@@ -135,7 +140,7 @@ export async function lifecycleFixture(
   ) =>
     BoundedContext.singleTenant(name)
       .addEventDispatcher({
-        messageSchemas: () => [StringValueSchema],
+        messageSchemas: () => [LifecycleEventSchema],
         dispatch: (event) => {
           const id = event.id?.value ?? "missing";
           observed.push(id);
@@ -150,7 +155,10 @@ export async function lifecycleFixture(
         producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: id })),
         version: create(VersionSchema, { number: 1 }),
       }),
-      message: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+      message: AnyMessages.pack(
+        LifecycleEventSchema,
+        create(LifecycleEventSchema, { id, name: id }),
+      ),
     });
   const context = await createContext("Lifecycle");
 
