@@ -12,13 +12,18 @@
  * the License.
  */
 
-import { create, type MessageInitShape } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import {
-  AnyMessages,
-  TypeUrls,
-  type MessageSchema,
-} from "@spine-event-engine/core";
+  create,
+  fromBinary,
+  toBinary,
+  type Message,
+  type MessageInitShape,
+} from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -29,6 +34,7 @@ import {
   EventSchema,
   TenantIdSchema,
   UserIdSchema,
+  file_spine_options,
 } from "@spine-event-engine/proto";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
 import {
@@ -54,9 +60,8 @@ import {
   NativeAggregateStateSchema,
   NativeProcessManagerStateSchema,
   NativeProjectionStateSchema,
-  type NativeAggregateState,
-  type NativeProjectionState,
 } from "../../test-fixtures/native-subscription-fixtures.js";
+import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 import {
   TaskCreatedSchema,
   type TaskCreated,
@@ -66,8 +71,29 @@ import {
   TaskListIdSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
+type NativeTaskCommand = Message<"TaskCommand"> & { id: string; name: string };
+
+function createFixtureFileDescriptor(descriptorSetBase64: string) {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(descriptorSetBase64, "base64"),
+  );
+  const descriptor = descriptorSet.file[0];
+  if (descriptor === undefined) throw new Error("Native command fixture descriptor set is empty.");
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+}
+
+const NativeTaskCommandSchema = messageDesc(
+  createFixtureFileDescriptor(
+    serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
+  ),
+  2,
+) as GenMessage<NativeTaskCommand>;
+
 class NativeAggregate extends Aggregate<string, typeof NativeAggregateStateSchema, bigint> {
-  assign(command: NativeAggregateState): NativeAggregateState {
+  assign(command: NativeTaskCommand): TaskCreated {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -78,10 +104,10 @@ class NativeAggregate extends Aggregate<string, typeof NativeAggregateStateSchem
         }),
       ),
     );
-    return create(NativeAggregateStateSchema, {
-      id: command.id,
-      name: `${command.name} aggregate`,
-      archived: false,
+    return create(TaskCreatedSchema, {
+      id: create(TaskIdSchema, { value: command.id }),
+      title: `${command.name} aggregate`,
+      taskListId: create(TaskListIdSchema, { value: command.id }),
     });
   }
 }
@@ -107,7 +133,7 @@ class NativeProcessManager extends ProcessManager<
   typeof NativeProcessManagerStateSchema,
   number
 > {
-  assign(command: NativeAggregateState): void {
+  assign(command: NativeTaskCommand): void {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -119,13 +145,13 @@ class NativeProcessManager extends ProcessManager<
     );
   }
 
-  react(event: NativeProjectionState): void {
+  react(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(
         draft,
         create(NativeProcessManagerStateSchema, {
-          id: event.id,
-          queue: `${event.name} event`,
+          id: event.id?.value ?? "",
+          queue: `${event.title} event`,
         }),
       ),
     );
@@ -142,9 +168,9 @@ describe("native service subscriptions", () => {
           handlers: EntityHandlers.define(
             NativeAggregate,
             NativeAggregateStateSchema,
-            (builder) => [builder.assign(NativeAggregateStateSchema, "assign")],
+            (builder) => [builder.assign(NativeTaskCommandSchema, "assign")],
           ),
-          events: [NativeAggregateStateSchema],
+          events: [TaskCreatedSchema],
         }),
       )
       .build();
@@ -277,8 +303,8 @@ function createProcessManagerContext(name: string): BoundedContext {
           NativeProcessManager,
           NativeProcessManagerStateSchema,
           (builder) => [
-            builder.assign(NativeAggregateStateSchema, "assign"),
-            builder.react(NativeProjectionStateSchema, "react"),
+            builder.assign(NativeTaskCommandSchema, "assign"),
+            builder.react(TaskCreatedSchema, "react"),
           ],
         ),
       }),
@@ -302,8 +328,8 @@ function createAggregateCommand(id: string, name: string) {
     id: create(CommandIdSchema, { uuid: `command-${id}` }),
     context: create(CommandContextSchema, { actorContext: createActorContext() }),
     message: AnyMessages.pack(
-      NativeAggregateStateSchema,
-      create(NativeAggregateStateSchema, { id, name, archived: false }),
+      NativeTaskCommandSchema,
+      create(NativeTaskCommandSchema, { id, name }),
     ),
   });
 }
@@ -316,8 +342,12 @@ function createProjectionEvent(id: string, name: string) {
       producerId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
     }),
     message: AnyMessages.pack(
-      NativeProjectionStateSchema,
-      create(NativeProjectionStateSchema, { id, name, priority: 1 }),
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id: create(TaskIdSchema, { value: id }),
+        title: name,
+        taskListId: create(TaskListIdSchema, { value: id }),
+      }),
     ),
   });
 }
@@ -348,8 +378,12 @@ function createAggregateEvent(id: string, name: string) {
       producerId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
     }),
     message: AnyMessages.pack(
-      NativeAggregateStateSchema,
-      create(NativeAggregateStateSchema, { id, name, archived: false }),
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id: create(TaskIdSchema, { value: id }),
+        title: name,
+        taskListId: create(TaskListIdSchema, { value: id }),
+      }),
     ),
   });
 }

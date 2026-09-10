@@ -1666,7 +1666,7 @@ describe("SpineServices", () => {
 
   it("wraps non-Error dispatcher failures in sanitized Spine command errors", async () => {
     const dispatcher: CommandDispatcher = {
-      messageSchemas: () => [ProjectionStateSchema],
+      messageSchemas: () => [ValidatedTaskCommandSchema],
       // Deliberately covers defensive wrapping of third-party non-Error rejections.
       // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
       dispatch: () => Promise.reject("dispatcher-string"),
@@ -1765,7 +1765,7 @@ describe("SpineServices", () => {
 
   it("keeps dispatcher-thrown validation exceptions sanitized", async () => {
     const dispatcher: CommandDispatcher = {
-      messageSchemas: () => [ProjectionStateSchema],
+      messageSchemas: () => [ValidatedTaskCommandSchema],
       dispatch: () => Promise.reject(new ValidationException(create(ValidationErrorSchema, {}))),
     };
     const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
@@ -1919,7 +1919,7 @@ describe("SpineServices", () => {
       },
     });
     const acceptedContext = createFakeContext({
-      commandTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      commandTypes: [TypeUrls.derive(ValidatedTaskCommandSchema)],
       post: (command) => {
         acceptedPosts.push(command.id?.uuid ?? "");
         return Promise.resolve();
@@ -1938,14 +1938,14 @@ describe("SpineServices", () => {
     const firstPosts: string[] = [];
     const secondPosts: string[] = [];
     const firstContext = createFakeContext({
-      commandTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      commandTypes: [TypeUrls.derive(ValidatedTaskCommandSchema)],
       post: (command) => {
         firstPosts.push(command.id?.uuid ?? "");
         return Promise.resolve();
       },
     });
     const secondContext = createFakeContext({
-      commandTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      commandTypes: [TypeUrls.derive(ValidatedTaskCommandSchema)],
       post: (command) => {
         secondPosts.push(command.id?.uuid ?? "");
         return Promise.resolve();
@@ -2279,7 +2279,7 @@ describe("SpineServices", () => {
 
   it("delivers event_updates for activated event subscriptions", async () => {
     const context = BoundedContext.singleTenant("Events")
-      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
 
@@ -2295,7 +2295,7 @@ describe("SpineServices", () => {
     const update = delivered.value as SubscriptionUpdate | undefined;
 
     expect(delivered.done).toBe(false);
-    expect(subscription.topic?.target?.type).toBe(TypeUrls.derive(AggregateStateSchema));
+    expect(subscription.topic?.target?.type).toBe(TypeUrls.derive(TaskCreatedSchema));
     expect(update?.response?.status?.status.case).toBe("ok");
     expect(update?.subscription?.id).toEqual(subscription.id);
     if (update?.update.case !== "eventUpdates") {
@@ -2308,11 +2308,11 @@ describe("SpineServices", () => {
     expect(event).toEqual(source);
     expect(event).not.toBe(source);
     expect(event.id?.value).toBe("event-created");
-    expect(AnyMessages.unpack(event.message, AggregateStateSchema)).toEqual(
-      create(AggregateStateSchema, {
-        id: "aggregate-1",
-        name: "Created",
-        archived: false,
+    expect(AnyMessages.unpack(event.message, TaskCreatedSchema)).toEqual(
+      create(TaskCreatedSchema, {
+        id: create(GeneratedTaskIdSchema, { value: "aggregate-1" }),
+        title: "Created",
+        taskListId: create(TodoTaskListIdSchema, { value: "aggregate-1" }),
       }),
     );
     await iterator.return?.();
@@ -2321,7 +2321,7 @@ describe("SpineServices", () => {
   it("keeps a closed event subscription detached when best-effort cleanup rejects", async () => {
     const context = BoundedContext.singleTenant("EventCleanup")
       .withSubscriptionRegistry(new RejectingDeleteRegistry())
-      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
     const services = new SpineServices({ contexts: [context], queueLimit: 1 });
     let handlers:
@@ -2411,7 +2411,7 @@ describe("SpineServices", () => {
 
   it("keeps multitenant event subscriptions isolated by tenant", async () => {
     const context = BoundedContext.multitenant("TenantEvents")
-      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createEventTopic("tenant-a"));
@@ -2446,7 +2446,7 @@ describe("SpineServices", () => {
 
   it("matches multitenant event subscriptions against past-message actor tenants", async () => {
     const context = BoundedContext.multitenant("PastMessageTenantEvents")
-      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createEventTopic("tenant-past"));
@@ -2483,7 +2483,7 @@ describe("SpineServices", () => {
 
   it("keeps duplicate activation and cancellation behavior for event subscriptions", async () => {
     const context = BoundedContext.singleTenant("EventLifecycle")
-      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createEventTopic());
@@ -2514,7 +2514,7 @@ describe("SpineServices", () => {
 
   it("rejects unsupported event subscription filters through the service boundary", async () => {
     const context = BoundedContext.singleTenant("FilteredEvents")
-      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
     const topic = create(TopicSchema, {});
@@ -2522,7 +2522,7 @@ describe("SpineServices", () => {
     topic.id = create(TopicIdSchema, { value: "t-filtered-event" });
     topic.context = createActorContext();
     topic.target = create(TargetSchema, {
-      type: TypeUrls.derive(AggregateStateSchema),
+      type: TypeUrls.derive(TaskCreatedSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema),
@@ -2545,7 +2545,7 @@ describe("SpineServices", () => {
 
   it("rejects field masks and false include-all values on event topics", () => {
     const context = BoundedContext.singleTenant("MalformedEventTopics")
-      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
     const masked = createEventTopic();
@@ -4262,7 +4262,7 @@ function createCommandDispatcher(
   onDispatch: (command: ReturnType<typeof createProjectionCommand>) => void,
 ): CommandDispatcher {
   return {
-    messageSchemas: () => [ProjectionStateSchema],
+    messageSchemas: () => [ValidatedTaskCommandSchema],
     dispatch: (command) => {
       onDispatch(command);
       return Promise.resolve();
@@ -4291,7 +4291,7 @@ function createValidatedCommandDispatcher(
 
 function createFailingCommandDispatcher(): CommandDispatcher {
   return {
-    messageSchemas: () => [ProjectionStateSchema],
+    messageSchemas: () => [ValidatedTaskCommandSchema],
     dispatch: () => Promise.reject(new Error("Dispatcher failed.")),
   };
 }
@@ -4312,7 +4312,7 @@ function createRejectingRepository(): Repository<typeof RejectingTaskAggregate> 
   const handlers = EntityHandlers.define(
     RejectingTaskAggregate,
     AggregateStateSchema,
-    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    (builder) => [builder.assign(ValidatedTaskCommandSchema, "assignTask")],
   );
 
   return new Repository({
@@ -4345,7 +4345,7 @@ function createTransitionViolatingRepository(): Repository<
   const handlers = EntityHandlers.define(
     TransitionViolatingTaskAggregate,
     AggregateStateSchema,
-    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    (builder) => [builder.assign(ValidatedTaskCommandSchema, "assignTask")],
   );
 
   return new Repository({
@@ -4361,7 +4361,7 @@ function createRollingBackTransitionRepository(): Repository<
   const handlers = EntityHandlers.define(
     RollingBackTransitionTaskAggregate,
     AggregateStateSchema,
-    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    (builder) => [builder.assign(ValidatedTaskCommandSchema, "assignTask")],
   );
 
   return new Repository({
@@ -4377,7 +4377,11 @@ function createProjectionCommand(id: string, tenantId?: TenantInput, name = "Tas
     context: create(CommandContextSchema, {
       actorContext: createActorContext(tenantId),
     }),
-    message: AnyMessages.pack(ProjectionStateSchema, createState("task-1", name)),
+    message: AnyMessages.pack(
+      ValidatedTaskCommandSchema,
+      create(ValidatedTaskCommandSchema, { id: "task-1", name }),
+      { validate: false },
+    ),
   });
 }
 
@@ -4388,8 +4392,9 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task") 
       actorContext: createActorContext(),
     }),
     message: AnyMessages.pack(
-      AggregateStateSchema,
-      create(AggregateStateSchema, { id: aggregateId, name, archived: false }),
+      ValidatedTaskCommandSchema,
+      create(ValidatedTaskCommandSchema, { id: aggregateId, name }),
+      { validate: false },
     ),
   });
 }
@@ -4421,8 +4426,12 @@ function createAggregateEvent(
     id: create(EventIdSchema, { value: id }),
     context: createEventContext(aggregateId, tenantId),
     message: AnyMessages.pack(
-      AggregateStateSchema,
-      create(AggregateStateSchema, { id: aggregateId, name, archived: false }),
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id: create(GeneratedTaskIdSchema, { value: aggregateId }),
+        title: name,
+        taskListId: create(TodoTaskListIdSchema, { value: aggregateId }),
+      }),
     ),
   });
 }
@@ -4437,11 +4446,11 @@ function createPastMessageAggregateEvent(id: string, tenantId: string) {
       },
     }),
     message: AnyMessages.pack(
-      AggregateStateSchema,
-      create(AggregateStateSchema, {
-        id: `aggregate-${id}`,
-        name: "Past message",
-        archived: false,
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id: create(GeneratedTaskIdSchema, { value: `aggregate-${id}` }),
+        title: "Past message",
+        taskListId: create(TodoTaskListIdSchema, { value: `aggregate-${id}` }),
       }),
     ),
   });
@@ -4509,9 +4518,12 @@ function createValidatedEvent(id: string, aggregateId: string, name: string) {
       ),
     }),
     message: AnyMessages.pack(
-      ValidatedAggregateStateSchema,
-      create(ValidatedAggregateStateSchema, { id: aggregateId, name }),
-      { validate: false },
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id: create(GeneratedTaskIdSchema, { value: aggregateId }),
+        title: name,
+        taskListId: create(TodoTaskListIdSchema, { value: aggregateId }),
+      }),
     ),
   });
 }
@@ -4539,7 +4551,11 @@ function createProjectionEvent(id: string, entityId: string) {
 
 function createCommandWithoutId() {
   return create(CommandSchema, {
-    message: AnyMessages.pack(ProjectionStateSchema, createState("task-1", "Task")),
+    message: AnyMessages.pack(
+      ValidatedTaskCommandSchema,
+      create(ValidatedTaskCommandSchema, { id: "task-1", name: "Task" }),
+      { validate: false },
+    ),
     context: create(CommandContextSchema, {
       actorContext: createActorContext(),
     }),
@@ -4722,7 +4738,7 @@ function createTopic(tenantId?: TenantInput) {
   });
 }
 
-function createEventTopic(tenantId?: TenantInput, schema: MessageSchema = AggregateStateSchema) {
+function createEventTopic(tenantId?: TenantInput, schema: MessageSchema = TaskCreatedSchema) {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t-event" }),
     target: createEventSubscriptionTarget(schema),
