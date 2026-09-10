@@ -9,7 +9,13 @@ import {
   ScriptTarget,
   SyntaxKind,
 } from "typescript";
-import { runBoundedCommand } from "./snapshot-test-command-runner.mjs";
+import {
+  Application,
+  ArgumentsReader,
+  PackageJsonReader,
+  TSConfigReader,
+  TypeDocReader,
+} from "typedoc";
 
 const expectedProtoExports = [
   "ActorContext",
@@ -920,20 +926,45 @@ const testingIndexPath = join("packages", "testing", "src", "index.ts");
 const transportIndexPath = join("packages", "transport", "src", "index.ts");
 const coreCodegenIndexPath = join("packages", "core", "src", "codegen", "index.ts");
 
-const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
-const typedocBin = join("node_modules", ".bin", typedocExecutable);
 const outputDir = mkdtempSync(join(tmpdir(), "spine-typedoc-json-"));
 const jsonPath = join(outputDir, "api.json");
 const referencePath = join(outputDir, "reference");
 process.on("exit", () => rmSync(outputDir, { force: true, recursive: true }));
 
 try {
-  runBoundedCommand(
-    typedocBin,
-    ["--options", "typedoc.json", "--json", jsonPath, "--out", referencePath],
-    process.cwd(),
-    60_000,
-  );
+  const application = await Application.bootstrapWithPlugins({}, [
+    new ArgumentsReader(0, ["--options", "typedoc.json"]),
+    new TypeDocReader(),
+    new PackageJsonReader(),
+    new TSConfigReader(),
+    new ArgumentsReader(300).ignoreErrors(),
+  ]);
+  if (application.logger.hasErrors()) throw new Error("TypeDoc option loading failed.");
+
+  const project = await application.convert();
+  if (project === undefined || application.logger.hasErrors())
+    throw new Error("TypeDoc conversion failed.");
+  if (application.options.getValue("treatWarningsAsErrors") && application.logger.hasWarnings())
+    throw new Error("TypeDoc conversion produced warnings.");
+
+  const warningCount = application.logger.warningCount;
+  application.validate(project);
+  const validationProducedWarnings =
+    application.logger.warningCount !== warningCount ||
+    application.logger.validationWarningCount !== 0;
+  if (application.logger.hasErrors()) throw new Error("TypeDoc validation failed.");
+  if (
+    validationProducedWarnings &&
+    (application.options.getValue("treatWarningsAsErrors") ||
+      application.options.getValue("treatValidationWarningsAsErrors"))
+  )
+    throw new Error("TypeDoc validation produced warnings.");
+
+  await application.generateJson(project, jsonPath);
+  await application.generateDocs(project, referencePath);
+  if (application.logger.hasErrors()) throw new Error("TypeDoc output generation failed.");
+  if (application.options.getValue("treatWarningsAsErrors") && application.logger.hasWarnings())
+    throw new Error("TypeDoc output generation produced warnings.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);

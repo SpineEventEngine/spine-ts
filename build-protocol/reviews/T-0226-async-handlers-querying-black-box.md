@@ -397,6 +397,10 @@ cheap preflight is required again before another release attempt.
 - SPI correction verification: generated strict build, core/server query tests (40/40), generated
   cleanliness, API inventory, and TSDoc checks pass. The evidence-only checkpoint follows after a
   clean diff check.
+- Release infrastructure correction: `check-api-docs.mjs` now runs TypeDoc 0.28 in-process with
+  the CLI-equivalent `typedoc.json` readers, then converts, validates, and writes its temporary JSON
+  and HTML outputs fail-closed. A RED/GREEN regression removes the suspended child-process bridge;
+  the real inventory check completes in 23.2 seconds with every exact export inventory intact.
 
 ## Final P2 correction response
 
