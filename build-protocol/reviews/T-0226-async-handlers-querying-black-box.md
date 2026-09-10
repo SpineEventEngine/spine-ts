@@ -353,6 +353,26 @@ finding from each round is fixed; both security reviews are clean. The shared
 runtime and public export changes require the release verification profile
 after this converged preflight.
 
+### Release verification infrastructure diagnosis
+
+The first release attempt exposed and then closed a package-boundary failure:
+the query-plan bridge now uses the permitted core SPI subpath rather than a
+published `internal` path. A complete post-correction task preflight passed.
+
+The next release attempt reached TypeDoc and timed out after its nested child
+process was suspended by the Desktop execution surface. The failure reproduced
+with both the TypeDoc launcher and its direct CLI module under Node child-process
+execution, while direct shell execution and an in-process TypeDoc API run each
+completed cleanly in about 24 seconds. A trivial supervised child also exits
+normally. This isolates the fault to TypeDoc's nested process boundary on this
+surface, not documentation conversion, leaked handles, or task code.
+
+The existing `implementer` role owns the narrow verification fix with explicit
+`gpt-5.6-terra` / medium reasoning. It remains the sole writer, may not spawn
+subagents, and must use a RED/GREEN regression to replace only the API-doc
+checker's child-process invocation with TypeDoc's in-process API. The full
+cheap preflight is required again before another release attempt.
+
 ### Independent round-two correction work log
 
 - Aggregate reactor follow-up Events now use a dedicated committed stored-follow-up publisher path:
