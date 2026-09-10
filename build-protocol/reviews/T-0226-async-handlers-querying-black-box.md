@@ -472,6 +472,11 @@ this correction context.
   end-user documentation is unaffected.
 - Security: the vulnerable dependency paths are removed from the lockfile and
   both audit scopes are clean.
+- Final verification: the mandatory preflight passed all deterministic gates
+  and 19/19 focused tests. `pnpm verify:publish` passed 289/289 test files and
+  4,642/4,642 tests with 93.22% statement, 90.00% branch, 92.76% function, and
+  94.38% line coverage, followed by two clean audits. `release-cli preflight`
+  and `release-cli prepare --check` both passed for all 18 packages.
 
 ## Final API P1 correction response
 
