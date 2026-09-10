@@ -79,10 +79,9 @@ function fixtureFile(descriptorSetBase64: string) {
   );
   const descriptor = descriptorSet.file[0];
   if (descriptor === undefined) throw new Error("Process Manager query fixture is empty.");
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    [file_spine_options],
-  );
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
 }
 
 const entityFixture = fixtureFile(serverEntityMetadataTestFixtures.main.descriptorSetBase64);
@@ -149,11 +148,7 @@ class QueryProjection extends Projection<string, typeof ProjectionStateSchema, n
   }
 }
 
-class QueryProcessManager extends ProcessManager<
-  string,
-  typeof ProcessManagerStateSchema,
-  number
-> {
+class QueryProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {
   static results: readonly ProjectionState[] = [];
   static predicate: unknown;
   static failure: unknown;
@@ -355,16 +350,20 @@ describe("Process Manager querying", () => {
     const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-b" } });
 
     try {
-      await context.stand().update(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema, { id: "shared", name: "A", priority: 1 }),
-        { tenantId: tenantA },
-      );
-      await context.stand().update(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema, { id: "shared", name: "B", priority: 2 }),
-        { tenantId: tenantB },
-      );
+      await context
+        .stand()
+        .update(
+          ProjectionStateSchema,
+          create(ProjectionStateSchema, { id: "shared", name: "A", priority: 1 }),
+          { tenantId: tenantA },
+        );
+      await context
+        .stand()
+        .update(
+          ProjectionStateSchema,
+          create(ProjectionStateSchema, { id: "shared", name: "B", priority: 2 }),
+          { tenantId: tenantB },
+        );
 
       await context.commandBus().post(queryCommand("shared", "A", "tenant-a"));
       expect(QueryProcessManager.results).toEqual([
@@ -474,16 +473,20 @@ describe("Process Manager querying", () => {
           ProjectionStateSchema,
           create(ProjectionStateSchema, { id: "live", name: "live", priority: 1 }),
         );
-      await context.stand().update(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema, { id: "archived", name: "archived", priority: 2 }),
-        { lifecycle: { archived: true, deleted: false } },
-      );
-      await context.stand().update(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema, { id: "deleted", name: "deleted", priority: 3 }),
-        { lifecycle: { archived: false, deleted: true } },
-      );
+      await context
+        .stand()
+        .update(
+          ProjectionStateSchema,
+          create(ProjectionStateSchema, { id: "archived", name: "archived", priority: 2 }),
+          { lifecycle: { archived: true, deleted: false } },
+        );
+      await context
+        .stand()
+        .update(
+          ProjectionStateSchema,
+          create(ProjectionStateSchema, { id: "deleted", name: "deleted", priority: 3 }),
+          { lifecycle: { archived: false, deleted: true } },
+        );
 
       await context.commandBus().post(queryCommand("manager", "all"));
       expect(QueryProcessManager.results.map((state) => state.name).sort()).toEqual([
