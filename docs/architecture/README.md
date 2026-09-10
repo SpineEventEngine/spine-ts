@@ -688,8 +688,8 @@ The same local runtime boundary provides a narrow generated-signal metadata
 policy through `SignalMetadata`. Repository-produced commands/events
 share one policy for command/event IDs, timestamps, actor/tenant command
 context, event origin chains, primitive producer IDs, and validated int32
-version metadata. Tests inject `SignalIds` and `Clock` instead of mutating
-process-global time or ID state. This seam is still metadata-only: end-user
+version metadata. IDs are generated through Node secure UUIDs; tests use fixed
+source envelopes and `Clock` rather than mutating process-global state. This seam is still metadata-only: end-user
 handlers continue to accept generated domain messages instead of framework
 `Event` envelopes, `@Apply` remains absent, manual transaction controls are
 not introduced, and the seam does not discover handlers, load generated

@@ -95,7 +95,6 @@ import {
   type SignalIntakeFailureCode,
   type SignalIntakeResult,
   type SignalKind,
-  SignalIds,
   SignalMetadata,
   type SignalMetadataOptions,
   SingleProcessServerRuntime,
@@ -296,7 +295,6 @@ describe("@spine-event-engine/server", () => {
         "ShardIndex",
         "ShardSession",
         "ShardedWorkRegistry",
-        "SignalIds",
         "SignalMetadata",
         "SingleProcessServerRuntime",
         "SpecScanner",
@@ -375,7 +373,6 @@ describe("@spine-event-engine/server", () => {
     expect(new StandStateTypeError("Unknown", "read")).toBeInstanceOf(StandStateTypeError);
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
     expect(new SignalMetadata()).toBeInstanceOf(SignalMetadata);
-    expect(new SignalIds()).toBeInstanceOf(SignalIds);
     expect(new FixedClock(new Date(0))).toBeInstanceOf(FixedClock);
     expect(new SystemClock()).toBeInstanceOf(SystemClock);
     expect(new GeneratedRegistryDiscovery()).toBeInstanceOf(GeneratedRegistryDiscovery);
@@ -412,9 +409,13 @@ describe("@spine-event-engine/server", () => {
       "RUNTIME_NOT_ACCEPTING" | "MALFORMED_ENVELOPE" | "UNSUPPORTED_SIGNAL_KIND"
     >();
     expectTypeOf<SignalMetadataOptions>().toExtend<{
-      readonly ids?: SignalIds;
       readonly clock?: SystemClock | FixedClock | undefined;
     }>();
+    const rejectsIdSource = () => {
+      // @ts-expect-error Public metadata options do not accept injected ID sources.
+      new SignalMetadata({ ids: () => "fixed" });
+    };
+    void rejectsIdSource;
     expectTypeOf<EventContextInput["producerId"]>().toEqualTypeOf<PrimitiveId | undefined>();
     expectTypeOf(acceptSignalIntake("command")).toExtend<SignalIntakeResult>();
     expectTypeOf(failSignalIntake("event", "MALFORMED_ENVELOPE")).toExtend<SignalIntakeResult>();

@@ -928,14 +928,14 @@ surface is a server-runtime kernel only; it is not a process-wide singleton,
 process supervisor, generic job framework, command/event/import bus, durable
 storage or inbox, read-side stand, repository dispatcher, integration broker,
 broad gRPC server lifecycle, or worker-process runtime.
-Runtime metadata exports include `SignalMetadata`, `SignalIds`, `Clock`,
+Runtime metadata exports include `SignalMetadata`, `Clock`,
 `SystemClock`, `FixedClock`, `SignalMetadataOptions`, `ActorContextInput`,
 `CommandContextInput`, and `EventContextInput`. `SignalMetadata` creates
 generated command IDs, event IDs, timestamps, actor/tenant command context,
 source-command/source-event origin chains, primitive (`string | number |
 boolean`) producer IDs, and validated int32 `Version` metadata through one
-small shared policy surface. Deterministic tests inject `Clock` and
-`SignalIds` instances instead of mutating process-wide globals. This seam is
+small shared policy surface. Generated IDs use Node secure UUIDs; deterministic
+tests inject `Clock` and use fixed source envelopes. This seam is
 local runtime metadata only; it does not discover handlers, load generated
 registries, materialize application handlers, manage transport, storage, tracing,
 or end-user envelope APIs.

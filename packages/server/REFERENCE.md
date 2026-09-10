@@ -469,6 +469,9 @@ command-validation failure, which `SpineServices` maps to
 `COMMAND_VALIDATION_ERROR` with a packed `spine.validation.ValidationError`.
 Entity transition validation failures map to
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with the same detail type.
+Framework-created runtime command and event metadata uses fresh Node secure
+UUIDs; fixed IDs belong only to existing source envelopes retained through the
+normal origin chain.
 
 An application handler throws a generated core `RejectionThrowable` for a
 domain rejection. The repository rolls back state, version, lifecycle, and

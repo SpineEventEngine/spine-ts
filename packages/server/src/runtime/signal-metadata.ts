@@ -103,41 +103,7 @@ export class FixedClock implements Clock {
 }
 
 /**
- * Creates fresh framework command and event identifiers.
- */
-export class SignalIds {
-  readonly #next: () => string;
-
-  /**
-   * Creates an identifier source.
-   *
-   * @param next Function that supplies each fresh identifier; only a non-empty result is required.
-   */
-  constructor(next: () => string = randomUUID) {
-    this.#next = next;
-  }
-
-  /**
-   * Creates a fresh command identifier.
-   *
-   * @returns Command identifier.
-   */
-  command(): CommandId {
-    return create(CommandIdSchema, { uuid: SignalValues.command(this.#next()) });
-  }
-
-  /**
-   * Creates a fresh event identifier.
-   *
-   * @returns Event identifier.
-   */
-  event(): EventId {
-    return create(EventIdSchema, { value: SignalValues.event(this.#next()) });
-  }
-}
-
-/**
- * Configures the sources used to create signal metadata.
+ * Configures the clock used to create signal metadata.
  */
 export interface SignalMetadataOptions {
   // prettier-ignore
@@ -146,11 +112,6 @@ export interface SignalMetadataOptions {
    * Supplies timestamps; defaults to {@link SystemClock}.
    */
   readonly clock?: Clock;
-
-  /**
-   * Supplies command and event identifiers; defaults to {@link SignalIds}.
-   */
-  readonly ids?: SignalIds;
 }
 
 /**
@@ -214,16 +175,14 @@ export interface EventContextInput {
  */
 export class SignalMetadata {
   readonly #clock: Clock;
-  readonly #ids: SignalIds;
 
   /**
    * Creates a metadata factory.
    *
-   * @param options Optional clock and identifier sources.
+   * @param options Optional clock.
    */
   constructor(options: SignalMetadataOptions = {}) {
     this.#clock = options.clock ?? new SystemClock();
-    this.#ids = options.ids ?? new SignalIds();
   }
 
   /**
@@ -232,7 +191,7 @@ export class SignalMetadata {
    * @returns Fresh command identifier.
    */
   commandId(): CommandId {
-    return this.#ids.command();
+    return create(CommandIdSchema, { uuid: randomUUID() });
   }
 
   /**
@@ -241,7 +200,7 @@ export class SignalMetadata {
    * @returns Fresh event identifier.
    */
   eventId(): EventId {
-    return this.#ids.event();
+    return create(EventIdSchema, { value: randomUUID() });
   }
 
   /**
@@ -524,22 +483,12 @@ export class SignalMetadata {
 }
 
 /**
- * Validates values shared by the clock and identifier sources.
+ * Validates values shared by clock metadata.
  */
 const SignalValues = Object.freeze({
   time(value: Date): Date {
     if (!Number.isFinite(value.getTime()))
       throw new TypeError("Signal metadata timestamps require a finite Date instance.");
-    return value;
-  },
-  command(value: string): string {
-    if (value.trim().length === 0)
-      throw new Error("Signal metadata command IDs require a non-empty command ID.");
-    return value;
-  },
-  event(value: string): string {
-    if (value.trim().length === 0)
-      throw new Error("Signal metadata event IDs require a non-empty event ID.");
     return value;
   },
 });

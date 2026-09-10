@@ -198,7 +198,6 @@ export {
   type CommandContextInput,
   FixedClock,
   type EventContextInput,
-  SignalIds,
   SignalMetadata,
   type SignalMetadataOptions,
   SystemClock,
