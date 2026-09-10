@@ -281,6 +281,16 @@ verification and review may run concurrently only at stable boundaries.
 ## Verification
 
 - Pending focused RED/GREEN evidence.
+- A2 analyzer RED: `build-time-handler-analyzer.test.ts` reported a Projection
+  `@Assign` as `command-assignment`; GREEN: 53 analyzer tests passed after
+  `UNSUPPORTED_ASSIGN_HANDLER` was added.
+- A2 runtime RED: explicit real-Projection metadata accepted `builder.assign()`;
+  GREEN: analyzer, handler metadata, generated registry, and readiness suites passed
+  together (101 tests). Focused Prettier and `git diff --check` passed.
+- A2 generated-ingestion regression uses the existing real `ProjectionReceiver` and
+  confirms centralized metadata rejection of generated `command-assignment` input.
+  Final analyzer, metadata, generated-registry, and readiness verification passed
+  102 tests; focused Prettier and `git diff --check` passed with no generated churn.
 - Pending affected-package checks and cheap preflight.
 - Pending specialist review wave.
 - Pending final `verify:release`.

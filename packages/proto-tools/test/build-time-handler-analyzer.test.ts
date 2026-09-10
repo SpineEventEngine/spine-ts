@@ -391,6 +391,33 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
+  it("rejects @Assign on a Projection while retaining valid subscriptions and assignments", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/projection-assign.ts",
+        handlerFixtureSource(
+          "Projection",
+          "TaskListSchema",
+          `
+            @Assign assign(command: CreateTask): TaskCreated { throw new Error(String(command)); }
+            @Subscribe observe(event: TaskCreated): void { void event; }
+          `,
+          `
+            import { type CreateTask } from "../generated/commands_pb.js";
+            import { type TaskCreated } from "../generated/events_pb.js";
+          `,
+        ),
+      ),
+    );
+
+    expect(entityReceivers(result)[0]?.handlers.map((handler) => handler.kind)).toEqual([
+      "event-subscription",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_ASSIGN_HANDLER",
+    ]);
+  });
+
   it("rejects @Command inherited through Aggregate and Projection domain bases", () => {
     const result = analyzeBuildHandlers(
       programWithSource(

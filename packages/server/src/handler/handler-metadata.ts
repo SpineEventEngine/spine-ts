@@ -14,7 +14,7 @@
 
 import type { EntityMetadata, DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import { describeEntityMetadata, isEntitySchema } from "../entity/entity-metadata.js";
-import { ProcessManager } from "../entity/entity.js";
+import { ProcessManager, Projection } from "../entity/entity.js";
 
 /**
  * Entity class value accepted by explicit handler metadata registration.
@@ -1075,6 +1075,15 @@ class EntityHandlersOwner {
   }
 
   #validateCommandHandlers(entityType: EntityClass, handlers: readonly HandlerMetadata[]): void {
+    if (
+      entityType.prototype instanceof Projection &&
+      handlers.some((handler) => handler.kind === "command-assignment")
+    ) {
+      throw new HandlerMetadataError(
+        "UNSUPPORTED_ASSIGN_HANDLER",
+        "Projection entities cannot use @Assign handlers.",
+      );
+    }
     if (
       handlers.some(
         (handler) => handler.kind === "command-substitution" || handler.kind === "command-reaction",

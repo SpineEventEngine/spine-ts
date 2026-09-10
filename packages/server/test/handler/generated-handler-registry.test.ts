@@ -25,6 +25,7 @@ import {
   AbstractEventReactor,
   AbstractEventSubscriber,
   Aggregate,
+  HandlerMetadataError,
   HandlerRegistryIngestionError,
   HandlerRegistryIngestor,
   ProcessManager,
@@ -93,7 +94,11 @@ class AggregateReceiver extends Aggregate<string, typeof StateSchema, number> {
     return command;
   }
 }
-class ProjectionReceiver extends Projection<string, typeof StateSchema, number> {}
+class ProjectionReceiver extends Projection<string, typeof StateSchema, number> {
+  handle(command: Message<"spine.server.testing.StartReview">) {
+    return command;
+  }
+}
 class UnrelatedReceiver {
   readonly unrelated = true;
 }
@@ -154,6 +159,21 @@ function domainHandler(kind: GeneratedHandlerRecordInput["kind"]): GeneratedHand
 }
 
 describe("generated handler registry ingestion", () => {
+  it("rejects Projection command assignments from generated metadata", () => {
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        receivers: [
+          {
+            receiverKind: "entity",
+            receiverType: ProjectionReceiver,
+            stateSchema: StateSchema,
+            handlers: [domainHandler("command-assignment")],
+          },
+        ],
+      }),
+    ).toThrow(HandlerMetadataError);
+  });
+
   it("rejects a schema without the descriptor file classifiers require", () => {
     const ingest = () =>
       new HandlerRegistryIngestor().ingest({

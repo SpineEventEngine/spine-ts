@@ -220,6 +220,7 @@ export type BuildHandlerDiagnosticCode =
   | "NON_EXPORTED_RECEIVER_CLASS"
   | "SCHEMA_BEARING_DECORATOR"
   | "TYPESCRIPT_SYNTAX_ERROR"
+  | "UNSUPPORTED_ASSIGN_HANDLER"
   | "UNSUPPORTED_COMMAND_HANDLER"
   | "UNSUPPORTED_RETURN_TYPE";
 
@@ -557,6 +558,17 @@ const HandlerSources = Object.freeze({
     }
 
     const method = HandlerTypes.methodName(node);
+    if (entityBase === "Projection" && handler.name === "Assign") {
+      HandlerTypes.pushDiagnostic(
+        scope,
+        "UNSUPPORTED_ASSIGN_HANDLER",
+        handler.node,
+        "Projection handlers cannot use @Assign.",
+        className,
+        method,
+      );
+      return undefined;
+    }
     if ((entityBase === "Aggregate" || entityBase === "Projection") && handler.name === "Command") {
       HandlerTypes.pushDiagnostic(
         scope,

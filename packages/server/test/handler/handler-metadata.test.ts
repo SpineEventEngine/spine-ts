@@ -29,6 +29,7 @@ import {
   HandlerMetadataRegistryError,
   type HandlerRegistrationBuilder,
   type HandlerMethodName,
+  Projection,
 } from "../../src/index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -86,6 +87,12 @@ class TaskProjection {
 
   applyArchived(event: Message<"spine.core.Event">): void {
     void event;
+  }
+}
+
+class AssignedProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  assignCreate(command: Message<"spine.core.Command">): void {
+    void command;
   }
 }
 
@@ -162,11 +169,16 @@ const AggregateStateSchema = messageDesc(
 ) as GenMessage<AggregateState>;
 
 describe("handler metadata", () => {
-  it("defines frozen explicit handler metadata in declaration order", () => {
+  it("rejects Projection command assignments from explicit metadata", () => {
     const entity = describeEntityMetadata(ProjectionStateSchema);
 
+    expect(() =>
+      EntityHandlers.define(AssignedProjection, ProjectionStateSchema, (builder) => [
+        builder.assign(CommandSchema, "assignCreate"),
+      ]),
+    ).toThrow(/Projection entities cannot use @Assign/i);
+
     const metadata = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
-      builder.assign(CommandSchema, "assignCreate"),
       builder.subscribe(EventSchema, "subscribeCreated"),
       builder.react(EventSchema, "reactToCreated"),
       builder.apply(EventSchema, "applyCreated", { allowImport: true }),
@@ -179,29 +191,26 @@ describe("handler metadata", () => {
     });
     expect(metadata.entityType).toBe(TaskProjection);
     expect(metadata.handlers.map((handler) => handler.kind)).toEqual([
-      "command-assignment",
       "event-subscription",
       "event-reaction",
       "event-application",
     ]);
     expect(metadata.handlers.map((handler) => handler.methodName)).toEqual([
-      "assignCreate",
       "subscribeCreated",
       "reactToCreated",
       "applyCreated",
     ]);
     expect(metadata.handlers.map((handler) => handler.messageFullTypeName)).toEqual([
-      "spine.core.Command",
       "spine.core.Event",
       "spine.core.Event",
       "spine.core.Event",
     ]);
-    expect(metadata.handlers.map((handler) => handler.parameterCount)).toEqual([1, 1, 1, 1]);
-    expect(metadata.commandAssignments[0]).toBe(metadata.handlers[0]);
+    expect(metadata.handlers.map((handler) => handler.parameterCount)).toEqual([1, 1, 1]);
+    expect(metadata.commandAssignments).toEqual([]);
     expect(metadata.commandReactions).toEqual([]);
-    expect(metadata.eventSubscriptions[0]).toBe(metadata.handlers[1]);
-    expect(metadata.eventReactions[0]).toBe(metadata.handlers[2]);
-    expect(metadata.eventApplications[0]).toBe(metadata.handlers[3]);
+    expect(metadata.eventSubscriptions[0]).toBe(metadata.handlers[0]);
+    expect(metadata.eventReactions[0]).toBe(metadata.handlers[1]);
+    expect(metadata.eventApplications[0]).toBe(metadata.handlers[2]);
     expect(metadata.eventApplications[0]?.allowImport).toBe(true);
 
     expect(Object.isFrozen(metadata)).toBe(true);
