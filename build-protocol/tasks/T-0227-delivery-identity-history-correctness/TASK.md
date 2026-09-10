@@ -8,9 +8,12 @@ Task log path: `build-protocol/tasks/T-0227-delivery-identity-history-correctnes
 Branch: `fix-delivery-identity-history-correctness`
 Worktree: current checkout at `/Users/armiol/development/experiments/spine-ts`;
 the human explicitly required no separate worktree
-Authoring sub-agent: Pending existing implementer dispatch
-Reviewer sub-agents: Pending
-Implementation commit: Pending
+Authoring sub-agent: Existing implementer role, explicitly dispatched as
+`gpt-5.6-terra`, medium reasoning; runtime metadata was not exposed
+Reviewer sub-agents: Existing performance/reliability, style/maintainability,
+TypeScript/API, documentation, and final security reviewer roles
+Implementation commits: `094316a06`, `6a7edf4d6`, `054174f06`, `00f27b8f6`,
+`e1772bacf`, and `8c0d06a01`
 Final branch HEAD: Pending
 
 Task classification: High-risk
@@ -151,8 +154,9 @@ Out of scope:
 - Style, TypeScript/API, and performance/reliability reviewers:
   `gpt-5.6-terra`, high reasoning.
 - Documentation reviewer: immutable `gpt-5.6-luna`, medium reasoning.
-- Security: N/A as a separate task review because this task adds no
-  authorization, credential, dependency, or new deserialization boundary.
+- Final security reviewer: existing configured role, explicitly
+  `gpt-5.6-terra`, high reasoning. Runtime metadata was not exposed; the
+  immutable configured role/profile is the available evidence.
 
 One writer may change overlapping production and test files. Read-only
 verification and review may run concurrently only at stable boundaries.
@@ -383,6 +387,9 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
 - Final documentation correction adds a focused Signal identity and Aggregate semantics
   heading, distinguishing fresh framework child Command/Event IDs from preserved
   existing envelope IDs through transport, storage, and envelope returns.
+- Version `2.0.0-snapshot.11` uses fixed internal workspace pins at the same version;
+  `workspace:*` references remain unchanged and external validation stays at
+  `2.0.0-snapshot.7`. `pnpm install --lockfile-only` regenerated the lockfile.
 - Independent Luna/low acceptance repeated the serialized seven-file gate with
   409/409 tests passing and the standalone repository-routing suite with 264/264
   tests passing. Focused Prettier, `git diff --check`, and the generated-manifest
@@ -396,15 +403,15 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
 
 ## Documentation And Public API Impact
 
-| Area                          | Impact                                                                                            |
-| ----------------------------- | ------------------------------------------------------------------------------------------------- |
-| Package README                | Update only if current public behavior claims conflict with the correction.                       |
-| TypeDoc/API docs              | Correct ID-creation and supported-handler claims where affected.                                  |
+| Area                          | Impact                                                                                                                |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Package README                | Update only if current public behavior claims conflict with the correction.                                           |
+| TypeDoc/API docs              | Correct ID-creation and supported-handler claims where affected.                                                      |
 | Public API additions/removals | New-signal metadata factories no longer accept caller IDs; `DeliveryInbox` gains an optional retained-admission seam. |
-| Framework `USER_GUIDE.md`     | Update only if it documents affected behavior.                                                    |
-| Example `USER_GUIDE.md`       | N/A unless an affected example fails.                                                             |
-| API examples                  | Preserve public Delivery client usage; adjust only invalid Projection assignment examples if any. |
-| Compatibility                 | No compatibility layer for prior snapshot behavior.                                               |
+| Framework `USER_GUIDE.md`     | Update only if it documents affected behavior.                                                                        |
+| Example `USER_GUIDE.md`       | N/A unless an affected example fails.                                                                                 |
+| API examples                  | Preserve public Delivery client usage; adjust only invalid Projection assignment examples if any.                     |
+| Compatibility                 | No compatibility layer for prior snapshot behavior.                                                                   |
 
 ## Security Impact
 
@@ -433,14 +440,21 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
 - Affected serialized verification passed 473 tests across 12 files;
   `pnpm typecheck:build`, `pnpm docs:api:check`, `pnpm docs:audience:check`, focused
   Prettier, and `git diff --check` passed with generated manifest churn removed.
-- Pending cheap release preflight and final `verify:release` after version selection.
+- Mandatory cheap release preflight passed after formatting this record: 506/506
+  focused tests across 14 files; direct affected-package TypeScript checks for
+  proto-tools, server, delivery-client, and delivery-server; changed-file Prettier;
+  `git diff --check`; API-documentation and audience checks; and changed-production-
+  branch coverage inspection were all clean. `pnpm install --frozen-lockfile` then
+  refreshed the dependency-state marker from the committed lockfile, and the pnpm-
+  mediated server typecheck passed.
+- Final `verify:release` remains pending.
 
 ## Open Risks And Follow-Up Routing
 
-| Risk/Follow-Up                               | Owner                   | Disposition                                                                   | Next Review Point       |
-| -------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------- | ----------------------- |
-| Remote scan depth and timestamp continuation | Reliability reviewer | Existing finite bound retained; non-progress fails closed; no non-JVM lookup RPC | Release verification |
-| Provider continuation semantics              | Implementer          | Existing exclusive older-than queries accepted unchanged                         | Closed               |
+| Risk/Follow-Up                               | Owner                   | Disposition                                                                      | Next Review Point    |
+| -------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------- | -------------------- |
+| Remote scan depth and timestamp continuation | Reliability reviewer    | Existing finite bound retained; non-progress fails closed; no non-JVM lookup RPC | Release verification |
+| Provider continuation semantics              | Implementer             | Existing exclusive older-than queries accepted unchanged                         | Closed               |
 | Public Signal ID creation signatures         | TypeScript/API reviewer | Fresh child IDs and preserved envelopes documented and reviewed clean            | Closed               |
 
 ## Review Waves And Dispositions
@@ -454,7 +468,12 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   SignalIds/RemoteInbox TSDoc, and adding direct multi-target UUID coverage.
 - Documentation: clean after replacing stale remote-removal text and documenting handler,
   identity, Aggregate-version, and sparse-history behavior.
-- Final security review remains pending at release readiness.
+- Final security: clean. Atomic typed-target admission, bounded fail-closed remote
+  paging, tenant/session/shard checks, generated and preserved identity paths,
+  handler rejection, history continuation, wire decoding, storage keys, and logging
+  were reviewed. `pnpm audit --prod --json` reported no advisories. Existing
+  cleartext behavior when a loopback-default server is deliberately exposed and the
+  bounded paging availability tradeoff are unchanged, documented residual constraints.
 
 ## Integration Result
 
