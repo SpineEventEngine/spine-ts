@@ -5114,7 +5114,7 @@ const RepositoryHistoryInternals = {
     const stateCache = RepositoryHistoryInternals.createHistoryCache(
       (depth, startingFromVersion) => storage.states.backward(entityId, depth, startingFromVersion),
       (record) => BigInt(EntityRecords.unpack(schema, record).versionMessage.number),
-      { requireContiguousVersions: true },
+      { requireDescendingVersions: true },
     );
     entityStateHistoryCaches.set(entity, stateCache);
     const eventCache = RepositoryHistoryInternals.createHistoryCache(
@@ -5148,14 +5148,14 @@ const RepositoryHistoryInternals = {
     load: (depth: number, startingFromVersion?: bigint) => Promise<readonly T[]>,
     versionOf: (entry: T) => bigint | undefined,
     options: {
-      readonly requireContiguousVersions?: boolean;
+      readonly requireDescendingVersions?: boolean;
       readonly cacheCompleteVersionGroups?: boolean;
     } = {},
   ): {
     readonly read: (depth: number) => Promise<readonly T[]>;
     readonly clear: () => void;
   } {
-    const { requireContiguousVersions = false, cacheCompleteVersionGroups = false } = options;
+    const { requireDescendingVersions = false, cacheCompleteVersionGroups = false } = options;
     let entries: readonly T[] = Object.freeze([]);
     let exhausted = false;
     let continuation = Promise.resolve();
@@ -5219,10 +5219,10 @@ const RepositoryHistoryInternals = {
             return;
           }
           if (
-            requireContiguousVersions &&
+            requireDescendingVersions &&
             oldestVersion !== undefined &&
             latest !== undefined &&
-            (latest >= oldestVersion || (latest < oldestVersion && latest !== oldestVersion - 1n))
+            latest >= oldestVersion
           ) {
             clear();
             return;
@@ -6282,14 +6282,14 @@ const repositoryHistory = {
    * @typeParam Entry - The history entry type.
    * @param load Loads entries before an optional continuation version.
    * @param versionOf Reads the optional version carried by an entry.
-   * @param options Selects contiguous-version and complete-group behavior.
+   * @param options Selects strictly descending-version and complete-group behavior.
    * @returns A cache with read and clear operations.
    */
   createCache<Entry>(
     load: (depth: number, startingFromVersion?: bigint) => Promise<readonly Entry[]>,
     versionOf: (entry: Entry) => bigint | undefined,
     options: {
-      readonly requireContiguousVersions?: boolean;
+      readonly requireDescendingVersions?: boolean;
       readonly cacheCompleteVersionGroups?: boolean;
     } = {},
   ): { readonly read: (depth: number) => Promise<readonly Entry[]>; readonly clear: () => void } {

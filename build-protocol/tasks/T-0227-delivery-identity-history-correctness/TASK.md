@@ -228,6 +228,16 @@ verification and review may run concurrently only at stable boundaries.
   locates one by the retained source ID and one by UUID-shaped child ID, and keeps the
   reactor origin, version, timestamp, producer, and message-context assertions on the
   identified records.
+- `2026-09-10 17:27 WEST`: HISTORY01-B RED confirmed that a state-history cache
+  cleared records when a valid descending continuation moved from version `4` to `2`.
+  GREEN removes only the adjacent-integer condition; continuation still rejects an
+  equal or newer version. In-memory and MySQL history conformance passed unchanged,
+  confirming their exclusive `startingFromVersion` queries already support sparse,
+  descending continuation.
+- `2026-09-10 17:29 WEST`: Renamed the internal/testing cache option from
+  `requireContiguousVersions` to `requireDescendingVersions` so its name matches the
+  sparse-history rule. This seam is not re-exported from a package index, so no public
+  compatibility layer is required.
 
 ## Decisions
 
@@ -302,6 +312,13 @@ verification and review may run concurrently only at stable boundaries.
   focused Prettier and `git diff --check` passed.
 - Ordering correction: focused child/source identity cases passed 3 tests; the same
   exact serialized seven-file command passed 409 tests across 7 files.
+- HISTORY01-B: focused history-cache GREEN passed 17 tests; in-memory and MySQL
+  provider history conformance passed 43 tests across 2 files. No provider source
+  change was warranted.
+- HISTORY01-B final regression: `repository-routing.test.ts` passed 264 tests;
+  focused Prettier and `git diff --check` passed.
+- HISTORY01-B naming correction: `history-cache.test.ts` passed 17 tests; focused
+  Prettier and `git diff --check` passed.
 - Independent Luna/low acceptance repeated the serialized seven-file gate with
   409/409 tests passing and the standalone repository-routing suite with 264/264
   tests passing. Focused Prettier, `git diff --check`, and the generated-manifest
