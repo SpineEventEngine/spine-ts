@@ -60,6 +60,11 @@ delivery and delivered rows are the deduplication fact. This
 package does not add authentication, authorization, durability, exactly-once
 effects, or a production topology.
 
+Remote admission scans at most 1,000 new raw rows when looking for a retained
+delivered duplicate. The timestamp continuation repeats its cursor row without
+counting it again. A match at candidate 1,000 suppresses delivery; 1,000 misses
+fail closed without reading candidate 1,001.
+
 ## Remote delivery in an environment
 
 `RemoteDelivery.connectTo({ endpoint, clientOptions? })` creates one lazy

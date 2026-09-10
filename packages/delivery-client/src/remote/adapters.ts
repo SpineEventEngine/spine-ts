@@ -154,29 +154,46 @@ export class RemoteInbox implements DeliveryInbox {
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined> {
     let after: InboxReadOptions["after"];
-    for (let page = 0; page < 500; page += 1) {
-      const delivered = await this.read(message.shard, {
-        statuses: ["DELIVERED"],
-        limit: this.client.pageSize,
-        ...(after === undefined ? {} : { after }),
+    let scanned = 0;
+    for (;;) {
+      const remaining = 1_000 - scanned;
+      const pageSize =
+        after === undefined
+          ? Math.min(this.client.pageSize, remaining)
+          : Math.min(1_000, this.client.pageSize + 1, remaining + 1);
+      const page = await this.client.readPage(message.shard, {
+        pageSize,
+        ...(after === undefined ? {} : { sinceWhen: RemoteValues.pageAnchor(after.whenReceived) }),
         ...(options?.signal === undefined ? {} : { signal: options.signal }),
         ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
       });
+      const start = after === undefined ? 0 : RemoteValues.exactAfter(page, after);
+      const raw = page.slice(start);
+      if (after !== undefined && page.length === pageSize && raw.length === 0)
+        throw new DeliveryPagingError();
+      const last = page.at(-1);
+      const prior = page.at(-2);
       if (
-        delivered.some(
-          (candidate) =>
-            candidate.signalId === message.signalId &&
-            candidate.inboxId.targetTypeUrl === message.inboxId.targetTypeUrl &&
-            RemoteValues.sameAny(candidate.inboxId.targetId, message.inboxId.targetId) &&
-            (candidate.keepUntil === undefined || candidate.keepUntil.getTime() > Date.now()),
-        )
-      ) {
-        await this.client.writeOne({ ...message, status: "DELIVERED" }, options);
-        return undefined;
+        page.length === pageSize &&
+        (last === undefined || prior?.whenReceived.getTime() === last.whenReceived.getTime())
+      )
+        throw new DeliveryPagingError();
+      for (const candidate of raw) {
+        scanned += 1;
+        if (
+          candidate.status === "DELIVERED" &&
+          candidate.signalId === message.signalId &&
+          candidate.inboxId.targetTypeUrl === message.inboxId.targetTypeUrl &&
+          RemoteValues.sameAny(candidate.inboxId.targetId, message.inboxId.targetId) &&
+          (candidate.keepUntil === undefined || candidate.keepUntil.getTime() > Date.now())
+        ) {
+          await this.client.writeOne({ ...message, status: "DELIVERED" }, options);
+          return undefined;
+        }
+        if (scanned === 1_000) throw new DeliveryPagingError();
       }
-      if (delivered.length < this.client.pageSize) return message;
-      const last = delivered.at(-1);
-      if (last === undefined) return message;
+      if (page.length < pageSize) return message;
+      if (last === undefined) throw new DeliveryPagingError();
       after = {
         messageId: last.id.value,
         whenReceived: last.whenReceived,

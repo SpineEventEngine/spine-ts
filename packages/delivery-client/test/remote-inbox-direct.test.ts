@@ -198,6 +198,47 @@ describe("RemoteInbox direct behavior", () => {
     ).resolves.toMatchObject({ id: duplicate.id });
   });
 
+  it.each([1, 2, 17, 1_000])(
+    "finds a matching retained row at new raw candidate 1,000 with page size %i",
+    async (pageSize) => {
+      const client = new Client();
+      client.pageSize = pageSize;
+      const inbox = new RemoteInbox(client as never);
+      const duplicate = { ...domainMessage("duplicate"), signalId: "matching-signal" };
+      const candidates = retainedCandidates(1_000, duplicate, 1_000);
+      serveRawCandidates(client, candidates);
+
+      await expect(inbox.admit(duplicate)).resolves.toBeUndefined();
+      expect(client.writeOne).toHaveBeenCalledWith(
+        expect.objectContaining({ id: duplicate.id, status: "DELIVERED" }),
+        undefined,
+      );
+      if (pageSize === 1)
+        expect(client.readPage).toHaveBeenNthCalledWith(
+          2,
+          ShardIndex.single(),
+          expect.objectContaining({ pageSize: 2 }),
+        );
+    },
+  );
+
+  it.each([1, 2, 17, 1_000])(
+    "fails closed after 1,000 new raw misses without reading candidate 1,001 with page size %i",
+    async (pageSize) => {
+      const client = new Client();
+      client.pageSize = pageSize;
+      const inbox = new RemoteInbox(client as never);
+      const duplicate = { ...domainMessage("duplicate"), signalId: "matching-signal" };
+      const candidates = retainedCandidates(1_001, duplicate);
+      const returned: string[] = [];
+      serveRawCandidates(client, candidates, returned);
+
+      await expect(inbox.admit(duplicate)).rejects.toBeInstanceOf(DeliveryPagingError);
+      expect(client.writeOne).not.toHaveBeenCalled();
+      expect(returned).not.toContain("candidate-1001");
+    },
+  );
+
   it("retains delivered rows until their finite expiration", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
@@ -243,3 +284,38 @@ describe("RemoteInbox direct behavior", () => {
     }).not.toThrow();
   });
 });
+
+function retainedCandidates(
+  count: number,
+  duplicate: ReturnType<typeof domainMessage>,
+  matchingCandidate?: number,
+) {
+  return Array.from({ length: count }, (_, index) => ({
+    ...domainMessage(`candidate-${String(index + 1)}`),
+    ...(index + 1 === matchingCandidate
+      ? { signalId: duplicate.signalId, inboxId: duplicate.inboxId }
+      : { signalId: `unrelated-${String(index + 1)}` }),
+    status: "DELIVERED" as const,
+    whenReceived: new Date(10_000 + index),
+  }));
+}
+
+function serveRawCandidates(
+  client: Client,
+  candidates: readonly ReturnType<typeof domainMessage>[],
+  returned: string[] = [],
+): void {
+  client.readPage.mockImplementation((_shard, options = {}) => {
+    const { pageSize, sinceWhen } = options;
+    if (pageSize === undefined) throw new Error("Expected a bounded remote page size.");
+    const start =
+      sinceWhen === undefined
+        ? 0
+        : candidates.findIndex(
+            (candidate) => candidate.whenReceived.getTime() > sinceWhen.getTime(),
+          );
+    const page = candidates.slice(start < 0 ? candidates.length : start, start + pageSize);
+    returned.push(...page.map((candidate) => candidate.id.value));
+    return Promise.resolve(page);
+  });
+}
