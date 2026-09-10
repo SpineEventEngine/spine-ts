@@ -21,12 +21,7 @@ import {
   SignalEnvelopes,
   TypeUrls,
 } from "@spine-event-engine/core";
-import {
-  CommandContextSchema,
-  CommandIdSchema,
-  type CommandContext,
-  type Event,
-} from "@spine-event-engine/proto";
+import { CommandContextSchema, type CommandContext, type Event } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
   type QueryResponse,
@@ -474,7 +469,6 @@ async function awaitProjectWorkflowStates(
 async function createProject(boundedContext: BoundedContext, id: ProjectId): Promise<void> {
   await boundedContext.commandBus().post(
     SignalEnvelopes.command({
-      id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
       context: create(CommandContextSchema),
       schema: CreateProjectSchema,
       message: create(CreateProjectSchema, { project: id, name: "roadmap" }),
@@ -484,7 +478,6 @@ async function createProject(boundedContext: BoundedContext, id: ProjectId): Pro
 async function approveProject(boundedContext: BoundedContext, id: ProjectId): Promise<void> {
   await boundedContext.commandBus().post(
     SignalEnvelopes.command({
-      id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
       context: create(CommandContextSchema),
       schema: ApproveProjectSchema,
       message: create(ApproveProjectSchema, { project: id, status: "approved" }),

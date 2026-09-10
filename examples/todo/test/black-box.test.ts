@@ -802,7 +802,6 @@ describe("@spine-event-engine/example-todo", () => {
       .buildAsync();
     const listId = create(TaskListIdSchema, { value: "task-inbox-replay" });
     const event = SignalEnvelopes.event({
-      id: create(EventIdSchema, { value: "event-inbox-replay" }),
       context: create(EventContextSchema, {
         timestamp: signalMetadata.timestamp(),
         producerId: AnyMessages.pack(
@@ -831,7 +830,7 @@ describe("@spine-event-engine/example-todo", () => {
       .withStorageFactory(new InMemoryStorageFactory(storageBackend))
       .withNode("todo-replay-seed")
       .build();
-    const replayEvent = SignalEnvelopes.event({
+    const replayEvent = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-inbox-restart" }),
       context: create(EventContextSchema, {
         timestamp: signalMetadata.timestamp(),
@@ -840,12 +839,14 @@ describe("@spine-event-engine/example-todo", () => {
           create(TaskIdSchema, { value: "task-inbox-restart" }),
         ),
       }),
-      schema: TaskCreatedSchema,
-      message: create(TaskCreatedSchema, {
-        id: create(TaskIdSchema, { value: "task-inbox-restart" }),
-        taskListId: listId,
-        title: "Restart replay",
-      }),
+      message: AnyMessages.pack(
+        TaskCreatedSchema,
+        create(TaskCreatedSchema, {
+          id: create(TaskIdSchema, { value: "task-inbox-restart" }),
+          taskListId: listId,
+          title: "Restart replay",
+        }),
+      ),
     });
     await delivery.inbox.receive({
       inboxId: { targetId, targetTypeUrl },
@@ -2496,7 +2497,6 @@ function rejectionPublisher(
       }
       return context.eventBus().post(
         SignalEnvelopes.event({
-          id: signalMetadata.eventId(),
           context: create(EventContextSchema, {
             timestamp: signalMetadata.timestamp(),
             producerId: AnyMessages.pack(TaskIdSchema, producerId),
@@ -2520,7 +2520,6 @@ function assignmentRejectionPublisher(
       }
       return context.eventBus().post(
         SignalEnvelopes.event({
-          id: signalMetadata.eventId(),
           context: create(EventContextSchema, {
             timestamp: signalMetadata.timestamp(),
             producerId: AnyMessages.pack(TaskIdSchema, producerId),
