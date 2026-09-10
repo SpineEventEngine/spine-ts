@@ -19,7 +19,7 @@ import {
   Int32ValueSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextNameSchema,
   BoundedContextOnlineSchema,
@@ -438,11 +438,10 @@ describe("IntegrationBroker module", () => {
     expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(Int32ValueSchema));
     const publications = factory.published.length;
     await bus.post(
-      SignalEnvelopes.event({
+      create(EventSchema, {
         id: create(EventIdSchema, { value: "rolled-back" }),
         context: create(EventContextSchema),
-        schema: Int32ValueSchema,
-        message: create(Int32ValueSchema, { value: 1 }),
+        message: AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 1 })),
       }),
     );
     expect(factory.published).toHaveLength(publications);
@@ -495,11 +494,10 @@ describe("IntegrationBroker module", () => {
     const before = factory.published.length;
     await bus.post(event("old"));
     await bus.post(
-      SignalEnvelopes.event({
+      create(EventSchema, {
         id: create(EventIdSchema, { value: "new" }),
         context: create(EventContextSchema),
-        schema: Int32ValueSchema,
-        message: create(Int32ValueSchema, { value: 1 }),
+        message: AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 1 })),
       }),
     );
     expect(factory.published).toHaveLength(before + 1);
@@ -576,11 +574,10 @@ describe("IntegrationBroker module", () => {
       second = event("second");
     await bus.post(first);
     await bus.post(
-      SignalEnvelopes.event({
+      create(EventSchema, {
         id: create(EventIdSchema, { value: "ignored" }),
         context: create(EventContextSchema),
-        schema: Int32ValueSchema,
-        message: create(Int32ValueSchema, { value: 1 }),
+        message: AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 1 })),
       }),
     );
     await bus.post(second);
@@ -628,11 +625,13 @@ describe("IntegrationBroker module", () => {
     await publishWanted(factory, "receiver", [StringValueSchema]);
     const before = factory.published.length;
     await bus.post(
-      SignalEnvelopes.event({
+      create(EventSchema, {
         id: create(EventIdSchema, { value: "external" }),
         context: create(EventContextSchema, { external: true }),
-        schema: StringValueSchema,
-        message: create(StringValueSchema, { value: "external" }),
+        message: AnyMessages.pack(
+          StringValueSchema,
+          create(StringValueSchema, { value: "external" }),
+        ),
       }),
     );
     expect(factory.published).toHaveLength(before);
@@ -1005,11 +1004,10 @@ describe("IntegrationBroker module", () => {
 });
 
 function event(id: string) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema),
-    schema: StringValueSchema,
-    message: create(StringValueSchema, { value: id }),
+    message: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
   });
 }
 async function publishExternal(

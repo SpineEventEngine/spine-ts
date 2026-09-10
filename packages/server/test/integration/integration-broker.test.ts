@@ -24,7 +24,7 @@ import {
   StringValueSchema,
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
-import { SignalEnvelopes, type MessageSchema } from "@spine-event-engine/core";
+import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
 import { TypeUrls } from "@spine-event-engine/core";
 import {
   EventContextSchema,
@@ -102,19 +102,17 @@ function eventContext(tenantId?: string) {
   );
 }
 function stringEvent(id: string, tenantId?: string) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: eventContext(tenantId),
-    schema: StringValueSchema,
-    message: create(StringValueSchema, { value: id }),
+    message: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
   });
 }
 function int32Event(id: string, tenantId?: string) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: eventContext(tenantId),
-    schema: Int32ValueSchema,
-    message: create(Int32ValueSchema, { value: id.length }),
+    message: AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: id.length })),
   });
 }
 async function broker(behavior: string) {
@@ -453,7 +451,7 @@ describe("Wave 13 IntegrationBroker", () => {
       .addEventDispatcher(domestic([StringValueSchema]))
       .buildAsync();
     try {
-      const original = SignalEnvelopes.event({
+      const original = create(EventSchema, {
         id: create(EventIdSchema, { value: "red16-preserved" }),
         context: create(EventContextSchema, {
           timestamp: create(TimestampSchema, { seconds: 1_725_000_000n, nanos: 123_000_000 }),
@@ -469,8 +467,10 @@ describe("Wave 13 IntegrationBroker", () => {
             timestamp: create(TimestampSchema, { seconds: 1_725_000_001n }),
           }),
         }),
-        schema: StringValueSchema,
-        message: create(StringValueSchema, { value: "preserved" }),
+        message: AnyMessages.pack(
+          StringValueSchema,
+          create(StringValueSchema, { value: "preserved" }),
+        ),
       });
       await p.eventBus().post(original);
       expect(seen).toEqual([
