@@ -1697,7 +1697,7 @@ class AggregateCommandExecution {
     allowEnvelopes: boolean,
     sequence: number,
   ): Event {
-    const metadata = this.#runtime.signalMetadata.eventFromCommand(this.#command, sequence, {
+    const metadata = this.#runtime.signalMetadata.eventFromCommand(this.#command, {
       version: RepositorySignals.eventVersionNumber(version),
     });
     const bound =
@@ -1931,7 +1931,7 @@ class AggregateEventExecution {
       throw new Error(`Repository aggregate execution cannot pack event message "${typeName}".`);
     }
 
-    const metadata = this.#runtime.signalMetadata.eventFromEvent(this.#event, sequence, {
+    const metadata = this.#runtime.signalMetadata.eventFromEvent(this.#event, {
       version: RepositorySignals.eventVersionNumber(version),
     });
 
@@ -2705,7 +2705,7 @@ class ProcessManagerCommandExecution {
       );
     }
 
-    const metadata = this.#runtime.signalMetadata.eventFromCommand(this.#command, sequence, {
+    const metadata = this.#runtime.signalMetadata.eventFromCommand(this.#command, {
       version: RepositoryStand.processManagerProducedVersion(sequence),
     });
 
@@ -2734,7 +2734,7 @@ class ProcessManagerCommandExecution {
             `Repository process-manager execution cannot pack command message "${typeName}".`,
           );
         }
-        const metadata = this.#runtime.signalMetadata.commandFromCommand(this.#command, sequence);
+        const metadata = this.#runtime.signalMetadata.commandFromCommand(this.#command);
         return create(CommandSchema, {
           id: metadata.id,
           message: AnyMessages.pack(schema, signal as never),
@@ -3018,7 +3018,7 @@ class ProcessManagerEventExecution {
       );
     }
 
-    const metadata = this.#runtime.signalMetadata.eventFromEvent(this.#event, sequence, {
+    const metadata = this.#runtime.signalMetadata.eventFromEvent(this.#event, {
       version: RepositoryStand.processManagerProducedVersion(sequence),
     });
 
@@ -3049,7 +3049,7 @@ class ProcessManagerEventExecution {
           );
         }
 
-        const metadata = this.#runtime.signalMetadata.commandFromEvent(this.#event, sequence);
+        const metadata = this.#runtime.signalMetadata.commandFromEvent(this.#event);
 
         return create(CommandSchema, {
           id: metadata.id,
@@ -3456,7 +3456,7 @@ const RepositorySignals = {
     rejection: RejectionThrowable,
   ): EntityInboxFollowUp {
     runtime.registerEventSchema(rejection.schema);
-    const metadata = runtime.signalMetadata.eventFromCommand(command, 1, {});
+    const metadata = runtime.signalMetadata.eventFromCommand(command, {});
     const event = create(EventSchema, {
       id: metadata.id,
       message: AnyMessages.pack(rejection.schema, rejection.messageThrown()),
@@ -3560,8 +3560,8 @@ class EntityStateChangePublishing {
   ): void {
     this.#publish(
       runtime,
-      (ordinal) =>
-        runtime.signalMetadata.eventFromCommand(command, ordinal, {
+      () =>
+        runtime.signalMetadata.eventFromCommand(command, {
           version,
         }),
       {
@@ -3585,8 +3585,8 @@ class EntityStateChangePublishing {
   ): void {
     this.#publish(
       runtime,
-      (ordinal) =>
-        runtime.signalMetadata.eventFromEvent(source, ordinal, {
+      () =>
+        runtime.signalMetadata.eventFromEvent(source, {
           version,
         }),
       {
@@ -3599,13 +3599,13 @@ class EntityStateChangePublishing {
 
   #publish(
     runtime: RepositoryRuntime,
-    metadataFor: (ordinal: number) => ReturnType<SignalMetadata["eventFromCommand"]>,
+    metadataFor: () => ReturnType<SignalMetadata["eventFromCommand"]>,
     origin: EventOrigin,
     change: EntityCommitChange,
   ): void {
     const drafts = this.#drafts(origin, change);
-    drafts.forEach((draft, ordinal) => {
-      const metadata = metadataFor(ordinal);
+    drafts.forEach((draft) => {
+      const metadata = metadataFor();
       runtime.registerSystemEventSchema(draft.schema);
       const event = create(EventSchema, {
         id: metadata.id,

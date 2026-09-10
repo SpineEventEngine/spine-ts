@@ -63,9 +63,21 @@ describe("SignalMetadata", () => {
     );
   });
 
+  it("generates distinct UUID identifiers for new commands and events by default", () => {
+    const metadata = new SignalMetadata();
+    const commandIds = [metadata.commandId().uuid, metadata.commandId().uuid];
+    const eventIds = [metadata.eventId().value, metadata.eventId().value];
+
+    for (const id of [...commandIds, ...eventIds]) expect(id).toMatch(UUID_PATTERN);
+    expect(new Set([...commandIds, ...eventIds]).size).toBe(4);
+  });
+
   it("creates follow-up event and command metadata from source signals", () => {
     const timestamp = new Date("2026-07-09T11:12:13.456Z");
-    const metadata = new SignalMetadata({ clock: new FixedClock(timestamp) });
+    const metadata = new SignalMetadata({
+      clock: new FixedClock(timestamp),
+      ids: new SignalIds(sequenceIds("fresh-event-id", "fresh-command-id")),
+    });
     const actorContext = create(ActorContextSchema, {
       actor: create(UserIdSchema, { value: "user-1" }),
       tenantId: createTenantId("tenant-1"),
@@ -87,12 +99,12 @@ describe("SignalMetadata", () => {
       message: create(UserIdSchema, { value: "payload-user" }),
     });
 
-    const eventMetadata = metadata.eventFromCommand(command, 3, {
+    const eventMetadata = metadata.eventFromCommand(command, {
       producerId: "task-1",
       version: 7,
     });
 
-    expect(eventMetadata.id).toEqual(create(EventIdSchema, { value: "source-command-3" }));
+    expect(eventMetadata.id).toEqual(create(EventIdSchema, { value: "fresh-event-id" }));
     expect(eventMetadata.context.timestamp).toEqual(timestampFor(timestamp));
     expect(eventMetadata.context.producerId).toBeDefined();
     expect(
@@ -128,8 +140,8 @@ describe("SignalMetadata", () => {
       message: create(UserIdSchema, { value: "payload-user" }),
     });
 
-    expect(metadata.commandFromEvent(sourceEvent, 2)).toEqual({
-      id: create(CommandIdSchema, { uuid: "source-event-2" }),
+    expect(metadata.commandFromEvent(sourceEvent)).toEqual({
+      id: create(CommandIdSchema, { uuid: "fresh-command-id" }),
       context: create(CommandContextSchema, {
         actorContext,
         origin: create(OriginSchema, {
@@ -141,6 +153,40 @@ describe("SignalMetadata", () => {
         }),
       }),
     });
+  });
+
+  it("assigns fresh identifiers to framework-created signals without changing source envelopes", () => {
+    const metadata = new SignalMetadata({
+      ids: new SignalIds(
+        sequenceIds(
+          "new-command-from-command",
+          "new-command-from-event",
+          "new-event-from-command",
+          "new-event-from-event",
+        ),
+      ),
+    });
+    const command = create(CommandSchema, {
+      id: create(CommandIdSchema, { uuid: "existing-command-id" }),
+    });
+    const event = create(EventSchema, {
+      id: create(EventIdSchema, { value: "existing-event-id" }),
+    });
+
+    expect(metadata.commandFromCommand(command).id).toEqual(
+      create(CommandIdSchema, { uuid: "new-command-from-command" }),
+    );
+    expect(metadata.commandFromEvent(event).id).toEqual(
+      create(CommandIdSchema, { uuid: "new-command-from-event" }),
+    );
+    expect(metadata.eventFromCommand(command, {}).id).toEqual(
+      create(EventIdSchema, { value: "new-event-from-command" }),
+    );
+    expect(metadata.eventFromEvent(event, {}).id).toEqual(
+      create(EventIdSchema, { value: "new-event-from-event" }),
+    );
+    expect(command.id).toEqual(create(CommandIdSchema, { uuid: "existing-command-id" }));
+    expect(event.id).toEqual(create(EventIdSchema, { value: "existing-event-id" }));
   });
 
   it("normalizes pre-epoch timestamps with floor-style seconds and nanos", () => {
@@ -217,8 +263,7 @@ describe("SignalMetadata", () => {
     expect(metadata.producerId(undefined)).toBeUndefined();
   });
 
-  it("rejects direct or generated empty signal ids immediately", () => {
-    const metadata = new SignalMetadata();
+  it("rejects empty values supplied by the internal identifier generator", () => {
     const generatedEmpty = new SignalMetadata({
       ids: new SignalIds(() => ""),
     });
@@ -226,8 +271,6 @@ describe("SignalMetadata", () => {
       ids: new SignalIds(() => ""),
     });
 
-    expect(() => metadata.commandId("")).toThrow(/command ID/i);
-    expect(() => metadata.eventId("")).toThrow(/event ID/i);
     expect(() => generatedEmpty.commandId()).toThrow(/command ID/i);
     expect(() => generatedEmptyEvent.eventId()).toThrow(/event ID/i);
   });
@@ -244,7 +287,6 @@ describe("SignalMetadata", () => {
         create(EventSchema, {
           message: eventMessage,
         }),
-        1,
       ),
     ).toThrow(/event ID/i);
     expect(() =>
@@ -253,7 +295,6 @@ describe("SignalMetadata", () => {
           id: create(EventIdSchema, { value: "" }),
           message: eventMessage,
         }),
-        1,
       ),
     ).toThrow(/event ID/i);
   });
@@ -270,7 +311,6 @@ describe("SignalMetadata", () => {
         create(CommandSchema, {
           message: commandMessage,
         }),
-        1,
         {},
       ),
     ).toThrow(/command ID/i);
@@ -280,7 +320,6 @@ describe("SignalMetadata", () => {
           id: create(CommandIdSchema, { uuid: " " }),
           message: commandMessage,
         }),
-        1,
         {},
       ),
     ).toThrow(/command ID/i);
@@ -293,8 +332,8 @@ describe("SignalMetadata", () => {
       message: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "payload-user" })),
     });
 
-    expect(() => metadata.commandFromEvent(event, 1)).toThrow(/event ID/i);
-    expect(() => metadata.eventFromEvent(event, 1, { version: 1 })).toThrow(/event ID/i);
+    expect(() => metadata.commandFromEvent(event)).toThrow(/event ID/i);
+    expect(() => metadata.eventFromEvent(event, { version: 1 })).toThrow(/event ID/i);
   });
 
   it("omits non-finite numeric producer ids from event metadata", () => {
@@ -369,6 +408,8 @@ function createTenantId(value: string) {
     },
   });
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function sequenceIds(...ids: readonly string[]) {
   let index = 0;

@@ -204,7 +204,7 @@ export class StandaloneHandlerRuntime {
         );
       return Promise.resolve();
     }
-    for (const [index, value] of values.entries()) {
+    for (const value of values) {
       const schema = binding.handler.emittedSchemas.find(
         (candidate) => (value as { $typeName?: string }).$typeName === candidate.typeName,
       );
@@ -218,8 +218,8 @@ export class StandaloneHandlerRuntime {
       ) {
         const metadata =
           "uuid" in (source.id ?? {})
-            ? this.#metadata.commandFromCommand(source as Command, index + 1)
-            : this.#metadata.commandFromEvent(source as Event, index + 1);
+            ? this.#metadata.commandFromCommand(source as Command)
+            : this.#metadata.commandFromEvent(source as Event);
         void this.#publisher.publishCommand(
           create(CommandSchema, {
             id: metadata.id,
@@ -230,8 +230,8 @@ export class StandaloneHandlerRuntime {
       } else {
         const metadata =
           "uuid" in (source.id ?? {})
-            ? this.#metadata.eventFromCommand(source as Command, index + 1, {})
-            : this.#metadata.eventFromEvent(source as Event, index + 1, {});
+            ? this.#metadata.eventFromCommand(source as Command, {})
+            : this.#metadata.eventFromEvent(source as Event, {});
         void this.#publisher.publishEvent(
           create(EventSchema, {
             id: metadata.id,

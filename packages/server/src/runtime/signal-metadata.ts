@@ -120,21 +120,19 @@ export class SignalIds {
   /**
    * Creates a validated command identifier.
    *
-   * @param uuid Command UUID, generated when omitted.
    * @returns Command identifier.
    */
-  command(uuid: string = this.#next()): CommandId {
-    return create(CommandIdSchema, { uuid: SignalValues.command(uuid) });
+  command(): CommandId {
+    return create(CommandIdSchema, { uuid: SignalValues.command(this.#next()) });
   }
 
   /**
    * Creates a validated event identifier.
    *
-   * @param value Event identifier value, generated when omitted.
    * @returns Event identifier.
    */
-  event(value: string = this.#next()): EventId {
-    return create(EventIdSchema, { value: SignalValues.event(value) });
+  event(): EventId {
+    return create(EventIdSchema, { value: SignalValues.event(this.#next()) });
   }
 }
 
@@ -231,21 +229,19 @@ export class SignalMetadata {
   /**
    * Creates a command identifier.
    *
-   * @param uuid Optional command UUID.
-   * @returns Validated command identifier.
+   * @returns Fresh command identifier.
    */
-  commandId(uuid?: string): CommandId {
-    return this.#ids.command(uuid);
+  commandId(): CommandId {
+    return this.#ids.command();
   }
 
   /**
    * Creates an event identifier.
    *
-   * @param value Optional event identifier value.
-   * @returns Validated event identifier.
+   * @returns Fresh event identifier.
    */
-  eventId(value?: string): EventId {
-    return this.#ids.event(value);
+  eventId(): EventId {
+    return this.#ids.event();
   }
 
   /**
@@ -402,17 +398,13 @@ export class SignalMetadata {
    * Creates command metadata from an event.
    *
    * @param event Source event.
-   * @param sequence Causal sequence number.
-   * @returns Derived command identifier and context.
+   * @returns Fresh command identifier and derived context.
    */
-  commandFromEvent(
-    event: Event,
-    sequence: number,
-  ): { readonly id: CommandId; readonly context: CommandContext } {
+  commandFromEvent(event: Event): { readonly id: CommandId; readonly context: CommandContext } {
     const actorContext = this.#eventActor(event);
 
     return {
-      id: this.commandId(this.#causalId(this.#eventId(event).value, sequence)),
+      id: this.commandId(),
       context: this.commandContext({
         ...(actorContext === undefined ? {} : { actorContext }),
         origin: this.originFromEvent(event),
@@ -424,15 +416,14 @@ export class SignalMetadata {
    * Creates command metadata from a command substitution.
    *
    * @param command Source command.
-   * @param sequence Causal sequence number.
-   * @returns Derived command identifier and context.
+   * @returns Fresh command identifier and derived context.
    */
-  commandFromCommand(
-    command: Command,
-    sequence: number,
-  ): { readonly id: CommandId; readonly context: CommandContext } {
+  commandFromCommand(command: Command): {
+    readonly id: CommandId;
+    readonly context: CommandContext;
+  } {
     return {
-      id: this.commandId(this.#causalId(this.#commandId(command).uuid, sequence)),
+      id: this.commandId(),
       context: this.commandContext({
         ...(command.context?.actorContext === undefined
           ? {}
@@ -446,13 +437,11 @@ export class SignalMetadata {
    * Creates event metadata from a command.
    *
    * @param command Source command.
-   * @param sequence Causal sequence number.
    * @param input Additional event context input.
-   * @returns Derived event identifier and context.
+   * @returns Fresh event identifier and derived context.
    */
   eventFromCommand(
     command: Command,
-    sequence: number,
     input: EventContextInput,
   ): { readonly id: EventId; readonly context: EventContext } {
     const context = {
@@ -462,7 +451,7 @@ export class SignalMetadata {
     } satisfies EventContextInput;
 
     return {
-      id: this.eventId(this.#causalId(this.#commandId(command).uuid, sequence)),
+      id: this.eventId(),
       context: this.eventContext(context),
     };
   }
@@ -471,13 +460,11 @@ export class SignalMetadata {
    * Creates event metadata from an event.
    *
    * @param event Source event.
-   * @param sequence Causal sequence number.
    * @param input Additional event context input.
-   * @returns Derived event identifier and context.
+   * @returns Fresh event identifier and derived context.
    */
   eventFromEvent(
     event: Event,
-    sequence: number,
     input: EventContextInput,
   ): { readonly id: EventId; readonly context: EventContext } {
     const context = {
@@ -487,7 +474,7 @@ export class SignalMetadata {
     } satisfies EventContextInput;
 
     return {
-      id: this.eventId(this.#causalId(this.#eventId(event).value, sequence)),
+      id: this.eventId(),
       context: this.eventContext(context),
     };
   }
@@ -533,10 +520,6 @@ export class SignalMetadata {
     if (event.id === undefined || event.id.value.trim().length === 0)
       throw new Error("Signal metadata requires a non-empty source event ID.");
     return event.id;
-  }
-
-  #causalId(source: string, sequence: number): string {
-    return `${source}-${sequence.toString()}`;
   }
 }
 

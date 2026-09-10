@@ -30,7 +30,7 @@ import {
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 import { SignalMetadata } from "../../src/index.js";
-import { UserIdSchema } from "@spine-event-engine/proto";
+import { CommandIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import {
   CommandService,
   SubscriptionService,
@@ -320,7 +320,7 @@ function taskListTopic() {
 function createTaskCommand(commandId = "t0209-create", taskId = "t0209-task") {
   const actorContext = metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) });
   return SignalEnvelopes.command({
-    id: metadata.commandId(commandId),
+    id: create(CommandIdSchema, { uuid: commandId }),
     context: metadata.commandContext({ actorContext }),
     schema: CreateTaskSchema,
     message: create(CreateTaskSchema, {

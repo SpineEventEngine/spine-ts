@@ -29,7 +29,7 @@ import {
   InboxService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
-import { UserIdSchema } from "@spine-event-engine/proto";
+import { CommandIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import {
   CommandService,
   SubscriptionService,
@@ -170,7 +170,7 @@ function externalStateTopic() {
 function createTaskCommand(taskId: string) {
   const actorContext = metadata.actorContext({ actor: create(UserIdSchema, { value: "t0210" }) });
   return SignalEnvelopes.command({
-    id: metadata.commandId(taskId),
+    id: create(CommandIdSchema, { uuid: taskId }),
     context: metadata.commandContext({ actorContext }),
     schema: CreateTaskSchema,
     message: create(CreateTaskSchema, {
