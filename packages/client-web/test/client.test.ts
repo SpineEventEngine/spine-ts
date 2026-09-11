@@ -194,10 +194,7 @@ describe("Client", () => {
 
   it("fails both streams and cleans up on count or byte overflow", async () => {
     for (const subscriptions of [{ updateBufferCapacity: 1 }, { updateBufferByteCapacity: 1 }]) {
-      const client = Client.usingTransport(
-        { transport: updateTransport() },
-        { subscriptions },
-      );
+      const client = Client.usingTransport({ transport: updateTransport() }, { subscriptions });
       const subscription = await client
         .asGuest()
         .createSubscription(create(TopicSchema), eventSubscription);
@@ -1550,7 +1547,9 @@ describe("Client", () => {
       }),
     });
 
-    await expect(client.asGuest().post(ActorContextSchema, create(ActorContextSchema))).resolves.toEqual({
+    await expect(
+      client.asGuest().post(ActorContextSchema, create(ActorContextSchema)),
+    ).resolves.toEqual({
       kind: "ok",
     });
     await client.onBehalfOf("alice").send(create(QuerySchema));
