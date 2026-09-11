@@ -14,10 +14,10 @@ Reviewer sub-agents: Existing performance/reliability, style/maintainability,
 TypeScript/API, documentation, and final security reviewer roles
 Implementation commits: authoritative range `31cfe4f0b..HEAD` on
 `fix-delivery-identity-history-correctness`; independent-review correction
-checkpoints through `2617fdeb5` are pushed to `origin`.
+checkpoints through `8315b4e64` are pushed to `origin`.
 Last release-verified implementation HEAD: `47c77cde6`; this evidence predates
 the current correction cycle and must be refreshed before closure.
-Last pushed behavior/documentation correction HEAD: `2617fdeb5`. Later
+Last pushed behavior/documentation correction HEAD: `8315b4e64`. Later
 task-record-only commits may follow without changing that implementation checkpoint.
 Final verification is in progress.
 
@@ -329,6 +329,17 @@ verification and review may run concurrently only at stable boundaries.
   explicitly dispatching the existing security reviewer role as
   `gpt-5.6-terra` / high. The reviewer is read-only and may not spawn sub-agents;
   immutable role configuration is the available runtime-profile evidence.
+- `2026-09-11 02:05 WEST`: The zero-memory final security review returned clean
+  after 209 focused tests and zero dependency advisories. It confirmed secure
+  fresh IDs, preserved existing envelope IDs without validation, Projection
+  `@Assign` rejection, typed-target duplicate admission, tenant/session/shard
+  fencing, bounded cancellation/deadline behavior, and the absence of an outbox
+  or recovery invention. The bounded preflight then exposed and corrected one
+  stale test import, one long test title, the missing necessity record for the
+  shared secure-ID helper, one previously unformatted test file, and two uses of
+  internal wording in reader documentation. Those deterministic changes did not
+  alter the reviewed runtime contracts. The complete restarted preflight passed
+  all shared gates and 105/105 focused tests across six delivery suites.
 
 ## Decisions
 
@@ -550,6 +561,12 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   cleanliness, logging containment, production dependencies, and release readiness all
   passed. Expected volatile stand-registry warnings and two deprecated transitive
   dependencies were non-failing.
+- Post-review bounded preflight passed at `8315b4e64`: Proto integrity and
+  generation, full build and tooling typechecks, cleanup rules, TSDoc, copyright,
+  log containment, repository formatting, documentation audience/API checks,
+  Buf lint, generated cleanliness, release readiness, and 105/105 focused tests
+  across six local/remote delivery suites. The profile intentionally used
+  `--no-coverage`; the required release profile provides repository-wide coverage.
 
 ## Open Risks And Follow-Up Routing
 
@@ -591,6 +608,10 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   tenant/session/shard boundaries.
 - Fresh post-correction documentation review: clean. The reviewer used no inherited
   conversation turns and confirmed all changed behavior claims and task evidence.
+- Fresh post-correction final security review: clean. The reviewer used no inherited
+  conversation turns and confirmed identity generation/preservation, handler
+  rejection, typed-target admission, boundary fencing, bounded resource behavior,
+  dependency safety, and prohibited-scope compliance.
 
 ## Integration Result
 
