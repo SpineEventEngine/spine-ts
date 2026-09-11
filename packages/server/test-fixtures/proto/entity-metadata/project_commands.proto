@@ -12,46 +12,13 @@
  * the License.
  */
 syntax = "proto3";
-package repository_routing;
 
-import "repository-routing/routing.proto";
+package entity_metadata;
 
-message UuidMessageIdAggregateCommand {
-  UuidMessageIdAggregateId id = 1;
-  string name = 2;
-  int32 priority = 3;
-}
-
-message TaskCommand {
-  string id = 1;
-  string name = 2;
-}
-
-message ImplicitTaskCommand {
-  string id = 1;
-  string name = 2;
-  int32 priority = 3;
-}
-
-message Int32AggregateCommand {
-  int32 id = 1;
-  string name = 2;
-}
-
-message Int64ProcessManagerCommand {
-  int64 id = 1;
-  string queue = 2;
-}
-
-message RepeatedIdCommand {
+message InviteProjectMembers {
   repeated string id = 1;
 }
 
-message MapIdCommand {
+message AssignProjectMemberRoles {
   map<string, string> id = 1;
-}
-
-message CompositeRouteCommand {
-  CompositeRouteId id = 1;
-  string name = 2;
 }

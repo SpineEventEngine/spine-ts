@@ -32,7 +32,7 @@ import {
   wave13OriginRouting,
   Wave13OriginProjection,
 } from "../integration/wave13-origin-repository.js";
-import { TaskEventSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
+import { ReviewTaskAssignedSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 describe("Wave 13 external receptor origin", () => {
   it("RED-03 excludes imported events from a domestic receptor", async () => {
@@ -124,7 +124,10 @@ function event(externalOrigin: boolean) {
     $typeName: "spine.core.Event",
     id: create(EventIdSchema, { value }),
     context: create(EventContextSchema, { external: externalOrigin }),
-    message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema, { id: value, name: value })),
+    message: AnyMessages.pack(
+      ReviewTaskAssignedSchema,
+      create(ReviewTaskAssignedSchema, { id: value, name: value }),
+    ),
   } as never;
 }
 

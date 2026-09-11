@@ -40,16 +40,16 @@ import {
 import { RecordingTransportFactory } from "./wave13-red-support.js";
 import {
   ReviewStartedSchema,
-  TaskEventSchema,
-  ValidatedTaskEventSchema,
+  ReviewTaskAssignedSchema,
+  ReviewFollowUpScheduledSchema,
 } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 function registeredEventBus() {
   const bus = eventBusAccess.createForgettingBus();
   eventBusAccess.registerSchemas(bus, [
-    TaskEventSchema,
+    ReviewTaskAssignedSchema,
     ReviewStartedSchema,
-    ValidatedTaskEventSchema,
+    ReviewFollowUpScheduledSchema,
   ]);
   return bus;
 }
@@ -121,14 +121,14 @@ describe("IntegrationBroker module", () => {
   it("deduplicates a one-shot external schema iterable and uses its canonical channel URL", async () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
-    eventBusAccess.registerSchemas(bus, [TaskEventSchema]);
+    eventBusAccess.registerSchemas(bus, [ReviewTaskAssignedSchema]);
     let consumed = false;
     const schemas = {
       *[Symbol.iterator]() {
         if (consumed) throw new Error("schema iterable was consumed twice");
         consumed = true;
-        yield TaskEventSchema;
-        yield TaskEventSchema;
+        yield ReviewTaskAssignedSchema;
+        yield ReviewTaskAssignedSchema;
       },
     };
     const broker = new IntegrationBroker({
@@ -144,7 +144,8 @@ describe("IntegrationBroker module", () => {
       factory.created.filter(
         ({ kind, channel }) =>
           kind === "subscriber" &&
-          (channel as { targetType?: string }).targetType === TypeUrls.derive(TaskEventSchema),
+          (channel as { targetType?: string }).targetType ===
+            TypeUrls.derive(ReviewTaskAssignedSchema),
       ),
     ).toHaveLength(1);
   });
@@ -170,7 +171,7 @@ describe("IntegrationBroker module", () => {
       pairedContextName: create(BoundedContextNameSchema, { value: "left_System" }),
       transportFactory: factory,
       eventBus: registeredEventBus(),
-      externalEventSchemas: [TaskEventSchema],
+      externalEventSchemas: [ReviewTaskAssignedSchema],
       postImported: () => Promise.resolve(),
     });
     brokers.push(broker);
@@ -343,7 +344,7 @@ describe("IntegrationBroker module", () => {
   it("retains a failed domestic publisher until a later close succeeds", async () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
-    eventBusAccess.registerSchemas(bus, [TaskEventSchema]);
+    eventBusAccess.registerSchemas(bus, [ReviewTaskAssignedSchema]);
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "close-publisher-retry" }),
       transportFactory: factory,
@@ -353,7 +354,7 @@ describe("IntegrationBroker module", () => {
     });
     brokers.push(broker);
     await broker.open();
-    await publishWanted(factory, "receiver", [TaskEventSchema]);
+    await publishWanted(factory, "receiver", [ReviewTaskAssignedSchema]);
     factory.failCloseAfter(1);
     await expect(broker.close()).rejects.toThrow(/close failed/u);
     await expect(broker.close()).resolves.toBeUndefined();
@@ -362,7 +363,7 @@ describe("IntegrationBroker module", () => {
   it("installs one publisher per type, retains it for another requester, then removes it", async () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
-    eventBusAccess.registerSchemas(bus, [TaskEventSchema, ReviewStartedSchema]);
+    eventBusAccess.registerSchemas(bus, [ReviewTaskAssignedSchema, ReviewStartedSchema]);
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "producer" }),
       transportFactory: factory,
@@ -372,13 +373,13 @@ describe("IntegrationBroker module", () => {
     });
     brokers.push(broker);
     await broker.open();
-    await publishWanted(factory, "one", [TaskEventSchema]);
-    await publishWanted(factory, "two", [TaskEventSchema]);
-    expect(eventPublisherCreations(factory, TaskEventSchema)).toHaveLength(1);
+    await publishWanted(factory, "one", [ReviewTaskAssignedSchema]);
+    await publishWanted(factory, "two", [ReviewTaskAssignedSchema]);
+    expect(eventPublisherCreations(factory, ReviewTaskAssignedSchema)).toHaveLength(1);
     await publishWanted(factory, "one", []);
-    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(TaskEventSchema));
+    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(ReviewTaskAssignedSchema));
     await publishWanted(factory, "two", [ReviewStartedSchema]);
-    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(TaskEventSchema));
+    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(ReviewTaskAssignedSchema));
     expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(ReviewStartedSchema));
   });
 
@@ -393,14 +394,16 @@ describe("IntegrationBroker module", () => {
     });
     brokers.push(broker);
     await broker.open();
-    await expect(publishWanted(factory, "requester", [TaskEventSchema])).resolves.toBeUndefined();
-    expect(eventPublisherCreations(factory, TaskEventSchema)).toHaveLength(0);
+    await expect(
+      publishWanted(factory, "requester", [ReviewTaskAssignedSchema]),
+    ).resolves.toBeUndefined();
+    expect(eventPublisherCreations(factory, ReviewTaskAssignedSchema)).toHaveLength(0);
   });
 
   it("cleans a partially acquired replacement and retains the prior wanted publisher", async () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
-    eventBusAccess.registerSchemas(bus, [TaskEventSchema, ReviewStartedSchema]);
+    eventBusAccess.registerSchemas(bus, [ReviewTaskAssignedSchema, ReviewStartedSchema]);
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "rollback" }),
       transportFactory: factory,
@@ -410,15 +413,15 @@ describe("IntegrationBroker module", () => {
     });
     brokers.push(broker);
     await broker.open();
-    await publishWanted(factory, "requester", [TaskEventSchema]);
+    await publishWanted(factory, "requester", [ReviewTaskAssignedSchema]);
     factory.failNextPublisherCreation(
       (channel) =>
         (channel as { targetType?: string }).targetType === TypeUrls.derive(ReviewStartedSchema),
     );
     await expect(
-      publishWanted(factory, "requester", [TaskEventSchema, ReviewStartedSchema]),
+      publishWanted(factory, "requester", [ReviewTaskAssignedSchema, ReviewStartedSchema]),
     ).rejects.toThrow(/injected publisher creation failure/u);
-    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(TaskEventSchema));
+    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(ReviewTaskAssignedSchema));
     expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(ReviewStartedSchema));
   });
 
@@ -426,9 +429,9 @@ describe("IntegrationBroker module", () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
     eventBusAccess.registerSchemas(bus, [
-      TaskEventSchema,
+      ReviewTaskAssignedSchema,
       ReviewStartedSchema,
-      ValidatedTaskEventSchema,
+      ReviewFollowUpScheduledSchema,
     ]);
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "acquisition-cleanup" }),
@@ -439,18 +442,19 @@ describe("IntegrationBroker module", () => {
     });
     brokers.push(broker);
     await broker.open();
-    await publishWanted(factory, "requester", [TaskEventSchema]);
+    await publishWanted(factory, "requester", [ReviewTaskAssignedSchema]);
     factory.failPublisherCreationAfter(1, (channel) =>
-      [TypeUrls.derive(ReviewStartedSchema), TypeUrls.derive(ValidatedTaskEventSchema)].includes(
-        (channel as { targetType?: string }).targetType ?? "",
-      ),
+      [
+        TypeUrls.derive(ReviewStartedSchema),
+        TypeUrls.derive(ReviewFollowUpScheduledSchema),
+      ].includes((channel as { targetType?: string }).targetType ?? ""),
     );
     factory.failNextClose();
     await expect(
       publishWanted(factory, "requester", [
-        TaskEventSchema,
+        ReviewTaskAssignedSchema,
         ReviewStartedSchema,
-        ValidatedTaskEventSchema,
+        ReviewFollowUpScheduledSchema,
       ]),
     ).rejects.toThrow(/Integration publisher acquisition failed/u);
     expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(ReviewStartedSchema));
@@ -473,7 +477,7 @@ describe("IntegrationBroker module", () => {
   it("closes an acquired publisher when a later expansion acquisition fails", async () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
-    eventBusAccess.registerSchemas(bus, [TaskEventSchema, ReviewStartedSchema]);
+    eventBusAccess.registerSchemas(bus, [ReviewTaskAssignedSchema, ReviewStartedSchema]);
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "acquisition-clean" }),
       transportFactory: factory,
@@ -484,20 +488,20 @@ describe("IntegrationBroker module", () => {
     brokers.push(broker);
     await broker.open();
     factory.failPublisherCreationAfter(1, (channel) =>
-      [TypeUrls.derive(TaskEventSchema), TypeUrls.derive(ReviewStartedSchema)].includes(
+      [TypeUrls.derive(ReviewTaskAssignedSchema), TypeUrls.derive(ReviewStartedSchema)].includes(
         (channel as { targetType?: string }).targetType ?? "",
       ),
     );
     await expect(
-      publishWanted(factory, "requester", [TaskEventSchema, ReviewStartedSchema]),
+      publishWanted(factory, "requester", [ReviewTaskAssignedSchema, ReviewStartedSchema]),
     ).rejects.toThrow(/injected publisher creation failure/u);
-    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(TaskEventSchema));
+    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(ReviewTaskAssignedSchema));
   });
 
   it("rolls back a new publisher when old removal fails without exporting the new type", async () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
-    eventBusAccess.registerSchemas(bus, [TaskEventSchema, ReviewStartedSchema]);
+    eventBusAccess.registerSchemas(bus, [ReviewTaskAssignedSchema, ReviewStartedSchema]);
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "removal-rollback" }),
       transportFactory: factory,
@@ -507,7 +511,7 @@ describe("IntegrationBroker module", () => {
     });
     brokers.push(broker);
     await broker.open();
-    await publishWanted(factory, "requester", [TaskEventSchema]);
+    await publishWanted(factory, "requester", [ReviewTaskAssignedSchema]);
     factory.failCloseAttempts(2);
     await expect(publishWanted(factory, "requester", [ReviewStartedSchema])).rejects.toThrow(
       /Failed to remove domestic publisher/u,
@@ -529,7 +533,7 @@ describe("IntegrationBroker module", () => {
   it("serializes overlapping complete wanted replacements to the final authority", async () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
-    eventBusAccess.registerSchemas(bus, [TaskEventSchema, ReviewStartedSchema]);
+    eventBusAccess.registerSchemas(bus, [ReviewTaskAssignedSchema, ReviewStartedSchema]);
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "overlap" }),
       transportFactory: factory,
@@ -540,19 +544,19 @@ describe("IntegrationBroker module", () => {
     brokers.push(broker);
     await broker.open();
     await Promise.all([
-      publishWanted(factory, "requester", [TaskEventSchema]),
+      publishWanted(factory, "requester", [ReviewTaskAssignedSchema]),
       publishWanted(factory, "requester", [ReviewStartedSchema]),
     ]);
-    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(TaskEventSchema));
+    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(ReviewTaskAssignedSchema));
     expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(ReviewStartedSchema));
-    expect(eventPublisherCreations(factory, TaskEventSchema)).toHaveLength(1);
+    expect(eventPublisherCreations(factory, ReviewTaskAssignedSchema)).toHaveLength(1);
     expect(eventPublisherCreations(factory, ReviewStartedSchema)).toHaveLength(1);
   });
 
   it("retains failed final removal and retries it without duplicate registration", async () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
-    eventBusAccess.registerSchemas(bus, [TaskEventSchema]);
+    eventBusAccess.registerSchemas(bus, [ReviewTaskAssignedSchema]);
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "retry" }),
       transportFactory: factory,
@@ -562,22 +566,22 @@ describe("IntegrationBroker module", () => {
     });
     brokers.push(broker);
     await broker.open();
-    await publishWanted(factory, "requester", [TaskEventSchema]);
+    await publishWanted(factory, "requester", [ReviewTaskAssignedSchema]);
     factory.failNextClose();
     await expect(publishWanted(factory, "requester", [])).rejects.toThrow(
       /Failed to remove domestic publisher/u,
     );
-    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(TaskEventSchema));
+    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(ReviewTaskAssignedSchema));
     await publishWanted(factory, "requester", []);
-    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(TaskEventSchema));
-    expect(eventPublisherCreations(factory, TaskEventSchema)).toHaveLength(1);
+    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(ReviewTaskAssignedSchema));
+    expect(eventPublisherCreations(factory, ReviewTaskAssignedSchema)).toHaveLength(1);
   });
 
   it("exports only requested domestic events with complete Event identity and preserves order", async () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
     const dispatcher = {
-      messageSchemas: () => [TaskEventSchema, ReviewStartedSchema],
+      messageSchemas: () => [ReviewTaskAssignedSchema, ReviewStartedSchema],
       dispatch: () => Promise.resolve(),
     };
     bus.register(dispatcher);
@@ -590,7 +594,7 @@ describe("IntegrationBroker module", () => {
     });
     brokers.push(broker);
     await broker.open();
-    await publishWanted(factory, "receiver", [TaskEventSchema]);
+    await publishWanted(factory, "receiver", [ReviewTaskAssignedSchema]);
     const first = event("first"),
       second = event("second");
     await bus.post(first);
@@ -607,7 +611,8 @@ describe("IntegrationBroker module", () => {
     await bus.post(second);
     const frames = factory.published.filter(
       ({ channel }) =>
-        (channel as { targetType?: string }).targetType === TypeUrls.derive(TaskEventSchema),
+        (channel as { targetType?: string }).targetType ===
+        TypeUrls.derive(ReviewTaskAssignedSchema),
     );
     expect(frames).toHaveLength(2);
     expect(
@@ -636,7 +641,10 @@ describe("IntegrationBroker module", () => {
   it("does not export an Event already marked external", async () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
-    bus.register({ messageSchemas: () => [TaskEventSchema], dispatch: () => Promise.resolve() });
+    bus.register({
+      messageSchemas: () => [ReviewTaskAssignedSchema],
+      dispatch: () => Promise.resolve(),
+    });
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "external-loop" }),
       transportFactory: factory,
@@ -646,15 +654,15 @@ describe("IntegrationBroker module", () => {
     });
     brokers.push(broker);
     await broker.open();
-    await publishWanted(factory, "receiver", [TaskEventSchema]);
+    await publishWanted(factory, "receiver", [ReviewTaskAssignedSchema]);
     const before = factory.published.length;
     await bus.post(
       create(EventSchema, {
         id: create(EventIdSchema, { value: "external" }),
         context: create(EventContextSchema, { external: true }),
         message: AnyMessages.pack(
-          TaskEventSchema,
-          create(TaskEventSchema, { id: "external", name: "external" }),
+          ReviewTaskAssignedSchema,
+          create(ReviewTaskAssignedSchema, { id: "external", name: "external" }),
         ),
       }),
     );
@@ -669,7 +677,7 @@ describe("IntegrationBroker module", () => {
       pairedContextName: create(BoundedContextNameSchema, { value: "receiver_System" }),
       transportFactory: factory,
       eventBus: registeredEventBus(),
-      externalEventSchemas: [TaskEventSchema],
+      externalEventSchemas: [ReviewTaskAssignedSchema],
       postImported: (value) => {
         received.push(value);
         return Promise.resolve();
@@ -708,7 +716,7 @@ describe("IntegrationBroker module", () => {
       contextName: create(BoundedContextNameSchema, { value: "invalid" }),
       transportFactory: factory,
       eventBus: registeredEventBus(),
-      externalEventSchemas: [TaskEventSchema],
+      externalEventSchemas: [ReviewTaskAssignedSchema],
       postImported: (event) => {
         imported.push(event);
         return Promise.resolve();
@@ -724,7 +732,7 @@ describe("IntegrationBroker module", () => {
     const undecodable = create(EventSchema, {
       id: create(EventIdSchema, { value: "undecodable-payload" }),
       context: create(EventContextSchema),
-      message: { typeUrl: TypeUrls.derive(TaskEventSchema), value: new Uint8Array([255]) },
+      message: { typeUrl: TypeUrls.derive(ReviewTaskAssignedSchema), value: new Uint8Array([255]) },
     });
 
     await expect(publishExternal(factory, unknown, "source-unknown")).resolves.toBeUndefined();
@@ -763,7 +771,7 @@ describe("IntegrationBroker module", () => {
       contextName: create(BoundedContextNameSchema, { value: "invalid-identity" }),
       transportFactory: factory,
       eventBus: registeredEventBus(),
-      externalEventSchemas: [TaskEventSchema],
+      externalEventSchemas: [ReviewTaskAssignedSchema],
       postImported: () => {
         calls += 1;
         return Promise.resolve();
@@ -778,7 +786,7 @@ describe("IntegrationBroker module", () => {
       value: toBinary(EventIdSchema, create(EventIdSchema, { value: "other" })),
     };
     const publisher = await factory.createPublisher(
-      create(ChannelIdSchema, { targetType: TypeUrls.derive(TaskEventSchema) }),
+      create(ChannelIdSchema, { targetType: TypeUrls.derive(ReviewTaskAssignedSchema) }),
     );
     await expect(publisher.publish(frame.id, frame)).resolves.toBeUndefined();
     expect(calls).toBe(0);
@@ -790,7 +798,7 @@ describe("IntegrationBroker module", () => {
       contextName: create(BoundedContextNameSchema, { value: "downstream-failure" }),
       transportFactory: factory,
       eventBus: registeredEventBus(),
-      externalEventSchemas: [TaskEventSchema],
+      externalEventSchemas: [ReviewTaskAssignedSchema],
       postImported: () => Promise.reject(new Error("import downstream failed")),
     });
     brokers.push(broker);
@@ -805,33 +813,39 @@ describe("IntegrationBroker module", () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
     bus.register({
-      messageSchemas: () => [TaskEventSchema, ReviewStartedSchema],
+      messageSchemas: () => [ReviewTaskAssignedSchema, ReviewStartedSchema],
       dispatch: () => Promise.resolve(),
     });
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "no-loop" }),
       transportFactory: factory,
       eventBus: bus,
-      externalEventSchemas: [TaskEventSchema, TaskEventSchema, ReviewStartedSchema],
+      externalEventSchemas: [
+        ReviewTaskAssignedSchema,
+        ReviewTaskAssignedSchema,
+        ReviewStartedSchema,
+      ],
       postImported: (value) => bus.post(value),
     });
     brokers.push(broker);
     await broker.open();
-    await publishWanted(factory, "requester", [TaskEventSchema]);
+    await publishWanted(factory, "requester", [ReviewTaskAssignedSchema]);
     await publishExternal(factory, event("external"), "remote");
     expect(
       factory.created.filter(
         ({ kind, channel }) =>
           kind === "subscriber" &&
-          [TypeUrls.derive(TaskEventSchema), TypeUrls.derive(ReviewStartedSchema)].includes(
-            (channel as { targetType?: string }).targetType ?? "",
-          ),
+          [
+            TypeUrls.derive(ReviewTaskAssignedSchema),
+            TypeUrls.derive(ReviewStartedSchema),
+          ].includes((channel as { targetType?: string }).targetType ?? ""),
       ),
     ).toHaveLength(2);
     expect(
       factory.published.filter(
         ({ channel }) =>
-          (channel as { targetType?: string }).targetType === TypeUrls.derive(TaskEventSchema),
+          (channel as { targetType?: string }).targetType ===
+          TypeUrls.derive(ReviewTaskAssignedSchema),
       ),
     ).toHaveLength(1);
   });
@@ -847,7 +861,7 @@ describe("IntegrationBroker module", () => {
       contextName: create(BoundedContextNameSchema, { value: "drain" }),
       transportFactory: factory,
       eventBus: registeredEventBus(),
-      externalEventSchemas: [TaskEventSchema],
+      externalEventSchemas: [ReviewTaskAssignedSchema],
       postImported: async () => {
         calls++;
         await gate;
@@ -956,7 +970,7 @@ describe("IntegrationBroker module", () => {
       contextName: create(BoundedContextNameSchema, { value: "close-retry" }),
       transportFactory: factory,
       eventBus: eventBusAccess.createForgettingBus(),
-      externalEventSchemas: [TaskEventSchema],
+      externalEventSchemas: [ReviewTaskAssignedSchema],
       postImported: () => Promise.resolve(),
     });
     await broker.open();
@@ -974,7 +988,7 @@ describe("IntegrationBroker module", () => {
       contextName: create(BoundedContextNameSchema, { value: "ordered-close" }),
       transportFactory: factory,
       eventBus: eventBusAccess.createForgettingBus(),
-      externalEventSchemas: [TaskEventSchema],
+      externalEventSchemas: [ReviewTaskAssignedSchema],
       postImported: () => Promise.resolve(),
     });
     brokers.push(broker);
@@ -1031,7 +1045,10 @@ function event(id: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema),
-    message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema, { id, name: id })),
+    message: AnyMessages.pack(
+      ReviewTaskAssignedSchema,
+      create(ReviewTaskAssignedSchema, { id, name: id }),
+    ),
   });
 }
 async function publishExternal(
@@ -1040,7 +1057,7 @@ async function publishExternal(
   source: string,
 ): Promise<void> {
   const publisher = await factory.createPublisher(
-    create(ChannelIdSchema, { targetType: TypeUrls.derive(TaskEventSchema) }),
+    create(ChannelIdSchema, { targetType: TypeUrls.derive(ReviewTaskAssignedSchema) }),
   );
   const frame = wrapExternalEvent(value, create(BoundedContextNameSchema, { value: source }));
   try {
@@ -1054,7 +1071,9 @@ async function publishWanted(
   factory: RecordingTransportFactory,
   source: string,
   schemas: readonly (
-    typeof TaskEventSchema | typeof ReviewStartedSchema | typeof ValidatedTaskEventSchema
+    | typeof ReviewTaskAssignedSchema
+    | typeof ReviewStartedSchema
+    | typeof ReviewFollowUpScheduledSchema
   )[],
 ): Promise<void> {
   const publisher = await factory.createPublisher(
@@ -1087,7 +1106,7 @@ async function publishWanted(
 }
 function eventPublisherCreations(
   factory: RecordingTransportFactory,
-  schema: typeof TaskEventSchema | typeof ReviewStartedSchema,
+  schema: typeof ReviewTaskAssignedSchema | typeof ReviewStartedSchema,
 ) {
   return factory.created.filter(
     ({ kind, channel }) =>

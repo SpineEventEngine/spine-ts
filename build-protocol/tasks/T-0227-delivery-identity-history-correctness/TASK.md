@@ -1096,3 +1096,56 @@ coverage was 93.22% statements, 90.06% branches, 92.79% functions, and 94.37%
 lines. `node scripts/release-cli.mjs prepare --check` also passed, packing all
 18 public packages at `2.0.0-snapshot.11` and installing them together in a
 clean consumer project.
+
+## Human Review Correction
+
+- The human review rejected the downstream `sigstore@4.1.1` patch. Current
+  upstream evidence confirms that released Sigstore 5 still leaves
+  `fetchOnConflict` disabled, while sigstore-js issue #1708 and PR #1709 remain
+  open. The accepted repository correction is to remove the patch, its focused
+  test, and its active runbook claim; retain official unmodified npm trusted
+  publishing without retries, custom timeouts, a custom publisher, stored
+  credentials, or disabled provenance. Equivalent-entry recovery remains an
+  upstream limitation until a released npm/Lerna dependency contains the
+  upstream correction.
+- The human review also rejected test-mechanical fixture domains, mixed signal
+  roles in one Proto file, misuse of `envelope` in payload fixture names, and
+  inconsistent Proto spacing. The correction covers every Proto changed from
+  the branch merge base, with commands, events, and entity states separated and
+  named in concrete domains.
+- Implementation assignment: existing implementer role, canonical agent
+  `/root/fixture_and_sigstore_correction`, explicitly dispatched with
+  `gpt-5.6-terra` / `medium` and no inherited turns. It may not spawn
+  sub-agents. Its scope is fixture Proto sources, manifests, direct test
+  consumers, Sigstore patch removal, active release documentation, and focused
+  verification; it may not commit or push.
+
+The correction removes `patches/sigstore@4.1.1.patch`, both pnpm
+`patchedDependencies` entries, and the patch-specific test. The replacement
+release-policy test checks the actual workspace and lockfile configuration and
+the absence of the patch file. It does not treat documentation prose as an
+executable contract. Official trusted publishing and automatic provenance are
+unchanged.
+
+The branch-added fixture payloads now use Project and Review domains. Command,
+Event, state, identifier, and rejection sources are separated by role. The
+misleading `black_box.proto`, `signal_envelopes.proto`, catch-all `main.proto`,
+and repository-routing/validation filenames were removed or replaced with
+role-specific source names. Direct consumers use the generated domain names;
+compatibility aliases that restored generic fixture vocabulary were removed.
+The repository's automated Proto formatter did not enforce every requested
+section break, so the changed sources were also inspected explicitly for blank
+lines after `syntax`, package, and import sections and between declarations.
+
+Correction verification so far:
+
+- `pnpm typecheck:tooling` passes after migrating every stale generated-schema
+  import found by the complete tooling project.
+- `pnpm format:check`, `git diff --check`, and
+  `pnpm proto:check-generated:current` pass.
+- Release-policy and Proto-workflow tests pass 105/105 with one worker; the
+  release-policy subset passes 7/7.
+- Core fixture tests pass 62/62, BlackBox contract tests pass 16/16, and the
+  repository-routing suite passes 265/265 with one worker.
+- Focused handler and repository consumer runs passed 363/363, 295/295,
+  144/144, and 59/59 at their respective correction checkpoints.

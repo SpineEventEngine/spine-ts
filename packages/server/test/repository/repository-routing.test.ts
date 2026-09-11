@@ -135,47 +135,48 @@ import { standAccess } from "../../src/stand/stand.js";
 import { SystemClock } from "../../src/runtime/signal-metadata.js";
 import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
 import * as FixtureSchemas from "../../test-fixtures/schemas.js";
-import type * as RepositoryRouting from "../../test-fixtures/generated/repository-routing/routing_pb.js";
-import type * as RepositoryCommands from "../../test-fixtures/generated/repository-routing/repository_commands_pb.js";
-import type * as RepositoryEvents from "../../test-fixtures/generated/repository-routing/repository_events_pb.js";
-import type * as RouteValidation from "../../test-fixtures/generated/repository-routing/route-validation_pb.js";
+import type * as RepositoryRouting from "../../test-fixtures/generated/repository-routing/project_states_pb.js";
+import type * as RepositoryIdentifiers from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
+import type * as RepositoryCommands from "../../test-fixtures/generated/repository-routing/project_commands_pb.js";
+import type * as RepositoryEvents from "../../test-fixtures/generated/repository-routing/project_events_pb.js";
+import type * as RouteValidation from "../../test-fixtures/generated/repository-routing/project_routing_events_pb.js";
 import type {
-  RepositoryRoutingProducedTaskCommand as ProducedTaskCommand,
-  RepositoryRoutingValidatedMessageId as ValidatedMessageId,
-  RepositoryRoutingValidatedTaskCommand as ValidatedTaskCommand,
-  RepositoryRoutingValidatedTaskEvent as ValidatedTaskEvent,
+  RepositoryRoutingCreateFollowUpProject as CreateFollowUpProject,
+  RepositoryRoutingProjectSubmissionId as ProjectSubmissionId,
+  RepositoryRoutingCreateProjectSubmission as CreateProjectSubmission,
+  RepositoryRoutingProjectSubmissionCreated as ProjectSubmissionCreated,
 } from "../../test-fixtures/schemas.js";
 
 const GeneratedTaskIdSchema = TodoIdSchema;
 
-type ProjectionState = RepositoryRouting.ProjectionState;
-type ProjectionEvent = RepositoryEvents.ProjectionEvent;
-type GeneratedReactorEvent = RepositoryEvents.GeneratedReactorEvent;
-type ImplicitTaskCommand = RepositoryCommands.ImplicitTaskCommand;
-type AggregateState = RepositoryRouting.AggregateState;
-type TaskCommand = RepositoryCommands.TaskCommand;
-type RepeatedIdCommand = RepositoryCommands.RepeatedIdCommand;
-type MapIdCommand = RepositoryCommands.MapIdCommand;
-type UuidMessageIdAggregateId = RepositoryRouting.UuidMessageIdAggregateId;
+type ProjectOverviewState = RepositoryRouting.ProjectOverviewState;
+type ProjectCreated = RepositoryEvents.ProjectCreated;
+type ProjectRegistered = RepositoryEvents.ProjectRegistered;
+type DraftProject = RepositoryCommands.DraftProject;
+type ProjectState = RepositoryRouting.ProjectState;
+type CreateProject = RepositoryCommands.CreateProject;
+type InviteProjectMembers = RepositoryCommands.InviteProjectMembers;
+type AssignProjectAttributes = RepositoryCommands.AssignProjectAttributes;
+type RepositoryProjectId = RepositoryIdentifiers.ProjectId;
 type TaskId =
   import("../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js").TaskId;
 type TaskCreated =
   import("../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js").TaskCreated;
 type TaskListId =
   import("../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js").TaskListId;
-type Int64ProjectionId = RepositoryRouting.ProjectionId;
-type Int64MessageIdProjectionEvent = RepositoryEvents.Int64MessageIdProjectionEvent;
-type CompositeRouteId = RepositoryRouting.CompositeRouteId;
-type CompositeRouteEvent = RepositoryEvents.CompositeRouteEvent;
-type CompositeRouteCommand = RepositoryCommands.CompositeRouteCommand;
-type UuidMessageIdAggregateCommand = RepositoryCommands.UuidMessageIdAggregateCommand;
-type Int32AggregateCommand = RepositoryCommands.Int32AggregateCommand;
-type Int64ProcessManagerCommand = RepositoryCommands.Int64ProcessManagerCommand;
-type Int32AggregateEvent = RepositoryEvents.Int32AggregateEvent;
-type Int64ProcessManagerEvent = RepositoryEvents.Int64ProcessManagerEvent;
-type CompositeRouteSourceState = RepositoryRouting.CompositeRouteSourceState;
-type NumberRouteEvent = RouteValidation.NumberRouteEvent;
-type WrongIdRouteEvent = RouteValidation.WrongIdRouteEvent;
+type ProjectSequenceId = RepositoryIdentifiers.ProjectSequenceId;
+type SequencedProjectOverviewCreated = RepositoryEvents.SequencedProjectOverviewCreated;
+type ProjectMilestoneId = RepositoryIdentifiers.ProjectMilestoneId;
+type ProjectMilestoneAdded = RepositoryEvents.ProjectMilestoneAdded;
+type AddProjectMilestone = RepositoryCommands.AddProjectMilestone;
+type RegisterProject = RepositoryCommands.RegisterProject;
+type CreateNumberedProject = RepositoryCommands.CreateNumberedProject;
+type ScheduleProjectWorkflow = RepositoryCommands.ScheduleProjectWorkflow;
+type NumberedProjectCreated = RepositoryEvents.NumberedProjectCreated;
+type ProjectWorkflowScheduled = RepositoryEvents.ProjectWorkflowScheduled;
+type ProjectMilestoneSourceState = RepositoryRouting.ProjectMilestoneSourceState;
+type ProjectPriorityChanged = RouteValidation.ProjectPriorityChanged;
+type ProjectMemberChanged = RouteValidation.ProjectMemberChanged;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -198,142 +199,142 @@ function storedSourceAndFreshChild(
   return { source, child };
 }
 const {
-  RepositoryRoutingProjectionStateSchema,
-  RepositoryRoutingAggregateStateSchema,
-  RepositoryRoutingUuidMessageIdAggregateStateSchema,
-  RepositoryRoutingUuidMessageIdAggregateIdSchema,
-  RepositoryRoutingUuidMessageIdAggregateCommandSchema,
-  RepositoryRoutingNeutralProjectionStateSchema,
-  RepositoryRoutingProjectionEventSchema,
-  RepositoryRoutingGeneratedReactorEventSchema,
-  RepositoryRoutingImplicitTaskCommandSchema,
-  RepositoryRoutingInt32AggregateStateSchema,
-  RepositoryRoutingInt64ProcessManagerStateSchema,
-  RepositoryRoutingInt32AggregateCommandSchema,
-  RepositoryRoutingInt64ProcessManagerCommandSchema,
-  RepositoryRoutingInt32AggregateEventSchema,
-  RepositoryRoutingInt64ProcessManagerEventSchema,
-  RepositoryRoutingRepeatedIdCommandSchema,
-  RepositoryRoutingMapIdCommandSchema,
-  RepositoryRoutingTaskCommandSchema,
-  RepositoryRoutingProcessManagerStateSchema,
-  RepositoryRoutingProjectionIdSchema,
-  RepositoryRoutingInt64MessageIdProjectionStateSchema,
-  RepositoryRoutingInt64MessageIdSourceStateSchema,
-  RepositoryRoutingInt64MessageIdProjectionEventSchema,
-  RepositoryRoutingCompositeRouteIdSchema,
-  RepositoryRoutingCompositeRouteStateSchema,
-  RepositoryRoutingCompositeRouteAggregateStateSchema,
-  RepositoryRoutingCompositeRouteProcessManagerStateSchema,
-  RepositoryRoutingCompositeRouteEventSchema,
-  RepositoryRoutingCompositeRouteCommandSchema,
-  RepositoryRoutingCompositeRouteSourceStateSchema,
-  RepositoryRoutingValidatedAggregateStateSchema,
-  RepositoryRoutingValidatedTaskCommandSchema,
-  RepositoryRoutingValidatedMessageIdSchema,
-  RepositoryRoutingValidatedTaskEventSchema,
-  RepositoryRoutingProducedTaskCommandSchema,
-  RepositoryRoutingValidatedMessageIdStateSchema,
-  RepositoryRoutingNumberRouteEventSchema,
-  RepositoryRoutingWrongIdRouteEventSchema,
+  RepositoryRoutingProjectOverviewStateSchema,
+  RepositoryRoutingProjectStateSchema,
+  RepositoryRoutingRegisteredProjectStateSchema,
+  RepositoryRoutingProjectIdSchema,
+  RepositoryRoutingRegisterProjectSchema,
+  RepositoryRoutingProjectBacklogStateSchema,
+  RepositoryRoutingProjectCreatedSchema,
+  RepositoryRoutingProjectRegisteredSchema,
+  RepositoryRoutingDraftProjectSchema,
+  RepositoryRoutingNumberedProjectStateSchema,
+  RepositoryRoutingProjectWorkflowStateSchema,
+  RepositoryRoutingCreateNumberedProjectSchema,
+  RepositoryRoutingScheduleProjectWorkflowSchema,
+  RepositoryRoutingNumberedProjectCreatedSchema,
+  RepositoryRoutingProjectWorkflowScheduledSchema,
+  RepositoryRoutingInviteProjectMembersSchema,
+  RepositoryRoutingAssignProjectAttributesSchema,
+  RepositoryRoutingCreateProjectSchema,
+  RepositoryRoutingProjectQueueStateSchema,
+  RepositoryRoutingProjectSequenceIdSchema,
+  RepositoryRoutingSequencedProjectOverviewStateSchema,
+  RepositoryRoutingSequencedProjectSourceStateSchema,
+  RepositoryRoutingSequencedProjectOverviewCreatedSchema,
+  RepositoryRoutingProjectMilestoneIdSchema,
+  RepositoryRoutingProjectMilestoneOverviewStateSchema,
+  RepositoryRoutingProjectMilestoneStateSchema,
+  RepositoryRoutingProjectMilestoneWorkflowStateSchema,
+  RepositoryRoutingProjectMilestoneAddedSchema,
+  RepositoryRoutingAddProjectMilestoneSchema,
+  RepositoryRoutingProjectMilestoneSourceStateSchema,
+  RepositoryRoutingProjectSubmissionStateSchema,
+  RepositoryRoutingCreateProjectSubmissionSchema,
+  RepositoryRoutingProjectSubmissionIdSchema,
+  RepositoryRoutingProjectSubmissionCreatedSchema,
+  RepositoryRoutingCreateFollowUpProjectSchema,
+  RepositoryRoutingAcceptedProjectSubmissionStateSchema,
+  RepositoryRoutingProjectPriorityChangedSchema,
+  RepositoryRoutingProjectMemberChangedSchema,
 } = FixtureSchemas;
 
-const ProjectionStateSchema = RepositoryRoutingProjectionStateSchema;
-const AggregateStateSchema = RepositoryRoutingAggregateStateSchema;
-const UuidMessageIdAggregateStateSchema = RepositoryRoutingUuidMessageIdAggregateStateSchema;
-const UuidMessageIdAggregateIdSchema = RepositoryRoutingUuidMessageIdAggregateIdSchema;
-const UuidMessageIdAggregateCommandSchema = RepositoryRoutingUuidMessageIdAggregateCommandSchema;
-const NeutralProjectionStateSchema = RepositoryRoutingNeutralProjectionStateSchema;
-const ProjectionEventSchema = RepositoryRoutingProjectionEventSchema;
-const GeneratedReactorEventSchema = RepositoryRoutingGeneratedReactorEventSchema;
-const ImplicitTaskCommandSchema = RepositoryRoutingImplicitTaskCommandSchema;
-const Int32AggregateStateSchema = RepositoryRoutingInt32AggregateStateSchema;
-const Int64ProcessManagerStateSchema = RepositoryRoutingInt64ProcessManagerStateSchema;
-const Int32AggregateCommandSchema = RepositoryRoutingInt32AggregateCommandSchema;
-const Int64ProcessManagerCommandSchema = RepositoryRoutingInt64ProcessManagerCommandSchema;
-const Int32AggregateEventSchema = RepositoryRoutingInt32AggregateEventSchema;
-const Int64ProcessManagerEventSchema = RepositoryRoutingInt64ProcessManagerEventSchema;
-const RepeatedIdCommandSchema = RepositoryRoutingRepeatedIdCommandSchema;
-const MapIdCommandSchema = RepositoryRoutingMapIdCommandSchema;
-const TaskCommandSchema = RepositoryRoutingTaskCommandSchema;
+const ProjectOverviewStateSchema = RepositoryRoutingProjectOverviewStateSchema;
+const ProjectStateSchema = RepositoryRoutingProjectStateSchema;
+const RegisteredProjectStateSchema = RepositoryRoutingRegisteredProjectStateSchema;
+const ProjectIdSchema = RepositoryRoutingProjectIdSchema;
+const RegisterProjectSchema = RepositoryRoutingRegisterProjectSchema;
+const ProjectBacklogStateSchema = RepositoryRoutingProjectBacklogStateSchema;
+const ProjectCreatedSchema = RepositoryRoutingProjectCreatedSchema;
+const ProjectRegisteredSchema = RepositoryRoutingProjectRegisteredSchema;
+const DraftProjectSchema = RepositoryRoutingDraftProjectSchema;
+const NumberedProjectStateSchema = RepositoryRoutingNumberedProjectStateSchema;
+const ProjectWorkflowStateSchema = RepositoryRoutingProjectWorkflowStateSchema;
+const CreateNumberedProjectSchema = RepositoryRoutingCreateNumberedProjectSchema;
+const ScheduleProjectWorkflowSchema = RepositoryRoutingScheduleProjectWorkflowSchema;
+const NumberedProjectCreatedSchema = RepositoryRoutingNumberedProjectCreatedSchema;
+const ProjectWorkflowScheduledSchema = RepositoryRoutingProjectWorkflowScheduledSchema;
+const InviteProjectMembersSchema = RepositoryRoutingInviteProjectMembersSchema;
+const AssignProjectAttributesSchema = RepositoryRoutingAssignProjectAttributesSchema;
+const CreateProjectSchema = RepositoryRoutingCreateProjectSchema;
 const TaskIdSchema = TodoIdSchema;
 const TaskSchema = TodoTaskSchema;
 const TaskCreatedSchema = TodoEvents.TaskCreatedSchema;
-const ProcessManagerStateSchema = RepositoryRoutingProcessManagerStateSchema;
-const Int64ProjectionIdSchema = RepositoryRoutingProjectionIdSchema;
-const Int64MessageIdProjectionStateSchema = RepositoryRoutingInt64MessageIdProjectionStateSchema;
-const Int64MessageIdSourceStateSchema = RepositoryRoutingInt64MessageIdSourceStateSchema;
-const Int64MessageIdProjectionEventSchema = RepositoryRoutingInt64MessageIdProjectionEventSchema;
-const CompositeRouteIdSchema = RepositoryRoutingCompositeRouteIdSchema;
-const CompositeRouteStateSchema = RepositoryRoutingCompositeRouteStateSchema;
-const CompositeRouteAggregateStateSchema = RepositoryRoutingCompositeRouteAggregateStateSchema;
-const CompositeRouteProcessManagerStateSchema =
-  RepositoryRoutingCompositeRouteProcessManagerStateSchema;
-const CompositeRouteEventSchema = RepositoryRoutingCompositeRouteEventSchema;
-const CompositeRouteCommandSchema = RepositoryRoutingCompositeRouteCommandSchema;
-const CompositeRouteSourceStateSchema = RepositoryRoutingCompositeRouteSourceStateSchema;
-const ValidatedAggregateStateSchema = RepositoryRoutingValidatedAggregateStateSchema;
-const ValidatedTaskCommandSchema = RepositoryRoutingValidatedTaskCommandSchema;
-const ValidatedMessageIdSchema = RepositoryRoutingValidatedMessageIdSchema;
-const ValidatedTaskEventSchema = RepositoryRoutingValidatedTaskEventSchema;
-const ProducedTaskCommandSchema = RepositoryRoutingProducedTaskCommandSchema;
-const ValidatedMessageIdStateSchema = RepositoryRoutingValidatedMessageIdStateSchema;
-const NumberRouteEventSchema = RepositoryRoutingNumberRouteEventSchema;
-const WrongIdRouteEventSchema = RepositoryRoutingWrongIdRouteEventSchema;
+const ProjectQueueStateSchema = RepositoryRoutingProjectQueueStateSchema;
+const ProjectSequenceIdSchema = RepositoryRoutingProjectSequenceIdSchema;
+const SequencedProjectOverviewStateSchema = RepositoryRoutingSequencedProjectOverviewStateSchema;
+const SequencedProjectSourceStateSchema = RepositoryRoutingSequencedProjectSourceStateSchema;
+const SequencedProjectOverviewCreatedSchema =
+  RepositoryRoutingSequencedProjectOverviewCreatedSchema;
+const ProjectMilestoneIdSchema = RepositoryRoutingProjectMilestoneIdSchema;
+const ProjectMilestoneOverviewStateSchema = RepositoryRoutingProjectMilestoneOverviewStateSchema;
+const ProjectMilestoneStateSchema = RepositoryRoutingProjectMilestoneStateSchema;
+const ProjectMilestoneWorkflowStateSchema = RepositoryRoutingProjectMilestoneWorkflowStateSchema;
+const ProjectMilestoneAddedSchema = RepositoryRoutingProjectMilestoneAddedSchema;
+const AddProjectMilestoneSchema = RepositoryRoutingAddProjectMilestoneSchema;
+const ProjectMilestoneSourceStateSchema = RepositoryRoutingProjectMilestoneSourceStateSchema;
+const ReviewProjectStateSchema = RepositoryRoutingProjectSubmissionStateSchema;
+const CreateProjectSubmissionSchema = RepositoryRoutingCreateProjectSubmissionSchema;
+const ProjectSubmissionIdSchema = RepositoryRoutingProjectSubmissionIdSchema;
+const ProjectSubmissionCreatedSchema = RepositoryRoutingProjectSubmissionCreatedSchema;
+const CreateFollowUpProjectSchema = RepositoryRoutingCreateFollowUpProjectSchema;
+const ProjectSubmissionIdStateSchema = RepositoryRoutingAcceptedProjectSubmissionStateSchema;
+const ProjectPriorityChangedSchema = RepositoryRoutingProjectPriorityChangedSchema;
+const ProjectMemberChangedSchema = RepositoryRoutingProjectMemberChangedSchema;
 
-class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: TaskCommand): void {
+class ProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+  createProject(command: CreateProject): void {
     void command;
   }
 
-  reactToProjection(event: ProjectionEvent): void {
+  reactToProjection(event: ProjectCreated): void {
     void event;
   }
 }
 
-class TaskCommandRoutingAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: TaskCommand): void {
+class CreateProjectRoutingAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+  createProject(command: CreateProject): void {
     void command;
   }
 }
 
 class IdlessCommandProcessManager extends ProcessManager<
   string,
-  typeof ProcessManagerStateSchema,
+  typeof ProjectQueueStateSchema,
   number
 > {
-  assignTask(command: TaskCommand): void {
+  createProject(command: CreateProject): void {
     void command;
   }
 }
 
 class IdlessCommandProjectionAggregate extends Aggregate<
   string,
-  typeof AggregateStateSchema,
+  typeof ProjectStateSchema,
   bigint
 > {
-  assignTask(command: TaskCommand): void {
+  createProject(command: CreateProject): void {
     void command;
   }
 }
 
-class ImplicitIdAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class DraftProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   static calls = 0;
 
   static reset(): void {
     this.calls = 0;
   }
 
-  assign(command: ImplicitTaskCommand): void {
+  assign(command: DraftProject): void {
     void command;
-    ImplicitIdAggregate.calls += 1;
+    DraftProjectAggregate.calls += 1;
   }
 }
 
-class BlankStateIdAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class BlankStateIdAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   static calls = 0;
 
-  assign(command: TaskCommand): void {
+  assign(command: CreateProject): void {
     BlankStateIdAggregate.calls += 1;
     this.update((draft) => Object.assign(draft, command, { id: "" }));
   }
@@ -341,12 +342,12 @@ class BlankStateIdAggregate extends Aggregate<string, typeof AggregateStateSchem
 
 class BlankStateIdProcessManager extends ProcessManager<
   string,
-  typeof ProcessManagerStateSchema,
+  typeof ProjectQueueStateSchema,
   number
 > {
   static calls = 0;
 
-  assign(command: TaskCommand): void {
+  assign(command: CreateProject): void {
     BlankStateIdProcessManager.calls += 1;
     this.update((draft) => {
       draft.id = "";
@@ -355,10 +356,10 @@ class BlankStateIdProcessManager extends ProcessManager<
   }
 }
 
-class BlankStateIdProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class BlankStateIdProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
   static calls = 0;
 
-  subscribe(event: ProjectionEvent): void {
+  subscribe(event: ProjectCreated): void {
     BlankStateIdProjection.calls += 1;
     this.update((draft) => {
       draft.id = "";
@@ -367,69 +368,69 @@ class BlankStateIdProjection extends Projection<string, typeof ProjectionStateSc
   }
 }
 
-class Int64MessageIdProjection extends Projection<
-  Int64ProjectionId,
-  typeof Int64MessageIdProjectionStateSchema,
+class SequencedProjectOverview extends Projection<
+  ProjectSequenceId,
+  typeof SequencedProjectOverviewStateSchema,
   number
 > {
   static calls = 0;
 
-  subscribeState(event: Int64MessageIdProjectionEvent): void {
+  subscribeState(event: SequencedProjectOverviewCreated): void {
     void event;
-    Int64MessageIdProjection.calls += 1;
+    SequencedProjectOverview.calls += 1;
   }
 }
 
-class UuidMessageIdAggregate extends Aggregate<
-  UuidMessageIdAggregateId,
-  typeof UuidMessageIdAggregateStateSchema,
+class RegisteredProjectAggregate extends Aggregate<
+  RepositoryProjectId,
+  typeof RegisteredProjectStateSchema,
   bigint
 > {
-  assign(command: UuidMessageIdAggregateCommand): void {
+  assign(command: RegisterProject): void {
     this.update((draft) => Object.assign(draft, command));
   }
 }
 
-class CompositeRouteProjection extends Projection<
-  CompositeRouteId,
-  typeof CompositeRouteStateSchema,
+class ProjectMilestoneProjection extends Projection<
+  ProjectMilestoneId,
+  typeof ProjectMilestoneOverviewStateSchema,
   number
 > {
-  subscribe(event: CompositeRouteEvent | CompositeRouteSourceState): void {
+  subscribe(event: ProjectMilestoneAdded | ProjectMilestoneSourceState): void {
     this.update((draft) => Object.assign(draft, event));
   }
 }
 
-class CompositeRouteAggregate extends Aggregate<
-  CompositeRouteId,
-  typeof CompositeRouteAggregateStateSchema,
+class ProjectMilestoneAggregate extends Aggregate<
+  ProjectMilestoneId,
+  typeof ProjectMilestoneStateSchema,
   bigint
 > {
-  assign(command: CompositeRouteCommand): void {
+  assign(command: AddProjectMilestone): void {
     this.update((draft) => Object.assign(draft, command));
   }
 }
 
-class CompositeRouteProcessManager extends ProcessManager<
-  CompositeRouteId,
-  typeof CompositeRouteProcessManagerStateSchema,
+class ProjectMilestoneProcessManager extends ProcessManager<
+  ProjectMilestoneId,
+  typeof ProjectMilestoneWorkflowStateSchema,
   number
 > {
   static calls = 0;
-  static ids: CompositeRouteId[] = [];
+  static ids: ProjectMilestoneId[] = [];
 
   static reset(): void {
     this.calls = 0;
     this.ids = [];
   }
 
-  react(event: CompositeRouteEvent): void {
-    CompositeRouteProcessManager.calls += 1;
-    CompositeRouteProcessManager.ids.push(this.id);
+  react(event: ProjectMilestoneAdded): void {
+    ProjectMilestoneProcessManager.calls += 1;
+    ProjectMilestoneProcessManager.ids.push(this.id);
     this.update((draft) =>
       Object.assign(
         draft,
-        create(CompositeRouteProcessManagerStateSchema, {
+        create(ProjectMilestoneWorkflowStateSchema, {
           id: this.id,
           queue: event.name,
         }),
@@ -437,65 +438,65 @@ class CompositeRouteProcessManager extends ProcessManager<
     );
   }
 
-  assignAndProduce(command: CompositeRouteCommand): CompositeRouteEvent {
+  assignAndProduce(command: AddProjectMilestone): ProjectMilestoneAdded {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(CompositeRouteProcessManagerStateSchema, {
+        create(ProjectMilestoneWorkflowStateSchema, {
           id: this.id,
           queue: command.name,
         }),
       ),
     );
-    return create(CompositeRouteEventSchema, {
+    return create(ProjectMilestoneAddedSchema, {
       id: this.id,
       name: `${command.name} produced`,
     });
   }
 }
 
-class Int32RoutingAggregate extends Aggregate<number, typeof Int32AggregateStateSchema, bigint> {
-  assign(command: Int32AggregateCommand): Int32AggregateEvent {
+class NumberedProjectAggregate extends Aggregate<
+  number,
+  typeof NumberedProjectStateSchema,
+  bigint
+> {
+  assign(command: CreateNumberedProject): NumberedProjectCreated {
     this.update((draft) => {
       draft.id = command.id;
       draft.name = command.name;
     });
-    return create(Int32AggregateEventSchema, { id: command.id, name: command.name });
+    return create(NumberedProjectCreatedSchema, { id: command.id, name: command.name });
   }
 
-  react(event: Int32AggregateEvent): void {
+  react(event: NumberedProjectCreated): void {
     void event;
   }
 }
 
-class Int64RoutingProcessManager extends ProcessManager<
-  bigint,
-  typeof Int64ProcessManagerStateSchema,
-  number
-> {
-  assign(command: Int64ProcessManagerCommand): void {
+class ProjectWorkflow extends ProcessManager<bigint, typeof ProjectWorkflowStateSchema, number> {
+  assign(command: ScheduleProjectWorkflow): void {
     this.update((draft) => {
       draft.id = command.id;
       draft.queue = command.queue;
     });
   }
 
-  react(event: Int64ProcessManagerEvent): void {
+  react(event: ProjectWorkflowScheduled): void {
     void event;
   }
 }
 
-class MalformedFirstFieldAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignRepeated(command: RepeatedIdCommand): void {
+class MalformedFirstFieldAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+  assignRepeated(command: InviteProjectMembers): void {
     void command;
   }
 
-  assignMap(command: MapIdCommand): void {
+  assignMap(command: AssignProjectAttributes): void {
     void command;
   }
 }
 
-class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class ExecutingProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   static assigneeCalls = 0;
   static directUpdateCalls = 0;
   static failure: Error | undefined;
@@ -506,11 +507,11 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
     this.failure = failure;
   }
 
-  assignTask(command: TaskCommand) {
-    ExecutingTaskAggregate.assigneeCalls++;
+  createProject(command: CreateProject) {
+    ExecutingProjectAggregate.assigneeCalls++;
 
-    if (ExecutingTaskAggregate.failure !== undefined) {
-      throw ExecutingTaskAggregate.failure;
+    if (ExecutingProjectAggregate.failure !== undefined) {
+      throw ExecutingProjectAggregate.failure;
     }
 
     if (command.name.startsWith("archive-lifecycle")) this.archiveDraft();
@@ -523,8 +524,8 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
         id: create(EventIdSchema, { value: `event-${command.name}` }),
         context: create(EventContextSchema),
         message: AnyMessages.pack(
-          ProjectionEventSchema,
-          create(ProjectionEventSchema, {
+          ProjectCreatedSchema,
+          create(ProjectCreatedSchema, {
             id: command.id,
             name: command.name,
             priority: 1,
@@ -534,11 +535,11 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
     }
 
     const name = command.name === "Multi" ? "Multi two" : command.name;
-    ExecutingTaskAggregate.directUpdateCalls++;
+    ExecutingProjectAggregate.directUpdateCalls++;
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: command.id,
           name: `${name} (applied)`,
           archived: true,
@@ -557,8 +558,8 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
       id: create(EventIdSchema, { value: `event-${command.name}` }),
       context: create(EventContextSchema),
       message: AnyMessages.pack(
-        ProjectionEventSchema,
-        create(ProjectionEventSchema, {
+        ProjectCreatedSchema,
+        create(ProjectCreatedSchema, {
           id: command.id,
           name: command.name,
           priority: 1,
@@ -568,7 +569,7 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
   }
 }
 
-class ManagedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class ManagedProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   static assigneeCalls = 0;
   static failure: Error | undefined;
 
@@ -577,37 +578,37 @@ class ManagedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema
     this.failure = failure;
   }
 
-  assignTask(command: TaskCommand): ProjectionEvent {
-    ManagedTaskAggregate.assigneeCalls++;
+  createProject(command: CreateProject): ProjectCreated {
+    ManagedProjectAggregate.assigneeCalls++;
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: command.id,
           name: `${command.name} (assigned)`,
           archived: false,
         }),
       ),
     );
-    if (ManagedTaskAggregate.failure !== undefined) {
-      throw ManagedTaskAggregate.failure;
+    if (ManagedProjectAggregate.failure !== undefined) {
+      throw ManagedProjectAggregate.failure;
     }
-    return create(ProjectionEventSchema, {
+    return create(ProjectCreatedSchema, {
       id: command.id,
       name: `${command.name} event`,
     });
   }
 }
 
-class MessageIdRejectingAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+class ProjectIdRejectingAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
   static failure: unknown;
 
-  assignTask(): never {
-    throw MessageIdRejectingAggregate.failure;
+  createProject(): never {
+    throw ProjectIdRejectingAggregate.failure;
   }
 }
 
-class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class GeneratedTwoArgAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   static argumentCounts: number[] = [];
   static contexts: CommandContext[] = [];
   static observedStateNames: string[] = [];
@@ -640,7 +641,7 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSc
     release?.();
   }
 
-  async assignTask(command: TaskCommand, context: CommandContext): Promise<ProjectionEvent> {
+  async createProject(command: CreateProject, context: CommandContext): Promise<ProjectCreated> {
     GeneratedTwoArgAggregate.argumentCounts.push(arguments.length);
     GeneratedTwoArgAggregate.contexts.push(context);
     GeneratedTwoArgAggregate.observedStateNames.push(this.state.name);
@@ -651,7 +652,7 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSc
       throw TaskAlreadyDone.create({ id: create(GeneratedTaskIdSchema, { value: command.id }) });
     }
     if (this.isArchived || this.isDeleted) {
-      return create(ProjectionEventSchema, {
+      return create(ProjectCreatedSchema, {
         id: command.id,
         name: `${command.name} event`,
       });
@@ -659,21 +660,25 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSc
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: command.id,
           name: `${command.name} (generated)`,
           archived: false,
         }),
       ),
     );
-    return create(ProjectionEventSchema, {
+    return create(ProjectCreatedSchema, {
       id: command.id,
       name: `${command.name} event`,
     });
   }
 }
 
-class GeneratedReactorAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class ProjectRegistrationReactorAggregate extends Aggregate<
+  string,
+  typeof ProjectStateSchema,
+  bigint
+> {
   static argumentCounts: number[] = [];
   static contexts: EventContext[] = [];
   static failure: Error | undefined;
@@ -685,47 +690,47 @@ class GeneratedReactorAggregate extends Aggregate<string, typeof AggregateStateS
   }
 
   reactProjection(
-    event: ProjectionEvent,
+    event: ProjectCreated,
     context: EventContext,
-  ): GeneratedReactorEvent | GeneratedReactorEvent[] {
-    GeneratedReactorAggregate.argumentCounts.push(arguments.length);
-    GeneratedReactorAggregate.contexts.push(context);
-    if (GeneratedReactorAggregate.failure !== undefined) {
-      throw GeneratedReactorAggregate.failure;
+  ): ProjectRegistered | ProjectRegistered[] {
+    ProjectRegistrationReactorAggregate.argumentCounts.push(arguments.length);
+    ProjectRegistrationReactorAggregate.contexts.push(context);
+    if (ProjectRegistrationReactorAggregate.failure !== undefined) {
+      throw ProjectRegistrationReactorAggregate.failure;
     }
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: event.id,
           name: `${event.name} (reacted)`,
           archived: false,
         }),
       ),
     );
-    const produced = create(GeneratedReactorEventSchema, {
+    const produced = create(ProjectRegisteredSchema, {
       id: event.id,
       name: `${event.name} reacted event`,
     });
     return event.name === "two events"
-      ? [produced, clone(GeneratedReactorEventSchema, produced)]
+      ? [produced, clone(ProjectRegisteredSchema, produced)]
       : produced;
   }
 }
 
-class GuardedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class GuardedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   static calls = 0;
 
   static reset(): void {
     this.calls = 0;
   }
 
-  reactProjection(event: ProjectionEvent): void {
+  reactProjection(event: ProjectCreated): void {
     GuardedAggregate.calls++;
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: this.id,
           name: `${event.name} (guarded)`,
           archived: false,
@@ -735,26 +740,26 @@ class GuardedAggregate extends Aggregate<string, typeof AggregateStateSchema, bi
   }
 }
 
-class ProducingGuardedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class ProducingGuardedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   static calls = 0;
 
   static reset(): void {
     this.calls = 0;
   }
 
-  reactProjection(event: ProjectionEvent): GeneratedReactorEvent {
+  reactProjection(event: ProjectCreated): ProjectRegistered {
     ProducingGuardedAggregate.calls++;
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: this.id,
           name: `${event.name} (producing guarded)`,
           archived: false,
         }),
       ),
     );
-    return create(GeneratedReactorEventSchema, {
+    return create(ProjectRegisteredSchema, {
       id: this.id,
       name: `${event.name} produced`,
       priority: 1,
@@ -764,7 +769,7 @@ class ProducingGuardedAggregate extends Aggregate<string, typeof AggregateStateS
 
 class GeneratedCommandingProcessManager extends ProcessManager<
   string,
-  typeof ProcessManagerStateSchema,
+  typeof ProjectQueueStateSchema,
   number
 > {
   static argumentCounts: number[] = [];
@@ -794,26 +799,26 @@ class GeneratedCommandingProcessManager extends ProcessManager<
   }
 
   async commandProjection(
-    event: ProjectionEvent,
+    event: ProjectCreated,
     context: EventContext,
-  ): Promise<ProducedTaskCommand> {
+  ): Promise<CreateFollowUpProject> {
     GeneratedCommandingProcessManager.argumentCounts.push(arguments.length);
     GeneratedCommandingProcessManager.contexts.push(context);
     GeneratedCommandingProcessManager.commandProjectionStarted++;
     await GeneratedCommandingProcessManager.#commandProjectionCanFinish;
-    return create(ProducedTaskCommandSchema, {
+    return create(CreateFollowUpProjectSchema, {
       id: event.id,
       name: `${event.name} command`,
     });
   }
 }
 
-class MultiManagedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: TaskCommand): readonly ProjectionEvent[] {
+class MultiManagedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+  createProject(command: CreateProject): readonly ProjectCreated[] {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: command.id,
           name: `${command.name} two (assigned)`,
           archived: false,
@@ -821,12 +826,12 @@ class MultiManagedAggregate extends Aggregate<string, typeof AggregateStateSchem
       ),
     );
     return [
-      create(ProjectionEventSchema, {
+      create(ProjectCreatedSchema, {
         id: command.id,
         name: `${command.name} one event`,
         priority: 1,
       }),
-      create(ProjectionEventSchema, {
+      create(ProjectCreatedSchema, {
         id: command.id,
         name: `${command.name} two event`,
         priority: 1,
@@ -835,12 +840,12 @@ class MultiManagedAggregate extends Aggregate<string, typeof AggregateStateSchem
   }
 }
 
-class EmptyManagedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: TaskCommand): undefined {
+class EmptyManagedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+  createProject(command: CreateProject): undefined {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: command.id,
           name: command.name,
           archived: false,
@@ -851,12 +856,12 @@ class EmptyManagedAggregate extends Aggregate<string, typeof AggregateStateSchem
   }
 }
 
-class EnvelopeManagedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: TaskCommand): SpineEvent {
+class EnvelopeManagedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+  createProject(command: CreateProject): SpineEvent {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: command.id,
           name: command.name,
           archived: false,
@@ -867,9 +872,9 @@ class EnvelopeManagedAggregate extends Aggregate<string, typeof AggregateStateSc
   }
 }
 
-class ValidatingTaskAggregate extends Aggregate<
+class ValidatingProjectAggregate extends Aggregate<
   string,
-  typeof ValidatedAggregateStateSchema,
+  typeof ReviewProjectStateSchema,
   bigint
 > {
   static assigneeCalls = 0;
@@ -880,18 +885,18 @@ class ValidatingTaskAggregate extends Aggregate<
     this.applierCalls = 0;
   }
 
-  assignTask(command: ValidatedTaskCommand) {
-    ValidatingTaskAggregate.assigneeCalls++;
+  createProject(command: CreateProjectSubmission) {
+    ValidatingProjectAggregate.assigneeCalls++;
     return createValidatedEvent(`event-${command.id}`, command.id, command.name);
   }
 
-  applyTask(event: ValidatedTaskEvent): void {
-    ValidatingTaskAggregate.applierCalls++;
+  applyTask(event: ProjectSubmissionCreated): void {
+    ValidatingProjectAggregate.applierCalls++;
     this.startTransaction();
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ValidatedAggregateStateSchema, {
+        create(ReviewProjectStateSchema, {
           id: event.id,
           name: event.name,
         }),
@@ -901,9 +906,9 @@ class ValidatingTaskAggregate extends Aggregate<
   }
 }
 
-class ValidatedMessageIdRouteAggregate extends Aggregate<
-  ValidatedMessageId,
-  typeof ValidatedMessageIdStateSchema,
+class ProjectSubmissionIdRouteAggregate extends Aggregate<
+  ProjectSubmissionId,
+  typeof ProjectSubmissionIdStateSchema,
   bigint
 > {
   static calls = 0;
@@ -912,14 +917,14 @@ class ValidatedMessageIdRouteAggregate extends Aggregate<
     this.calls = 0;
   }
 
-  assignTask(): void {
-    ValidatedMessageIdRouteAggregate.calls += 1;
+  createProject(): void {
+    ProjectSubmissionIdRouteAggregate.calls += 1;
   }
 }
 
 class ValidatingProcessManager extends ProcessManager<
   string,
-  typeof ProcessManagerStateSchema,
+  typeof ProjectQueueStateSchema,
   number
 > {
   static commandCalls = 0;
@@ -928,18 +933,18 @@ class ValidatingProcessManager extends ProcessManager<
     this.commandCalls = 0;
   }
 
-  assignTask(command: ValidatedTaskCommand): ProjectionEvent {
+  createProject(command: CreateProjectSubmission): ProjectCreated {
     ValidatingProcessManager.commandCalls++;
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProcessManagerStateSchema, {
+        create(ProjectQueueStateSchema, {
           id: command.id,
           queue: `${command.name} assigned`,
         }),
       ),
     );
-    return create(ProjectionEventSchema, {
+    return create(ProjectCreatedSchema, {
       id: command.id,
       name: `${command.name} event`,
       priority: 1,
@@ -947,12 +952,12 @@ class ValidatingProcessManager extends ProcessManager<
   }
 }
 
-class TransitionViolatingAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: TaskCommand) {
+class TransitionViolatingAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+  createProject(command: CreateProject) {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: `${command.id}-changed`,
           name: command.name,
           archived: false,
@@ -964,11 +969,11 @@ class TransitionViolatingAggregate extends Aggregate<string, typeof AggregateSta
 }
 
 class RecoveringTransitionAggregate extends TransitionViolatingAggregate {
-  override assignTask(command: TaskCommand) {
+  override createProject(command: CreateProject) {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: command.id,
           name: `${command.name} recovered`,
           archived: false,
@@ -979,16 +984,16 @@ class RecoveringTransitionAggregate extends TransitionViolatingAggregate {
   }
 }
 
-class AsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class AsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   static resolveCommand: ((eventName: string) => void) | undefined;
 
-  assignTask(command: TaskCommand): Promise<SpineEvent> {
+  createProject(command: CreateProject): Promise<SpineEvent> {
     return new Promise((resolve) => {
       AsyncAssigneeAggregate.resolveCommand = (eventName) => {
         this.update((draft) =>
           Object.assign(
             draft,
-            create(AggregateStateSchema, {
+            create(ProjectStateSchema, {
               id: command.id,
               name: `${eventName} (applied)`,
               archived: false,
@@ -1001,22 +1006,18 @@ class AsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSche
   }
 }
 
-class RejectedAsyncAssigneeAggregate extends Aggregate<
-  string,
-  typeof AggregateStateSchema,
-  bigint
-> {
+class RejectedAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   static rejectCommand: ((error: Error) => void) | undefined;
 
   static reset(): void {
     this.rejectCommand = undefined;
   }
 
-  assignTask(command: TaskCommand): Promise<SpineEvent> {
+  createProject(command: CreateProject): Promise<SpineEvent> {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: command.id,
           name: `${command.name} provisional`,
           archived: false,
@@ -1029,7 +1030,7 @@ class RejectedAsyncAssigneeAggregate extends Aggregate<
   }
 }
 
-class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   static readonly started: string[] = [];
   static readonly releases: (() => void)[] = [];
 
@@ -1044,7 +1045,7 @@ class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof AggregateSta
     release();
   }
 
-  assignTask(command: TaskCommand): Promise<SpineEvent> {
+  createProject(command: CreateProject): Promise<SpineEvent> {
     SerialAsyncAssigneeAggregate.started.push(command.name);
     return new Promise<void>((resolve) => {
       SerialAsyncAssigneeAggregate.releases.push(resolve);
@@ -1052,7 +1053,7 @@ class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof AggregateSta
       this.update((draft) =>
         Object.assign(
           draft,
-          create(AggregateStateSchema, {
+          create(ProjectStateSchema, {
             id: command.id,
             name: `${command.name} (applied)`,
             archived: false,
@@ -1064,60 +1065,60 @@ class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof AggregateSta
   }
 }
 
-class NoApplierAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: TaskCommand): ProjectionEvent {
+class NoApplierAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+  createProject(command: CreateProject): ProjectCreated {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: command.id,
           name: `${command.name} (reaction metadata)`,
           archived: false,
         }),
       ),
     );
-    return create(ProjectionEventSchema, {
+    return create(ProjectCreatedSchema, {
       id: command.id,
       name: `${command.name} event`,
     });
   }
 
-  reactTask(event: ProjectionEvent): void {
+  reactTask(event: ProjectCreated): void {
     void event;
   }
 }
 
-class MalformedEventAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(): unknown {
+class MalformedEventAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+  createProject(): unknown {
     return create(EventSchema, {
       id: create(EventIdSchema, { value: "event-malformed" }),
       context: create(EventContextSchema),
     });
   }
 
-  applyTask(event: ProjectionEvent): void {
+  applyTask(event: ProjectCreated): void {
     void event;
   }
 }
 
-class BigintVersionAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class BigintVersionAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   static observedVersions: unknown[] = [];
 
   static reset(): void {
     this.observedVersions = [];
   }
 
-  assignTask(command: TaskCommand) {
+  createProject(command: CreateProject) {
     BigintVersionAggregate.observedVersions.push(this.version);
     return createAggregateEvent(`event-bigint-${command.name}`, command.id, 0, command.name);
   }
 
-  applyTask(event: ProjectionEvent): void {
+  applyTask(event: ProjectCreated): void {
     this.startTransaction();
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: event.id,
           name: event.name,
           archived: false,
@@ -1128,9 +1129,9 @@ class BigintVersionAggregate extends Aggregate<string, typeof AggregateStateSche
   }
 }
 
-class ProjectionProducingAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: TaskCommand) {
-    return createProjectionEvent(
+class ProjectionProducingAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+  createProject(command: CreateProject) {
+    return createProjectCreated(
       `event-${command.name}`,
       command.id,
       command.name === "PastMessageTenant"
@@ -1139,12 +1140,12 @@ class ProjectionProducingAggregate extends Aggregate<string, typeof AggregateSta
     );
   }
 
-  applyProjection(event: ProjectionEvent): void {
+  applyProjection(event: ProjectCreated): void {
     this.startTransaction();
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: event.id,
           name: event.name,
           archived: false,
@@ -1157,19 +1158,19 @@ class ProjectionProducingAggregate extends Aggregate<string, typeof AggregateSta
 
 class CommandTenantProjectionProducingAggregate extends Aggregate<
   string,
-  typeof AggregateStateSchema,
+  typeof ProjectStateSchema,
   bigint
 > {
-  assignTask(command: TaskCommand) {
-    return createProjectionEvent(`event-${command.name}`, command.id);
+  createProject(command: CreateProject) {
+    return createProjectCreated(`event-${command.name}`, command.id);
   }
 
-  applyProjection(event: ProjectionEvent): void {
+  applyProjection(event: ProjectCreated): void {
     this.startTransaction();
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: event.id,
           name: event.name,
           archived: false,
@@ -1180,14 +1181,18 @@ class CommandTenantProjectionProducingAggregate extends Aggregate<
   }
 }
 
-class ExecutingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class ExecutingTaskProjection extends Projection<
+  string,
+  typeof ProjectOverviewStateSchema,
+  number
+> {
   static subscriberCalls = 0;
 
   static reset(): void {
     this.subscriberCalls = 0;
   }
 
-  subscribeTask(event: ProjectionEvent): void {
+  subscribeTask(event: ProjectCreated): void {
     ExecutingTaskProjection.subscriberCalls++;
     if (event.name.endsWith("-lifecycle")) {
       if (event.name === "archive-lifecycle") this.archiveDraft();
@@ -1199,7 +1204,7 @@ class ExecutingTaskProjection extends Projection<string, typeof ProjectionStateS
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProjectionStateSchema, {
+        create(ProjectOverviewStateSchema, {
           id: event.id,
           name: `${event.name} (projected)`,
           priority: event.priority + 1,
@@ -1209,61 +1214,61 @@ class ExecutingTaskProjection extends Projection<string, typeof ProjectionStateS
   }
 }
 
-class FilteredTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class FilteredTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
   static calls: string[] = [];
 
   static reset(): void {
     this.calls = [];
   }
 
-  subscribeAnnouncements(event: ProjectionEvent): void {
+  subscribeAnnouncements(event: ProjectCreated): void {
     FilteredTaskProjection.calls.push(`announcements:${event.name}`);
   }
 
-  subscribeFallback(event: ProjectionEvent): void {
+  subscribeFallback(event: ProjectCreated): void {
     FilteredTaskProjection.calls.push(`fallback:${event.name}`);
   }
 }
 
-class FilteredEventAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class FilteredEventAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   static calls: string[] = [];
 
   static reset(): void {
     this.calls = [];
   }
 
-  reactAnnouncements(event: ProjectionEvent): GeneratedReactorEvent {
+  reactAnnouncements(event: ProjectCreated): ProjectRegistered {
     FilteredEventAggregate.calls.push(`announcements:${event.name}`);
     return this.result(event);
   }
 
-  reactFallback(event: ProjectionEvent): GeneratedReactorEvent {
+  reactFallback(event: ProjectCreated): ProjectRegistered {
     FilteredEventAggregate.calls.push(`fallback:${event.name}`);
     return this.result(event);
   }
 
-  private result(event: ProjectionEvent): GeneratedReactorEvent {
+  private result(event: ProjectCreated): ProjectRegistered {
     this.update((draft) => {
       draft.id = event.id;
       draft.name = event.name;
     });
-    return create(GeneratedReactorEventSchema, { id: event.id, name: event.name, priority: 1 });
+    return create(ProjectRegisteredSchema, { id: event.id, name: event.name, priority: 1 });
   }
 }
 
-class ManagedTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class ManagedTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
   static subscriberCalls = 0;
 
   static reset(): void {
     this.subscriberCalls = 0;
   }
 
-  subscribeTask(event: ProjectionEvent): void {
+  subscribeTask(event: ProjectCreated): void {
     ManagedTaskProjection.subscriberCalls++;
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProjectionStateSchema, {
+        create(ProjectOverviewStateSchema, {
           id: event.id,
           name: `${event.name} (managed)`,
           priority: event.priority + 1,
@@ -1294,7 +1299,11 @@ class AlternateCatchUpProjection extends Projection<TaskListId, typeof TaskListS
   }
 }
 
-class BlockingCatchUpProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class BlockingCatchUpProjection extends Projection<
+  string,
+  typeof ProjectOverviewStateSchema,
+  number
+> {
   static startedCalls = 0;
   static completedCalls = 0;
   static block = false;
@@ -1317,7 +1326,7 @@ class BlockingCatchUpProjection extends Projection<string, typeof ProjectionStat
     gate.resolve();
   }
 
-  async subscribeTask(event: ProjectionEvent): Promise<void> {
+  async subscribeTask(event: ProjectCreated): Promise<void> {
     if (BlockingCatchUpProjection.block) {
       const index = BlockingCatchUpProjection.startedCalls;
       const gate = BlockingCatchUpProjection.gates[index];
@@ -1333,7 +1342,7 @@ class BlockingCatchUpProjection extends Projection<string, typeof ProjectionStat
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProjectionStateSchema, {
+        create(ProjectOverviewStateSchema, {
           id: event.id,
           name: `${event.name} (blocking)`,
           priority: event.priority + 1,
@@ -1343,7 +1352,11 @@ class BlockingCatchUpProjection extends Projection<string, typeof ProjectionStat
   }
 }
 
-class GeneratedTwoArgProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class GeneratedTwoArgProjection extends Projection<
+  string,
+  typeof ProjectOverviewStateSchema,
+  number
+> {
   static argumentCounts: number[] = [];
   static contexts: EventContext[] = [];
 
@@ -1352,13 +1365,13 @@ class GeneratedTwoArgProjection extends Projection<string, typeof ProjectionStat
     this.contexts = [];
   }
 
-  subscribeTask(event: ProjectionEvent, context: EventContext): void {
+  subscribeTask(event: ProjectCreated, context: EventContext): void {
     GeneratedTwoArgProjection.argumentCounts.push(arguments.length);
     GeneratedTwoArgProjection.contexts.push(context);
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProjectionStateSchema, {
+        create(ProjectOverviewStateSchema, {
           id: event.id,
           name: `${event.name} (generated)`,
           priority: event.priority + 1,
@@ -1370,7 +1383,7 @@ class GeneratedTwoArgProjection extends Projection<string, typeof ProjectionStat
 
 class RejectionObservingProjection extends Projection<
   string,
-  typeof ProjectionStateSchema,
+  typeof ProjectOverviewStateSchema,
   number
 > {
   static messages: TaskAlreadyDoneMessage[] = [];
@@ -1403,7 +1416,7 @@ class RejectionObservingProjection extends Projection<
 
 class ContextMutatingGeneratedProjection extends Projection<
   string,
-  typeof ProjectionStateSchema,
+  typeof ProjectOverviewStateSchema,
   number
 > {
   static firstContext: EventContext | undefined;
@@ -1416,20 +1429,20 @@ class ContextMutatingGeneratedProjection extends Projection<
     this.observedVersions = [];
   }
 
-  mutateContext(event: ProjectionEvent, context: EventContext): void {
+  mutateContext(event: ProjectCreated, context: EventContext): void {
     void event;
     ContextMutatingGeneratedProjection.firstContext = context;
     context.version = create(VersionSchema, { number: 99 });
   }
 
-  observeContext(event: ProjectionEvent, context: EventContext): void {
+  observeContext(event: ProjectCreated, context: EventContext): void {
     ContextMutatingGeneratedProjection.observerSawSameContext =
       context === ContextMutatingGeneratedProjection.firstContext;
     ContextMutatingGeneratedProjection.observedVersions.push(context.version?.number);
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProjectionStateSchema, {
+        create(ProjectOverviewStateSchema, {
           id: event.id,
           name: `${event.name} (observed)`,
           priority: event.priority + 1,
@@ -1439,26 +1452,30 @@ class ContextMutatingGeneratedProjection extends Projection<
   }
 }
 
-class PassiveTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class PassiveTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
   static subscriberCalls = 0;
 
   static reset(): void {
     this.subscriberCalls = 0;
   }
 
-  subscribeTask(event: ProjectionEvent): void {
+  subscribeTask(event: ProjectCreated): void {
     PassiveTaskProjection.subscriberCalls++;
     void event;
   }
 
-  subscribeState(state: AggregateState): void {
+  subscribeState(state: ProjectState): void {
     PassiveTaskProjection.subscriberCalls++;
     void state;
   }
 }
 
-class AccumulatingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
-  subscribeTask(event: ProjectionEvent): void {
+class AccumulatingTaskProjection extends Projection<
+  string,
+  typeof ProjectOverviewStateSchema,
+  number
+> {
+  subscribeTask(event: ProjectCreated): void {
     this.update((draft) => {
       draft.name = event.name;
       draft.priority += event.priority;
@@ -1466,14 +1483,18 @@ class AccumulatingTaskProjection extends Projection<string, typeof ProjectionSta
   }
 }
 
-class StateObservingProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class StateObservingProjection extends Projection<
+  string,
+  typeof ProjectOverviewStateSchema,
+  number
+> {
   static subscriberCalls = 0;
 
   static reset(): void {
     this.subscriberCalls = 0;
   }
 
-  subscribeState(state: AggregateState): void {
+  subscribeState(state: ProjectState): void {
     StateObservingProjection.subscriberCalls++;
     this.update((draft) => {
       draft.name = `${state.name} (projected)`;
@@ -1482,61 +1503,65 @@ class StateObservingProjection extends Projection<string, typeof ProjectionState
   }
 }
 
-class OriginStateProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class OriginStateProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
   static calls: string[] = [];
 
   static reset(): void {
     this.calls = [];
   }
 
-  domesticState(state: AggregateState): void {
+  domesticState(state: ProjectState): void {
     OriginStateProjection.calls.push(`domestic:${state.id}`);
   }
 
-  externalState(state: AggregateState): void {
+  externalState(state: ProjectState): void {
     OriginStateProjection.calls.push(`external:${state.id}`);
   }
 }
 
-class NeutralStateObservingProjection extends Projection<
+class ProjectBacklogProjection extends Projection<
   string,
-  typeof NeutralProjectionStateSchema,
+  typeof ProjectBacklogStateSchema,
   number
 > {
-  subscribeState(state: ProjectionState): void {
+  subscribeState(state: ProjectOverviewState): void {
     void state;
   }
 }
 
-class ReactingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
-  reactTask(event: ProjectionEvent): void {
+class ReactingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+  reactTask(event: ProjectCreated): void {
     void event;
   }
 }
 
-class UserIdProjection extends Projection<string, typeof ProjectionStateSchema, number> {
-  subscribeUser(event: ProjectionEvent): void {
+class UserIdProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+  subscribeUser(event: ProjectCreated): void {
     void event;
   }
 }
 
-class NonFiniteRouteProjection extends Projection<string, typeof ProjectionStateSchema, number> {
-  subscribeNumber(event: NumberRouteEvent): void {
+class NonFiniteRouteProjection extends Projection<
+  string,
+  typeof ProjectOverviewStateSchema,
+  number
+> {
+  subscribeNumber(event: ProjectPriorityChanged): void {
     void event;
   }
 }
 
-class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+class ProjectIdProjectAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
   applyTaskCreated(event: TaskCreated): void {
     void event;
   }
 
-  applyWrongId(event: WrongIdRouteEvent): void {
+  applyWrongId(event: ProjectMemberChanged): void {
     void event;
   }
 }
 
-class MessageIdProducingAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+class ProjectIdProducingAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
   assignTask(command: CreateTask): TaskCreated {
     this.update((draft) =>
       Object.assign(draft, {
@@ -1553,13 +1578,17 @@ class MessageIdProducingAggregate extends Aggregate<TaskId, typeof TaskSchema, b
   }
 }
 
-class TaskCreatedScalarProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class TaskCreatedScalarProjection extends Projection<
+  string,
+  typeof ProjectOverviewStateSchema,
+  number
+> {
   subscribeTaskCreated(event: TaskCreated): void {
     void event;
   }
 }
 
-class CreateTaskScalarAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class CreateTaskScalarAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   assignCreateTask(command: CreateTask): void {
     void command;
   }
@@ -1567,32 +1596,28 @@ class CreateTaskScalarAggregate extends Aggregate<string, typeof AggregateStateS
 
 class MissingSubscriberMethodProjection extends Projection<
   string,
-  typeof ProjectionStateSchema,
+  typeof ProjectOverviewStateSchema,
   number
 > {
-  missingSubscriber(event: ProjectionEvent): void {
+  missingSubscriber(event: ProjectCreated): void {
     void event;
   }
 }
 
-class ThrowingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class ThrowingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
   static failure: unknown = new Error("projection subscriber failed");
 
   static reset(failure: unknown = new Error("projection subscriber failed")): void {
     this.failure = failure;
   }
 
-  subscribeTask(event: ProjectionEvent): void {
+  subscribeTask(event: ProjectCreated): void {
     void event;
     throw ThrowingTaskProjection.failure;
   }
 }
 
-class RoutingProcessManager extends ProcessManager<
-  string,
-  typeof ProcessManagerStateSchema,
-  number
-> {
+class RoutingProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema, number> {
   static commandCalls = 0;
   static eventCalls = 0;
   static commandReactionCalls = 0;
@@ -1605,19 +1630,19 @@ class RoutingProcessManager extends ProcessManager<
     this.failure = failure;
   }
 
-  assignTask(command: TaskCommand): ProjectionEvent {
+  createProject(command: CreateProject): ProjectCreated {
     RoutingProcessManager.commandCalls++;
     if (command.name.endsWith("-lifecycle")) {
       if (command.name === "archive-lifecycle") this.archiveDraft();
       if (command.name === "unarchive-lifecycle") this.unarchiveDraft();
       if (command.name === "delete-lifecycle") this.markDraftDeleted();
       if (command.name === "restore-lifecycle") this.restoreDraft();
-      return create(ProjectionEventSchema, { id: command.id, name: command.name, priority: 1 });
+      return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
     }
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProcessManagerStateSchema, {
+        create(ProjectQueueStateSchema, {
           id: command.id,
           queue: `${command.name} assigned`,
         }),
@@ -1626,19 +1651,19 @@ class RoutingProcessManager extends ProcessManager<
     if (RoutingProcessManager.failure !== undefined) {
       throw RoutingProcessManager.failure;
     }
-    return create(ProjectionEventSchema, {
+    return create(ProjectCreatedSchema, {
       id: command.id,
       name: `${command.name} event`,
       priority: 1,
     });
   }
 
-  reactTask(event: ProjectionEvent): void {
+  reactTask(event: ProjectCreated): void {
     RoutingProcessManager.eventCalls++;
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProcessManagerStateSchema, {
+        create(ProjectQueueStateSchema, {
           id: event.id,
           queue: `${event.name} reacted`,
         }),
@@ -1649,35 +1674,35 @@ class RoutingProcessManager extends ProcessManager<
     }
   }
 
-  commandTask(event: ProjectionEvent): TaskCommand {
+  commandProject(event: ProjectCreated): CreateProject {
     RoutingProcessManager.commandReactionCalls++;
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProcessManagerStateSchema, {
+        create(ProjectQueueStateSchema, {
           id: event.id,
           queue: `${event.name} commanded`,
         }),
       ),
     );
-    return create(TaskCommandSchema, {
+    return create(CreateProjectSchema, {
       id: event.id,
       name: `${event.name} follow-up command`,
     });
   }
 
-  reactTaskWithEvent(event: ProjectionEvent): GeneratedReactorEvent {
+  reactTaskWithEvent(event: ProjectCreated): ProjectRegistered {
     RoutingProcessManager.eventCalls++;
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProcessManagerStateSchema, {
+        create(ProjectQueueStateSchema, {
           id: event.id,
           queue: `${event.name} evented`,
         }),
       ),
     );
-    return create(GeneratedReactorEventSchema, {
+    return create(ProjectRegisteredSchema, {
       id: event.id,
       name: `${event.name} produced event`,
       priority: 1,
@@ -1687,7 +1712,7 @@ class RoutingProcessManager extends ProcessManager<
 
 class CommandSubstitutingProcessManager extends ProcessManager<
   string,
-  typeof ProcessManagerStateSchema,
+  typeof ProjectQueueStateSchema,
   number
 > {
   static siblingOutputs = false;
@@ -1697,31 +1722,31 @@ class CommandSubstitutingProcessManager extends ProcessManager<
   }
 
   substitute(
-    command: ValidatedTaskCommand,
+    command: CreateProjectSubmission,
     context: CommandContext,
-  ): ProducedTaskCommand | readonly ProducedTaskCommand[] {
+  ): CreateFollowUpProject | readonly CreateFollowUpProject[] {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProcessManagerStateSchema, {
+        create(ProjectQueueStateSchema, {
           id: this.id,
           queue: `${command.name}:${context.actorContext?.actor?.value ?? "anonymous"}`,
         }),
       ),
     );
-    const first = create(ProducedTaskCommandSchema, {
+    const first = create(CreateFollowUpProjectSchema, {
       id: command.id,
       name: `${command.name} follow-up`,
     });
     return CommandSubstitutingProcessManager.siblingOutputs
-      ? [first, create(ProducedTaskCommandSchema, { ...first, name: `${command.name} sibling` })]
+      ? [first, create(CreateFollowUpProjectSchema, { ...first, name: `${command.name} sibling` })]
       : first;
   }
 }
 
 class FilteredProcessManager extends ProcessManager<
   string,
-  typeof ProcessManagerStateSchema,
+  typeof ProjectQueueStateSchema,
   number
 > {
   static calls: string[] = [];
@@ -1730,35 +1755,35 @@ class FilteredProcessManager extends ProcessManager<
     this.calls = [];
   }
 
-  reactAnnouncements(event: ProjectionEvent): void {
+  reactAnnouncements(event: ProjectCreated): void {
     FilteredProcessManager.calls.push(`react-announcements:${event.name}`);
   }
 
-  reactFallback(event: ProjectionEvent): void {
+  reactFallback(event: ProjectCreated): void {
     FilteredProcessManager.calls.push(`react-fallback:${event.name}`);
   }
 
-  commandAnnouncements(event: ProjectionEvent): TaskCommand {
+  commandAnnouncements(event: ProjectCreated): CreateProject {
     FilteredProcessManager.calls.push(`command-announcements:${event.name}`);
-    return create(TaskCommandSchema, { id: event.id, name: event.name });
+    return create(CreateProjectSchema, { id: event.id, name: event.name });
   }
 
-  commandFallback(event: ProjectionEvent): TaskCommand {
+  commandFallback(event: ProjectCreated): CreateProject {
     FilteredProcessManager.calls.push(`command-fallback:${event.name}`);
-    return create(TaskCommandSchema, { id: event.id, name: event.name });
+    return create(CreateProjectSchema, { id: event.id, name: event.name });
   }
 }
 
 class DiagnosticOnlyProcessManager extends ProcessManager<
   string,
-  typeof ProcessManagerStateSchema,
+  typeof ProjectQueueStateSchema,
   number
 > {
   static calls = 0;
 
-  assignTask(command: TaskCommand): ProjectionEvent {
+  createProject(command: CreateProject): ProjectCreated {
     DiagnosticOnlyProcessManager.calls += 1;
-    return create(ProjectionEventSchema, {
+    return create(ProjectCreatedSchema, {
       id: command.id,
       name: `${command.name} diagnostic`,
       priority: 1,
@@ -1768,7 +1793,7 @@ class DiagnosticOnlyProcessManager extends ProcessManager<
 
 class InboxCheckingProcessManager extends ProcessManager<
   string,
-  typeof ProcessManagerStateSchema,
+  typeof ProjectQueueStateSchema,
   number
 > {
   static delivery: Delivery | undefined;
@@ -1781,7 +1806,7 @@ class InboxCheckingProcessManager extends ProcessManager<
     this.eventCalls = 0;
   }
 
-  async reactTask(event: ProjectionEvent): Promise<void> {
+  async reactTask(event: ProjectCreated): Promise<void> {
     const delivery = InboxCheckingProcessManager.delivery;
 
     if (delivery === undefined) {
@@ -1802,7 +1827,7 @@ class InboxCheckingProcessManager extends ProcessManager<
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProcessManagerStateSchema, {
+        create(ProjectQueueStateSchema, {
           id: event.id,
           queue: `${event.name} checked`,
         }),
@@ -1813,7 +1838,7 @@ class InboxCheckingProcessManager extends ProcessManager<
 
 class BlockingProcessManager extends ProcessManager<
   string,
-  typeof ProcessManagerStateSchema,
+  typeof ProjectQueueStateSchema,
   number
 > {
   static startedCalls = 0;
@@ -1832,7 +1857,7 @@ class BlockingProcessManager extends ProcessManager<
     this.gate.resolve();
   }
 
-  async reactTask(event: ProjectionEvent): Promise<void> {
+  async reactTask(event: ProjectCreated): Promise<void> {
     BlockingProcessManager.startedCalls++;
     if (
       BlockingProcessManager.blockingId === undefined ||
@@ -1844,7 +1869,7 @@ class BlockingProcessManager extends ProcessManager<
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProcessManagerStateSchema, {
+        create(ProjectQueueStateSchema, {
           id: event.id,
           queue: `${event.name} blocked`,
         }),
@@ -1855,7 +1880,7 @@ class BlockingProcessManager extends ProcessManager<
 
 class SplitRouteProcessManager extends ProcessManager<
   string,
-  typeof ProcessManagerStateSchema,
+  typeof ProjectQueueStateSchema,
   number
 > {
   static startedIds: string[] = [];
@@ -1866,7 +1891,7 @@ class SplitRouteProcessManager extends ProcessManager<
     this.completedIds = [];
   }
 
-  reactTask(event: ProjectionEvent): void {
+  reactTask(event: ProjectCreated): void {
     SplitRouteProcessManager.startedIds.push(this.id);
 
     if (this.id === "pm-fail") {
@@ -1877,7 +1902,7 @@ class SplitRouteProcessManager extends ProcessManager<
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProcessManagerStateSchema, {
+        create(ProjectQueueStateSchema, {
           id: this.id,
           queue: `${event.name} split`,
         }),
@@ -1894,19 +1919,19 @@ describe("repository signal routing", () => {
   });
 
   it("derives stable current-record identity from every supported ID representation", () => {
-    new Repository({ entityType: ExecutingTaskProjection, schema: ProjectionStateSchema });
+    new Repository({ entityType: ExecutingTaskProjection, schema: ProjectOverviewStateSchema });
     const spec = SpecScanner.scan(ExecutingTaskProjection as never);
     const descriptor = entityStorageDescriptor({ name: "Tasks", multitenant: false }, spec);
     const structured = { value: "task-1" };
     const record = EntityRecords.pack(
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
       "task-1",
-      create(ProjectionStateSchema, { id: "state-id-must-not-route", name: "First" }),
+      create(ProjectOverviewStateSchema, { id: "state-id-must-not-route", name: "First" }),
       1n,
       { archived: false, deleted: false },
     );
 
-    expect(spec.sourceType).toBe(ProjectionStateSchema);
+    expect(spec.sourceType).toBe(ProjectOverviewStateSchema);
     expect(spec.recordType.typeName).toBe("spine.server.entity.EntityRecord");
     expect(spec.idValueIn(record)).toBe("task-1");
     expect(record.entityId).toBeDefined();
@@ -1922,14 +1947,14 @@ describe("repository signal routing", () => {
   });
 
   it("executes aggregate commands through a built bounded-context command bus", async () => {
-    ExecutingTaskAggregate.reset();
+    ExecutingProjectAggregate.reset();
     const factory = new InMemoryStorageFactory();
     const observed: string[] = [];
     const repository = createExecutingRepository();
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .addEventDispatcher({
-        messageSchemas: () => [ProjectionEventSchema],
+        messageSchemas: () => [ProjectCreatedSchema],
         dispatch: (event) => {
           observed.push(event.id?.value ?? "missing");
           return Promise.resolve();
@@ -1940,7 +1965,7 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
       eventHistory: true,
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
@@ -1949,13 +1974,13 @@ describe("repository signal routing", () => {
       .commandBus()
       .post(createAggregateCommand("command-exec", "task-exec", "TaskExec"));
 
-    expect(ExecutingTaskAggregate.assigneeCalls).toBe(0);
+    expect(ExecutingProjectAggregate.assigneeCalls).toBe(0);
     expect(observed).toEqual([]);
 
     await completion;
 
-    expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
-    expect(ExecutingTaskAggregate.directUpdateCalls).toBe(1);
+    expect(ExecutingProjectAggregate.assigneeCalls).toBe(1);
+    expect(ExecutingProjectAggregate.directUpdateCalls).toBe(1);
     await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-TaskExec" } }]);
     await expect(storage.readEvents("task-exec")).resolves.toMatchObject([
       { id: { value: "event-TaskExec" } },
@@ -1977,7 +2002,7 @@ describe("repository signal routing", () => {
     const aggregateStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: aggregateFactory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
 
     try {
@@ -1997,13 +2022,13 @@ describe("repository signal routing", () => {
     const projectionStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: projectionFactory,
-      stateSchema: ProjectionStateSchema,
+      stateSchema: ProjectOverviewStateSchema,
     });
 
     try {
       await projectionContext
         .eventBus()
-        .post(createProjectionEvent("event-history-default-projection", "history-projection"));
+        .post(createProjectCreated("event-history-default-projection", "history-projection"));
       await expect(projectionStorage.readStates("history-projection")).resolves.toEqual([]);
     } finally {
       await projectionContext.close();
@@ -2017,13 +2042,13 @@ describe("repository signal routing", () => {
     const processManagerStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: processManagerFactory,
-      stateSchema: ProcessManagerStateSchema,
+      stateSchema: ProjectQueueStateSchema,
     });
 
     try {
       await processManagerContext
         .eventBus()
-        .post(createProjectionEvent("event-history-default-pm", "history-pm"));
+        .post(createProjectCreated("event-history-default-pm", "history-pm"));
       await expect(processManagerStorage.readStates("history-pm")).resolves.toEqual([]);
     } finally {
       await processManagerContext.close();
@@ -2041,13 +2066,13 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
       stateHistory: true,
       eventHistory: true,
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     let attempts = 0;
-    context.stand().subscribe(AggregateStateSchema, () => {
+    context.stand().subscribe(ProjectStateSchema, () => {
       attempts += 1;
       throw new Error("subscriber failure");
     });
@@ -2079,7 +2104,7 @@ describe("repository signal routing", () => {
       .add(createProcessManagerAssignRepository())
       .build();
     let notifications = 0;
-    context.stand().subscribe(ProcessManagerStateSchema, () => {
+    context.stand().subscribe(ProjectQueueStateSchema, () => {
       notifications++;
       throw new Error("process-manager command subscriber failed");
     });
@@ -2098,10 +2123,8 @@ describe("repository signal routing", () => {
 
       expect(RoutingProcessManager.commandCalls).toBe(2);
       expect(notifications).toBe(2);
-      await expect(
-        context.stand().read(ProcessManagerStateSchema, "pm-subscriber"),
-      ).resolves.toEqual(
-        create(ProcessManagerStateSchema, {
+      await expect(context.stand().read(ProjectQueueStateSchema, "pm-subscriber")).resolves.toEqual(
+        create(ProjectQueueStateSchema, {
           id: "pm-subscriber",
           queue: "Follow-up assigned",
         }),
@@ -2120,12 +2143,12 @@ describe("repository signal routing", () => {
       .build();
     let original = 0;
     let late = 0;
-    context.stand().subscribe(AggregateStateSchema, () => {
+    context.stand().subscribe(ProjectStateSchema, () => {
       original += 1;
     });
     const command = context.commandBus().post(createAggregateCommand("command-late", "late-id"));
     await factory.reached;
-    context.stand().subscribe(AggregateStateSchema, () => {
+    context.stand().subscribe(ProjectStateSchema, () => {
       late += 1;
     });
     factory.release();
@@ -2149,7 +2172,7 @@ describe("repository signal routing", () => {
     const aggregateStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: aggregateFactory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
       stateHistory: true,
     });
 
@@ -2190,18 +2213,18 @@ describe("repository signal routing", () => {
     const projectionStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: projectionFactory,
-      stateSchema: ProjectionStateSchema,
+      stateSchema: ProjectOverviewStateSchema,
       stateHistory: true,
     });
 
     try {
       await projectionContext
         .eventBus()
-        .post(createProjectionEvent("event-history-enabled-projection", "history-projection"));
+        .post(createProjectCreated("event-history-enabled-projection", "history-projection"));
       projectionRepository.setStateHistoryEnabled(false);
       await projectionContext
         .eventBus()
-        .post(createProjectionEvent("event-history-disabled-projection", "history-projection"));
+        .post(createProjectCreated("event-history-disabled-projection", "history-projection"));
       await expect(projectionStorage.readStates("history-projection")).resolves.toEqual([]);
     } finally {
       await projectionContext.close();
@@ -2217,18 +2240,18 @@ describe("repository signal routing", () => {
     const processManagerStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: processManagerFactory,
-      stateSchema: ProcessManagerStateSchema,
+      stateSchema: ProjectQueueStateSchema,
       stateHistory: true,
     });
 
     try {
       await processManagerContext
         .eventBus()
-        .post(createProjectionEvent("event-history-enabled-pm", "history-pm"));
+        .post(createProjectCreated("event-history-enabled-pm", "history-pm"));
       processManagerRepository.setStateHistoryEnabled(false);
       await processManagerContext
         .eventBus()
-        .post(createProjectionEvent("event-history-disabled-pm", "history-pm"));
+        .post(createProjectCreated("event-history-disabled-pm", "history-pm"));
       await expect(processManagerStorage.readStates("history-pm")).resolves.toMatchObject([
         { version: 1n, state: { queue: "Task reacted" } },
       ]);
@@ -2247,7 +2270,7 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
       stateHistory: true,
     });
 
@@ -2282,7 +2305,7 @@ describe("repository signal routing", () => {
   });
 
   it("packs aggregate-returned domain events and owns the aggregate transaction", async () => {
-    ManagedTaskAggregate.reset();
+    ManagedProjectAggregate.reset();
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createManagedRepository())
@@ -2291,7 +2314,7 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -2299,7 +2322,7 @@ describe("repository signal routing", () => {
       .commandBus()
       .post(createAggregateCommand("command-managed", "task-managed", "Managed"));
 
-    expect(ManagedTaskAggregate.assigneeCalls).toBe(1);
+    expect(ManagedProjectAggregate.assigneeCalls).toBe(1);
     await expect(eventStore.read()).resolves.toMatchObject([
       {
         context: { version: { number: 0 } },
@@ -2329,11 +2352,11 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
-    ManagedTaskAggregate.reset();
+    ManagedProjectAggregate.reset();
     await context
       .commandBus()
       .post(createAggregateCommand("command-existing", "task-rejected", "Persisted"));
@@ -2342,7 +2365,7 @@ describe("repository signal routing", () => {
 
     expect(currentBeforeRejection).toEqual({
       entityId: "task-rejected",
-      state: create(AggregateStateSchema, {
+      state: create(ProjectStateSchema, {
         id: "task-rejected",
         name: "Persisted (assigned)",
         archived: false,
@@ -2356,7 +2379,7 @@ describe("repository signal routing", () => {
     const rejection = TaskAlreadyDone.create({ id: taskId });
     const command = createAggregateCommand("command-rejected", "task-rejected", "Already done");
     const originalCommand = clone(CommandSchema, command);
-    ManagedTaskAggregate.reset(rejection);
+    ManagedProjectAggregate.reset(rejection);
 
     await expect(context.commandBus().post(command)).resolves.toBeUndefined();
 
@@ -2387,7 +2410,7 @@ describe("repository signal routing", () => {
             CommandIdSchema,
             create(CommandIdSchema, { uuid: "command-rejected" }),
           ),
-          typeUrl: TypeUrls.derive(TaskCommandSchema),
+          typeUrl: TypeUrls.derive(CreateProjectSchema),
         }),
         actorContext: create(ActorContextSchema, {
           actor: create(UserIdSchema, { value: "user-1" }),
@@ -2398,14 +2421,14 @@ describe("repository signal routing", () => {
     expect(event?.context?.version).toBeUndefined();
     await expect(storage.readCurrent("task-rejected")).resolves.toEqual(currentBeforeRejection);
     expect("storedEventDispatchFailures" in context).toBe(false);
-    ManagedTaskAggregate.reset();
+    ManagedProjectAggregate.reset();
   });
 
   it("posts a rejected aggregate command without directly updating or persisting output", async () => {
     const rejection = TaskAlreadyDone.create({
       id: create(GeneratedTaskIdSchema, { value: "task-applier-rejected" }),
     });
-    ExecutingTaskAggregate.reset(rejection);
+    ExecutingProjectAggregate.reset(rejection);
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
@@ -2414,7 +2437,7 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -2424,11 +2447,11 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("command-applier-rejected", "task-applier-rejected")),
     ).resolves.toBeUndefined();
 
-    expect(ExecutingTaskAggregate.directUpdateCalls).toBe(0);
+    expect(ExecutingProjectAggregate.directUpdateCalls).toBe(0);
     const [stored] = await waitForStoredEvents(eventStore, 1);
     expect(stored?.id?.value).toMatch(UUID_PATTERN);
     await expect(storage.readCurrent("task-applier-rejected")).resolves.toBeUndefined();
-    ExecutingTaskAggregate.reset();
+    ExecutingProjectAggregate.reset();
   });
 
   it.each([
@@ -2449,7 +2472,7 @@ describe("repository signal routing", () => {
     },
   ])("keeps $label as technical aggregate failures", async ({ failure }) => {
     const thrown = failure();
-    ManagedTaskAggregate.reset(thrown);
+    ManagedProjectAggregate.reset(thrown);
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createManagedRepository())
@@ -2462,17 +2485,17 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
 
     await expect(eventStore.read()).resolves.toEqual([]);
-    ManagedTaskAggregate.reset();
+    ManagedProjectAggregate.reset();
   });
 
   it("uses the typed message-valued entity ID as the rejection producer", async () => {
     RejectionObservingProjection.reset();
-    MessageIdRejectingAggregate.failure = TaskAlreadyDone.create({
+    ProjectIdRejectingAggregate.failure = TaskAlreadyDone.create({
       id: create(GeneratedTaskIdSchema, { value: "task-message-id" }),
     });
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
-      .add(createMessageIdRejectingRepository())
+      .add(createProjectIdRejectingRepository())
       .add(
         createRejectionObservingRepository(
           EventRouting.create<string>().route(TaskAlreadyDoneSchema, (message) => {
@@ -2486,7 +2509,7 @@ describe("repository signal routing", () => {
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(
-      context.commandBus().post(createTaskCommand("command-message-id", "task-message-id")),
+      context.commandBus().post(createCreateProject("command-message-id", "task-message-id")),
     ).resolves.toBeUndefined();
 
     const [event] = await waitForStoredEvents(eventStore, 1);
@@ -2508,7 +2531,12 @@ describe("repository signal routing", () => {
     await context
       .commandBus()
       .post(
-        createGeneratedTaskCommand("command-generated", "task-generated", "Generated", "tenant-a"),
+        createGeneratedCreateProject(
+          "command-generated",
+          "task-generated",
+          "Generated",
+          "tenant-a",
+        ),
       );
 
     expect(GeneratedTwoArgAggregate.argumentCounts).toEqual([2]);
@@ -2530,7 +2558,7 @@ describe("repository signal routing", () => {
 
     await context
       .commandBus()
-      .post(createContextlessGeneratedTaskCommand("command-empty-context", "task-empty-context"));
+      .post(createContextlessGeneratedCreateProject("command-empty-context", "task-empty-context"));
 
     expect(GeneratedTwoArgAggregate.argumentCounts).toEqual([2]);
     expect(GeneratedTwoArgAggregate.contexts).toEqual([create(CommandContextSchema)]);
@@ -2545,10 +2573,10 @@ describe("repository signal routing", () => {
 
     await context
       .commandBus()
-      .post(createGeneratedTaskCommand("command-first", "same-id", "First"));
+      .post(createGeneratedCreateProject("command-first", "same-id", "First"));
     await context
       .commandBus()
-      .post(createGeneratedTaskCommand("command-second", "same-id", "Second"));
+      .post(createGeneratedCreateProject("command-second", "same-id", "Second"));
 
     expect(GeneratedTwoArgAggregate.observedStateNames).toEqual(["", "First (generated)"]);
   });
@@ -2561,7 +2589,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedTwoArgAggregateRepository())
       .addEventDispatcher({
-        messageSchemas: () => [ProjectionEventSchema],
+        messageSchemas: () => [ProjectCreatedSchema],
         dispatch: (event) => {
           published.push(event.id?.value ?? "missing");
           return Promise.resolve();
@@ -2575,16 +2603,16 @@ describe("repository signal routing", () => {
       Promise.all([
         context
           .commandBus()
-          .post(createGeneratedTaskCommand("concurrent-first", "duplicate", "First")),
+          .post(createGeneratedCreateProject("concurrent-first", "duplicate", "First")),
         context
           .commandBus()
-          .post(createGeneratedTaskCommand("concurrent-second", "duplicate", "Second")),
+          .post(createGeneratedCreateProject("concurrent-second", "duplicate", "Second")),
       ]),
     ).resolves.toEqual([undefined, undefined]);
 
     expect(GeneratedTwoArgAggregate.observedStateNames).toEqual(["", "First (generated)"]);
     await expect(
-      context.stand().readVersioned(AggregateStateSchema, "duplicate"),
+      context.stand().readVersioned(ProjectStateSchema, "duplicate"),
     ).resolves.toMatchObject({
       state: { name: "First (generated)" },
       version: { number: 1 },
@@ -2609,8 +2637,8 @@ describe("repository signal routing", () => {
     await context
       .stand()
       .update(
-        AggregateStateSchema,
-        create(AggregateStateSchema, { id: "lifecycle-id", name: "Stored", archived: true }),
+        ProjectStateSchema,
+        create(ProjectStateSchema, { id: "lifecycle-id", name: "Stored", archived: true }),
         {
           version: create(VersionSchema, { number: 7 }),
           lifecycle: { archived: true, deleted: true },
@@ -2619,7 +2647,7 @@ describe("repository signal routing", () => {
 
     await context
       .commandBus()
-      .post(createGeneratedTaskCommand("command-lifecycle", "lifecycle-id"));
+      .post(createGeneratedCreateProject("command-lifecycle", "lifecycle-id"));
 
     expect(GeneratedTwoArgAggregate.observedStateNames).toEqual(["Stored"]);
     expect(GeneratedTwoArgAggregate.observedLifecycles).toEqual([
@@ -2635,16 +2663,16 @@ describe("repository signal routing", () => {
       .build();
     await context
       .commandBus()
-      .post(createGeneratedTaskCommand("tenant-a-first", "same", "A", "tenant-a"));
+      .post(createGeneratedCreateProject("tenant-a-first", "same", "A", "tenant-a"));
     await context
       .commandBus()
-      .post(createGeneratedTaskCommand("tenant-b-first", "same", "B", "tenant-b"));
+      .post(createGeneratedCreateProject("tenant-b-first", "same", "B", "tenant-b"));
     await context
       .commandBus()
-      .post(createGeneratedTaskCommand("tenant-a-next", "same", "A2", "tenant-a"));
+      .post(createGeneratedCreateProject("tenant-a-next", "same", "A2", "tenant-a"));
     await context
       .commandBus()
-      .post(createGeneratedTaskCommand("tenant-b-next", "same", "B2", "tenant-b"));
+      .post(createGeneratedCreateProject("tenant-b-next", "same", "B2", "tenant-b"));
 
     expect(GeneratedTwoArgAggregate.observedStateNames).toEqual([
       "",
@@ -2692,7 +2720,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedTwoArgAggregateRepository())
       .addEventDispatcher({
-        messageSchemas: () => [ProjectionEventSchema],
+        messageSchemas: () => [ProjectCreatedSchema],
         dispatch: (event) => {
           observed.push(event.id?.value ?? "missing");
           return Promise.resolve();
@@ -2703,7 +2731,7 @@ describe("repository signal routing", () => {
 
     const post = context
       .commandBus()
-      .post(createGeneratedTaskCommand("command-close-event", "task-close-event"));
+      .post(createGeneratedCreateProject("command-close-event", "task-close-event"));
     await waitForCondition(() => GeneratedTwoArgAggregate.assigneeStarted === 1);
 
     const close = context.close().then(() => "closed");
@@ -2719,13 +2747,13 @@ describe("repository signal routing", () => {
   });
 
   it("runs generated aggregate event reactors and wraps returned domain events after commit", async () => {
-    GeneratedReactorAggregate.reset();
+    ProjectRegistrationReactorAggregate.reset();
     const factory = new InMemoryStorageFactory();
     const observed: string[] = [];
     const context = BoundedContext.multitenant("Tasks")
       .add(createGeneratedReactorRepository())
       .addEventDispatcher({
-        messageSchemas: () => [GeneratedReactorEventSchema],
+        messageSchemas: () => [ProjectRegisteredSchema],
         dispatch: (event) => {
           observed.push(event.id?.value ?? "missing");
           return Promise.resolve();
@@ -2740,7 +2768,7 @@ describe("repository signal routing", () => {
         tenantId: createTenantId("tenant-b"),
       },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
     const eventStore = new EventStore(
       { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-b") },
@@ -2748,13 +2776,13 @@ describe("repository signal routing", () => {
     );
 
     await context.eventBus().post(
-      createProjectionEvent("event-reactor-source", "task-reactor", {
+      createProjectCreated("event-reactor-source", "task-reactor", {
         pastMessageTenantId: "tenant-b",
       }),
     );
 
-    expect(GeneratedReactorAggregate.argumentCounts).toEqual([2]);
-    expect(GeneratedReactorAggregate.contexts[0]?.origin).toEqual(
+    expect(ProjectRegistrationReactorAggregate.argumentCounts).toEqual([2]);
+    expect(ProjectRegistrationReactorAggregate.contexts[0]?.origin).toEqual(
       projectionEventOrigin({ pastMessageTenantId: "tenant-b" }),
     );
     const stored = await eventStore.read();
@@ -2777,7 +2805,7 @@ describe("repository signal routing", () => {
       value: create(OriginSchema, {
         message: create(MessageIdSchema, {
           id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-          typeUrl: TypeUrls.derive(TaskCommandSchema),
+          typeUrl: TypeUrls.derive(CreateProjectSchema),
         }),
         actorContext: create(ActorContextSchema, {
           tenantId: createTenantId("tenant-b"),
@@ -2795,7 +2823,7 @@ describe("repository signal routing", () => {
   });
 
   it("uses one committed version for every event and state from an aggregate event reaction", async () => {
-    GeneratedReactorAggregate.reset();
+    ProjectRegistrationReactorAggregate.reset();
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedReactorRepository())
@@ -2804,13 +2832,13 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     try {
       await context.eventBus().post(
-        createProjectionEvent("event-reactor-multi", "task-reactor-multi", {
+        createProjectCreated("event-reactor-multi", "task-reactor-multi", {
           name: "two events",
         }),
       );
@@ -2820,7 +2848,7 @@ describe("repository signal routing", () => {
         stored.filter(
           (event) =>
             event.context?.version?.number === 0 &&
-            AnyMessages.unpack(event.message as never, GeneratedReactorEventSchema) !== undefined,
+            AnyMessages.unpack(event.message as never, ProjectRegisteredSchema) !== undefined,
         ),
       ).toHaveLength(2);
       await expect(storage.readCurrent("task-reactor-multi")).resolves.toMatchObject({
@@ -2833,9 +2861,9 @@ describe("repository signal routing", () => {
   });
 
   it("emits a System reactor-dispatch diagnostic after aggregate reactor admission", async () => {
-    GeneratedReactorAggregate.reset();
+    ProjectRegistrationReactorAggregate.reset();
     const diagnostics: SpineEvent[] = [];
-    const event = createProjectionEvent("aggregate-reactor-diagnostic", "aggregate-reactor-id");
+    const event = createProjectCreated("aggregate-reactor-diagnostic", "aggregate-reactor-id");
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedReactorRepository())
       .addEventDispatcher({
@@ -2856,14 +2884,16 @@ describe("repository signal routing", () => {
         EventDispatchedToReactorSchema,
       );
       expect(diagnostic).toMatchObject({
-        receiver: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        receiver: { typeUrl: TypeUrls.derive(ProjectStateSchema) },
         payload: event,
-        entityType: { impl: { case: "javaClassName", value: "GeneratedReactorAggregate" } },
+        entityType: {
+          impl: { case: "javaClassName", value: "ProjectRegistrationReactorAggregate" },
+        },
         whenDispatched: diagnostics[0]?.context?.timestamp,
       });
       expect(diagnostics[0]?.context?.origin).toMatchObject({
         case: "pastMessage",
-        value: { message: { typeUrl: TypeUrls.derive(ProjectionEventSchema) } },
+        value: { message: { typeUrl: TypeUrls.derive(ProjectCreatedSchema) } },
       });
       expect(context.eventBus().acceptedEventTypes()).not.toContain(
         TypeUrls.derive(EventDispatchedToReactorSchema),
@@ -2876,7 +2906,7 @@ describe("repository signal routing", () => {
   it("retains one reactor diagnostic when an admitted reactor fails", async () => {
     const failure = new Error("admitted reactor failed");
     const diagnostics: SpineEvent[] = [];
-    const event = createProjectionEvent("aggregate-reactor-failure", "aggregate-reactor-failure");
+    const event = createProjectCreated("aggregate-reactor-failure", "aggregate-reactor-failure");
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedReactorRepository())
       .addEventDispatcher({
@@ -2889,23 +2919,23 @@ describe("repository signal routing", () => {
       .build();
 
     try {
-      GeneratedReactorAggregate.reset(failure);
+      ProjectRegistrationReactorAggregate.reset(failure);
       await expect(context.eventBus().post(event)).rejects.toThrow(failure);
       await waitForCondition(() => diagnostics.length === 1);
 
-      expect(GeneratedReactorAggregate.argumentCounts).toEqual([2]);
+      expect(ProjectRegistrationReactorAggregate.argumentCounts).toEqual([2]);
       expect(diagnostics).toHaveLength(1);
       expect(
         AnyMessages.unpack(diagnostics[0]?.message as never, EventDispatchedToReactorSchema),
       ).toMatchObject({ payload: event });
     } finally {
-      GeneratedReactorAggregate.reset();
+      ProjectRegistrationReactorAggregate.reset();
       await context.close();
     }
   });
 
   it("does not emit reactor diagnostics for an event without a matching route", async () => {
-    GeneratedReactorAggregate.reset();
+    ProjectRegistrationReactorAggregate.reset();
     const diagnostics: SpineEvent[] = [];
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedReactorRepository())
@@ -2925,8 +2955,8 @@ describe("repository signal routing", () => {
             id: create(EventIdSchema, { value: "aggregate-reactor-unmatched" }),
             context: create(EventContextSchema),
             message: AnyMessages.pack(
-              NumberRouteEventSchema,
-              create(NumberRouteEventSchema, { id: 7 }),
+              ProjectPriorityChangedSchema,
+              create(ProjectPriorityChangedSchema, { id: 7 }),
             ),
           }),
         ),
@@ -2934,7 +2964,7 @@ describe("repository signal routing", () => {
       await context.close();
 
       expect(diagnostics).toEqual([]);
-      expect(GeneratedReactorAggregate.argumentCounts).toEqual([]);
+      expect(ProjectRegistrationReactorAggregate.argumentCounts).toEqual([]);
     } finally {
       await context.close();
     }
@@ -2946,7 +2976,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedReactorRepository())
       .addEventDispatcher({
-        messageSchemas: () => [GeneratedReactorEventSchema],
+        messageSchemas: () => [ProjectRegisteredSchema],
         dispatch: (event) => {
           observed.push(event.id?.value ?? "missing");
           return Promise.resolve();
@@ -2955,12 +2985,10 @@ describe("repository signal routing", () => {
       .withStorageFactory(factory)
       .build();
 
+    await context.eventBus().post(createProjectCreated("event-follow-up-source", "task-follow-up"));
     await context
       .eventBus()
-      .post(createProjectionEvent("event-follow-up-source", "task-follow-up"));
-    await context
-      .eventBus()
-      .post(createGeneratedReactorEvent("event-later-external", "task-follow-up", 2));
+      .post(createProjectRegistered("event-later-external", "task-follow-up", 2));
     await context.close();
 
     expect(observed).toHaveLength(2);
@@ -2975,7 +3003,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedCommandingRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [ProducedTaskCommandSchema],
+        messageSchemas: () => [CreateFollowUpProjectSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -2983,7 +3011,7 @@ describe("repository signal routing", () => {
       })
       .build();
 
-    await context.eventBus().post(createProjectionEvent("event-command-source", "task-command"));
+    await context.eventBus().post(createProjectCreated("event-command-source", "task-command"));
 
     expect(GeneratedCommandingProcessManager.argumentCounts).toEqual([2]);
     expect(commands).toHaveLength(1);
@@ -2994,8 +3022,8 @@ describe("repository signal routing", () => {
     if (command?.message === undefined) {
       throw new Error("Expected a produced command message.");
     }
-    expect(AnyMessages.unpack(command.message, ProducedTaskCommandSchema)).toEqual(
-      create(ProducedTaskCommandSchema, {
+    expect(AnyMessages.unpack(command.message, CreateFollowUpProjectSchema)).toEqual(
+      create(CreateFollowUpProjectSchema, {
         id: "task-command",
         name: "Task command",
       }),
@@ -3007,14 +3035,14 @@ describe("repository signal routing", () => {
     const context = BoundedContext.multitenant("Tasks")
       .add(createGeneratedCommandingRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [ProducedTaskCommandSchema],
+        messageSchemas: () => [CreateFollowUpProjectSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
         },
       })
       .build();
-    const sourceEvent = createProjectionEvent("event-command-origin", "task-command-origin", {
+    const sourceEvent = createProjectCreated("event-command-origin", "task-command-origin", {
       pastMessageTenantId: "tenant-command",
     });
     const sourceActorContext = create(ActorContextSchema, {
@@ -3023,7 +3051,7 @@ describe("repository signal routing", () => {
     const sourceGrandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-        typeUrl: TypeUrls.derive(TaskCommandSchema),
+        typeUrl: TypeUrls.derive(CreateProjectSchema),
       }),
       actorContext: sourceActorContext,
     });
@@ -3038,7 +3066,7 @@ describe("repository signal routing", () => {
             EventIdSchema,
             create(EventIdSchema, { value: "event-command-origin" }),
           ),
-          typeUrl: TypeUrls.derive(ProjectionEventSchema),
+          typeUrl: TypeUrls.derive(ProjectCreatedSchema),
         }),
         actorContext: sourceActorContext,
         grandOrigin: sourceGrandOrigin,
@@ -3052,7 +3080,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedCommandingRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [ProducedTaskCommandSchema],
+        messageSchemas: () => [CreateFollowUpProjectSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -3062,7 +3090,7 @@ describe("repository signal routing", () => {
 
     const post = context
       .eventBus()
-      .post(createProjectionEvent("event-command-close", "task-command-close"));
+      .post(createProjectCreated("event-command-close", "task-command-close"));
     await waitForCondition(() => GeneratedCommandingProcessManager.commandProjectionStarted === 1);
 
     const close = context.close().then(() => "closed");
@@ -3086,7 +3114,7 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -3138,7 +3166,7 @@ describe("repository signal routing", () => {
   });
 
   it("keeps an already registered repository executable after a failed second registration", async () => {
-    ExecutingTaskAggregate.reset();
+    ExecutingProjectAggregate.reset();
     const repository = createExecutingRepository();
     const firstContext = BoundedContext.singleTenant("Tasks").add(repository).build();
 
@@ -3150,12 +3178,12 @@ describe("repository signal routing", () => {
       .commandBus()
       .post(createAggregateCommand("command-after-registration-failure", "task-after-failure"));
 
-    expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
-    expect(ExecutingTaskAggregate.directUpdateCalls).toBe(1);
+    expect(ExecutingProjectAggregate.assigneeCalls).toBe(1);
+    expect(ExecutingProjectAggregate.directUpdateCalls).toBe(1);
   });
 
   it("keeps a reentrantly registered repository executable after failed outer cleanup", async () => {
-    ExecutingTaskAggregate.reset();
+    ExecutingProjectAggregate.reset();
     const repository = createExecutingRepository();
     let nestedContext: BoundedContext | undefined;
     let attempted = false;
@@ -3178,12 +3206,12 @@ describe("repository signal routing", () => {
       ?.commandBus()
       .post(createAggregateCommand("command-after-reentrant-failure", "task-reentrant"));
 
-    expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
-    expect(ExecutingTaskAggregate.directUpdateCalls).toBe(1);
+    expect(ExecutingProjectAggregate.assigneeCalls).toBe(1);
+    expect(ExecutingProjectAggregate.directUpdateCalls).toBe(1);
   });
 
   it("uses one committed version for every event and state from an aggregate command dispatch", async () => {
-    ExecutingTaskAggregate.reset();
+    ExecutingProjectAggregate.reset();
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
@@ -3192,7 +3220,7 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
 
     await context.commandBus().post(createAggregateCommand("command-multi", "task-multi", "Multi"));
@@ -3219,7 +3247,7 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
 
     const completion = context
@@ -3251,7 +3279,7 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     const failure = new Error("async assignment failed");
@@ -3311,7 +3339,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
       .addEventDispatcher({
-        messageSchemas: () => [ProjectionEventSchema],
+        messageSchemas: () => [ProjectCreatedSchema],
         dispatch: () => {
           dispatchAttempted.resolve();
           return Promise.reject(dispatchFailure);
@@ -3322,7 +3350,7 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -3355,7 +3383,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
       .addEventDispatcher({
-        messageSchemas: () => [ProjectionEventSchema],
+        messageSchemas: () => [ProjectCreatedSchema],
         dispatch: async (event) => {
           if (event.id?.value === "event-Outer") {
             nestedPosted.resolve();
@@ -3432,7 +3460,7 @@ describe("repository signal routing", () => {
   });
 
   it("rejects invalid aggregate command payloads before durable aggregate work", async () => {
-    ValidatingTaskAggregate.reset();
+    ValidatingProjectAggregate.reset();
     const factory = new ObservingStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createValidatingRepository())
@@ -3442,8 +3470,8 @@ describe("repository signal routing", () => {
       context.commandBus().post(createValidatedCommand("command-invalid", "task-invalid", "")),
     ).rejects.toThrow(/validation/i);
 
-    expect(ValidatingTaskAggregate.assigneeCalls).toBe(0);
-    expect(ValidatingTaskAggregate.applierCalls).toBe(0);
+    expect(ValidatingProjectAggregate.assigneeCalls).toBe(0);
+    expect(ValidatingProjectAggregate.applierCalls).toBe(0);
   });
 
   it("rejects state-transition validation failures before storing aggregate output", async () => {
@@ -3456,7 +3484,7 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
 
     await expect(
@@ -3478,7 +3506,7 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
 
     await expect(
@@ -3503,12 +3531,12 @@ describe("repository signal routing", () => {
     const tenantAStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
     const tenantBStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-b") },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
 
     await context
@@ -3562,11 +3590,11 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: AggregateStateSchema,
+      stateSchema: ProjectStateSchema,
     });
     await storage.writeCurrent({
       entityId: "task-overflow",
-      state: create(AggregateStateSchema, {
+      state: create(ProjectStateSchema, {
         id: "task-overflow",
         name: "Overflow",
         archived: false,
@@ -3605,13 +3633,13 @@ describe("repository signal routing", () => {
   it("packs a message aggregate ID into its produced event producer ID", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
-      .add(createMessageIdProducingRepository())
+      .add(createProjectIdProducingRepository())
       .withStorageFactory(factory)
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     const taskId = create(TaskIdSchema, { value: "message-produced-task" });
 
-    await context.commandBus().post(createTaskCommand("command-message-producer", taskId.value));
+    await context.commandBus().post(createCreateProject("command-message-producer", taskId.value));
 
     const [stored] = await eventStore.read();
     expect(AnyMessages.unpack(stored?.context?.producerId as never, TaskIdSchema)).toEqual(taskId);
@@ -3622,7 +3650,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.multitenant("Command substitutions")
       .add(createCommandSubstitutingProcessManagerRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [ProducedTaskCommandSchema],
+        messageSchemas: () => [CreateFollowUpProjectSchema],
         dispatch: (command) => {
           produced.push(command);
           return Promise.resolve();
@@ -3637,7 +3665,7 @@ describe("repository signal routing", () => {
     const grandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "grandparent" })),
-        typeUrl: TypeUrls.derive(ValidatedTaskCommandSchema),
+        typeUrl: TypeUrls.derive(CreateProjectSubmissionSchema),
       }),
       actorContext,
     });
@@ -3645,8 +3673,8 @@ describe("repository signal routing", () => {
       id: create(CommandIdSchema, { uuid: "transform-source" }),
       context: create(CommandContextSchema, { actorContext, origin: grandOrigin }),
       message: AnyMessages.pack(
-        ValidatedTaskCommandSchema,
-        create(ValidatedTaskCommandSchema, {
+        CreateProjectSubmissionSchema,
+        create(CreateProjectSubmissionSchema, {
           id: "declared-source-id",
           name: "Transform",
         }),
@@ -3657,17 +3685,15 @@ describe("repository signal routing", () => {
     await waitForCondition(() => produced.length === 1);
 
     expect(
-      await context
-        .stand()
-        .read(ProcessManagerStateSchema, "transform-target", { tenantId: tenant }),
+      await context.stand().read(ProjectQueueStateSchema, "transform-target", { tenantId: tenant }),
     ).toEqual(
-      create(ProcessManagerStateSchema, {
+      create(ProjectQueueStateSchema, {
         id: "transform-target",
         queue: "Transform:transformer",
       }),
     );
     await expect(
-      context.stand().read(ProcessManagerStateSchema, "transform-target", {
+      context.stand().read(ProjectQueueStateSchema, "transform-target", {
         tenantId: createTenantId("tenant-other"),
       }),
     ).resolves.toBeUndefined();
@@ -3682,7 +3708,7 @@ describe("repository signal routing", () => {
               CommandIdSchema,
               create(CommandIdSchema, { uuid: "transform-source" }),
             ),
-            typeUrl: TypeUrls.derive(ValidatedTaskCommandSchema),
+            typeUrl: TypeUrls.derive(CreateProjectSubmissionSchema),
           }),
           actorContext,
           grandOrigin,
@@ -3691,8 +3717,8 @@ describe("repository signal routing", () => {
     });
     expect(producedCommand.id?.uuid).toMatch(UUID_PATTERN);
     if (producedCommand.message === undefined) throw new Error("Expected a produced payload.");
-    expect(AnyMessages.unpack(producedCommand.message, ProducedTaskCommandSchema)).toEqual(
-      create(ProducedTaskCommandSchema, {
+    expect(AnyMessages.unpack(producedCommand.message, CreateFollowUpProjectSchema)).toEqual(
+      create(CreateFollowUpProjectSchema, {
         id: "declared-source-id",
         name: "Transform follow-up",
       }),
@@ -3706,10 +3732,10 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Command substitution siblings")
       .add(createCommandSubstitutingProcessManagerRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [ProducedTaskCommandSchema],
+        messageSchemas: () => [CreateFollowUpProjectSchema],
         dispatch: (command) => {
           if (command.message === undefined) throw new Error("Expected a produced payload.");
-          const message = AnyMessages.unpack(command.message, ProducedTaskCommandSchema);
+          const message = AnyMessages.unpack(command.message, CreateFollowUpProjectSchema);
           if (message === undefined) throw new Error("Expected a produced command.");
           observed.push(message.name);
           if (message.name === "Siblings follow-up") throw new Error("first child failed");
@@ -3728,8 +3754,8 @@ describe("repository signal routing", () => {
           id: create(CommandIdSchema, { uuid: "siblings-source" }),
           context: create(CommandContextSchema),
           message: AnyMessages.pack(
-            ValidatedTaskCommandSchema,
-            create(ValidatedTaskCommandSchema, {
+            CreateProjectSubmissionSchema,
+            create(CreateProjectSubmissionSchema, {
               id: "source",
               name: "Siblings",
             }),
@@ -3766,7 +3792,7 @@ describe("repository signal routing", () => {
 
     expect(route).toMatchObject({
       entityId: "task-1",
-      messageFullTypeName: TaskCommandSchema.typeName,
+      messageFullTypeName: CreateProjectSchema.typeName,
       invocation: "deferred",
     });
     expectTypeOf(route.entityId).toEqualTypeOf<string>();
@@ -3775,13 +3801,13 @@ describe("repository signal routing", () => {
   });
 
   it("routes a generated UUID message ID", () => {
-    const id = create(UuidMessageIdAggregateIdSchema, { value: "uuid-message-id" });
-    const publicMessageId: MessageId = id;
-    const repository = createUuidMessageIdAggregateRepository();
+    const id = create(ProjectIdSchema, { value: "uuid-message-id" });
+    const publicProjectId: RepositoryProjectId = id;
+    const repository = createRegisteredProjectAggregateRepository();
 
-    expect(publicMessageId).toBe(id);
+    expect(publicProjectId).toBe(id);
     expect(id).toEqual({
-      $typeName: UuidMessageIdAggregateIdSchema.typeName,
+      $typeName: ProjectIdSchema.typeName,
       value: "uuid-message-id",
     });
     expect(
@@ -3790,8 +3816,8 @@ describe("repository signal routing", () => {
           id: create(CommandIdSchema, { uuid: "command-uuid-message-id" }),
           context: create(CommandContextSchema),
           message: AnyMessages.pack(
-            UuidMessageIdAggregateCommandSchema,
-            create(UuidMessageIdAggregateCommandSchema, { id, name: "UUID", priority: 1 }),
+            RegisterProjectSchema,
+            create(RegisterProjectSchema, { id, name: "UUID", priority: 1 }),
           ),
         }),
       ).entityId,
@@ -3799,24 +3825,24 @@ describe("repository signal routing", () => {
   });
 
   it("routes generated nested composite IDs through command, event, and state sources", () => {
-    const idA = create(CompositeRouteIdSchema, {
+    const idA = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "reader" }),
       number: 1,
     });
-    const idB = create(CompositeRouteIdSchema, {
+    const idB = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "reader" }),
       number: 2,
     });
-    const commandRepository = createCompositeRouteAggregateRepository();
-    const projectionRepository = createCompositeRouteProjectionRepository();
-    const message = create(CompositeRouteCommandSchema, { id: idA, name: "Composite" });
+    const commandRepository = createProjectMilestoneAggregateRepository();
+    const projectionRepository = createProjectMilestoneProjectionRepository();
+    const message = create(AddProjectMilestoneSchema, { id: idA, name: "Composite" });
 
     expect(
       commandRepository.routeCommand(
         create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: "composite-command" }),
           context: create(CommandContextSchema),
-          message: AnyMessages.pack(CompositeRouteCommandSchema, message),
+          message: AnyMessages.pack(AddProjectMilestoneSchema, message),
         }),
       ).entityId,
     ).toEqual(idA);
@@ -3825,11 +3851,11 @@ describe("repository signal routing", () => {
         create(EventSchema, {
           id: create(EventIdSchema, { value: "composite-producer" }),
           context: create(EventContextSchema, {
-            producerId: Identifiers.pack(CompositeRouteIdSchema, idA),
+            producerId: Identifiers.pack(ProjectMilestoneIdSchema, idA),
           }),
           message: AnyMessages.pack(
-            CompositeRouteEventSchema,
-            create(CompositeRouteEventSchema, { id: idB, name: "Producer" }),
+            ProjectMilestoneAddedSchema,
+            create(ProjectMilestoneAddedSchema, { id: idB, name: "Producer" }),
           ),
         }),
       ).entityIds,
@@ -3842,8 +3868,8 @@ describe("repository signal routing", () => {
             producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "other" })),
           }),
           message: AnyMessages.pack(
-            CompositeRouteEventSchema,
-            create(CompositeRouteEventSchema, { id: idB, name: "Fallback" }),
+            ProjectMilestoneAddedSchema,
+            create(ProjectMilestoneAddedSchema, { id: idB, name: "Fallback" }),
           ),
         }),
       ).entityIds,
@@ -3853,24 +3879,24 @@ describe("repository signal routing", () => {
         projectionRepository,
         createStateChangedEvent(
           "composite-state",
-          create(CompositeRouteSourceStateSchema, { id: idA, name: "State" }),
+          create(ProjectMilestoneSourceStateSchema, { id: idA, name: "State" }),
         ),
       )?.entityIds,
     ).toEqual([idA]);
   });
 
   it("uses the complete composite ID returned by a custom Command route", () => {
-    const declarationId = create(CompositeRouteIdSchema, {
+    const declarationId = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "declaration" }),
       number: 1,
     });
-    const routedId = create(CompositeRouteIdSchema, {
+    const routedId = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "custom" }),
       number: 2,
     });
     let routeCalls = 0;
-    const repository = createCompositeRouteAggregateRepository(
-      CommandRouting.create<CompositeRouteId>().route(CompositeRouteCommandSchema, () => {
+    const repository = createProjectMilestoneAggregateRepository(
+      CommandRouting.create<ProjectMilestoneId>().route(AddProjectMilestoneSchema, () => {
         routeCalls += 1;
         return routedId;
       }),
@@ -3882,8 +3908,8 @@ describe("repository signal routing", () => {
           id: create(CommandIdSchema, { uuid: "command-composite-custom" }),
           context: create(CommandContextSchema),
           message: AnyMessages.pack(
-            CompositeRouteCommandSchema,
-            create(CompositeRouteCommandSchema, {
+            AddProjectMilestoneSchema,
+            create(AddProjectMilestoneSchema, {
               id: declarationId,
               name: "Custom",
             }),
@@ -3895,23 +3921,23 @@ describe("repository signal routing", () => {
   });
 
   it("deduplicates generated composite route clones without merging their scalar discriminator", () => {
-    const idA = create(CompositeRouteIdSchema, {
+    const idA = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "reader" }),
       number: 1,
     });
-    const idB = create(CompositeRouteIdSchema, {
+    const idB = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "reader" }),
       number: 2,
     });
-    const eventRouting = EventRouting.create<CompositeRouteId>().route(
-      CompositeRouteEventSchema,
-      () => [idA, clone(CompositeRouteIdSchema, idA), idB],
+    const eventRouting = EventRouting.create<ProjectMilestoneId>().route(
+      ProjectMilestoneAddedSchema,
+      () => [idA, clone(ProjectMilestoneIdSchema, idA), idB],
     );
-    const stateUpdateRouting = StateUpdateRouting.create<CompositeRouteId>().route(
-      CompositeRouteSourceStateSchema,
-      () => [idA, clone(CompositeRouteIdSchema, idA), idB],
+    const stateUpdateRouting = StateUpdateRouting.create<ProjectMilestoneId>().route(
+      ProjectMilestoneSourceStateSchema,
+      () => [idA, clone(ProjectMilestoneIdSchema, idA), idB],
     );
-    const repository = createCompositeRouteProjectionRepository(eventRouting, stateUpdateRouting);
+    const repository = createProjectMilestoneProjectionRepository(eventRouting, stateUpdateRouting);
 
     expect(
       repository.routeEvent(
@@ -3921,8 +3947,8 @@ describe("repository signal routing", () => {
             producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "other" })),
           }),
           message: AnyMessages.pack(
-            CompositeRouteEventSchema,
-            create(CompositeRouteEventSchema, { id: idA, name: "Custom" }),
+            ProjectMilestoneAddedSchema,
+            create(ProjectMilestoneAddedSchema, { id: idA, name: "Custom" }),
           ),
         }),
       ).entityIds,
@@ -3932,32 +3958,35 @@ describe("repository signal routing", () => {
         repository,
         createStateChangedEvent(
           "composite-custom-state",
-          create(CompositeRouteSourceStateSchema, { id: idA, name: "State" }),
+          create(ProjectMilestoneSourceStateSchema, { id: idA, name: "State" }),
         ),
       )?.entityIds,
     ).toEqual([idA, idB]);
   });
 
   it("uses packed descriptor identity for generated composite ID clones", () => {
-    const idA = create(CompositeRouteIdSchema, {
+    const idA = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "reader" }),
       number: 1,
     });
-    const idB = create(CompositeRouteIdSchema, {
+    const idB = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "reader" }),
       number: 2,
     });
-    new Repository({ entityType: CompositeRouteProjection, schema: CompositeRouteStateSchema });
-    const spec = SpecScanner.scan(CompositeRouteProjection as never);
+    new Repository({
+      entityType: ProjectMilestoneProjection,
+      schema: ProjectMilestoneOverviewStateSchema,
+    });
+    const spec = SpecScanner.scan(ProjectMilestoneProjection as never);
     const descriptor = entityStorageDescriptor({ name: "Composite", multitenant: false }, spec);
 
-    expect(descriptor.id.key(idA)).toBe(descriptor.id.key(clone(CompositeRouteIdSchema, idA)));
+    expect(descriptor.id.key(idA)).toBe(descriptor.id.key(clone(ProjectMilestoneIdSchema, idA)));
     expect(descriptor.id.key(idA)).not.toBe(descriptor.id.key(idB));
   });
 
   it("uses an exact Command route instead of the declaration-first field", () => {
     const repository = createRoutingRepository(
-      CommandRouting.create<string>().route(TaskCommandSchema, () => "custom-task"),
+      CommandRouting.create<string>().route(CreateProjectSchema, () => "custom-task"),
     );
 
     expect(
@@ -3970,7 +3999,7 @@ describe("repository signal routing", () => {
   it("applies exact routes before replacement defaults", () => {
     const exact = createRoutingRepository(
       CommandRouting.create<string>()
-        .route(TaskCommandSchema, () => "exact")
+        .route(CreateProjectSchema, () => "exact")
         .replaceDefault(() => "replacement"),
     );
     const replacement = createRoutingRepository(
@@ -3983,8 +4012,8 @@ describe("repository signal routing", () => {
   });
 
   it("selects a Command interface route after exact routes and before the default", () => {
-    const token = MessageInterfaces.define<object, readonly [typeof TaskCommandSchema]>([
-      TaskCommandSchema,
+    const token = MessageInterfaces.define<object, readonly [typeof CreateProjectSchema]>([
+      CreateProjectSchema,
     ]);
     const repository = createRoutingRepository(
       CommandRouting.create<string>()
@@ -3999,7 +4028,7 @@ describe("repository signal routing", () => {
       createRoutingRepository(
         CommandRouting.create<string>()
           .route(token, () => "interface")
-          .route(TaskCommandSchema, () => "exact"),
+          .route(CreateProjectSchema, () => "exact"),
       ).routeCommand(createAggregateCommand("command-interface-exact", "field")).entityId,
     ).toBe("exact");
   });
@@ -4007,8 +4036,8 @@ describe("repository signal routing", () => {
   it("rejects a Command interface token with an unregistered member at construction", () => {
     const token = MessageInterfaces.define<
       object,
-      readonly [typeof TaskCommandSchema, typeof ValidatedTaskCommandSchema]
-    >([TaskCommandSchema, ValidatedTaskCommandSchema]);
+      readonly [typeof CreateProjectSchema, typeof CreateProjectSubmissionSchema]
+    >([CreateProjectSchema, CreateProjectSubmissionSchema]);
 
     expect(() =>
       createRoutingRepository(CommandRouting.create<string>().route(token, () => "target")),
@@ -4028,7 +4057,7 @@ describe("repository signal routing", () => {
   it("rejects routes that cannot apply to a registered Command", () => {
     expect(() =>
       createRoutingRepository(
-        CommandRouting.create<string>().route(ValidatedTaskCommandSchema, () => "target"),
+        CommandRouting.create<string>().route(CreateProjectSubmissionSchema, () => "target"),
       ),
     ).toThrow(/unregistered exact route/);
   });
@@ -4036,24 +4065,24 @@ describe("repository signal routing", () => {
   it("rejects missing and incompatible custom Command route results", () => {
     expect(() =>
       createRoutingRepository(
-        CommandRouting.create<string>().route(TaskCommandSchema, () => "   "),
+        CommandRouting.create<string>().route(CreateProjectSchema, () => "   "),
       ).routeCommand(createAggregateCommand("command-blank-custom", "first")),
     ).toThrow(/ID compatible with the Entity state/);
     expect(() =>
       createRoutingRepository(
-        CommandRouting.create<string>().route(TaskCommandSchema, () => 42 as never),
+        CommandRouting.create<string>().route(CreateProjectSchema, () => 42 as never),
       ).routeCommand(createAggregateCommand("command-number-custom", "first")),
     ).toThrow(/ID compatible with the Entity state/);
     expect(() =>
       createInt32RoutingRepository(
-        CommandRouting.create<number>().route(Int32AggregateCommandSchema, () => 2 ** 31),
+        CommandRouting.create<number>().route(CreateNumberedProjectSchema, () => 2 ** 31),
       ).routeCommand(
         create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: "command-range-custom" }),
           context: create(CommandContextSchema),
           message: AnyMessages.pack(
-            Int32AggregateCommandSchema,
-            create(Int32AggregateCommandSchema, { id: 1, name: "Range" }),
+            CreateNumberedProjectSchema,
+            create(CreateNumberedProjectSchema, { id: 1, name: "Range" }),
           ),
         }),
       ),
@@ -4061,30 +4090,30 @@ describe("repository signal routing", () => {
   });
 
   it("rejects a non-message custom Command ID before dispatch", () => {
-    const repository = createMessageIdProducingRepository(
+    const repository = createProjectIdProducingRepository(
       CommandRouting.create<TaskId>().route(CreateTaskSchema, () => undefined as never),
     );
 
     expect(() =>
-      repository.routeCommand(createTaskCommand("command-missing-message-id", "task")),
+      repository.routeCommand(createCreateProject("command-missing-message-id", "task")),
     ).toThrow(`Repository command routing requires a "${TaskIdSchema.typeName}" ID.`);
   });
 
   it("rejects a validation-invalid custom message Command ID before durable dispatch", async () => {
-    ValidatedMessageIdRouteAggregate.reset();
+    ProjectSubmissionIdRouteAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    const context = BoundedContext.singleTenant("Validated message ID")
+    const context = BoundedContext.singleTenant("Project submission ID")
       .add(
-        createValidatedMessageIdRouteRepository(
-          CommandRouting.create<ValidatedMessageId>().route(ValidatedTaskCommandSchema, () =>
-            create(ValidatedMessageIdSchema, { value: "" }),
+        createProjectSubmissionIdRouteRepository(
+          CommandRouting.create<ProjectSubmissionId>().route(CreateProjectSubmissionSchema, () =>
+            create(ProjectSubmissionIdSchema, { value: "" }),
           ),
         ),
       )
       .withStorageFactory(factory)
       .build();
     const eventStore = new EventStore(
-      { name: "Validated message ID", multitenant: false },
+      { name: "Project submission ID", multitenant: false },
       factory,
     );
     try {
@@ -4094,7 +4123,7 @@ describe("repository signal routing", () => {
           .post(createValidatedCommand("command-invalid-route-id", "task", "Valid")),
       ).rejects.toThrow(/valid.*ID/i);
 
-      expect(ValidatedMessageIdRouteAggregate.calls).toBe(0);
+      expect(ProjectSubmissionIdRouteAggregate.calls).toBe(0);
       await expect(eventStore.read()).resolves.toEqual([]);
     } finally {
       await context.close();
@@ -4103,14 +4132,16 @@ describe("repository signal routing", () => {
 
   it("supplies a default Command context to custom routing", () => {
     let observed: CommandContext | undefined;
-    const repository = createTaskCommandRoutingRepository(
-      CommandRouting.create<string>().route(TaskCommandSchema, (message, context) => {
+    const repository = createCreateProjectRoutingRepository(
+      CommandRouting.create<string>().route(CreateProjectSchema, (message, context) => {
         observed = context;
         return message.id;
       }),
     );
 
-    repository.routeCommand(createContextlessGeneratedTaskCommand("command-context-route", "task"));
+    repository.routeCommand(
+      createContextlessGeneratedCreateProject("command-context-route", "task"),
+    );
 
     expect(observed).toEqual(create(CommandContextSchema));
   });
@@ -4129,16 +4160,16 @@ describe("repository signal routing", () => {
       id: create(CommandIdSchema, { uuid: "command-repeated-id" }),
       context: create(CommandContextSchema),
       message: AnyMessages.pack(
-        RepeatedIdCommandSchema,
-        create(RepeatedIdCommandSchema, { id: ["one"] }),
+        InviteProjectMembersSchema,
+        create(InviteProjectMembersSchema, { id: ["one"] }),
       ),
     });
     const mapped = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "command-map-id" }),
       context: create(CommandContextSchema),
       message: AnyMessages.pack(
-        MapIdCommandSchema,
-        create(MapIdCommandSchema, { id: { one: "one" } }),
+        AssignProjectAttributesSchema,
+        create(AssignProjectAttributesSchema, { id: { one: "one" } }),
       ),
     });
 
@@ -4152,8 +4183,8 @@ describe("repository signal routing", () => {
       id: create(CommandIdSchema, { uuid: "command-default-int32" }),
       context: create(CommandContextSchema),
       message: AnyMessages.pack(
-        Int32AggregateCommandSchema,
-        create(Int32AggregateCommandSchema, { id: 0, name: "Default" }),
+        CreateNumberedProjectSchema,
+        create(CreateNumberedProjectSchema, { id: 0, name: "Default" }),
       ),
     });
 
@@ -4171,8 +4202,8 @@ describe("repository signal routing", () => {
           version: create(VersionSchema, { number: 1 }),
         }),
         message: AnyMessages.pack(
-          ProjectionEventSchema,
-          create(ProjectionEventSchema, {
+          ProjectCreatedSchema,
+          create(ProjectCreatedSchema, {
             id: "field-task",
             name: "Task",
             priority: 1,
@@ -4181,12 +4212,12 @@ describe("repository signal routing", () => {
       }),
     );
     const firstFieldRoute = repository.routeEvent(
-      createProjectionEvent("event-2", "field-task", { producerId: "other-kind" }),
+      createProjectCreated("event-2", "field-task", { producerId: "other-kind" }),
     );
 
     expect(producerRoute).toMatchObject({
       entityIds: ["producer-task"],
-      messageFullTypeName: ProjectionEventSchema.typeName,
+      messageFullTypeName: ProjectCreatedSchema.typeName,
       invocation: "deferred",
     });
     expectTypeOf(producerRoute.entityIds).toEqualTypeOf<readonly string[]>();
@@ -4195,16 +4226,16 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
 
     await expect(
-      context.eventBus().post(createProjectionEvent("event-3", "posted-task")),
+      context.eventBus().post(createProjectCreated("event-3", "posted-task")),
     ).resolves.toBeUndefined();
   });
 
   it("uses one immutable stable-deduplicated custom Event target plan", () => {
     const returned = ["target-b", "target-a", "target-b"];
-    const routing = EventRouting.create<string>().route(ProjectionEventSchema, () => returned);
+    const routing = EventRouting.create<string>().route(ProjectCreatedSchema, () => returned);
     const repository = createRoutingRepository(undefined, routing);
 
-    const route = repository.routeEvent(createProjectionEvent("event-custom-targets", "ignored"));
+    const route = repository.routeEvent(createProjectCreated("event-custom-targets", "ignored"));
     returned[0] = "mutated";
 
     expect(route.entityIds).toEqual(["target-b", "target-a"]);
@@ -4212,29 +4243,29 @@ describe("repository signal routing", () => {
   });
 
   it("deduplicates and replays a message target containing an int64 value", async () => {
-    Int64MessageIdProjection.calls = 0;
+    SequencedProjectOverview.calls = 0;
     let routeCalls = 0;
-    const eventRouting = EventRouting.create<Int64ProjectionId>().route(
-      Int64MessageIdProjectionEventSchema,
+    const eventRouting = EventRouting.create<ProjectSequenceId>().route(
+      SequencedProjectOverviewCreatedSchema,
       (message) => {
         routeCalls += 1;
         if (message.id === undefined) throw new Error("Expected an int64 message ID.");
-        return [message.id, clone(Int64ProjectionIdSchema, message.id)];
+        return [message.id, clone(ProjectSequenceIdSchema, message.id)];
       },
     );
     const factory = new InMemoryStorageFactory();
-    const repository = createInt64MessageIdProjectionRepository(eventRouting);
+    const repository = createSequencedProjectOverviewRepository(eventRouting);
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .withStorageFactory(factory)
       .build();
-    const id = create(Int64ProjectionIdSchema, { value: 42n });
+    const id = create(ProjectSequenceIdSchema, { value: 42n });
     const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-int64-message-id" }),
       context: create(EventContextSchema),
       message: AnyMessages.pack(
-        Int64MessageIdProjectionEventSchema,
-        create(Int64MessageIdProjectionEventSchema, { id, name: "Int64 ID" }),
+        SequencedProjectOverviewCreatedSchema,
+        create(SequencedProjectOverviewCreatedSchema, { id, name: "Int64 ID" }),
       ),
     });
 
@@ -4257,17 +4288,17 @@ describe("repository signal routing", () => {
 
       await requireProjectionInboxTarget(repository).replay(stored);
       expect(routeCalls).toBe(2);
-      expect(Int64MessageIdProjection.calls).toBe(2);
+      expect(SequencedProjectOverview.calls).toBe(2);
     } finally {
       await context.close();
     }
   });
 
   it("hands off, replays, and rehydrates composite Process Manager IDs without rerouting", async () => {
-    CompositeRouteProcessManager.reset();
+    ProjectMilestoneProcessManager.reset();
     let routeCalls = 0;
-    const routing = EventRouting.create<CompositeRouteId>().route(
-      CompositeRouteEventSchema,
+    const routing = EventRouting.create<ProjectMilestoneId>().route(
+      ProjectMilestoneAddedSchema,
       (message) => {
         routeCalls += 1;
         if (message.id === undefined) throw new Error("Expected a composite route ID.");
@@ -4275,16 +4306,16 @@ describe("repository signal routing", () => {
       },
     );
     const factory = new InMemoryStorageFactory();
-    const repository = createCompositeRouteProcessManagerRepository(routing);
+    const repository = createProjectMilestoneProcessManagerRepository(routing);
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .withStorageFactory(factory)
       .build();
-    const idA = create(CompositeRouteIdSchema, {
+    const idA = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "reader" }),
       number: 1,
     });
-    const idB = create(CompositeRouteIdSchema, {
+    const idB = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "reader" }),
       number: 2,
     });
@@ -4292,16 +4323,16 @@ describe("repository signal routing", () => {
       id: create(EventIdSchema, { value: "event-composite-inbox-a" }),
       context: create(EventContextSchema),
       message: AnyMessages.pack(
-        CompositeRouteEventSchema,
-        create(CompositeRouteEventSchema, { id: idA, name: "A delivered" }),
+        ProjectMilestoneAddedSchema,
+        create(ProjectMilestoneAddedSchema, { id: idA, name: "A delivered" }),
       ),
     });
     const eventB = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-composite-inbox-b" }),
       context: create(EventContextSchema),
       message: AnyMessages.pack(
-        CompositeRouteEventSchema,
-        create(CompositeRouteEventSchema, { id: idB, name: "B delivered" }),
+        ProjectMilestoneAddedSchema,
+        create(ProjectMilestoneAddedSchema, { id: idB, name: "B delivered" }),
       ),
     });
 
@@ -4320,8 +4351,8 @@ describe("repository signal routing", () => {
         throw new Error("Expected delivered composite Process Manager inbox rows.");
       }
 
-      expect(Identifiers.unpack(CompositeRouteIdSchema, rowA.inboxId.targetId)).toEqual(idA);
-      expect(Identifiers.unpack(CompositeRouteIdSchema, rowB.inboxId.targetId)).toEqual(idB);
+      expect(Identifiers.unpack(ProjectMilestoneIdSchema, rowA.inboxId.targetId)).toEqual(idA);
+      expect(Identifiers.unpack(ProjectMilestoneIdSchema, rowB.inboxId.targetId)).toEqual(idB);
       expect(routeCalls).toBe(2);
 
       const target = requireEntityInboxTarget(repository);
@@ -4329,31 +4360,27 @@ describe("repository signal routing", () => {
       await target.replay(rowB);
 
       expect(routeCalls).toBe(2);
-      expect(CompositeRouteProcessManager.ids).toEqual([idA, idB, idA, idB]);
-      await expect(
-        context.stand().read(CompositeRouteProcessManagerStateSchema, idA),
-      ).resolves.toEqual(
-        create(CompositeRouteProcessManagerStateSchema, { id: idA, queue: "A delivered" }),
+      expect(ProjectMilestoneProcessManager.ids).toEqual([idA, idB, idA, idB]);
+      await expect(context.stand().read(ProjectMilestoneWorkflowStateSchema, idA)).resolves.toEqual(
+        create(ProjectMilestoneWorkflowStateSchema, { id: idA, queue: "A delivered" }),
       );
-      await expect(
-        context.stand().read(CompositeRouteProcessManagerStateSchema, idB),
-      ).resolves.toEqual(
-        create(CompositeRouteProcessManagerStateSchema, { id: idB, queue: "B delivered" }),
+      await expect(context.stand().read(ProjectMilestoneWorkflowStateSchema, idB)).resolves.toEqual(
+        create(ProjectMilestoneWorkflowStateSchema, { id: idB, queue: "B delivered" }),
       );
     } finally {
       await context.close();
     }
 
     const rehydrated = BoundedContext.singleTenant("Tasks")
-      .add(createCompositeRouteProcessManagerRepository(routing))
+      .add(createProjectMilestoneProcessManagerRepository(routing))
       .withStorageFactory(factory)
       .build();
     try {
       await expect(
-        rehydrated.stand().read(CompositeRouteProcessManagerStateSchema, idA),
+        rehydrated.stand().read(ProjectMilestoneWorkflowStateSchema, idA),
       ).resolves.toMatchObject({ id: idA, queue: "A delivered" });
       await expect(
-        rehydrated.stand().read(CompositeRouteProcessManagerStateSchema, idB),
+        rehydrated.stand().read(ProjectMilestoneWorkflowStateSchema, idB),
       ).resolves.toMatchObject({ id: idB, queue: "B delivered" });
     } finally {
       await rehydrated.close();
@@ -4363,10 +4390,10 @@ describe("repository signal routing", () => {
   it("packs the complete composite Process Manager ID into produced event context", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
-      .add(createCompositeRouteProcessManagerRepository(undefined, { produces: true }))
+      .add(createProjectMilestoneProcessManagerRepository(undefined, { produces: true }))
       .withStorageFactory(factory)
       .build();
-    const id = create(CompositeRouteIdSchema, {
+    const id = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "producer" }),
       number: 7,
     });
@@ -4374,8 +4401,8 @@ describe("repository signal routing", () => {
       id: create(CommandIdSchema, { uuid: "command-composite-producer" }),
       context: create(CommandContextSchema),
       message: AnyMessages.pack(
-        CompositeRouteCommandSchema,
-        create(CompositeRouteCommandSchema, { id, name: "Produce" }),
+        AddProjectMilestoneSchema,
+        create(AddProjectMilestoneSchema, { id, name: "Produce" }),
       ),
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
@@ -4385,7 +4412,7 @@ describe("repository signal routing", () => {
 
       const [produced] = await waitForStoredEvents(eventStore, 1);
       expect(
-        AnyMessages.unpack(produced?.context?.producerId as never, CompositeRouteIdSchema),
+        AnyMessages.unpack(produced?.context?.producerId as never, ProjectMilestoneIdSchema),
       ).toEqual(id);
     } finally {
       await context.close();
@@ -4393,9 +4420,9 @@ describe("repository signal routing", () => {
   });
 
   it("rejects malformed composite Entity Inbox targets before invoking the Process Manager", async () => {
-    CompositeRouteProcessManager.reset();
+    ProjectMilestoneProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    const repository = createCompositeRouteProcessManagerRepository();
+    const repository = createProjectMilestoneProcessManagerRepository();
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .withStorageFactory(factory)
@@ -4408,9 +4435,9 @@ describe("repository signal routing", () => {
       id: create(EventIdSchema, { value: "event-composite-inbox-invalid" }),
       context: create(EventContextSchema),
       message: AnyMessages.pack(
-        CompositeRouteEventSchema,
-        create(CompositeRouteEventSchema, {
-          id: create(CompositeRouteIdSchema, {
+        ProjectMilestoneAddedSchema,
+        create(ProjectMilestoneAddedSchema, {
+          id: create(ProjectMilestoneIdSchema, {
             reader: create(UserIdSchema, { value: "valid" }),
             number: 3,
           }),
@@ -4427,7 +4454,7 @@ describe("repository signal routing", () => {
         1n,
         {
           packedTargetId: Identifiers.pack(UserIdSchema, create(UserIdSchema, { value: "wrong" })),
-          targetTypeUrl: TypeUrls.derive(CompositeRouteProcessManagerStateSchema),
+          targetTypeUrl: TypeUrls.derive(ProjectMilestoneWorkflowStateSchema),
         },
       );
       const malformed = await storePmInboxEvent(
@@ -4438,37 +4465,37 @@ describe("repository signal routing", () => {
         {
           signalId: "event-composite-inbox-malformed",
           packedTargetId: create(AnySchema, {
-            typeUrl: TypeUrls.derive(CompositeRouteIdSchema),
+            typeUrl: TypeUrls.derive(ProjectMilestoneIdSchema),
             value: new Uint8Array([0xff]),
           }),
-          targetTypeUrl: TypeUrls.derive(CompositeRouteProcessManagerStateSchema),
+          targetTypeUrl: TypeUrls.derive(ProjectMilestoneWorkflowStateSchema),
         },
       );
       const target = requireEntityInboxTarget(repository);
 
       await expect(target.replay(wrongType)).rejects.toThrow(/target ID is incompatible/);
       await expect(target.replay(malformed)).rejects.toThrow(/target ID is incompatible/);
-      expect(CompositeRouteProcessManager.calls).toBe(0);
+      expect(ProjectMilestoneProcessManager.calls).toBe(0);
     } finally {
       await context.close();
     }
   });
 
   it("guards multi-target composite Process Manager delivery by complete ID", async () => {
-    CompositeRouteProcessManager.reset();
+    ProjectMilestoneProcessManager.reset();
     let routeCalls = 0;
-    const idA = create(CompositeRouteIdSchema, {
+    const idA = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "guarded" }),
       number: 1,
     });
-    const idB = create(CompositeRouteIdSchema, {
+    const idB = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "guarded" }),
       number: 2,
     });
-    const repository = createCompositeRouteProcessManagerRepository(
-      EventRouting.create<CompositeRouteId>().route(CompositeRouteEventSchema, () => {
+    const repository = createProjectMilestoneProcessManagerRepository(
+      EventRouting.create<ProjectMilestoneId>().route(ProjectMilestoneAddedSchema, () => {
         routeCalls += 1;
-        return [idA, clone(CompositeRouteIdSchema, idA), idB];
+        return [idA, clone(ProjectMilestoneIdSchema, idA), idB];
       }),
       { doubleDispatchGuard: true },
     );
@@ -4483,25 +4510,25 @@ describe("repository signal routing", () => {
     const duplicate = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-composite-guarded" }),
       context: create(EventContextSchema, {
-        producerId: Identifiers.pack(CompositeRouteIdSchema, idA),
+        producerId: Identifiers.pack(ProjectMilestoneIdSchema, idA),
         version: create(VersionSchema, { number: 1 }),
         timestamp: create(TimestampSchema, { seconds: 1n }),
       }),
       message: AnyMessages.pack(
-        CompositeRouteEventSchema,
-        create(CompositeRouteEventSchema, { id: idA, name: "Guarded" }),
+        ProjectMilestoneAddedSchema,
+        create(ProjectMilestoneAddedSchema, { id: idA, name: "Guarded" }),
       ),
     });
     const distinct = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-composite-guarded-distinct" }),
       context: create(EventContextSchema, {
-        producerId: Identifiers.pack(CompositeRouteIdSchema, idA),
+        producerId: Identifiers.pack(ProjectMilestoneIdSchema, idA),
         version: create(VersionSchema, { number: 2 }),
         timestamp: create(TimestampSchema, { seconds: 2n }),
       }),
       message: AnyMessages.pack(
-        CompositeRouteEventSchema,
-        create(CompositeRouteEventSchema, { id: idA, name: "Distinct" }),
+        ProjectMilestoneAddedSchema,
+        create(ProjectMilestoneAddedSchema, { id: idA, name: "Distinct" }),
       ),
     });
 
@@ -4511,7 +4538,7 @@ describe("repository signal routing", () => {
       await dispatcher.dispatch(distinct);
 
       expect(routeCalls).toBe(3);
-      expect(CompositeRouteProcessManager.ids).toEqual([idA, idB, idA, idB]);
+      expect(ProjectMilestoneProcessManager.ids).toEqual([idA, idB, idA, idB]);
     } finally {
       await context.close();
     }
@@ -4521,22 +4548,22 @@ describe("repository signal routing", () => {
     const exact = createRoutingRepository(
       undefined,
       EventRouting.create<string>()
-        .route(ProjectionEventSchema, () => ["exact"])
+        .route(ProjectCreatedSchema, () => ["exact"])
         .replaceDefault(() => ["replacement"]),
     );
     const replacement = createRoutingRepository(
       undefined,
       EventRouting.create<string>().replaceDefault(() => ["replacement"]),
     );
-    const event = createProjectionEvent("event-precedence", "declaration");
+    const event = createProjectCreated("event-precedence", "declaration");
 
     expect(exact.routeEvent(event).entityIds).toEqual(["exact"]);
     expect(replacement.routeEvent(event).entityIds).toEqual(["replacement"]);
   });
 
   it("selects an Event interface route after exact routes and before the default", () => {
-    const token = MessageInterfaces.define<object, readonly [typeof ProjectionEventSchema]>([
-      ProjectionEventSchema,
+    const token = MessageInterfaces.define<object, readonly [typeof ProjectCreatedSchema]>([
+      ProjectCreatedSchema,
     ]);
     const repository = createRoutingRepository(
       undefined,
@@ -4546,15 +4573,15 @@ describe("repository signal routing", () => {
     );
 
     expect(
-      repository.routeEvent(createProjectionEvent("event-interface", "field")).entityIds,
+      repository.routeEvent(createProjectCreated("event-interface", "field")).entityIds,
     ).toEqual(["interface"]);
     expect(
       createRoutingRepository(
         undefined,
         EventRouting.create<string>()
           .route(token, () => ["interface"])
-          .route(ProjectionEventSchema, () => ["exact"]),
-      ).routeEvent(createProjectionEvent("event-interface-exact", "field")).entityIds,
+          .route(ProjectCreatedSchema, () => ["exact"]),
+      ).routeEvent(createProjectCreated("event-interface-exact", "field")).entityIds,
     ).toEqual(["exact"]);
   });
 
@@ -4564,18 +4591,18 @@ describe("repository signal routing", () => {
     routing.replaceDefault(() => ["second"]);
 
     expect(
-      repository.routeEvent(createProjectionEvent("event-snapshot", "field")).entityIds,
+      repository.routeEvent(createProjectCreated("event-snapshot", "field")).entityIds,
     ).toEqual(["first"]);
   });
 
   it("accepts an empty custom Event target plan", () => {
     const repository = createRoutingRepository(
       undefined,
-      EventRouting.create<string>().route(ProjectionEventSchema, () => []),
+      EventRouting.create<string>().route(ProjectCreatedSchema, () => []),
     );
 
     expect(
-      repository.routeEvent(createProjectionEvent("event-no-targets", "ignored")).entityIds,
+      repository.routeEvent(createProjectCreated("event-no-targets", "ignored")).entityIds,
     ).toEqual([]);
   });
 
@@ -4583,7 +4610,7 @@ describe("repository signal routing", () => {
     ExecutingTaskProjection.reset();
     let routeCalls = 0;
     const repository = createExecutingProjectionRepository(
-      EventRouting.create<string>().route(ProjectionEventSchema, () => {
+      EventRouting.create<string>().route(ProjectCreatedSchema, () => {
         routeCalls += 1;
         return [];
       }),
@@ -4591,7 +4618,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
 
     try {
-      await context.eventBus().post(createProjectionEvent("event-no-delivery", "ignored"));
+      await context.eventBus().post(createProjectCreated("event-no-delivery", "ignored"));
 
       expect(routeCalls).toBe(1);
       expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
@@ -4604,7 +4631,7 @@ describe("repository signal routing", () => {
     GuardedAggregate.reset();
     let routeCalls = 0;
     const repository = createGuardedAggregateRepository(
-      EventRouting.create<string>().route(ProjectionEventSchema, () => {
+      EventRouting.create<string>().route(ProjectCreatedSchema, () => {
         routeCalls += 1;
         return ["aggregate-one", "aggregate-two"];
       }),
@@ -4612,7 +4639,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
 
     try {
-      await context.eventBus().post(createProjectionEvent("event-aggregate-many", "ignored"));
+      await context.eventBus().post(createProjectCreated("event-aggregate-many", "ignored"));
 
       expect(routeCalls).toBe(1);
       expect(GuardedAggregate.calls).toBe(2);
@@ -4633,27 +4660,27 @@ describe("repository signal routing", () => {
   it("validates the complete custom Event target plan before returning it", () => {
     const invalid = createRoutingRepository(
       undefined,
-      EventRouting.create<string>().route(ProjectionEventSchema, () => ["valid", "  "]),
+      EventRouting.create<string>().route(ProjectCreatedSchema, () => ["valid", "  "]),
     );
     const overflow = createRoutingRepository(
       undefined,
-      EventRouting.create<string>().route(ProjectionEventSchema, () =>
+      EventRouting.create<string>().route(ProjectCreatedSchema, () =>
         Array.from({ length: 1_001 }, (_, index) => `target-${String(index)}`),
       ),
     );
     const notAnArray = createRoutingRepository(
       undefined,
-      EventRouting.create<string>().route(ProjectionEventSchema, () => "target" as never),
+      EventRouting.create<string>().route(ProjectCreatedSchema, () => "target" as never),
     );
 
     expect(() =>
-      invalid.routeEvent(createProjectionEvent("event-invalid-targets", "ignored")),
+      invalid.routeEvent(createProjectCreated("event-invalid-targets", "ignored")),
     ).toThrow(/compatible with the Entity state/);
     expect(() =>
-      overflow.routeEvent(createProjectionEvent("event-overflow-targets", "ignored")),
+      overflow.routeEvent(createProjectCreated("event-overflow-targets", "ignored")),
     ).toThrow(/at most 1,000/);
     expect(() =>
-      notAnArray.routeEvent(createProjectionEvent("event-non-array-targets", "ignored")),
+      notAnArray.routeEvent(createProjectCreated("event-non-array-targets", "ignored")),
     ).toThrow(/array of Entity IDs/);
   });
 
@@ -4669,8 +4696,8 @@ describe("repository signal routing", () => {
         rejection: {},
       }),
       message: AnyMessages.pack(
-        ProjectionEventSchema,
-        create(ProjectionEventSchema, {
+        ProjectCreatedSchema,
+        create(ProjectCreatedSchema, {
           id: "mismatched-task",
         }),
       ),
@@ -4689,8 +4716,8 @@ describe("repository signal routing", () => {
           id: create(EventIdSchema, { value: "event-int32-producer" }),
           context: create(EventContextSchema, { producerId: Identifiers.pack("int32", 0) }),
           message: AnyMessages.pack(
-            Int32AggregateEventSchema,
-            create(Int32AggregateEventSchema, { id: 42, name: "Int32" }),
+            NumberedProjectCreatedSchema,
+            create(NumberedProjectCreatedSchema, { id: 42, name: "Int32" }),
           ),
         }),
       ).entityIds,
@@ -4701,8 +4728,8 @@ describe("repository signal routing", () => {
           id: create(EventIdSchema, { value: "event-int64-producer" }),
           context: create(EventContextSchema, { producerId: Identifiers.pack("int64", 0n) }),
           message: AnyMessages.pack(
-            Int64ProcessManagerEventSchema,
-            create(Int64ProcessManagerEventSchema, { id: 42n, queue: "Int64" }),
+            ProjectWorkflowScheduledSchema,
+            create(ProjectWorkflowScheduledSchema, { id: 42n, queue: "Int64" }),
           ),
         }),
       ).entityIds,
@@ -4719,15 +4746,15 @@ describe("repository signal routing", () => {
           version: create(VersionSchema, { number: 1 }),
         }),
         message: AnyMessages.pack(
-          ProjectionEventSchema,
-          create(ProjectionEventSchema, { id: "user-id-task", name: "User route", priority: 1 }),
+          ProjectCreatedSchema,
+          create(ProjectCreatedSchema, { id: "user-id-task", name: "User route", priority: 1 }),
         ),
       }),
     );
 
     expect(route).toMatchObject({
       entityIds: ["user-id-task"],
-      messageFullTypeName: ProjectionEventSchema.typeName,
+      messageFullTypeName: ProjectCreatedSchema.typeName,
       invocation: "deferred",
     });
   });
@@ -4785,7 +4812,7 @@ describe("repository signal routing", () => {
   });
 
   it("routes message-valued event IDs as messages when the entity ID field is a message", () => {
-    const repository = createMessageIdTaskRepository();
+    const repository = createProjectIdTaskRepository();
     const taskId = create(TaskIdSchema, { value: "message-id-task" });
     const route = repository.routeEvent(
       create(EventSchema, {
@@ -4814,7 +4841,7 @@ describe("repository signal routing", () => {
   });
 
   it("routes a message-valued producer ID when it matches the event target ID", () => {
-    const repository = createMessageIdTaskRepository();
+    const repository = createProjectIdTaskRepository();
     const taskId = create(TaskIdSchema, { value: "message-producer-task" });
     const route = repository.routeEvent(
       create(EventSchema, {
@@ -4838,7 +4865,7 @@ describe("repository signal routing", () => {
   });
 
   it("uses a compatible message-valued producer even when the first field differs", () => {
-    const repository = createMessageIdTaskRepository();
+    const repository = createProjectIdTaskRepository();
     const targetId = create(TaskIdSchema, { value: "message-target-task" });
     const producerId = create(TaskIdSchema, { value: "different-message-producer" });
 
@@ -4864,7 +4891,7 @@ describe("repository signal routing", () => {
   });
 
   it("rejects a malformed producer that claims a compatible message ID type", () => {
-    const repository = createMessageIdTaskRepository();
+    const repository = createProjectIdTaskRepository();
 
     expect(() =>
       repository.routeEvent(
@@ -4943,7 +4970,7 @@ describe("repository signal routing", () => {
   });
 
   it("rejects message-valued event IDs with the wrong message type", () => {
-    const repository = createMessageIdTaskRepository();
+    const repository = createProjectIdTaskRepository();
 
     expect(() =>
       repository.routeEvent(
@@ -4954,8 +4981,8 @@ describe("repository signal routing", () => {
             version: create(VersionSchema, { number: 1 }),
           }),
           message: AnyMessages.pack(
-            WrongIdRouteEventSchema,
-            create(WrongIdRouteEventSchema, {
+            ProjectMemberChangedSchema,
+            create(ProjectMemberChangedSchema, {
               id: create(UserIdSchema, { value: "message-id-task" }),
             }),
           ),
@@ -4965,7 +4992,7 @@ describe("repository signal routing", () => {
   });
 
   it("routes direct repository dispatchers without a bound runtime", async () => {
-    ExecutingTaskAggregate.reset();
+    ExecutingProjectAggregate.reset();
     ExecutingTaskProjection.reset();
     const aggregate = createExecutingRepository();
     const projection = createExecutingProjectionRepository();
@@ -4977,9 +5004,9 @@ describe("repository signal routing", () => {
     }
 
     await commandDispatcher.dispatch(createAggregateCommand("command-direct", "task-direct"));
-    await eventDispatcher.dispatch(createProjectionEvent("event-direct", "task-direct"));
+    await eventDispatcher.dispatch(createProjectCreated("event-direct", "task-direct"));
 
-    expect(ExecutingTaskAggregate.assigneeCalls).toBe(0);
+    expect(ExecutingProjectAggregate.assigneeCalls).toBe(0);
     expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
   });
 
@@ -4989,7 +5016,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerAssignRepository())
       .addEventDispatcher({
-        messageSchemas: () => [ProjectionEventSchema],
+        messageSchemas: () => [ProjectCreatedSchema],
         dispatch: (event) => {
           observed.push(event);
           return Promise.resolve();
@@ -5002,8 +5029,8 @@ describe("repository signal routing", () => {
       .post(createAggregateCommand("command-pm", "pm-task", "ProcessManager"));
 
     expect(RoutingProcessManager.commandCalls).toBe(1);
-    await expect(context.stand().read(ProcessManagerStateSchema, "pm-task")).resolves.toEqual(
-      create(ProcessManagerStateSchema, {
+    await expect(context.stand().read(ProjectQueueStateSchema, "pm-task")).resolves.toEqual(
+      create(ProjectQueueStateSchema, {
         id: "pm-task",
         queue: "ProcessManager assigned",
       }),
@@ -5014,8 +5041,8 @@ describe("repository signal routing", () => {
     if (producedMessage === undefined) {
       throw new Error("Expected a process-manager produced event message.");
     }
-    expect(AnyMessages.unpack(producedMessage, ProjectionEventSchema)).toEqual(
-      create(ProjectionEventSchema, {
+    expect(AnyMessages.unpack(producedMessage, ProjectCreatedSchema)).toEqual(
+      create(ProjectCreatedSchema, {
         id: "pm-task",
         name: "ProcessManager event",
         priority: 1,
@@ -5048,7 +5075,7 @@ describe("repository signal routing", () => {
       expect(
         AnyMessages.unpack(diagnostics[0]?.message as never, CommandDispatchedToHandlerSchema),
       ).toMatchObject({
-        receiver: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        receiver: { typeUrl: TypeUrls.derive(ProjectQueueStateSchema) },
         payload: command,
       });
     } finally {
@@ -5080,14 +5107,14 @@ describe("repository signal routing", () => {
         CommandDispatchedToHandlerSchema,
       );
       expect(diagnostic).toMatchObject({
-        receiver: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        receiver: { typeUrl: TypeUrls.derive(ProjectStateSchema) },
         payload: command,
-        entityType: { impl: { case: "javaClassName", value: "ExecutingTaskAggregate" } },
+        entityType: { impl: { case: "javaClassName", value: "ExecutingProjectAggregate" } },
         whenDispatched: diagnostics[0]?.context?.timestamp,
       });
       expect(diagnostics[0]?.context?.origin).toMatchObject({
         case: "pastMessage",
-        value: { message: { typeUrl: TypeUrls.derive(TaskCommandSchema) } },
+        value: { message: { typeUrl: TypeUrls.derive(CreateProjectSchema) } },
       });
       expect(context.eventBus().acceptedEventTypes()).not.toContain(
         TypeUrls.derive(CommandDispatchedToHandlerSchema),
@@ -5113,17 +5140,17 @@ describe("repository signal routing", () => {
       .build();
 
     try {
-      ExecutingTaskAggregate.reset(failure);
+      ExecutingProjectAggregate.reset(failure);
       await expect(context.commandBus().post(command)).resolves.toBeUndefined();
       await waitForCondition(() => diagnostics.length === 1);
 
-      expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
+      expect(ExecutingProjectAggregate.assigneeCalls).toBe(1);
       expect(diagnostics).toHaveLength(1);
       expect(
         AnyMessages.unpack(diagnostics[0]?.message as never, CommandDispatchedToHandlerSchema),
       ).toMatchObject({ payload: command });
     } finally {
-      ExecutingTaskAggregate.reset();
+      ExecutingProjectAggregate.reset();
       await context.close();
     }
   });
@@ -5198,7 +5225,7 @@ describe("repository signal routing", () => {
           CommandDispatchedToHandlerSchema,
         ),
       ).toMatchObject({
-        receiver: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        receiver: { typeUrl: TypeUrls.derive(ProjectQueueStateSchema) },
         entityType: { impl: { case: "javaClassName", value: "RoutingProcessManager" } },
       });
     } finally {
@@ -5207,7 +5234,7 @@ describe("repository signal routing", () => {
   });
 
   it("isolates command diagnostic publication failure from admitted handler work", async () => {
-    ExecutingTaskAggregate.reset();
+    ExecutingProjectAggregate.reset();
     const diagnostics: SpineEvent[] = [];
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
@@ -5225,12 +5252,10 @@ describe("repository signal routing", () => {
         context.commandBus().post(createAggregateCommand("diagnostic-failure", "failure-id")),
       ).resolves.toBeUndefined();
 
-      expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
-      await expect(context.stand().read(AggregateStateSchema, "failure-id")).resolves.toMatchObject(
-        {
-          name: "Task (applied)",
-        },
-      );
+      expect(ExecutingProjectAggregate.assigneeCalls).toBe(1);
+      await expect(context.stand().read(ProjectStateSchema, "failure-id")).resolves.toMatchObject({
+        name: "Task (applied)",
+      });
       expect(diagnostics).toHaveLength(1);
       expect("storedEventDispatchFailures" in context).toBe(false);
     } finally {
@@ -5245,7 +5270,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerAssignRepository())
       .addEventDispatcher({
-        messageSchemas: () => [ProjectionEventSchema],
+        messageSchemas: () => [ProjectCreatedSchema],
         dispatch: (event) => {
           observed.push(event);
           return Promise.resolve();
@@ -5274,13 +5299,13 @@ describe("repository signal routing", () => {
         status: "DELIVERED",
         inboxId: {
           targetId: Identifiers.pack("string", "pm-inbox"),
-          targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
+          targetTypeUrl: TypeUrls.derive(ProjectQueueStateSchema),
         },
       },
     ]);
     expect(RoutingProcessManager.commandCalls).toBe(1);
-    await expect(context.stand().read(ProcessManagerStateSchema, "pm-inbox")).resolves.toEqual(
-      create(ProcessManagerStateSchema, {
+    await expect(context.stand().read(ProjectQueueStateSchema, "pm-inbox")).resolves.toEqual(
+      create(ProjectQueueStateSchema, {
         id: "pm-inbox",
         queue: "ProcessManager assigned",
       }),
@@ -5301,11 +5326,11 @@ describe("repository signal routing", () => {
     expect(
       storedEnvelope.message === undefined
         ? undefined
-        : AnyMessages.unpack(storedEnvelope.message, TaskCommandSchema),
+        : AnyMessages.unpack(storedEnvelope.message, CreateProjectSchema),
     ).toEqual(
       command.message === undefined
         ? undefined
-        : AnyMessages.unpack(command.message, TaskCommandSchema),
+        : AnyMessages.unpack(command.message, CreateProjectSchema),
     );
   });
 
@@ -5319,7 +5344,7 @@ describe("repository signal routing", () => {
       context.commandBus().post(createAggregateCommand("command-pm-missing-id", "")),
     ).rejects.toBeInstanceOf(CommandValidationError);
     expect(RoutingProcessManager.commandCalls).toBe(0);
-    await expect(context.stand().read(ProcessManagerStateSchema, "")).resolves.toBeUndefined();
+    await expect(context.stand().read(ProjectQueueStateSchema, "")).resolves.toBeUndefined();
   });
 
   it("rejects idless process-manager commands before route, handler, or Stand write", async () => {
@@ -5333,7 +5358,7 @@ describe("repository signal routing", () => {
     ).rejects.toThrow("requires command.id");
     expect(RoutingProcessManager.commandCalls).toBe(0);
     await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-idless"),
+      context.stand().read(ProjectQueueStateSchema, "pm-idless"),
     ).resolves.toBeUndefined();
   });
 
@@ -5348,7 +5373,7 @@ describe("repository signal routing", () => {
     ).rejects.toThrow(/command\.id/i);
     expect(RoutingProcessManager.commandCalls).toBe(0);
     await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-blank-id"),
+      context.stand().read(ProjectQueueStateSchema, "pm-blank-id"),
     ).resolves.toBeUndefined();
   });
 
@@ -5365,9 +5390,9 @@ describe("repository signal routing", () => {
     await expect(
       context
         .stand()
-        .read(ProcessManagerStateSchema, "pm-tenant", { tenantId: createTenantId("tenant-a") }),
+        .read(ProjectQueueStateSchema, "pm-tenant", { tenantId: createTenantId("tenant-a") }),
     ).resolves.toEqual(
-      create(ProcessManagerStateSchema, {
+      create(ProjectQueueStateSchema, {
         id: "pm-tenant",
         queue: "Tenant PM assigned",
       }),
@@ -5375,7 +5400,7 @@ describe("repository signal routing", () => {
     await expect(
       context
         .stand()
-        .read(ProcessManagerStateSchema, "pm-tenant", { tenantId: createTenantId("tenant-b") }),
+        .read(ProjectQueueStateSchema, "pm-tenant", { tenantId: createTenantId("tenant-b") }),
     ).resolves.toBeUndefined();
   });
 
@@ -5466,10 +5491,8 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("command-pm-page-target", "pm-page-target", "Page target")),
     ).resolves.toBeUndefined();
 
-    await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-page-target"),
-    ).resolves.toEqual(
-      create(ProcessManagerStateSchema, {
+    await expect(context.stand().read(ProjectQueueStateSchema, "pm-page-target")).resolves.toEqual(
+      create(ProjectQueueStateSchema, {
         id: "pm-page-target",
         queue: "Page target assigned",
       }),
@@ -5558,8 +5581,8 @@ describe("repository signal routing", () => {
   it("does not call Command interface routing again during replay", async () => {
     RoutingProcessManager.reset();
     let routeCalls = 0;
-    const token = MessageInterfaces.define<object, readonly [typeof TaskCommandSchema]>([
-      TaskCommandSchema,
+    const token = MessageInterfaces.define<object, readonly [typeof CreateProjectSchema]>([
+      CreateProjectSchema,
     ]);
     const routing = CommandRouting.create<string>().route(token, (message) => {
       routeCalls += 1;
@@ -5611,7 +5634,7 @@ describe("repository signal routing", () => {
       return message.id;
     });
     const factory = new InMemoryStorageFactory();
-    const repository = createMessageIdProducingRepository(routing);
+    const repository = createProjectIdProducingRepository(routing);
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .withStorageFactory(factory)
@@ -5622,13 +5645,13 @@ describe("repository signal routing", () => {
         storageFactory: factory,
       });
       const target = requireEntityInboxTarget(repository);
-      const command = createTaskCommand("command-message-count", "message-count", "Counted");
+      const command = createCreateProject("command-message-count", "message-count", "Counted");
       await context.commandBus().post(command);
       await expect(
         context.stand().read(TaskSchema, create(TaskIdSchema, { value: "message-count" })),
       ).resolves.toBeDefined();
       expect(routeCalls).toBe(1);
-      const replayCommand = createTaskCommand(
+      const replayCommand = createCreateProject(
         "command-message-count-replay",
         "message-count",
         "Counted replay",
@@ -5656,13 +5679,13 @@ describe("repository signal routing", () => {
   });
 
   it("hands off and replays a composite Command target without rerouting", async () => {
-    const id = create(CompositeRouteIdSchema, {
+    const id = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "command-reader" }),
       number: 42,
     });
     let routeCalls = 0;
-    const commandRouting = CommandRouting.create<CompositeRouteId>().route(
-      CompositeRouteCommandSchema,
+    const commandRouting = CommandRouting.create<ProjectMilestoneId>().route(
+      AddProjectMilestoneSchema,
       (message) => {
         routeCalls += 1;
         if (message.id === undefined) throw new Error("Expected a composite Command ID.");
@@ -5670,7 +5693,7 @@ describe("repository signal routing", () => {
       },
     );
     const factory = new InMemoryStorageFactory();
-    const repository = createCompositeRouteProcessManagerRepository(
+    const repository = createProjectMilestoneProcessManagerRepository(
       undefined,
       { produces: true },
       commandRouting,
@@ -5683,8 +5706,8 @@ describe("repository signal routing", () => {
       id: create(CommandIdSchema, { uuid: "command-composite-handoff" }),
       context: create(CommandContextSchema),
       message: AnyMessages.pack(
-        CompositeRouteCommandSchema,
-        create(CompositeRouteCommandSchema, { id, name: "Composite command" }),
+        AddProjectMilestoneSchema,
+        create(AddProjectMilestoneSchema, { id, name: "Composite command" }),
       ),
     });
     try {
@@ -5700,18 +5723,16 @@ describe("repository signal routing", () => {
         throw new Error("Expected a delivered composite Command inbox row.");
 
       expect(stored.inboxId.targetTypeUrl).toBe(
-        TypeUrls.derive(CompositeRouteProcessManagerStateSchema),
+        TypeUrls.derive(ProjectMilestoneWorkflowStateSchema),
       );
-      expect(stored.inboxId.targetId).toEqual(Identifiers.pack(CompositeRouteIdSchema, id));
+      expect(stored.inboxId.targetId).toEqual(Identifiers.pack(ProjectMilestoneIdSchema, id));
       expect(routeCalls).toBe(1);
 
       await expect(requireEntityInboxTarget(repository).replay(stored)).resolves.toBeUndefined();
 
       expect(routeCalls).toBe(1);
-      await expect(
-        context.stand().read(CompositeRouteProcessManagerStateSchema, id),
-      ).resolves.toEqual(
-        create(CompositeRouteProcessManagerStateSchema, { id, queue: "Composite command" }),
+      await expect(context.stand().read(ProjectMilestoneWorkflowStateSchema, id)).resolves.toEqual(
+        create(ProjectMilestoneWorkflowStateSchema, { id, queue: "Composite command" }),
       );
     } finally {
       await context.close();
@@ -5719,9 +5740,9 @@ describe("repository signal routing", () => {
   });
 
   it("rejects an empty implicit Command ID during durable Aggregate replay", async () => {
-    ImplicitIdAggregate.reset();
+    DraftProjectAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    const repository = createImplicitIdAggregateRepository();
+    const repository = createDraftProjectAggregateRepository();
     const context = BoundedContext.singleTenant("Implicit replay")
       .add(repository)
       .withStorageFactory(factory)
@@ -5733,19 +5754,19 @@ describe("repository signal routing", () => {
       });
       const received = await storeEntityInboxCommand(
         delivery,
-        createImplicitTaskCommand("implicit-replay", ""),
+        createDraftProject("implicit-replay", ""),
         new Date("2026-08-11T10:00:00.000Z"),
         1n,
         {
           targetId: Identifiers.pack("string", "target"),
-          targetTypeUrl: TypeUrls.derive(AggregateStateSchema),
+          targetTypeUrl: TypeUrls.derive(ProjectStateSchema),
         },
       );
 
       await expect(requireEntityInboxTarget(repository).replay(received)).rejects.toBeInstanceOf(
         CommandValidationError,
       );
-      expect(ImplicitIdAggregate.calls).toBe(0);
+      expect(DraftProjectAggregate.calls).toBe(0);
     } finally {
       await context.close();
     }
@@ -5772,20 +5793,20 @@ describe("repository signal routing", () => {
         processManager.commandBus().post(createAggregateCommand("blank-pm", "pm-id")),
       ).resolves.toBeUndefined();
       await expect(
-        projection.eventBus().post(createProjectionEvent("blank-projection", "projection-id")),
+        projection.eventBus().post(createProjectCreated("blank-projection", "projection-id")),
       ).resolves.toBeUndefined();
 
       expect(BlankStateIdAggregate.calls).toBe(1);
       expect(BlankStateIdProcessManager.calls).toBe(1);
       expect(BlankStateIdProjection.calls).toBe(1);
       await expect(
-        aggregate.stand().read(AggregateStateSchema, "aggregate-id"),
+        aggregate.stand().read(ProjectStateSchema, "aggregate-id"),
       ).resolves.toBeUndefined();
       await expect(
-        processManager.stand().read(ProcessManagerStateSchema, "pm-id"),
+        processManager.stand().read(ProjectQueueStateSchema, "pm-id"),
       ).resolves.toBeUndefined();
       await expect(
-        projection.stand().read(ProjectionStateSchema, "projection-id"),
+        projection.stand().read(ProjectOverviewStateSchema, "projection-id"),
       ).resolves.toBeUndefined();
     } finally {
       await Promise.all([aggregate.close(), processManager.close(), projection.close()]);
@@ -5803,8 +5824,8 @@ describe("repository signal routing", () => {
       id: create(CommandIdSchema, { uuid: "command-numeric-int32" }),
       context: create(CommandContextSchema),
       message: AnyMessages.pack(
-        Int32AggregateCommandSchema,
-        create(Int32AggregateCommandSchema, { id: 42, name: "Int32" }),
+        CreateNumberedProjectSchema,
+        create(CreateNumberedProjectSchema, { id: 42, name: "Int32" }),
       ),
     });
     const int32Message = await storeEntityInboxCommand(
@@ -5817,7 +5838,7 @@ describe("repository signal routing", () => {
       1n,
       {
         targetId: Identifiers.pack("int32", 42),
-        targetTypeUrl: TypeUrls.derive(Int32AggregateStateSchema),
+        targetTypeUrl: TypeUrls.derive(NumberedProjectStateSchema),
       },
     );
 
@@ -5836,8 +5857,8 @@ describe("repository signal routing", () => {
       id: create(CommandIdSchema, { uuid: "command-numeric-int64" }),
       context: create(CommandContextSchema),
       message: AnyMessages.pack(
-        Int64ProcessManagerCommandSchema,
-        create(Int64ProcessManagerCommandSchema, { id: 42n, queue: "Int64" }),
+        ScheduleProjectWorkflowSchema,
+        create(ScheduleProjectWorkflowSchema, { id: 42n, queue: "Int64" }),
       ),
     });
     const int64Message = await storeEntityInboxCommand(
@@ -5850,7 +5871,7 @@ describe("repository signal routing", () => {
       1n,
       {
         targetId: Identifiers.pack("int64", 42n),
-        targetTypeUrl: TypeUrls.derive(Int64ProcessManagerStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectWorkflowStateSchema),
       },
     );
 
@@ -5890,8 +5911,8 @@ describe("repository signal routing", () => {
           id: create(CommandIdSchema, { uuid: "command-int32-producer" }),
           context: create(CommandContextSchema),
           message: AnyMessages.pack(
-            Int32AggregateCommandSchema,
-            create(Int32AggregateCommandSchema, { id: 42, name: "Int32" }),
+            CreateNumberedProjectSchema,
+            create(CreateNumberedProjectSchema, { id: 42, name: "Int32" }),
           ),
         }),
       );
@@ -5900,8 +5921,8 @@ describe("repository signal routing", () => {
           id: create(CommandIdSchema, { uuid: "command-int64-producer" }),
           context: create(CommandContextSchema),
           message: AnyMessages.pack(
-            Int64ProcessManagerCommandSchema,
-            create(Int64ProcessManagerCommandSchema, { id: 42n, queue: "Int64" }),
+            ScheduleProjectWorkflowSchema,
+            create(ScheduleProjectWorkflowSchema, { id: 42n, queue: "Int64" }),
           ),
         }),
       );
@@ -5936,7 +5957,7 @@ describe("repository signal routing", () => {
         },
         inboxId: {
           targetId: Identifiers.pack("string", "pm-unbound"),
-          targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
+          targetTypeUrl: TypeUrls.derive(ProjectQueueStateSchema),
         },
         signalId: "command-pm-unbound",
         label: "HANDLE_COMMAND",
@@ -6080,7 +6101,7 @@ describe("repository signal routing", () => {
       new Date("2026-07-08T09:03:00.000Z"),
       1n,
       {
-        targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectQueueStateSchema),
       },
     );
 
@@ -6113,7 +6134,7 @@ describe("repository signal routing", () => {
 
     expect(RoutingProcessManager.commandCalls).toBe(0);
     await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-idless-replay"),
+      context.stand().read(ProjectQueueStateSchema, "pm-idless-replay"),
     ).resolves.toBeUndefined();
   });
 
@@ -6142,7 +6163,7 @@ describe("repository signal routing", () => {
 
     expect(RoutingProcessManager.commandCalls).toBe(0);
     await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-blank-replay"),
+      context.stand().read(ProjectQueueStateSchema, "pm-blank-replay"),
     ).resolves.toBeUndefined();
   });
 
@@ -6153,7 +6174,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerAssignRepository())
       .addEventDispatcher({
-        messageSchemas: () => [ProjectionEventSchema],
+        messageSchemas: () => [ProjectCreatedSchema],
         dispatch: () => {
           dispatchAttempted.resolve();
           return Promise.reject(new Error("process-manager command event dispatch failed"));
@@ -6168,8 +6189,8 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
 
     expect(RoutingProcessManager.commandCalls).toBe(1);
-    await expect(context.stand().read(ProcessManagerStateSchema, "pm-dispatch")).resolves.toEqual(
-      create(ProcessManagerStateSchema, {
+    await expect(context.stand().read(ProjectQueueStateSchema, "pm-dispatch")).resolves.toEqual(
+      create(ProjectQueueStateSchema, {
         id: "pm-dispatch",
         queue: "Task assigned",
       }),
@@ -6189,7 +6210,7 @@ describe("repository signal routing", () => {
             CommandIdSchema,
             create(CommandIdSchema, { uuid: "command-pm-dispatch" }),
           ),
-          typeUrl: TypeUrls.derive(TaskCommandSchema),
+          typeUrl: TypeUrls.derive(CreateProjectSchema),
         }),
         actorContext: create(ActorContextSchema, {
           actor: create(UserIdSchema, { value: "user-1" }),
@@ -6221,11 +6242,11 @@ describe("repository signal routing", () => {
       .post(createAggregateCommand("command-pm-existing", "pm-rejected", "Persisted"));
     const stateBeforeRejection = await context
       .stand()
-      .readVersioned(ProcessManagerStateSchema, "pm-rejected");
+      .readVersioned(ProjectQueueStateSchema, "pm-rejected");
     const eventsBeforeRejection = await eventStore.read();
 
     expect(stateBeforeRejection).toEqual({
-      state: create(ProcessManagerStateSchema, {
+      state: create(ProjectQueueStateSchema, {
         id: "pm-rejected",
         queue: "Persisted assigned",
       }),
@@ -6246,7 +6267,7 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
 
     await expect(
-      context.stand().readVersioned(ProcessManagerStateSchema, "pm-rejected"),
+      context.stand().readVersioned(ProjectQueueStateSchema, "pm-rejected"),
     ).resolves.toEqual(stateBeforeRejection);
     const storedEvents = await waitForStoredEvents(eventStore, 2);
     const rejectionEvents = storedEvents.filter((event) => event.context?.rejection !== undefined);
@@ -6296,7 +6317,7 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
 
     await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-technical"),
+      context.stand().read(ProjectQueueStateSchema, "pm-technical"),
     ).resolves.toBeUndefined();
     await expect(eventStore.read()).resolves.toEqual([]);
     await expect(
@@ -6326,10 +6347,10 @@ describe("repository signal routing", () => {
     await delivery.inbox.receive({
       inboxId: {
         targetId: Identifiers.pack("string", "pm-older"),
-        targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectQueueStateSchema),
       },
       signalId: "event-older",
-      signal: AnyMessages.pack(EventSchema, createProjectionEvent("event-older", "pm-older"), {
+      signal: AnyMessages.pack(EventSchema, createProjectCreated("event-older", "pm-older"), {
         validate: false,
       }),
       label: "REACT_UPON_EVENT",
@@ -6339,14 +6360,12 @@ describe("repository signal routing", () => {
       version: 1n,
     });
 
-    await context.eventBus().post(createProjectionEvent("event-pm-inbox-first", "pm-inbox-first"));
+    await context.eventBus().post(createProjectCreated("event-pm-inbox-first", "pm-inbox-first"));
 
     expect(InboxCheckingProcessManager.eventCalls).toBe(2);
     expect(InboxCheckingProcessManager.sawPendingRow).toBe(true);
-    await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-inbox-first"),
-    ).resolves.toEqual(
-      create(ProcessManagerStateSchema, {
+    await expect(context.stand().read(ProjectQueueStateSchema, "pm-inbox-first")).resolves.toEqual(
+      create(ProjectQueueStateSchema, {
         id: "pm-inbox-first",
         queue: "Task checked",
       }),
@@ -6379,7 +6398,7 @@ describe("repository signal routing", () => {
       .withStorageFactory(factory)
       .build();
     const dispatcher = repositoryAccess.eventDispatcher(repository);
-    const event = createProjectionEvent("event-pm-duplicate", "pm-duplicate");
+    const event = createProjectCreated("event-pm-duplicate", "pm-duplicate");
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -6404,8 +6423,8 @@ describe("repository signal routing", () => {
     await expect(Promise.all([first, duplicate])).resolves.toEqual([undefined, undefined]);
     expect(BlockingProcessManager.startedCalls).toBe(1);
     expect(BlockingProcessManager.completedCalls).toBe(1);
-    await expect(context.stand().read(ProcessManagerStateSchema, "pm-duplicate")).resolves.toEqual(
-      create(ProcessManagerStateSchema, {
+    await expect(context.stand().read(ProjectQueueStateSchema, "pm-duplicate")).resolves.toEqual(
+      create(ProjectQueueStateSchema, {
         id: "pm-duplicate",
         queue: "Task blocked",
       }),
@@ -6448,7 +6467,7 @@ describe("repository signal routing", () => {
       throw new Error("Expected a process-manager event dispatcher.");
     }
 
-    const posted = dispatcher.dispatch(createProjectionEvent("event-pm-split", "pm-source"));
+    const posted = dispatcher.dispatch(createProjectCreated("event-pm-split", "pm-source"));
 
     await expect(posted).resolves.toBeUndefined();
     expect(SplitRouteProcessManager.startedIds).toEqual(["pm-fail", "pm-later"]);
@@ -6462,7 +6481,7 @@ describe("repository signal routing", () => {
         message.status === "DELIVERED" &&
         Identifiers.unpack("string", message.inboxId.targetId) === "pm-fail",
     );
-    expect(failed?.inboxId.targetTypeUrl).toBe(TypeUrls.derive(ProcessManagerStateSchema));
+    expect(failed?.inboxId.targetTypeUrl).toBe(TypeUrls.derive(ProjectQueueStateSchema));
     expect(
       delivered.some(
         (message) => Identifiers.unpack("string", message.inboxId.targetId) === "pm-later",
@@ -6476,20 +6495,20 @@ describe("repository signal routing", () => {
         message.status === "DELIVERED" &&
         Identifiers.unpack("string", message.inboxId.targetId) === "pm-later",
     );
-    expect(later?.inboxId.targetTypeUrl).toBe(TypeUrls.derive(ProcessManagerStateSchema));
+    expect(later?.inboxId.targetTypeUrl).toBe(TypeUrls.derive(ProjectQueueStateSchema));
   });
 
   it("guards each target of a multi-target Process Manager route independently", async () => {
     SplitRouteProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createGuardedSplitPmRepo(
-      EventRouting.create<string>().route(ProjectionEventSchema, () => ["pm-one", "pm-two"]),
+      EventRouting.create<string>().route(ProjectCreatedSchema, () => ["pm-one", "pm-two"]),
     );
     BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
 
-    const event = createProjectionEvent("event-pm-guarded-many", "pm-source");
+    const event = createProjectCreated("event-pm-guarded-many", "pm-source");
     await dispatcher.dispatch(event);
     await dispatcher.dispatch(event);
 
@@ -6518,10 +6537,10 @@ describe("repository signal routing", () => {
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
 
-    const event = createProjectionEvent("event-aggregate-guarded-many", "aggregate-source");
+    const event = createProjectCreated("event-aggregate-guarded-many", "aggregate-source");
     await dispatcher.dispatch(event);
     await dispatcher.dispatch(
-      createProjectionEvent("event-aggregate-guarded-other", "aggregate-other"),
+      createProjectCreated("event-aggregate-guarded-other", "aggregate-other"),
     );
     await dispatcher.dispatch(event);
 
@@ -6532,7 +6551,7 @@ describe("repository signal routing", () => {
   it("does not use durable markers to replay a multi-target producing Aggregate event", async () => {
     ProducingGuardedAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    const event = createProjectionEvent("event-aggregate-restart", "aggregate-restart-source");
+    const event = createProjectCreated("event-aggregate-restart", "aggregate-restart-source");
 
     const firstRepository = createProducingGuardedAggregateRepository();
     routeAggregateTargets(firstRepository, ["aggregate-restart-one", "aggregate-restart-two"]);
@@ -6580,12 +6599,12 @@ describe("repository signal routing", () => {
     const aggregateDispatcher = repositoryAccess.eventDispatcher(aggregateRepository);
     if (aggregateDispatcher === undefined)
       throw new Error("Expected an aggregate event dispatcher.");
-    const aggregateEvent = createProjectionEvent("event-aggregate-probe", "aggregate-probe");
+    const aggregateEvent = createProjectCreated("event-aggregate-probe", "aggregate-probe");
 
     await aggregateDispatcher.dispatch(aggregateEvent);
     expect(aggregateFactory.closedProbes).toBe(1);
     await aggregateDispatcher.dispatch(
-      createProjectionEvent("event-aggregate-probe-other", "aggregate-probe-other"),
+      createProjectCreated("event-aggregate-probe-other", "aggregate-probe-other"),
     );
     expect(aggregateFactory.closedProbes).toBe(2);
     await aggregateDispatcher.dispatch(aggregateEvent);
@@ -6600,11 +6619,11 @@ describe("repository signal routing", () => {
       .build();
     const pmDispatcher = repositoryAccess.eventDispatcher(pmRepository);
     if (pmDispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
-    const pmEvent = createProjectionEvent("event-pm-probe", "pm-probe");
+    const pmEvent = createProjectCreated("event-pm-probe", "pm-probe");
 
-    await pmDispatcher.dispatch(createProjectionEvent("event-pm-probe-retry", "pm-probe"));
+    await pmDispatcher.dispatch(createProjectCreated("event-pm-probe-retry", "pm-probe"));
     expect(pmFactory.closedProbes).toBe(1);
-    await pmDispatcher.dispatch(createProjectionEvent("event-pm-probe-other", "pm-probe-other"));
+    await pmDispatcher.dispatch(createProjectCreated("event-pm-probe-other", "pm-probe-other"));
     expect(pmFactory.closedProbes).toBe(2);
     await pmDispatcher.dispatch(pmEvent);
     expect(pmFactory.closedProbes).toBe(3);
@@ -6621,7 +6640,7 @@ describe("repository signal routing", () => {
 
     await expect(
       failingDispatcher.dispatch(
-        createProjectionEvent("event-aggregate-probe-fail", "aggregate-probe-fail"),
+        createProjectCreated("event-aggregate-probe-fail", "aggregate-probe-fail"),
       ),
     ).rejects.toThrow("guard probe read failed");
     expect(failingFactory).toMatchObject({ opened: 1, closed: 1, closedProbes: 1 });
@@ -6636,8 +6655,8 @@ describe("repository signal routing", () => {
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
 
-    const first = createProjectionEvent("event-guard-depth-first", "pm-guard-depth-first");
-    const second = createProjectionEvent("event-guard-depth-second", "pm-guard-depth-second");
+    const first = createProjectCreated("event-guard-depth-first", "pm-guard-depth-first");
+    const second = createProjectCreated("event-guard-depth-second", "pm-guard-depth-second");
     await dispatcher.dispatch(first);
     await dispatcher.dispatch(second);
     await dispatcher.dispatch(first);
@@ -6653,7 +6672,7 @@ describe("repository signal routing", () => {
       .add(repository)
       .withStorageFactory(firstFactory)
       .build();
-    const event = createProjectionEvent("event-guard-rebind", "pm-guard-rebind");
+    const event = createProjectCreated("event-guard-rebind", "pm-guard-rebind");
 
     const firstDispatcher = repositoryAccess.eventDispatcher(repository);
     if (firstDispatcher === undefined)
@@ -6687,7 +6706,7 @@ describe("repository signal routing", () => {
     const preJournalDispatcher = repositoryAccess.eventDispatcher(preJournalRepository);
     if (preJournalDispatcher === undefined)
       throw new Error("Expected a process-manager event dispatcher.");
-    const preJournalEvent = createProjectionEvent(
+    const preJournalEvent = createProjectCreated(
       "event-guard-before-journal",
       "pm-guard-before-journal",
     );
@@ -6696,12 +6715,12 @@ describe("repository signal routing", () => {
     const preJournal = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: preJournalFactory,
-      stateSchema: ProcessManagerStateSchema,
+      stateSchema: ProjectQueueStateSchema,
     });
     await expect(preJournal.readEvents("pm-guard-before-journal")).resolves.toEqual([]);
     RoutingProcessManager.reset();
     await preJournalDispatcher.dispatch(
-      createProjectionEvent("event-guard-before-journal-retry", "pm-guard-before-journal"),
+      createProjectCreated("event-guard-before-journal-retry", "pm-guard-before-journal"),
     );
     expect(RoutingProcessManager.eventCalls).toBe(1);
     await expect(preJournal.readEvents("pm-guard-before-journal")).resolves.toEqual([]);
@@ -6713,7 +6732,7 @@ describe("repository signal routing", () => {
     const postJournalContext = BoundedContext.singleTenant("Tasks")
       .add(postJournalRepository)
       .addCommandDispatcher({
-        messageSchemas: () => [TaskCommandSchema],
+        messageSchemas: () => [CreateProjectSchema],
         dispatch: () => {
           publicationAttempts++;
           return Promise.reject(new Error("publication failed after journal"));
@@ -6724,7 +6743,7 @@ describe("repository signal routing", () => {
     const postJournalDispatcher = repositoryAccess.eventDispatcher(postJournalRepository);
     if (postJournalDispatcher === undefined)
       throw new Error("Expected a process-manager event dispatcher.");
-    const postJournalEvent = createProjectionEvent(
+    const postJournalEvent = createProjectCreated(
       "event-guard-after-journal",
       "pm-guard-after-journal",
     );
@@ -6732,14 +6751,14 @@ describe("repository signal routing", () => {
     RoutingProcessManager.reset();
     await expect(postJournalDispatcher.dispatch(postJournalEvent)).resolves.toBeUndefined();
     await postJournalDispatcher.dispatch(
-      createProjectionEvent("event-guard-after-journal-retry", "pm-guard-after-journal"),
+      createProjectCreated("event-guard-after-journal-retry", "pm-guard-after-journal"),
     );
     expect(RoutingProcessManager.commandReactionCalls).toBe(2);
     expect(publicationAttempts).toBe(2);
     const postJournal = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: postJournalFactory,
-      stateSchema: ProcessManagerStateSchema,
+      stateSchema: ProjectQueueStateSchema,
     });
     await expect(postJournal.readEvents("pm-guard-after-journal")).resolves.toEqual([]);
     await postJournalContext.close();
@@ -6761,13 +6780,13 @@ describe("repository signal routing", () => {
     const target = requireEntityInboxTarget(repository);
     const blockedRow = await storePmInboxEvent(
       delivery,
-      createProjectionEvent("event-guard-lane-one", "pm-guard-lane-one"),
+      createProjectCreated("event-guard-lane-one", "pm-guard-lane-one"),
       new Date("2026-07-24T19:00:00.000Z"),
       1n,
     );
     const unrelatedRow = await storePmInboxEvent(
       delivery,
-      createProjectionEvent("event-guard-lane-two", "pm-guard-lane-two"),
+      createProjectCreated("event-guard-lane-two", "pm-guard-lane-two"),
       new Date("2026-07-24T19:00:01.000Z"),
       2n,
     );
@@ -6796,7 +6815,7 @@ describe("repository signal routing", () => {
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
-    const event = createProjectionEvent("event-pm-replay", "pm-replay");
+    const event = createProjectCreated("event-pm-replay", "pm-replay");
     const wrongId = await storePmInboxEvent(
       delivery,
       event,
@@ -6815,8 +6834,8 @@ describe("repository signal routing", () => {
       storePmInboxEvent(delivery, event, new Date("2026-07-08T09:05:02.000Z"), 3n, {
         signalId: "event-pm-replay-malformed",
         signal: AnyMessages.pack(
-          AggregateStateSchema,
-          create(AggregateStateSchema, {
+          ProjectStateSchema,
+          create(ProjectStateSchema, {
             id: "pm-replay",
             name: "Wrong envelope",
             archived: false,
@@ -6846,8 +6865,8 @@ describe("repository signal routing", () => {
   it("routes a Process Manager Event interface once at admission and not during replay", async () => {
     RoutingProcessManager.reset();
     let routeCalls = 0;
-    const token = MessageInterfaces.define<object, readonly [typeof ProjectionEventSchema]>([
-      ProjectionEventSchema,
+    const token = MessageInterfaces.define<object, readonly [typeof ProjectCreatedSchema]>([
+      ProjectCreatedSchema,
     ]);
     const eventRouting = EventRouting.create<string>().route(token, (message) => {
       routeCalls += 1;
@@ -6861,7 +6880,7 @@ describe("repository signal routing", () => {
       .build();
 
     try {
-      await context.eventBus().post(createProjectionEvent("event-pm-admission", "pm-admission"));
+      await context.eventBus().post(createProjectCreated("event-pm-admission", "pm-admission"));
       await waitForCondition(() => RoutingProcessManager.eventCalls === 1);
       expect(routeCalls).toBe(1);
 
@@ -6871,7 +6890,7 @@ describe("repository signal routing", () => {
       });
       const replay = await storePmInboxEvent(
         delivery,
-        createProjectionEvent("event-pm-replay-count", "pm-admission"),
+        createProjectCreated("event-pm-replay-count", "pm-admission"),
         new Date("2026-08-11T04:55:00.000Z"),
         1n,
       );
@@ -6896,7 +6915,7 @@ describe("repository signal routing", () => {
     const target = requireEntityInboxTarget(repository);
     const stored = await storePmInboxEvent(
       delivery,
-      createProjectionEvent("event-pm-guarded-replay", "pm-guarded-replay"),
+      createProjectCreated("event-pm-guarded-replay", "pm-guarded-replay"),
       new Date("2026-07-08T09:05:30.000Z"),
       1n,
     );
@@ -6914,16 +6933,14 @@ describe("repository signal routing", () => {
       .build();
 
     await context.eventBus().post(
-      createProjectionEvent("event-pm-react", "pm-event-react", {
+      createProjectCreated("event-pm-react", "pm-event-react", {
         producerId: "different-producer",
       }),
     );
 
     expect(RoutingProcessManager.eventCalls).toBe(1);
-    await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-event-react"),
-    ).resolves.toEqual(
-      create(ProcessManagerStateSchema, {
+    await expect(context.stand().read(ProjectQueueStateSchema, "pm-event-react")).resolves.toEqual(
+      create(ProjectQueueStateSchema, {
         id: "pm-event-react",
         queue: "Task reacted",
       }),
@@ -6933,7 +6950,7 @@ describe("repository signal routing", () => {
   it("retains one reactor diagnostic when an admitted Process Manager reactor fails", async () => {
     const failure = new Error("admitted Process Manager reactor failed");
     const diagnostics: SpineEvent[] = [];
-    const event = createProjectionEvent("pm-reactor-diagnostic-failure", "pm-reactor-failure");
+    const event = createProjectCreated("pm-reactor-diagnostic-failure", "pm-reactor-failure");
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerReactRepository())
       .addEventDispatcher({
@@ -6955,7 +6972,7 @@ describe("repository signal routing", () => {
       expect(
         AnyMessages.unpack(diagnostics[0]?.message as never, EventDispatchedToReactorSchema),
       ).toMatchObject({
-        receiver: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        receiver: { typeUrl: TypeUrls.derive(ProjectQueueStateSchema) },
         payload: event,
       });
     } finally {
@@ -6983,7 +7000,7 @@ describe("repository signal routing", () => {
       "Command",
       "a",
     );
-    const event = createProjectionEvent("pm-diagnostic-event", "pm-diagnostic", {
+    const event = createProjectCreated("pm-diagnostic-event", "pm-diagnostic", {
       pastMessageTenantId: "a",
     });
 
@@ -7002,7 +7019,7 @@ describe("repository signal routing", () => {
       expect(
         AnyMessages.unpack(reactor?.message as never, EventDispatchedToReactorSchema),
       ).toMatchObject({
-        receiver: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        receiver: { typeUrl: TypeUrls.derive(ProjectQueueStateSchema) },
         payload: event,
         entityType: { impl: { case: "javaClassName", value: "RoutingProcessManager" } },
         whenDispatched: reactor?.context?.timestamp,
@@ -7010,7 +7027,7 @@ describe("repository signal routing", () => {
       await expect(
         context
           .stand()
-          .read(ProcessManagerStateSchema, "pm-diagnostic", { tenantId: createTenantId("a") }),
+          .read(ProjectQueueStateSchema, "pm-diagnostic", { tenantId: createTenantId("a") }),
       ).resolves.toMatchObject({
         queue: "Task reacted",
       });
@@ -7033,7 +7050,7 @@ describe("repository signal routing", () => {
       .build();
 
     try {
-      await context.eventBus().post(createProjectionEvent("pm-no-reactor", "pm-no-reactor"));
+      await context.eventBus().post(createProjectCreated("pm-no-reactor", "pm-no-reactor"));
       await context.close();
 
       expect(diagnostics).toEqual([]);
@@ -7058,12 +7075,12 @@ describe("repository signal routing", () => {
 
     try {
       await expect(
-        context.eventBus().post(createProjectionEvent("pm-reactor-failure", "pm-reactor-failure")),
+        context.eventBus().post(createProjectCreated("pm-reactor-failure", "pm-reactor-failure")),
       ).resolves.toBeUndefined();
 
       expect(RoutingProcessManager.eventCalls).toBe(1);
       await expect(
-        context.stand().read(ProcessManagerStateSchema, "pm-reactor-failure"),
+        context.stand().read(ProjectQueueStateSchema, "pm-reactor-failure"),
       ).resolves.toMatchObject({
         queue: "Task reacted",
       });
@@ -7080,29 +7097,27 @@ describe("repository signal routing", () => {
       .add(createProcessManagerReactRepository())
       .build();
     let notifications = 0;
-    context.stand().subscribe(ProcessManagerStateSchema, () => {
+    context.stand().subscribe(ProjectQueueStateSchema, () => {
       notifications++;
       throw new Error("process-manager event subscriber failed");
     });
 
     try {
       await expect(
-        context.eventBus().post(createProjectionEvent("event-pm-subscriber-1", "pm-subscriber")),
+        context.eventBus().post(createProjectCreated("event-pm-subscriber-1", "pm-subscriber")),
       ).resolves.toBeUndefined();
       await expect(
         context
           .eventBus()
           .post(
-            createProjectionEvent("event-pm-subscriber-2", "pm-subscriber", { name: "Follow-up" }),
+            createProjectCreated("event-pm-subscriber-2", "pm-subscriber", { name: "Follow-up" }),
           ),
       ).resolves.toBeUndefined();
 
       expect(RoutingProcessManager.eventCalls).toBe(2);
       expect(notifications).toBe(2);
-      await expect(
-        context.stand().read(ProcessManagerStateSchema, "pm-subscriber"),
-      ).resolves.toEqual(
-        create(ProcessManagerStateSchema, {
+      await expect(context.stand().read(ProjectQueueStateSchema, "pm-subscriber")).resolves.toEqual(
+        create(ProjectQueueStateSchema, {
           id: "pm-subscriber",
           queue: "Follow-up reacted",
         }),
@@ -7119,7 +7134,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.multitenant("Tasks")
       .add(createProcessManagerEventRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [TaskCommandSchema],
+        messageSchemas: () => [CreateProjectSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -7132,13 +7147,13 @@ describe("repository signal routing", () => {
     const sourceGrandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-        typeUrl: TypeUrls.derive(TaskCommandSchema),
+        typeUrl: TypeUrls.derive(CreateProjectSchema),
       }),
       actorContext: sourceActorContext,
     });
 
     await context.eventBus().post(
-      createProjectionEvent("event-pm-command", "pm-event-command", {
+      createProjectCreated("event-pm-command", "pm-event-command", {
         pastMessageTenantId: "tenant-command",
       }),
     );
@@ -7151,7 +7166,7 @@ describe("repository signal routing", () => {
       create(OriginSchema, {
         message: create(MessageIdSchema, {
           id: AnyMessages.pack(EventIdSchema, create(EventIdSchema, { value: "event-pm-command" })),
-          typeUrl: TypeUrls.derive(ProjectionEventSchema),
+          typeUrl: TypeUrls.derive(ProjectCreatedSchema),
         }),
         actorContext: sourceActorContext,
         grandOrigin: sourceGrandOrigin,
@@ -7161,8 +7176,8 @@ describe("repository signal routing", () => {
     if (producedMessage === undefined) {
       throw new Error("Expected a process-manager produced command message.");
     }
-    expect(AnyMessages.unpack(producedMessage, TaskCommandSchema)).toEqual(
-      create(TaskCommandSchema, {
+    expect(AnyMessages.unpack(producedMessage, CreateProjectSchema)).toEqual(
+      create(CreateProjectSchema, {
         id: "pm-event-command",
         name: "Task follow-up command",
       }),
@@ -7176,7 +7191,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .addCommandDispatcher({
-        messageSchemas: () => [TaskCommandSchema],
+        messageSchemas: () => [CreateProjectSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -7184,7 +7199,7 @@ describe("repository signal routing", () => {
       })
       .build();
     const eventDispatcher = repositoryAccess.eventDispatcher(repository);
-    const sourceEvent = createProjectionEvent("event-unused", "pm-event-command-missing-id");
+    const sourceEvent = createProjectCreated("event-unused", "pm-event-command-missing-id");
     const idlessEvent = create(EventSchema, {
       context: sourceEvent.context,
       message: sourceEvent.message,
@@ -7199,7 +7214,7 @@ describe("repository signal routing", () => {
     expect(RoutingProcessManager.eventCalls).toBe(0);
     expect(RoutingProcessManager.commandReactionCalls).toBe(0);
     await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-event-command-missing-id"),
+      context.stand().read(ProjectQueueStateSchema, "pm-event-command-missing-id"),
     ).resolves.toBeUndefined();
     expect(commands).toEqual([]);
   });
@@ -7210,7 +7225,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerCommandOnlyRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [TaskCommandSchema],
+        messageSchemas: () => [CreateProjectSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -7219,17 +7234,15 @@ describe("repository signal routing", () => {
       .build();
 
     await context.eventBus().post(
-      createProjectionEvent("event-pm-command-producer", "pm-first-field", {
+      createProjectCreated("event-pm-command-producer", "pm-first-field", {
         producerId: "different-producer",
       }),
     );
 
     expect(RoutingProcessManager.eventCalls).toBe(0);
     expect(RoutingProcessManager.commandReactionCalls).toBe(1);
-    await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-first-field"),
-    ).resolves.toEqual(
-      create(ProcessManagerStateSchema, {
+    await expect(context.stand().read(ProjectQueueStateSchema, "pm-first-field")).resolves.toEqual(
+      create(ProjectQueueStateSchema, {
         id: "pm-first-field",
         queue: "Task commanded",
       }),
@@ -7239,8 +7252,8 @@ describe("repository signal routing", () => {
     if (producedMessage === undefined) {
       throw new Error("Expected a process-manager produced command message.");
     }
-    expect(AnyMessages.unpack(producedMessage, TaskCommandSchema)).toEqual(
-      create(TaskCommandSchema, {
+    expect(AnyMessages.unpack(producedMessage, CreateProjectSchema)).toEqual(
+      create(CreateProjectSchema, {
         id: "pm-first-field",
         name: "Task follow-up command",
       }),
@@ -7254,7 +7267,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerEventProducingRepository())
       .addEventDispatcher({
-        messageSchemas: () => [GeneratedReactorEventSchema],
+        messageSchemas: () => [ProjectRegisteredSchema],
         dispatch: () => {
           dispatchAttempted.resolve();
           return Promise.reject(new Error("process-manager event dispatch failed"));
@@ -7271,14 +7284,14 @@ describe("repository signal routing", () => {
     } as unknown as ILogLayer);
 
     await expect(
-      context.eventBus().post(createProjectionEvent("event-pm-produce", "pm-event-produce")),
+      context.eventBus().post(createProjectCreated("event-pm-produce", "pm-event-produce")),
     ).resolves.toBeUndefined();
 
     expect(RoutingProcessManager.eventCalls).toBe(1);
     await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-event-produce"),
+      context.stand().read(ProjectQueueStateSchema, "pm-event-produce"),
     ).resolves.toEqual(
-      create(ProcessManagerStateSchema, {
+      create(ProjectQueueStateSchema, {
         id: "pm-event-produce",
         queue: "Task evented",
       }),
@@ -7309,7 +7322,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .addEventDispatcher({
-        messageSchemas: () => [GeneratedReactorEventSchema],
+        messageSchemas: () => [ProjectRegisteredSchema],
         dispatch: (event) => {
           dispatchedEventIds.push(event.id?.value ?? "");
           return Promise.resolve();
@@ -7323,12 +7336,12 @@ describe("repository signal routing", () => {
     }
 
     await expect(
-      eventDispatcher.dispatch(createProjectionEvent("   ", "pm-event-produce-blank-id")),
+      eventDispatcher.dispatch(createProjectCreated("   ", "pm-event-produce-blank-id")),
     ).rejects.toThrow(/event ID/i);
 
     expect(RoutingProcessManager.eventCalls).toBe(0);
     await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-event-produce-blank-id"),
+      context.stand().read(ProjectQueueStateSchema, "pm-event-produce-blank-id"),
     ).resolves.toBeUndefined();
     expect(dispatchedEventIds).toEqual([]);
   });
@@ -7341,14 +7354,14 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerMixedEventRepository())
       .addEventDispatcher({
-        messageSchemas: () => [GeneratedReactorEventSchema],
+        messageSchemas: () => [ProjectRegisteredSchema],
         dispatch: (event) => {
           eventDispatches.push(event.id?.value ?? "");
           return Promise.resolve();
         },
       })
       .addCommandDispatcher({
-        messageSchemas: () => [TaskCommandSchema],
+        messageSchemas: () => [CreateProjectSchema],
         dispatch: (command) => {
           commandDispatches.push(command.id?.uuid ?? "");
           return Promise.reject(new Error("mixed process-manager command dispatch failed"));
@@ -7359,15 +7372,13 @@ describe("repository signal routing", () => {
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(
-      context.eventBus().post(createProjectionEvent("event-pm-mixed", "pm-event-mixed")),
+      context.eventBus().post(createProjectCreated("event-pm-mixed", "pm-event-mixed")),
     ).resolves.toBeUndefined();
 
     expect(RoutingProcessManager.eventCalls).toBe(1);
     expect(RoutingProcessManager.commandReactionCalls).toBe(1);
-    await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-event-mixed"),
-    ).resolves.toEqual(
-      create(ProcessManagerStateSchema, {
+    await expect(context.stand().read(ProjectQueueStateSchema, "pm-event-mixed")).resolves.toEqual(
+      create(ProjectQueueStateSchema, {
         id: "pm-event-mixed",
         queue: "Task commanded",
       }),
@@ -7386,11 +7397,11 @@ describe("repository signal routing", () => {
       .add(createExecutingProjectionRepository())
       .build();
 
-    await context.eventBus().post(createProjectionEvent("event-projected", "task-projected"));
+    await context.eventBus().post(createProjectCreated("event-projected", "task-projected"));
 
     expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
     await expect(
-      context.stand().readVersioned(ProjectionStateSchema, "task-projected"),
+      context.stand().readVersioned(ProjectOverviewStateSchema, "task-projected"),
     ).resolves.toMatchObject({
       state: {
         id: "task-projected",
@@ -7409,14 +7420,14 @@ describe("repository signal routing", () => {
 
     try {
       await context.eventBus().post(
-        createProjectionEvent("event-filtered-announcements", "filtered-announcements", {
+        createProjectCreated("event-filtered-announcements", "filtered-announcements", {
           name: "announcements",
         }),
       );
       await context
         .eventBus()
         .post(
-          createProjectionEvent("event-filtered-general", "filtered-general", { name: "general" }),
+          createProjectCreated("event-filtered-general", "filtered-general", { name: "general" }),
         );
 
       expect(FilteredTaskProjection.calls).toEqual([
@@ -7430,15 +7441,15 @@ describe("repository signal routing", () => {
 
   it("constructs Event filters with a snapshotted custom message stringifier", () => {
     const stringifiers = new StringifierRegistry();
-    stringifiers.register(Int64ProjectionIdSchema, {
+    stringifiers.register(ProjectSequenceIdSchema, {
       fromString: (value) =>
-        create(Int64ProjectionIdSchema, { value: BigInt(value.replace(/^id:/, "")) }),
+        create(ProjectSequenceIdSchema, { value: BigInt(value.replace(/^id:/, "")) }),
       toString: (value) => `id:${String(value.value)}`,
     });
     const handlers = HandlerMetadataValues.defineArity(
-      Int64MessageIdProjection,
-      Int64MessageIdProjectionStateSchema,
-      (builder) => [builder.subscribe(Int64MessageIdProjectionEventSchema, "subscribeState")],
+      SequencedProjectOverview,
+      SequencedProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(SequencedProjectOverviewCreatedSchema, "subscribeState")],
       [
         {
           kind: "event-subscription",
@@ -7453,8 +7464,8 @@ describe("repository signal routing", () => {
     expect(
       () =>
         new Repository({
-          entityType: Int64MessageIdProjection,
-          schema: Int64MessageIdProjectionStateSchema,
+          entityType: SequencedProjectOverview,
+          schema: SequencedProjectOverviewStateSchema,
           handlers,
           stringifierRegistry: stringifiers,
         }),
@@ -7466,19 +7477,19 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Filtered aggregates")
       .add(createFilteredAggregateRepository())
       .addEventDispatcher({
-        messageSchemas: () => [GeneratedReactorEventSchema],
+        messageSchemas: () => [ProjectRegisteredSchema],
         dispatch: () => Promise.resolve(),
       })
       .build();
 
     try {
       await context.eventBus().post(
-        createProjectionEvent("event-filtered-aggregate-one", "filtered-aggregate-one", {
+        createProjectCreated("event-filtered-aggregate-one", "filtered-aggregate-one", {
           name: "announcements",
         }),
       );
       await context.eventBus().post(
-        createProjectionEvent("event-filtered-aggregate-two", "filtered-aggregate-two", {
+        createProjectCreated("event-filtered-aggregate-two", "filtered-aggregate-two", {
           name: "general",
         }),
       );
@@ -7498,7 +7509,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Filtered process managers")
       .add(createFilteredProcessManagerRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [TaskCommandSchema],
+        messageSchemas: () => [CreateProjectSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -7508,14 +7519,14 @@ describe("repository signal routing", () => {
 
     try {
       await context.eventBus().post(
-        createProjectionEvent("event-filtered-pm-one", "filtered-pm-one", {
+        createProjectCreated("event-filtered-pm-one", "filtered-pm-one", {
           name: "announcements",
         }),
       );
       await context
         .eventBus()
         .post(
-          createProjectionEvent("event-filtered-pm-two", "filtered-pm-two", { name: "general" }),
+          createProjectCreated("event-filtered-pm-two", "filtered-pm-two", { name: "general" }),
         );
 
       expect(FilteredProcessManager.calls).toEqual([
@@ -7532,7 +7543,7 @@ describe("repository signal routing", () => {
 
   it("emits a System subscriber-dispatch diagnostic after projection admission", async () => {
     const diagnostics: SpineEvent[] = [];
-    const event = createProjectionEvent("subscriber-diagnostic", "subscriber-id");
+    const event = createProjectCreated("subscriber-diagnostic", "subscriber-id");
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingProjectionRepository())
       .addEventDispatcher({
@@ -7553,14 +7564,14 @@ describe("repository signal routing", () => {
         EventDispatchedToSubscriberSchema,
       );
       expect(diagnostic).toMatchObject({
-        receiver: { typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+        receiver: { typeUrl: TypeUrls.derive(ProjectOverviewStateSchema) },
         payload: event,
         entityType: { impl: { case: "javaClassName", value: "ExecutingTaskProjection" } },
         whenDispatched: diagnostics[0]?.context?.timestamp,
       });
       expect(diagnostics[0]?.context?.origin).toMatchObject({
         case: "pastMessage",
-        value: { message: { typeUrl: TypeUrls.derive(ProjectionEventSchema) } },
+        value: { message: { typeUrl: TypeUrls.derive(ProjectCreatedSchema) } },
       });
       expect(context.eventBus().acceptedEventTypes()).not.toContain(
         TypeUrls.derive(EventDispatchedToSubscriberSchema),
@@ -7573,7 +7584,7 @@ describe("repository signal routing", () => {
   it("retains one subscriber diagnostic when an admitted subscriber fails", async () => {
     const failure = new Error("admitted projection subscriber failed");
     const diagnostics: SpineEvent[] = [];
-    const event = createProjectionEvent(
+    const event = createProjectCreated(
       "subscriber-diagnostic-failure",
       "subscriber-diagnostic-failure",
     );
@@ -7618,7 +7629,7 @@ describe("repository signal routing", () => {
 
     try {
       await context.eventBus().post(
-        createProjectionEvent("subscriber-tenant", "subscriber-id", {
+        createProjectCreated("subscriber-tenant", "subscriber-id", {
           pastMessageTenantId: "tenant-a",
         }),
       );
@@ -7659,8 +7670,8 @@ describe("repository signal routing", () => {
           id: create(EventIdSchema, { value: "subscriber-unmatched" }),
           context: create(EventContextSchema),
           message: AnyMessages.pack(
-            NumberRouteEventSchema,
-            create(NumberRouteEventSchema, { id: 7 }),
+            ProjectPriorityChangedSchema,
+            create(ProjectPriorityChangedSchema, { id: 7 }),
           ),
         }),
       );
@@ -7691,7 +7702,7 @@ describe("repository signal routing", () => {
       await expect(
         context
           .eventBus()
-          .post(createContextlessProjectionEvent("subscriber-routing-refusal", "first-field-task")),
+          .post(createContextlessProjectCreated("subscriber-routing-refusal", "first-field-task")),
       ).rejects.toThrow(/producer ID/i);
       await context.close();
 
@@ -7718,12 +7729,12 @@ describe("repository signal routing", () => {
 
     try {
       await expect(
-        context.eventBus().post(createProjectionEvent("subscriber-failure", "subscriber-failure")),
+        context.eventBus().post(createProjectCreated("subscriber-failure", "subscriber-failure")),
       ).resolves.toBeUndefined();
 
       expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
       await expect(
-        context.stand().read(ProjectionStateSchema, "subscriber-failure"),
+        context.stand().read(ProjectOverviewStateSchema, "subscriber-failure"),
       ).resolves.toMatchObject({
         name: "Task (projected)",
       });
@@ -7758,10 +7769,10 @@ describe("repository signal routing", () => {
       .build();
 
     await expect(
-      context.eventBus().post(createProjectionEvent("projection-commit-fails", "projection-fails")),
+      context.eventBus().post(createProjectCreated("projection-commit-fails", "projection-fails")),
     ).resolves.toBeUndefined();
     await expect(
-      context.stand().read(ProjectionStateSchema, "projection-fails"),
+      context.stand().read(ProjectOverviewStateSchema, "projection-fails"),
     ).resolves.toBeUndefined();
     expect(changes).toEqual([]);
   });
@@ -7793,7 +7804,7 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("aggregate-commit-fails", "aggregate-fails")),
     ).resolves.toBeUndefined();
     await expect(
-      context.stand().read(AggregateStateSchema, "aggregate-fails"),
+      context.stand().read(ProjectStateSchema, "aggregate-fails"),
     ).resolves.toBeUndefined();
     expect(changes).toEqual([]);
   });
@@ -7826,17 +7837,17 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("aggregate-replay", "aggregate-replay"));
       await projection
         .eventBus()
-        .post(createProjectionEvent("projection-replay", "projection-replay"));
+        .post(createProjectCreated("projection-replay", "projection-replay"));
       await processManager.commandBus().post(createAggregateCommand("pm-replay", "pm-replay"));
 
       await expect(
-        aggregate.stand().read(AggregateStateSchema, "aggregate-replay"),
+        aggregate.stand().read(ProjectStateSchema, "aggregate-replay"),
       ).resolves.toBeUndefined();
       await expect(
-        projection.stand().read(ProjectionStateSchema, "projection-replay"),
+        projection.stand().read(ProjectOverviewStateSchema, "projection-replay"),
       ).resolves.toBeUndefined();
       await expect(
-        processManager.stand().read(ProcessManagerStateSchema, "pm-replay"),
+        processManager.stand().read(ProjectQueueStateSchema, "pm-replay"),
       ).resolves.toBeUndefined();
       expect(aggregateChanges).toEqual([]);
     } finally {
@@ -7882,20 +7893,20 @@ describe("repository signal routing", () => {
       await expect(
         projection
           .eventBus()
-          .post(createProjectionEvent("projection-conflict", "projection-conflict")),
+          .post(createProjectCreated("projection-conflict", "projection-conflict")),
       ).resolves.toBeUndefined();
       await expect(
         processManager.commandBus().post(createAggregateCommand("pm-conflict", "pm-conflict")),
       ).resolves.toBeUndefined();
 
       await expect(
-        aggregate.stand().read(AggregateStateSchema, "aggregate-conflict"),
+        aggregate.stand().read(ProjectStateSchema, "aggregate-conflict"),
       ).resolves.toBeUndefined();
       await expect(
-        projection.stand().read(ProjectionStateSchema, "projection-conflict"),
+        projection.stand().read(ProjectOverviewStateSchema, "projection-conflict"),
       ).resolves.toBeUndefined();
       await expect(
-        processManager.stand().read(ProcessManagerStateSchema, "pm-conflict"),
+        processManager.stand().read(ProjectQueueStateSchema, "pm-conflict"),
       ).resolves.toBeUndefined();
       expect(lifecycleEvents).toEqual([]);
     } finally {
@@ -7910,7 +7921,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerAssignRepository())
       .addEventDispatcher({
-        messageSchemas: () => [ProjectionEventSchema],
+        messageSchemas: () => [ProjectCreatedSchema],
         dispatch: (event) => {
           dispatched.push(event);
           return Promise.resolve();
@@ -7930,7 +7941,7 @@ describe("repository signal routing", () => {
       context.commandBus().post(createAggregateCommand("pm-commit-fails", "pm-fails")),
     ).resolves.toBeUndefined();
     await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-fails"),
+      context.stand().read(ProjectQueueStateSchema, "pm-fails"),
     ).resolves.toBeUndefined();
     expect(dispatched).toEqual([]);
   });
@@ -7966,15 +7977,15 @@ describe("repository signal routing", () => {
       }
       const change = AnyMessages.unpack(event.message, EntityStateChangedSchema);
       expect(change).toMatchObject({
-        entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
-        signalId: [{ typeUrl: TypeUrls.derive(TaskCommandSchema) }],
-        newState: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        entity: { typeUrl: TypeUrls.derive(ProjectStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(CreateProjectSchema) }],
+        newState: { typeUrl: TypeUrls.derive(ProjectStateSchema) },
         newVersion: { number: 1 },
       });
       if (change?.newState === undefined) {
         throw new Error("Expected the committed state in the change event.");
       }
-      expect(AnyMessages.unpack(change.newState, AggregateStateSchema)).toMatchObject({
+      expect(AnyMessages.unpack(change.newState, ProjectStateSchema)).toMatchObject({
         id: "changed",
         name: "Task (applied)",
       });
@@ -8008,7 +8019,7 @@ describe("repository signal routing", () => {
         TypeUrls.derive(EntityStateChangedSchema),
       ]);
       expect(AnyMessages.unpack(changes[0]?.message as never, EntityCreatedSchema)).toMatchObject({
-        entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        entity: { typeUrl: TypeUrls.derive(ProjectStateSchema) },
         kind: 1,
       });
     } finally {
@@ -8110,8 +8121,8 @@ describe("repository signal routing", () => {
       ].entries()) {
         const lifecycle = AnyMessages.unpack(changes[index]?.message as never, schema);
         expect(lifecycle).toMatchObject({
-          entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
-          signalId: [{ typeUrl: TypeUrls.derive(TaskCommandSchema) }],
+          entity: { typeUrl: TypeUrls.derive(ProjectStateSchema) },
+          signalId: [{ typeUrl: TypeUrls.derive(CreateProjectSchema) }],
         });
         expect(lifecycle?.version?.number).toBeGreaterThan(0);
       }
@@ -8142,7 +8153,7 @@ describe("repository signal routing", () => {
     try {
       await context
         .eventBus()
-        .post(createProjectionEvent("projection-seed", "projection-lifecycle"));
+        .post(createProjectCreated("projection-seed", "projection-lifecycle"));
       await waitForCondition(() => changes.length === 2);
       changes.splice(0);
       for (const [index, name] of [
@@ -8155,7 +8166,7 @@ describe("repository signal routing", () => {
         await context
           .eventBus()
           .post(
-            createProjectionEvent(`projection-${String(index)}`, "projection-lifecycle", { name }),
+            createProjectCreated(`projection-${String(index)}`, "projection-lifecycle", { name }),
           );
       }
       await waitForCondition(() => changes.length === 4);
@@ -8166,7 +8177,12 @@ describe("repository signal routing", () => {
         TypeUrls.derive(EntityRestoredSchema),
       ]);
       await expect(
-        standAccess.readCurrent(context.stand(), ProjectionStateSchema, "projection-lifecycle", {}),
+        standAccess.readCurrent(
+          context.stand(),
+          ProjectOverviewStateSchema,
+          "projection-lifecycle",
+          {},
+        ),
       ).resolves.toMatchObject({
         archived: false,
         deleted: false,
@@ -8234,7 +8250,7 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("pm-archive-all", "pm-all", "archive-lifecycle"));
       await waitForCondition(() => changes.length === 1);
       await expect(
-        standAccess.readCurrent(context.stand(), ProcessManagerStateSchema, "pm-all", {}),
+        standAccess.readCurrent(context.stand(), ProjectQueueStateSchema, "pm-all", {}),
       ).resolves.toMatchObject({ archived: true });
       changes.splice(0);
       await context
@@ -8242,7 +8258,7 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("pm-unarchive-all", "pm-all", "unarchive-lifecycle"));
       expect(RoutingProcessManager.commandCalls).toBe(3);
       await expect(
-        standAccess.readCurrent(context.stand(), ProcessManagerStateSchema, "pm-all", {}),
+        standAccess.readCurrent(context.stand(), ProjectQueueStateSchema, "pm-all", {}),
       ).resolves.toMatchObject({ archived: false });
       await waitForCondition(() => changes.length === 1);
       expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityUnarchivedSchema));
@@ -8251,7 +8267,7 @@ describe("repository signal routing", () => {
         .commandBus()
         .post(createAggregateCommand("pm-delete-all", "pm-all", "delete-lifecycle"));
       await expect(
-        standAccess.readCurrent(context.stand(), ProcessManagerStateSchema, "pm-all", {}),
+        standAccess.readCurrent(context.stand(), ProjectQueueStateSchema, "pm-all", {}),
       ).resolves.toMatchObject({ deleted: true });
       await waitForCondition(() => changes.length === 1);
       expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityDeletedSchema));
@@ -8260,7 +8276,7 @@ describe("repository signal routing", () => {
         .commandBus()
         .post(createAggregateCommand("pm-restore-all", "pm-all", "restore-lifecycle"));
       await expect(
-        standAccess.readCurrent(context.stand(), ProcessManagerStateSchema, "pm-all", {}),
+        standAccess.readCurrent(context.stand(), ProjectQueueStateSchema, "pm-all", {}),
       ).resolves.toMatchObject({ deleted: false, state: { queue: "Task assigned" } });
       await waitForCondition(() => changes.length === 1);
       expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityRestoredSchema));
@@ -8290,14 +8306,14 @@ describe("repository signal routing", () => {
 
       expect(changes).toHaveLength(2);
       await expect(
-        context.stand().readVersioned(AggregateStateSchema, "state-change"),
+        context.stand().readVersioned(ProjectStateSchema, "state-change"),
       ).resolves.toMatchObject({ state: { name: "Second (applied)" }, version: { number: 2 } });
       expect(readStateChange(changes[0])?.oldState).toBeUndefined();
       const oldState = readStateChange(changes[1])?.oldState;
       if (oldState === undefined) {
         throw new Error("Expected a prior state on the second state-change notification.");
       }
-      expect(AnyMessages.unpack(oldState, AggregateStateSchema)).toMatchObject({
+      expect(AnyMessages.unpack(oldState, ProjectStateSchema)).toMatchObject({
         id: "state-change",
         name: "Task (applied)",
       });
@@ -8321,11 +8337,11 @@ describe("repository signal routing", () => {
       })
       .build();
     try {
-      await aggregate.eventBus().post(createProjectionEvent("reactor-source", "reactor-id"));
+      await aggregate.eventBus().post(createProjectCreated("reactor-source", "reactor-id"));
       await waitForCondition(() => aggregateChanges.length === 1);
       expect(readStateChange(aggregateChanges[0])).toMatchObject({
-        entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
-        signalId: [{ typeUrl: TypeUrls.derive(ProjectionEventSchema) }],
+        entity: { typeUrl: TypeUrls.derive(ProjectStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(ProjectCreatedSchema) }],
         newVersion: { number: 1 },
       });
       expect(aggregateChanges[0]?.context?.origin.case).toBe("pastMessage");
@@ -8345,11 +8361,11 @@ describe("repository signal routing", () => {
       })
       .build();
     try {
-      await projection.eventBus().post(createProjectionEvent("projection-source", "projection-id"));
+      await projection.eventBus().post(createProjectCreated("projection-source", "projection-id"));
       await waitForCondition(() => projectionChanges.length === 1);
       expect(readStateChange(projectionChanges[0])).toMatchObject({
-        entity: { typeUrl: TypeUrls.derive(ProjectionStateSchema) },
-        signalId: [{ typeUrl: TypeUrls.derive(ProjectionEventSchema) }],
+        entity: { typeUrl: TypeUrls.derive(ProjectOverviewStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(ProjectCreatedSchema) }],
         newVersion: { number: 1 },
       });
     } finally {
@@ -8371,8 +8387,8 @@ describe("repository signal routing", () => {
       await processManager.commandBus().post(createAggregateCommand("pm-command", "pm-command-id"));
       await waitForCondition(() => pmChanges.length === 1);
       expect(readStateChange(pmChanges[0])).toMatchObject({
-        entity: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
-        signalId: [{ typeUrl: TypeUrls.derive(TaskCommandSchema) }],
+        entity: { typeUrl: TypeUrls.derive(ProjectQueueStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(CreateProjectSchema) }],
       });
     } finally {
       await processManager.close();
@@ -8390,11 +8406,11 @@ describe("repository signal routing", () => {
       })
       .build();
     try {
-      await eventProcessManager.eventBus().post(createProjectionEvent("pm-event", "pm-event-id"));
+      await eventProcessManager.eventBus().post(createProjectCreated("pm-event", "pm-event-id"));
       await waitForCondition(() => pmEventChanges.length === 1);
       expect(readStateChange(pmEventChanges[0])).toMatchObject({
-        entity: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
-        signalId: [{ typeUrl: TypeUrls.derive(ProjectionEventSchema) }],
+        entity: { typeUrl: TypeUrls.derive(ProjectQueueStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(ProjectCreatedSchema) }],
       });
     } finally {
       await eventProcessManager.close();
@@ -8414,7 +8430,7 @@ describe("repository signal routing", () => {
       })
       .build();
     try {
-      await context.eventBus().post(createProjectionEvent("unchanged", "unchanged-id"));
+      await context.eventBus().post(createProjectCreated("unchanged", "unchanged-id"));
       await context.close();
       expect(changes).toEqual([]);
     } finally {
@@ -8461,18 +8477,18 @@ describe("repository signal routing", () => {
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
 
-    await context.eventBus().post(createProjectionEvent("event-catch-up", "task-catch-up"));
+    await context.eventBus().post(createProjectCreated("event-catch-up", "task-catch-up"));
     await context.stand().update(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, {
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
         id: "task-catch-up",
         name: "Wrong",
         priority: 99,
       }),
     );
     await context.stand().update(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, {
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
         id: "task-stale",
         name: "Stale",
         priority: 7,
@@ -8485,12 +8501,12 @@ describe("repository signal routing", () => {
     await expect(context.catchUpReadSide()).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 2,
-      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
     });
     await expect(
-      context.stand().readVersioned(ProjectionStateSchema, "task-catch-up"),
+      context.stand().readVersioned(ProjectOverviewStateSchema, "task-catch-up"),
     ).resolves.toEqual({
-      state: create(ProjectionStateSchema, {
+      state: create(ProjectOverviewStateSchema, {
         id: "task-catch-up",
         name: "Task (projected)",
         priority: 2,
@@ -8498,7 +8514,7 @@ describe("repository signal routing", () => {
       version: create(VersionSchema, { number: 1 }),
     });
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-stale"),
+      context.stand().read(ProjectOverviewStateSchema, "task-stale"),
     ).resolves.toBeUndefined();
     await expect(eventStore.read()).resolves.toEqual(storedBefore);
     expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
@@ -8531,12 +8547,16 @@ describe("repository signal routing", () => {
           "tenant-b",
         ),
       );
-    await waitForProjectionState(context, "task-catch-up-tenant", "tenant-a");
-    const tenantBBefore = await waitForProjectionState(context, "task-catch-up-tenant", "tenant-b");
+    await waitForProjectOverviewState(context, "task-catch-up-tenant", "tenant-a");
+    const tenantBBefore = await waitForProjectOverviewState(
+      context,
+      "task-catch-up-tenant",
+      "tenant-b",
+    );
 
     await context.stand().update(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, {
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
         id: "task-catch-up-tenant",
         name: "Wrong tenant-a",
         priority: 99,
@@ -8550,21 +8570,21 @@ describe("repository signal routing", () => {
     ).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
     });
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-catch-up-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-catch-up-tenant", {
         tenantId: createTenantId("tenant-a"),
       }),
     ).resolves.toEqual(
-      create(ProjectionStateSchema, {
+      create(ProjectOverviewStateSchema, {
         id: "task-catch-up-tenant",
         name: "Task (projected)",
         priority: 2,
       }),
     );
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-catch-up-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-catch-up-tenant", {
         tenantId: createTenantId("tenant-b"),
       }),
     ).resolves.toEqual(tenantBBefore);
@@ -8598,7 +8618,7 @@ describe("repository signal routing", () => {
       .add(createAlternateCatchUpProjectionRepository())
       .build();
 
-    await context.eventBus().post(createProjectionEvent("event-primary", "task-primary"));
+    await context.eventBus().post(createProjectCreated("event-primary", "task-primary"));
     await context.eventBus().post(
       create(EventSchema, {
         id: create(EventIdSchema, { value: "event-alternate" }),
@@ -8614,8 +8634,8 @@ describe("repository signal routing", () => {
       }),
     );
     await context.stand().update(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, {
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
         id: "task-primary",
         name: "Wrong primary",
         priority: 99,
@@ -8634,10 +8654,13 @@ describe("repository signal routing", () => {
     await expect(context.catchUpReadSide()).resolves.toEqual({
       replayedEventCount: 2,
       clearedEntityCount: 2,
-      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema), TypeUrls.derive(TaskListSchema)],
+      clearedStateTypes: [
+        TypeUrls.derive(ProjectOverviewStateSchema),
+        TypeUrls.derive(TaskListSchema),
+      ],
     });
-    await expect(context.stand().read(ProjectionStateSchema, "task-primary")).resolves.toEqual(
-      create(ProjectionStateSchema, {
+    await expect(context.stand().read(ProjectOverviewStateSchema, "task-primary")).resolves.toEqual(
+      create(ProjectOverviewStateSchema, {
         id: "task-primary",
         name: "Task (projected)",
         priority: 2,
@@ -8663,7 +8686,7 @@ describe("repository signal routing", () => {
       .add(createExecutingProjectionRepository())
       .build();
 
-    await context.eventBus().post(createProjectionEvent("event-shared-state", "task-shared-state"));
+    await context.eventBus().post(createProjectCreated("event-shared-state", "task-shared-state"));
     await context.eventBus().post(
       create(EventSchema, {
         id: create(EventIdSchema, { value: "event-unmatched-state" }),
@@ -8671,16 +8694,16 @@ describe("repository signal routing", () => {
           version: create(VersionSchema, { number: 1 }),
         }),
         message: AnyMessages.pack(
-          NumberRouteEventSchema,
-          create(NumberRouteEventSchema, {
+          ProjectPriorityChangedSchema,
+          create(ProjectPriorityChangedSchema, {
             id: 7,
           }),
         ),
       }),
     );
     await context.stand().update(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, {
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
         id: "task-shared-state",
         name: "Wrong shared state",
         priority: 99,
@@ -8691,7 +8714,7 @@ describe("repository signal routing", () => {
     await expect(context.catchUpReadSide()).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
     });
     expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
   });
@@ -8718,16 +8741,16 @@ describe("repository signal routing", () => {
           trimmedTenantId,
         ),
       );
-    await waitForProjectionState(context, "task-space-tenant", rawTenantId);
-    const trimmedBefore = await waitForProjectionState(
+    await waitForProjectOverviewState(context, "task-space-tenant", rawTenantId);
+    const trimmedBefore = await waitForProjectOverviewState(
       context,
       "task-space-tenant",
       trimmedTenantId,
     );
 
     await context.stand().update(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, {
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
         id: "task-space-tenant",
         name: "Wrong raw tenant",
         priority: 99,
@@ -8741,21 +8764,21 @@ describe("repository signal routing", () => {
     ).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
     });
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-space-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-space-tenant", {
         tenantId: createTenantId(rawTenantId),
       }),
     ).resolves.toEqual(
-      create(ProjectionStateSchema, {
+      create(ProjectOverviewStateSchema, {
         id: "task-space-tenant",
         name: "Task (projected)",
         priority: 2,
       }),
     );
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-space-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-space-tenant", {
         tenantId: createTenantId(trimmedTenantId),
       }),
     ).resolves.toEqual(trimmedBefore);
@@ -8775,7 +8798,7 @@ describe("repository signal routing", () => {
     );
 
     await eventStore.append(
-      createProjectionEvent("event-domain-tenant", "task-domain-tenant", {
+      createProjectCreated("event-domain-tenant", "task-domain-tenant", {
         importTenantId: "example.com",
         importTenantKind: "domain",
       }),
@@ -8786,14 +8809,14 @@ describe("repository signal routing", () => {
     ).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 0,
-      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
     });
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-domain-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-domain-tenant", {
         tenantId: createTenantId("example.com", "domain"),
       }),
     ).resolves.toEqual(
-      create(ProjectionStateSchema, {
+      create(ProjectOverviewStateSchema, {
         id: "task-domain-tenant",
         name: "Task (projected)",
         priority: 2,
@@ -8818,7 +8841,7 @@ describe("repository signal routing", () => {
     );
 
     await eventStore.append(
-      createProjectionEvent("event-email-tenant", "task-email-tenant", {
+      createProjectCreated("event-email-tenant", "task-email-tenant", {
         pastMessageTenantId: "owner@example.com",
         pastMessageTenantKind: "email",
       }),
@@ -8829,14 +8852,14 @@ describe("repository signal routing", () => {
     ).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 0,
-      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
     });
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-email-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-email-tenant", {
         tenantId: createTenantId("owner@example.com", "email"),
       }),
     ).resolves.toEqual(
-      create(ProjectionStateSchema, {
+      create(ProjectOverviewStateSchema, {
         id: "task-email-tenant",
         name: "Task (projected)",
         priority: 2,
@@ -8851,7 +8874,7 @@ describe("repository signal routing", () => {
       .withStorageFactory(storageFactory)
       .add(createExecutingProjectionRepository())
       .build();
-    const tenantBState = create(ProjectionStateSchema, {
+    const tenantBState = create(ProjectOverviewStateSchema, {
       id: "task-corrupt-tenant",
       name: "Tenant B before catch-up",
       priority: 7,
@@ -8862,11 +8885,11 @@ describe("repository signal routing", () => {
     );
 
     await eventStore.appendAll([
-      createProjectionEvent("event-corrupt-tenant", "task-corrupt-tenant", {
+      createProjectCreated("event-corrupt-tenant", "task-corrupt-tenant", {
         pastMessageTenantId: "tenant-b",
       }),
     ]);
-    await context.stand().update(ProjectionStateSchema, tenantBState, {
+    await context.stand().update(ProjectOverviewStateSchema, tenantBState, {
       tenantId: createTenantId("tenant-b"),
     });
 
@@ -8882,7 +8905,7 @@ describe("repository signal routing", () => {
       clearedEntityCount: 1,
     });
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-corrupt-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-corrupt-tenant", {
         tenantId: createTenantId("tenant-b"),
       }),
     ).resolves.toMatchObject({ name: "Task (projected)", priority: 2 });
@@ -8901,7 +8924,7 @@ describe("repository signal routing", () => {
       storageFactory,
     );
 
-    await eventStore.append(createProjectionEvent("event-missing-tenant", "task-missing-tenant"));
+    await eventStore.append(createProjectCreated("event-missing-tenant", "task-missing-tenant"));
 
     await expect(
       context.catchUpReadSide({ tenantId: createTenantId("tenant-a") }),
@@ -8915,7 +8938,7 @@ describe("repository signal routing", () => {
       },
     });
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-missing-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-missing-tenant", {
         tenantId: createTenantId("tenant-a"),
       }),
     ).resolves.toBeUndefined();
@@ -8928,10 +8951,10 @@ describe("repository signal routing", () => {
       .add(createBlockingCatchUpProjectionRepository())
       .build();
 
-    await context.eventBus().post(createProjectionEvent("event-blocking", "task-blocking"));
+    await context.eventBus().post(createProjectCreated("event-blocking", "task-blocking"));
     await context.stand().update(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, {
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
         id: "task-blocking",
         name: "Wrong blocking",
         priority: 99,
@@ -8949,7 +8972,7 @@ describe("repository signal routing", () => {
     await expect(first).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
     });
     await waitForCondition(() => BlockingCatchUpProjection.startedCalls === 2);
     expect(BlockingCatchUpProjection.completedCalls).toBe(1);
@@ -8958,7 +8981,7 @@ describe("repository signal routing", () => {
     await expect(second).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
     });
     expect(BlockingCatchUpProjection.completedCalls).toBe(2);
   });
@@ -8969,10 +8992,10 @@ describe("repository signal routing", () => {
       .add(createBlockingCatchUpProjectionRepository())
       .build();
 
-    await context.eventBus().post(createProjectionEvent("event-queued-catch-up", "task-queued"));
+    await context.eventBus().post(createProjectCreated("event-queued-catch-up", "task-queued"));
     await context.stand().update(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, {
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
         id: "task-queued",
         name: "Wrong queued",
         priority: 99,
@@ -8985,18 +9008,20 @@ describe("repository signal routing", () => {
 
     const livePost = context
       .eventBus()
-      .post(createProjectionEvent("event-queued-live", "task-live"));
+      .post(createProjectCreated("event-queued-live", "task-live"));
 
     await expect(Promise.race([livePost.then(() => "posted"), delay(25)])).resolves.toBe("pending");
     expect(BlockingCatchUpProjection.completedCalls).toBe(0);
-    await expect(context.stand().read(ProjectionStateSchema, "task-live")).resolves.toBeUndefined();
+    await expect(
+      context.stand().read(ProjectOverviewStateSchema, "task-live"),
+    ).resolves.toBeUndefined();
 
     BlockingCatchUpProjection.release(0);
 
     await expect(catchUp).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
     });
     await waitForCondition(() => BlockingCatchUpProjection.startedCalls === 2);
     expect(BlockingCatchUpProjection.completedCalls).toBe(1);
@@ -9005,8 +9030,8 @@ describe("repository signal routing", () => {
 
     await expect(livePost).resolves.toBeUndefined();
     expect(BlockingCatchUpProjection.completedCalls).toBe(2);
-    await expect(context.stand().read(ProjectionStateSchema, "task-live")).resolves.toEqual(
-      create(ProjectionStateSchema, {
+    await expect(context.stand().read(ProjectOverviewStateSchema, "task-live")).resolves.toEqual(
+      create(ProjectOverviewStateSchema, {
         id: "task-live",
         name: "Task (blocking)",
         priority: 2,
@@ -9020,10 +9045,10 @@ describe("repository signal routing", () => {
       .add(createBlockingCatchUpProjectionRepository())
       .build();
 
-    await context.eventBus().post(createProjectionEvent("event-close", "task-close"));
+    await context.eventBus().post(createProjectCreated("event-close", "task-close"));
     await context.stand().update(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, {
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
         id: "task-close",
         name: "Wrong close",
         priority: 99,
@@ -9043,7 +9068,7 @@ describe("repository signal routing", () => {
     await expect(catchUp).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
     });
     await expect(close).resolves.toBe("closed");
   });
@@ -9057,7 +9082,7 @@ describe("repository signal routing", () => {
     await expect(
       context
         .eventBus()
-        .post(createProjectionEvent("event-catch-up-failure", "task-catch-up-failure")),
+        .post(createProjectCreated("event-catch-up-failure", "task-catch-up-failure")),
     ).resolves.toBeUndefined();
 
     await expect(context.catchUpReadSide()).rejects.toMatchObject({
@@ -9086,7 +9111,7 @@ describe("repository signal routing", () => {
       await expect(
         context
           .eventBus()
-          .post(createProjectionEvent("event-catch-up-string-failure", "task-string-failure")),
+          .post(createProjectCreated("event-catch-up-string-failure", "task-string-failure")),
       ).resolves.toBeUndefined();
 
       await expect(context.catchUpReadSide()).rejects.toMatchObject({
@@ -9135,7 +9160,7 @@ describe("repository signal routing", () => {
       .build();
 
     await context.eventBus().post(
-      createProjectionEvent("event-generated", "task-generated", {
+      createProjectCreated("event-generated", "task-generated", {
         pastMessageTenantId: "tenant-b",
       }),
     );
@@ -9165,7 +9190,7 @@ describe("repository signal routing", () => {
       "Already done",
     );
     const originalCommand = clone(CommandSchema, command);
-    ManagedTaskAggregate.reset(rejection);
+    ManagedProjectAggregate.reset(rejection);
     const context = BoundedContext.singleTenant("Tasks")
       .add(createManagedRepository())
       .add(createRejectionObservingRepository())
@@ -9196,7 +9221,7 @@ describe("repository signal routing", () => {
     ).toEqual(expectedPayload);
     expect(stored?.context?.rejection?.command).toEqual(originalCommand);
     expect(stored?.context?.rejection?.stacktrace).toBe(rejection.stack);
-    ManagedTaskAggregate.reset();
+    ManagedProjectAggregate.reset();
   });
 
   it("passes empty EventContext to a custom-routed two-argument subscriber", async () => {
@@ -9204,12 +9229,12 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(
         createGeneratedTwoArgProjectionRepository(
-          EventRouting.create<string>().route(ProjectionEventSchema, () => ["task-empty"]),
+          EventRouting.create<string>().route(ProjectCreatedSchema, () => ["task-empty"]),
         ),
       )
       .build();
 
-    await context.eventBus().post(createContextlessProjectionEvent("event-empty", "task-empty"));
+    await context.eventBus().post(createContextlessProjectCreated("event-empty", "task-empty"));
 
     expect(GeneratedTwoArgProjection.argumentCounts).toEqual([2]);
     expect(GeneratedTwoArgProjection.contexts).toEqual([create(EventContextSchema)]);
@@ -9221,7 +9246,7 @@ describe("repository signal routing", () => {
       .add(createContextMutatingGeneratedProjectionRepository())
       .build();
 
-    await context.eventBus().post(createProjectionEvent("event-mutating", "task-mutating"));
+    await context.eventBus().post(createProjectCreated("event-mutating", "task-mutating"));
 
     expect(ContextMutatingGeneratedProjection.observerSawSameContext).toBe(false);
     expect(ContextMutatingGeneratedProjection.observedVersions).toEqual([1]);
@@ -9231,11 +9256,11 @@ describe("repository signal routing", () => {
     ManagedTaskProjection.reset();
     const context = BoundedContext.singleTenant("Tasks").add(createManagedProjection()).build();
 
-    await context.eventBus().post(createProjectionEvent("event-managed", "task-managed"));
+    await context.eventBus().post(createProjectCreated("event-managed", "task-managed"));
 
     expect(ManagedTaskProjection.subscriberCalls).toBe(1);
     await expect(
-      context.stand().readVersioned(ProjectionStateSchema, "task-managed"),
+      context.stand().readVersioned(ProjectOverviewStateSchema, "task-managed"),
     ).resolves.toMatchObject({
       state: {
         id: "task-managed",
@@ -9258,7 +9283,7 @@ describe("repository signal routing", () => {
       storageFactory: factory,
     });
 
-    await context.eventBus().post(createProjectionEvent("event-inbox", "task-inbox"));
+    await context.eventBus().post(createProjectCreated("event-inbox", "task-inbox"));
 
     expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
 
@@ -9270,7 +9295,7 @@ describe("repository signal routing", () => {
     expect(delivered[0]).toMatchObject({
       inboxId: {
         targetId: Identifiers.pack("string", "task-inbox"),
-        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       },
       signalId: "event-inbox",
       label: "UPDATE_SUBSCRIBER",
@@ -9299,7 +9324,7 @@ describe("repository signal routing", () => {
       storageFactory: factory,
     });
     const target = requireProjectionInboxTarget(repository);
-    const event = createProjectionEvent("event-projection-replay", "projection-replay", {
+    const event = createProjectCreated("event-projection-replay", "projection-replay", {
       importTenantId: "tenant-a",
     });
     const valid = await storePmInboxEvent(
@@ -9309,7 +9334,7 @@ describe("repository signal routing", () => {
       1n,
       {
         label: "UPDATE_SUBSCRIBER",
-        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       },
     );
     const { signal: ignoredSignal, ...missingSignal } = valid;
@@ -9323,7 +9348,7 @@ describe("repository signal routing", () => {
           typeUrl: TypeUrls.derive(EventSchema),
           value: new Uint8Array([0]),
         }),
-        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       }),
     ).rejects.toThrow();
     const invalidPayload = await storePmInboxEvent(
@@ -9334,8 +9359,8 @@ describe("repository signal routing", () => {
           ...(tenantAOrigin === undefined ? {} : { origin: tenantAOrigin }),
         }),
         message: AnyMessages.pack(
-          ProjectionEventSchema,
-          create(ProjectionEventSchema, { id: "projection-replay", name: "Task" }),
+          ProjectCreatedSchema,
+          create(ProjectCreatedSchema, { id: "projection-replay", name: "Task" }),
         ),
       }),
       new Date("2026-07-24T21:20:02.000Z"),
@@ -9352,29 +9377,29 @@ describe("repository signal routing", () => {
               ...(tenantAOrigin === undefined ? {} : { origin: tenantAOrigin }),
             }),
             message: create(AnySchema, {
-              typeUrl: TypeUrls.derive(ProjectionEventSchema),
+              typeUrl: TypeUrls.derive(ProjectCreatedSchema),
               value: new Uint8Array([255]),
             }),
           }),
           { validate: false },
         ),
-        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       },
     );
     const missingTenant = await storePmInboxEvent(
       delivery,
-      createProjectionEvent("event-projection-missing-tenant", "projection-replay"),
+      createProjectCreated("event-projection-missing-tenant", "projection-replay"),
       new Date("2026-07-24T21:20:03.000Z"),
       4n,
       {
         label: "UPDATE_SUBSCRIBER",
         signalId: "event-projection-replay-missing-tenant",
-        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       },
     );
     const mismatchedTenant = await storePmInboxEvent(
       delivery,
-      createProjectionEvent("event-projection-mismatched-tenant", "projection-replay", {
+      createProjectCreated("event-projection-mismatched-tenant", "projection-replay", {
         importTenantId: "tenant-b",
       }),
       new Date("2026-07-24T21:20:04.000Z"),
@@ -9382,7 +9407,7 @@ describe("repository signal routing", () => {
       {
         label: "UPDATE_SUBSCRIBER",
         signalId: "event-projection-replay-mismatched-tenant",
-        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       },
     );
     try {
@@ -9403,7 +9428,7 @@ describe("repository signal routing", () => {
       ).rejects.toThrow("Projection inbox replay stored event tenant does not match.");
       expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
       await expect(
-        context.stand().read(ProjectionStateSchema, "projection-replay", {
+        context.stand().read(ProjectOverviewStateSchema, "projection-replay", {
           tenantId: createTenantId("tenant-a"),
         }),
       ).resolves.toBeUndefined();
@@ -9415,7 +9440,7 @@ describe("repository signal routing", () => {
   it("routes a Projection Event once at admission and not during replay", async () => {
     ExecutingTaskProjection.reset();
     let routeCalls = 0;
-    const eventRouting = EventRouting.create<string>().route(ProjectionEventSchema, (message) => {
+    const eventRouting = EventRouting.create<string>().route(ProjectCreatedSchema, (message) => {
       routeCalls += 1;
       return [message.id];
     });
@@ -9429,7 +9454,7 @@ describe("repository signal routing", () => {
     try {
       await context
         .eventBus()
-        .post(createProjectionEvent("event-projection-admission", "projection-admission"));
+        .post(createProjectCreated("event-projection-admission", "projection-admission"));
       await waitForCondition(() => ExecutingTaskProjection.subscriberCalls === 1);
       expect(routeCalls).toBe(1);
 
@@ -9439,10 +9464,10 @@ describe("repository signal routing", () => {
       });
       const replay = await storePmInboxEvent(
         delivery,
-        createProjectionEvent("event-projection-replay-count", "projection-admission"),
+        createProjectCreated("event-projection-replay-count", "projection-admission"),
         new Date("2026-08-11T04:56:00.000Z"),
         1n,
-        { label: "UPDATE_SUBSCRIBER", targetTypeUrl: TypeUrls.derive(ProjectionStateSchema) },
+        { label: "UPDATE_SUBSCRIBER", targetTypeUrl: TypeUrls.derive(ProjectOverviewStateSchema) },
       );
 
       await expect(
@@ -9464,7 +9489,7 @@ describe("repository signal routing", () => {
       .withStorageFactory(factory)
       .build();
     const dispatcher = repositoryAccess.eventDispatcher(repository);
-    const event = createProjectionEvent("event-duplicate-inbox", "task-duplicate-inbox");
+    const event = createProjectCreated("event-duplicate-inbox", "task-duplicate-inbox");
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -9479,7 +9504,7 @@ describe("repository signal routing", () => {
 
     expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-duplicate-inbox"),
+      context.stand().read(ProjectOverviewStateSchema, "task-duplicate-inbox"),
     ).resolves.toMatchObject({
       name: "Task (projected)",
       priority: 2,
@@ -9513,8 +9538,8 @@ describe("repository signal routing", () => {
         producerId: Identifiers.pack("string", "task-distinct-inbox"),
         version: create(VersionSchema, { number: 1 }),
       }),
-      schema: ProjectionEventSchema,
-      message: create(ProjectionEventSchema, {
+      schema: ProjectCreatedSchema,
+      message: create(ProjectCreatedSchema, {
         id: "task-distinct-inbox",
         name: "Same payload",
         priority: 1,
@@ -9547,7 +9572,7 @@ describe("repository signal routing", () => {
           (row) =>
             row.label === "UPDATE_SUBSCRIBER" &&
             row.status === "DELIVERED" &&
-            row.inboxId.targetTypeUrl === TypeUrls.derive(ProjectionStateSchema) &&
+            row.inboxId.targetTypeUrl === TypeUrls.derive(ProjectOverviewStateSchema) &&
             Identifiers.unpack("string", row.inboxId.targetId) === "task-distinct-inbox",
         ),
       ).toBe(true);
@@ -9565,7 +9590,7 @@ describe("repository signal routing", () => {
       .withStorageFactory(factory)
       .build();
     const dispatcher = repositoryAccess.eventDispatcher(repository);
-    const event = createProjectionEvent("event-concurrent-inbox", "task-concurrent-inbox");
+    const event = createProjectCreated("event-concurrent-inbox", "task-concurrent-inbox");
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -9591,7 +9616,7 @@ describe("repository signal routing", () => {
     expect(BlockingCatchUpProjection.startedCalls).toBe(1);
     expect(BlockingCatchUpProjection.completedCalls).toBe(1);
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-concurrent-inbox"),
+      context.stand().read(ProjectOverviewStateSchema, "task-concurrent-inbox"),
     ).resolves.toMatchObject({
       name: "Task (blocking)",
       priority: 2,
@@ -9611,15 +9636,15 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingProjectionRepository())
       .build();
-    const updates: ProjectionState[] = [];
-    context.stand().subscribe(ProjectionStateSchema, (update) => {
+    const updates: ProjectOverviewState[] = [];
+    context.stand().subscribe(ProjectOverviewStateSchema, (update) => {
       updates.push(update.state);
     });
 
-    await context.eventBus().post(createProjectionEvent("event-subscribed", "task-subscribed"));
+    await context.eventBus().post(createProjectCreated("event-subscribed", "task-subscribed"));
 
     expect(updates).toEqual([
-      create(ProjectionStateSchema, {
+      create(ProjectOverviewStateSchema, {
         id: "task-subscribed",
         name: "Task (projected)",
         priority: 2,
@@ -9633,11 +9658,11 @@ describe("repository signal routing", () => {
       .add(createPassiveProjectionRepository())
       .build();
 
-    await context.eventBus().post(createProjectionEvent("event-passive", "task-passive"));
+    await context.eventBus().post(createProjectCreated("event-passive", "task-passive"));
 
     expect(PassiveTaskProjection.subscriberCalls).toBe(1);
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-passive"),
+      context.stand().read(ProjectOverviewStateSchema, "task-passive"),
     ).resolves.toBeUndefined();
   });
 
@@ -9651,12 +9676,12 @@ describe("repository signal routing", () => {
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
-      stateSchema: ProcessManagerStateSchema,
+      stateSchema: ProjectQueueStateSchema,
       eventHistory: true,
     });
 
     try {
-      const existing = create(ProcessManagerStateSchema, {
+      const existing = create(ProjectQueueStateSchema, {
         id: "pm-diagnostic",
         queue: "already persisted",
       });
@@ -9666,17 +9691,17 @@ describe("repository signal routing", () => {
         state: existing,
         version: 1n,
       });
-      await context.stand().update(ProcessManagerStateSchema, existing, {
+      await context.stand().update(ProjectQueueStateSchema, existing, {
         version: create(VersionSchema, { number: 1 }),
       });
       await context.commandBus().post(createAggregateCommand("pm-diagnostic", "pm-diagnostic"));
 
       expect(DiagnosticOnlyProcessManager.calls).toBe(1);
-      await expect(
-        context.stand().read(ProcessManagerStateSchema, "pm-diagnostic"),
-      ).resolves.toEqual(existing);
+      await expect(context.stand().read(ProjectQueueStateSchema, "pm-diagnostic")).resolves.toEqual(
+        existing,
+      );
       await expect(storage.readEvents("pm-diagnostic")).resolves.toMatchObject([
-        { message: { typeUrl: TypeUrls.derive(ProjectionEventSchema) } },
+        { message: { typeUrl: TypeUrls.derive(ProjectCreatedSchema) } },
       ]);
     } finally {
       await context.close();
@@ -9688,11 +9713,11 @@ describe("repository signal routing", () => {
       .add(createAccumulatingProjectionRepository())
       .build();
 
-    await context.eventBus().post(createProjectionEvent("event-accumulated-1", "task-accumulated"));
-    await context.eventBus().post(createProjectionEvent("event-accumulated-2", "task-accumulated"));
+    await context.eventBus().post(createProjectCreated("event-accumulated-1", "task-accumulated"));
+    await context.eventBus().post(createProjectCreated("event-accumulated-2", "task-accumulated"));
 
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-accumulated"),
+      context.stand().read(ProjectOverviewStateSchema, "task-accumulated"),
     ).resolves.toMatchObject({
       id: "task-accumulated",
       name: "Task",
@@ -9717,8 +9742,8 @@ describe("repository signal routing", () => {
 
     try {
       await context.stand().update(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema, {
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, {
           id: "timestamped-cas",
           name: "Before",
           priority: 1,
@@ -9728,16 +9753,16 @@ describe("repository signal routing", () => {
 
       await expect(
         context.eventBus().post(
-          createProjectionEvent("timestamped-cas-event", "timestamped-cas", {
+          createProjectCreated("timestamped-cas-event", "timestamped-cas", {
             version: nextVersion,
           }),
         ),
       ).resolves.toBeUndefined();
 
       await expect(
-        context.stand().readVersioned(ProjectionStateSchema, "timestamped-cas"),
+        context.stand().readVersioned(ProjectOverviewStateSchema, "timestamped-cas"),
       ).resolves.toEqual({
-        state: create(ProjectionStateSchema, {
+        state: create(ProjectOverviewStateSchema, {
           id: "timestamped-cas",
           name: "Task (projected)",
           priority: 2,
@@ -9754,10 +9779,10 @@ describe("repository signal routing", () => {
       .add(createReactingProjectionRepository())
       .build();
 
-    await context.eventBus().post(createProjectionEvent("event-reacting", "task-reacting"));
+    await context.eventBus().post(createProjectCreated("event-reacting", "task-reacting"));
 
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-reacting"),
+      context.stand().read(ProjectOverviewStateSchema, "task-reacting"),
     ).resolves.toBeUndefined();
   });
 
@@ -9771,7 +9796,7 @@ describe("repository signal routing", () => {
       .commandBus()
       .post(createAggregateCommand("command-project-tenant", "task-tenant", "Tenant", "tenant-a"));
 
-    const projected = await waitForProjectionState(context, "task-tenant", "tenant-a");
+    const projected = await waitForProjectOverviewState(context, "task-tenant", "tenant-a");
 
     expect(projected).toMatchObject({
       name: "Task (projected)",
@@ -9780,7 +9805,7 @@ describe("repository signal routing", () => {
     await expect(
       context
         .stand()
-        .read(ProjectionStateSchema, "task-tenant", { tenantId: createTenantId("tenant-b") }),
+        .read(ProjectOverviewStateSchema, "task-tenant", { tenantId: createTenantId("tenant-b") }),
     ).resolves.toBeUndefined();
   });
 
@@ -9801,14 +9826,18 @@ describe("repository signal routing", () => {
         ),
       );
 
-    const projected = await waitForProjectionState(context, "task-past-message-tenant", "tenant-a");
+    const projected = await waitForProjectOverviewState(
+      context,
+      "task-past-message-tenant",
+      "tenant-a",
+    );
 
     expect(projected).toMatchObject({
       name: "Task (projected)",
       priority: 2,
     });
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-past-message-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-past-message-tenant", {
         tenantId: createTenantId("tenant-b"),
       }),
     ).resolves.toBeUndefined();
@@ -9826,12 +9855,12 @@ describe("repository signal routing", () => {
         .post(createIdlessAggregateCommand("task-no-id-tenant", "NoIdTenant", "tenant-a")),
     ).rejects.toThrow(/requires command\.id/);
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-no-id-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-no-id-tenant", {
         tenantId: createTenantId("tenant-a"),
       }),
     ).resolves.toBeUndefined();
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-no-id-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-no-id-tenant", {
         tenantId: createTenantId("tenant-b"),
       }),
     ).resolves.toBeUndefined();
@@ -9849,12 +9878,12 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("   ", "task-blank-id-tenant", "BlankId", "tenant-a")),
     ).rejects.toThrow(/command\.id/i);
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-blank-id-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-blank-id-tenant", {
         tenantId: createTenantId("tenant-a"),
       }),
     ).resolves.toBeUndefined();
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-blank-id-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-blank-id-tenant", {
         tenantId: createTenantId("tenant-b"),
       }),
     ).resolves.toBeUndefined();
@@ -9865,9 +9894,9 @@ describe("repository signal routing", () => {
       .add(createTenantProjectionRepo())
       .add(createExecutingProjectionRepository())
       .build();
-    const updates: ProjectionState[] = [];
+    const updates: ProjectOverviewState[] = [];
     context.stand().subscribe(
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
       (update) => {
         updates.push(update.state);
       },
@@ -9885,21 +9914,21 @@ describe("repository signal routing", () => {
         ),
       );
 
-    const projected = await waitForProjectionState(context, "task-command-tenant", "tenant-a");
+    const projected = await waitForProjectOverviewState(context, "task-command-tenant", "tenant-a");
 
     expect(projected).toMatchObject({
       name: "Task (projected)",
       priority: 2,
     });
     expect(updates).toEqual([
-      create(ProjectionStateSchema, {
+      create(ProjectOverviewStateSchema, {
         id: "task-command-tenant",
         name: "Task (projected)",
         priority: 2,
       }),
     ]);
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-command-tenant", {
+      context.stand().read(ProjectOverviewStateSchema, "task-command-tenant", {
         tenantId: createTenantId("tenant-b"),
       }),
     ).resolves.toBeUndefined();
@@ -9929,7 +9958,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
       .addEventDispatcher({
-        messageSchemas: () => [ProjectionEventSchema],
+        messageSchemas: () => [ProjectCreatedSchema],
         dispatch: () => Promise.reject(thrown),
       })
       .build();
@@ -9973,18 +10002,18 @@ describe("repository signal routing", () => {
       .build();
 
     await context.eventBus().post(
-      createProjectionEvent("event-without-version", "task-without-version", {
+      createProjectCreated("event-without-version", "task-without-version", {
         includeVersion: false,
       }),
     );
 
     await expect(
-      context.stand().readVersioned(ProjectionStateSchema, "task-without-version"),
+      context.stand().readVersioned(ProjectOverviewStateSchema, "task-without-version"),
     ).resolves.toMatchObject({
       state: { name: "Task (projected)" },
     });
     await expect(
-      context.stand().readVersioned(ProjectionStateSchema, "task-without-version"),
+      context.stand().readVersioned(ProjectOverviewStateSchema, "task-without-version"),
     ).resolves.not.toHaveProperty("version");
   });
 
@@ -9992,13 +10021,13 @@ describe("repository signal routing", () => {
     const repository = createRoutingRepository();
 
     expect(() =>
-      repository.routeEvent(createContextlessProjectionEvent("event-no-producer", "field-task")),
+      repository.routeEvent(createContextlessProjectCreated("event-no-producer", "field-task")),
     ).toThrow(/producer ID/);
   });
 
   it("rejects a malformed producer that claims the compatible target type", () => {
     const repository = createRoutingRepository();
-    const event = createProjectionEvent("event-unreadable-producer", "first-field-task");
+    const event = createProjectCreated("event-unreadable-producer", "first-field-task");
     if (event.context === undefined) throw new Error("Expected Event context.");
     event.context.producerId = create(AnySchema, {
       typeUrl: TypeUrls.derive(StringValueSchema),
@@ -10013,7 +10042,7 @@ describe("repository signal routing", () => {
 
     expect(
       repository.routeEvent(
-        createProjectionEvent("event-non-finite-producer", "first-field-task", {
+        createProjectCreated("event-non-finite-producer", "first-field-task", {
           producerNumber: Number.NaN,
         }),
       ).entityIds,
@@ -10032,8 +10061,8 @@ describe("repository signal routing", () => {
             version: create(VersionSchema, { number: 1 }),
           }),
           message: AnyMessages.pack(
-            NumberRouteEventSchema,
-            create(NumberRouteEventSchema, { id: Number.POSITIVE_INFINITY }),
+            ProjectPriorityChangedSchema,
+            create(ProjectPriorityChangedSchema, { id: Number.POSITIVE_INFINITY }),
           ),
         }),
       ),
@@ -10052,7 +10081,7 @@ describe("repository signal routing", () => {
     await expect(
       context
         .eventBus()
-        .post(createContextlessProjectionEvent("event-not-stored", "first-field-task")),
+        .post(createContextlessProjectCreated("event-not-stored", "first-field-task")),
     ).rejects.toThrow(/producer ID/);
     await expect(eventStore.read()).resolves.toEqual([]);
   });
@@ -10061,7 +10090,7 @@ describe("repository signal routing", () => {
     const factory = new InMemoryStorageFactory();
     const observed: string[] = [];
     const customDispatcher: EventDispatcher = {
-      messageSchemas: () => [ProjectionEventSchema],
+      messageSchemas: () => [ProjectCreatedSchema],
       accept: () => {
         observed.push("custom-accept");
         return Promise.resolve();
@@ -10077,25 +10106,25 @@ describe("repository signal routing", () => {
     await expect(
       context
         .eventBus()
-        .post(createContextlessProjectionEvent("event-rejected-before-custom", "first-field-task")),
+        .post(createContextlessProjectCreated("event-rejected-before-custom", "first-field-task")),
     ).rejects.toThrow(/producer ID/);
     expect(observed).toEqual([]);
   });
 
   it("rejects structurally fabricated handler metadata", () => {
-    const handlers = EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
-      builder.assign(TaskCommandSchema, "assignTask"),
+    const handlers = EntityHandlers.define(ProjectAggregate, ProjectStateSchema, (builder) => [
+      builder.assign(CreateProjectSchema, "createProject"),
     ]);
     const fabricated = { ...handlers } as unknown as EntityHandlersMetadata<
-      TaskAggregate,
-      typeof AggregateStateSchema
+      ProjectAggregate,
+      typeof ProjectStateSchema
     >;
 
     expect(
       () =>
         new Repository({
-          entityType: TaskAggregate,
-          schema: AggregateStateSchema,
+          entityType: ProjectAggregate,
+          schema: ProjectStateSchema,
           handlers: fabricated,
         }),
     ).toThrow(RepositoryIdentityError);
@@ -10114,7 +10143,7 @@ describe("repository signal routing", () => {
       await expect(
         context
           .eventBus()
-          .post(createProjectionEvent("event-missing-method", "task-missing-method")),
+          .post(createProjectCreated("event-missing-method", "task-missing-method")),
       ).resolves.toBeUndefined();
     } finally {
       if (descriptor !== undefined) {
@@ -10131,43 +10160,43 @@ describe("repository signal routing", () => {
 function createRoutingRepository(
   commandRouting?: CommandRouting<string>,
   eventRouting?: EventRouting<string>,
-): Repository<typeof TaskAggregate> {
-  const handlers = EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(TaskCommandSchema, "assignTask"),
-    builder.react(ProjectionEventSchema, "reactToProjection"),
+): Repository<typeof ProjectAggregate> {
+  const handlers = EntityHandlers.define(ProjectAggregate, ProjectStateSchema, (builder) => [
+    builder.assign(CreateProjectSchema, "createProject"),
+    builder.react(ProjectCreatedSchema, "reactToProjection"),
   ]);
 
   return new Repository({
-    entityType: TaskAggregate,
-    schema: AggregateStateSchema,
+    entityType: ProjectAggregate,
+    schema: ProjectStateSchema,
     handlers,
     ...(commandRouting === undefined ? {} : { commandRouting }),
     ...(eventRouting === undefined ? {} : { eventRouting }),
   });
 }
 
-function createTaskCommandRoutingRepository(
+function createCreateProjectRoutingRepository(
   commandRouting?: CommandRouting<string>,
-): Repository<typeof TaskCommandRoutingAggregate> {
+): Repository<typeof CreateProjectRoutingAggregate> {
   return new Repository({
-    entityType: TaskCommandRoutingAggregate,
-    schema: AggregateStateSchema,
+    entityType: CreateProjectRoutingAggregate,
+    schema: ProjectStateSchema,
     handlers: EntityHandlers.define(
-      TaskCommandRoutingAggregate,
-      AggregateStateSchema,
-      (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+      CreateProjectRoutingAggregate,
+      ProjectStateSchema,
+      (builder) => [builder.assign(CreateProjectSchema, "createProject")],
     ),
     ...(commandRouting === undefined ? {} : { commandRouting }),
   });
 }
 
-function createImplicitIdAggregateRepository(): Repository<typeof ImplicitIdAggregate> {
-  const handlers = EntityHandlers.define(ImplicitIdAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(ImplicitTaskCommandSchema, "assign"),
+function createDraftProjectAggregateRepository(): Repository<typeof DraftProjectAggregate> {
+  const handlers = EntityHandlers.define(DraftProjectAggregate, ProjectStateSchema, (builder) => [
+    builder.assign(DraftProjectSchema, "assign"),
   ]);
   return new Repository({
-    entityType: ImplicitIdAggregate,
-    schema: AggregateStateSchema,
+    entityType: DraftProjectAggregate,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
@@ -10175,9 +10204,9 @@ function createImplicitIdAggregateRepository(): Repository<typeof ImplicitIdAggr
 function createBlankStateIdAggregateRepository(): Repository<typeof BlankStateIdAggregate> {
   return new Repository({
     entityType: BlankStateIdAggregate,
-    schema: AggregateStateSchema,
-    handlers: EntityHandlers.define(BlankStateIdAggregate, AggregateStateSchema, (builder) => [
-      builder.assign(TaskCommandSchema, "assign"),
+    schema: ProjectStateSchema,
+    handlers: EntityHandlers.define(BlankStateIdAggregate, ProjectStateSchema, (builder) => [
+      builder.assign(CreateProjectSchema, "assign"),
     ]),
   });
 }
@@ -10187,11 +10216,11 @@ function createBlankStateIdProcessManagerRepository(): Repository<
 > {
   return new Repository({
     entityType: BlankStateIdProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers: EntityHandlers.define(
       BlankStateIdProcessManager,
-      ProcessManagerStateSchema,
-      (builder) => [builder.assign(TaskCommandSchema, "assign")],
+      ProjectQueueStateSchema,
+      (builder) => [builder.assign(CreateProjectSchema, "assign")],
     ),
   });
 }
@@ -10199,10 +10228,12 @@ function createBlankStateIdProcessManagerRepository(): Repository<
 function createBlankStateIdProjectionRepository(): Repository<typeof BlankStateIdProjection> {
   return new Repository({
     entityType: BlankStateIdProjection,
-    schema: ProjectionStateSchema,
-    handlers: EntityHandlers.define(BlankStateIdProjection, ProjectionStateSchema, (builder) => [
-      builder.subscribe(ProjectionEventSchema, "subscribe"),
-    ]),
+    schema: ProjectOverviewStateSchema,
+    handlers: EntityHandlers.define(
+      BlankStateIdProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribe")],
+    ),
   });
 }
 
@@ -10211,15 +10242,15 @@ function createExecutingProjectionRepository(
 ): Repository<typeof ExecutingTaskProjection> {
   const handlers = EntityHandlers.define(
     ExecutingTaskProjection,
-    ProjectionStateSchema,
-    (builder) => [builder.subscribe(ProjectionEventSchema, "subscribeTask")],
+    ProjectOverviewStateSchema,
+    (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeTask")],
   );
 
   return new Repository({
     entityType: ExecutingTaskProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
-    events: [NumberRouteEventSchema],
+    events: [ProjectPriorityChangedSchema],
     ...(eventRouting === undefined ? {} : { eventRouting }),
   });
 }
@@ -10227,10 +10258,10 @@ function createExecutingProjectionRepository(
 function createFilteredProjectionRepository(): Repository<typeof FilteredTaskProjection> {
   const handlers = HandlerMetadataValues.defineArity(
     FilteredTaskProjection,
-    ProjectionStateSchema,
+    ProjectOverviewStateSchema,
     (builder) => [
-      builder.subscribe(ProjectionEventSchema, "subscribeAnnouncements"),
-      builder.subscribe(ProjectionEventSchema, "subscribeFallback"),
+      builder.subscribe(ProjectCreatedSchema, "subscribeAnnouncements"),
+      builder.subscribe(ProjectCreatedSchema, "subscribeFallback"),
     ],
     [
       {
@@ -10251,7 +10282,7 @@ function createFilteredProjectionRepository(): Repository<typeof FilteredTaskPro
 
   return new Repository({
     entityType: FilteredTaskProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
   });
 }
@@ -10259,10 +10290,10 @@ function createFilteredProjectionRepository(): Repository<typeof FilteredTaskPro
 function createFilteredAggregateRepository(): Repository<typeof FilteredEventAggregate> {
   const handlers = HandlerMetadataValues.defineArity(
     FilteredEventAggregate,
-    AggregateStateSchema,
+    ProjectStateSchema,
     (builder) => [
-      builder.react(ProjectionEventSchema, "reactAnnouncements"),
-      builder.react(ProjectionEventSchema, "reactFallback"),
+      builder.react(ProjectCreatedSchema, "reactAnnouncements"),
+      builder.react(ProjectCreatedSchema, "reactFallback"),
     ],
     [
       {
@@ -10270,7 +10301,7 @@ function createFilteredAggregateRepository(): Repository<typeof FilteredEventAgg
         methodName: "reactAnnouncements",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [GeneratedReactorEventSchema],
+        emittedSchemas: [ProjectRegisteredSchema],
         where: { eventField: "name", equals: "announcements" },
       },
       {
@@ -10278,14 +10309,14 @@ function createFilteredAggregateRepository(): Repository<typeof FilteredEventAgg
         methodName: "reactFallback",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [GeneratedReactorEventSchema],
+        emittedSchemas: [ProjectRegisteredSchema],
       },
     ],
   );
 
   return new Repository({
     entityType: FilteredEventAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
@@ -10293,12 +10324,12 @@ function createFilteredAggregateRepository(): Repository<typeof FilteredEventAgg
 function createFilteredProcessManagerRepository(): Repository<typeof FilteredProcessManager> {
   const handlers = HandlerMetadataValues.defineArity(
     FilteredProcessManager,
-    ProcessManagerStateSchema,
+    ProjectQueueStateSchema,
     (builder) => [
-      builder.react(ProjectionEventSchema, "reactAnnouncements"),
-      builder.react(ProjectionEventSchema, "reactFallback"),
-      builder.command(ProjectionEventSchema, "commandAnnouncements"),
-      builder.command(ProjectionEventSchema, "commandFallback"),
+      builder.react(ProjectCreatedSchema, "reactAnnouncements"),
+      builder.react(ProjectCreatedSchema, "reactFallback"),
+      builder.command(ProjectCreatedSchema, "commandAnnouncements"),
+      builder.command(ProjectCreatedSchema, "commandFallback"),
     ],
     [
       {
@@ -10319,7 +10350,7 @@ function createFilteredProcessManagerRepository(): Repository<typeof FilteredPro
         methodName: "commandAnnouncements",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [TaskCommandSchema],
+        emittedSchemas: [CreateProjectSchema],
         where: { eventField: "name", equals: "announcements" },
       },
       {
@@ -10327,102 +10358,104 @@ function createFilteredProcessManagerRepository(): Repository<typeof FilteredPro
         methodName: "commandFallback",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [TaskCommandSchema],
+        emittedSchemas: [CreateProjectSchema],
       },
     ],
   );
 
   return new Repository({
     entityType: FilteredProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
   });
 }
 
-function createInt64MessageIdProjectionRepository(
-  eventRouting: EventRouting<Int64ProjectionId>,
-): Repository<typeof Int64MessageIdProjection> {
+function createSequencedProjectOverviewRepository(
+  eventRouting: EventRouting<ProjectSequenceId>,
+): Repository<typeof SequencedProjectOverview> {
   const handlers = EntityHandlers.define(
-    Int64MessageIdProjection,
-    Int64MessageIdProjectionStateSchema,
-    (builder) => [builder.subscribe(Int64MessageIdProjectionEventSchema, "subscribeState")],
+    SequencedProjectOverview,
+    SequencedProjectOverviewStateSchema,
+    (builder) => [builder.subscribe(SequencedProjectOverviewCreatedSchema, "subscribeState")],
   );
 
   return new Repository({
-    entityType: Int64MessageIdProjection,
-    schema: Int64MessageIdProjectionStateSchema,
+    entityType: SequencedProjectOverview,
+    schema: SequencedProjectOverviewStateSchema,
     handlers,
     eventRouting,
   });
 }
 
-function createCompositeRouteProjectionRepository(
-  eventRouting?: EventRouting<CompositeRouteId>,
-  stateUpdateRouting?: StateUpdateRouting<CompositeRouteId>,
-): Repository<typeof CompositeRouteProjection> {
+function createProjectMilestoneProjectionRepository(
+  eventRouting?: EventRouting<ProjectMilestoneId>,
+  stateUpdateRouting?: StateUpdateRouting<ProjectMilestoneId>,
+): Repository<typeof ProjectMilestoneProjection> {
   const handlers = EntityHandlers.define(
-    CompositeRouteProjection,
-    CompositeRouteStateSchema,
+    ProjectMilestoneProjection,
+    ProjectMilestoneOverviewStateSchema,
     (builder) => [
-      builder.subscribe(CompositeRouteEventSchema, "subscribe"),
-      builder.subscribe(CompositeRouteSourceStateSchema, "subscribe"),
+      builder.subscribe(ProjectMilestoneAddedSchema, "subscribe"),
+      builder.subscribe(ProjectMilestoneSourceStateSchema, "subscribe"),
     ],
   );
   return new Repository({
-    entityType: CompositeRouteProjection,
-    schema: CompositeRouteStateSchema,
+    entityType: ProjectMilestoneProjection,
+    schema: ProjectMilestoneOverviewStateSchema,
     handlers,
     ...(eventRouting === undefined ? {} : { eventRouting }),
     ...(stateUpdateRouting === undefined ? {} : { stateUpdateRouting }),
   });
 }
 
-function createCompositeRouteAggregateRepository(
-  commandRouting?: CommandRouting<CompositeRouteId>,
-): Repository<typeof CompositeRouteAggregate> {
+function createProjectMilestoneAggregateRepository(
+  commandRouting?: CommandRouting<ProjectMilestoneId>,
+): Repository<typeof ProjectMilestoneAggregate> {
   const handlers = EntityHandlers.define(
-    CompositeRouteAggregate,
-    CompositeRouteAggregateStateSchema,
-    (builder) => [builder.assign(CompositeRouteCommandSchema, "assign")],
+    ProjectMilestoneAggregate,
+    ProjectMilestoneStateSchema,
+    (builder) => [builder.assign(AddProjectMilestoneSchema, "assign")],
   );
 
   return new Repository({
-    entityType: CompositeRouteAggregate,
-    schema: CompositeRouteAggregateStateSchema,
+    entityType: ProjectMilestoneAggregate,
+    schema: ProjectMilestoneStateSchema,
     handlers,
     ...(commandRouting === undefined ? {} : { commandRouting }),
   });
 }
 
-function createUuidMessageIdAggregateRepository(): Repository<typeof UuidMessageIdAggregate> {
+function createRegisteredProjectAggregateRepository(): Repository<
+  typeof RegisteredProjectAggregate
+> {
   const handlers = EntityHandlers.define(
-    UuidMessageIdAggregate,
-    UuidMessageIdAggregateStateSchema,
-    (builder) => [builder.assign(UuidMessageIdAggregateCommandSchema, "assign")],
+    RegisteredProjectAggregate,
+    RegisteredProjectStateSchema,
+    (builder) => [builder.assign(RegisterProjectSchema, "assign")],
   );
 
   return new Repository({
-    entityType: UuidMessageIdAggregate,
-    schema: UuidMessageIdAggregateStateSchema,
+    entityType: RegisteredProjectAggregate,
+    schema: RegisteredProjectStateSchema,
     handlers,
   });
 }
 
-function createCompositeRouteProcessManagerRepository(
-  eventRouting?: EventRouting<CompositeRouteId>,
+function createProjectMilestoneProcessManagerRepository(
+  eventRouting?: EventRouting<ProjectMilestoneId>,
   options: { readonly doubleDispatchGuard?: boolean; readonly produces?: boolean } = {},
-  commandRouting?: CommandRouting<CompositeRouteId>,
-): Repository<typeof CompositeRouteProcessManager> {
+  commandRouting?: CommandRouting<ProjectMilestoneId>,
+): Repository<typeof ProjectMilestoneProcessManager> {
   const handlers = HandlerMetadataValues.defineArity(
-    CompositeRouteProcessManager,
-    CompositeRouteProcessManagerStateSchema,
+    ProjectMilestoneProcessManager,
+    ProjectMilestoneWorkflowStateSchema,
     (builder) =>
       options.produces === true
         ? [
-            builder.assign(CompositeRouteCommandSchema, "assignAndProduce"),
-            builder.react(CompositeRouteEventSchema, "react"),
+            builder.assign(AddProjectMilestoneSchema, "assignAndProduce"),
+            builder.react(ProjectMilestoneAddedSchema, "react"),
           ]
-        : [builder.react(CompositeRouteEventSchema, "react")],
+        : [builder.react(ProjectMilestoneAddedSchema, "react")],
     options.produces === true
       ? [
           {
@@ -10430,7 +10463,7 @@ function createCompositeRouteProcessManagerRepository(
             methodName: "assignAndProduce",
             parameterCount: 1,
             origin: "domestic",
-            emittedSchemas: [CompositeRouteEventSchema],
+            emittedSchemas: [ProjectMilestoneAddedSchema],
           },
           {
             kind: "event-reaction",
@@ -10450,8 +10483,8 @@ function createCompositeRouteProcessManagerRepository(
   );
 
   return new Repository({
-    entityType: CompositeRouteProcessManager,
-    schema: CompositeRouteProcessManagerStateSchema,
+    entityType: ProjectMilestoneProcessManager,
+    schema: ProjectMilestoneWorkflowStateSchema,
     handlers,
     ...(eventRouting === undefined ? {} : { eventRouting }),
     ...(commandRouting === undefined ? {} : { commandRouting }),
@@ -10464,13 +10497,13 @@ function createCompositeRouteProcessManagerRepository(
 function createManagedProjection(): Repository<typeof ManagedTaskProjection> {
   const handlers = EntityHandlers.define(
     ManagedTaskProjection,
-    ProjectionStateSchema,
-    (builder) => [builder.subscribe(ProjectionEventSchema, "subscribeTask")],
+    ProjectOverviewStateSchema,
+    (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeTask")],
   );
 
   return new Repository({
     entityType: ManagedTaskProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
   });
 }
@@ -10497,13 +10530,13 @@ function createAlternateCatchUpProjectionRepository(): Repository<
 function createBlockingCatchUpProjectionRepository(): Repository<typeof BlockingCatchUpProjection> {
   const handlers = EntityHandlers.define(
     BlockingCatchUpProjection,
-    ProjectionStateSchema,
-    (builder) => [builder.subscribe(ProjectionEventSchema, "subscribeTask")],
+    ProjectOverviewStateSchema,
+    (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeTask")],
   );
 
   return new Repository({
     entityType: BlockingCatchUpProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
   });
 }
@@ -10516,12 +10549,12 @@ function createGeneratedTwoArgProjectionRepository(
       {
         receiverKind: "entity",
         receiverType: GeneratedTwoArgProjection,
-        stateSchema: ProjectionStateSchema,
+        stateSchema: ProjectOverviewStateSchema,
         handlers: [
           {
             kind: "event-subscription",
             methodName: "subscribeTask",
-            signalSchema: ProjectionEventSchema,
+            signalSchema: ProjectCreatedSchema,
             emittedSchemas: [],
             parameterCount: 2,
             origin: "domestic",
@@ -10529,11 +10562,11 @@ function createGeneratedTwoArgProjectionRepository(
         ],
       },
     ],
-  })[0] as EntityHandlersMetadata<GeneratedTwoArgProjection, typeof ProjectionStateSchema>;
+  })[0] as EntityHandlersMetadata<GeneratedTwoArgProjection, typeof ProjectOverviewStateSchema>;
 
   return new Repository({
     entityType: GeneratedTwoArgProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
     ...(eventRouting === undefined ? {} : { eventRouting }),
   });
@@ -10547,7 +10580,7 @@ function createRejectionObservingRepository(
       {
         receiverKind: "entity",
         receiverType: RejectionObservingProjection,
-        stateSchema: ProjectionStateSchema,
+        stateSchema: ProjectOverviewStateSchema,
         handlers: [
           {
             kind: "event-subscription",
@@ -10568,11 +10601,11 @@ function createRejectionObservingRepository(
         ],
       },
     ],
-  })[0] as EntityHandlersMetadata<RejectionObservingProjection, typeof ProjectionStateSchema>;
+  })[0] as EntityHandlersMetadata<RejectionObservingProjection, typeof ProjectOverviewStateSchema>;
 
   return new Repository({
     entityType: RejectionObservingProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
     ...(eventRouting === undefined ? {} : { eventRouting }),
   });
@@ -10586,12 +10619,12 @@ function createContextMutatingGeneratedProjectionRepository(): Repository<
       {
         receiverKind: "entity",
         receiverType: ContextMutatingGeneratedProjection,
-        stateSchema: ProjectionStateSchema,
+        stateSchema: ProjectOverviewStateSchema,
         handlers: [
           {
             kind: "event-subscription",
             methodName: "mutateContext",
-            signalSchema: ProjectionEventSchema,
+            signalSchema: ProjectCreatedSchema,
             emittedSchemas: [],
             parameterCount: 2,
             origin: "domestic",
@@ -10599,7 +10632,7 @@ function createContextMutatingGeneratedProjectionRepository(): Repository<
           {
             kind: "event-subscription",
             methodName: "observeContext",
-            signalSchema: ProjectionEventSchema,
+            signalSchema: ProjectCreatedSchema,
             emittedSchemas: [],
             parameterCount: 2,
             origin: "domestic",
@@ -10607,23 +10640,28 @@ function createContextMutatingGeneratedProjectionRepository(): Repository<
         ],
       },
     ],
-  })[0] as EntityHandlersMetadata<ContextMutatingGeneratedProjection, typeof ProjectionStateSchema>;
+  })[0] as EntityHandlersMetadata<
+    ContextMutatingGeneratedProjection,
+    typeof ProjectOverviewStateSchema
+  >;
 
   return new Repository({
     entityType: ContextMutatingGeneratedProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
   });
 }
 
 function createUserIdProjectionRepository(): Repository<typeof UserIdProjection> {
-  const handlers = EntityHandlers.define(UserIdProjection, ProjectionStateSchema, (builder) => [
-    builder.subscribe(ProjectionEventSchema, "subscribeUser"),
-  ]);
+  const handlers = EntityHandlers.define(
+    UserIdProjection,
+    ProjectOverviewStateSchema,
+    (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeUser")],
+  );
 
   return new Repository({
     entityType: UserIdProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
   });
 }
@@ -10631,25 +10669,25 @@ function createUserIdProjectionRepository(): Repository<typeof UserIdProjection>
 function createNonFiniteRouteRepository(): Repository<typeof NonFiniteRouteProjection> {
   const handlers = EntityHandlers.define(
     NonFiniteRouteProjection,
-    ProjectionStateSchema,
-    (builder) => [builder.subscribe(NumberRouteEventSchema, "subscribeNumber")],
+    ProjectOverviewStateSchema,
+    (builder) => [builder.subscribe(ProjectPriorityChangedSchema, "subscribeNumber")],
   );
 
   return new Repository({
     entityType: NonFiniteRouteProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
   });
 }
 
-function createMessageIdTaskRepository(): Repository<typeof MessageIdTaskAggregate> {
-  const handlers = EntityHandlers.define(MessageIdTaskAggregate, TaskSchema, (builder) => [
+function createProjectIdTaskRepository(): Repository<typeof ProjectIdProjectAggregate> {
+  const handlers = EntityHandlers.define(ProjectIdProjectAggregate, TaskSchema, (builder) => [
     builder.apply(TaskCreatedSchema, "applyTaskCreated"),
-    builder.apply(WrongIdRouteEventSchema, "applyWrongId"),
+    builder.apply(ProjectMemberChangedSchema, "applyWrongId"),
   ]);
 
   return new Repository({
-    entityType: MessageIdTaskAggregate,
+    entityType: ProjectIdProjectAggregate,
     schema: TaskSchema,
     handlers,
   });
@@ -10657,36 +10695,32 @@ function createMessageIdTaskRepository(): Repository<typeof MessageIdTaskAggrega
 
 function createInt32RoutingRepository(
   commandRouting?: CommandRouting<number>,
-): Repository<typeof Int32RoutingAggregate> {
+): Repository<typeof NumberedProjectAggregate> {
   const handlers = EntityHandlers.define(
-    Int32RoutingAggregate,
-    Int32AggregateStateSchema,
+    NumberedProjectAggregate,
+    NumberedProjectStateSchema,
     (builder) => [
-      builder.assign(Int32AggregateCommandSchema, "assign"),
-      builder.react(Int32AggregateEventSchema, "react"),
+      builder.assign(CreateNumberedProjectSchema, "assign"),
+      builder.react(NumberedProjectCreatedSchema, "react"),
     ],
   );
   return new Repository({
-    entityType: Int32RoutingAggregate,
-    schema: Int32AggregateStateSchema,
+    entityType: NumberedProjectAggregate,
+    schema: NumberedProjectStateSchema,
     handlers,
-    events: [Int32AggregateEventSchema],
+    events: [NumberedProjectCreatedSchema],
     ...(commandRouting === undefined ? {} : { commandRouting }),
   });
 }
 
-function createInt64RoutingRepository(): Repository<typeof Int64RoutingProcessManager> {
-  const handlers = EntityHandlers.define(
-    Int64RoutingProcessManager,
-    Int64ProcessManagerStateSchema,
-    (builder) => [
-      builder.assign(Int64ProcessManagerCommandSchema, "assign"),
-      builder.react(Int64ProcessManagerEventSchema, "react"),
-    ],
-  );
+function createInt64RoutingRepository(): Repository<typeof ProjectWorkflow> {
+  const handlers = EntityHandlers.define(ProjectWorkflow, ProjectWorkflowStateSchema, (builder) => [
+    builder.assign(ScheduleProjectWorkflowSchema, "assign"),
+    builder.react(ProjectWorkflowScheduledSchema, "react"),
+  ]);
   return new Repository({
-    entityType: Int64RoutingProcessManager,
-    schema: Int64ProcessManagerStateSchema,
+    entityType: ProjectWorkflow,
+    schema: ProjectWorkflowStateSchema,
     handlers,
   });
 }
@@ -10694,28 +10728,28 @@ function createInt64RoutingRepository(): Repository<typeof Int64RoutingProcessMa
 function createMalformedFirstFieldRepository(): Repository<typeof MalformedFirstFieldAggregate> {
   const handlers = EntityHandlers.define(
     MalformedFirstFieldAggregate,
-    AggregateStateSchema,
+    ProjectStateSchema,
     (builder) => [
-      builder.assign(RepeatedIdCommandSchema, "assignRepeated"),
-      builder.assign(MapIdCommandSchema, "assignMap"),
+      builder.assign(InviteProjectMembersSchema, "assignRepeated"),
+      builder.assign(AssignProjectAttributesSchema, "assignMap"),
     ],
   );
   return new Repository({
     entityType: MalformedFirstFieldAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
 
-function createMessageIdProducingRepository(
+function createProjectIdProducingRepository(
   commandRouting?: CommandRouting<TaskId>,
-): Repository<typeof MessageIdProducingAggregate> {
-  const handlers = EntityHandlers.define(MessageIdProducingAggregate, TaskSchema, (builder) => [
+): Repository<typeof ProjectIdProducingAggregate> {
+  const handlers = EntityHandlers.define(ProjectIdProducingAggregate, TaskSchema, (builder) => [
     builder.assign(CreateTaskSchema, "assignTask"),
   ]);
 
   return new Repository({
-    entityType: MessageIdProducingAggregate,
+    entityType: ProjectIdProducingAggregate,
     schema: TaskSchema,
     handlers,
     events: [TaskCreatedSchema],
@@ -10728,13 +10762,13 @@ function createTaskCreatedScalarProjectionRepository(): Repository<
 > {
   const handlers = EntityHandlers.define(
     TaskCreatedScalarProjection,
-    ProjectionStateSchema,
+    ProjectOverviewStateSchema,
     (builder) => [builder.subscribe(TaskCreatedSchema, "subscribeTaskCreated")],
   );
 
   return new Repository({
     entityType: TaskCreatedScalarProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
   });
 }
@@ -10744,13 +10778,13 @@ function createCreateTaskScalarAggregateRepository(
 ): Repository<typeof CreateTaskScalarAggregate> {
   const handlers = EntityHandlers.define(
     CreateTaskScalarAggregate,
-    AggregateStateSchema,
+    ProjectStateSchema,
     (builder) => [builder.assign(CreateTaskSchema, "assignCreateTask")],
   );
 
   return new Repository({
     entityType: CreateTaskScalarAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
     ...(commandRouting === undefined ? {} : { commandRouting }),
   });
@@ -10759,13 +10793,13 @@ function createCreateTaskScalarAggregateRepository(
 function createPassiveProjectionRepository(): Repository<typeof PassiveTaskProjection> {
   const handlers = EntityHandlers.define(
     PassiveTaskProjection,
-    ProjectionStateSchema,
-    (builder) => [builder.subscribe(ProjectionEventSchema, "subscribeTask")],
+    ProjectOverviewStateSchema,
+    (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeTask")],
   );
 
   return new Repository({
     entityType: PassiveTaskProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
   });
 }
@@ -10773,13 +10807,13 @@ function createPassiveProjectionRepository(): Repository<typeof PassiveTaskProje
 function createAccumulatingProjectionRepository(): Repository<typeof AccumulatingTaskProjection> {
   const handlers = EntityHandlers.define(
     AccumulatingTaskProjection,
-    ProjectionStateSchema,
-    (builder) => [builder.subscribe(ProjectionEventSchema, "subscribeTask")],
+    ProjectOverviewStateSchema,
+    (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeTask")],
   );
 
   return new Repository({
     entityType: AccumulatingTaskProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
   });
 }
@@ -10787,52 +10821,52 @@ function createAccumulatingProjectionRepository(): Repository<typeof Accumulatin
 function createReactingProjectionRepository(): Repository<typeof ReactingTaskProjection> {
   const handlers = EntityHandlers.define(
     ReactingTaskProjection,
-    ProjectionStateSchema,
-    (builder) => [builder.react(ProjectionEventSchema, "reactTask")],
+    ProjectOverviewStateSchema,
+    (builder) => [builder.react(ProjectCreatedSchema, "reactTask")],
   );
 
   return new Repository({
     entityType: ReactingTaskProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
   });
 }
 
-function createExecutingRepository(): Repository<typeof ExecutingTaskAggregate> {
+function createExecutingRepository(): Repository<typeof ExecutingProjectAggregate> {
   const handlers = EntityHandlers.define(
-    ExecutingTaskAggregate,
-    AggregateStateSchema,
-    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ExecutingProjectAggregate,
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
   );
 
   return new Repository({
-    entityType: ExecutingTaskAggregate,
-    schema: AggregateStateSchema,
+    entityType: ExecutingProjectAggregate,
+    schema: ProjectStateSchema,
     handlers,
-    events: [ProjectionEventSchema, TaskAlreadyDoneSchema],
+    events: [ProjectCreatedSchema, TaskAlreadyDoneSchema],
   });
 }
 
-function createManagedRepository(): Repository<typeof ManagedTaskAggregate> {
-  const handlers = EntityHandlers.define(ManagedTaskAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(TaskCommandSchema, "assignTask"),
+function createManagedRepository(): Repository<typeof ManagedProjectAggregate> {
+  const handlers = EntityHandlers.define(ManagedProjectAggregate, ProjectStateSchema, (builder) => [
+    builder.assign(CreateProjectSchema, "createProject"),
   ]);
 
   return new Repository({
-    entityType: ManagedTaskAggregate,
-    schema: AggregateStateSchema,
+    entityType: ManagedProjectAggregate,
+    schema: ProjectStateSchema,
     handlers,
-    events: [ProjectionEventSchema, TaskAlreadyDoneSchema],
+    events: [ProjectCreatedSchema, TaskAlreadyDoneSchema],
   });
 }
 
-function createMessageIdRejectingRepository(): Repository<typeof MessageIdRejectingAggregate> {
-  const handlers = EntityHandlers.define(MessageIdRejectingAggregate, TaskSchema, (builder) => [
-    builder.assign(CreateTaskSchema, "assignTask"),
+function createProjectIdRejectingRepository(): Repository<typeof ProjectIdRejectingAggregate> {
+  const handlers = EntityHandlers.define(ProjectIdRejectingAggregate, TaskSchema, (builder) => [
+    builder.assign(CreateTaskSchema, "createProject"),
   ]);
 
   return new Repository({
-    entityType: MessageIdRejectingAggregate,
+    entityType: ProjectIdRejectingAggregate,
     schema: TaskSchema,
     handlers,
     events: [TaskCreatedSchema],
@@ -10845,57 +10879,57 @@ function createGeneratedTwoArgAggregateRepository(): Repository<typeof Generated
       {
         receiverKind: "entity",
         receiverType: GeneratedTwoArgAggregate,
-        stateSchema: AggregateStateSchema,
+        stateSchema: ProjectStateSchema,
         handlers: [
           {
             kind: "command-assignment",
-            methodName: "assignTask",
-            signalSchema: TaskCommandSchema,
-            emittedSchemas: [ProjectionEventSchema],
+            methodName: "createProject",
+            signalSchema: CreateProjectSchema,
+            emittedSchemas: [ProjectCreatedSchema],
             parameterCount: 2,
             origin: "domestic",
           },
         ],
       },
     ],
-  })[0] as EntityHandlersMetadata<GeneratedTwoArgAggregate, typeof AggregateStateSchema>;
+  })[0] as EntityHandlersMetadata<GeneratedTwoArgAggregate, typeof ProjectStateSchema>;
 
   return new Repository({
     entityType: GeneratedTwoArgAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
-    events: [ProjectionEventSchema, TaskAlreadyDoneSchema],
+    events: [ProjectCreatedSchema, TaskAlreadyDoneSchema],
   });
 }
 
 function createGeneratedReactorRepository(
   guarded = false,
-): Repository<typeof GeneratedReactorAggregate> {
+): Repository<typeof ProjectRegistrationReactorAggregate> {
   const handlers = new HandlerRegistryIngestor().ingest({
     receivers: [
       {
         receiverKind: "entity",
-        receiverType: GeneratedReactorAggregate,
-        stateSchema: AggregateStateSchema,
+        receiverType: ProjectRegistrationReactorAggregate,
+        stateSchema: ProjectStateSchema,
         handlers: [
           {
             kind: "event-reaction",
             methodName: "reactProjection",
-            signalSchema: ProjectionEventSchema,
-            emittedSchemas: [GeneratedReactorEventSchema],
+            signalSchema: ProjectCreatedSchema,
+            emittedSchemas: [ProjectRegisteredSchema],
             parameterCount: 2,
             origin: "domestic",
           },
         ],
       },
     ],
-  })[0] as EntityHandlersMetadata<GeneratedReactorAggregate, typeof AggregateStateSchema>;
+  })[0] as EntityHandlersMetadata<ProjectRegistrationReactorAggregate, typeof ProjectStateSchema>;
 
   return new Repository({
-    entityType: GeneratedReactorAggregate,
-    schema: AggregateStateSchema,
+    entityType: ProjectRegistrationReactorAggregate,
+    schema: ProjectStateSchema,
     handlers,
-    events: [GeneratedReactorEventSchema],
+    events: [ProjectRegisteredSchema],
     ...(guarded ? { doubleDispatchGuard: { depth: 1 } } : {}),
   });
 }
@@ -10905,22 +10939,22 @@ function createGuardedAggregateRepository(
 ): Repository<typeof GuardedAggregate> {
   const handlers = HandlerMetadataValues.defineArity(
     GuardedAggregate,
-    AggregateStateSchema,
-    (builder) => [builder.react(ProjectionEventSchema, "reactProjection")],
+    ProjectStateSchema,
+    (builder) => [builder.react(ProjectCreatedSchema, "reactProjection")],
     [
       {
         kind: "event-reaction",
         methodName: "reactProjection",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectionEventSchema],
+        emittedSchemas: [ProjectCreatedSchema],
       },
     ],
   );
 
   return new Repository({
     entityType: GuardedAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
     doubleDispatchGuard: { depth: 1 },
     ...(eventRouting === undefined ? {} : { eventRouting }),
@@ -10930,24 +10964,24 @@ function createGuardedAggregateRepository(
 function createProducingGuardedAggregateRepository(): Repository<typeof ProducingGuardedAggregate> {
   const handlers = HandlerMetadataValues.defineArity(
     ProducingGuardedAggregate,
-    AggregateStateSchema,
-    (builder) => [builder.react(ProjectionEventSchema, "reactProjection")],
+    ProjectStateSchema,
+    (builder) => [builder.react(ProjectCreatedSchema, "reactProjection")],
     [
       {
         kind: "event-reaction",
         methodName: "reactProjection",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [GeneratedReactorEventSchema],
+        emittedSchemas: [ProjectRegisteredSchema],
       },
     ],
   );
 
   return new Repository({
     entityType: ProducingGuardedAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
-    events: [GeneratedReactorEventSchema],
+    events: [ProjectRegisteredSchema],
     doubleDispatchGuard: true,
   });
 }
@@ -10972,13 +11006,13 @@ function createGeneratedCommandingRepository(): Repository<
       {
         receiverKind: "entity",
         receiverType: GeneratedCommandingProcessManager,
-        stateSchema: ProcessManagerStateSchema,
+        stateSchema: ProjectQueueStateSchema,
         handlers: [
           {
             kind: "command-reaction",
             methodName: "commandProjection",
-            signalSchema: ProjectionEventSchema,
-            emittedSchemas: [ProducedTaskCommandSchema],
+            signalSchema: ProjectCreatedSchema,
+            emittedSchemas: [CreateFollowUpProjectSchema],
             parameterCount: 2,
             origin: "domestic",
           },
@@ -10987,86 +11021,86 @@ function createGeneratedCommandingRepository(): Repository<
     ],
   })[0] as EntityHandlersMetadata<
     GeneratedCommandingProcessManager,
-    typeof ProcessManagerStateSchema
+    typeof ProjectQueueStateSchema
   >;
 
   return new Repository({
     entityType: GeneratedCommandingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
   });
 }
 
 function createMultiManagedRepository(): Repository<typeof MultiManagedAggregate> {
-  const handlers = EntityHandlers.define(MultiManagedAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(TaskCommandSchema, "assignTask"),
+  const handlers = EntityHandlers.define(MultiManagedAggregate, ProjectStateSchema, (builder) => [
+    builder.assign(CreateProjectSchema, "createProject"),
   ]);
 
   return new Repository({
     entityType: MultiManagedAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
-    events: [ProjectionEventSchema],
+    events: [ProjectCreatedSchema],
   });
 }
 
 function createEmptyManagedRepository(): Repository<typeof EmptyManagedAggregate> {
-  const handlers = EntityHandlers.define(EmptyManagedAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(TaskCommandSchema, "assignTask"),
+  const handlers = EntityHandlers.define(EmptyManagedAggregate, ProjectStateSchema, (builder) => [
+    builder.assign(CreateProjectSchema, "createProject"),
   ]);
 
   return new Repository({
     entityType: EmptyManagedAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
-    events: [ProjectionEventSchema],
+    events: [ProjectCreatedSchema],
   });
 }
 
 function createEnvelopeManagedRepository(): Repository<typeof EnvelopeManagedAggregate> {
   const handlers = EntityHandlers.define(
     EnvelopeManagedAggregate,
-    AggregateStateSchema,
-    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
   );
 
   return new Repository({
     entityType: EnvelopeManagedAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
-    events: [ProjectionEventSchema],
+    events: [ProjectCreatedSchema],
   });
 }
 
-function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate> {
+function createValidatingRepository(): Repository<typeof ValidatingProjectAggregate> {
   const handlers = EntityHandlers.define(
-    ValidatingTaskAggregate,
-    ValidatedAggregateStateSchema,
+    ValidatingProjectAggregate,
+    ReviewProjectStateSchema,
     (builder) => [
-      builder.assign(ValidatedTaskCommandSchema, "assignTask"),
-      builder.apply(ValidatedTaskEventSchema, "applyTask"),
+      builder.assign(CreateProjectSubmissionSchema, "createProject"),
+      builder.apply(ProjectSubmissionCreatedSchema, "applyTask"),
     ],
   );
 
   return new Repository({
-    entityType: ValidatingTaskAggregate,
-    schema: ValidatedAggregateStateSchema,
+    entityType: ValidatingProjectAggregate,
+    schema: ReviewProjectStateSchema,
     handlers,
   });
 }
 
-function createValidatedMessageIdRouteRepository(
-  commandRouting?: CommandRouting<ValidatedMessageId>,
-): Repository<typeof ValidatedMessageIdRouteAggregate> {
+function createProjectSubmissionIdRouteRepository(
+  commandRouting?: CommandRouting<ProjectSubmissionId>,
+): Repository<typeof ProjectSubmissionIdRouteAggregate> {
   const handlers = EntityHandlers.define(
-    ValidatedMessageIdRouteAggregate,
-    ValidatedMessageIdStateSchema,
-    (builder) => [builder.assign(ValidatedTaskCommandSchema, "assignTask")],
+    ProjectSubmissionIdRouteAggregate,
+    ProjectSubmissionIdStateSchema,
+    (builder) => [builder.assign(CreateProjectSubmissionSchema, "createProject")],
   );
 
   return new Repository({
-    entityType: ValidatedMessageIdRouteAggregate,
-    schema: ValidatedMessageIdStateSchema,
+    entityType: ProjectSubmissionIdRouteAggregate,
+    schema: ProjectSubmissionIdStateSchema,
     handlers,
     ...(commandRouting === undefined ? {} : { commandRouting }),
   });
@@ -11075,22 +11109,22 @@ function createValidatedMessageIdRouteRepository(
 function createValidatingProcessManagerRepository(): Repository<typeof ValidatingProcessManager> {
   const handlers = HandlerMetadataValues.defineArity(
     ValidatingProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.assign(ValidatedTaskCommandSchema, "assignTask")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.assign(CreateProjectSubmissionSchema, "createProject")],
     [
       {
         kind: "command-assignment",
-        methodName: "assignTask",
+        methodName: "createProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectionEventSchema],
+        emittedSchemas: [ProjectCreatedSchema],
       },
     ],
   );
 
   return new Repository({
     entityType: ValidatingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
   });
 }
@@ -11098,13 +11132,13 @@ function createValidatingProcessManagerRepository(): Repository<typeof Validatin
 function createTransitionViolatingRepository(): Repository<typeof TransitionViolatingAggregate> {
   const handlers = EntityHandlers.define(
     TransitionViolatingAggregate,
-    AggregateStateSchema,
-    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
   );
 
   return new Repository({
     entityType: TransitionViolatingAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
@@ -11112,27 +11146,25 @@ function createTransitionViolatingRepository(): Repository<typeof TransitionViol
 function createRecoveringTransitionRepository(): Repository<typeof RecoveringTransitionAggregate> {
   const handlers = EntityHandlers.define(
     RecoveringTransitionAggregate,
-    AggregateStateSchema,
-    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
   );
 
   return new Repository({
     entityType: RecoveringTransitionAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
 
 function createAsyncAssigneeRepository(): Repository<typeof AsyncAssigneeAggregate> {
-  const handlers = EntityHandlers.define(
-    AsyncAssigneeAggregate,
-    AggregateStateSchema,
-    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
-  );
+  const handlers = EntityHandlers.define(AsyncAssigneeAggregate, ProjectStateSchema, (builder) => [
+    builder.assign(CreateProjectSchema, "createProject"),
+  ]);
 
   return new Repository({
     entityType: AsyncAssigneeAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
@@ -11142,13 +11174,13 @@ function createRejectedAsyncAssigneeRepository(): Repository<
 > {
   const handlers = EntityHandlers.define(
     RejectedAsyncAssigneeAggregate,
-    AggregateStateSchema,
-    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
   );
 
   return new Repository({
     entityType: RejectedAsyncAssigneeAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
@@ -11156,30 +11188,26 @@ function createRejectedAsyncAssigneeRepository(): Repository<
 function createSerialAsyncAssigneeRepository(): Repository<typeof SerialAsyncAssigneeAggregate> {
   const handlers = EntityHandlers.define(
     SerialAsyncAssigneeAggregate,
-    AggregateStateSchema,
-    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
   );
 
   return new Repository({
     entityType: SerialAsyncAssigneeAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
 
 function createBigintVersionRepository(): Repository<typeof BigintVersionAggregate> {
-  const handlers = EntityHandlers.define(
-    BigintVersionAggregate,
-    AggregateStateSchema,
-    (builder) => [
-      builder.assign(TaskCommandSchema, "assignTask"),
-      builder.apply(ProjectionEventSchema, "applyTask"),
-    ],
-  );
+  const handlers = EntityHandlers.define(BigintVersionAggregate, ProjectStateSchema, (builder) => [
+    builder.assign(CreateProjectSchema, "createProject"),
+    builder.apply(ProjectCreatedSchema, "applyTask"),
+  ]);
 
   return new Repository({
     entityType: BigintVersionAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
@@ -11187,16 +11215,16 @@ function createBigintVersionRepository(): Repository<typeof BigintVersionAggrega
 function createProjectionProducingRepository(): Repository<typeof ProjectionProducingAggregate> {
   const handlers = EntityHandlers.define(
     ProjectionProducingAggregate,
-    AggregateStateSchema,
+    ProjectStateSchema,
     (builder) => [
-      builder.assign(TaskCommandSchema, "assignTask"),
-      builder.apply(ProjectionEventSchema, "applyProjection"),
+      builder.assign(CreateProjectSchema, "createProject"),
+      builder.apply(ProjectCreatedSchema, "applyProjection"),
     ],
   );
 
   return new Repository({
     entityType: ProjectionProducingAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
@@ -11206,16 +11234,16 @@ function createTenantProjectionRepo(): Repository<
 > {
   const handlers = EntityHandlers.define(
     CommandTenantProjectionProducingAggregate,
-    AggregateStateSchema,
+    ProjectStateSchema,
     (builder) => [
-      builder.assign(TaskCommandSchema, "assignTask"),
-      builder.apply(ProjectionEventSchema, "applyProjection"),
+      builder.assign(CreateProjectSchema, "createProject"),
+      builder.apply(ProjectCreatedSchema, "applyProjection"),
     ],
   );
 
   return new Repository({
     entityType: CommandTenantProjectionProducingAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
@@ -11225,24 +11253,24 @@ function createProcessManagerAssignRepository(
 ): Repository<typeof RoutingProcessManager> {
   const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
     [
       {
         kind: "command-assignment",
-        methodName: "assignTask",
+        methodName: "createProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectionEventSchema],
+        emittedSchemas: [ProjectCreatedSchema],
       },
     ],
   );
 
   return new Repository({
     entityType: RoutingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
-    events: [ProjectionEventSchema, TaskAlreadyDoneSchema],
+    events: [ProjectCreatedSchema, TaskAlreadyDoneSchema],
     ...(commandRouting === undefined ? {} : { commandRouting }),
   });
 }
@@ -11252,11 +11280,11 @@ function createIdlessCommandProcessManagerRepository(): Repository<
 > {
   return new Repository({
     entityType: IdlessCommandProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers: EntityHandlers.define(
       IdlessCommandProcessManager,
-      ProcessManagerStateSchema,
-      (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+      ProjectQueueStateSchema,
+      (builder) => [builder.assign(CreateProjectSchema, "createProject")],
     ),
   });
 }
@@ -11266,11 +11294,11 @@ function createIdlessCommandProjectionRepository(): Repository<
 > {
   return new Repository({
     entityType: IdlessCommandProjectionAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers: EntityHandlers.define(
       IdlessCommandProjectionAggregate,
-      AggregateStateSchema,
-      (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+      ProjectStateSchema,
+      (builder) => [builder.assign(CreateProjectSchema, "createProject")],
     ),
   });
 }
@@ -11280,13 +11308,13 @@ function createProcessManagerReactRepository(
 ): Repository<typeof RoutingProcessManager> {
   const handlers = EntityHandlers.define(
     RoutingProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.react(ProjectionEventSchema, "reactTask")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.react(ProjectCreatedSchema, "reactTask")],
   );
 
   return new Repository({
     entityType: RoutingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
     ...(eventRouting === undefined ? {} : { eventRouting }),
   });
@@ -11295,18 +11323,18 @@ function createProcessManagerReactRepository(
 function createProcessManagerCommandAndReactRepository(): Repository<typeof RoutingProcessManager> {
   const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
-    ProcessManagerStateSchema,
+    ProjectQueueStateSchema,
     (builder) => [
-      builder.assign(TaskCommandSchema, "assignTask"),
-      builder.react(ProjectionEventSchema, "reactTask"),
+      builder.assign(CreateProjectSchema, "createProject"),
+      builder.react(ProjectCreatedSchema, "reactTask"),
     ],
     [
       {
         kind: "command-assignment",
-        methodName: "assignTask",
+        methodName: "createProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectionEventSchema],
+        emittedSchemas: [ProjectCreatedSchema],
       },
       {
         kind: "event-reaction",
@@ -11319,7 +11347,7 @@ function createProcessManagerCommandAndReactRepository(): Repository<typeof Rout
 
   return new Repository({
     entityType: RoutingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
   });
 }
@@ -11329,24 +11357,24 @@ function createDiagnosticOnlyProcessManagerRepository(): Repository<
 > {
   const handlers = HandlerMetadataValues.defineArity(
     DiagnosticOnlyProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
     [
       {
         kind: "command-assignment",
-        methodName: "assignTask",
+        methodName: "createProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectionEventSchema],
+        emittedSchemas: [ProjectCreatedSchema],
       },
     ],
   );
 
   return new Repository({
     entityType: DiagnosticOnlyProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
-    events: [ProjectionEventSchema],
+    events: [ProjectCreatedSchema],
     processManagerEventHistory: true,
   });
 }
@@ -11356,13 +11384,13 @@ function createGuardedProcessManagerReactRepository(
 ): Repository<typeof RoutingProcessManager> {
   const handlers = EntityHandlers.define(
     RoutingProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.react(ProjectionEventSchema, "reactTask")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.react(ProjectCreatedSchema, "reactTask")],
   );
 
   return new Repository({
     entityType: RoutingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
     processManagerEventHistory: true,
     doubleDispatchGuard: { depth },
@@ -11372,13 +11400,13 @@ function createGuardedProcessManagerReactRepository(
 function createInboxCheckRepo(): Repository<typeof InboxCheckingProcessManager> {
   const handlers = EntityHandlers.define(
     InboxCheckingProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.react(ProjectionEventSchema, "reactTask")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.react(ProjectCreatedSchema, "reactTask")],
   );
 
   return new Repository({
     entityType: InboxCheckingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
   });
 }
@@ -11386,13 +11414,13 @@ function createInboxCheckRepo(): Repository<typeof InboxCheckingProcessManager> 
 function createBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
   const handlers = EntityHandlers.define(
     BlockingProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.react(ProjectionEventSchema, "reactTask")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.react(ProjectCreatedSchema, "reactTask")],
   );
 
   return new Repository({
     entityType: BlockingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
   });
 }
@@ -11400,13 +11428,13 @@ function createBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
 function createGuardedBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
   const handlers = EntityHandlers.define(
     BlockingProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.react(ProjectionEventSchema, "reactTask")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.react(ProjectCreatedSchema, "reactTask")],
   );
 
   return new Repository({
     entityType: BlockingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
     processManagerEventHistory: true,
     doubleDispatchGuard: true,
@@ -11416,13 +11444,13 @@ function createGuardedBlockingPmRepo(): Repository<typeof BlockingProcessManager
 function createSplitPmRepo(): Repository<typeof SplitRouteProcessManager> {
   const handlers = EntityHandlers.define(
     SplitRouteProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.react(ProjectionEventSchema, "reactTask")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.react(ProjectCreatedSchema, "reactTask")],
   );
 
   return new Repository({
     entityType: SplitRouteProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
   });
 }
@@ -11432,12 +11460,12 @@ function createGuardedSplitPmRepo(
 ): Repository<typeof SplitRouteProcessManager> {
   const handlers = EntityHandlers.define(
     SplitRouteProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.react(ProjectionEventSchema, "reactTask")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.react(ProjectCreatedSchema, "reactTask")],
   );
   return new Repository({
     entityType: SplitRouteProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
     processManagerEventHistory: true,
     doubleDispatchGuard: true,
@@ -11448,10 +11476,10 @@ function createGuardedSplitPmRepo(
 function createProcessManagerEventRepository(): Repository<typeof RoutingProcessManager> {
   const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
-    ProcessManagerStateSchema,
+    ProjectQueueStateSchema,
     (builder) => [
-      builder.react(ProjectionEventSchema, "reactTask"),
-      builder.command(ProjectionEventSchema, "commandTask"),
+      builder.react(ProjectCreatedSchema, "reactTask"),
+      builder.command(ProjectCreatedSchema, "commandProject"),
     ],
     [
       {
@@ -11462,17 +11490,17 @@ function createProcessManagerEventRepository(): Repository<typeof RoutingProcess
       },
       {
         kind: "command-reaction",
-        methodName: "commandTask",
+        methodName: "commandProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [TaskCommandSchema],
+        emittedSchemas: [CreateProjectSchema],
       },
     ],
   );
 
   return new Repository({
     entityType: RoutingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
   });
 }
@@ -11480,22 +11508,22 @@ function createProcessManagerEventRepository(): Repository<typeof RoutingProcess
 function createProcessManagerEventProducingRepository(): Repository<typeof RoutingProcessManager> {
   const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.react(ProjectionEventSchema, "reactTaskWithEvent")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.react(ProjectCreatedSchema, "reactTaskWithEvent")],
     [
       {
         kind: "event-reaction",
         methodName: "reactTaskWithEvent",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [GeneratedReactorEventSchema],
+        emittedSchemas: [ProjectRegisteredSchema],
       },
     ],
   );
 
   return new Repository({
     entityType: RoutingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
   });
 }
@@ -11503,22 +11531,22 @@ function createProcessManagerEventProducingRepository(): Repository<typeof Routi
 function createProcessManagerCommandOnlyRepository(): Repository<typeof RoutingProcessManager> {
   const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.command(ProjectionEventSchema, "commandTask")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.command(ProjectCreatedSchema, "commandProject")],
     [
       {
         kind: "command-reaction",
-        methodName: "commandTask",
+        methodName: "commandProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [TaskCommandSchema],
+        emittedSchemas: [CreateProjectSchema],
       },
     ],
   );
 
   return new Repository({
     entityType: RoutingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
   });
 }
@@ -11528,25 +11556,25 @@ function createCommandSubstitutingProcessManagerRepository(): Repository<
 > {
   const handlers = HandlerMetadataValues.defineArity(
     CommandSubstitutingProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.substitute(ValidatedTaskCommandSchema, "substitute")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.substitute(CreateProjectSubmissionSchema, "substitute")],
     [
       {
         kind: "command-substitution",
         methodName: "substitute",
         parameterCount: 2,
         origin: "domestic",
-        emittedSchemas: [ProducedTaskCommandSchema],
+        emittedSchemas: [CreateFollowUpProjectSchema],
       },
     ],
   );
 
   return new Repository({
     entityType: CommandSubstitutingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
     commandRouting: CommandRouting.create<string>().route(
-      ValidatedTaskCommandSchema,
+      CreateProjectSubmissionSchema,
       () => "transform-target",
     ),
   });
@@ -11557,22 +11585,22 @@ function createGuardedProcessManagerCommandOnlyRepository(): Repository<
 > {
   const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.command(ProjectionEventSchema, "commandTask")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.command(ProjectCreatedSchema, "commandProject")],
     [
       {
         kind: "command-reaction",
-        methodName: "commandTask",
+        methodName: "commandProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [TaskCommandSchema],
+        emittedSchemas: [CreateProjectSchema],
       },
     ],
   );
 
   return new Repository({
     entityType: RoutingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
     processManagerEventHistory: true,
     doubleDispatchGuard: true,
@@ -11582,10 +11610,10 @@ function createGuardedProcessManagerCommandOnlyRepository(): Repository<
 function createProcessManagerMixedEventRepository(): Repository<typeof RoutingProcessManager> {
   const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
-    ProcessManagerStateSchema,
+    ProjectQueueStateSchema,
     (builder) => [
-      builder.react(ProjectionEventSchema, "reactTaskWithEvent"),
-      builder.command(ProjectionEventSchema, "commandTask"),
+      builder.react(ProjectCreatedSchema, "reactTaskWithEvent"),
+      builder.command(ProjectCreatedSchema, "commandProject"),
     ],
     [
       {
@@ -11593,21 +11621,21 @@ function createProcessManagerMixedEventRepository(): Repository<typeof RoutingPr
         methodName: "reactTaskWithEvent",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [GeneratedReactorEventSchema],
+        emittedSchemas: [ProjectRegisteredSchema],
       },
       {
         kind: "command-reaction",
-        methodName: "commandTask",
+        methodName: "commandProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [TaskCommandSchema],
+        emittedSchemas: [CreateProjectSchema],
       },
     ],
   );
 
   return new Repository({
     entityType: RoutingProcessManager,
-    schema: ProcessManagerStateSchema,
+    schema: ProjectQueueStateSchema,
     handlers,
   });
 }
@@ -11615,13 +11643,13 @@ function createProcessManagerMixedEventRepository(): Repository<typeof RoutingPr
 function createMissingSubscriberRepo(): Repository<typeof MissingSubscriberMethodProjection> {
   const handlers = EntityHandlers.define(
     MissingSubscriberMethodProjection,
-    ProjectionStateSchema,
-    (builder) => [builder.subscribe(ProjectionEventSchema, "missingSubscriber")],
+    ProjectOverviewStateSchema,
+    (builder) => [builder.subscribe(ProjectCreatedSchema, "missingSubscriber")],
   );
 
   return new Repository({
     entityType: MissingSubscriberMethodProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
   });
 }
@@ -11629,44 +11657,40 @@ function createMissingSubscriberRepo(): Repository<typeof MissingSubscriberMetho
 function createThrowingProjectionRepository(): Repository<typeof ThrowingTaskProjection> {
   const handlers = EntityHandlers.define(
     ThrowingTaskProjection,
-    ProjectionStateSchema,
-    (builder) => [builder.subscribe(ProjectionEventSchema, "subscribeTask")],
+    ProjectOverviewStateSchema,
+    (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeTask")],
   );
 
   return new Repository({
     entityType: ThrowingTaskProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
   });
 }
 
 function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
-  const handlers = EntityHandlers.define(NoApplierAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(TaskCommandSchema, "assignTask"),
-    builder.react(ProjectionEventSchema, "reactTask"),
+  const handlers = EntityHandlers.define(NoApplierAggregate, ProjectStateSchema, (builder) => [
+    builder.assign(CreateProjectSchema, "createProject"),
+    builder.react(ProjectCreatedSchema, "reactTask"),
   ]);
 
   return new Repository({
     entityType: NoApplierAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
-    events: [ProjectionEventSchema],
+    events: [ProjectCreatedSchema],
   });
 }
 
 function createMalformedEventRepository(): Repository<typeof MalformedEventAggregate> {
-  const handlers = EntityHandlers.define(
-    MalformedEventAggregate,
-    AggregateStateSchema,
-    (builder) => [
-      builder.assign(TaskCommandSchema, "assignTask"),
-      builder.apply(ProjectionEventSchema, "applyTask"),
-    ],
-  );
+  const handlers = EntityHandlers.define(MalformedEventAggregate, ProjectStateSchema, (builder) => [
+    builder.assign(CreateProjectSchema, "createProject"),
+    builder.apply(ProjectCreatedSchema, "applyTask"),
+  ]);
 
   return new Repository({
     entityType: MalformedEventAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
@@ -11688,8 +11712,8 @@ function createAggregateEvent(
       version: create(VersionSchema, { number: version }),
     }),
     message: AnyMessages.pack(
-      ProjectionEventSchema,
-      create(ProjectionEventSchema, {
+      ProjectCreatedSchema,
+      create(ProjectCreatedSchema, {
         id: aggregateId,
         name,
         priority: 1,
@@ -11698,7 +11722,7 @@ function createAggregateEvent(
   });
 }
 
-function createGeneratedReactorEvent(
+function createProjectRegistered(
   id: string,
   aggregateId: string,
   version: number,
@@ -11715,8 +11739,8 @@ function createGeneratedReactorEvent(
       version: create(VersionSchema, { number: version }),
     }),
     message: AnyMessages.pack(
-      GeneratedReactorEventSchema,
-      create(GeneratedReactorEventSchema, { id: aggregateId, name, priority: 1 }),
+      ProjectRegisteredSchema,
+      create(ProjectRegisteredSchema, { id: aggregateId, name, priority: 1 }),
     ),
   });
 }
@@ -11740,8 +11764,8 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task", 
       }),
     }),
     message: AnyMessages.pack(
-      TaskCommandSchema,
-      create(TaskCommandSchema, {
+      CreateProjectSchema,
+      create(CreateProjectSchema, {
         id: aggregateId,
         name,
       }),
@@ -11749,7 +11773,7 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task", 
   });
 }
 
-function createGeneratedTaskCommand(
+function createGeneratedCreateProject(
   id: string,
   aggregateId: string,
   name = "Task",
@@ -11766,19 +11790,19 @@ function createGeneratedTaskCommand(
       }),
     }),
     message: AnyMessages.pack(
-      TaskCommandSchema,
-      create(TaskCommandSchema, { id: aggregateId, name }),
+      CreateProjectSchema,
+      create(CreateProjectSchema, { id: aggregateId, name }),
     ),
   });
 }
 
-function createImplicitTaskCommand(commandId: string, entityId: string) {
+function createDraftProject(commandId: string, entityId: string) {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: commandId }),
     context: create(CommandContextSchema),
     message: AnyMessages.pack(
-      ImplicitTaskCommandSchema,
-      create(ImplicitTaskCommandSchema, { id: entityId, name: "Implicit" }),
+      DraftProjectSchema,
+      create(DraftProjectSchema, { id: entityId, name: "Implicit" }),
     ),
   });
 }
@@ -11801,17 +11825,17 @@ function diagnosticTenants(events: readonly SpineEvent[]): readonly string[] {
   });
 }
 
-function createContextlessGeneratedTaskCommand(id: string, aggregateId: string, name = "Task") {
+function createContextlessGeneratedCreateProject(id: string, aggregateId: string, name = "Task") {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
     message: AnyMessages.pack(
-      TaskCommandSchema,
-      create(TaskCommandSchema, { id: aggregateId, name }),
+      CreateProjectSchema,
+      create(CreateProjectSchema, { id: aggregateId, name }),
     ),
   });
 }
 
-function createTaskCommand(id: string, taskId: string, title = "Task") {
+function createCreateProject(id: string, taskId: string, title = "Task") {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
@@ -11849,8 +11873,8 @@ function createValidatedCommand(id: string, aggregateId: string, name: string, t
       }),
     }),
     message: AnyMessages.pack(
-      ValidatedTaskCommandSchema,
-      create(ValidatedTaskCommandSchema, {
+      CreateProjectSubmissionSchema,
+      create(CreateProjectSubmissionSchema, {
         id: aggregateId,
         name,
       }),
@@ -11877,8 +11901,8 @@ function createIdlessAggregateCommand(aggregateId: string, name = "Task", tenant
       }),
     }),
     message: AnyMessages.pack(
-      TaskCommandSchema,
-      create(TaskCommandSchema, { id: aggregateId, name }),
+      CreateProjectSchema,
+      create(CreateProjectSchema, { id: aggregateId, name }),
     ),
   });
 }
@@ -11919,7 +11943,7 @@ async function storeEntityInboxCommand(
   const message = await delivery.inbox.receive({
     inboxId: {
       targetId: overrides.targetId ?? Identifiers.pack("string", readAggregateId(command)),
-      targetTypeUrl: overrides.targetTypeUrl ?? TypeUrls.derive(ProcessManagerStateSchema),
+      targetTypeUrl: overrides.targetTypeUrl ?? TypeUrls.derive(ProjectQueueStateSchema),
     },
     signalId: overrides.signalId ?? command.id?.uuid ?? "missing-command-id",
     signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
@@ -11951,8 +11975,8 @@ async function storePmInboxEvent(
     inboxId: {
       targetId:
         overrides.packedTargetId ??
-        Identifiers.pack("string", overrides.targetId ?? readProjectionId(event)),
-      targetTypeUrl: overrides.targetTypeUrl ?? TypeUrls.derive(ProcessManagerStateSchema),
+        Identifiers.pack("string", overrides.targetId ?? readProjectOverviewId(event)),
+      targetTypeUrl: overrides.targetTypeUrl ?? TypeUrls.derive(ProjectQueueStateSchema),
     },
     signalId: overrides.signalId ?? event.id?.value ?? "missing-event-id",
     signal: overrides.signal ?? AnyMessages.pack(EventSchema, event, { validate: false }),
@@ -11970,13 +11994,13 @@ function readAggregateId(command: SpineCommand): string {
   const message =
     command.message === undefined
       ? undefined
-      : AnyMessages.unpack(command.message, TaskCommandSchema);
+      : AnyMessages.unpack(command.message, CreateProjectSchema);
 
   if (message === undefined) {
     const validated =
       command.message === undefined
         ? undefined
-        : AnyMessages.unpack(command.message, ValidatedTaskCommandSchema);
+        : AnyMessages.unpack(command.message, CreateProjectSubmissionSchema);
     if (validated === undefined) {
       throw new Error("Expected a readable process-manager command payload.");
     }
@@ -11986,11 +12010,11 @@ function readAggregateId(command: SpineCommand): string {
   return message.id;
 }
 
-function readProjectionId(event: SpineEvent): string {
+function readProjectOverviewId(event: SpineEvent): string {
   const message =
     event.message === undefined
       ? undefined
-      : AnyMessages.unpack(event.message, ProjectionEventSchema);
+      : AnyMessages.unpack(event.message, ProjectCreatedSchema);
 
   if (message === undefined) {
     throw new Error("Expected a readable process-manager event payload.");
@@ -12011,8 +12035,8 @@ function createValidatedEvent(id: string, aggregateId: string, name: string): Sp
       version: create(VersionSchema, { number: 1 }),
     }),
     message: AnyMessages.pack(
-      ValidatedTaskEventSchema,
-      create(ValidatedTaskEventSchema, {
+      ProjectSubmissionCreatedSchema,
+      create(ProjectSubmissionCreatedSchema, {
         id: aggregateId,
         name,
       }),
@@ -12020,7 +12044,7 @@ function createValidatedEvent(id: string, aggregateId: string, name: string): Sp
   });
 }
 
-function createProjectionEvent(
+function createProjectCreated(
   id: string,
   entityId: string,
   options: {
@@ -12050,8 +12074,8 @@ function createProjectionEvent(
         : { version: options.version ?? create(VersionSchema, { number: 1 }) }),
     }),
     message: AnyMessages.pack(
-      ProjectionEventSchema,
-      create(ProjectionEventSchema, {
+      ProjectCreatedSchema,
+      create(ProjectCreatedSchema, {
         id: entityId,
         name: options.name ?? "Task",
         priority: 1,
@@ -12060,12 +12084,12 @@ function createProjectionEvent(
   });
 }
 
-function createContextlessProjectionEvent(id: string, entityId: string) {
+function createContextlessProjectCreated(id: string, entityId: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     message: AnyMessages.pack(
-      ProjectionEventSchema,
-      create(ProjectionEventSchema, {
+      ProjectCreatedSchema,
+      create(ProjectCreatedSchema, {
         id: entityId,
         name: "Task",
         priority: 1,
@@ -12094,7 +12118,7 @@ function projectionEventOrigin(options: {
       value: create(OriginSchema, {
         message: create(MessageIdSchema, {
           id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-          typeUrl: TypeUrls.derive(TaskCommandSchema),
+          typeUrl: TypeUrls.derive(CreateProjectSchema),
         }),
         actorContext: create(ActorContextSchema, {
           tenantId: createTenantId(options.pastMessageTenantId, options.pastMessageTenantKind),
@@ -12199,17 +12223,17 @@ async function waitForCondition(predicate: () => boolean): Promise<void> {
   throw new Error("Timed out waiting for condition.");
 }
 
-async function waitForProjectionState(
+async function waitForProjectOverviewState(
   context: BoundedContext,
   id: string,
   tenantId?: string,
-): Promise<ProjectionState | undefined> {
+): Promise<ProjectOverviewState | undefined> {
   const deadline = Date.now() + 500;
   while (Date.now() < deadline) {
     const state = await context
       .stand()
       .read(
-        ProjectionStateSchema,
+        ProjectOverviewStateSchema,
         id,
         tenantId === undefined ? {} : { tenantId: createTenantId(tenantId) },
       );
@@ -12641,13 +12665,13 @@ class ObservingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
 
 it("rejects state-update routing for Aggregate repositories", () => {
   expectTypeOf<
-    RepositoryOptions<typeof TaskAggregate>["stateUpdateRouting"]
+    RepositoryOptions<typeof ProjectAggregate>["stateUpdateRouting"]
   >().toEqualTypeOf<undefined>();
   expect(
     () =>
       new Repository({
-        entityType: TaskAggregate,
-        schema: AggregateStateSchema,
+        entityType: ProjectAggregate,
+        schema: ProjectStateSchema,
         stateUpdateRouting: StateUpdateRouting.create<string>(),
       } as never),
   ).toThrow(/State-update routing is supported only by Projection repositories/);
@@ -12661,7 +12685,7 @@ it("rejects state-update routing for Process Manager repositories", () => {
     () =>
       new Repository({
         entityType: RoutingProcessManager,
-        schema: ProcessManagerStateSchema,
+        schema: ProjectQueueStateSchema,
         stateUpdateRouting: StateUpdateRouting.create<string>(),
       } as never),
   ).toThrow(/State-update routing is supported only by Projection repositories/);
@@ -12669,21 +12693,21 @@ it("rejects state-update routing for Process Manager repositories", () => {
 
 it("rejects Entity state subscribers outside Projection repositories", () => {
   const aggregateHandlers = EntityHandlers.define(
-    TaskAggregate,
-    AggregateStateSchema,
-    (builder) => [builder.subscribe(ProjectionStateSchema, "reactToProjection")],
+    ProjectAggregate,
+    ProjectStateSchema,
+    (builder) => [builder.subscribe(ProjectOverviewStateSchema, "reactToProjection")],
   );
   const processManagerHandlers = EntityHandlers.define(
     RoutingProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.subscribe(ProjectionStateSchema, "reactTask")],
+    ProjectQueueStateSchema,
+    (builder) => [builder.subscribe(ProjectOverviewStateSchema, "reactTask")],
   );
 
   expect(
     () =>
       new Repository({
-        entityType: TaskAggregate,
-        schema: AggregateStateSchema,
+        entityType: ProjectAggregate,
+        schema: ProjectStateSchema,
         handlers: aggregateHandlers,
       }),
   ).toThrow(/Entity state subscriptions are supported only by Projection repositories/);
@@ -12691,7 +12715,7 @@ it("rejects Entity state subscribers outside Projection repositories", () => {
     () =>
       new Repository({
         entityType: RoutingProcessManager,
-        schema: ProcessManagerStateSchema,
+        schema: ProjectQueueStateSchema,
         handlers: processManagerHandlers,
       }),
   ).toThrow(/Entity state subscriptions are supported only by Projection repositories/);
@@ -12701,15 +12725,15 @@ describe("Projection state-update routing", () => {
   it("rejects a recursive subscription to the repository state", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectOverviewStateSchema, "subscribeState")],
     );
 
     expect(
       () =>
         new Repository({
           entityType: StateObservingProjection,
-          schema: ProjectionStateSchema,
+          schema: ProjectOverviewStateSchema,
           handlers,
         }),
     ).toThrow(/cannot subscribe to updates of its repository state/);
@@ -12718,22 +12742,22 @@ describe("Projection state-update routing", () => {
   it("rejects a feedback cycle between Projection state subscriptions", () => {
     const projectionHandlers = EntityHandlers.define(
       StateObservingProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(NeutralProjectionStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectBacklogStateSchema, "subscribeState")],
     );
     const neutralProjectionHandlers = EntityHandlers.define(
-      NeutralStateObservingProjection,
-      NeutralProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+      ProjectBacklogProjection,
+      ProjectBacklogStateSchema,
+      (builder) => [builder.subscribe(ProjectOverviewStateSchema, "subscribeState")],
     );
     const projection = new Repository({
       entityType: StateObservingProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       handlers: projectionHandlers,
     });
     const neutralProjection = new Repository({
-      entityType: NeutralStateObservingProjection,
-      schema: NeutralProjectionStateSchema,
+      entityType: ProjectBacklogProjection,
+      schema: ProjectBacklogStateSchema,
       handlers: neutralProjectionHandlers,
     });
 
@@ -12748,21 +12772,21 @@ describe("Projection state-update routing", () => {
   it("allows a one-way dependency between Projection state subscriptions", async () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(NeutralProjectionStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectBacklogStateSchema, "subscribeState")],
     );
     const context = BoundedContext.singleTenant("One-way state subscription")
       .add(
         new Repository({
           entityType: StateObservingProjection,
-          schema: ProjectionStateSchema,
+          schema: ProjectOverviewStateSchema,
           handlers,
         }),
       )
       .add(
         new Repository({
-          entityType: NeutralStateObservingProjection,
-          schema: NeutralProjectionStateSchema,
+          entityType: ProjectBacklogProjection,
+          schema: ProjectBacklogStateSchema,
         }),
       )
       .build();
@@ -12773,12 +12797,12 @@ describe("Projection state-update routing", () => {
   it("uses the first compatible state field and ignores unrelated state types", () => {
     const handlers = EntityHandlers.define(
       ExecutingTaskProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeTask")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeTask")],
     );
     const repository = new Repository({
       entityType: ExecutingTaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       handlers,
     });
 
@@ -12786,12 +12810,12 @@ describe("Projection state-update routing", () => {
       repositoryAccess.routeStateUpdate(repository, createStateChangedEvent("state-1")),
     ).toMatchObject({
       entityIds: ["state-1"],
-      messageFullTypeName: AggregateStateSchema.typeName,
+      messageFullTypeName: ProjectStateSchema.typeName,
     });
     expect(
       repositoryAccess.routeStateUpdate(
         repository,
-        createStateChangedEvent("other", create(ProjectionStateSchema, { id: "other" })),
+        createStateChangedEvent("other", create(ProjectOverviewStateSchema, { id: "other" })),
       ),
     ).toBeUndefined();
   });
@@ -12799,12 +12823,12 @@ describe("Projection state-update routing", () => {
   it("rejects an empty first compatible field instead of routing by a later field", () => {
     const handlers = EntityHandlers.define(
       ExecutingTaskProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeTask")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeTask")],
     );
     const repository = new Repository({
       entityType: ExecutingTaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       handlers,
     });
 
@@ -12813,7 +12837,7 @@ describe("Projection state-update routing", () => {
         repository,
         createStateChangedEvent(
           "empty-id",
-          create(AggregateStateSchema, { id: "", name: "not-an-id" }),
+          create(ProjectStateSchema, { id: "", name: "not-an-id" }),
         ),
       ),
     ).toThrow(/state update routing requires an ID compatible with the Entity state/);
@@ -12821,40 +12845,40 @@ describe("Projection state-update routing", () => {
 
   it("rejects construction when the built-in route has no compatible state field", () => {
     const handlers = EntityHandlers.define(
-      Int64MessageIdProjection,
-      Int64MessageIdProjectionStateSchema,
-      (builder) => [builder.subscribe(Int32AggregateStateSchema, "subscribeState")],
+      SequencedProjectOverview,
+      SequencedProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(NumberedProjectStateSchema, "subscribeState")],
     );
 
     expect(
       () =>
         new Repository({
-          entityType: Int64MessageIdProjection,
-          schema: Int64MessageIdProjectionStateSchema,
+          entityType: SequencedProjectOverview,
+          schema: SequencedProjectOverviewStateSchema,
           handlers,
         }),
-    ).toThrow(/no compatible field.*Int32AggregateState/i);
+    ).toThrow(/no compatible field.*NumberedProjectState/i);
   });
 
   it("uses a declaration-first message ID compatible with the Projection ID", () => {
     const handlers = EntityHandlers.define(
-      Int64MessageIdProjection,
-      Int64MessageIdProjectionStateSchema,
-      (builder) => [builder.subscribe(Int64MessageIdSourceStateSchema, "subscribeState")],
+      SequencedProjectOverview,
+      SequencedProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(SequencedProjectSourceStateSchema, "subscribeState")],
     );
     const repository = new Repository({
-      entityType: Int64MessageIdProjection,
-      schema: Int64MessageIdProjectionStateSchema,
+      entityType: SequencedProjectOverview,
+      schema: SequencedProjectOverviewStateSchema,
       handlers,
     });
-    const id = create(Int64ProjectionIdSchema, { value: 42n });
+    const id = create(ProjectSequenceIdSchema, { value: 42n });
 
     expect(
       repositoryAccess.routeStateUpdate(
         repository,
         createStateChangedEvent(
           "int64-message",
-          create(Int64MessageIdSourceStateSchema, { id, name: "Message ID" }),
+          create(SequencedProjectSourceStateSchema, { id, name: "Message ID" }),
         ),
       )?.entityIds,
     ).toEqual([id]);
@@ -12864,14 +12888,14 @@ describe("Projection state-update routing", () => {
     const route = vi.fn(() => ["second", "first", "second"]);
     const handlers = EntityHandlers.define(
       ExecutingTaskProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeTask")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeTask")],
     );
     const repository = new Repository({
       entityType: ExecutingTaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       handlers,
-      stateUpdateRouting: StateUpdateRouting.create<string>().route(AggregateStateSchema, route),
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectStateSchema, route),
     });
 
     const result = repositoryAccess.routeStateUpdate(repository, createStateChangedEvent("source"));
@@ -12884,13 +12908,13 @@ describe("Projection state-update routing", () => {
   it("selects exact state routes before replacement defaults", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
     );
     const event = createStateChangedEvent("built-in");
     const cases = [
       StateUpdateRouting.create<string>()
-        .route(AggregateStateSchema, () => ["exact"])
+        .route(ProjectStateSchema, () => ["exact"])
         .replaceDefault(() => ["replacement"]),
       StateUpdateRouting.create<string>().replaceDefault(() => ["replacement"]),
     ];
@@ -12901,7 +12925,7 @@ describe("Projection state-update routing", () => {
           repositoryAccess.routeStateUpdate(
             new Repository({
               entityType: StateObservingProjection,
-              schema: ProjectionStateSchema,
+              schema: ProjectOverviewStateSchema,
               handlers,
               stateUpdateRouting,
             }),
@@ -12912,17 +12936,17 @@ describe("Projection state-update routing", () => {
   });
 
   it("selects a state interface route after exact routes and before the default", () => {
-    const token = MessageInterfaces.define<object, readonly [typeof AggregateStateSchema]>([
-      AggregateStateSchema,
+    const token = MessageInterfaces.define<object, readonly [typeof ProjectStateSchema]>([
+      ProjectStateSchema,
     ]);
     const handlers = EntityHandlers.define(
       StateObservingProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
     );
     const repository = new Repository({
       entityType: StateObservingProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       handlers,
       stateUpdateRouting: StateUpdateRouting.create<string>()
         .route(token, () => ["interface"])
@@ -12938,16 +12962,16 @@ describe("Projection state-update routing", () => {
   it("fails closed for malformed System events", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
     );
     const repository = new Repository({
       entityType: StateObservingProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       handlers,
     });
     expect(() =>
-      repositoryAccess.routeStateUpdate(repository, createProjectionEvent("domain", "target")),
+      repositoryAccess.routeStateUpdate(repository, createProjectCreated("domain", "target")),
     ).toThrow(/requires an EntityStateChanged System event/);
     const missingState = create(EventSchema, {
       id: create(EventIdSchema, { value: "missing-state" }),
@@ -12964,7 +12988,7 @@ describe("Projection state-update routing", () => {
         EntityStateChangedSchema,
         create(EntityStateChangedSchema, {
           newState: create(AnySchema, {
-            typeUrl: TypeUrls.derive(AggregateStateSchema),
+            typeUrl: TypeUrls.derive(ProjectStateSchema),
             value: new Uint8Array([255]),
           }),
         }),
@@ -12978,14 +13002,14 @@ describe("Projection state-update routing", () => {
     const route = vi.fn(() => ["target"]);
     const handlers = EntityHandlers.define(
       StateObservingProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
     );
     const repository = new Repository({
       entityType: StateObservingProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       handlers,
-      stateUpdateRouting: StateUpdateRouting.create<string>().route(AggregateStateSchema, route),
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectStateSchema, route),
     });
     const event = createStateChangedEvent("source");
     event.context = undefined;
@@ -13001,17 +13025,17 @@ describe("Projection state-update routing", () => {
   it("admits one durable state-interface row per selected target", async () => {
     StateObservingProjection.reset();
     const route = vi.fn(() => ["second", "first", "second"]);
-    const token = MessageInterfaces.define<object, readonly [typeof AggregateStateSchema]>([
-      AggregateStateSchema,
+    const token = MessageInterfaces.define<object, readonly [typeof ProjectStateSchema]>([
+      ProjectStateSchema,
     ]);
     const handlers = EntityHandlers.define(
       StateObservingProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
     );
     const repository = new Repository({
       entityType: StateObservingProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       handlers,
       stateUpdateRouting: StateUpdateRouting.create<string>().route(token, route),
     });
@@ -13022,18 +13046,22 @@ describe("Projection state-update routing", () => {
         context,
         createStateChangedEvent(
           "source",
-          create(AggregateStateSchema, { id: "source", name: "Source" }),
+          create(ProjectStateSchema, { id: "source", name: "Source" }),
         ),
       );
 
       expect(route).toHaveBeenCalledOnce();
       expect(StateObservingProjection.subscriberCalls).toBe(2);
-      await expect(context.stand().read(ProjectionStateSchema, "first")).resolves.toMatchObject({
+      await expect(
+        context.stand().read(ProjectOverviewStateSchema, "first"),
+      ).resolves.toMatchObject({
         id: "first",
         name: "Source (projected)",
         priority: 1,
       });
-      await expect(context.stand().read(ProjectionStateSchema, "second")).resolves.toMatchObject({
+      await expect(
+        context.stand().read(ProjectOverviewStateSchema, "second"),
+      ).resolves.toMatchObject({
         id: "second",
         name: "Source (projected)",
         priority: 1,
@@ -13048,10 +13076,10 @@ describe("Projection state-update routing", () => {
     const factory = new InMemoryStorageFactory();
     const handlers = HandlerMetadataValues.defineArity(
       OriginStateProjection,
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
       (builder) => [
-        builder.subscribe(AggregateStateSchema, "domesticState"),
-        builder.subscribe(AggregateStateSchema, "externalState"),
+        builder.subscribe(ProjectStateSchema, "domesticState"),
+        builder.subscribe(ProjectStateSchema, "externalState"),
       ],
       [
         {
@@ -13070,7 +13098,7 @@ describe("Projection state-update routing", () => {
     );
     const repository = new Repository({
       entityType: OriginStateProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       handlers,
     });
     const context = BoundedContext.singleTenant("State origins")
@@ -13113,18 +13141,18 @@ describe("Projection state-update routing", () => {
   it("rejects corrupted durable state-update routes without rerouting", async () => {
     PassiveTaskProjection.reset();
     const route = vi.fn(() => ["target"]);
-    const token = MessageInterfaces.define<object, readonly [typeof AggregateStateSchema]>([
-      AggregateStateSchema,
+    const token = MessageInterfaces.define<object, readonly [typeof ProjectStateSchema]>([
+      ProjectStateSchema,
     ]);
     const factory = new InMemoryStorageFactory();
     const handlers = EntityHandlers.define(
       PassiveTaskProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
     );
     const repository = new Repository({
       entityType: PassiveTaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       handlers,
       stateUpdateRouting: StateUpdateRouting.create<string>().route(token, route),
     });
@@ -13152,7 +13180,7 @@ describe("Projection state-update routing", () => {
       await expect(
         target.replay({
           ...stored,
-          inboxId: { ...stored.inboxId, targetTypeUrl: TypeUrls.derive(AggregateStateSchema) },
+          inboxId: { ...stored.inboxId, targetTypeUrl: TypeUrls.derive(ProjectStateSchema) },
         }),
       ).rejects.toThrow(/stored target type/);
       const event = AnyMessages.unpack(stored.signal, EventSchema);
@@ -13186,14 +13214,14 @@ describe("Projection state-update routing", () => {
     const route = vi.fn(() => []);
     const handlers = EntityHandlers.define(
       StateObservingProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
     );
     const repository = new Repository({
       entityType: StateObservingProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       handlers,
-      stateUpdateRouting: StateUpdateRouting.create<string>().route(AggregateStateSchema, route),
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectStateSchema, route),
     });
     const context = BoundedContext.singleTenant("Empty state updates").add(repository).build();
 
@@ -13202,7 +13230,9 @@ describe("Projection state-update routing", () => {
 
       expect(route).toHaveBeenCalledOnce();
       expect(StateObservingProjection.subscriberCalls).toBe(0);
-      await expect(context.stand().read(ProjectionStateSchema, "source")).resolves.toBeUndefined();
+      await expect(
+        context.stand().read(ProjectOverviewStateSchema, "source"),
+      ).resolves.toBeUndefined();
     } finally {
       await context.close();
     }
@@ -13212,12 +13242,12 @@ describe("Projection state-update routing", () => {
     PassiveTaskProjection.reset();
     const handlers = EntityHandlers.define(
       PassiveTaskProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
     );
     const repository = new Repository({
       entityType: PassiveTaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       handlers,
     });
     const dispatcher = repositoryAccess.systemEventDispatcher(repository);
@@ -13235,7 +13265,7 @@ describe("Projection state-update routing", () => {
       await dispatcher.dispatch(related);
       const unrelated = createStateChangedEvent(
         "unrelated-system",
-        create(ProjectionStateSchema, { id: "unrelated-system" }),
+        create(ProjectOverviewStateSchema, { id: "unrelated-system" }),
       );
       await dispatcher.dispatch(unrelated);
       await accept(unrelated);
@@ -13250,8 +13280,8 @@ describe("Projection state-update routing", () => {
   it("rejects invalid route collections before invoking a subscriber", async () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
     );
     const event = createStateChangedEvent("source");
 
@@ -13263,15 +13293,17 @@ describe("Projection state-update routing", () => {
       StateObservingProjection.reset();
       const repository = new Repository({
         entityType: StateObservingProjection,
-        schema: ProjectionStateSchema,
+        schema: ProjectOverviewStateSchema,
         handlers,
-        stateUpdateRouting: StateUpdateRouting.create<string>().route(AggregateStateSchema, route),
+        stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectStateSchema, route),
       });
       const context = BoundedContext.singleTenant("Invalid state route").add(repository).build();
       try {
         await expect(boundedContextAccess.postSystemEvent(context, event)).resolves.toBeUndefined();
         expect(StateObservingProjection.subscriberCalls).toBe(0);
-        await expect(context.stand().read(ProjectionStateSchema, "valid")).resolves.toBeUndefined();
+        await expect(
+          context.stand().read(ProjectOverviewStateSchema, "valid"),
+        ).resolves.toBeUndefined();
       } finally {
         await context.close();
       }
@@ -13281,18 +13313,18 @@ describe("Projection state-update routing", () => {
   it("rejects exact routes for state schemas without a subscriber", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
     );
 
     expect(
       () =>
         new Repository({
           entityType: StateObservingProjection,
-          schema: ProjectionStateSchema,
+          schema: ProjectOverviewStateSchema,
           handlers,
           stateUpdateRouting: StateUpdateRouting.create<string>().route(
-            Int32AggregateStateSchema,
+            NumberedProjectStateSchema,
             () => ["target"],
           ),
         }),
@@ -13303,14 +13335,14 @@ describe("Projection state-update routing", () => {
     StateObservingProjection.reset();
     const handlers = EntityHandlers.define(
       StateObservingProjection,
-      ProjectionStateSchema,
-      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
     );
     const context = BoundedContext.multitenant("Tenant state updates")
       .add(
         new Repository({
           entityType: StateObservingProjection,
-          schema: ProjectionStateSchema,
+          schema: ProjectOverviewStateSchema,
           handlers,
         }),
       )
@@ -13322,19 +13354,19 @@ describe("Projection state-update routing", () => {
         context,
         createStateChangedEvent(
           "shared",
-          create(AggregateStateSchema, { id: "shared", name: "Tenant A" }),
+          create(ProjectStateSchema, { id: "shared", name: "Tenant A" }),
           "tenant-a",
         ),
       );
       await expect(
         context
           .stand()
-          .read(ProjectionStateSchema, "shared", { tenantId: createTenantId("tenant-a") }),
+          .read(ProjectOverviewStateSchema, "shared", { tenantId: createTenantId("tenant-a") }),
       ).resolves.toMatchObject({ name: "Tenant A (projected)" });
       await expect(
         context
           .stand()
-          .read(ProjectionStateSchema, "shared", { tenantId: createTenantId("tenant-b") }),
+          .read(ProjectOverviewStateSchema, "shared", { tenantId: createTenantId("tenant-b") }),
       ).resolves.toBeUndefined();
       await expect(
         boundedContextAccess.postSystemEvent(context, createStateChangedEvent("missing-tenant")),
@@ -13347,17 +13379,17 @@ describe("Projection state-update routing", () => {
 
 function createStateChangedEvent(
   id: string,
-  state: Message = create(AggregateStateSchema, { id }),
+  state: Message = create(ProjectStateSchema, { id }),
   tenantId?: string,
 ) {
   const stateSchema =
-    state.$typeName === AggregateStateSchema.typeName
-      ? AggregateStateSchema
-      : state.$typeName === Int64MessageIdSourceStateSchema.typeName
-        ? Int64MessageIdSourceStateSchema
-        : state.$typeName === CompositeRouteSourceStateSchema.typeName
-          ? CompositeRouteSourceStateSchema
-          : ProjectionStateSchema;
+    state.$typeName === ProjectStateSchema.typeName
+      ? ProjectStateSchema
+      : state.$typeName === SequencedProjectSourceStateSchema.typeName
+        ? SequencedProjectSourceStateSchema
+        : state.$typeName === ProjectMilestoneSourceStateSchema.typeName
+          ? ProjectMilestoneSourceStateSchema
+          : ProjectOverviewStateSchema;
   const origin =
     tenantId === undefined ? undefined : projectionEventOrigin({ pastMessageTenantId: tenantId });
   if (tenantId !== undefined && origin === undefined) {

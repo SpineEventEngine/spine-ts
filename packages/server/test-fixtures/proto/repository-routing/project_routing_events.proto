@@ -12,20 +12,15 @@
  * the License.
  */
 syntax = "proto3";
-package repository_routing_validation_commands;
 
-import "spine/options.proto";
+package spine_ts.test;
 
-message ValidatedMessageId {
-  string value = 1 [(required) = true];
+import "spine/core/user_id.proto";
+
+message ProjectPriorityChanged {
+  double id = 1;
 }
 
-message ValidatedTaskCommand {
-  string id = 1;
-  string name = 2 [(required) = true];
-}
-
-message ProducedTaskCommand {
-  string id = 1;
-  string name = 2 [(required) = true];
+message ProjectMemberChanged {
+  spine.core.UserId id = 1;
 }

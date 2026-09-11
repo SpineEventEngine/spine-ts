@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package spine_ts.testing.projects;
+
+message ProjectCreated {
+  string id = 1;
+  string name = 2;
+  int32 priority = 3;
+}
+
+message ProjectObserved {
+  string id = 1;
+}

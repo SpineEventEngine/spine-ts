@@ -34,13 +34,13 @@ import {
   type RegisteredHandlerMetadata,
 } from "../../src/index.js";
 
-type ProjectionState = Message<"ProjectionState"> & {
+type ProjectOverviewState = Message<"ProjectOverviewState"> & {
   id: string;
   name: string;
   priority: number;
 };
 
-type AggregateState = Message<"AggregateState"> & {
+type ProjectState = Message<"ProjectState"> & {
   id: string;
   name: string;
   archived: boolean;
@@ -51,7 +51,7 @@ class TaskProjection {
     void command;
   }
 
-  assignArchive(command: Message<"AggregateState">): void {
+  assignArchive(command: Message<"ProjectState">): void {
     void command;
   }
 }
@@ -63,14 +63,11 @@ class TaskAggregate {
 }
 
 const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectionStateSchema = messageDesc(
+const ProjectOverviewStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
-) as GenMessage<ProjectionState>;
-const AggregateStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  1,
-) as GenMessage<AggregateState>;
+) as GenMessage<ProjectOverviewState>;
+const ProjectStateSchema = messageDesc(fileEntityMetadataFixture, 1) as GenMessage<ProjectState>;
 
 describe("command registration readiness", () => {
   it("rejects non-readiness values as inauthentic", () => {
@@ -103,15 +100,19 @@ describe("command registration readiness", () => {
   });
 
   it("lists registered command message full type names in deterministic order", () => {
-    const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
-      builder.assign(CommandSchema, "assignCreate"),
-      builder.assign(AggregateStateSchema, "assignArchive"),
-    ]);
+    const handlers = EntityHandlers.define(
+      TaskProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [
+        builder.assign(CommandSchema, "assignCreate"),
+        builder.assign(ProjectStateSchema, "assignArchive"),
+      ],
+    );
     const readiness = CommandRegistrationReadiness.fromRegistry(
       new HandlerMetadataRegistry([handlers]),
     );
 
-    expect(readiness.commandTypeNames()).toEqual(["AggregateState", "spine.core.Command"]);
+    expect(readiness.commandTypeNames()).toEqual(["ProjectState", "spine.core.Command"]);
   });
 
   it("orders command message names by locale-independent code units", () => {
@@ -133,9 +134,11 @@ describe("command registration readiness", () => {
   });
 
   it("finds the unique command assignee metadata for a command type", () => {
-    const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
-      builder.assign(CommandSchema, "assignCreate"),
-    ]);
+    const handlers = EntityHandlers.define(
+      TaskProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [builder.assign(CommandSchema, "assignCreate")],
+    );
     const readiness = CommandRegistrationReadiness.fromEntityHandlers([handlers]);
 
     const assignee = readiness.findCommandAssignee(CommandSchema.typeName);
@@ -147,7 +150,7 @@ describe("command registration readiness", () => {
       commandFullTypeName: "spine.core.Command",
       entityType: TaskProjection,
       entity: {
-        fullTypeName: "ProjectionState",
+        fullTypeName: "ProjectOverviewState",
       },
       handler: {
         kind: "command-assignment",
@@ -160,10 +163,10 @@ describe("command registration readiness", () => {
   });
 
   it("keeps duplicate command assignment failure owned by HandlerMetadataRegistry", () => {
-    const first = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
+    const first = EntityHandlers.define(TaskProjection, ProjectOverviewStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
     ]);
-    const second = EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
+    const second = EntityHandlers.define(TaskAggregate, ProjectStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
     ]);
 
@@ -176,10 +179,10 @@ describe("command registration readiness", () => {
   });
 
   it("rejects duplicate command assignments exposed by a custom registry lookup", () => {
-    const first = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
+    const first = EntityHandlers.define(TaskProjection, ProjectOverviewStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
     ]);
-    const second = EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
+    const second = EntityHandlers.define(TaskAggregate, ProjectStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
     ]);
     const firstAssignment = createRegisteredCommandAssignment(first);
@@ -198,9 +201,11 @@ describe("command registration readiness", () => {
   });
 
   it("returns frozen copy-safe command lists and assignee values", () => {
-    const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
-      builder.assign(CommandSchema, "assignCreate"),
-    ]);
+    const handlers = EntityHandlers.define(
+      TaskProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [builder.assign(CommandSchema, "assignCreate")],
+    );
     const readiness = CommandRegistrationReadiness.fromEntityHandlers([handlers]);
 
     const firstList = readiness.commandTypeNames();
@@ -386,9 +391,11 @@ describe("command registration readiness", () => {
   });
 
   it("preserves entity field metadata identity in returned assignee metadata", () => {
-    const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
-      builder.assign(CommandSchema, "assignCreate"),
-    ]);
+    const handlers = EntityHandlers.define(
+      TaskProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [builder.assign(CommandSchema, "assignCreate")],
+    );
     const readiness = CommandRegistrationReadiness.fromEntityHandlers([handlers]);
 
     const assignee = readiness.findCommandAssignee(CommandSchema.typeName);
@@ -495,7 +502,7 @@ function createRegisteredCommandAssignment(
 }
 
 function createProjectionEntityMetadata(): EntityHandlersMetadata["entity"] {
-  return EntityHandlers.define(TaskProjection, ProjectionStateSchema, () => []).entity;
+  return EntityHandlers.define(TaskProjection, ProjectOverviewStateSchema, () => []).entity;
 }
 
 function metadataWithTags(semanticTags: unknown): EntityHandlersMetadata["entity"] {

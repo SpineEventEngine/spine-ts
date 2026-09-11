@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package example.project;
+
+message ProjectCreated {
+  repeated string member_id = 1;
+}

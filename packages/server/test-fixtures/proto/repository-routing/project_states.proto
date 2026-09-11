@@ -12,19 +12,20 @@
  * the License.
  */
 syntax = "proto3";
+
 package repository_routing;
 
-import "spine/core/user_id.proto";
 import "spine/options.proto";
+import "repository-routing/project_identifiers.proto";
 
-message ProjectionState {
+message ProjectOverviewState {
   option (entity).kind = PROJECTION;
   string id = 1 [(set_once) = true];
   string name = 2 [(column) = true];
   int32 priority = 3 [(column) = true];
 }
 
-message AggregateState {
+message ProjectState {
   option (entity).kind = AGGREGATE;
   option (entity).visibility = QUERY;
   string id = 1 [(set_once) = true];
@@ -32,83 +33,71 @@ message AggregateState {
   bool archived = 3;
 }
 
-message UuidMessageIdAggregateId {
-  string value = 1;
-}
-
-message UuidMessageIdAggregateState {
+message RegisteredProjectState {
   option (entity).kind = AGGREGATE;
-  UuidMessageIdAggregateId id = 1 [(set_once) = true];
+  ProjectId id = 1 [(set_once) = true];
   string name = 2 [(column) = true];
   int32 priority = 3 [(column) = true];
 }
-message NeutralProjectionState {
+
+message ProjectBacklogState {
   option (entity).kind = PROJECTION;
   string id = 1 [(set_once) = true];
   string name = 2 [(column) = true];
   int32 priority = 3 [(column) = true];
 }
 
-message Int32AggregateState {
+message NumberedProjectState {
   option (entity).kind = AGGREGATE;
   int32 id = 1 [(set_once) = true];
   string name = 2;
 }
 
-message Int64ProcessManagerState {
+message ProjectWorkflowState {
   option (entity).kind = PROCESS_MANAGER;
   int64 id = 1 [(set_once) = true];
   string queue = 2;
 }
 
-message ProcessManagerState {
+message ProjectQueueState {
   option (entity).kind = PROCESS_MANAGER;
   option (entity).visibility = SUBSCRIBE;
   string id = 1;
   string queue = 2 [(column) = true];
 }
 
-message ProjectionId {
-  int64 value = 1;
-}
-
-message Int64MessageIdProjectionState {
+message SequencedProjectOverviewState {
   option (entity).kind = PROJECTION;
-  ProjectionId id = 1 [(set_once) = true];
+  ProjectSequenceId id = 1 [(set_once) = true];
   string name = 2 [(column) = true];
 }
 
-message Int64MessageIdSourceState {
+message SequencedProjectSourceState {
   option (entity).kind = PROJECTION;
-  ProjectionId id = 1 [(set_once) = true];
+  ProjectSequenceId id = 1 [(set_once) = true];
   string name = 2 [(column) = true];
 }
 
-message CompositeRouteId {
-  spine.core.UserId reader = 1;
-  int32 number = 2;
-}
-
-message CompositeRouteState {
+message ProjectMilestoneOverviewState {
   option (entity).kind = PROJECTION;
-  CompositeRouteId id = 1 [(set_once) = true];
+  ProjectMilestoneId id = 1 [(set_once) = true];
   string name = 2 [(column) = true];
 }
 
-message CompositeRouteAggregateState {
+message ProjectMilestoneState {
   option (entity).kind = AGGREGATE;
-  CompositeRouteId id = 1 [(set_once) = true];
+  ProjectMilestoneId id = 1 [(set_once) = true];
   string name = 2 [(column) = true];
 }
 
-message CompositeRouteProcessManagerState {
+message ProjectMilestoneWorkflowState {
   option (entity).kind = PROCESS_MANAGER;
-  CompositeRouteId id = 1 [(set_once) = true];
+  ProjectMilestoneId id = 1 [(set_once) = true];
   string queue = 2;
 }
 
-message CompositeRouteSourceState {
+message ProjectMilestoneSourceState {
   option (entity).kind = PROJECTION;
-  CompositeRouteId id = 1 [(set_once) = true];
+  ProjectMilestoneId id = 1 [(set_once) = true];
   string name = 2 [(column) = true];
 }

@@ -13,7 +13,7 @@
  */
 
 /* Readable server test-fixture schemas generated from the adjacent Proto sources. */
-export { file_entity_metadata_main as entityMetadataMainFile } from "./generated/entity-metadata/main_pb.js";
+export { file_entity_metadata_project_states as entityMetadataMainFile } from "./generated/entity-metadata/project_states_pb.js";
 export { file_entity_metadata_empty as entityMetadataEmptyFile } from "./generated/entity-metadata/empty_pb.js";
 export { file_entity_metadata_unknown_kind as entityMetadataUnknownKindFile } from "./generated/entity-metadata/unknown-kind_pb.js";
 export { file_entity_metadata_invalid_column as entityMetadataInvalidColumnFile } from "./generated/entity-metadata/invalid-column_pb.js";
@@ -24,63 +24,65 @@ export { file_handler_registry_events as handlerRegistryEventsFile } from "./gen
 export { file_handler_registry_rejections as handlerRegistryRejectionsFile } from "./generated/handler-registry/rejections_pb.js";
 export { file_handler_registry_states as handlerRegistryStatesFile } from "./generated/handler-registry/states_pb.js";
 export {
-  ProjectionStateSchema as RepositoryRoutingProjectionStateSchema,
-  AggregateStateSchema as RepositoryRoutingAggregateStateSchema,
-  UuidMessageIdAggregateStateSchema as RepositoryRoutingUuidMessageIdAggregateStateSchema,
-  UuidMessageIdAggregateIdSchema as RepositoryRoutingUuidMessageIdAggregateIdSchema,
-  NeutralProjectionStateSchema as RepositoryRoutingNeutralProjectionStateSchema,
-  Int32AggregateStateSchema as RepositoryRoutingInt32AggregateStateSchema,
-  Int64ProcessManagerStateSchema as RepositoryRoutingInt64ProcessManagerStateSchema,
-  ProcessManagerStateSchema as RepositoryRoutingProcessManagerStateSchema,
-  ProjectionIdSchema as RepositoryRoutingProjectionIdSchema,
-  Int64MessageIdProjectionStateSchema as RepositoryRoutingInt64MessageIdProjectionStateSchema,
-  Int64MessageIdSourceStateSchema as RepositoryRoutingInt64MessageIdSourceStateSchema,
-  CompositeRouteIdSchema as RepositoryRoutingCompositeRouteIdSchema,
-  CompositeRouteStateSchema as RepositoryRoutingCompositeRouteStateSchema,
-  CompositeRouteAggregateStateSchema as RepositoryRoutingCompositeRouteAggregateStateSchema,
-  CompositeRouteProcessManagerStateSchema as RepositoryRoutingCompositeRouteProcessManagerStateSchema,
-  CompositeRouteSourceStateSchema as RepositoryRoutingCompositeRouteSourceStateSchema,
-} from "./generated/repository-routing/routing_pb.js";
+  ProjectOverviewStateSchema as RepositoryRoutingProjectOverviewStateSchema,
+  ProjectStateSchema as RepositoryRoutingProjectStateSchema,
+  RegisteredProjectStateSchema as RepositoryRoutingRegisteredProjectStateSchema,
+  ProjectBacklogStateSchema as RepositoryRoutingProjectBacklogStateSchema,
+  NumberedProjectStateSchema as RepositoryRoutingNumberedProjectStateSchema,
+  ProjectWorkflowStateSchema as RepositoryRoutingProjectWorkflowStateSchema,
+  ProjectQueueStateSchema as RepositoryRoutingProjectQueueStateSchema,
+  SequencedProjectOverviewStateSchema as RepositoryRoutingSequencedProjectOverviewStateSchema,
+  SequencedProjectSourceStateSchema as RepositoryRoutingSequencedProjectSourceStateSchema,
+  ProjectMilestoneOverviewStateSchema as RepositoryRoutingProjectMilestoneOverviewStateSchema,
+  ProjectMilestoneStateSchema as RepositoryRoutingProjectMilestoneStateSchema,
+  ProjectMilestoneWorkflowStateSchema as RepositoryRoutingProjectMilestoneWorkflowStateSchema,
+  ProjectMilestoneSourceStateSchema as RepositoryRoutingProjectMilestoneSourceStateSchema,
+} from "./generated/repository-routing/project_states_pb.js";
 export {
-  UuidMessageIdAggregateCommandSchema as RepositoryRoutingUuidMessageIdAggregateCommandSchema,
-  TaskCommandSchema as RepositoryRoutingTaskCommandSchema,
-  ImplicitTaskCommandSchema as RepositoryRoutingImplicitTaskCommandSchema,
-  Int32AggregateCommandSchema as RepositoryRoutingInt32AggregateCommandSchema,
-  Int64ProcessManagerCommandSchema as RepositoryRoutingInt64ProcessManagerCommandSchema,
-  RepeatedIdCommandSchema as RepositoryRoutingRepeatedIdCommandSchema,
-  MapIdCommandSchema as RepositoryRoutingMapIdCommandSchema,
-  CompositeRouteCommandSchema as RepositoryRoutingCompositeRouteCommandSchema,
-} from "./generated/repository-routing/repository_commands_pb.js";
+  ProjectIdSchema as RepositoryRoutingProjectIdSchema,
+  ProjectSequenceIdSchema as RepositoryRoutingProjectSequenceIdSchema,
+  ProjectMilestoneIdSchema as RepositoryRoutingProjectMilestoneIdSchema,
+} from "./generated/repository-routing/project_identifiers_pb.js";
 export {
-  ProjectionEventSchema as RepositoryRoutingProjectionEventSchema,
-  GeneratedReactorEventSchema as RepositoryRoutingGeneratedReactorEventSchema,
-  Int32AggregateEventSchema as RepositoryRoutingInt32AggregateEventSchema,
-  Int64ProcessManagerEventSchema as RepositoryRoutingInt64ProcessManagerEventSchema,
-  Int64MessageIdProjectionEventSchema as RepositoryRoutingInt64MessageIdProjectionEventSchema,
-  CompositeRouteEventSchema as RepositoryRoutingCompositeRouteEventSchema,
-} from "./generated/repository-routing/repository_events_pb.js";
+  RegisterProjectSchema as RepositoryRoutingRegisterProjectSchema,
+  CreateProjectSchema as RepositoryRoutingCreateProjectSchema,
+  DraftProjectSchema as RepositoryRoutingDraftProjectSchema,
+  CreateNumberedProjectSchema as RepositoryRoutingCreateNumberedProjectSchema,
+  ScheduleProjectWorkflowSchema as RepositoryRoutingScheduleProjectWorkflowSchema,
+  InviteProjectMembersSchema as RepositoryRoutingInviteProjectMembersSchema,
+  AssignProjectAttributesSchema as RepositoryRoutingAssignProjectAttributesSchema,
+  AddProjectMilestoneSchema as RepositoryRoutingAddProjectMilestoneSchema,
+} from "./generated/repository-routing/project_commands_pb.js";
 export {
-  ValidatedAggregateStateSchema as RepositoryRoutingValidatedAggregateStateSchema,
-  ValidatedMessageIdStateSchema as RepositoryRoutingValidatedMessageIdStateSchema,
-} from "./generated/repository-routing/validation-refusal_pb.js";
+  ProjectCreatedSchema as RepositoryRoutingProjectCreatedSchema,
+  ProjectRegisteredSchema as RepositoryRoutingProjectRegisteredSchema,
+  NumberedProjectCreatedSchema as RepositoryRoutingNumberedProjectCreatedSchema,
+  ProjectWorkflowScheduledSchema as RepositoryRoutingProjectWorkflowScheduledSchema,
+  SequencedProjectOverviewCreatedSchema as RepositoryRoutingSequencedProjectOverviewCreatedSchema,
+  ProjectMilestoneAddedSchema as RepositoryRoutingProjectMilestoneAddedSchema,
+} from "./generated/repository-routing/project_events_pb.js";
 export {
-  ValidatedTaskCommandSchema as RepositoryRoutingValidatedTaskCommandSchema,
-  ValidatedMessageIdSchema as RepositoryRoutingValidatedMessageIdSchema,
-  ProducedTaskCommandSchema as RepositoryRoutingProducedTaskCommandSchema,
-} from "./generated/repository-routing/validation_refusal_commands_pb.js";
-export { ValidatedTaskEventSchema as RepositoryRoutingValidatedTaskEventSchema } from "./generated/repository-routing/validation_refusal_events_pb.js";
+  ProjectSubmissionStateSchema as RepositoryRoutingProjectSubmissionStateSchema,
+  AcceptedProjectSubmissionStateSchema as RepositoryRoutingAcceptedProjectSubmissionStateSchema,
+} from "./generated/repository-routing/project_validation_states_pb.js";
+export {
+  CreateProjectSubmissionSchema as RepositoryRoutingCreateProjectSubmissionSchema,
+  ProjectSubmissionIdSchema as RepositoryRoutingProjectSubmissionIdSchema,
+  CreateFollowUpProjectSchema as RepositoryRoutingCreateFollowUpProjectSchema,
+} from "./generated/repository-routing/project_validation_commands_pb.js";
+export { ProjectSubmissionCreatedSchema as RepositoryRoutingProjectSubmissionCreatedSchema } from "./generated/repository-routing/project_validation_events_pb.js";
 export type {
-  ProducedTaskCommand as RepositoryRoutingProducedTaskCommand,
-  ValidatedMessageId as RepositoryRoutingValidatedMessageId,
-  ValidatedTaskCommand as RepositoryRoutingValidatedTaskCommand,
-} from "./generated/repository-routing/validation_refusal_commands_pb.js";
-export type { ValidatedTaskEvent as RepositoryRoutingValidatedTaskEvent } from "./generated/repository-routing/validation_refusal_events_pb.js";
+  CreateFollowUpProject as RepositoryRoutingCreateFollowUpProject,
+  ProjectSubmissionId as RepositoryRoutingProjectSubmissionId,
+  CreateProjectSubmission as RepositoryRoutingCreateProjectSubmission,
+} from "./generated/repository-routing/project_validation_commands_pb.js";
+export type { ProjectSubmissionCreated as RepositoryRoutingProjectSubmissionCreated } from "./generated/repository-routing/project_validation_events_pb.js";
 export {
-  NumberRouteEventSchema as RepositoryRoutingNumberRouteEventSchema,
-  WrongIdRouteEventSchema as RepositoryRoutingWrongIdRouteEventSchema,
-} from "./generated/repository-routing/route-validation_pb.js";
+  ProjectPriorityChangedSchema as RepositoryRoutingProjectPriorityChangedSchema,
+  ProjectMemberChangedSchema as RepositoryRoutingProjectMemberChangedSchema,
+} from "./generated/repository-routing/project_routing_events_pb.js";
 export {
-  ValidatedAggregateStateSchema,
-  ValidatedTaskCommandSchema,
-  file_validation_refusal_command as validationRefusalCommandFile,
-} from "./generated/validation-refusal/command_pb.js";
+  CreateReviewProjectSchema,
+  file_validation_refusal_project_commands as validationRefusalCommandFile,
+} from "./generated/validation-refusal/project_commands_pb.js";
+export { ReviewProjectStateSchema } from "./generated/validation-refusal/project_states_pb.js";

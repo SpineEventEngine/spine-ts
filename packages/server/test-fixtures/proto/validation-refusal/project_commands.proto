@@ -13,8 +13,11 @@
  */
 syntax = "proto3";
 
-package spine.server.testing.handlerregistry;
+package example.validation_refusal;
 
-message ReviewRejected {
+import "spine/options.proto";
+
+message CreateReviewProject {
   string id = 1;
+  string name = 2 [(required) = true];
 }

@@ -15,7 +15,7 @@
 import { type Message } from "@bufbuild/protobuf";
 import { CommandSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
-import { ProjectionStateSchema as StateSchema } from "../../test-fixtures/generated/entity-metadata/main_pb.js";
+import { ProjectOverviewStateSchema as StateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import {
   ScheduleReviewSchema,
   StartReviewSchema,

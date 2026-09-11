@@ -17,7 +17,7 @@ import "spine/options.proto";
 
 option (every_is).java_type = "example.tags.ASharedTag";
 
-message ProjectionState {
+message ProjectOverviewState {
   option (entity).kind = PROJECTION;
   option (is).java_type = "example.tags.ZProjectionTag";
 
@@ -26,7 +26,7 @@ message ProjectionState {
   int32 priority = 3 [(column) = true];
 }
 
-message AggregateState {
+message ProjectState {
   option (entity).kind = AGGREGATE;
   option (entity).visibility = QUERY;
   option (is).java_type = "example.tags.AggregateTag";
@@ -36,7 +36,7 @@ message AggregateState {
   bool archived = 3;
 }
 
-message GenericState {
+message ProjectSearchState {
   option (entity).kind = ENTITY;
   option (is).java_type = "example.tags.ASharedTag";
 
@@ -44,22 +44,22 @@ message GenericState {
   string searchable = 2 [(column) = true];
 }
 
-message SetOnceDetails {
+message ProjectProfile {
   string value = 1;
-  SetOnceDetails child = 2;
+  ProjectProfile child = 2;
 }
 
-message RichSetOnceState {
+message ProjectProfileState {
   option (entity).kind = PROJECTION;
 
   string id = 1 [(set_once) = true];
   bytes fingerprint = 2 [(set_once) = true];
   repeated string tags = 3 [(set_once) = true];
-  SetOnceDetails details = 4 [(set_once) = true];
+  ProjectProfile details = 4 [(set_once) = true];
   string mutable_note = 5;
 }
 
-message MapSetOnceState {
+message ProjectCatalogState {
   option (entity).kind = PROJECTION;
 
   string id = 1 [(set_once) = true];
@@ -67,16 +67,16 @@ message MapSetOnceState {
   string mutable_note = 3;
 }
 
-message SingularSetOnceState {
+message ProjectRecordState {
   option (entity).kind = PROJECTION;
 
   string id = 1 [(set_once) = true];
   bytes fingerprint = 2 [(set_once) = true];
-  SetOnceDetails details = 3 [(set_once) = true];
+  ProjectProfile details = 3 [(set_once) = true];
   string mutable_note = 4;
 }
 
-message OptionalSetOnceState {
+message ProjectDraftState {
   option (entity).kind = PROJECTION;
 
   string id = 1 [(set_once) = true];
@@ -85,51 +85,43 @@ message OptionalSetOnceState {
 }
 
 // Identifies a Projection state with a message-shaped ID.
-message ProjectionId {
+message ProjectOverviewId {
   // The identifier value.
   string value = 1;
 }
 
 // Provides a Projection state identified by a Proto message.
-message MessageIdProjectionState {
+message ProjectPortfolioState {
   option (entity).kind = PROJECTION;
 
   // The Projection identifier.
-  ProjectionId id = 1 [(set_once) = true];
+  ProjectOverviewId id = 1 [(set_once) = true];
 
   // A queryable name.
   string name = 2 [(column) = true];
 }
 
-message Int32AggregateState {
+message NumberedProjectState {
   option (entity).kind = AGGREGATE;
 
   int32 id = 1 [(set_once) = true];
   string name = 2;
 }
 
-message Int64ProcessManagerState {
+message ProjectWorkflowState {
   option (entity).kind = PROCESS_MANAGER;
 
   int64 id = 1 [(set_once) = true];
   string queue = 2;
 }
 
-message RepeatedIdCommand {
-  repeated string id = 1;
-}
-
-message MapIdCommand {
-  map<string, string> id = 1;
-}
-
-message ExplicitRequiredState {
+message PublishedProjectState {
   option (entity).kind = PROJECTION;
 
   string id = 1 [(required) = true];
 }
 
-message ExplicitOptionalState {
+message DraftProjectState {
   option (entity).kind = PROJECTION;
 
   string id = 1 [(required) = false];

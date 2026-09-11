@@ -818,10 +818,10 @@ describe("proto-workflow", () => {
       displayPath: "packages/server/test-fixtures/generated",
       moduleName: "ServerTestFixtures",
     });
-    expect(existsSync("packages/server/test-fixtures/proto/entity-metadata/main.proto")).toBe(true);
-    expect(existsSync("packages/server/test-fixtures/generated/entity-metadata/main_pb.ts")).toBe(
-      true,
-    );
+    expect(existsSync("packages/server/test-fixtures/proto/entity-metadata/project_states.proto")).toBe(true);
+    expect(existsSync("packages/server/test-fixtures/proto/entity-metadata/project_commands.proto")).toBe(true);
+    expect(existsSync("packages/server/test-fixtures/generated/entity-metadata/project_states_pb.ts")).toBe(true);
+    expect(existsSync("packages/server/test-fixtures/generated/entity-metadata/project_commands_pb.ts")).toBe(true);
   });
 
   it("generates core and testing fixtures from package-local Proto sources", () => {
@@ -837,10 +837,10 @@ describe("proto-workflow", () => {
       displayPath: "packages/testing/test-fixtures/generated",
       moduleName: "TestingTestFixtures",
     });
-    expect(existsSync("packages/core/test-fixtures/proto/entity_columns.proto")).toBe(true);
-    expect(existsSync("packages/testing/test-fixtures/proto/black_box.proto")).toBe(true);
-    expect(existsSync("packages/core/test-fixtures/generated/signal_envelopes_pb.ts")).toBe(true);
-    expect(existsSync("packages/testing/test-fixtures/generated/black_box_pb.ts")).toBe(true);
+    expect(existsSync("packages/core/test-fixtures/proto/project_states.proto")).toBe(true);
+    expect(existsSync("packages/testing/test-fixtures/proto/project_commands.proto")).toBe(true);
+    expect(existsSync("packages/core/test-fixtures/generated/project_commands_pb.ts")).toBe(true);
+    expect(existsSync("packages/testing/test-fixtures/generated/project_states_pb.ts")).toBe(true);
   });
 
   it("stages the MessageBoard handler registry with its model output", () => {

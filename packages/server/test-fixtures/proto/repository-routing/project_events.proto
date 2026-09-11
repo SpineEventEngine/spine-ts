@@ -12,13 +12,39 @@
  * the License.
  */
 syntax = "proto3";
-package spine_ts.test;
 
-import "spine/core/user_id.proto";
-message NumberRouteEvent {
-  double id = 1;
+package repository_routing;
+
+import "repository-routing/project_identifiers.proto";
+
+message ProjectCreated {
+  string id = 1;
+  string name = 2;
+  int32 priority = 3;
 }
 
-message WrongIdRouteEvent {
-  spine.core.UserId id = 1;
+message ProjectRegistered {
+  string id = 1;
+  string name = 2;
+  int32 priority = 3;
+}
+
+message NumberedProjectCreated {
+  int32 id = 1;
+  string name = 2;
+}
+
+message ProjectWorkflowScheduled {
+  int64 id = 1;
+  string queue = 2;
+}
+
+message SequencedProjectOverviewCreated {
+  ProjectSequenceId id = 1;
+  string name = 2;
+}
+
+message ProjectMilestoneAdded {
+  ProjectMilestoneId id = 1;
+  string name = 2;
 }

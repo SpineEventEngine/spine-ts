@@ -12,38 +12,20 @@
  * the License.
  */
 syntax = "proto3";
-package repository_routing;
 
-import "repository-routing/routing.proto";
+package repository_routing_project_validation;
 
-message ProjectionEvent {
-  string id = 1;
-  string name = 2;
-  int32 priority = 3;
+import "repository-routing/project_validation_commands.proto";
+import "spine/options.proto";
+
+message ProjectSubmissionState {
+  option (entity).kind = AGGREGATE;
+  string id = 1 [(set_once) = true];
+  string name = 2 [(column) = true];
 }
 
-message GeneratedReactorEvent {
-  string id = 1;
-  string name = 2;
-  int32 priority = 3;
-}
-
-message Int32AggregateEvent {
-  int32 id = 1;
-  string name = 2;
-}
-
-message Int64ProcessManagerEvent {
-  int64 id = 1;
-  string queue = 2;
-}
-
-message Int64MessageIdProjectionEvent {
-  ProjectionId id = 1;
-  string name = 2;
-}
-
-message CompositeRouteEvent {
-  CompositeRouteId id = 1;
-  string name = 2;
+message AcceptedProjectSubmissionState {
+  option (entity).kind = AGGREGATE;
+  repository_routing_project_validation_commands.ProjectSubmissionId id = 1 [(set_once) = true];
+  string name = 2 [(column) = true];
 }

@@ -69,7 +69,9 @@ it("resolves its managed-host access seam outside the published package", async 
   const source = await readFile(childPath, "utf8");
 
   expect(source).toContain('from "../../test-fixtures/internal.mjs"');
-  expect(source).toContain('from "../../test-fixtures/dist/generated/entity-metadata/main_pb.js"');
+  expect(source).toContain(
+    'from "../../test-fixtures/dist/generated/entity-metadata/project_states_pb.js"',
+  );
 });
 
 it("starts concurrent managed fixtures on independent Coordinator ports", async () => {
@@ -161,7 +163,7 @@ function externalStateTopic() {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t0210-external-state" }),
     target: create(TargetSchema, {
-      type: "type.googleapis.com/ProjectionState",
+      type: "type.googleapis.com/ProjectOverviewState",
       criterion: { case: "includeAll", value: true },
     }),
     context: metadata.actorContext({ actor: create(UserIdSchema, { value: "t0210" }) }),

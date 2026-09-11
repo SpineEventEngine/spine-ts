@@ -12,17 +12,21 @@
  * the License.
  */
 syntax = "proto3";
+
 package spine.server.testing.handlerregistry;
 
 import "spine/options.proto";
+
 message ReviewStarted {
   string id = 1;
 }
-message TaskEvent {
+
+message ReviewTaskAssigned {
   string id = 1;
   string name = 2;
 }
-message ValidatedTaskEvent {
+
+message ReviewFollowUpScheduled {
   string id = 1;
   string name = 2 [(required) = true];
 }

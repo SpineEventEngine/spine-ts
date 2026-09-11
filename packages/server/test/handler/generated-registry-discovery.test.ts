@@ -31,7 +31,7 @@ import { type GeneratedHandlerRegistry } from "../../src/handler/generated-handl
 import { HandlerRegistryIngestionError } from "../../src/handler/generated-handler-registry.js";
 import { HandlerMetadataRegistry } from "../../src/handler/handler-metadata.js";
 
-type ProjectionState = Message<"ProjectionState"> & {
+type ProjectOverviewState = Message<"ProjectOverviewState"> & {
   id: string;
   name: string;
   priority: number;
@@ -47,10 +47,10 @@ class DiscoveredProjection {
 }
 
 const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectionStateSchema = messageDesc(
+const ProjectOverviewStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
-) as GenMessage<ProjectionState>;
+) as GenMessage<ProjectOverviewState>;
 const StartReviewSchema = messageDesc(
   FixtureSchemas.handlerRegistryCommandsFile,
   0,
@@ -252,7 +252,7 @@ describe("generated registry discovery", () => {
         {
           receiverKind: "entity",
           receiverType: DiscoveredProjection,
-          stateSchema: ProjectionStateSchema,
+          stateSchema: ProjectOverviewStateSchema,
           handlers: [
             {
               kind: "command-assignment",

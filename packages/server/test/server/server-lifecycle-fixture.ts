@@ -49,8 +49,11 @@ import type { EnvironmentDeliveryRuntime } from "../../src/server/environment-de
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
 import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
-type LifecycleState = Message<"ProjectionState"> & { readonly id: string };
-type LifecycleEvent = Message<"TaskEvent"> & { readonly id: string; readonly name: string };
+type LifecycleState = Message<"ProjectOverviewState"> & { readonly id: string };
+type LifecycleEvent = Message<"ReviewTaskAssigned"> & {
+  readonly id: string;
+  readonly name: string;
+};
 
 const lifecycleFile = FixtureSchemas.entityMetadataMainFile;
 const LifecycleStateSchema = messageDesc(lifecycleFile, 0) as GenMessage<LifecycleState>;

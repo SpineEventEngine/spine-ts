@@ -39,10 +39,8 @@ import {
   file_spine_options,
   type_url_prefix,
 } from "@spine-event-engine/proto";
-import {
-  TaskCommandSchema as TestTaskCommandSchema,
-  TaskEventSchema as TestTaskEventSchema,
-} from "../test-fixtures/generated/signal_envelopes_pb.js";
+import { CreateProjectSchema as TestCreateProjectSchema } from "../test-fixtures/generated/project_commands_pb.js";
+import { ProjectCreatedSchema as TestProjectCreatedSchema } from "../test-fixtures/generated/project_events_pb.js";
 
 import {
   DEFAULT_TYPE_URL_PREFIX,
@@ -1183,14 +1181,14 @@ describe("@spine-event-engine/core envelope packing", () => {
 
   it("creates distinct fresh command IDs and clones contexts", () => {
     const context = commandContext();
-    const message = create(TestTaskCommandSchema, { fieldName: ["task"] });
+    const message = create(TestCreateProjectSchema, { memberId: ["project"] });
 
     const first = SignalEnvelopes.command({
       context,
-      schema: TestTaskCommandSchema,
+      schema: TestCreateProjectSchema,
       message,
     });
-    const second = SignalEnvelopes.command({ context, schema: TestTaskCommandSchema, message });
+    const second = SignalEnvelopes.command({ context, schema: TestCreateProjectSchema, message });
 
     expect(first.$typeName).toBe("spine.core.Command");
     expect(first.id?.uuid).toMatch(UUID_PATTERN);
@@ -1198,9 +1196,9 @@ describe("@spine-event-engine/core envelope packing", () => {
     expect(first.id?.uuid).not.toBe(second.id?.uuid);
     expect(first.context).toEqual(context);
     expect(first.systemProperties).toBeUndefined();
-    expect(first.message?.typeUrl).toBe(TypeUrls.derive(TestTaskCommandSchema));
-    expect(first.message?.value).toEqual(toBinary(TestTaskCommandSchema, message));
-    expect(AnyMessages.unpack(first.message ?? create(AnySchema), TestTaskCommandSchema)).toEqual(
+    expect(first.message?.typeUrl).toBe(TypeUrls.derive(TestCreateProjectSchema));
+    expect(first.message?.value).toEqual(toBinary(TestCreateProjectSchema, message));
+    expect(AnyMessages.unpack(first.message ?? create(AnySchema), TestCreateProjectSchema)).toEqual(
       message,
     );
 
@@ -1214,25 +1212,25 @@ describe("@spine-event-engine/core envelope packing", () => {
 
   it("creates distinct fresh event IDs and clones contexts", () => {
     const context = eventContext();
-    const message = create(TestTaskEventSchema, { fieldName: ["task", "created"] });
+    const message = create(TestProjectCreatedSchema, { memberId: ["member", "created"] });
 
     const first = SignalEnvelopes.event({
       context,
-      schema: TestTaskEventSchema,
+      schema: TestProjectCreatedSchema,
       message,
     });
-    const second = SignalEnvelopes.event({ context, schema: TestTaskEventSchema, message });
+    const second = SignalEnvelopes.event({ context, schema: TestProjectCreatedSchema, message });
 
     expect(first.$typeName).toBe("spine.core.Event");
     expect(first.id?.value).toMatch(UUID_PATTERN);
     expect(second.id?.value).toMatch(UUID_PATTERN);
     expect(first.id?.value).not.toBe(second.id?.value);
     expect(first.context).toEqual(context);
-    expect(first.message?.typeUrl).toBe(TypeUrls.derive(TestTaskEventSchema));
-    expect(first.message?.value).toEqual(toBinary(TestTaskEventSchema, message));
-    expect(AnyMessages.unpack(first.message ?? create(AnySchema), TestTaskEventSchema)).toEqual(
-      message,
-    );
+    expect(first.message?.typeUrl).toBe(TypeUrls.derive(TestProjectCreatedSchema));
+    expect(first.message?.value).toEqual(toBinary(TestProjectCreatedSchema, message));
+    expect(
+      AnyMessages.unpack(first.message ?? create(AnySchema), TestProjectCreatedSchema),
+    ).toEqual(message);
 
     if (context.version === undefined) {
       throw new Error("Expected event context version fixture.");
@@ -1250,8 +1248,8 @@ describe("@spine-event-engine/core envelope packing", () => {
     try {
       const command = SignalEnvelopes.command({
         context: commandContext(),
-        schema: TestTaskCommandSchema,
-        message: create(TestTaskCommandSchema),
+        schema: TestCreateProjectSchema,
+        message: create(TestCreateProjectSchema),
       });
 
       expect(command.id?.uuid).toBe("6f75b67a-5f23-4b64-8a35-6ce5f8f97cf5");
@@ -1272,8 +1270,8 @@ describe("@spine-event-engine/core envelope packing", () => {
     try {
       const event = SignalEnvelopes.event({
         context: eventContext(),
-        schema: TestTaskEventSchema,
-        message: create(TestTaskEventSchema),
+        schema: TestProjectCreatedSchema,
+        message: create(TestProjectCreatedSchema),
       });
 
       expect(event.id?.value).toBe("00000000-0000-4000-8000-000000000000");
@@ -1290,8 +1288,8 @@ describe("@spine-event-engine/core envelope packing", () => {
       expect(() =>
         SignalEnvelopes.command({
           context: commandContext(),
-          schema: TestTaskCommandSchema,
-          message: create(TestTaskCommandSchema),
+          schema: TestCreateProjectSchema,
+          message: create(TestCreateProjectSchema),
         }),
       ).toThrow(/secure random/i);
     } finally {
@@ -1302,13 +1300,13 @@ describe("@spine-event-engine/core envelope packing", () => {
   it("rejects caller-provided envelope IDs at the type boundary", () => {
     const commandInput: PackCommandInput = {
       context: commandContext(),
-      schema: TestTaskCommandSchema,
-      message: create(TestTaskCommandSchema),
+      schema: TestCreateProjectSchema,
+      message: create(TestCreateProjectSchema),
     };
     const eventInput: PackEventInput = {
       context: eventContext(),
-      schema: TestTaskEventSchema,
-      message: create(TestTaskEventSchema),
+      schema: TestProjectCreatedSchema,
+      message: create(TestProjectCreatedSchema),
     };
     expectTypeOf(commandInput).toExtend<PackCommandInput>();
     expectTypeOf(eventInput).toExtend<PackEventInput>();

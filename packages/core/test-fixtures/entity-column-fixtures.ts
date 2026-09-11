@@ -18,25 +18,27 @@ import { FieldOptionsSchema, MessageOptionsSchema } from "@bufbuild/protobuf/wkt
 import { column, entity } from "@spine-event-engine/proto";
 
 export {
-  AggregateStateSchema,
-  FixtureStatus,
-  InvalidMapStateSchema,
-  InvalidOneofStateSchema,
-  InvalidRepeatedStateSchema,
-  ProcessManagerStateSchema,
-  ProjectionStateSchema,
-  ScalarProjectionStateSchema,
-} from "./generated/entity_columns_pb.js";
-export type { Owner } from "./generated/entity_columns_pb.js";
-import { ProjectionStateSchema } from "./generated/entity_columns_pb.js";
-import type { ProjectionState } from "./generated/entity_columns_pb.js";
+  ProjectStateSchema,
+  ProjectStatus,
+  ProjectOverviewWithLabelCatalogStateSchema,
+  ProjectOverviewWithDisplayLabelStateSchema,
+  ProjectOverviewWithTagsStateSchema,
+  ProjectWorkflowStateSchema,
+  ProjectOverviewStateSchema,
+  ProjectOverviewWithMetricsStateSchema,
+} from "./generated/project_states_pb.js";
+export type { ProjectLead } from "./generated/project_states_pb.js";
+import { ProjectOverviewStateSchema } from "./generated/project_states_pb.js";
+import type { ProjectOverviewState } from "./generated/project_states_pb.js";
 
-export function projectionSchemaWithRawEntityOption(data: Uint8Array): GenMessage<ProjectionState> {
+export function projectionSchemaWithRawEntityOption(
+  data: Uint8Array,
+): GenMessage<ProjectOverviewState> {
   const options = create(MessageOptionsSchema);
   options.$unknown = [{ no: entity.number, wireType: 2, data }];
   return {
-    ...ProjectionStateSchema,
-    proto: { ...ProjectionStateSchema.proto, options },
+    ...ProjectOverviewStateSchema,
+    proto: { ...ProjectOverviewStateSchema.proto, options },
   };
 }
 
@@ -44,7 +46,7 @@ export function projectionFieldWithRawColumnOption(data: Uint8Array) {
   const options = create(FieldOptionsSchema);
   options.$unknown = [{ no: column.number, wireType: 0, data }];
   return {
-    ...ProjectionStateSchema.field.title,
-    proto: { ...ProjectionStateSchema.field.title.proto, options },
+    ...ProjectOverviewStateSchema.field.title,
+    proto: { ...ProjectOverviewStateSchema.field.title.proto, options },
   };
 }

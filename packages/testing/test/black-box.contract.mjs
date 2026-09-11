@@ -19,37 +19,39 @@ import {
   TopicSchema,
 } from "@spine-event-engine/proto/client";
 import { Aggregate, EntityHandlers, Projection, Repository } from "@spine-event-engine/server";
+import { CreateProjectSchema } from "../test-fixtures/generated/project_commands_pb.ts";
 import {
-  AggregateStateSchema,
-  ProjectionEventSchema,
-  ProjectionStateSchema,
-  TaskCommandSchema,
-  TaskObservedSchema,
-} from "../test-fixtures/generated/black_box_pb.ts";
+  ProjectCreatedSchema,
+  ProjectObservedSchema,
+} from "../test-fixtures/generated/project_events_pb.ts";
+import {
+  ProjectSchema,
+  ProjectOverviewSchema,
+} from "../test-fixtures/generated/project_states_pb.ts";
 
-class TaskAggregate extends Aggregate {
-  assignTask(command) {
+class ProjectAggregate extends Aggregate {
+  registerProject(command) {
     return SignalEnvelopes.event({
       id: create(EventIdSchema, { value: `event-${command.id}` }),
       context: create(EventContextSchema),
-      schema: ProjectionEventSchema,
-      message: create(ProjectionEventSchema, {
+      schema: ProjectCreatedSchema,
+      message: create(ProjectCreatedSchema, {
         id: command.id,
         name: command.name,
         priority: 1,
       }),
     });
   }
-  applyTask(event) {
+  applyProjectCreated(event) {
     this.startTransaction();
     this.update((draft) =>
-      Object.assign(draft, create(AggregateStateSchema, { id: event.id, name: event.name })),
+      Object.assign(draft, create(ProjectSchema, { id: event.id, name: event.name })),
     );
     this.commitTransaction();
   }
 }
-class TaskProjection extends Projection {
-  subscribeTask(event) {
+class ProjectOverview extends Projection {
+  projectCreated(event) {
     this.update((draft) =>
       Object.assign(draft, state(event.id, `${event.name} (projected)`, event.priority + 1)),
     );
@@ -62,12 +64,12 @@ class TaskProjection extends Projection {
 export function registerBlackBoxContract(test, testing) {
   const { BlackBox, BlackBoxClosedError, BlackBoxTimeoutError } = testing;
   test("posts a command then eventually sends a query and decodes its projection", async () => {
-    const blackBox = await BlackBox.from(taskContext());
+    const blackBox = await BlackBox.from(projectContext());
     try {
       const scope = blackBox.asGuest();
       const posted = await scope.post(
-        TaskCommandSchema,
-        create(TaskCommandSchema, { id: "task-1", name: "First" }),
+        CreateProjectSchema,
+        create(CreateProjectSchema, { id: "project-1", name: "First" }),
       );
       if (posted.kind !== "ok") throw new Error("command was not accepted");
       if (blackBox.assertCommands().length !== 0)
@@ -77,16 +79,16 @@ export function registerBlackBoxContract(test, testing) {
         (events) => events.length === 1,
       );
       const event = produced[0];
-      if (AnyMessages.unpack(event?.message, ProjectionEventSchema)?.name !== "First")
+      if (AnyMessages.unpack(event?.message, ProjectCreatedSchema)?.name !== "First")
         throw new Error("BlackBox did not capture the committed produced event");
       event.context = undefined;
       if (blackBox.assertEvents()[0]?.context === undefined)
         throw new Error("BlackBox returned a mutable produced-event snapshot");
       const result = await blackBox.eventually(
-        () => scope.send(query("task-1")),
+        () => scope.send(query("project-1")),
         (candidate) => candidate.message.length === 1,
       );
-      const first = AnyMessages.unpack(result.message[0]?.state, ProjectionStateSchema);
+      const first = AnyMessages.unpack(result.message[0]?.state, ProjectOverviewSchema);
       if (first?.name !== "First (projected)") throw new Error("projection was not immutable");
     } finally {
       await blackBox.close();
@@ -94,11 +96,11 @@ export function registerBlackBoxContract(test, testing) {
   });
 
   test("activates a raw projection topic and decodes its update with the schema", async () => {
-    const blackBox = await BlackBox.from(taskContext());
+    const blackBox = await BlackBox.from(projectContext());
     try {
       const scope = blackBox.asGuest();
       const subscription = await scope.createSubscription(
-        topic(ProjectionStateSchema),
+        topic(ProjectOverviewSchema),
         entityOptions(),
       );
       const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
@@ -115,8 +117,8 @@ export function registerBlackBoxContract(test, testing) {
       }
       const next = subscription.updates[Symbol.asyncIterator]().next();
       const posted = await scope.post(
-        TaskCommandSchema,
-        create(TaskCommandSchema, { id: "task-state", name: "State" }),
+        CreateProjectSchema,
+        create(CreateProjectSchema, { id: "project-state", name: "State" }),
       );
       if (posted.kind !== "ok") throw new Error("command was not accepted");
       const update = await next;
@@ -126,7 +128,7 @@ export function registerBlackBoxContract(test, testing) {
         update.value.update.update.case !== "entityUpdates" ||
         AnyMessages.unpack(
           update.value.update.update.value.update[0]?.kind.value,
-          ProjectionStateSchema,
+          ProjectOverviewSchema,
         )?.name !== "State (projected)"
       ) {
         throw new Error("state subscription did not decode the projection update");
@@ -143,11 +145,11 @@ export function registerBlackBoxContract(test, testing) {
   });
 
   test("releases explicitly canceled and returned raw subscriptions before BlackBox close", async () => {
-    const blackBox = await BlackBox.from(taskContext());
+    const blackBox = await BlackBox.from(projectContext());
     try {
       const scope = blackBox.asGuest();
       const canceled = await scope.createSubscription(
-        topic(ProjectionStateSchema),
+        topic(ProjectOverviewSchema),
         entityOptions(),
       );
       await canceled.activate();
@@ -164,7 +166,7 @@ export function registerBlackBoxContract(test, testing) {
       if (cancellations !== 1)
         throw new Error("explicit cancellation was not observed exactly once");
       const returned = await scope.createSubscription(
-        topic(ProjectionStateSchema),
+        topic(ProjectOverviewSchema),
         entityOptions(),
       );
       await returned.activate();
@@ -186,21 +188,21 @@ export function registerBlackBoxContract(test, testing) {
   });
 
   test("activates a raw event topic and decodes its update with the schema", async () => {
-    const blackBox = await BlackBox.from(eventContext());
+    const blackBox = await BlackBox.from(projectEventContext());
     try {
       const scope = blackBox.asGuest();
-      const events = await scope.createSubscription(topic(TaskObservedSchema), { kind: "event" });
+      const events = await scope.createSubscription(topic(ProjectObservedSchema), { kind: "event" });
       await events.activate();
       const iterator = events.updates[Symbol.asyncIterator]();
       const pending = iterator.next();
       const update = await emitUntil(pending, () =>
-        scope.postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "event-1" })),
+        scope.postEvent(ProjectObservedSchema, create(ProjectObservedSchema, { id: "event-1" })),
       );
       if (
         update.done ||
         update.value.kind !== "update" ||
         update.value.update.update.case !== "eventUpdates" ||
-        AnyMessages.unpack(update.value.update.update.value.event[0]?.message, TaskObservedSchema)
+        AnyMessages.unpack(update.value.update.update.value.event[0]?.message, ProjectObservedSchema)
           ?.id !== "event-1" ||
         update.value.update.update.value.event[0]?.context === undefined
       ) {
@@ -233,7 +235,7 @@ export function registerBlackBoxContract(test, testing) {
     try {
       await blackBox
         .onBehalfOf("alice")
-        .postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "imported" }));
+        .postEvent(ProjectObservedSchema, create(ProjectObservedSchema, { id: "imported" }));
       const context = await blackBox.eventually(
         () => contexts[0],
         (value) => value !== undefined,
@@ -262,7 +264,7 @@ export function registerBlackBoxContract(test, testing) {
     try {
       await blackBox
         .onBehalfOf("external-system")
-        .postExternalEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "external" }));
+        .postExternalEvent(ProjectObservedSchema, create(ProjectObservedSchema, { id: "external" }));
       const context = await blackBox.eventually(
         () => contexts[0],
         (value) => value !== undefined,
@@ -291,10 +293,10 @@ export function registerBlackBoxContract(test, testing) {
       await Promise.all([
         blackBox
           .asGuest()
-          .postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "guest" })),
+          .postEvent(ProjectObservedSchema, create(ProjectObservedSchema, { id: "guest" })),
         blackBox
           .onBehalfOf("bob")
-          .postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "actor" })),
+          .postEvent(ProjectObservedSchema, create(ProjectObservedSchema, { id: "actor" })),
       ]);
       const captured = await blackBox.eventually(
         () => contexts,
@@ -358,21 +360,21 @@ export function registerBlackBoxContract(test, testing) {
     const scope = blackBox.asGuest();
     await blackBox.close();
     await assertFailure(
-      () => scope.post(TaskCommandSchema, create(TaskCommandSchema)),
+      () => scope.post(CreateProjectSchema, create(CreateProjectSchema)),
       BlackBoxClosedError,
     );
     await assertFailure(() => scope.send(query("missing")), BlackBoxClosedError);
     await assertFailure(
-      () => scope.createSubscription(topic(ProjectionStateSchema), entityOptions()),
+      () => scope.createSubscription(topic(ProjectOverviewSchema), entityOptions()),
       BlackBoxClosedError,
     );
     await assertFailure(
-      () => scope.postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "closed" })),
+      () => scope.postEvent(ProjectObservedSchema, create(ProjectObservedSchema, { id: "closed" })),
       BlackBoxClosedError,
     );
     await assertFailure(
       () =>
-        scope.postExternalEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "closed" })),
+        scope.postExternalEvent(ProjectObservedSchema, create(ProjectObservedSchema, { id: "closed" })),
       BlackBoxClosedError,
     );
   });
@@ -496,7 +498,7 @@ export function registerBlackBoxContract(test, testing) {
     try {
       await blackBox
         .asGuest()
-        .postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "deferred" }));
+        .postEvent(ProjectObservedSchema, create(ProjectObservedSchema, { id: "deferred" }));
       const context = await blackBox.eventually(
         () => contexts[0],
         (value) => value !== undefined,
@@ -529,7 +531,7 @@ export function registerBlackBoxContract(test, testing) {
       try {
         await blackBox
           .asGuest()
-          .postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "zone" }));
+          .postEvent(ProjectObservedSchema, create(ProjectObservedSchema, { id: "zone" }));
         const context = await blackBox.eventually(
           () => contexts[0],
           (value) => value !== undefined,
@@ -546,33 +548,33 @@ export function registerBlackBoxContract(test, testing) {
   });
 }
 
-function taskContext() {
-  return BoundedContext.singleTenant("Tasks")
+function projectContext() {
+  return BoundedContext.singleTenant("Projects")
     .add(
       new Repository({
-        entityType: TaskAggregate,
-        schema: AggregateStateSchema,
-        handlers: EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
-          builder.assign(TaskCommandSchema, "assignTask"),
-          builder.apply(ProjectionEventSchema, "applyTask"),
+        entityType: ProjectAggregate,
+        schema: ProjectSchema,
+        handlers: EntityHandlers.define(ProjectAggregate, ProjectSchema, (builder) => [
+          builder.assign(CreateProjectSchema, "registerProject"),
+          builder.apply(ProjectCreatedSchema, "applyProjectCreated"),
         ]),
       }),
     )
     .add(
       new Repository({
-        entityType: TaskProjection,
-        schema: ProjectionStateSchema,
-        handlers: EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
-          builder.subscribe(ProjectionEventSchema, "subscribeTask"),
+        entityType: ProjectOverview,
+        schema: ProjectOverviewSchema,
+        handlers: EntityHandlers.define(ProjectOverview, ProjectOverviewSchema, (builder) => [
+          builder.subscribe(ProjectCreatedSchema, "projectCreated"),
         ]),
       }),
     )
     .build();
 }
-function eventContext() {
+function projectEventContext() {
   return BoundedContext.singleTenant("Events")
     .addEventDispatcher({
-      messageSchemas: () => [TaskObservedSchema],
+      messageSchemas: () => [ProjectObservedSchema],
       dispatch: () => Promise.resolve(),
     })
     .build();
@@ -583,7 +585,7 @@ function capturingContext(name, contexts, multitenant) {
     : BoundedContext.singleTenant(name);
   return builder
     .addEventDispatcher({
-      messageSchemas: () => [TaskObservedSchema],
+      messageSchemas: () => [ProjectObservedSchema],
       dispatch: (event) => {
         contexts.push(event.context);
         return Promise.resolve();
@@ -594,8 +596,8 @@ function capturingContext(name, contexts, multitenant) {
 function externalCapturingContext(name, contexts) {
   return BoundedContext.multitenant(name)
     .addEventDispatcher({
-      messageSchemas: () => [TaskObservedSchema],
-      externalEventSchemas: () => [TaskObservedSchema],
+      messageSchemas: () => [ProjectObservedSchema],
+      externalEventSchemas: () => [ProjectObservedSchema],
       dispatch: (event) => {
         contexts.push(event.context);
         return Promise.resolve();
@@ -607,7 +609,7 @@ function query(id) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: `q-${id}` }),
     target: create(TargetSchema, {
-      type: TypeUrls.derive(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectOverviewSchema),
       criterion:
         id === undefined
           ? { case: "includeAll", value: true }
@@ -637,7 +639,7 @@ function topic(schema) {
   });
 }
 function state(id, name, priority = 1) {
-  return create(ProjectionStateSchema, { id, name, priority });
+  return create(ProjectOverviewSchema, { id, name, priority });
 }
 async function emitUntil(pending, emit) {
   const deadline = Date.now() + 2_000;

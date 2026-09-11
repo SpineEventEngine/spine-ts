@@ -50,17 +50,17 @@ import { resetServerEnvironmentForTest as resetDirectSourceServerEnvironment } f
 import { RecordingTransportFactory } from "./wave13-red-support.js";
 import { expectWave13ContractToCompile } from "./wave13-compile-contract.js";
 import {
-  AggregateStateSchema,
-  ProjectionStateSchema,
-} from "../../test-fixtures/generated/entity-metadata/main_pb.js";
+  ProjectStateSchema,
+  ProjectOverviewStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import type {
   GeneratedHandlerRecordInput,
   GeneratedHandlerRegistry,
 } from "../../src/handler/generated-handler-registry.js";
 
-type State = Message<"ProjectionState"> & { id: string; name: string; priority: number };
+type State = Message<"ProjectOverviewState"> & { id: string; name: string; priority: number };
 function stateSchema(index = 0): GenMessage<State> {
-  return (index === 0 ? ProjectionStateSchema : AggregateStateSchema) as GenMessage<State>;
+  return (index === 0 ? ProjectOverviewStateSchema : ProjectStateSchema) as GenMessage<State>;
 }
 const StateSchema = stateSchema();
 const SubscribedStateSchema = stateSchema(1);

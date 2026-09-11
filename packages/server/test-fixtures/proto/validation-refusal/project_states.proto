@@ -12,18 +12,15 @@
  * the License.
  */
 syntax = "proto3";
-package repository_routing_validation;
 
-import "repository-routing/validation_refusal_commands.proto";
+package example.validation_refusal;
+
 import "spine/options.proto";
-message ValidatedAggregateState {
-  option (entity).kind = AGGREGATE;
-  string id = 1 [(set_once) = true];
-  string name = 2 [(column) = true];
-}
 
-message ValidatedMessageIdState {
+message ReviewProjectState {
   option (entity).kind = AGGREGATE;
-  repository_routing_validation_commands.ValidatedMessageId id = 1 [(set_once) = true];
+  option (is).java_type = "example.tags.AggregateTag";
+
+  string id = 1 [(set_once) = true];
   string name = 2 [(column) = true];
 }

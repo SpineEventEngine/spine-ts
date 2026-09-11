@@ -18,46 +18,46 @@ package spine_ts.client.test;
 import "google/protobuf/timestamp.proto";
 import "spine/options.proto";
 
-enum FixtureStatus {
+enum ProjectStatus {
   FIXTURE_STATUS_UNSPECIFIED = 0;
   OPEN = 1;
   CLOSED = 2;
 }
 
-message Owner {
+message ProjectLead {
   string value = 1;
 }
 
-message ProjectionState {
+message ProjectOverviewState {
   option (entity).kind = PROJECTION;
 
   string id = 1;
   string title = 2 [(column) = true];
   int32 priority = 3 [(column) = true];
-  FixtureStatus status = 4 [(column) = true];
+  ProjectStatus status = 4 [(column) = true];
   google.protobuf.Timestamp due_at = 5 [(column) = true];
-  Owner owner = 6 [(column) = true];
+  ProjectLead owner = 6 [(column) = true];
   bytes fingerprint = 7 [(column) = true];
   bool active = 8 [(column) = true];
   int64 sequence = 9 [(column) = true];
   string note = 10;
 }
 
-message InvalidRepeatedState {
+message ProjectOverviewWithTagsState {
   option (entity).kind = PROJECTION;
 
   string id = 1;
   repeated string tags = 2 [(column) = true];
 }
 
-message InvalidMapState {
+message ProjectOverviewWithLabelCatalogState {
   option (entity).kind = PROJECTION;
 
   string id = 1;
   map<string, string> labels = 2 [(column) = true];
 }
 
-message InvalidOneofState {
+message ProjectOverviewWithDisplayLabelState {
   option (entity).kind = PROJECTION;
 
   string id = 1;
@@ -67,21 +67,21 @@ message InvalidOneofState {
   }
 }
 
-message AggregateState {
+message ProjectState {
   option (entity).kind = AGGREGATE;
 
   string id = 1;
   string title = 2 [(column) = true];
 }
 
-message ProcessManagerState {
+message ProjectWorkflowState {
   option (entity).kind = PROCESS_MANAGER;
 
   string id = 1;
   string title = 2 [(column) = true];
 }
 
-message ScalarProjectionState {
+message ProjectOverviewWithMetricsState {
   option (entity).kind = PROJECTION;
 
   string id = 1;

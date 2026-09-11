@@ -12,11 +12,20 @@
  * the License.
  */
 syntax = "proto3";
-package repository_routing_validation_events;
 
-import "spine/options.proto";
+package repository_routing;
 
-message ValidatedTaskEvent {
-  string id = 1;
-  string name = 2 [(required) = true];
+import "spine/core/user_id.proto";
+
+message ProjectId {
+  string value = 1;
+}
+
+message ProjectSequenceId {
+  int64 value = 1;
+}
+
+message ProjectMilestoneId {
+  spine.core.UserId reader = 1;
+  int32 number = 2;
 }

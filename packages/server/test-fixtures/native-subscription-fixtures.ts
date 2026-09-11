@@ -14,18 +14,18 @@
 
 import type { Message } from "@bufbuild/protobuf";
 import {
-  AggregateStateSchema as NativeAggregateStateSchema,
-  ProjectionStateSchema as NativeProjectionStateSchema,
-} from "./generated/entity-metadata/main_pb.js";
+  ProjectStateSchema as NativeProjectStateSchema,
+  ProjectOverviewStateSchema as NativeProjectOverviewStateSchema,
+} from "./generated/entity-metadata/project_states_pb.js";
 import { ProcessManagerStateSchema as NativeProcessManagerStateSchema } from "./generated/entity-metadata/visibility_pb.js";
 
-export type NativeProjectionState = Message<"ProjectionState"> & {
+export type NativeProjectOverviewState = Message<"ProjectOverviewState"> & {
   id: string;
   name: string;
   priority: number;
 };
 
-export type NativeAggregateState = Message<"AggregateState"> & {
+export type NativeProjectState = Message<"ProjectState"> & {
   id: string;
   name: string;
   archived: boolean;
@@ -36,4 +36,8 @@ export type NativeProcessManagerState = Message<"ProcessManagerState"> & {
   queue: string;
 };
 
-export { NativeProjectionStateSchema, NativeAggregateStateSchema, NativeProcessManagerStateSchema };
+export {
+  NativeProjectOverviewStateSchema,
+  NativeProjectStateSchema,
+  NativeProcessManagerStateSchema,
+};

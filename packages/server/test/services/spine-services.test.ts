@@ -129,13 +129,13 @@ import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 const GeneratedTaskIdSchema = TodoIdSchema;
 let stateChangeSequence = 0;
 
-type ProjectionState = Message<"ProjectionState"> & {
+type ProjectOverviewState = Message<"ProjectOverviewState"> & {
   id: string;
   name: string;
   priority: number;
 };
 
-type AggregateState = Message<"AggregateState"> & {
+type ProjectState = Message<"ProjectState"> & {
   id: string;
   name: string;
   archived: boolean;
@@ -156,12 +156,12 @@ type Task = Message<"spine.examples.todo.Task"> & {
   taskListId?: TaskListId;
 };
 
-type ValidatedAggregateState = Message<"example.validation_refusal.ValidatedAggregateState"> & {
+type ReviewProjectState = Message<"example.validation_refusal.ReviewProjectState"> & {
   id: string;
   name: string;
 };
 
-type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
+type CreateReviewProject = Message<"example.validation_refusal.CreateReviewProject"> & {
   id: string;
   name: string;
 };
@@ -169,35 +169,29 @@ type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCom
 type TenantInput = string | TenantId;
 
 const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectionStateSchema = messageDesc(
+const ProjectOverviewStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
-) as GenMessage<ProjectionState>;
-const AggregateStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  1,
-) as GenMessage<AggregateState>;
-const fileValidationRefusalFixture = FixtureSchemas.validationRefusalCommandFile;
-const ValidatedAggregateStateSchema = messageDesc(
-  fileValidationRefusalFixture,
-  0,
-) as GenMessage<ValidatedAggregateState>;
-const ValidatedTaskCommandSchema = messageDesc(
-  fileValidationRefusalFixture,
-  1,
-) as GenMessage<ValidatedTaskCommand>;
+) as GenMessage<ProjectOverviewState>;
+const ProjectStateSchema = messageDesc(fileEntityMetadataFixture, 1) as GenMessage<ProjectState>;
+const ReviewProjectStateSchema = (
+  await import("../../test-fixtures/generated/validation-refusal/project_states_pb.js")
+).ReviewProjectStateSchema as GenMessage<ReviewProjectState>;
+const CreateReviewProjectSchema = (
+  await import("../../test-fixtures/generated/validation-refusal/project_commands_pb.js")
+).CreateReviewProjectSchema as GenMessage<CreateReviewProject>;
 const fileTaskIdFixture = TodoIdSchema.file;
 const fileTaskFixture = TodoTaskSchema.file;
 const TaskIdSchema = messageDesc(fileTaskIdFixture, 0) as GenMessage<TaskId>;
 const TaskSchema = messageDesc(fileTaskFixture, 0) as GenMessage<Task>;
 
-class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
   subscribeTask(event: TaskCreated): void {
     const id = event.id?.value ?? "";
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProjectionStateSchema, {
+        create(ProjectOverviewStateSchema, {
           id,
           name: `${event.title} (projected)`,
           priority: 2,
@@ -207,7 +201,7 @@ class TaskProjection extends Projection<string, typeof ProjectionStateSchema, nu
   }
 }
 
-class RejectingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class RejectingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   assignTask(): never {
     throw TaskAlreadyDone.create({
       id: create(GeneratedTaskIdSchema, { value: this.id }),
@@ -215,21 +209,17 @@ class RejectingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
   }
 }
 
-class ValidatingTaskAggregate extends Aggregate<
-  string,
-  typeof ValidatedAggregateStateSchema,
-  bigint
-> {
-  assignTask(command: ValidatedTaskCommand) {
+class ValidatingTaskAggregate extends Aggregate<string, typeof ReviewProjectStateSchema, bigint> {
+  assignTask(command: CreateReviewProject) {
     return createValidatedEvent(`event-${command.id}`, command.id, command.name);
   }
 
-  applyTask(event: ValidatedAggregateState): void {
+  applyTask(event: ReviewProjectState): void {
     this.startTransaction();
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ValidatedAggregateStateSchema, {
+        create(ReviewProjectStateSchema, {
           id: event.id,
           name: event.name,
         }),
@@ -241,14 +231,14 @@ class ValidatingTaskAggregate extends Aggregate<
 
 class TransitionViolatingTaskAggregate extends Aggregate<
   string,
-  typeof AggregateStateSchema,
+  typeof ProjectStateSchema,
   bigint
 > {
-  assignTask(command: AggregateState) {
+  assignTask(command: ProjectState) {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: `${command.id}-changed`,
           name: command.name,
           archived: command.archived,
@@ -260,11 +250,11 @@ class TransitionViolatingTaskAggregate extends Aggregate<
 }
 
 class RollingBackTransitionTaskAggregate extends TransitionViolatingTaskAggregate {
-  override assignTask(command: AggregateState) {
+  override assignTask(command: ProjectState) {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: `${command.id}-changed`,
           name: command.name,
           archived: command.archived,
@@ -393,13 +383,15 @@ describe("SpineServices", () => {
   it("rejects a response message above the configured network bound", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "x".repeat(2_000)));
+    await context
+      .stand()
+      .update(ProjectOverviewStateSchema, createState("task-1", "x".repeat(2_000)));
     const server = await new Server({ contexts: [context], writeMaxBytes: 512 }).start();
 
     try {
@@ -419,13 +411,13 @@ describe("SpineServices", () => {
   it("reads Stand state through QueryService over a real gRPC transport", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "First"), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 7 }),
     });
     const server = await startServices(context);
@@ -438,7 +430,7 @@ describe("SpineServices", () => {
       expect(response.response?.status?.status.case).toBe("ok");
       expect(response.message).toHaveLength(1);
       expect(
-        AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+        AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
       ).toEqual(createState("task-1", "First"));
       expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
     } finally {
@@ -449,16 +441,16 @@ describe("SpineServices", () => {
   it("executes the complete Entity query contract over real gRPC", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("NetworkQuery").add(repository).build();
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "Beta", 2), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Beta", 2), {
       version: create(VersionSchema, { number: 1 }),
     });
-    await context.stand().update(ProjectionStateSchema, createState("task-2", "Alpha", 2), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Alpha", 2), {
       version: create(VersionSchema, { number: 2 }),
     });
-    await context.stand().update(ProjectionStateSchema, createState("task-3", "Gamma", 1), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-3", "Gamma", 1), {
       version: create(VersionSchema, { number: 3 }),
     });
     const server = await startServices(context);
@@ -468,7 +460,7 @@ describe("SpineServices", () => {
       const query = create(QuerySchema, {
         id: create(QueryIdSchema, { value: "q-network-complete" }),
         target: create(TargetSchema, {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
           criterion: {
             case: "filters",
             value: create(TargetFiltersSchema, {
@@ -517,8 +509,8 @@ describe("SpineServices", () => {
 
       const response = await client.read(query);
       expect(response.response?.status?.status.case).toBe("ok");
-      expect(response.message.map((item) => unpackProjectionState(item.state))).toEqual([
-        create(ProjectionStateSchema, { name: "Alpha" }),
+      expect(response.message.map((item) => unpackProjectOverviewState(item.state))).toEqual([
+        create(ProjectOverviewStateSchema, { name: "Alpha" }),
       ]);
       expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 2 }));
 
@@ -535,10 +527,10 @@ describe("SpineServices", () => {
   it("keeps ID-filter QueryService reads working through direct handlers", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "First"), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 7 }),
     });
     const handlers = registeredQueryHandlers(context);
@@ -548,7 +540,7 @@ describe("SpineServices", () => {
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(1);
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-1", "First"));
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
   });
@@ -589,13 +581,13 @@ describe("SpineServices", () => {
   it("keeps QueryService reads isolated by tenant", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.multitenant("Tasks").add(repository).build();
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "Tenant A"), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant A"), {
       tenantId: tenantValue("tenant-a"),
     });
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "Tenant B"), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant B"), {
       tenantId: tenantValue("tenant-b"),
     });
     const server = await startServices(context);
@@ -608,7 +600,7 @@ describe("SpineServices", () => {
       expect(response.response?.status?.status.case).toBe("ok");
       expect(response.message).toHaveLength(1);
       expect(
-        AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+        AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
       ).toEqual(createState("task-1", "Tenant B"));
     } finally {
       await server.close();
@@ -618,13 +610,13 @@ describe("SpineServices", () => {
   it("reads all projection states through QueryService include-all queries", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
-    await context.stand().update(ProjectionStateSchema, createState("task-2", "Second"), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Second"), {
       version: create(VersionSchema, { number: 2 }),
     });
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "First"), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 1 }),
     });
     const handlers = registeredQueryHandlers(context);
@@ -634,11 +626,11 @@ describe("SpineServices", () => {
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(2);
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-1", "First"));
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 1 }));
     expect(
-      AnyMessages.unpack(response.message[1]?.state ?? packMissing(), ProjectionStateSchema),
+      AnyMessages.unpack(response.message[1]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-2", "Second"));
     expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 2 }));
   });
@@ -646,21 +638,23 @@ describe("SpineServices", () => {
   it("keeps QueryService include-all reads isolated by tenant", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.multitenant("Tasks").add(repository).build();
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "Tenant A"), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant A"), {
       tenantId: tenantValue("tenant-a"),
       version: create(VersionSchema, { number: 1 }),
     });
-    await context.stand().update(ProjectionStateSchema, createState("task-2", "Tenant B"), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Tenant B"), {
       tenantId: tenantValue("tenant-b"),
       version: create(VersionSchema, { number: 2 }),
     });
-    await context.stand().update(ProjectionStateSchema, createState("task-3", "Tenant B Again"), {
-      tenantId: tenantValue("tenant-b"),
-      version: create(VersionSchema, { number: 3 }),
-    });
+    await context
+      .stand()
+      .update(ProjectOverviewStateSchema, createState("task-3", "Tenant B Again"), {
+        tenantId: tenantValue("tenant-b"),
+        version: create(VersionSchema, { number: 3 }),
+      });
     const handlers = registeredQueryHandlers(context);
 
     const response = await handlers.read(createIncludeAllQuery("tenant-b"));
@@ -668,11 +662,11 @@ describe("SpineServices", () => {
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(2);
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-2", "Tenant B"));
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 2 }));
     expect(
-      AnyMessages.unpack(response.message[1]?.state ?? packMissing(), ProjectionStateSchema),
+      AnyMessages.unpack(response.message[1]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-3", "Tenant B Again"));
     expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 3 }));
   });
@@ -680,7 +674,7 @@ describe("SpineServices", () => {
   it("reads all aggregate states through QueryService include-all queries", async () => {
     const context = createFakeContext({
       entityFamily: "aggregate",
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       readAllVersioned: () =>
         Promise.resolve([{ state: createState("task-aggregate", "Aggregate") }]),
     });
@@ -690,14 +684,14 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("ok");
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-aggregate", "Aggregate"));
   });
 
   it("reads all process-manager states through QueryService include-all queries", async () => {
     const context = createFakeContext({
       entityFamily: "process-manager",
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       readAllVersioned: () =>
         Promise.resolve([{ state: createState("task-pm", "Process manager") }]),
     });
@@ -707,7 +701,7 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("ok");
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-pm", "Process manager"));
   });
 
@@ -717,7 +711,7 @@ describe("SpineServices", () => {
       registeredQueryHandlers(
         createFakeContext({
           entityFamily,
-          stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+          stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
           queryVersioned: (_schema, plan) => {
             plans.push(plan);
             return Promise.resolve([]);
@@ -769,7 +763,7 @@ describe("SpineServices", () => {
     const dispatcher = createFailingCommandDispatcher();
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
@@ -793,7 +787,7 @@ describe("SpineServices", () => {
   it("returns Spine statuses for empty contexts and malformed read criteria", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
     const server = await startServices(context);
@@ -823,7 +817,7 @@ describe("SpineServices", () => {
         create(QuerySchema, {
           id: create(QueryIdSchema, { value: "q-empty-filter" }),
           target: create(TargetSchema, {
-            type: TypeUrls.derive(ProjectionStateSchema),
+            type: TypeUrls.derive(ProjectOverviewStateSchema),
             criterion: {
               case: "filters",
               value: create(TargetFiltersSchema),
@@ -849,13 +843,13 @@ describe("SpineServices", () => {
   it("applies field masks to ID-filter and include-all reads", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "First"), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 7 }),
     });
-    await context.stand().update(ProjectionStateSchema, createState("task-2", "Second"), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Second"), {
       version: create(VersionSchema, { number: 8 }),
     });
     const handlers = registeredQueryHandlers(context);
@@ -871,10 +865,10 @@ describe("SpineServices", () => {
 
     const idState = AnyMessages.unpack(
       idResponse.message[0]?.state ?? packMissing(),
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
     );
     const allStates = allResponse.message.map((message) =>
-      AnyMessages.unpack(message.state ?? packMissing(), ProjectionStateSchema),
+      AnyMessages.unpack(message.state ?? packMissing(), ProjectOverviewStateSchema),
     );
     if (idState === undefined) {
       throw new Error("Expected masked ID-filter state.");
@@ -886,8 +880,8 @@ describe("SpineServices", () => {
     expect(idResponse.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
     expect(allResponse.response?.status?.status.case).toBe("ok");
     expect(allStates).toEqual([
-      create(ProjectionStateSchema, { id: "task-1" }),
-      create(ProjectionStateSchema, { id: "task-2" }),
+      create(ProjectOverviewStateSchema, { id: "task-1" }),
+      create(ProjectOverviewStateSchema, { id: "task-2" }),
     ]);
     expect(allResponse.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
   });
@@ -895,12 +889,12 @@ describe("SpineServices", () => {
   it("applies ordering and limit to include-all projection reads", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "Beta", 2));
-    await context.stand().update(ProjectionStateSchema, createState("task-2", "Alpha", 2));
-    await context.stand().update(ProjectionStateSchema, createState("task-3", "Gamma", 1));
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Beta", 2));
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Alpha", 2));
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-3", "Gamma", 1));
     const handlers = registeredQueryHandlers(context);
     const response = await handlers.read(
       createFormattedIncludeAllQuery(
@@ -921,7 +915,7 @@ describe("SpineServices", () => {
     );
 
     expect(response.response?.status?.status.case).toBe("ok");
-    expect(response.message.map((message) => unpackProjectionState(message.state))).toEqual([
+    expect(response.message.map((message) => unpackProjectOverviewState(message.state))).toEqual([
       createState("task-2", "Alpha", 2),
       createState("task-1", "Beta", 2),
     ]);
@@ -930,13 +924,13 @@ describe("SpineServices", () => {
   it("filters and orders by the Projection version system column", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("VersionQuery").add(repository).build();
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "First"), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 1 }),
     });
-    await context.stand().update(ProjectionStateSchema, createState("task-2", "Second"), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Second"), {
       version: create(VersionSchema, { number: 3 }),
     });
     const query = createColumnFilterQuery(
@@ -953,27 +947,27 @@ describe("SpineServices", () => {
 
     const response = await registeredQueryHandlers(context).read(query);
 
-    expect(response.message.map((message) => unpackProjectionState(message.state)?.id)).toEqual([
-      "task-2",
-    ]);
+    expect(
+      response.message.map((message) => unpackProjectOverviewState(message.state)?.id),
+    ).toEqual(["task-2"]);
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 3 }));
   });
 
   it("applies top-level exact column filters over projection state", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "Open", 1));
-    await context.stand().update(ProjectionStateSchema, createState("task-2", "Closed", 2));
-    await context.stand().update(ProjectionStateSchema, createState("task-3", "Open", 3));
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Open", 1));
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Closed", 2));
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-3", "Open", 3));
     const handlers = registeredQueryHandlers(context);
 
     const response = await handlers.read(createColumnFilterQuery("name", packStringId("Open")));
 
     expect(response.response?.status?.status.case).toBe("ok");
-    expect(response.message.map((message) => unpackProjectionState(message.state))).toEqual([
+    expect(response.message.map((message) => unpackProjectOverviewState(message.state))).toEqual([
       createState("task-1", "Open", 1),
       createState("task-3", "Open", 3),
     ]);
@@ -982,17 +976,17 @@ describe("SpineServices", () => {
   it("applies tenant-scoped filters, ordering, and masks", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.multitenant("Tasks").add(repository).build();
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "Tenant A", 1), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant A", 1), {
       tenantId: tenantValue("tenant-a"),
     });
-    await context.stand().update(ProjectionStateSchema, createState("task-2", "Bravo", 2), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Bravo", 2), {
       tenantId: tenantValue("tenant-b"),
       version: create(VersionSchema, { number: 2 }),
     });
-    await context.stand().update(ProjectionStateSchema, createState("task-3", "Alpha", 2), {
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-3", "Alpha", 2), {
       tenantId: tenantValue("tenant-b"),
       version: create(VersionSchema, { number: 3 }),
     });
@@ -1016,9 +1010,9 @@ describe("SpineServices", () => {
     );
 
     expect(response.response?.status?.status.case).toBe("ok");
-    expect(response.message.map((message) => unpackProjectionState(message.state))).toEqual([
-      create(ProjectionStateSchema, { name: "Alpha" }),
-      create(ProjectionStateSchema, { name: "Bravo" }),
+    expect(response.message.map((message) => unpackProjectOverviewState(message.state))).toEqual([
+      create(ProjectOverviewStateSchema, { name: "Alpha" }),
+      create(ProjectOverviewStateSchema, { name: "Bravo" }),
     ]);
     expect(response.message.map((message) => message.version)).toEqual([
       create(VersionSchema, { number: 3 }),
@@ -1041,7 +1035,7 @@ describe("SpineServices", () => {
   it("adds the implicit storage query cap without requiring ordering", async () => {
     const observedQueries: NormalizedQueryPlan<unknown>[] = [];
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       queryVersioned: (_schema, query) => {
         observedQueries.push(query as NormalizedQueryPlan<unknown>);
         return Promise.resolve([]);
@@ -1100,25 +1094,29 @@ describe("SpineServices", () => {
   it("applies tenant filtering before the implicit storage query cap", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.multitenant("ImplicitQueryCap").add(repository).build();
     const tenantAUpdates = Array.from({ length: 1_001 }, (_, index) =>
       context
         .stand()
         .update(
-          ProjectionStateSchema,
+          ProjectOverviewStateSchema,
           createState(`tenant-a-${String(index)}`, `Tenant A ${String(index)}`),
           { tenantId: tenantValue("tenant-a") },
         ),
     );
     await Promise.all(tenantAUpdates);
-    await context.stand().update(ProjectionStateSchema, createState("tenant-b-1", "Tenant B 1"), {
-      tenantId: tenantValue("tenant-b"),
-    });
-    await context.stand().update(ProjectionStateSchema, createState("tenant-b-2", "Tenant B 2"), {
-      tenantId: tenantValue("tenant-b"),
-    });
+    await context
+      .stand()
+      .update(ProjectOverviewStateSchema, createState("tenant-b-1", "Tenant B 1"), {
+        tenantId: tenantValue("tenant-b"),
+      });
+    await context
+      .stand()
+      .update(ProjectOverviewStateSchema, createState("tenant-b-2", "Tenant B 2"), {
+        tenantId: tenantValue("tenant-b"),
+      });
     const handlers = registeredQueryHandlers(context);
 
     const tenantA = await handlers.read(createIncludeAllQuery("tenant-a"));
@@ -1169,10 +1167,9 @@ describe("SpineServices", () => {
     expect(responseErrorMessage(tenantASystem)).toBe("Query read failed.");
     expect(responseErrorMessage(tenantAExplicit)).toBe("Query read failed.");
     expect(responseErrorMessage(tenantAExplicitSystem)).toBe("Query read failed.");
-    expect(tenantB.message.map((message) => unpackProjectionState(message.state)?.id)).toEqual([
-      "tenant-b-1",
-      "tenant-b-2",
-    ]);
+    expect(tenantB.message.map((message) => unpackProjectOverviewState(message.state)?.id)).toEqual(
+      ["tenant-b-1", "tenant-b-2"],
+    );
   });
 
   it("rejects malformed ordering before reading storage", async () => {
@@ -1210,7 +1207,7 @@ describe("SpineServices", () => {
   it("rejects malformed ID-filter entries before storage query execution", async () => {
     let observedQuery: { readonly ids?: readonly unknown[] } | undefined;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       queryVersioned: (_schema, query) => {
         observedQuery = query as { readonly ids?: readonly unknown[] };
         return Promise.resolve([]);
@@ -1236,11 +1233,11 @@ describe("SpineServices", () => {
   it("executes EITHER, nested, and range column filters", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("NestedQuery").add(repository).build();
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "Open", 1));
-    await context.stand().update(ProjectionStateSchema, createState("task-2", "Closed", 2));
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Open", 1));
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Closed", 2));
     const handlers = registeredQueryHandlers(context);
 
     const either = await handlers.read(
@@ -1259,9 +1256,9 @@ describe("SpineServices", () => {
 
     expect(either.response?.status?.status.case).toBe("ok");
     expect(nested.response?.status?.status.case).toBe("ok");
-    expect(greaterThan.message.map((message) => unpackProjectionState(message.state)?.id)).toEqual([
-      "task-2",
-    ]);
+    expect(
+      greaterThan.message.map((message) => unpackProjectOverviewState(message.state)?.id),
+    ).toEqual(["task-2"]);
   });
 
   it("rejects undefined, empty, and blank column filter names before reading storage", async () => {
@@ -1513,7 +1510,7 @@ describe("SpineServices", () => {
   it("normalizes typed system-column predicates before provider access", async () => {
     const plans: unknown[] = [];
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       queryVersioned: (_schema, plan) => {
         plans.push(plan);
         return Promise.resolve([]);
@@ -1558,10 +1555,10 @@ describe("SpineServices", () => {
   it("accepts an empty response format as a no-op", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
-    await context.stand().update(ProjectionStateSchema, createState("task-1", "First"));
+    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "First"));
     const handlers = registeredQueryHandlers(context);
 
     const response = await handlers.read(createFormattedQuery(create(ResponseFormatSchema)));
@@ -1578,7 +1575,7 @@ describe("SpineServices", () => {
       create(QuerySchema, {
         id: create(QueryIdSchema, { value: "q-missing-criterion" }),
         target: create(TargetSchema, {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
         }),
         context: createActorContext(),
       }),
@@ -1587,7 +1584,7 @@ describe("SpineServices", () => {
       create(QuerySchema, {
         id: create(QueryIdSchema, { value: "q-false-include-all" }),
         target: create(TargetSchema, {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
           criterion: {
             case: "includeAll",
             value: false,
@@ -1607,7 +1604,7 @@ describe("SpineServices", () => {
 
   it("returns stable errors for invalid command envelopes and read failures", async () => {
     const readFailureContext = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       readVersioned: () => Promise.reject(new Error("storage details")),
     });
     const commandHandlers = registeredCommandHandlers(readFailureContext);
@@ -1624,7 +1621,7 @@ describe("SpineServices", () => {
 
   it("returns stable errors for include-all read failures", async () => {
     const readFailureContext = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       readAllVersioned: () => Promise.reject(new Error("storage details")),
     });
     const handlers = registeredQueryHandlers(readFailureContext);
@@ -1637,7 +1634,7 @@ describe("SpineServices", () => {
 
   it("wraps non-Error dispatcher failures in sanitized Spine command errors", async () => {
     const dispatcher: CommandDispatcher = {
-      messageSchemas: () => [ValidatedTaskCommandSchema],
+      messageSchemas: () => [CreateReviewProjectSchema],
       // Deliberately covers defensive wrapping of third-party non-Error rejections.
       // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
       dispatch: () => Promise.reject("dispatcher-string"),
@@ -1736,7 +1733,7 @@ describe("SpineServices", () => {
 
   it("keeps dispatcher-thrown validation exceptions sanitized", async () => {
     const dispatcher: CommandDispatcher = {
-      messageSchemas: () => [ValidatedTaskCommandSchema],
+      messageSchemas: () => [CreateReviewProjectSchema],
       dispatch: () => Promise.reject(new ValidationException(create(ValidationErrorSchema, {}))),
     };
     const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
@@ -1890,7 +1887,7 @@ describe("SpineServices", () => {
       },
     });
     const acceptedContext = createFakeContext({
-      commandTypes: [TypeUrls.derive(ValidatedTaskCommandSchema)],
+      commandTypes: [TypeUrls.derive(CreateReviewProjectSchema)],
       post: (command) => {
         acceptedPosts.push(command.id?.uuid ?? "");
         return Promise.resolve();
@@ -1909,14 +1906,14 @@ describe("SpineServices", () => {
     const firstPosts: string[] = [];
     const secondPosts: string[] = [];
     const firstContext = createFakeContext({
-      commandTypes: [TypeUrls.derive(ValidatedTaskCommandSchema)],
+      commandTypes: [TypeUrls.derive(CreateReviewProjectSchema)],
       post: (command) => {
         firstPosts.push(command.id?.uuid ?? "");
         return Promise.resolve();
       },
     });
     const secondContext = createFakeContext({
-      commandTypes: [TypeUrls.derive(ValidatedTaskCommandSchema)],
+      commandTypes: [TypeUrls.derive(CreateReviewProjectSchema)],
       post: (command) => {
         secondPosts.push(command.id?.uuid ?? "");
         return Promise.resolve();
@@ -1934,12 +1931,12 @@ describe("SpineServices", () => {
   it("rejects subscription tenant mismatches contractually", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const singleTenant = BoundedContext.singleTenant("SingleSubscription").add(repository).build();
     const secondRepository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const multitenant = BoundedContext.multitenant("MultiSubscription")
       .add(secondRepository)
@@ -1975,15 +1972,15 @@ describe("SpineServices", () => {
       | ((update: {
           readonly typeUrl: string;
           readonly id: unknown;
-          readonly state: ProjectionState;
+          readonly state: ProjectOverviewState;
         }) => void)
       | undefined;
     const singleTenant = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: false,
     });
     const multitenant = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: true,
       subscribe: (_schema, callback, options) => {
         deliverUpdate = callback;
@@ -2013,7 +2010,7 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-tenant",
       state: createState("task-tenant", "Tenant"),
     });
@@ -2026,12 +2023,12 @@ describe("SpineServices", () => {
   it("returns QueryResponse errors for query tenant mismatches", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const singleTenant = BoundedContext.singleTenant("Single").add(repository).build();
     const secondRepository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const multitenant = BoundedContext.multitenant("Multi").add(secondRepository).build();
     const singleServer = await startServices(singleTenant);
@@ -2063,11 +2060,11 @@ describe("SpineServices", () => {
   it("treats query tenant domain and email variants as present", async () => {
     const capturedTenantKeys: (TenantId | undefined)[] = [];
     const singleTenant = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: false,
     });
     const multitenant = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: true,
       readVersioned: (_schema, _id, options) => {
         capturedTenantKeys.push(options.tenantId);
@@ -2096,11 +2093,11 @@ describe("SpineServices", () => {
   it("treats include-all query tenant domain and email variants as present", async () => {
     const capturedTenantKeys: (TenantId | undefined)[] = [];
     const singleTenant = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: false,
     });
     const multitenant = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: true,
       readAllVersioned: (_schema, options) => {
         capturedTenantKeys.push(options.tenantId);
@@ -2131,7 +2128,7 @@ describe("SpineServices", () => {
   it("activates and cancels explicit subscriptions over a real gRPC transport", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
@@ -2150,13 +2147,17 @@ describe("SpineServices", () => {
       const nextUpdate = withTimeout(iterator.next(), "subscription update");
 
       await delay(25);
-      await postEntityStateChanged(context, ProjectionStateSchema, createState("task-1", "First"));
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-1", "First"),
+      );
 
       const delivered = await nextUpdate;
       const update = delivered.value as SubscriptionUpdate | undefined;
 
       expect(subscription.id?.value).toMatch(/^s-/u);
-      expect(subscription.topic?.target?.type).toBe(TypeUrls.derive(ProjectionStateSchema));
+      expect(subscription.topic?.target?.type).toBe(TypeUrls.derive(ProjectOverviewStateSchema));
       expect(delivered.done).toBe(false);
       expect(update?.response?.status?.status.case).toBe("ok");
       expect(update?.subscription?.id).toEqual(subscription.id);
@@ -2167,12 +2168,12 @@ describe("SpineServices", () => {
       if (state?.case !== "state") {
         throw new Error("Expected entity state update.");
       }
-      expect(AnyMessages.unpack(state.value, ProjectionStateSchema)).toEqual(
+      expect(AnyMessages.unpack(state.value, ProjectOverviewStateSchema)).toEqual(
         createState("task-1", "First"),
       );
 
       const cancel = await withTimeout(client.cancel(subscription), "subscription cancellation");
-      await context.stand().update(ProjectionStateSchema, createState("task-1", "Second"));
+      await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Second"));
 
       expect(cancel.status?.status.case).toBe("ok");
     } finally {
@@ -2184,7 +2185,7 @@ describe("SpineServices", () => {
     const registry = new InMemorySubscriptionRegistry();
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("RegistrySubscriptions")
       .withSubscriptionRegistry(registry)
@@ -2216,12 +2217,12 @@ describe("SpineServices", () => {
     const storageFactory = new InMemoryStorageFactory();
     const firstContext = BoundedContext.singleTenant("SharedSubscriptions")
       .withStorageFactory(storageFactory)
-      .add(new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema }))
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
     const secondContext = BoundedContext.singleTenant("SharedSubscriptions")
       .withStorageFactory(storageFactory)
-      .add(new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema }))
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
     const first = registeredSubscriptionHandlers(firstContext);
@@ -2234,7 +2235,7 @@ describe("SpineServices", () => {
       await delay(25);
       await postEntityStateChanged(
         secondContext,
-        ProjectionStateSchema,
+        ProjectOverviewStateSchema,
         createState("task-shared", "Shared"),
       );
 
@@ -2579,7 +2580,7 @@ describe("SpineServices", () => {
     if (state?.case !== "state") {
       throw new Error("Expected entity state update.");
     }
-    expect(AnyMessages.unpack(state.value, ProjectionStateSchema)).toEqual(
+    expect(AnyMessages.unpack(state.value, ProjectOverviewStateSchema)).toEqual(
       createState("task-projected", "Task (projected)", 2),
     );
     await iterator.return?.();
@@ -2590,11 +2591,11 @@ describe("SpineServices", () => {
       | ((update: {
           readonly typeUrl: string;
           readonly id: unknown;
-          readonly state: ProjectionState;
+          readonly state: ProjectOverviewState;
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -2612,17 +2613,17 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-1",
       state: createState("task-1", "Closed"),
     });
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-2",
       state: createState("task-2", "Open"),
     });
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-1",
       state: createState("task-1", "Open"),
     });
@@ -2640,12 +2641,12 @@ describe("SpineServices", () => {
       | ((update: {
           readonly typeUrl: string;
           readonly id: unknown;
-          readonly previousState?: ProjectionState;
-          readonly state: ProjectionState;
+          readonly previousState?: ProjectOverviewState;
+          readonly state: ProjectOverviewState;
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -2661,7 +2662,7 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-1",
       previousState: createState("task-1", "Open"),
       state: createState("task-1", "Closed"),
@@ -2684,12 +2685,12 @@ describe("SpineServices", () => {
       | ((update: {
           readonly typeUrl: string;
           readonly id: unknown;
-          readonly previousState?: ProjectionState;
-          readonly state: ProjectionState;
+          readonly previousState?: ProjectOverviewState;
+          readonly state: ProjectOverviewState;
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -2707,14 +2708,14 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-1",
       state: createState("task-1", "Open", 7),
     });
     const deliveredState = await withTimeout(first, "masked subscription state");
     const second = iterator.next();
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-1",
       previousState: createState("task-1", "Open", 7),
       state: createState("task-1", "Closed", 7),
@@ -2722,7 +2723,7 @@ describe("SpineServices", () => {
     const noLongerMatching = await withTimeout(second, "unmasked no-longer-matching update");
 
     expect(unpackEntityState(deliveredState.value as SubscriptionUpdate | undefined)).toEqual(
-      create(ProjectionStateSchema, { name: "Open" }),
+      create(ProjectOverviewStateSchema, { name: "Open" }),
     );
     expect(entityUpdateKind(noLongerMatching.value as SubscriptionUpdate | undefined)?.case).toBe(
       "noLongerMatching",
@@ -2733,7 +2734,7 @@ describe("SpineServices", () => {
   it("rejects unsupported subscription filters before activation attaches Stand delivery", async () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -2761,7 +2762,7 @@ describe("SpineServices", () => {
 
   it("rejects malformed subscription topics before activation attaches Stand delivery", () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)] }),
     );
     const cases = [
       {
@@ -2782,7 +2783,7 @@ describe("SpineServices", () => {
       {
         topic: create(TopicSchema, {
           id: create(TopicIdSchema, { value: "t-missing-criterion" }),
-          target: create(TargetSchema, { type: TypeUrls.derive(ProjectionStateSchema) }),
+          target: create(TargetSchema, { type: TypeUrls.derive(ProjectOverviewStateSchema) }),
           context: createActorContext(),
         }),
         message: "Subscription topic criterion is required.",
@@ -2791,7 +2792,7 @@ describe("SpineServices", () => {
         topic: create(TopicSchema, {
           id: create(TopicIdSchema, { value: "t-include-none" }),
           target: create(TargetSchema, {
-            type: TypeUrls.derive(ProjectionStateSchema),
+            type: TypeUrls.derive(ProjectOverviewStateSchema),
             criterion: { case: "includeAll", value: false },
           }),
           context: createActorContext(),
@@ -2808,7 +2809,7 @@ describe("SpineServices", () => {
   it("rejects empty subscription target filters before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -2821,7 +2822,7 @@ describe("SpineServices", () => {
     const topic = create(TopicSchema, {
       id: create(TopicIdSchema, { value: "t-empty-filters" }),
       target: create(TargetSchema, {
-        type: TypeUrls.derive(ProjectionStateSchema),
+        type: TypeUrls.derive(ProjectOverviewStateSchema),
         criterion: {
           case: "filters",
           value: create(TargetFiltersSchema),
@@ -2838,7 +2839,7 @@ describe("SpineServices", () => {
 
   it("rejects invalid subscription field masks before activation attaches Stand delivery", () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)] }),
     );
     const cases = [
       {
@@ -2882,7 +2883,7 @@ describe("SpineServices", () => {
 
   it("rejects invalid subscription field filters before activation attaches Stand delivery", () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)] }),
     );
     const cases = [
       {
@@ -2981,11 +2982,11 @@ describe("SpineServices", () => {
       | ((update: {
           readonly typeUrl: string;
           readonly id: unknown;
-          readonly state: ProjectionState;
+          readonly state: ProjectOverviewState;
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: true,
       subscribe: (_schema, callback, options) => {
         capturedTenantKeys.push(options.tenantId);
@@ -3007,7 +3008,7 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-cloned",
       state: createState("task-cloned", "Delivered"),
     });
@@ -3025,11 +3026,11 @@ describe("SpineServices", () => {
       | ((update: {
           readonly typeUrl: string;
           readonly id: unknown;
-          readonly state: ProjectionState;
+          readonly state: ProjectOverviewState;
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -3046,7 +3047,7 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "first-delivered",
       state: createState("first-delivered", "First"),
     });
@@ -3069,7 +3070,7 @@ describe("SpineServices", () => {
     const second = iterator.next();
     await delay(25);
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "second-delivered",
       state: createState("second-delivered", "Second"),
     });
@@ -3086,7 +3087,7 @@ describe("SpineServices", () => {
 
   it("coerces a non-positive subscription queue limit", () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)] }),
       { queueLimit: 0 },
     );
 
@@ -3095,7 +3096,7 @@ describe("SpineServices", () => {
 
   it("keeps missing subscription IDs inert", async () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)] }),
     );
     const iterator = handlers.activate(create(SubscriptionSchema))[Symbol.asyncIterator]();
 
@@ -3114,7 +3115,7 @@ describe("SpineServices", () => {
     for (const outcome of ["missing", "expired"] as const) {
       const context = BoundedContext.singleTenant(`Subscription-${outcome}`)
         .withSubscriptionRegistry(new InertActivationRegistry(outcome))
-        .add(new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema }))
+        .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
         .build();
       const handlers = registeredSubscriptionHandlers(context);
 
@@ -3135,7 +3136,7 @@ describe("SpineServices", () => {
   it("rejects empty subscription ID filters before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -3148,7 +3149,7 @@ describe("SpineServices", () => {
     const topic = create(TopicSchema, {
       id: create(TopicIdSchema, { value: "t-empty-id-filter" }),
       target: create(TargetSchema, {
-        type: TypeUrls.derive(ProjectionStateSchema),
+        type: TypeUrls.derive(ProjectOverviewStateSchema),
         criterion: {
           case: "filters",
           value: create(TargetFiltersSchema, {
@@ -3170,11 +3171,11 @@ describe("SpineServices", () => {
       | ((update: {
           readonly typeUrl: string;
           readonly id: unknown;
-          readonly state: ProjectionState;
+          readonly state: ProjectOverviewState;
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -3210,7 +3211,7 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-1",
       state: createState("task-1", "Open", 7),
     });
@@ -3227,11 +3228,11 @@ describe("SpineServices", () => {
       | ((update: {
           readonly typeUrl: string;
           readonly id: unknown;
-          readonly state: ProjectionState;
+          readonly state: ProjectOverviewState;
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -3250,7 +3251,7 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id,
       state: createState("task-1", "Packed"),
     });
@@ -3267,11 +3268,11 @@ describe("SpineServices", () => {
       | ((update: {
           readonly typeUrl: string;
           readonly id: unknown;
-          readonly state: ProjectionState;
+          readonly state: ProjectOverviewState;
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -3290,12 +3291,12 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: new Uint8Array([9]),
       state: createState("task-ignored", "Ignored"),
     });
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: new Uint8Array(id),
       state: createState("task-1", "Bytes"),
     });
@@ -3417,7 +3418,7 @@ describe("SpineServices", () => {
   it("rejects malformed subscription ID filters before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -3447,7 +3448,7 @@ describe("SpineServices", () => {
   it("rejects over-limit subscription ID filters before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -3472,7 +3473,7 @@ describe("SpineServices", () => {
   it("rejects over-depth subscription composites before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -3496,7 +3497,7 @@ describe("SpineServices", () => {
   it("rejects too many nested subscription composites before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -3528,7 +3529,7 @@ describe("SpineServices", () => {
 
   it("rejects too many top-level subscription composites before walking fields", () => {
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: () => {
         throw new Error("over-broad filters must not attach delivery.");
       },
@@ -3557,7 +3558,7 @@ describe("SpineServices", () => {
   it("rejects empty undefined-operator subscription composites before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -3585,7 +3586,7 @@ describe("SpineServices", () => {
   it("does not deliver pre-activation updates and tolerates unknown subscription cancellation", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
@@ -3599,14 +3600,16 @@ describe("SpineServices", () => {
         createGrpcTransport({ baseUrl: server.baseUrl }),
       );
       const subscription = await client.subscribe(createTopic());
-      await context.stand().update(ProjectionStateSchema, createState("task-queued", "Queued"));
+      await context
+        .stand()
+        .update(ProjectOverviewStateSchema, createState("task-queued", "Queued"));
 
       const iterator = client.activate(subscription)[Symbol.asyncIterator]();
       const nextUpdate = withTimeout(iterator.next(), "post-activation subscription update");
       await delay(25);
       await postEntityStateChanged(
         context,
-        ProjectionStateSchema,
+        ProjectOverviewStateSchema,
         createState("task-live", "Live"),
       );
       const delivered = await nextUpdate;
@@ -3628,7 +3631,7 @@ describe("SpineServices", () => {
       if (state?.case !== "state") {
         throw new Error("Expected entity state update.");
       }
-      expect(AnyMessages.unpack(state.value, ProjectionStateSchema)).toEqual(
+      expect(AnyMessages.unpack(state.value, ProjectOverviewStateSchema)).toEqual(
         createState("task-live", "Live"),
       );
       expect(unknownNext.done).toBe(true);
@@ -3646,11 +3649,11 @@ describe("SpineServices", () => {
       | ((update: {
           readonly typeUrl: string;
           readonly id: unknown;
-          readonly state: ProjectionState;
+          readonly state: ProjectOverviewState;
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: (_schema, callback) => {
         activeStandSubscriptions.push("open");
         deliverUpdate = callback;
@@ -3675,7 +3678,7 @@ describe("SpineServices", () => {
     await delay(25);
     expect(activeStandSubscriptions).toEqual(["open"]);
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-close",
       state: createState("task-close", "Close"),
     });
@@ -3690,13 +3693,13 @@ describe("SpineServices", () => {
       | ((update: {
           readonly typeUrl: string;
           readonly id: unknown;
-          readonly state: ProjectionState;
+          readonly state: ProjectOverviewState;
         }) => void)
       | undefined;
     let subscribeCalls = 0;
     let unsubscribeCount = 0;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: (_schema, callback) => {
         subscribeCalls += 1;
         deliverUpdate = callback;
@@ -3720,7 +3723,7 @@ describe("SpineServices", () => {
     const duplicateDone = await withTimeout(duplicateIterator.next(), "duplicate activation close");
 
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-primary",
       state: createState("task-primary", "Primary"),
     });
@@ -3728,7 +3731,7 @@ describe("SpineServices", () => {
     await duplicateIterator.return?.();
     const secondUpdate = primaryIterator.next();
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-still-active",
       state: createState("task-still-active", "Still active"),
     });
@@ -3747,7 +3750,7 @@ describe("SpineServices", () => {
     const registry = new GatedActivateRegistry();
     const context = BoundedContext.singleTenant("ActivationRace")
       .withSubscriptionRegistry(registry)
-      .add(new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema }))
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
@@ -3761,7 +3764,11 @@ describe("SpineServices", () => {
     registry.releaseActivation();
 
     const duplicate = await withTimeout(secondNext, "simultaneous duplicate activation close");
-    await postEntityStateChanged(context, ProjectionStateSchema, createState("race", "Delivered"));
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("race", "Delivered"),
+    );
     const primary = await withTimeout(firstNext, "simultaneous primary activation update");
 
     expect(duplicate.done).toBe(true);
@@ -3774,7 +3781,7 @@ describe("SpineServices", () => {
   it("removes inactive subscription records when activation attachment fails", async () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         throw new Error("stand subscribe failed");
@@ -3799,7 +3806,7 @@ describe("SpineServices", () => {
     const registry = new FailingDeleteRegistry();
     const context = BoundedContext.singleTenant("SubscriptionCleanup")
       .withSubscriptionRegistry(registry)
-      .add(new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema }))
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createTopic());
@@ -3824,7 +3831,7 @@ describe("SpineServices", () => {
     const registry = new RejectingDeleteRegistry();
     const context = BoundedContext.singleTenant("CleanupWarning")
       .withSubscriptionRegistry(registry)
-      .add(new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema }))
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
     const warn = vi.fn(() => Promise.reject(new Error("logger rejection")));
@@ -3848,10 +3855,22 @@ describe("SpineServices", () => {
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const first = iterator.next();
     await delay(25);
-    await postEntityStateChanged(context, ProjectionStateSchema, createState("cleanup", "First"));
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("cleanup", "First"),
+    );
     await first;
-    await postEntityStateChanged(context, ProjectionStateSchema, createState("cleanup", "Second"));
-    await postEntityStateChanged(context, ProjectionStateSchema, createState("cleanup", "Third"));
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("cleanup", "Second"),
+    );
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("cleanup", "Third"),
+    );
     await delay(25);
 
     expect(warn).toHaveBeenCalledTimes(1);
@@ -3871,10 +3890,10 @@ describe("SpineServices", () => {
     const callbacks: ((update: {
       readonly typeUrl: string;
       readonly id: unknown;
-      readonly state: ProjectionState;
+      readonly state: ProjectOverviewState;
     }) => void)[] = [];
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: (_schema, callback) => {
         const index = callbacks.length;
         let closed = false;
@@ -3904,7 +3923,7 @@ describe("SpineServices", () => {
     await handlers.cancel(firstSubscription);
     await firstIterator.return?.();
     callbacks[1]?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-second",
       state: createState("task-second", "Second"),
     });
@@ -3926,11 +3945,11 @@ describe("SpineServices", () => {
       | ((update: {
           readonly typeUrl: string;
           readonly id: unknown;
-          readonly state: ProjectionState;
+          readonly state: ProjectOverviewState;
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -3951,37 +3970,37 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-first",
       state: createState("task-first", "First"),
     });
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: bytesId,
       state: createState("task-bytes", "Bytes"),
     });
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: anyId,
       state: createState("task-any", "Any"),
     });
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: true,
       state: createState("task-bool", "Bool"),
     });
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: 42,
       state: createState("task-number", "Number"),
     });
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: 9007199254740993n,
       state: createState("task-bigint", "Bigint"),
     });
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: { unsupported: true },
       state: createState("task-object", "Object"),
     });
@@ -4049,12 +4068,12 @@ describe("SpineServices", () => {
       | ((update: {
           readonly typeUrl: string;
           readonly id: unknown;
-          readonly state: ProjectionState;
+          readonly state: ProjectOverviewState;
         }) => void)
       | undefined;
     let unsubscribeCount = 0;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -4077,18 +4096,18 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-one",
       state: createState("task-one", "One"),
     });
     await withTimeout(first, "first slow subscription update");
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-two",
       state: createState("task-two", "Two"),
     });
     deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
       id: "task-three",
       state: createState("task-three", "Three"),
     });
@@ -4103,7 +4122,7 @@ describe("SpineServices", () => {
   it("releases subscription capacity after activation attachment fails", async () => {
     const handlers = registeredSubscriptionHandlers(
       createFakeContext({
-        stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+        stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
         subscribe: () => {
           throw new Error("activation failed");
         },
@@ -4139,7 +4158,7 @@ describe("SpineServices", () => {
   it("rejects unknown subscription targets before attaching Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -4168,7 +4187,7 @@ describe("SpineServices", () => {
   it("fails known subscription topics with missing required fields", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
     const server = await startServices(context);
@@ -4180,7 +4199,7 @@ describe("SpineServices", () => {
       );
       const malformed = create(TopicSchema, {
         target: create(TargetSchema, {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
         }),
       });
 
@@ -4195,12 +4214,12 @@ describe("SpineServices", () => {
   it("fails known subscription topics with missing context or criterion directly", () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
     const handlers = registeredSubscriptionHandlers(context);
     const target = create(TargetSchema, {
-      type: TypeUrls.derive(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectOverviewStateSchema),
       criterion: {
         case: "includeAll",
         value: true,
@@ -4220,7 +4239,7 @@ describe("SpineServices", () => {
         create(TopicSchema, {
           id: create(TopicIdSchema, { value: "t-missing-criterion" }),
           target: create(TargetSchema, {
-            type: TypeUrls.derive(ProjectionStateSchema),
+            type: TypeUrls.derive(ProjectOverviewStateSchema),
           }),
           context: createActorContext(),
         }),
@@ -4233,7 +4252,7 @@ function createCommandDispatcher(
   onDispatch: (command: ReturnType<typeof createProjectionCommand>) => void,
 ): CommandDispatcher {
   return {
-    messageSchemas: () => [ValidatedTaskCommandSchema],
+    messageSchemas: () => [CreateReviewProjectSchema],
     dispatch: (command) => {
       onDispatch(command);
       return Promise.resolve();
@@ -4252,7 +4271,7 @@ function createValidatedCommandDispatcher(
   onDispatch: (command: ReturnType<typeof createValidatedCommand>) => void,
 ): CommandDispatcher {
   return {
-    messageSchemas: () => [ValidatedTaskCommandSchema],
+    messageSchemas: () => [CreateReviewProjectSchema],
     dispatch: (command) => {
       onDispatch(command);
       return Promise.resolve();
@@ -4262,33 +4281,31 @@ function createValidatedCommandDispatcher(
 
 function createFailingCommandDispatcher(): CommandDispatcher {
   return {
-    messageSchemas: () => [ValidatedTaskCommandSchema],
+    messageSchemas: () => [CreateReviewProjectSchema],
     dispatch: () => Promise.reject(new Error("Dispatcher failed.")),
   };
 }
 
 function createProjectionRepositoryWithHandlers(): Repository<typeof TaskProjection> {
-  const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
+  const handlers = EntityHandlers.define(TaskProjection, ProjectOverviewStateSchema, (builder) => [
     builder.subscribe(TaskCreatedSchema, "subscribeTask"),
   ]);
 
   return new Repository({
     entityType: TaskProjection,
-    schema: ProjectionStateSchema,
+    schema: ProjectOverviewStateSchema,
     handlers,
   });
 }
 
 function createRejectingRepository(): Repository<typeof RejectingTaskAggregate> {
-  const handlers = EntityHandlers.define(
-    RejectingTaskAggregate,
-    AggregateStateSchema,
-    (builder) => [builder.assign(ValidatedTaskCommandSchema, "assignTask")],
-  );
+  const handlers = EntityHandlers.define(RejectingTaskAggregate, ProjectStateSchema, (builder) => [
+    builder.assign(CreateReviewProjectSchema, "assignTask"),
+  ]);
 
   return new Repository({
     entityType: RejectingTaskAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
@@ -4296,16 +4313,16 @@ function createRejectingRepository(): Repository<typeof RejectingTaskAggregate> 
 function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate> {
   const handlers = EntityHandlers.define(
     ValidatingTaskAggregate,
-    ValidatedAggregateStateSchema,
+    ReviewProjectStateSchema,
     (builder) => [
-      builder.assign(ValidatedTaskCommandSchema, "assignTask"),
-      builder.apply(ValidatedAggregateStateSchema, "applyTask"),
+      builder.assign(CreateReviewProjectSchema, "assignTask"),
+      builder.apply(ReviewProjectStateSchema, "applyTask"),
     ],
   );
 
   return new Repository({
     entityType: ValidatingTaskAggregate,
-    schema: ValidatedAggregateStateSchema,
+    schema: ReviewProjectStateSchema,
     handlers,
   });
 }
@@ -4315,13 +4332,13 @@ function createTransitionViolatingRepository(): Repository<
 > {
   const handlers = EntityHandlers.define(
     TransitionViolatingTaskAggregate,
-    AggregateStateSchema,
-    (builder) => [builder.assign(ValidatedTaskCommandSchema, "assignTask")],
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateReviewProjectSchema, "assignTask")],
   );
 
   return new Repository({
     entityType: TransitionViolatingTaskAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
@@ -4331,13 +4348,13 @@ function createRollingBackTransitionRepository(): Repository<
 > {
   const handlers = EntityHandlers.define(
     RollingBackTransitionTaskAggregate,
-    AggregateStateSchema,
-    (builder) => [builder.assign(ValidatedTaskCommandSchema, "assignTask")],
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateReviewProjectSchema, "assignTask")],
   );
 
   return new Repository({
     entityType: RollingBackTransitionTaskAggregate,
-    schema: AggregateStateSchema,
+    schema: ProjectStateSchema,
     handlers,
   });
 }
@@ -4349,8 +4366,8 @@ function createProjectionCommand(id: string, tenantId?: TenantInput, name = "Tas
       actorContext: createActorContext(tenantId),
     }),
     message: AnyMessages.pack(
-      ValidatedTaskCommandSchema,
-      create(ValidatedTaskCommandSchema, { id: "task-1", name }),
+      CreateReviewProjectSchema,
+      create(CreateReviewProjectSchema, { id: "task-1", name }),
       { validate: false },
     ),
   });
@@ -4363,8 +4380,8 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task") 
       actorContext: createActorContext(),
     }),
     message: AnyMessages.pack(
-      ValidatedTaskCommandSchema,
-      create(ValidatedTaskCommandSchema, { id: aggregateId, name }),
+      CreateReviewProjectSchema,
+      create(CreateReviewProjectSchema, { id: aggregateId, name }),
       { validate: false },
     ),
   });
@@ -4377,8 +4394,8 @@ function createValidatedCommand(id: string, aggregateId: string, name: string) {
       actorContext: createActorContext(),
     }),
     message: AnyMessages.pack(
-      ValidatedTaskCommandSchema,
-      create(ValidatedTaskCommandSchema, {
+      CreateReviewProjectSchema,
+      create(CreateReviewProjectSchema, {
         id: aggregateId,
         name,
       }),
@@ -4446,8 +4463,8 @@ function createRejectionEvent(
       rejection: create(RejectionEventContextSchema, {
         command,
         commandMessage: AnyMessages.pack(
-          ValidatedTaskCommandSchema,
-          create(ValidatedTaskCommandSchema, { id: "task-rejected", name: "Task" }),
+          CreateReviewProjectSchema,
+          create(CreateReviewProjectSchema, { id: "task-rejected", name: "Task" }),
         ),
         stacktrace,
       }),
@@ -4523,8 +4540,8 @@ function createProjectionEvent(id: string, entityId: string) {
 function createCommandWithoutId() {
   return create(CommandSchema, {
     message: AnyMessages.pack(
-      ValidatedTaskCommandSchema,
-      create(ValidatedTaskCommandSchema, { id: "task-1", name: "Task" }),
+      CreateReviewProjectSchema,
+      create(CreateReviewProjectSchema, { id: "task-1", name: "Task" }),
       { validate: false },
     ),
     context: create(CommandContextSchema, {
@@ -4541,7 +4558,7 @@ function createQueryWithIds(ids: ReturnType<typeof AnyMessages.pack>[], tenantId
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-1" }),
     target: create(TargetSchema, {
-      type: TypeUrls.derive(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectOverviewStateSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
@@ -4581,7 +4598,7 @@ function createColumnFilterQuery(
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-column-filter" }),
     target: create(TargetSchema, {
-      type: TypeUrls.derive(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectOverviewStateSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
@@ -4684,7 +4701,7 @@ function createIncludeAllQuery(tenantId?: TenantInput) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-empty" }),
     target: create(TargetSchema, {
-      type: TypeUrls.derive(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectOverviewStateSchema),
       criterion: {
         case: "includeAll",
         value: true,
@@ -4719,7 +4736,7 @@ function createEventTopic(tenantId?: TenantInput, schema: MessageSchema = TaskCr
 
 function createSubscriptionTarget() {
   return create(TargetSchema, {
-    type: TypeUrls.derive(ProjectionStateSchema),
+    type: TypeUrls.derive(ProjectOverviewStateSchema),
     criterion: {
       case: "includeAll",
       value: true,
@@ -4727,7 +4744,7 @@ function createSubscriptionTarget() {
   });
 }
 
-function createEventSubscriptionTarget(schema: MessageSchema = AggregateStateSchema) {
+function createEventSubscriptionTarget(schema: MessageSchema = ProjectStateSchema) {
   return create(TargetSchema, {
     type: TypeUrls.derive(schema),
     criterion: {
@@ -4768,7 +4785,7 @@ function createFilteredTopic(options: {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t-filtered" }),
     target: create(TargetSchema, {
-      type: TypeUrls.derive(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectOverviewStateSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
@@ -4798,7 +4815,7 @@ function createFilteredTopicWithCriteria(
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t-filtered" }),
     target: create(TargetSchema, {
-      type: TypeUrls.derive(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectOverviewStateSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, filters),
@@ -4878,8 +4895,8 @@ function tenantEmail(value: string): TenantId {
   });
 }
 
-function createState(id: string, name: string, priority = 1): ProjectionState {
-  return create(ProjectionStateSchema, {
+function createState(id: string, name: string, priority = 1): ProjectOverviewState {
+  return create(ProjectOverviewStateSchema, {
     id,
     name,
     priority,
@@ -4937,14 +4954,14 @@ function packBytes(value: Uint8Array) {
   return AnyMessages.pack(BytesValueSchema, create(BytesValueSchema, { value }));
 }
 
-function unpackProjectionState(state: Any | undefined) {
-  return AnyMessages.unpack(state ?? packMissing(), ProjectionStateSchema);
+function unpackProjectOverviewState(state: Any | undefined) {
+  return AnyMessages.unpack(state ?? packMissing(), ProjectOverviewStateSchema);
 }
 
 function unpackEntityState(update: SubscriptionUpdate | undefined) {
   const kind = entityUpdateKind(update);
 
-  return kind?.case === "state" ? unpackProjectionState(kind.value) : undefined;
+  return kind?.case === "state" ? unpackProjectOverviewState(kind.value) : undefined;
 }
 
 function entityUpdateKind(update: SubscriptionUpdate | undefined) {
@@ -5039,7 +5056,7 @@ function responseErrorMessage(response: unknown) {
 
 function createRejectingReadContext() {
   return createFakeContext({
-    stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+    stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
     queryVersioned: () => {
       throw new Error("unsupported query must not query storage.");
     },
@@ -5123,26 +5140,26 @@ function createFakeContext(options: {
   readonly stateTypes?: readonly string[];
   readonly post?: (command: ReturnType<typeof createProjectionCommand>) => Promise<void>;
   readonly readVersioned?: (
-    schema: typeof ProjectionStateSchema,
+    schema: typeof ProjectOverviewStateSchema,
     id: unknown,
     options: { readonly tenantId?: TenantId },
-  ) => Promise<{ readonly state: ProjectionState; readonly version?: unknown } | undefined>;
+  ) => Promise<{ readonly state: ProjectOverviewState; readonly version?: unknown } | undefined>;
   readonly readAllVersioned?: (
-    schema: typeof ProjectionStateSchema,
+    schema: typeof ProjectOverviewStateSchema,
     options: { readonly tenantId?: TenantId },
-  ) => Promise<readonly { readonly state: ProjectionState; readonly version?: unknown }[]>;
+  ) => Promise<readonly { readonly state: ProjectOverviewState; readonly version?: unknown }[]>;
   readonly queryVersioned?: (
-    schema: typeof ProjectionStateSchema,
+    schema: typeof ProjectOverviewStateSchema,
     query: unknown,
     options: { readonly tenantId?: TenantId },
-  ) => Promise<readonly { readonly state: ProjectionState; readonly version?: unknown }[]>;
+  ) => Promise<readonly { readonly state: ProjectOverviewState; readonly version?: unknown }[]>;
   readonly subscribe?: (
-    schema: typeof ProjectionStateSchema,
+    schema: typeof ProjectOverviewStateSchema,
     callback: (update: {
       readonly typeUrl: string;
       readonly id: unknown;
-      readonly previousState?: ProjectionState;
-      readonly state: ProjectionState;
+      readonly previousState?: ProjectOverviewState;
+      readonly state: ProjectOverviewState;
     }) => void,
     options: { readonly tenantId?: TenantId },
   ) => { readonly closed: boolean; unsubscribe(): void };
@@ -5171,7 +5188,7 @@ function createFakeContext(options: {
           metadata: {
             columns: [{ name: "name" }, { name: "priority" }],
           },
-          stateSchema: ProjectionStateSchema,
+          stateSchema: ProjectOverviewStateSchema,
           typeUrl,
         }),
       ),
@@ -5188,19 +5205,19 @@ function createFakeContext(options: {
 
 function createFakeQueryVersioned(options: {
   readonly readVersioned?: (
-    schema: typeof ProjectionStateSchema,
+    schema: typeof ProjectOverviewStateSchema,
     id: unknown,
     options: { readonly tenantId?: TenantId },
-  ) => Promise<{ readonly state: ProjectionState; readonly version?: unknown } | undefined>;
+  ) => Promise<{ readonly state: ProjectOverviewState; readonly version?: unknown } | undefined>;
   readonly readAllVersioned?: (
-    schema: typeof ProjectionStateSchema,
+    schema: typeof ProjectOverviewStateSchema,
     options: { readonly tenantId?: TenantId },
-  ) => Promise<readonly { readonly state: ProjectionState; readonly version?: unknown }[]>;
+  ) => Promise<readonly { readonly state: ProjectOverviewState; readonly version?: unknown }[]>;
 }) {
   if (options.readVersioned !== undefined) {
     const readVersioned = options.readVersioned;
     return async (
-      schema: typeof ProjectionStateSchema,
+      schema: typeof ProjectOverviewStateSchema,
       query: { readonly ids?: readonly unknown[]; readonly predicate?: unknown },
       readOptions: { readonly tenantId?: TenantId },
     ) => {
@@ -5217,7 +5234,7 @@ function createFakeQueryVersioned(options: {
   return options.readAllVersioned === undefined
     ? undefined
     : (
-        schema: typeof ProjectionStateSchema,
+        schema: typeof ProjectOverviewStateSchema,
         _query: unknown,
         readOptions: { readonly tenantId?: TenantId },
       ) => options.readAllVersioned?.(schema, readOptions);

@@ -121,29 +121,29 @@ interface InternalDeliveryDescriptor {
   transition(scopes: readonly unknown[], onReady: (ready: unknown) => void): Promise<void>;
 }
 
-type ProjectionState = Message<"ProjectionState"> & {
+type ProjectOverviewState = Message<"ProjectOverviewState"> & {
   id: string;
   name: string;
   priority: number;
 };
 
-type AggregateState = Message<"AggregateState"> & {
+type ProjectState = Message<"ProjectState"> & {
   id: string;
   name: string;
   archived: boolean;
 };
 
-type TaskCommand = Message<"TaskCommand"> & {
+type AssignReviewTask = Message<"AssignReviewTask"> & {
   id: string;
   name: string;
 };
 
-type ProcessManagerTaskCommand = Message<"ProcessManagerTaskCommand"> & {
+type ScheduleReviewTask = Message<"ScheduleReviewTask"> & {
   id: string;
   name: string;
 };
 
-type TaskEvent = Message<"TaskEvent"> & {
+type ReviewTaskAssigned = Message<"ReviewTaskAssigned"> & {
   id: string;
   name: string;
 };
@@ -158,25 +158,25 @@ type ProcessManagerState = Message<"ProcessManagerState"> & {
 };
 
 const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectionStateSchema = messageDesc(
+const ProjectOverviewStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
-) as GenMessage<ProjectionState>;
-const AggregateStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  1,
-) as GenMessage<AggregateState>;
+) as GenMessage<ProjectOverviewState>;
+const ProjectStateSchema = messageDesc(fileEntityMetadataFixture, 1) as GenMessage<ProjectState>;
 const fileHandlerRegistryCommandsFixture = FixtureSchemas.handlerRegistryCommandsFile;
-const TaskCommandSchema = messageDesc(
+const AssignReviewTaskSchema = messageDesc(
   fileHandlerRegistryCommandsFixture,
   2,
-) as GenMessage<TaskCommand>;
-const ProcessManagerTaskCommandSchema = messageDesc(
+) as GenMessage<AssignReviewTask>;
+const ScheduleReviewTaskSchema = messageDesc(
   fileHandlerRegistryCommandsFixture,
   3,
-) as GenMessage<ProcessManagerTaskCommand>;
+) as GenMessage<ScheduleReviewTask>;
 const fileHandlerRegistryEventsFixture = FixtureSchemas.handlerRegistryEventsFile;
-const TaskEventSchema = messageDesc(fileHandlerRegistryEventsFixture, 1) as GenMessage<TaskEvent>;
+const ReviewTaskAssignedSchema = messageDesc(
+  fileHandlerRegistryEventsFixture,
+  1,
+) as GenMessage<ReviewTaskAssigned>;
 const ReviewStartedSchema = messageDesc(
   fileHandlerRegistryEventsFixture,
   0,
@@ -188,25 +188,25 @@ const ProcessManagerStateSchema = messageDesc(
   0,
 ) as GenMessage<ProcessManagerState>;
 
-class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
-class DuplicateTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
-class ReplayTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
-  assignTask(command: TaskCommand): ReviewStarted {
+class TaskAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {}
+class DuplicateTaskAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {}
+class ReplayTaskAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {
+  assignTask(command: AssignReviewTask): ReviewStarted {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, { id: command.id, name: command.name, archived: false }),
+        create(ProjectStateSchema, { id: command.id, name: command.name, archived: false }),
       ),
     );
     return create(ReviewStartedSchema, { id: command.id });
   }
 }
-class GeneratedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignProjection(command: TaskCommand): TaskEvent {
+class GeneratedTaskAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+  assignProjection(command: AssignReviewTask): ReviewTaskAssigned {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AggregateStateSchema, {
+        create(ProjectStateSchema, {
           id: command.id,
           name: command.name,
           archived: false,
@@ -214,15 +214,15 @@ class GeneratedTaskAggregate extends Aggregate<string, typeof AggregateStateSche
       ),
     );
 
-    return create(TaskEventSchema, { id: command.id, name: command.name });
+    return create(ReviewTaskAssignedSchema, { id: command.id, name: command.name });
   }
 }
-class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
   onProjection(event: ProcessManagerState): void {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProjectionStateSchema, {
+        create(ProjectOverviewStateSchema, {
           id: event.id,
           name: event.queue,
           priority: 1,
@@ -233,18 +233,18 @@ class TaskProjection extends Projection<string, typeof ProjectionStateSchema, nu
 }
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
 class StandaloneAssignee extends AbstractAssignee {
-  assign(): TaskEvent {
-    return create(TaskEventSchema, { id: "event-1", name: "assigned" });
+  assign(): ReviewTaskAssigned {
+    return create(ReviewTaskAssignedSchema, { id: "event-1", name: "assigned" });
   }
 }
 class OtherStandaloneAssignee extends AbstractAssignee {
-  assign(): TaskEvent {
-    return create(TaskEventSchema, { id: "event-2", name: "other" });
+  assign(): ReviewTaskAssigned {
+    return create(ReviewTaskAssignedSchema, { id: "event-2", name: "other" });
   }
 }
 class StandaloneCommander extends AbstractCommander {
-  substitute(command: ProcessManagerTaskCommand): TaskCommand {
-    return create(TaskCommandSchema, { id: command.id, name: command.name });
+  substitute(command: ScheduleReviewTask): AssignReviewTask {
+    return create(AssignReviewTaskSchema, { id: command.id, name: command.name });
   }
 }
 class DependencyInjectedStandaloneCommander extends AbstractCommander {
@@ -252,29 +252,29 @@ class DependencyInjectedStandaloneCommander extends AbstractCommander {
     super();
   }
 
-  substitute(command: ProcessManagerTaskCommand): TaskCommand {
-    return create(TaskCommandSchema, {
+  substitute(command: ScheduleReviewTask): AssignReviewTask {
+    return create(AssignReviewTaskSchema, {
       id: command.id,
       name: `${command.name} ${this.dependency}`,
     });
   }
 }
 class CollidingStandaloneCommander extends AbstractCommander {
-  substitute(command: TaskCommand): TaskCommand {
-    return create(TaskCommandSchema, { id: command.id, name: command.name });
+  substitute(command: AssignReviewTask): AssignReviewTask {
+    return create(AssignReviewTaskSchema, { id: command.id, name: command.name });
   }
 }
 class SiblingStandaloneCommander extends AbstractCommander {
-  substitute(): readonly TaskCommand[] {
+  substitute(): readonly AssignReviewTask[] {
     return [
-      create(TaskCommandSchema, { id: "failing-produced-command", name: "Failing" }),
-      create(TaskCommandSchema, { id: "later-produced-command", name: "Later" }),
+      create(AssignReviewTaskSchema, { id: "failing-produced-command", name: "Failing" }),
+      create(AssignReviewTaskSchema, { id: "later-produced-command", name: "Later" }),
     ];
   }
 }
 class StandaloneReactor extends AbstractEventReactor {
   calls = 0;
-  react(_event: TaskEvent, _context: EventContext): void {
+  react(_event: ReviewTaskAssigned, _context: EventContext): void {
     void _event;
     void _context;
     this.calls += 1;
@@ -282,7 +282,7 @@ class StandaloneReactor extends AbstractEventReactor {
 }
 class StandaloneSubscriber extends AbstractEventSubscriber {
   calls = 0;
-  subscribe(_event: TaskEvent, _context: EventContext): void {
+  subscribe(_event: ReviewTaskAssigned, _context: EventContext): void {
     void _event;
     void _context;
     this.calls += 1;
@@ -294,9 +294,9 @@ class ProducingStandaloneReactor extends AbstractEventReactor {
   }
 }
 class StateOutputSubscriber extends AbstractEventSubscriber {
-  subscribe(_state: AggregateState): TaskEvent {
+  subscribe(_state: ProjectState): ReviewTaskAssigned {
     void _state;
-    return create(TaskEventSchema, { id: "illegal", name: "illegal output" });
+    return create(ReviewTaskAssignedSchema, { id: "illegal", name: "illegal output" });
   }
 }
 class GeneratedTaskProcessManager extends ProcessManager<
@@ -304,7 +304,7 @@ class GeneratedTaskProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: TaskCommand): TaskEvent {
+  assignTask(command: AssignReviewTask): ReviewTaskAssigned {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -315,7 +315,7 @@ class GeneratedTaskProcessManager extends ProcessManager<
       ),
     );
 
-    return create(TaskEventSchema, {
+    return create(ReviewTaskAssignedSchema, {
       id: command.id,
       name: `${command.name} event`,
     });
@@ -327,7 +327,7 @@ class ReplayTaskProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: ProcessManagerTaskCommand): ReviewStarted {
+  assignTask(command: ScheduleReviewTask): ReviewStarted {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -340,7 +340,7 @@ class ReplayTaskProcessManager extends ProcessManager<
     return create(ReviewStartedSchema, { id: command.id });
   }
 
-  reactToProjection(event: TaskEvent): ReviewStarted {
+  reactToProjection(event: ReviewTaskAssigned): ReviewStarted {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -361,7 +361,7 @@ class FailingRecoveryProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: TaskCommand): void {
+  assignTask(command: AssignReviewTask): void {
     void command;
     throw pendingFreshRecovery;
   }
@@ -372,7 +372,7 @@ class FreshRecoveryProcessManager extends ProcessManager<
   typeof ProcessManagerStateSchema,
   number
 > {
-  assignTask(command: TaskCommand): TaskEvent {
+  assignTask(command: AssignReviewTask): ReviewTaskAssigned {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -382,7 +382,7 @@ class FreshRecoveryProcessManager extends ProcessManager<
         }),
       ),
     );
-    return create(TaskEventSchema, {
+    return create(ReviewTaskAssignedSchema, {
       id: command.id,
       name: command.name,
     });
@@ -579,8 +579,8 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: TaskCommandSchema,
-            emittedSchemas: [TaskEventSchema],
+            signalSchema: AssignReviewTaskSchema,
+            emittedSchemas: [ReviewTaskAssignedSchema],
             parameterCount: 1,
             origin: "domestic",
           },
@@ -588,7 +588,7 @@ describe("BoundedContext assembly", () => {
       },
       {
         entityType: TaskProjection,
-        stateSchema: ProjectionStateSchema,
+        stateSchema: ProjectOverviewStateSchema,
         handlers: [
           {
             kind: "state-subscription",
@@ -615,7 +615,7 @@ describe("BoundedContext assembly", () => {
       },
       {
         label: "UPDATE_SUBSCRIBER",
-        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
         shard: { index: 0, ofTotal: 1 },
       },
     ]);
@@ -633,7 +633,7 @@ describe("BoundedContext assembly", () => {
       },
       {
         label: "UPDATE_SUBSCRIBER",
-        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
         shard: { index: 0, ofTotal: 1 },
       },
     ]);
@@ -656,7 +656,7 @@ describe("BoundedContext assembly", () => {
     const registryRoot = createGeneratedRegistryRoot([
       {
         entityType: TaskProjection,
-        stateSchema: ProjectionStateSchema,
+        stateSchema: ProjectOverviewStateSchema,
         handlers: [
           {
             kind: "state-subscription",
@@ -669,7 +669,7 @@ describe("BoundedContext assembly", () => {
         ],
       },
     ]);
-    const eventRouting = EventRouting.create<string>().route(TaskEventSchema, () => [
+    const eventRouting = EventRouting.create<string>().route(ReviewTaskAssignedSchema, () => [
       "custom-target",
     ]);
     await expect(
@@ -678,7 +678,7 @@ describe("BoundedContext assembly", () => {
         .add(TaskProjection, { eventRouting })
         .buildAsync(),
     ).rejects.toThrow(
-      'unregistered exact route for "spine.server.testing.handlerregistry.TaskEvent"',
+      'unregistered exact route for "spine.server.testing.handlerregistry.ReviewTaskAssigned"',
     );
   });
 
@@ -689,7 +689,7 @@ describe("BoundedContext assembly", () => {
     };
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
 
     expect(() => invalidAdd.add(repository, {})).toThrow(
@@ -699,9 +699,13 @@ describe("BoundedContext assembly", () => {
 
   it("matches standalone generated metadata by exact registered constructor", async () => {
     const registryRoot = createStandaloneGeneratedRegistryRoot([
-      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
-        TaskEventSchema,
-      ]),
+      standaloneReceiver(
+        StandaloneAssignee,
+        "command-assignment",
+        "assign",
+        AssignReviewTaskSchema,
+        [ReviewTaskAssignedSchema],
+      ),
     ]);
 
     await expect(
@@ -717,9 +721,13 @@ describe("BoundedContext assembly", () => {
   it("rejects duplicate standalone instances during generated assembly", async () => {
     const instance = new StandaloneAssignee();
     const registryRoot = createStandaloneGeneratedRegistryRoot([
-      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
-        TaskEventSchema,
-      ]),
+      standaloneReceiver(
+        StandaloneAssignee,
+        "command-assignment",
+        "assign",
+        AssignReviewTaskSchema,
+        [ReviewTaskAssignedSchema],
+      ),
     ]);
 
     await expect(
@@ -735,15 +743,19 @@ describe("BoundedContext assembly", () => {
     const assignee = new StandaloneAssignee();
     const commander = new StandaloneCommander();
     const registryRoot = createStandaloneGeneratedRegistryRoot([
-      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
-        TaskEventSchema,
-      ]),
+      standaloneReceiver(
+        StandaloneAssignee,
+        "command-assignment",
+        "assign",
+        AssignReviewTaskSchema,
+        [ReviewTaskAssignedSchema],
+      ),
       standaloneReceiver(
         StandaloneCommander,
         "command-substitution",
         "substitute",
-        ProcessManagerTaskCommandSchema,
-        [TaskCommandSchema],
+        ScheduleReviewTaskSchema,
+        [AssignReviewTaskSchema],
       ),
     ]);
     const context = await BoundedContext.singleTenant("StandalonePaths")
@@ -754,7 +766,7 @@ describe("BoundedContext assembly", () => {
 
     try {
       await context.commandBus().post(createAggregateCommand("standalone-assignee"));
-      await context.commandBus().post(createProcessManagerTaskCommand("standalone-commander"));
+      await context.commandBus().post(createScheduleReviewTask("standalone-commander"));
     } finally {
       await context.close();
     }
@@ -762,15 +774,19 @@ describe("BoundedContext assembly", () => {
 
   it("rejects an assignee and commander generated for the same Command before intake", async () => {
     const registryRoot = createStandaloneGeneratedRegistryRoot([
-      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
-        TaskEventSchema,
-      ]),
+      standaloneReceiver(
+        StandaloneAssignee,
+        "command-assignment",
+        "assign",
+        AssignReviewTaskSchema,
+        [ReviewTaskAssignedSchema],
+      ),
       standaloneReceiver(
         CollidingStandaloneCommander,
         "command-substitution",
         "substitute",
-        TaskCommandSchema,
-        [TaskCommandSchema],
+        AssignReviewTaskSchema,
+        [AssignReviewTaskSchema],
       ),
     ]);
 
@@ -787,12 +803,18 @@ describe("BoundedContext assembly", () => {
     const reactor = new StandaloneReactor();
     const subscriber = new StandaloneSubscriber();
     const registryRoot = createStandaloneGeneratedRegistryRoot([
-      standaloneReceiver(StandaloneReactor, "event-reaction", "react", TaskEventSchema, []),
+      standaloneReceiver(
+        StandaloneReactor,
+        "event-reaction",
+        "react",
+        ReviewTaskAssignedSchema,
+        [],
+      ),
       standaloneReceiver(
         StandaloneSubscriber,
         "event-subscription",
         "subscribe",
-        TaskEventSchema,
+        ReviewTaskAssignedSchema,
         [],
       ),
     ]);
@@ -802,7 +824,7 @@ describe("BoundedContext assembly", () => {
       .addEventDispatcher(subscriber)
       .buildAsync();
     try {
-      await context.eventBus().post(createTaskEvent("standalone-event"));
+      await context.eventBus().post(createReviewTaskAssigned("standalone-event"));
       expect(reactor.calls).toBe(1);
       expect(subscriber.calls).toBe(1);
     } finally {
@@ -818,18 +840,22 @@ describe("BoundedContext assembly", () => {
         StandaloneCommander,
         "command-substitution",
         "substitute",
-        ProcessManagerTaskCommandSchema,
-        [TaskCommandSchema],
+        ScheduleReviewTaskSchema,
+        [AssignReviewTaskSchema],
       ),
-      standaloneReceiver(ProducingStandaloneReactor, "event-reaction", "react", TaskEventSchema, [
-        ReviewStartedSchema,
-      ]),
+      standaloneReceiver(
+        ProducingStandaloneReactor,
+        "event-reaction",
+        "react",
+        ReviewTaskAssignedSchema,
+        [ReviewStartedSchema],
+      ),
     ]);
     const context = await BoundedContext.singleTenant("StandaloneProducedSignals")
       .withGeneratedRegistryRoot(registryRoot)
       .addCommandDispatcher(new StandaloneCommander())
       .addCommandDispatcher(
-        createCommandDispatcher([TaskCommandSchema], (command) => {
+        createCommandDispatcher([AssignReviewTaskSchema], (command) => {
           commands.push(command.id?.uuid ?? "missing");
         }),
       )
@@ -842,8 +868,8 @@ describe("BoundedContext assembly", () => {
       .buildAsync();
 
     try {
-      await context.commandBus().post(createProcessManagerTaskCommand("standalone-command"));
-      await context.eventBus().post(createTaskEvent("standalone-event"));
+      await context.commandBus().post(createScheduleReviewTask("standalone-command"));
+      await context.eventBus().post(createReviewTaskAssigned("standalone-event"));
     } finally {
       await context.close();
     }
@@ -860,26 +886,26 @@ describe("BoundedContext assembly", () => {
         DependencyInjectedStandaloneCommander,
         "command-substitution",
         "substitute",
-        ProcessManagerTaskCommandSchema,
-        [TaskCommandSchema],
+        ScheduleReviewTaskSchema,
+        [AssignReviewTaskSchema],
       ),
     ]);
     const context = await BoundedContext.singleTenant("DependencyInjectedStandalone")
       .withGeneratedRegistryRoot(registryRoot)
       .addCommandDispatcher(commander)
       .addCommandDispatcher(
-        createCommandDispatcher([TaskCommandSchema], (command) => {
+        createCommandDispatcher([AssignReviewTaskSchema], (command) => {
           if (command.message === undefined)
-            throw new Error("Expected a produced TaskCommand payload.");
-          const message = AnyMessages.unpack(command.message, TaskCommandSchema);
-          if (message === undefined) throw new Error("Expected a produced TaskCommand.");
+            throw new Error("Expected a produced AssignReviewTask payload.");
+          const message = AnyMessages.unpack(command.message, AssignReviewTaskSchema);
+          if (message === undefined) throw new Error("Expected a produced AssignReviewTask.");
           names.push(message.name);
         }),
       )
       .buildAsync();
 
     try {
-      await context.commandBus().post(createProcessManagerTaskCommand("standalone-command"));
+      await context.commandBus().post(createScheduleReviewTask("standalone-command"));
     } finally {
       await context.close();
     }
@@ -894,21 +920,21 @@ describe("BoundedContext assembly", () => {
         StandaloneCommander,
         "command-substitution",
         "substitute",
-        ProcessManagerTaskCommandSchema,
-        [TaskCommandSchema],
+        ScheduleReviewTaskSchema,
+        [AssignReviewTaskSchema],
       ),
     ]);
     const context = await BoundedContext.singleTenant("StandaloneCloseDrain")
       .withGeneratedRegistryRoot(registryRoot)
       .addCommandDispatcher(new StandaloneCommander())
       .addCommandDispatcher(
-        createCommandDispatcher([TaskCommandSchema], (command) => {
+        createCommandDispatcher([AssignReviewTaskSchema], (command) => {
           commands.push(command.id?.uuid ?? "missing");
         }),
       )
       .buildAsync();
 
-    await context.commandBus().post(createProcessManagerTaskCommand("closing-command"));
+    await context.commandBus().post(createScheduleReviewTask("closing-command"));
     await context.close();
 
     expect(commands).toHaveLength(1);
@@ -922,19 +948,19 @@ describe("BoundedContext assembly", () => {
         SiblingStandaloneCommander,
         "command-substitution",
         "substitute",
-        ProcessManagerTaskCommandSchema,
-        [TaskCommandSchema],
+        ScheduleReviewTaskSchema,
+        [AssignReviewTaskSchema],
       ),
     ]);
     const context = await BoundedContext.singleTenant("StandaloneSiblingFailure")
       .withGeneratedRegistryRoot(registryRoot)
       .addCommandDispatcher(new SiblingStandaloneCommander())
       .addCommandDispatcher(
-        createCommandDispatcher([TaskCommandSchema], (command) => {
+        createCommandDispatcher([AssignReviewTaskSchema], (command) => {
           const message =
             command.message === undefined
               ? undefined
-              : AnyMessages.unpack(command.message, TaskCommandSchema);
+              : AnyMessages.unpack(command.message, AssignReviewTaskSchema);
           if (message?.id === "failing-produced-command")
             throw new Error("expected produced failure");
           delivered.push(message?.id ?? "missing");
@@ -944,7 +970,7 @@ describe("BoundedContext assembly", () => {
     const observeUnhandled = (reason: unknown) => unhandled.push(reason);
     process.on("unhandledRejection", observeUnhandled);
     try {
-      await context.commandBus().post(createProcessManagerTaskCommand("sibling-source"));
+      await context.commandBus().post(createScheduleReviewTask("sibling-source"));
       await context.close();
       await Promise.resolve();
     } finally {
@@ -963,7 +989,7 @@ describe("BoundedContext assembly", () => {
           StateOutputSubscriber,
           "state-subscription",
           "subscribe",
-          AggregateStateSchema,
+          ProjectStateSchema,
           [],
         ) as never,
         instance: new StateOutputSubscriber(),
@@ -976,8 +1002,8 @@ describe("BoundedContext assembly", () => {
     await expect(
       dispatcher.dispatch(
         createEntityStateChangedEvent(
-          AggregateStateSchema,
-          create(AggregateStateSchema, {
+          ProjectStateSchema,
+          create(ProjectStateSchema, {
             id: "state-output",
             name: "State",
             archived: false,
@@ -989,16 +1015,20 @@ describe("BoundedContext assembly", () => {
 
   it("rejects a raw command dispatcher that collides with generated standalone metadata", async () => {
     const registryRoot = createStandaloneGeneratedRegistryRoot([
-      standaloneReceiver(StandaloneAssignee, "command-assignment", "assign", TaskCommandSchema, [
-        TaskEventSchema,
-      ]),
+      standaloneReceiver(
+        StandaloneAssignee,
+        "command-assignment",
+        "assign",
+        AssignReviewTaskSchema,
+        [ReviewTaskAssignedSchema],
+      ),
     ]);
     await expect(
       BoundedContext.singleTenant("StandaloneCollision")
         .withGeneratedRegistryRoot(registryRoot)
         .addAssignee(new StandaloneAssignee())
         .addCommandDispatcher({
-          messageSchemas: () => [TaskCommandSchema],
+          messageSchemas: () => [AssignReviewTaskSchema],
           dispatch: () => Promise.resolve(),
         })
         .buildAsync(),
@@ -1014,8 +1044,8 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: TaskCommandSchema,
-            emittedSchemas: [TaskEventSchema],
+            signalSchema: AssignReviewTaskSchema,
+            emittedSchemas: [ReviewTaskAssignedSchema],
             parameterCount: 1,
             origin: "domestic",
           },
@@ -1047,8 +1077,8 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: TaskCommandSchema,
-            emittedSchemas: [TaskEventSchema],
+            signalSchema: AssignReviewTaskSchema,
+            emittedSchemas: [ReviewTaskAssignedSchema],
             parameterCount: 1,
             origin: "domestic",
           },
@@ -1100,14 +1130,14 @@ describe("BoundedContext assembly", () => {
       .buildAsync();
     try {
       const descriptor = internalDeliveryDescriptor(context);
-      const aggregateType = TypeUrls.derive(AggregateStateSchema);
+      const aggregateType = TypeUrls.derive(ProjectStateSchema);
       const processManagerType = TypeUrls.derive(ProcessManagerStateSchema);
       const aggregateId = targetForShard(strategy, aggregateType, 1, "aggregate");
       const commandId = targetForShard(strategy, processManagerType, 2, "pm-command");
       const eventId = targetForShard(strategy, processManagerType, 1, "pm-event");
       const aggregateCommand = createAggregateCommand("aggregate-row", aggregateId);
-      const processManagerCommand = createProcessManagerTaskCommand("pm-command-row", commandId);
-      const processManagerEvent = createTaskEvent("pm-event-row", eventId);
+      const processManagerCommand = createScheduleReviewTask("pm-command-row", commandId);
+      const processManagerEvent = createReviewTaskAssigned("pm-event-row", eventId);
 
       const aggregateRow = await persistDescriptorRow({
         descriptor,
@@ -1144,7 +1174,7 @@ describe("BoundedContext assembly", () => {
       await descriptor.replay(processManagerCommandRow);
       await descriptor.replay(processManagerEventRow);
 
-      await expect(context.stand().read(AggregateStateSchema, aggregateId)).resolves.toMatchObject({
+      await expect(context.stand().read(ProjectStateSchema, aggregateId)).resolves.toMatchObject({
         id: aggregateId,
         name: "Task Ready",
       });
@@ -1183,7 +1213,7 @@ describe("BoundedContext assembly", () => {
 
     try {
       const descriptor = internalDeliveryDescriptor(context);
-      const aggregateType = TypeUrls.derive(AggregateStateSchema);
+      const aggregateType = TypeUrls.derive(ProjectStateSchema);
       const processManagerType = TypeUrls.derive(ProcessManagerStateSchema);
       const aggregateId = targetForShard(strategy, aggregateType, 1, "forged-aggregate");
       const processManagerId = targetForShard(strategy, processManagerType, 2, "forged-pm");
@@ -1212,7 +1242,7 @@ describe("BoundedContext assembly", () => {
         label: "HANDLE_COMMAND",
         signal: AnyMessages.pack(
           CommandSchema,
-          createProcessManagerTaskCommand("forged-pm", processManagerId),
+          createScheduleReviewTask("forged-pm", processManagerId),
           { validate: false },
         ),
         shard: new ShardIndex(0, 3),
@@ -1224,9 +1254,7 @@ describe("BoundedContext assembly", () => {
       await expect(descriptor.replay(processManagerRow)).rejects.toThrow(
         "Entity Inbox replay stored shard does not match the routed target.",
       );
-      await expect(
-        context.stand().read(AggregateStateSchema, aggregateId),
-      ).resolves.toBeUndefined();
+      await expect(context.stand().read(ProjectStateSchema, aggregateId)).resolves.toBeUndefined();
       await expect(
         context.stand().read(ProcessManagerStateSchema, processManagerId),
       ).resolves.toBeUndefined();
@@ -1268,14 +1296,10 @@ describe("BoundedContext assembly", () => {
           const signalId = `${label}-${String(index)}`;
           const signal =
             label === "HANDLE_COMMAND"
-              ? AnyMessages.pack(
-                  CommandSchema,
-                  createProcessManagerTaskCommand(signalId, targetId),
-                  {
-                    validate: false,
-                  },
-                )
-              : AnyMessages.pack(EventSchema, createTaskEvent(signalId, targetId), {
+              ? AnyMessages.pack(CommandSchema, createScheduleReviewTask(signalId, targetId), {
+                  validate: false,
+                })
+              : AnyMessages.pack(EventSchema, createReviewTaskAssigned(signalId, targetId), {
                   validate: false,
                 });
           rows.push(
@@ -1369,7 +1393,7 @@ describe("BoundedContext assembly", () => {
         .withStorageFactory(storageFactory)
         .withGeneratedRegistryRoot(failingRegistry.root)
         .add(FailingRecoveryProcessManager)
-        .addEventDispatcher(createEventDispatcher([TaskEventSchema], () => undefined))
+        .addEventDispatcher(createEventDispatcher([ReviewTaskAssignedSchema], () => undefined))
         .buildAsync();
 
       await expect(
@@ -1398,7 +1422,7 @@ describe("BoundedContext assembly", () => {
         .withStorageFactory(storageFactory)
         .withGeneratedRegistryRoot(recoveryRegistry.root)
         .add(FreshRecoveryProcessManager)
-        .addEventDispatcher(createEventDispatcher([TaskEventSchema], () => undefined))
+        .addEventDispatcher(createEventDispatcher([ReviewTaskAssignedSchema], () => undefined))
         .buildAsync();
       const descriptor = internalDeliveryDescriptor(recovered);
 
@@ -1475,24 +1499,24 @@ describe("BoundedContext assembly", () => {
   it("owns a stable stand with repository state types registered", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
     const stand = context.stand();
 
     expect(stand).toBe(context.stand());
-    expect(stand.stateTypes()).toEqual([TypeUrls.derive(ProjectionStateSchema)]);
+    expect(stand.stateTypes()).toEqual([TypeUrls.derive(ProjectOverviewStateSchema)]);
 
     await stand.update(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, {
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
         id: "task-1",
         name: "Task",
         priority: 1,
       }),
     );
 
-    await expect(stand.read(ProjectionStateSchema, "task-1")).resolves.toMatchObject({
+    await expect(stand.read(ProjectOverviewStateSchema, "task-1")).resolves.toMatchObject({
       id: "task-1",
       name: "Task",
       priority: 1,
@@ -1501,7 +1525,7 @@ describe("BoundedContext assembly", () => {
 
   it("registers command dispatchers added to the builder", async () => {
     const observed: string[] = [];
-    const dispatcher = createCommandDispatcher([TaskCommandSchema], (command) => {
+    const dispatcher = createCommandDispatcher([AssignReviewTaskSchema], (command) => {
       observed.push(command.id?.uuid ?? "missing");
     });
     const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
@@ -1512,20 +1536,20 @@ describe("BoundedContext assembly", () => {
   });
 
   it("does not register command dispatchers removed before build", async () => {
-    const dispatcher = createCommandDispatcher([TaskCommandSchema], () => undefined);
+    const dispatcher = createCommandDispatcher([AssignReviewTaskSchema], () => undefined);
     const context = BoundedContext.singleTenant("Tasks")
       .addCommandDispatcher(dispatcher)
       .removeCommandDispatcher(dispatcher)
       .build();
 
     await expect(context.commandBus().post(createProjectionCommand("command-2"))).rejects.toThrow(
-      `No command dispatcher registered for "${TypeUrls.derive(TaskCommandSchema)}".`,
+      `No command dispatcher registered for "${TypeUrls.derive(AssignReviewTaskSchema)}".`,
     );
   });
 
   it("registers event dispatchers added to the builder", async () => {
     const observed: string[] = [];
-    const dispatcher = createEventDispatcher([TaskEventSchema], (event) => {
+    const dispatcher = createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
       observed.push(event.id?.value ?? "missing");
     });
     const context = BoundedContext.singleTenant("Tasks").addEventDispatcher(dispatcher).build();
@@ -1536,17 +1560,22 @@ describe("BoundedContext assembly", () => {
   });
 
   it("does not expose internal event types accepted by framework dispatchers", () => {
-    const dispatcher = createEventDispatcher([EventSchema, TaskEventSchema], () => undefined);
+    const dispatcher = createEventDispatcher(
+      [EventSchema, ReviewTaskAssignedSchema],
+      () => undefined,
+    );
     const context = BoundedContext.singleTenant("Tasks").addEventDispatcher(dispatcher).build();
 
-    expect(context.eventBus().acceptedEventTypes()).toEqual([TypeUrls.derive(TaskEventSchema)]);
+    expect(context.eventBus().acceptedEventTypes()).toEqual([
+      TypeUrls.derive(ReviewTaskAssignedSchema),
+    ]);
   });
 
   it("rejects package-local event subscriptions for non-context values", () => {
     expect(() =>
       boundedContextAccess.subscribeToEvent(
         {} as BoundedContext,
-        TypeUrls.derive(TaskEventSchema),
+        TypeUrls.derive(ReviewTaskAssignedSchema),
         { onEvent: () => undefined },
       ),
     ).toThrow("Event subscription requires a built BoundedContext instance.");
@@ -1554,7 +1583,7 @@ describe("BoundedContext assembly", () => {
 
   it("rejects events whose only dispatcher was removed before build", async () => {
     const observed: string[] = [];
-    const dispatcher = createEventDispatcher([TaskEventSchema], (event) => {
+    const dispatcher = createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
       observed.push(event.id?.value ?? "missing");
     });
     const context = BoundedContext.singleTenant("Tasks")
@@ -1572,7 +1601,7 @@ describe("BoundedContext assembly", () => {
   it("stores events in the context EventStore before dispatch", async () => {
     const observed: string[] = [];
     const storageFactory = new ObservingStorageFactory(observed);
-    const dispatcher = createEventDispatcher([TaskEventSchema], (event) => {
+    const dispatcher = createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
       observed.push(`dispatch:${event.id?.value ?? "missing"}`);
     });
     const context = BoundedContext.singleTenant("Tasks")
@@ -1587,7 +1616,7 @@ describe("BoundedContext assembly", () => {
 
   it("rejects event dispatcher classification before acquiring event storage", () => {
     const storageFactory = new ObservingStorageFactory([]);
-    const dispatcher = createEventDispatcher([TaskEventSchema], () => undefined);
+    const dispatcher = createEventDispatcher([ReviewTaskAssignedSchema], () => undefined);
     const brokenDispatcher = {
       messageSchemas: () => {
         throw new Error("Cannot read event schemas.");
@@ -1633,7 +1662,7 @@ describe("BoundedContext assembly", () => {
     const storageFactory = new ObservingStorageFactory([]);
     const repository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
@@ -1647,24 +1676,24 @@ describe("BoundedContext assembly", () => {
     expect(firstRepositories).toHaveLength(1);
     expect(firstRepositories[0]).not.toBe(repository);
     expect(firstRepositories[0]?.entityType).toBe(TaskAggregate);
-    expect(firstRepositories[0]?.stateFullTypeName).toBe(AggregateStateSchema.typeName);
+    expect(firstRepositories[0]?.stateFullTypeName).toBe(ProjectStateSchema.typeName);
     expect(secondRepositories).toEqual(firstRepositories);
     expect(secondRepositories).not.toBe(firstRepositories);
     expect(secondRepositories[0]).not.toBe(firstRepositories[0]);
-    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(0);
+    expect(storageFactory.creationsFor(ProjectStateSchema.typeName)).toHaveLength(0);
   });
 
   it("builds generated repositories from entity classes with buildAsync", async () => {
     const registryRoot = createGeneratedRegistryRoot([
       {
         entityType: GeneratedTaskAggregate,
-        stateSchema: AggregateStateSchema,
+        stateSchema: ProjectStateSchema,
         handlers: [
           {
             kind: "command-assignment",
             methodName: "assignProjection",
-            signalSchema: TaskCommandSchema,
-            emittedSchemas: [TaskEventSchema],
+            signalSchema: AssignReviewTaskSchema,
+            emittedSchemas: [ReviewTaskAssignedSchema],
             parameterCount: 1,
             origin: "domestic",
           },
@@ -1672,12 +1701,12 @@ describe("BoundedContext assembly", () => {
       },
       {
         entityType: TaskProjection,
-        stateSchema: ProjectionStateSchema,
+        stateSchema: ProjectOverviewStateSchema,
         handlers: [
           {
             kind: "state-subscription",
             methodName: "onProjection",
-            signalSchema: AggregateStateSchema,
+            signalSchema: ProjectStateSchema,
             emittedSchemas: [],
             parameterCount: 1,
             origin: "domestic",
@@ -1696,7 +1725,7 @@ describe("BoundedContext assembly", () => {
       TaskProjection,
     ]);
     expect(context.commandBus().acceptedCommandTypes()).toEqual([
-      TypeUrls.derive(TaskCommandSchema),
+      TypeUrls.derive(AssignReviewTaskSchema),
     ]);
 
     await expect(context.commandBus().post(createAggregateCommand("command-4"))).resolves.toBe(
@@ -1714,8 +1743,8 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: TaskCommandSchema,
-            emittedSchemas: [TaskEventSchema],
+            signalSchema: AssignReviewTaskSchema,
+            emittedSchemas: [ReviewTaskAssignedSchema],
             parameterCount: 1,
             origin: "domestic",
           },
@@ -1726,7 +1755,7 @@ describe("BoundedContext assembly", () => {
       .withGeneratedRegistryRoot(registryRoot)
       .add(GeneratedTaskProcessManager)
       .addEventDispatcher(
-        createEventDispatcher([TaskEventSchema], (event) => {
+        createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
           observed.push(event);
         }),
       )
@@ -1740,8 +1769,8 @@ describe("BoundedContext assembly", () => {
               actor: create(UserIdSchema, { value: "user-1" }),
             }),
           }),
-          schema: TaskCommandSchema,
-          message: create(TaskCommandSchema, {
+          schema: AssignReviewTaskSchema,
+          message: create(AssignReviewTaskSchema, {
             id: "generated-pm",
             name: "Generated PM",
           }),
@@ -1768,7 +1797,7 @@ describe("BoundedContext assembly", () => {
     if (message === undefined) {
       throw new Error("Expected a generated process-manager produced event.");
     }
-    expect(message.typeUrl).toBe(TypeUrls.derive(TaskEventSchema));
+    expect(message.typeUrl).toBe(TypeUrls.derive(ReviewTaskAssignedSchema));
   });
 
   it("keeps producer-only event schemas off external routes while admitting follow-ups", async () => {
@@ -1781,8 +1810,8 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: TaskCommandSchema,
-            emittedSchemas: [TaskEventSchema],
+            signalSchema: AssignReviewTaskSchema,
+            emittedSchemas: [ReviewTaskAssignedSchema],
             parameterCount: 1,
             origin: "domestic",
           },
@@ -1805,8 +1834,8 @@ describe("BoundedContext assembly", () => {
             actor: create(UserIdSchema, { value: "user-1" }),
           }),
         }),
-        schema: TaskCommandSchema,
-        message: create(TaskCommandSchema, {
+        schema: AssignReviewTaskSchema,
+        message: create(AssignReviewTaskSchema, {
           id: "producer-only",
           name: "Producer only",
         }),
@@ -1818,7 +1847,7 @@ describe("BoundedContext assembly", () => {
       "producer-only event",
     );
     await expect(eventStore.read()).resolves.toMatchObject([
-      { message: { typeUrl: TypeUrls.derive(TaskEventSchema) } },
+      { message: { typeUrl: TypeUrls.derive(ReviewTaskAssignedSchema) } },
     ]);
   });
 
@@ -1832,7 +1861,7 @@ describe("BoundedContext assembly", () => {
     const registryRoot = createGeneratedRegistryRoot([
       {
         entityType: GeneratedTaskAggregate,
-        stateSchema: AggregateStateSchema,
+        stateSchema: ProjectStateSchema,
         handlers: [],
       },
     ]);
@@ -1849,7 +1878,7 @@ describe("BoundedContext assembly", () => {
     const registryRoot = createGeneratedRegistryRoot([
       {
         entityType: GeneratedTaskAggregate,
-        stateSchema: AggregateStateSchema,
+        stateSchema: ProjectStateSchema,
         handlers: [],
       },
     ]);
@@ -1884,7 +1913,7 @@ describe("BoundedContext assembly", () => {
     const registryRoot = createGeneratedRegistryRoot([
       {
         entityType: GeneratedTaskAggregate,
-        stateSchema: AggregateStateSchema,
+        stateSchema: ProjectStateSchema,
         handlers: [],
       },
     ]);
@@ -1914,7 +1943,7 @@ describe("BoundedContext assembly", () => {
     const fixture = createGeneratedRegistryFixture([
       {
         entityType: GeneratedTaskAggregate,
-        stateSchema: AggregateStateSchema,
+        stateSchema: ProjectStateSchema,
         handlers: [],
       },
     ]);
@@ -1936,7 +1965,7 @@ describe("BoundedContext assembly", () => {
     const fixture = createGeneratedRegistryFixture([
       {
         entityType: GeneratedTaskAggregate,
-        stateSchema: AggregateStateSchema,
+        stateSchema: ProjectStateSchema,
         handlers: [],
       },
     ]);
@@ -1978,7 +2007,7 @@ describe("BoundedContext assembly", () => {
   it("does not register repositories removed before build", () => {
     const repository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks").add(repository).remove(repository).build();
 
@@ -1989,7 +2018,7 @@ describe("BoundedContext assembly", () => {
     const storageFactory = new ObservingStorageFactory([]);
     const repository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
@@ -1999,14 +2028,14 @@ describe("BoundedContext assembly", () => {
 
     const repositories = context.registeredRepositories();
     expect(repositories).toHaveLength(1);
-    expect(repositories[0]?.stateFullTypeName).toBe(AggregateStateSchema.typeName);
-    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(0);
+    expect(repositories[0]?.stateFullTypeName).toBe(ProjectStateSchema.typeName);
+    expect(storageFactory.creationsFor(ProjectStateSchema.typeName)).toHaveLength(0);
   });
 
   it("rejects registering one repository instance with two built contexts", () => {
     const repository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
 
     BoundedContext.singleTenant("Tasks").add(repository).build();
@@ -2019,7 +2048,7 @@ describe("BoundedContext assembly", () => {
   it("does not open repository storage during registration", () => {
     const repository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const storageFactory = new ObservingStorageFactory([]);
 
@@ -2029,21 +2058,21 @@ describe("BoundedContext assembly", () => {
       .build();
 
     expect(context.registeredRepositories()).toHaveLength(1);
-    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toEqual([]);
+    expect(storageFactory.creationsFor(ProjectStateSchema.typeName)).toEqual([]);
   });
 
   it("rejects duplicate repository entity or state identities when building", () => {
     const firstTaskRepository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const secondTaskRepository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const duplicateStateRepository = new Repository({
       entityType: DuplicateTaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
 
     expect(() =>
@@ -2058,13 +2087,13 @@ describe("BoundedContext assembly", () => {
         .add(firstTaskRepository)
         .add(duplicateStateRepository)
         .build(),
-    ).toThrow(`Repository state type "${AggregateStateSchema.typeName}" is already registered.`);
+    ).toThrow(`Repository state type "${ProjectStateSchema.typeName}" is already registered.`);
   });
 
   it("rejects structural repository lookalikes before registration", () => {
     const repository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const structuralRepository = {
       entityType: repository.entityType,
@@ -2084,13 +2113,13 @@ describe("BoundedContext assembly", () => {
   it("uses captured repository metadata instead of virtual getters for registration", () => {
     const projectionMetadata = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     }).metadata;
     class SpoofingRepository extends Repository<typeof TaskAggregate> {
       constructor() {
         super({
           entityType: TaskAggregate,
-          schema: AggregateStateSchema,
+          schema: ProjectStateSchema,
         });
       }
 
@@ -2099,7 +2128,7 @@ describe("BoundedContext assembly", () => {
       }
 
       override get stateFullTypeName(): Repository<typeof TaskAggregate>["stateFullTypeName"] {
-        return ProjectionStateSchema.typeName as Repository<
+        return ProjectOverviewStateSchema.typeName as Repository<
           typeof TaskAggregate
         >["stateFullTypeName"];
       }
@@ -2109,7 +2138,7 @@ describe("BoundedContext assembly", () => {
     const spoofingRepository = new SpoofingRepository();
     const projectionRepository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
@@ -2119,23 +2148,23 @@ describe("BoundedContext assembly", () => {
 
     const repositories = context.registeredRepositories();
     expect(repositories.map((repository) => repository.stateFullTypeName)).toEqual([
-      AggregateStateSchema.typeName,
-      ProjectionStateSchema.typeName,
+      ProjectStateSchema.typeName,
+      ProjectOverviewStateSchema.typeName,
     ]);
     expect(repositories[0]).not.toBe(spoofingRepository);
     expect(repositories[1]).not.toBe(projectionRepository);
-    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(0);
+    expect(storageFactory.creationsFor(ProjectStateSchema.typeName)).toHaveLength(0);
   });
 
   it("defers repository provider failures until an operation selects storage", () => {
-    const storageFactory = new FailingStorageFactory(6, ProjectionStateSchema.typeName);
+    const storageFactory = new FailingStorageFactory(6, ProjectOverviewStateSchema.typeName);
     const aggregateRepository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const projectionRepository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
 
     const context = BoundedContext.singleTenant("Tasks")
@@ -2145,12 +2174,12 @@ describe("BoundedContext assembly", () => {
       .build();
 
     expect(context.registeredRepositories()).toHaveLength(2);
-    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(0);
-    expect(storageFactory.creationsFor(ProjectionStateSchema.typeName)).toHaveLength(0);
+    expect(storageFactory.creationsFor(ProjectStateSchema.typeName)).toHaveLength(0);
+    expect(storageFactory.creationsFor(ProjectOverviewStateSchema.typeName)).toHaveLength(0);
   });
 
   it("aborts retained domain and System buses when dispatcher registration throws", () => {
-    for (const schema of [ProjectionStateSchema, EntityLog.EntityStateChangedSchema]) {
+    for (const schema of [ProjectOverviewStateSchema, EntityLog.EntityStateChangedSchema]) {
       const storageFactory = new ObservingStorageFactory([]);
       let schemaReads = 0;
       const dispatcher: EventDispatcher = {
@@ -2203,11 +2232,11 @@ describe("BoundedContext assembly", () => {
     const storageFactory = new FailingStorageFactory(7, ProcessManagerStateSchema.typeName, [5]);
     const aggregateRepository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const projectionRepository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const processManagerRepository = new Repository({
       entityType: TaskProcessManager,
@@ -2222,15 +2251,15 @@ describe("BoundedContext assembly", () => {
       .build();
 
     expect(context.registeredRepositories()).toHaveLength(3);
-    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(0);
-    expect(storageFactory.creationsFor(ProjectionStateSchema.typeName)).toHaveLength(0);
+    expect(storageFactory.creationsFor(ProjectStateSchema.typeName)).toHaveLength(0);
+    expect(storageFactory.creationsFor(ProjectOverviewStateSchema.typeName)).toHaveLength(0);
     expect(storageFactory.creationsFor(ProcessManagerStateSchema.typeName)).toHaveLength(0);
   });
 
   it("keeps add and remove chainable while maintaining the registration list", () => {
     const repository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const builder = BoundedContext.singleTenant("Tasks");
 
@@ -2243,7 +2272,7 @@ describe("BoundedContext assembly", () => {
     const storageFactory = new ObservingStorageFactory([]);
     const repository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const context = BoundedContext.multitenant("Tasks")
       .withStorageFactory(storageFactory)
@@ -2265,10 +2294,10 @@ describe("BoundedContext assembly", () => {
   });
 
   it("keeps the provider tenant catalog independent of repository registration", async () => {
-    const storageFactory = new FailingStorageFactory(6, AggregateStateSchema.typeName);
+    const storageFactory = new FailingStorageFactory(6, ProjectStateSchema.typeName);
     const repository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
 
     const context = BoundedContext.multitenant("Tasks")
@@ -2279,14 +2308,14 @@ describe("BoundedContext assembly", () => {
 
     await tenantIndex.keep(tenant("tenant-a"));
     await expect(tenantIndex.all()).resolves.toEqual([tenant("tenant-a")]);
-    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(0);
+    expect(storageFactory.creationsFor(ProjectStateSchema.typeName)).toHaveLength(0);
   });
 
   it("transfers and closes a custom subscription registry on a failed first build", async () => {
     const registry = new ObservingSubscriptionRegistry();
     const repository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const existing = BoundedContext.singleTenant("Existing").add(repository).build();
     const builder = BoundedContext.singleTenant("Tasks")
@@ -2322,20 +2351,20 @@ describe("BoundedContext assembly", () => {
     const storageFactory = new DelayingStorageFactory();
     const repository = new Repository({
       entityType: TaskProjection,
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
       .add(repository)
       .build();
     const deliveries: string[] = [];
-    context.stand().subscribe(ProjectionStateSchema, (update) => {
+    context.stand().subscribe(ProjectOverviewStateSchema, (update) => {
       deliveries.push(update.state.name);
     });
 
     const update = context.stand().update(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, {
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
         id: "task-in-flight",
         name: "In Flight",
         priority: 1,
@@ -2353,8 +2382,8 @@ describe("BoundedContext assembly", () => {
     expect(deliveries).toEqual(["In Flight"]);
     await expect(
       context.stand().update(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema, {
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, {
           id: "task-rejected",
           name: "Rejected",
           priority: 1,
@@ -2367,7 +2396,7 @@ describe("BoundedContext assembly", () => {
     const storageFactory = new ObservingStorageFactory([], [1, 2]);
     const repository = new Repository({
       entityType: TaskAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const context = BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
@@ -2409,7 +2438,7 @@ describe("BoundedContext assembly", () => {
     const context = BoundedContext.multitenant("Tasks")
       .withStorageFactory(storageFactory)
       .withSubscriptionRegistry(registry)
-      .add(new Repository({ entityType: TaskAggregate, schema: AggregateStateSchema }))
+      .add(new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema }))
       .build();
 
     try {
@@ -2437,7 +2466,7 @@ describe("BoundedContext assembly", () => {
     const systemDispatcher = createEventDispatcher([EntityLog.EntityStateChangedSchema], () => {
       order.push("system event dispatched");
     });
-    const commandDispatcher = createCommandDispatcher([TaskCommandSchema], async () => {
+    const commandDispatcher = createCommandDispatcher([AssignReviewTaskSchema], async () => {
       order.push("domain command accepted");
       await commandReleased;
       await (
@@ -2456,11 +2485,11 @@ describe("BoundedContext assembly", () => {
                   StringValueSchema,
                   create(StringValueSchema, { value: "task-1" }),
                 ),
-                typeUrl: TypeUrls.derive(ProjectionStateSchema),
+                typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
               },
               newState: AnyMessages.pack(
-                ProjectionStateSchema,
-                create(ProjectionStateSchema, { id: "task-1", name: "Closed", priority: 1 }),
+                ProjectOverviewStateSchema,
+                create(ProjectOverviewStateSchema, { id: "task-1", name: "Closed", priority: 1 }),
               ),
               signalId: [
                 {
@@ -2819,8 +2848,8 @@ function createProjectionCommand(id: string, targetId = "task-1") {
       }),
     }),
     message: AnyMessages.pack(
-      TaskCommandSchema,
-      create(TaskCommandSchema, { id: targetId, name: "Task" }),
+      AssignReviewTaskSchema,
+      create(AssignReviewTaskSchema, { id: targetId, name: "Task" }),
     ),
   });
 }
@@ -2841,13 +2870,13 @@ function createAggregateCommand(id: string, targetId = "task-ready", tenantId?: 
       }),
     }),
     message: AnyMessages.pack(
-      TaskCommandSchema,
-      create(TaskCommandSchema, { id: targetId, name: "Task Ready" }),
+      AssignReviewTaskSchema,
+      create(AssignReviewTaskSchema, { id: targetId, name: "Task Ready" }),
     ),
   });
 }
 
-function createProcessManagerTaskCommand(id: string, targetId = "task-ready") {
+function createScheduleReviewTask(id: string, targetId = "task-ready") {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
@@ -2856,8 +2885,8 @@ function createProcessManagerTaskCommand(id: string, targetId = "task-ready") {
       }),
     }),
     message: AnyMessages.pack(
-      ProcessManagerTaskCommandSchema,
-      create(ProcessManagerTaskCommandSchema, { id: targetId, name: "Task Ready" }),
+      ScheduleReviewTaskSchema,
+      create(ScheduleReviewTaskSchema, { id: targetId, name: "Task Ready" }),
     ),
   });
 }
@@ -2878,19 +2907,19 @@ function createProjectionEvent(id: string, targetId = "task-1", tenantId?: Tenan
       version: create(VersionSchema, { number: 1 }),
     }),
     message: AnyMessages.pack(
-      TaskEventSchema,
-      create(TaskEventSchema, { id: targetId, name: "Task" }),
+      ReviewTaskAssignedSchema,
+      create(ReviewTaskAssignedSchema, { id: targetId, name: "Task" }),
     ),
   });
 }
 
-function createTaskEvent(id: string, targetId = "task-1") {
+function createReviewTaskAssigned(id: string, targetId = "task-1") {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema),
     message: AnyMessages.pack(
-      TaskEventSchema,
-      create(TaskEventSchema, { id: targetId, name: "Task" }),
+      ReviewTaskAssignedSchema,
+      create(ReviewTaskAssignedSchema, { id: targetId, name: "Task" }),
     ),
   });
 }
@@ -3024,8 +3053,8 @@ function processManagerRegistry(
       {
         kind: "command-assignment" as const,
         methodName: "assignTask",
-        signalSchema: TaskCommandSchema,
-        emittedSchemas: [TaskEventSchema],
+        signalSchema: AssignReviewTaskSchema,
+        emittedSchemas: [ReviewTaskAssignedSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,
       },
@@ -3036,12 +3065,12 @@ function processManagerRegistry(
 function aggregateReplayRegistry(entityType: typeof ReplayTaskAggregate) {
   return {
     entityType,
-    stateSchema: AggregateStateSchema,
+    stateSchema: ProjectStateSchema,
     handlers: [
       {
         kind: "command-assignment" as const,
         methodName: "assignTask",
-        signalSchema: TaskCommandSchema,
+        signalSchema: AssignReviewTaskSchema,
         emittedSchemas: [ReviewStartedSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,
@@ -3058,7 +3087,7 @@ function replayProcessManagerRegistry(entityType: typeof ReplayTaskProcessManage
       {
         kind: "command-assignment" as const,
         methodName: "assignTask",
-        signalSchema: ProcessManagerTaskCommandSchema,
+        signalSchema: ScheduleReviewTaskSchema,
         emittedSchemas: [ReviewStartedSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,
@@ -3066,7 +3095,7 @@ function replayProcessManagerRegistry(entityType: typeof ReplayTaskProcessManage
       {
         kind: "event-reaction" as const,
         methodName: "reactToProjection",
-        signalSchema: TaskEventSchema,
+        signalSchema: ReviewTaskAssignedSchema,
         emittedSchemas: [ReviewStartedSchema],
         parameterCount: 1 as const,
         origin: "domestic" as const,

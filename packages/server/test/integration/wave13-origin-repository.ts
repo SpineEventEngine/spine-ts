@@ -20,13 +20,13 @@ import { pathToFileURL } from "node:url";
 import type { EventContext } from "@spine-event-engine/proto";
 import { EventRouting, Projection } from "@spine-event-engine/server";
 
-import { ProjectionStateSchema } from "../../test-fixtures/generated/entity-metadata/main_pb.js";
+import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import {
-  type TaskEvent,
-  TaskEventSchema,
+  type ReviewTaskAssigned,
+  ReviewTaskAssignedSchema,
 } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
-export const Wave13OriginStateSchema = ProjectionStateSchema;
+export const Wave13OriginStateSchema = ProjectOverviewStateSchema;
 
 export class Wave13OriginProjection extends Projection<
   string,
@@ -41,17 +41,17 @@ export class Wave13OriginProjection extends Projection<
     this.externalContexts = [];
   }
 
-  onDomestic(event: TaskEvent, context: EventContext): void {
+  onDomestic(event: ReviewTaskAssigned, context: EventContext): void {
     Wave13OriginProjection.domesticContexts.push(context);
     this.record(event, "domestic");
   }
 
-  onExternal(event: TaskEvent, context: EventContext): void {
+  onExternal(event: ReviewTaskAssigned, context: EventContext): void {
     Wave13OriginProjection.externalContexts.push(context);
     this.record(event, "external");
   }
 
-  private record(event: TaskEvent, origin: string): void {
+  private record(event: ReviewTaskAssigned, origin: string): void {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -65,9 +65,10 @@ export class Wave13OriginProjection extends Projection<
   }
 }
 
-export const wave13OriginRouting = EventRouting.create<string>().route(TaskEventSchema, (event) => [
-  event.id,
-]);
+export const wave13OriginRouting = EventRouting.create<string>().route(
+  ReviewTaskAssignedSchema,
+  (event) => [event.id],
+);
 
 export function createWave13OriginRegistry(): { readonly clear: () => void; readonly root: URL } {
   const root = mkdtempSync(join(tmpdir(), "spine-wave13-origin-registry-"));
@@ -83,7 +84,7 @@ export function createWave13OriginRegistry(): { readonly clear: () => void; read
           {
             kind: "event-subscription",
             methodName: "onDomestic",
-            signalSchema: TaskEventSchema,
+            signalSchema: ReviewTaskAssignedSchema,
             emittedSchemas: [],
             parameterCount: 2,
             origin: "domestic",
@@ -91,7 +92,7 @@ export function createWave13OriginRegistry(): { readonly clear: () => void; read
           {
             kind: "event-subscription",
             methodName: "onExternal",
-            signalSchema: TaskEventSchema,
+            signalSchema: ReviewTaskAssignedSchema,
             emittedSchemas: [],
             parameterCount: 2,
             origin: "external",

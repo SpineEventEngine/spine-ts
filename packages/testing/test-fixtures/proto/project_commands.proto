@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package spine_ts.testing.projects;
+
+message CreateProject {
+  string id = 1;
+  string name = 2;
+}

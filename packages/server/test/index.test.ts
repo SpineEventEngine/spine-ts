@@ -97,7 +97,7 @@ import {
   SystemClock,
 } from "../src/index.js";
 
-type ProjectionState = Message<"ProjectionState"> & {
+type ProjectOverviewState = Message<"ProjectOverviewState"> & {
   id: string;
   name: string;
   priority: number;
@@ -114,13 +114,13 @@ interface ExportedSizedMetadata {
   readonly size: number;
 }
 
-type AggregateState = Message<"AggregateState"> & {
+type ProjectState = Message<"ProjectState"> & {
   id: string;
   name: string;
   archived: boolean;
 };
 
-type GenericState = Message<"GenericState"> & {
+type ProjectSearchState = Message<"ProjectSearchState"> & {
   id: string;
   searchable: boolean;
 };
@@ -138,15 +138,15 @@ type HiddenState = Message<"HiddenState"> & { id: string };
 
 // Descriptor fixtures are generated from checked-in test-only .proto sources.
 const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectionStateSchema = messageDesc(
+const ProjectOverviewStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
-) as GenMessage<ProjectionState>;
-const AggregateStateSchema = messageDesc(
+) as GenMessage<ProjectOverviewState>;
+const ProjectStateSchema = messageDesc(fileEntityMetadataFixture, 1) as GenMessage<ProjectState>;
+const ProjectSearchStateSchema = messageDesc(
   fileEntityMetadataFixture,
-  1,
-) as GenMessage<AggregateState>;
-const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
+  2,
+) as GenMessage<ProjectSearchState>;
 
 it("exports nominal standalone handler base classes", () => {
   class Assignee extends AbstractAssignee {}
@@ -159,12 +159,12 @@ it("exports nominal standalone handler base classes", () => {
   expect(new Subscriber()).toBeInstanceOf(AbstractEventSubscriber);
 });
 
-class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   assignCommand(command: Message<"spine.core.Command">): void {
     void command;
   }
 
-  onAggregateChanged(event: AggregateState): void {
+  onAggregateChanged(event: ProjectState): void {
     void event;
   }
 }
@@ -486,15 +486,15 @@ describe("@spine-event-engine/server", () => {
 
     const repository = new Repository({
       entityType: PublicRuntimeSmokeAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const context = BoundedContext.singleTenant("PublicRuntimeSmoke").add(repository).build();
     const handlers = EntityHandlers.define(
       PublicRuntimeSmokeAggregate,
-      AggregateStateSchema,
+      ProjectStateSchema,
       (builder) => [
         builder.assign(CommandSchema, "assignCommand"),
-        builder.apply(AggregateStateSchema, "onAggregateChanged", { allowImport: true }),
+        builder.apply(ProjectStateSchema, "onAggregateChanged", { allowImport: true }),
       ],
     );
     const registry = new HandlerMetadataRegistry([handlers]);
@@ -506,7 +506,7 @@ describe("@spine-event-engine/server", () => {
     expect("register" in context.commandBus()).toBe(false);
     expect("register" in context.eventBus()).toBe(false);
     expect(commandReadiness.commandTypeNames()).toEqual([CommandSchema.typeName]);
-    expect(eventReadiness.eventTypeNames()).toEqual([AggregateStateSchema.typeName]);
+    expect(eventReadiness.eventTypeNames()).toEqual([ProjectStateSchema.typeName]);
     for (const member of ["ImportBus", "GrpcServer"]) {
       expect(Object.hasOwn(serverRoot, member)).toBe(false);
     }
@@ -532,10 +532,10 @@ describe("@spine-event-engine/server", () => {
   });
 
   it("extracts entity kind, default visibility, routing hints, columns, and set-once fields", () => {
-    const metadata = describeEntityMetadata(ProjectionStateSchema);
+    const metadata = describeEntityMetadata(ProjectOverviewStateSchema);
 
-    expect(metadata.fullTypeName).toBe("ProjectionState");
-    expect(metadata.fileName).toBe("entity-metadata/main.proto");
+    expect(metadata.fullTypeName).toBe("ProjectOverviewState");
+    expect(metadata.fileName).toBe("entity-metadata/project_states.proto");
     expect(metadata.kind).toBe("projection");
     expect(metadata.declaredVisibility).toBe("default");
     expect(metadata.visibility).toBe("full");
@@ -550,7 +550,7 @@ describe("@spine-event-engine/server", () => {
   });
 
   it("keeps explicit aggregate visibility and descriptor ordering deterministic", () => {
-    const metadata = describeEntityMetadata(AggregateStateSchema);
+    const metadata = describeEntityMetadata(ProjectStateSchema);
 
     expect(metadata.kind).toBe("aggregate");
     expect(metadata.declaredVisibility).toBe("query");
@@ -571,8 +571,8 @@ describe("@spine-event-engine/server", () => {
   });
 
   it("ignores column declarations on entity kinds that are not column-eligible", () => {
-    expect(describeEntityMetadata(AggregateStateSchema).columns).toEqual([]);
-    expect(describeEntityMetadata(GenericStateSchema).columns).toEqual([]);
+    expect(describeEntityMetadata(ProjectStateSchema).columns).toEqual([]);
+    expect(describeEntityMetadata(ProjectSearchStateSchema).columns).toEqual([]);
   });
 
   it("uses generated schemas from checked-in fixture Proto sources", () => {
@@ -580,8 +580,8 @@ describe("@spine-event-engine/server", () => {
   });
 
   it("distinguishes entity schemas from non-entity schemas", () => {
-    expect(isEntitySchema(ProjectionStateSchema)).toBe(true);
-    expect(isEntitySchema(GenericStateSchema)).toBe(true);
+    expect(isEntitySchema(ProjectOverviewStateSchema)).toBe(true);
+    expect(isEntitySchema(ProjectSearchStateSchema)).toBe(true);
     expect(isEntitySchema(CommandSchema)).toBe(false);
   });
 

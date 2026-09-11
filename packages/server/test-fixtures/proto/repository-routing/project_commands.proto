@@ -13,36 +13,46 @@
  */
 syntax = "proto3";
 
-package spine_ts.testing.black_box;
+package repository_routing;
 
-import "spine/options.proto";
+import "repository-routing/project_identifiers.proto";
 
-message ProjectionState {
-  option (entity).kind = PROJECTION;
-
-  string id = 1 [(set_once) = true];
-  string name = 2 [(column) = true];
-  int32 priority = 3 [(column) = true];
+message RegisterProject {
+  ProjectId id = 1;
+  string name = 2;
+  int32 priority = 3;
 }
 
-message AggregateState {
-  option (entity).kind = AGGREGATE;
-
-  string id = 1 [(set_once) = true];
-  string name = 2 [(column) = true];
-}
-
-message TaskCommand {
+message CreateProject {
   string id = 1;
   string name = 2;
 }
 
-message TaskObserved {
-  string id = 1;
-}
-
-message ProjectionEvent {
+message DraftProject {
   string id = 1;
   string name = 2;
   int32 priority = 3;
+}
+
+message CreateNumberedProject {
+  int32 id = 1;
+  string name = 2;
+}
+
+message ScheduleProjectWorkflow {
+  int64 id = 1;
+  string queue = 2;
+}
+
+message InviteProjectMembers {
+  repeated string id = 1;
+}
+
+message AssignProjectAttributes {
+  map<string, string> id = 1;
+}
+
+message AddProjectMilestone {
+  ProjectMilestoneId id = 1;
+  string name = 2;
 }

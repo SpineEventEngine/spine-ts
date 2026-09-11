@@ -49,9 +49,9 @@ import {
   SpineServices,
 } from "../../src/index.js";
 import {
-  NativeAggregateStateSchema,
+  NativeProjectStateSchema,
   NativeProcessManagerStateSchema,
-  NativeProjectionStateSchema,
+  NativeProjectOverviewStateSchema,
 } from "../../test-fixtures/native-subscription-fixtures.js";
 import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 import {
@@ -63,19 +63,19 @@ import {
   TaskListIdSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
-type NativeTaskCommand = Message<"TaskCommand"> & { id: string; name: string };
+type NativeAssignReviewTask = Message<"AssignReviewTask"> & { id: string; name: string };
 
-const NativeTaskCommandSchema = messageDesc(
+const NativeAssignReviewTaskSchema = messageDesc(
   FixtureSchemas.handlerRegistryCommandsFile,
   2,
-) as GenMessage<NativeTaskCommand>;
+) as GenMessage<NativeAssignReviewTask>;
 
-class NativeAggregate extends Aggregate<string, typeof NativeAggregateStateSchema, bigint> {
-  assign(command: NativeTaskCommand): TaskCreated {
+class NativeAggregate extends Aggregate<string, typeof NativeProjectStateSchema, bigint> {
+  assign(command: NativeAssignReviewTask): TaskCreated {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(NativeAggregateStateSchema, {
+        create(NativeProjectStateSchema, {
           id: command.id,
           name: `${command.name} aggregate`,
           archived: false,
@@ -90,13 +90,13 @@ class NativeAggregate extends Aggregate<string, typeof NativeAggregateStateSchem
   }
 }
 
-class NativeProjection extends Projection<string, typeof NativeProjectionStateSchema, number> {
+class NativeProjection extends Projection<string, typeof NativeProjectOverviewStateSchema, number> {
   project(event: TaskCreated): void {
     const id = event.id?.value ?? "";
     this.update((draft) =>
       Object.assign(
         draft,
-        create(NativeProjectionStateSchema, {
+        create(NativeProjectOverviewStateSchema, {
           id,
           name: `${event.title} projection`,
           priority: 2,
@@ -111,7 +111,7 @@ class NativeProcessManager extends ProcessManager<
   typeof NativeProcessManagerStateSchema,
   number
 > {
-  assign(command: NativeTaskCommand): void {
+  assign(command: NativeAssignReviewTask): void {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -142,12 +142,10 @@ describe("native service subscriptions", () => {
       .add(
         new Repository({
           entityType: NativeAggregate,
-          schema: NativeAggregateStateSchema,
-          handlers: EntityHandlers.define(
-            NativeAggregate,
-            NativeAggregateStateSchema,
-            (builder) => [builder.assign(NativeTaskCommandSchema, "assign")],
-          ),
+          schema: NativeProjectStateSchema,
+          handlers: EntityHandlers.define(NativeAggregate, NativeProjectStateSchema, (builder) => [
+            builder.assign(NativeAssignReviewTaskSchema, "assign"),
+          ]),
           events: [TaskCreatedSchema],
         }),
       )
@@ -157,7 +155,7 @@ describe("native service subscriptions", () => {
       const handlers = registeredSubscriptionHandlers(context);
       const iterator = handlers
         .activate(
-          await handlers.subscribe(createEntityTopic(NativeAggregateStateSchema, "aggregate")),
+          await handlers.subscribe(createEntityTopic(NativeProjectStateSchema, "aggregate")),
         )
         [Symbol.asyncIterator]();
       const next = nextSubscriptionUpdate(iterator);
@@ -166,7 +164,7 @@ describe("native service subscriptions", () => {
       await context.commandBus().post(createAggregateCommand("aggregate-1", "Aggregate"));
       await context.eventBus().post(createAggregateEvent("aggregate-flush", "Flush"));
 
-      await expectNativeState(next, NativeAggregateStateSchema, {
+      await expectNativeState(next, NativeProjectStateSchema, {
         id: "aggregate-1",
         name: "Aggregate aggregate",
         archived: false,
@@ -182,10 +180,10 @@ describe("native service subscriptions", () => {
       .add(
         new Repository({
           entityType: NativeProjection,
-          schema: NativeProjectionStateSchema,
+          schema: NativeProjectOverviewStateSchema,
           handlers: EntityHandlers.define(
             NativeProjection,
-            NativeProjectionStateSchema,
+            NativeProjectOverviewStateSchema,
             (builder) => [builder.subscribe(TaskCreatedSchema, "project")],
           ),
         }),
@@ -196,7 +194,9 @@ describe("native service subscriptions", () => {
       const handlers = registeredSubscriptionHandlers(context);
       const iterator = handlers
         .activate(
-          await handlers.subscribe(createEntityTopic(NativeProjectionStateSchema, "projection")),
+          await handlers.subscribe(
+            createEntityTopic(NativeProjectOverviewStateSchema, "projection"),
+          ),
         )
         [Symbol.asyncIterator]();
       const next = nextSubscriptionUpdate(iterator);
@@ -204,7 +204,7 @@ describe("native service subscriptions", () => {
 
       await context.eventBus().post(createProjectionTriggerEvent("projection-1", "Projection"));
 
-      await expectNativeState(next, NativeProjectionStateSchema, {
+      await expectNativeState(next, NativeProjectOverviewStateSchema, {
         id: "projection-1",
         name: "Projection projection",
         priority: 2,
@@ -281,7 +281,7 @@ function createProcessManagerContext(name: string): BoundedContext {
           NativeProcessManager,
           NativeProcessManagerStateSchema,
           (builder) => [
-            builder.assign(NativeTaskCommandSchema, "assign"),
+            builder.assign(NativeAssignReviewTaskSchema, "assign"),
             builder.react(TaskCreatedSchema, "react"),
           ],
         ),
@@ -306,8 +306,8 @@ function createAggregateCommand(id: string, name: string) {
     id: create(CommandIdSchema, { uuid: `command-${id}` }),
     context: create(CommandContextSchema, { actorContext: createActorContext() }),
     message: AnyMessages.pack(
-      NativeTaskCommandSchema,
-      create(NativeTaskCommandSchema, { id, name }),
+      NativeAssignReviewTaskSchema,
+      create(NativeAssignReviewTaskSchema, { id, name }),
     ),
   });
 }

@@ -37,8 +37,8 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { FixedClock, SignalMetadata } from "../../src/runtime/signal-metadata.js";
-import { TaskCommandSchema } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
-import { TaskEventSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
+import { AssignReviewTaskSchema } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import { ReviewTaskAssignedSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 describe("SignalMetadata", () => {
   it("creates fresh ids, timestamps, and actor/tenant command contexts", () => {
@@ -85,7 +85,7 @@ describe("SignalMetadata", () => {
     const grandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-        typeUrl: TypeUrls.derive(TaskCommandSchema),
+        typeUrl: TypeUrls.derive(AssignReviewTaskSchema),
       }),
       actorContext,
     });
@@ -96,8 +96,8 @@ describe("SignalMetadata", () => {
         origin: grandOrigin,
       }),
       message: AnyMessages.pack(
-        TaskCommandSchema,
-        create(TaskCommandSchema, { id: "task-1", name: "Task" }),
+        AssignReviewTaskSchema,
+        create(AssignReviewTaskSchema, { id: "task-1", name: "Task" }),
       ),
     });
 
@@ -123,7 +123,7 @@ describe("SignalMetadata", () => {
             CommandIdSchema,
             create(CommandIdSchema, { uuid: "source-command" }),
           ),
-          typeUrl: TypeUrls.derive(TaskCommandSchema),
+          typeUrl: TypeUrls.derive(AssignReviewTaskSchema),
         }),
         actorContext,
         grandOrigin,
@@ -139,8 +139,8 @@ describe("SignalMetadata", () => {
         },
       }),
       message: AnyMessages.pack(
-        TaskEventSchema,
-        create(TaskEventSchema, { id: "task-1", name: "Task" }),
+        ReviewTaskAssignedSchema,
+        create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
       ),
     });
 
@@ -152,7 +152,7 @@ describe("SignalMetadata", () => {
         origin: create(OriginSchema, {
           message: create(MessageIdSchema, {
             id: AnyMessages.pack(EventIdSchema, create(EventIdSchema, { value: "source-event" })),
-            typeUrl: TypeUrls.derive(TaskEventSchema),
+            typeUrl: TypeUrls.derive(ReviewTaskAssignedSchema),
           }),
           actorContext,
         }),
@@ -216,7 +216,7 @@ describe("SignalMetadata", () => {
     const origin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-origin" })),
-        typeUrl: TypeUrls.derive(TaskCommandSchema),
+        typeUrl: TypeUrls.derive(AssignReviewTaskSchema),
       }),
     });
 
@@ -258,8 +258,8 @@ describe("SignalMetadata", () => {
   it("rejects missing or empty event ids before deriving causality", () => {
     const metadata = new SignalMetadata();
     const eventMessage = AnyMessages.pack(
-      TaskEventSchema,
-      create(TaskEventSchema, { id: "task-1", name: "Task" }),
+      ReviewTaskAssignedSchema,
+      create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
     );
 
     expect(() =>
@@ -282,8 +282,8 @@ describe("SignalMetadata", () => {
   it("rejects missing or empty command ids before deriving event metadata", () => {
     const metadata = new SignalMetadata();
     const commandMessage = AnyMessages.pack(
-      TaskCommandSchema,
-      create(TaskCommandSchema, { id: "task-1", name: "Task" }),
+      AssignReviewTaskSchema,
+      create(AssignReviewTaskSchema, { id: "task-1", name: "Task" }),
     );
 
     expect(() =>
@@ -310,8 +310,8 @@ describe("SignalMetadata", () => {
     const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "   " }),
       message: AnyMessages.pack(
-        TaskEventSchema,
-        create(TaskEventSchema, { id: "task-1", name: "Task" }),
+        ReviewTaskAssignedSchema,
+        create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
       ),
     });
 
@@ -333,7 +333,7 @@ describe("SignalMetadata", () => {
     const grandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "grand-command" })),
-        typeUrl: TypeUrls.derive(TaskCommandSchema),
+        typeUrl: TypeUrls.derive(AssignReviewTaskSchema),
       }),
     });
     const event = create(EventSchema, {
@@ -345,8 +345,8 @@ describe("SignalMetadata", () => {
         },
       }),
       message: AnyMessages.pack(
-        TaskEventSchema,
-        create(TaskEventSchema, { id: "task-1", name: "Task" }),
+        ReviewTaskAssignedSchema,
+        create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
       ),
     });
 
@@ -354,7 +354,7 @@ describe("SignalMetadata", () => {
       create(OriginSchema, {
         message: create(MessageIdSchema, {
           id: AnyMessages.pack(EventIdSchema, create(EventIdSchema, { value: "past-event" })),
-          typeUrl: TypeUrls.derive(TaskEventSchema),
+          typeUrl: TypeUrls.derive(ReviewTaskAssignedSchema),
         }),
         grandOrigin,
       }),

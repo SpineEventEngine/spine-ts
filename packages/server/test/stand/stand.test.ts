@@ -93,13 +93,13 @@ vi.mock("../../src/bus/event-bus.js", async (importOriginal) => {
   };
 });
 
-type ProjectionState = Message<"ProjectionState"> & {
+type ProjectOverviewState = Message<"ProjectOverviewState"> & {
   id: string;
   name: string;
   priority: number;
 };
 
-type AggregateState = Message<"AggregateState"> & {
+type ProjectState = Message<"ProjectState"> & {
   id: string;
   name: string;
   archived: boolean;
@@ -108,14 +108,11 @@ type AggregateState = Message<"AggregateState"> & {
 type EmptyState = Message<"EmptyState">;
 
 const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectionStateSchema = messageDesc(
+const ProjectOverviewStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
-) as GenMessage<ProjectionState>;
-const AggregateStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  1,
-) as GenMessage<AggregateState>;
+) as GenMessage<ProjectOverviewState>;
+const ProjectStateSchema = messageDesc(fileEntityMetadataFixture, 1) as GenMessage<ProjectState>;
 const fileEntityEmptyFixture = FixtureSchemas.entityMetadataEmptyFile;
 const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
 
@@ -134,32 +131,37 @@ describe("Stand", () => {
     expect(() =>
       standAccess.observeState(invalid, {} as never, {} as never, {} as never, () => undefined),
     ).toThrow(/Stand instance/);
-    expect(() => standAccess.readCurrent(invalid, ProjectionStateSchema, "task", {})).toThrow(
+    expect(() => standAccess.readCurrent(invalid, ProjectOverviewStateSchema, "task", {})).toThrow(
       /Stand instance/,
     );
     expect(() =>
-      standAccess.deferUpdate(invalid, ProjectionStateSchema, createState("task", "First"), {}),
+      standAccess.deferUpdate(
+        invalid,
+        ProjectOverviewStateSchema,
+        createState("task", "First"),
+        {},
+      ),
     ).toThrow(/Stand instance/);
 
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
     expect(standAccess.observedState(stand, undefined)).toBeUndefined();
     await expect(
-      standAccess.readCurrent(stand, ProjectionStateSchema, "missing", {}),
+      standAccess.readCurrent(stand, ProjectOverviewStateSchema, "missing", {}),
     ).resolves.toBeUndefined();
     const deferred = await standAccess.deferUpdate(
       stand,
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
       createState("deferred", "Deferred"),
       {},
     );
     deferred.cancel();
     await stand.close();
     expect(() => {
-      stand.register(ProjectionStateSchema);
+      stand.register(ProjectOverviewStateSchema);
     }).toThrow(/closed/);
   });
 
@@ -176,13 +178,13 @@ describe("Stand", () => {
       topic: {
         id: { value: "updates" },
         target: {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
           criterion: { case: "includeAll", value: true },
         },
       },
     });
     if (subscription.id === undefined) throw new Error("Expected subscription ID.");
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
     await registry.create(subscription);
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
@@ -195,7 +197,7 @@ describe("Stand", () => {
     await runtime.reconcile();
     let delivered = 0;
     await runtime.consume("gated-delete", () => delivered++);
-    await postStateChange(bus, ProjectionStateSchema, createState("deleted", "Deleted"));
+    await postStateChange(bus, ProjectOverviewStateSchema, createState("deleted", "Deleted"));
     expect(delivered).toBe(0);
     await Promise.all([runtime.close(), stand.close(), bus.close()]);
   });
@@ -214,13 +216,13 @@ describe("Stand", () => {
       topic: {
         id: { value: "updates" },
         target: {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
           criterion: { case: "includeAll", value: true },
         },
       },
     });
     if (subscription.id === undefined) throw new Error("Expected subscription ID.");
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
     await registry.create(subscription);
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
@@ -231,7 +233,11 @@ describe("Stand", () => {
     expect(observedEventBusSubscriptions).toHaveLength(5);
     const observers = [...observedEventBusSubscriptions];
     expect(observers.every((observer) => !observer.closed)).toBe(true);
-    await postStateChange(bus, ProjectionStateSchema, createState("before-close", "Before close"));
+    await postStateChange(
+      bus,
+      ProjectOverviewStateSchema,
+      createState("before-close", "Before close"),
+    );
     expect(deliveries).toBe(1);
 
     registry.gateNextSnapshot();
@@ -242,7 +248,11 @@ describe("Stand", () => {
     await reconciliation;
     await closing;
     expect(observers.every((observer) => observer.closed)).toBe(true);
-    await postStateChange(bus, ProjectionStateSchema, createState("after-close", "After close"));
+    await postStateChange(
+      bus,
+      ProjectOverviewStateSchema,
+      createState("after-close", "After close"),
+    );
     expect(deliveries).toBe(1);
     await expect(bus.close()).resolves.toBeUndefined();
   });
@@ -261,13 +271,13 @@ describe("Stand", () => {
       topic: {
         id: { value: "updates" },
         target: {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
           criterion: { case: "includeAll", value: true },
         },
       },
     });
     if (subscription.id === undefined) throw new Error("Expected subscription ID.");
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
     await registry.create(subscription);
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
@@ -287,7 +297,7 @@ describe("Stand", () => {
     await runtime.consume(id, () => {
       peer++;
     });
-    await postStateChange(bus, ProjectionStateSchema, createState("fanout", "Fanout"));
+    await postStateChange(bus, ProjectOverviewStateSchema, createState("fanout", "Fanout"));
     expect(peer).toBe(1);
     expect(logger.withMetadata).toHaveBeenCalledWith({
       operation: "subscription.consumer",
@@ -300,7 +310,7 @@ describe("Stand", () => {
     expect(warn).toHaveBeenCalledTimes(2);
     await postStateChange(
       bus,
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
       createState("fanout-without-logger", "Fanout"),
     );
     await Promise.resolve();
@@ -321,12 +331,12 @@ describe("Stand", () => {
     const registry = new ClosingRegistry(() =>
       observedEventBusSubscriptions.every((observer) => observer.closed),
     );
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
     for (const id of ["detach-one", "detach-two"]) {
       const subscription = create(SubscriptionSchema, {
         id: create(SubscriptionIdSchema, { value: id }),
-        topic: { id: { value: id }, target: { type: TypeUrls.derive(ProjectionStateSchema) } },
+        topic: { id: { value: id }, target: { type: TypeUrls.derive(ProjectOverviewStateSchema) } },
       });
       if (subscription.id === undefined) throw new Error("Expected subscription ID.");
       await registry.create(subscription);
@@ -367,13 +377,13 @@ describe("Stand", () => {
       topic: {
         id: { value: "updates" },
         target: {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
           criterion: { case: "includeAll", value: true },
         },
       },
     });
     if (subscription.id === undefined) throw new Error("Expected subscription ID.");
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
     await registry.create(subscription);
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(eventBus, [EntityLog.EntityStateChangedSchema]);
@@ -392,7 +402,7 @@ describe("Stand", () => {
       delivered++;
     });
 
-    await postStateChange(eventBus, ProjectionStateSchema, createState("one", "Recovered"));
+    await postStateChange(eventBus, ProjectOverviewStateSchema, createState("one", "Recovered"));
 
     expect(failedConsumerDeliveries).toBe(0);
     expect(delivered).toBe(1);
@@ -406,14 +416,14 @@ describe("Stand", () => {
       storageFactory,
     });
     const eventBus = eventBusAccess.createSystemBus(undefined);
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
     const registry = new AttachmentIdentityRegistry();
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "s-1" }),
       topic: {
         id: { value: "updates" },
         target: {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
           criterion: { case: "includeAll", value: true },
         },
       },
@@ -427,17 +437,21 @@ describe("Stand", () => {
     runtime.start();
     await runtime.consume("s-1", () => observed.push(1));
 
-    await postStateChange(eventBus, ProjectionStateSchema, createState("one", "Before fence"));
+    await postStateChange(eventBus, ProjectOverviewStateSchema, createState("one", "Before fence"));
     expect(observed).toEqual([]);
 
     registry.allowExactAttachment = true;
     await runtime.reconcile();
-    await postStateChange(eventBus, ProjectionStateSchema, createState("two", "After fence"));
+    await postStateChange(eventBus, ProjectOverviewStateSchema, createState("two", "After fence"));
     expect(observed).toEqual([1]);
 
     await registry.delete(subscription.id);
     await runtime.reconcile();
-    await postStateChange(eventBus, ProjectionStateSchema, createState("three", "After sweep"));
+    await postStateChange(
+      eventBus,
+      ProjectOverviewStateSchema,
+      createState("three", "After sweep"),
+    );
     expect(observed).toEqual([1]);
     await Promise.all([runtime.close(), stand.close(), eventBus.close()]);
   });
@@ -456,13 +470,13 @@ describe("Stand", () => {
       topic: {
         id: { value: "first" },
         target: {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
           criterion: { case: "includeAll", value: true },
         },
       },
     });
     if (subscription.id === undefined) throw new Error("Expected subscription ID.");
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
     await registry.create(subscription);
     await registry.activate(subscription.id);
@@ -490,7 +504,7 @@ describe("Stand", () => {
       topic: {
         id: { value: "updates" },
         target: {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
           criterion: { case: "includeAll", value: true },
         },
       },
@@ -502,7 +516,7 @@ describe("Stand", () => {
 
     const stand = new Stand({ context, storageFactory });
     const bus = eventBusAccess.createSystemBus(undefined);
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
     const restarted = new StorageSubscriptionRegistry(context, storageFactory);
     const runtime = pairedRuntime(stand, storageFactory, restarted, bus, bus);
@@ -532,14 +546,14 @@ describe("Stand", () => {
     });
     const firstBus = eventBusAccess.createSystemBus(undefined);
     const secondBus = eventBusAccess.createSystemBus(undefined);
-    first.register(ProjectionStateSchema);
-    second.register(ProjectionStateSchema);
+    first.register(ProjectOverviewStateSchema);
+    second.register(ProjectOverviewStateSchema);
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "shared" }),
       topic: {
         id: { value: "updates" },
         target: {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
           criterion: { case: "includeAll", value: true },
         },
       },
@@ -557,8 +571,12 @@ describe("Stand", () => {
     await firstRuntime.consume("shared", () => observed.first++);
     await secondRuntime.consume("shared", () => observed.second++);
 
-    await postStateChange(firstBus, ProjectionStateSchema, createState("first", "First node"));
-    await postStateChange(secondBus, ProjectionStateSchema, createState("second", "Second node"));
+    await postStateChange(firstBus, ProjectOverviewStateSchema, createState("first", "First node"));
+    await postStateChange(
+      secondBus,
+      ProjectOverviewStateSchema,
+      createState("second", "Second node"),
+    );
 
     expect(observed).toEqual({ first: 1, second: 1 });
     await Promise.all([
@@ -588,14 +606,14 @@ describe("Stand", () => {
     const secondBus = new EventBus(
       new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
     );
-    eventBusAccess.registerSchemas(firstBus, [ProjectionStateSchema]);
-    eventBusAccess.registerSchemas(secondBus, [ProjectionStateSchema]);
+    eventBusAccess.registerSchemas(firstBus, [ProjectOverviewStateSchema]);
+    eventBusAccess.registerSchemas(secondBus, [ProjectOverviewStateSchema]);
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "shared-events" }),
       topic: {
         id: { value: "events" },
         target: {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
           criterion: { case: "includeAll", value: true },
         },
       },
@@ -632,14 +650,12 @@ describe("Stand", () => {
       storageFactory: new InMemoryStorageFactory(),
     });
 
-    stand.register(ProjectionStateSchema);
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
-    expect(stand.stateTypes()).toEqual([TypeUrls.derive(ProjectionStateSchema)]);
-    await expect(stand.read(AggregateStateSchema, "task-1")).rejects.toThrow(StandStateTypeError);
-    expect(() => stand.subscribe(AggregateStateSchema, () => undefined)).toThrow(
-      StandStateTypeError,
-    );
+    expect(stand.stateTypes()).toEqual([TypeUrls.derive(ProjectOverviewStateSchema)]);
+    await expect(stand.read(ProjectStateSchema, "task-1")).rejects.toThrow(StandStateTypeError);
+    expect(() => stand.subscribe(ProjectStateSchema, () => undefined)).toThrow(StandStateTypeError);
   });
 
   it("rejects registration when a schema has no inferred ID field", () => {
@@ -658,27 +674,27 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const updates: StandUpdate<typeof ProjectionStateSchema>[] = [];
-    stand.register(ProjectionStateSchema);
-    const subscription = stand.subscribe(ProjectionStateSchema, (update) => {
+    const updates: StandUpdate<typeof ProjectOverviewStateSchema>[] = [];
+    stand.register(ProjectOverviewStateSchema);
+    const subscription = stand.subscribe(ProjectOverviewStateSchema, (update) => {
       updates.push(update);
     });
-    const state = create(ProjectionStateSchema, {
+    const state = create(ProjectOverviewStateSchema, {
       id: "task-1",
       name: "First",
       priority: 1,
     });
 
     expectTypeOf(subscription).toEqualTypeOf<StandSubscription>();
-    await stand.update(ProjectionStateSchema, state, {
+    await stand.update(ProjectOverviewStateSchema, state, {
       version: create(VersionSchema, { number: 3 }),
     });
     state.name = "mutated outside";
 
-    const stored = await stand.read(ProjectionStateSchema, "task-1");
+    const stored = await stand.read(ProjectOverviewStateSchema, "task-1");
 
     expect(stored).toEqual(
-      create(ProjectionStateSchema, {
+      create(ProjectOverviewStateSchema, {
         id: "task-1",
         name: "First",
         priority: 1,
@@ -687,7 +703,7 @@ describe("Stand", () => {
     expect(stored).not.toBe(state);
     expect(updates).toHaveLength(1);
     expect(updates[0]?.id).toBe("task-1");
-    expect(updates[0]?.typeUrl).toBe(TypeUrls.derive(ProjectionStateSchema));
+    expect(updates[0]?.typeUrl).toBe(TypeUrls.derive(ProjectOverviewStateSchema));
     expect(updates[0]?.version).toEqual(create(VersionSchema, { number: 3 }));
     expect(updates[0]?.state).toEqual(stored);
     expect(updates[0]?.state).not.toBe(stored);
@@ -698,15 +714,15 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const updates: StandUpdate<typeof ProjectionStateSchema>[] = [];
-    stand.register(ProjectionStateSchema);
-    stand.subscribe(ProjectionStateSchema, (update) => {
+    const updates: StandUpdate<typeof ProjectOverviewStateSchema>[] = [];
+    stand.register(ProjectOverviewStateSchema);
+    stand.subscribe(ProjectOverviewStateSchema, (update) => {
       updates.push(update);
     });
 
-    await stand.update(ProjectionStateSchema, createState("task-1", "First"));
-    await stand.update(ProjectionStateSchema, createState("task-1", "Second"));
-    const current = await stand.read(ProjectionStateSchema, "task-1");
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Second"));
+    const current = await stand.read(ProjectOverviewStateSchema, "task-1");
 
     expect(updates).toHaveLength(2);
     expect(updates[0]?.previousState).toBeUndefined();
@@ -719,7 +735,7 @@ describe("Stand", () => {
     second.previousState.name = "Mutated previous";
     second.state.name = "Mutated current";
 
-    await expect(stand.read(ProjectionStateSchema, "task-1")).resolves.toEqual(
+    await expect(stand.read(ProjectOverviewStateSchema, "task-1")).resolves.toEqual(
       createState("task-1", "Second"),
     );
   });
@@ -730,20 +746,20 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: true },
       storageFactory,
     });
-    stand.register(ProjectionStateSchema);
-    stand.subscribe(ProjectionStateSchema, () => undefined, { tenantId: tenant("tenant-b") });
+    stand.register(ProjectOverviewStateSchema);
+    stand.subscribe(ProjectOverviewStateSchema, () => undefined, { tenantId: tenant("tenant-b") });
 
-    await stand.update(ProjectionStateSchema, createState("task-1", "Tenant A first"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Tenant A first"), {
       tenantId: tenant("tenant-a"),
     });
-    await stand.update(ProjectionStateSchema, createState("task-1", "Tenant A second"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Tenant A second"), {
       tenantId: tenant("tenant-a"),
     });
 
     expect(storageFactory.readCount).toBe(0);
 
-    stand.subscribe(ProjectionStateSchema, () => undefined, { tenantId: tenant("tenant-a") });
-    await stand.update(ProjectionStateSchema, createState("task-1", "Tenant A third"), {
+    stand.subscribe(ProjectOverviewStateSchema, () => undefined, { tenantId: tenant("tenant-a") });
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Tenant A third"), {
       tenantId: tenant("tenant-a"),
     });
 
@@ -755,9 +771,9 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
-    await expect(stand.read(ProjectionStateSchema, "missing-task")).resolves.toBeUndefined();
+    await expect(stand.read(ProjectOverviewStateSchema, "missing-task")).resolves.toBeUndefined();
   });
 
   it("reads all stored entity states with their versions in storage order", async () => {
@@ -765,16 +781,16 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
-    await stand.update(ProjectionStateSchema, createState("task-2", "Second"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-2", "Second"), {
       version: create(VersionSchema, { number: 2 }),
     });
-    await stand.update(ProjectionStateSchema, createState("task-1", "First"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 1 }),
     });
 
-    const results = await stand.readAllVersioned(ProjectionStateSchema);
+    const results = await stand.readAllVersioned(ProjectOverviewStateSchema);
 
     expect(results).toEqual([
       {
@@ -793,19 +809,19 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
-    await stand.update(ProjectionStateSchema, createState("task-1", "Beta"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Beta"), {
       version: create(VersionSchema, { number: 1 }),
     });
-    await stand.update(ProjectionStateSchema, createState("task-2", "Alpha"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-2", "Alpha"), {
       version: create(VersionSchema, { number: 2 }),
     });
-    await stand.update(ProjectionStateSchema, createState("task-3", "Ignored"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-3", "Ignored"), {
       version: create(VersionSchema, { number: 3 }),
     });
 
-    const results = await stand.queryVersioned(ProjectionStateSchema, {
+    const results = await stand.queryVersioned(ProjectOverviewStateSchema, {
       filters: [{ column: "priority", value: 1 }],
       sort: [{ field: "name", direction: "asc" }],
       limit: 2,
@@ -814,11 +830,11 @@ describe("Stand", () => {
 
     expect(results).toEqual([
       {
-        state: create(ProjectionStateSchema, { name: "Alpha" }),
+        state: create(ProjectOverviewStateSchema, { name: "Alpha" }),
         version: create(VersionSchema, { number: 2 }),
       },
       {
-        state: create(ProjectionStateSchema, { name: "Beta" }),
+        state: create(ProjectOverviewStateSchema, { name: "Beta" }),
         version: create(VersionSchema, { number: 1 }),
       },
     ]);
@@ -829,16 +845,16 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    stand.register(ProjectionStateSchema);
-    await stand.update(ProjectionStateSchema, createState("task-old", "Old"), {
+    stand.register(ProjectOverviewStateSchema);
+    await stand.update(ProjectOverviewStateSchema, createState("task-old", "Old"), {
       version: create(VersionSchema, { number: 1 }),
       lifecycle: { archived: false, deleted: false },
     });
-    await stand.update(ProjectionStateSchema, createState("task-archived", "Archived"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-archived", "Archived"), {
       version: create(VersionSchema, { number: 3 }),
       lifecycle: { archived: true, deleted: false },
     });
-    await stand.update(ProjectionStateSchema, createState("task-active", "Active"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-active", "Active"), {
       version: create(VersionSchema, { number: 2 }),
       lifecycle: { archived: false, deleted: false },
     });
@@ -859,7 +875,7 @@ describe("Stand", () => {
       order: [{ column: "version", direction: "desc" }],
     };
 
-    await expect(stand.queryPlanVersioned(ProjectionStateSchema, plan)).resolves.toEqual([
+    await expect(stand.queryPlanVersioned(ProjectOverviewStateSchema, plan)).resolves.toEqual([
       {
         state: createState("task-archived", "Archived"),
         version: create(VersionSchema, { number: 3 }),
@@ -877,8 +893,8 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    stand.register(ProjectionStateSchema);
-    await stand.update(ProjectionStateSchema, createState("task-stale", "Indexed old"), {
+    stand.register(ProjectOverviewStateSchema);
+    await stand.update(ProjectOverviewStateSchema, createState("task-stale", "Indexed old"), {
       version: create(VersionSchema, { number: 1 }),
     });
     await writeStandCurrent(storageFactory, createState("task-stale", "Current new"), 9n, {
@@ -886,7 +902,7 @@ describe("Stand", () => {
       deleted: false,
     });
 
-    await expect(stand.readAllVersioned(ProjectionStateSchema)).resolves.toEqual([
+    await expect(stand.readAllVersioned(ProjectOverviewStateSchema)).resolves.toEqual([
       {
         state: createState("task-stale", "Current new"),
         version: create(VersionSchema, { number: 9 }),
@@ -899,19 +915,19 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
-    await stand.update(ProjectionStateSchema, createState("task-1", "First"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 1 }),
     });
-    await stand.update(ProjectionStateSchema, createState("task-2", "Second"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-2", "Second"), {
       version: create(VersionSchema, { number: 2 }),
     });
 
-    await expect(stand.clear(ProjectionStateSchema)).resolves.toBe(2);
-    await expect(stand.read(ProjectionStateSchema, "task-1")).resolves.toBeUndefined();
-    await expect(stand.read(ProjectionStateSchema, "task-2")).resolves.toBeUndefined();
-    await expect(stand.readAllVersioned(ProjectionStateSchema)).resolves.toEqual([]);
+    await expect(stand.clear(ProjectOverviewStateSchema)).resolves.toBe(2);
+    await expect(stand.read(ProjectOverviewStateSchema, "task-1")).resolves.toBeUndefined();
+    await expect(stand.read(ProjectOverviewStateSchema, "task-2")).resolves.toBeUndefined();
+    await expect(stand.readAllVersioned(ProjectOverviewStateSchema)).resolves.toEqual([]);
   });
 
   it("returns copy-safe list read results for state and version", async () => {
@@ -919,13 +935,13 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
-    await stand.update(ProjectionStateSchema, createState("task-1", "First"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 7 }),
     });
 
-    const results = await stand.readAllVersioned(ProjectionStateSchema);
+    const results = await stand.readAllVersioned(ProjectOverviewStateSchema);
     const first = results[0];
     if (first !== undefined) {
       first.state.name = "Mutated";
@@ -934,7 +950,7 @@ describe("Stand", () => {
       }
     }
 
-    const reread = await stand.readAllVersioned(ProjectionStateSchema);
+    const reread = await stand.readAllVersioned(ProjectOverviewStateSchema);
 
     expect(reread).toEqual([
       {
@@ -949,14 +965,14 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
-    await stand.update(ProjectionStateSchema, createState("task-1", "First"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 7 }),
     });
-    await stand.update(ProjectionStateSchema, createState("task-1", "Second"));
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Second"));
 
-    await expect(stand.readVersioned(ProjectionStateSchema, "task-1")).resolves.toEqual({
+    await expect(stand.readVersioned(ProjectOverviewStateSchema, "task-1")).resolves.toEqual({
       state: createState("task-1", "Second"),
     });
   });
@@ -967,13 +983,15 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
     await writeStandCurrent(storageFactory, createState("task-zero-version", "Current"), 0n, {
       archived: false,
       deleted: false,
     });
 
-    await expect(stand.readVersioned(ProjectionStateSchema, "task-zero-version")).resolves.toEqual({
+    await expect(
+      stand.readVersioned(ProjectOverviewStateSchema, "task-zero-version"),
+    ).resolves.toEqual({
       state: createState("task-zero-version", "Current"),
     });
   });
@@ -984,17 +1002,17 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
     await writeStandCurrent(storageFactory, createState("task-deleted-current", "Deleted"), 4n, {
       archived: false,
       deleted: true,
     });
 
     await expect(
-      stand.read(ProjectionStateSchema, "task-deleted-current"),
+      stand.read(ProjectOverviewStateSchema, "task-deleted-current"),
     ).resolves.toBeUndefined();
     await expect(
-      stand.readVersioned(ProjectionStateSchema, "task-deleted-current"),
+      stand.readVersioned(ProjectOverviewStateSchema, "task-deleted-current"),
     ).resolves.toBeUndefined();
   });
 
@@ -1003,12 +1021,12 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
     await expect(
-      stand.update(ProjectionStateSchema, createState("task-1", "First")),
+      stand.update(ProjectOverviewStateSchema, createState("task-1", "First")),
     ).resolves.toBeUndefined();
-    await expect(stand.read(ProjectionStateSchema, "task-1")).resolves.toMatchObject({
+    await expect(stand.read(ProjectOverviewStateSchema, "task-1")).resolves.toMatchObject({
       id: "task-1",
     });
   });
@@ -1019,15 +1037,15 @@ describe("Stand", () => {
       storageFactory: new InMemoryStorageFactory(),
     });
     let deliveries = 0;
-    stand.register(ProjectionStateSchema);
-    const subscription = stand.subscribe(ProjectionStateSchema, () => {
+    stand.register(ProjectOverviewStateSchema);
+    const subscription = stand.subscribe(ProjectOverviewStateSchema, () => {
       deliveries += 1;
     });
 
-    await stand.update(ProjectionStateSchema, createState("task-1", "First"));
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
     subscription.unsubscribe();
     subscription.unsubscribe();
-    await stand.update(ProjectionStateSchema, createState("task-1", "Second"));
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Second"));
 
     expect(subscription.closed).toBe(true);
     expect(deliveries).toBe(1);
@@ -1045,16 +1063,16 @@ describe("Stand", () => {
     });
     let firstDeliveries = 0;
     let secondDeliveries = 0;
-    firstStand.register(ProjectionStateSchema);
-    secondStand.register(ProjectionStateSchema);
-    firstStand.subscribe(ProjectionStateSchema, () => {
+    firstStand.register(ProjectOverviewStateSchema);
+    secondStand.register(ProjectOverviewStateSchema);
+    firstStand.subscribe(ProjectOverviewStateSchema, () => {
       firstDeliveries += 1;
     });
-    secondStand.subscribe(ProjectionStateSchema, () => {
+    secondStand.subscribe(ProjectOverviewStateSchema, () => {
       secondDeliveries += 1;
     });
 
-    await firstStand.update(ProjectionStateSchema, createState("task-1", "First"));
+    await firstStand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
 
     expect(firstDeliveries).toBe(1);
     expect(secondDeliveries).toBe(0);
@@ -1066,8 +1084,8 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    first.register(ProjectionStateSchema);
-    await first.update(ProjectionStateSchema, createState("task-versioned", "Persisted"), {
+    first.register(ProjectOverviewStateSchema);
+    await first.update(ProjectOverviewStateSchema, createState("task-versioned", "Persisted"), {
       version: create(VersionSchema, {
         number: 9,
         timestamp: create(TimestampSchema, { seconds: 42n, nanos: 7 }),
@@ -1079,17 +1097,17 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    restarted.register(ProjectionStateSchema);
+    restarted.register(ProjectOverviewStateSchema);
 
-    await expect(restarted.readVersioned(ProjectionStateSchema, "task-versioned")).resolves.toEqual(
-      {
-        state: createState("task-versioned", "Persisted"),
-        version: create(VersionSchema, {
-          number: 9,
-          timestamp: create(TimestampSchema, { seconds: 42n, nanos: 7 }),
-        }),
-      },
-    );
+    await expect(
+      restarted.readVersioned(ProjectOverviewStateSchema, "task-versioned"),
+    ).resolves.toEqual({
+      state: createState("task-versioned", "Persisted"),
+      version: create(VersionSchema, {
+        number: 9,
+        timestamp: create(TimestampSchema, { seconds: 42n, nanos: 7 }),
+      }),
+    });
   });
 
   it("keeps a cleared record unavailable after a later Stand instance opens", async () => {
@@ -1098,21 +1116,21 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    first.register(ProjectionStateSchema);
-    await first.update(ProjectionStateSchema, createState("task-cleared", "Before clear"), {
+    first.register(ProjectOverviewStateSchema);
+    await first.update(ProjectOverviewStateSchema, createState("task-cleared", "Before clear"), {
       version: create(VersionSchema, { number: 4 }),
     });
-    await first.clear(ProjectionStateSchema);
+    await first.clear(ProjectOverviewStateSchema);
     await first.close();
 
     const restarted = new Stand({
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    restarted.register(ProjectionStateSchema);
+    restarted.register(ProjectOverviewStateSchema);
 
     await expect(
-      restarted.readVersioned(ProjectionStateSchema, "task-cleared"),
+      restarted.readVersioned(ProjectOverviewStateSchema, "task-cleared"),
     ).resolves.toBeUndefined();
   });
 
@@ -1124,28 +1142,28 @@ describe("Stand", () => {
     const deliveries: string[] = [];
     const subscriptions: StandSubscription[] = [];
     let lateSubscribed = false;
-    stand.register(ProjectionStateSchema);
-    stand.subscribe(ProjectionStateSchema, () => {
+    stand.register(ProjectOverviewStateSchema);
+    stand.subscribe(ProjectOverviewStateSchema, () => {
       deliveries.push("first");
       subscriptions[0]?.unsubscribe();
       if (!lateSubscribed) {
         lateSubscribed = true;
-        stand.subscribe(ProjectionStateSchema, () => {
+        stand.subscribe(ProjectOverviewStateSchema, () => {
           deliveries.push("late");
         });
       }
     });
     subscriptions.push(
-      stand.subscribe(ProjectionStateSchema, () => {
+      stand.subscribe(ProjectOverviewStateSchema, () => {
         deliveries.push("second");
       }),
     );
 
-    await stand.update(ProjectionStateSchema, createState("task-1", "First"));
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
     expect(deliveries).toEqual(["first", "second"]);
 
     deliveries.length = 0;
-    await stand.update(ProjectionStateSchema, createState("task-1", "Second"));
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Second"));
     expect(deliveries).toEqual(["first", "late"]);
   });
 
@@ -1155,10 +1173,10 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
-    await stand.update(ProjectionStateSchema, createState("task-1", "First"));
-    await stand.read(ProjectionStateSchema, "task-1");
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
+    await stand.read(ProjectOverviewStateSchema, "task-1");
 
     expect(storageFactory.storages).toHaveLength(0);
   });
@@ -1169,11 +1187,11 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
-    await stand.update(ProjectionStateSchema, createState("task-1", "First"));
-    await stand.readVersioned(ProjectionStateSchema, "task-1");
-    await stand.readAllVersioned(ProjectionStateSchema);
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
+    await stand.readVersioned(ProjectOverviewStateSchema, "task-1");
+    await stand.readAllVersioned(ProjectOverviewStateSchema);
 
     expect(storageFactory.openedEntityHandles).toBe(1);
     expect(storageFactory.closedEntityHandles).toBe(0);
@@ -1187,10 +1205,10 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: true },
       storageFactory,
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
     for (let index = 0; index < 128; index++) {
-      await stand.read(ProjectionStateSchema, "missing", {
+      await stand.read(ProjectOverviewStateSchema, "missing", {
         tenantId: tenant(`tenant-${String(index)}`),
       });
     }
@@ -1207,12 +1225,12 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: true },
       storageFactory,
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
-    await stand.update(ProjectionStateSchema, createState("first", "First"), {
+    await stand.update(ProjectOverviewStateSchema, createState("first", "First"), {
       tenantId: tenant("one"),
     });
-    await stand.update(ProjectionStateSchema, createState("second", "Second"), {
+    await stand.update(ProjectOverviewStateSchema, createState("second", "Second"), {
       tenantId: tenant("two"),
     });
 
@@ -1226,10 +1244,10 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: true },
       storageFactory,
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
     for (let index = 0; index < 128; index++) {
-      await stand.read(ProjectionStateSchema, "missing", {
+      await stand.read(ProjectOverviewStateSchema, "missing", {
         tenantId: tenant(`tenant-${String(index)}`),
       });
     }
@@ -1252,10 +1270,10 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
-    await stand.update(ProjectionStateSchema, createState("task-1", "First"));
-    await stand.readAllVersioned(ProjectionStateSchema);
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
+    await stand.readAllVersioned(ProjectOverviewStateSchema);
 
     expect(storageFactory.storages).toHaveLength(0);
   });
@@ -1266,9 +1284,9 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
-    await expect(stand.readAllVersioned(ProjectionStateSchema)).resolves.toEqual([]);
+    await expect(stand.readAllVersioned(ProjectOverviewStateSchema)).resolves.toEqual([]);
     expect(storageFactory.storages).toHaveLength(0);
   });
 
@@ -1279,16 +1297,16 @@ describe("Stand", () => {
     });
     const tenantAUpdates: string[] = [];
     const tenantBUpdates: string[] = [];
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
     stand.subscribe(
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
       (update) => {
         tenantAUpdates.push(update.state.name);
       },
       { tenantId: tenant("tenant-a") },
     );
     stand.subscribe(
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
       (update) => {
         tenantBUpdates.push(update.state.name);
       },
@@ -1296,20 +1314,20 @@ describe("Stand", () => {
     );
 
     await expect(
-      stand.update(ProjectionStateSchema, createState("task-1", "No Tenant")),
+      stand.update(ProjectOverviewStateSchema, createState("task-1", "No Tenant")),
     ).rejects.toThrow(/tenantId/);
-    await stand.update(ProjectionStateSchema, createState("task-1", "Tenant A"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Tenant A"), {
       tenantId: tenant("tenant-a"),
     });
-    await stand.update(ProjectionStateSchema, createState("task-1", "Tenant B"), {
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Tenant B"), {
       tenantId: tenant("tenant-b"),
     });
 
     await expect(
-      stand.read(ProjectionStateSchema, "task-1", { tenantId: tenant("tenant-a") }),
+      stand.read(ProjectOverviewStateSchema, "task-1", { tenantId: tenant("tenant-a") }),
     ).resolves.toMatchObject({ name: "Tenant A" });
     await expect(
-      stand.read(ProjectionStateSchema, "task-1", { tenantId: tenant("tenant-b") }),
+      stand.read(ProjectOverviewStateSchema, "task-1", { tenantId: tenant("tenant-b") }),
     ).resolves.toMatchObject({ name: "Tenant B" });
     expect(tenantAUpdates).toEqual(["Tenant A"]);
     expect(tenantBUpdates).toEqual(["Tenant B"]);
@@ -1320,18 +1338,20 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    stand.register(ProjectionStateSchema);
+    stand.register(ProjectOverviewStateSchema);
 
     await expect(
-      stand.update(ProjectionStateSchema, createState("task-1", "Tenant"), {
+      stand.update(ProjectOverviewStateSchema, createState("task-1", "Tenant"), {
         tenantId: tenant("tenant-a"),
       }),
     ).rejects.toThrow(/single-tenant/i);
     await expect(
-      stand.read(ProjectionStateSchema, "task-1", { tenantId: tenant("tenant-a") }),
+      stand.read(ProjectOverviewStateSchema, "task-1", { tenantId: tenant("tenant-a") }),
     ).rejects.toThrow(/single-tenant/i);
     expect(() =>
-      stand.subscribe(ProjectionStateSchema, () => undefined, { tenantId: tenant("tenant-a") }),
+      stand.subscribe(ProjectOverviewStateSchema, () => undefined, {
+        tenantId: tenant("tenant-a"),
+      }),
     ).toThrow(/single-tenant/i);
   });
 
@@ -1340,23 +1360,23 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    let firstUpdate: StandUpdate<typeof ProjectionStateSchema> | undefined;
-    let secondUpdate: StandUpdate<typeof ProjectionStateSchema> | undefined;
-    stand.register(ProjectionStateSchema);
-    stand.subscribe(ProjectionStateSchema, (update) => {
+    let firstUpdate: StandUpdate<typeof ProjectOverviewStateSchema> | undefined;
+    let secondUpdate: StandUpdate<typeof ProjectOverviewStateSchema> | undefined;
+    stand.register(ProjectOverviewStateSchema);
+    stand.subscribe(ProjectOverviewStateSchema, (update) => {
       firstUpdate = update;
       update.state.name = "changed by first subscriber";
     });
-    stand.subscribe(ProjectionStateSchema, (update) => {
+    stand.subscribe(ProjectOverviewStateSchema, (update) => {
       secondUpdate = update;
     });
 
-    await stand.update(ProjectionStateSchema, createState("task-1", "First"));
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
 
     expect(firstUpdate?.state.name).toBe("changed by first subscriber");
     expect(secondUpdate?.state.name).toBe("First");
     expect(secondUpdate?.state).not.toBe(firstUpdate?.state);
-    await expect(stand.read(ProjectionStateSchema, "task-1")).resolves.toMatchObject({
+    await expect(stand.read(ProjectOverviewStateSchema, "task-1")).resolves.toMatchObject({
       name: "First",
     });
   });
@@ -1367,19 +1387,19 @@ describe("Stand", () => {
       storageFactory: new InMemoryStorageFactory(),
     });
     let delivered = 0;
-    stand.register(ProjectionStateSchema);
-    stand.subscribe(ProjectionStateSchema, () => {
+    stand.register(ProjectOverviewStateSchema);
+    stand.subscribe(ProjectOverviewStateSchema, () => {
       throw new Error("first subscriber failed");
     });
-    stand.subscribe(ProjectionStateSchema, () => {
+    stand.subscribe(ProjectOverviewStateSchema, () => {
       delivered += 1;
     });
 
     await expect(
-      stand.update(ProjectionStateSchema, createState("task-1", "First")),
+      stand.update(ProjectOverviewStateSchema, createState("task-1", "First")),
     ).rejects.toThrow("first subscriber failed");
     expect(delivered).toBe(1);
-    await expect(stand.read(ProjectionStateSchema, "task-1")).resolves.toMatchObject({
+    await expect(stand.read(ProjectOverviewStateSchema, "task-1")).resolves.toMatchObject({
       name: "First",
     });
   });
@@ -1389,16 +1409,16 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    stand.register(ProjectionStateSchema);
-    stand.subscribe(ProjectionStateSchema, () => {
+    stand.register(ProjectOverviewStateSchema);
+    stand.subscribe(ProjectOverviewStateSchema, () => {
       throw new Error("first subscriber failed");
     });
-    stand.subscribe(ProjectionStateSchema, () => {
+    stand.subscribe(ProjectOverviewStateSchema, () => {
       throw new Error("second subscriber failed");
     });
 
     await expect(
-      stand.update(ProjectionStateSchema, createState("task-1", "First")),
+      stand.update(ProjectOverviewStateSchema, createState("task-1", "First")),
     ).rejects.toThrow(AggregateError);
   });
 
@@ -1409,13 +1429,13 @@ describe("Stand", () => {
     });
     const version = create(VersionSchema, { number: 7 });
     const expectedVersion = clone(VersionSchema, version);
-    let observed: StandUpdate<typeof ProjectionStateSchema> | undefined;
-    stand.register(ProjectionStateSchema);
-    stand.subscribe(ProjectionStateSchema, (update) => {
+    let observed: StandUpdate<typeof ProjectOverviewStateSchema> | undefined;
+    stand.register(ProjectOverviewStateSchema);
+    stand.subscribe(ProjectOverviewStateSchema, (update) => {
       observed = update;
     });
 
-    await stand.update(ProjectionStateSchema, createState("task-1", "First"), { version });
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"), { version });
     version.number = 99;
 
     expect(observed?.version).toEqual(expectedVersion);
@@ -1442,8 +1462,8 @@ function pairedRuntime(
   );
 }
 
-function createState(id: string, name: string): ProjectionState {
-  return create(ProjectionStateSchema, {
+function createState(id: string, name: string): ProjectOverviewState {
+  return create(ProjectOverviewStateSchema, {
     id,
     name,
     priority: 1,
@@ -1453,7 +1473,7 @@ function createState(id: string, name: string): ProjectionState {
 function createSubscriptionEvent(id: string) {
   return create(EventSchema, {
     id: { value: id },
-    message: AnyMessages.pack(ProjectionStateSchema, createState(id, "Event payload"), {
+    message: AnyMessages.pack(ProjectOverviewStateSchema, createState(id, "Event payload"), {
       validate: false,
     }),
   });
@@ -1495,14 +1515,14 @@ async function postStateChange(
 
 async function writeStandCurrent(
   factory: InMemoryStorageFactory,
-  state: ProjectionState,
+  state: ProjectOverviewState,
   version: bigint,
   lifecycle: { readonly archived: boolean; readonly deleted: boolean },
 ): Promise<void> {
   const input = standEntityStorageDescriptor(
     { name: "Tasks", multitenant: false },
-    ProjectionStateSchema,
-    ProjectionStateSchema.fields.map(
+    ProjectOverviewStateSchema,
+    ProjectOverviewStateSchema.fields.map(
       (field) =>
         new RecordColumn(
           field.localName,
@@ -1520,7 +1540,7 @@ async function writeStandCurrent(
 
   try {
     await storage.current.write(
-      EntityRecords.pack(ProjectionStateSchema, state.id, state, version, lifecycle),
+      EntityRecords.pack(ProjectOverviewStateSchema, state.id, state, version, lifecycle),
     );
   } finally {
     storage.close();
