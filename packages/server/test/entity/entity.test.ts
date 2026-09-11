@@ -12,11 +12,10 @@
  * the License.
  */
 
-import { create, type Message } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 import * as serverRoot from "../../src/index.js";
 import {
@@ -35,12 +34,6 @@ import { entityHistoryAccess } from "../../src/entity/entity.js";
 
 // @ts-expect-error EntityStorageInput is an internal repository/runtime seam, not a root storage export.
 import type { EntityStorageInput } from "@spine-event-engine/storage";
-
-type ProjectOverviewState = Message<"ProjectOverviewState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
 
 interface RevisionMetadata {
   readonly revision: number;
@@ -87,7 +80,10 @@ function verifyHistoryDeclarationAbsence(projection: TestProjection): void {
   void (null as unknown as EntityStorageInput);
 }
 
-import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import {
+  type ProjectOverviewState,
+  ProjectOverviewStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
 function createProjectOverviewState(
   overrides: Partial<ProjectOverviewState> = {},

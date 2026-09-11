@@ -13,12 +13,9 @@
  */
 
 import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { CommandSchema } from "@spine-event-engine/proto";
-import * as FixtureSchemas from "../test-fixtures/schemas.js";
 
 import * as serverRoot from "../src/index.js";
 import {
@@ -96,12 +93,29 @@ import {
   SingleProcessServerRuntime,
   SystemClock,
 } from "../src/index.js";
-
-type ProjectOverviewState = Message<"ProjectOverviewState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
+import {
+  type CreateProject,
+  CreateProjectSchema,
+} from "../test-fixtures/generated/entity-metadata/project_commands_pb.js";
+import { EmptyStateSchema } from "../test-fixtures/generated/entity-metadata/empty_pb.js";
+import { InvalidColumnStateSchema } from "../test-fixtures/generated/entity-metadata/invalid-column_pb.js";
+import { InvalidTagStateSchema } from "../test-fixtures/generated/entity-metadata/invalid-tag_pb.js";
+import {
+  type ProjectCreated,
+  ProjectCreatedSchema,
+} from "../test-fixtures/generated/entity-metadata/project_events_pb.js";
+import {
+  file_entity_metadata_project_states,
+  ProjectOverviewStateSchema,
+  ProjectSearchStateSchema,
+  ProjectStateSchema,
+} from "../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import { UnknownKindStateSchema } from "../test-fixtures/generated/entity-metadata/unknown-kind_pb.js";
+import {
+  FullVisibilityStateSchema,
+  HiddenStateSchema,
+  ProcessManagerStateSchema,
+} from "../test-fixtures/generated/entity-metadata/visibility_pb.js";
 
 interface ExportedRevisionMetadata {
   readonly revision: number;
@@ -113,36 +127,6 @@ interface ExportedSizedMetadata {
   readonly revision: number;
   readonly size: number;
 }
-
-type ProjectState = Message<"ProjectState"> & {
-  id: string;
-  name: string;
-  archived: boolean;
-};
-
-type ProjectSearchState = Message<"ProjectSearchState"> & {
-  id: string;
-  searchable: boolean;
-};
-
-type EmptyState = Message<"EmptyState">;
-type UnknownKindState = Message<"UnknownKindState"> & { id: string };
-type InvalidColumnState = Message<"InvalidColumnState"> & {
-  id: string;
-  tags: string[];
-};
-type InvalidTagState = Message<"InvalidTagState"> & { id: string };
-type ProcessManagerState = Message<"ProcessManagerState"> & { id: string; queue: string };
-type FullVisibilityState = Message<"FullVisibilityState"> & { id: string };
-type HiddenState = Message<"HiddenState"> & { id: string };
-
-// Descriptor fixtures are generated from checked-in test-only .proto sources.
-const {
-  file_entity_metadata_project_states,
-  ProjectOverviewStateSchema,
-  ProjectSearchStateSchema,
-  ProjectStateSchema,
-} = await import("../test-fixtures/generated/entity-metadata/project_states_pb.js");
 
 it("exports nominal standalone handler base classes", () => {
   class Assignee extends AbstractAssignee {}
@@ -156,46 +140,14 @@ it("exports nominal standalone handler base classes", () => {
 });
 
 class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
-  assignCommand(command: Message<"spine.core.Command">): void {
+  assignCommand(command: CreateProject): void {
     void command;
   }
 
-  onAggregateChanged(event: ProjectState): void {
+  onAggregateChanged(event: ProjectCreated): void {
     void event;
   }
 }
-
-const fileEntityEmptyFixture = FixtureSchemas.entityMetadataEmptyFile;
-const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
-
-const fileEntityUnknownKindFixture = FixtureSchemas.entityMetadataUnknownKindFile;
-const UnknownKindStateSchema = messageDesc(
-  fileEntityUnknownKindFixture,
-  0,
-) as GenMessage<UnknownKindState>;
-
-const fileEntityInvalidColumnFixture = FixtureSchemas.entityMetadataInvalidColumnFile;
-const InvalidColumnStateSchema = messageDesc(
-  fileEntityInvalidColumnFixture,
-  0,
-) as GenMessage<InvalidColumnState>;
-
-const fileEntityInvalidTagFixture = FixtureSchemas.entityMetadataInvalidTagFile;
-const InvalidTagStateSchema = messageDesc(
-  fileEntityInvalidTagFixture,
-  0,
-) as GenMessage<InvalidTagState>;
-
-const fileEntityVisibilityFixture = FixtureSchemas.entityMetadataVisibilityFile;
-const ProcessManagerStateSchema = messageDesc(
-  fileEntityVisibilityFixture,
-  0,
-) as GenMessage<ProcessManagerState>;
-const FullVisibilityStateSchema = messageDesc(
-  fileEntityVisibilityFixture,
-  1,
-) as GenMessage<FullVisibilityState>;
-const HiddenStateSchema = messageDesc(fileEntityVisibilityFixture, 2) as GenMessage<HiddenState>;
 
 describe("@spine-event-engine/server", () => {
   it("exports the descriptor-derived entity and handler metadata surface", () => {
@@ -489,8 +441,8 @@ describe("@spine-event-engine/server", () => {
       PublicRuntimeSmokeAggregate,
       ProjectStateSchema,
       (builder) => [
-        builder.assign(CommandSchema, "assignCommand"),
-        builder.apply(ProjectStateSchema, "onAggregateChanged", { allowImport: true }),
+        builder.assign(CreateProjectSchema, "assignCommand"),
+        builder.apply(ProjectCreatedSchema, "onAggregateChanged", { allowImport: true }),
       ],
     );
     const registry = new HandlerMetadataRegistry([handlers]);
@@ -501,8 +453,8 @@ describe("@spine-event-engine/server", () => {
     expect(typeof context.eventBus().post).toBe("function");
     expect("register" in context.commandBus()).toBe(false);
     expect("register" in context.eventBus()).toBe(false);
-    expect(commandReadiness.commandTypeNames()).toEqual([CommandSchema.typeName]);
-    expect(eventReadiness.eventTypeNames()).toEqual([ProjectStateSchema.typeName]);
+    expect(commandReadiness.commandTypeNames()).toEqual([CreateProjectSchema.typeName]);
+    expect(eventReadiness.eventTypeNames()).toEqual([ProjectCreatedSchema.typeName]);
     for (const member of ["ImportBus", "GrpcServer"]) {
       expect(Object.hasOwn(serverRoot, member)).toBe(false);
     }
@@ -530,7 +482,7 @@ describe("@spine-event-engine/server", () => {
   it("extracts entity kind, default visibility, routing hints, columns, and set-once fields", () => {
     const metadata = describeEntityMetadata(ProjectOverviewStateSchema);
 
-    expect(metadata.fullTypeName).toBe("ProjectOverviewState");
+    expect(metadata.fullTypeName).toBe(ProjectOverviewStateSchema.typeName);
     expect(metadata.fileName).toBe("entity-metadata/project_states.proto");
     expect(metadata.kind).toBe("projection");
     expect(metadata.declaredVisibility).toBe("default");

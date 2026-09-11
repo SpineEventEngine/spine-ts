@@ -13,11 +13,7 @@
  */
 
 import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { CommandSchema } from "@spine-event-engine/proto";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 import {
   CommandRegistrationReadiness,
@@ -33,6 +29,14 @@ import {
   type HandlerMetadataRegistryLookup,
   type RegisteredHandlerMetadata,
 } from "../../src/index.js";
+import {
+  type CreateProject,
+  CreateProjectSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_commands_pb.js";
+import {
+  ProjectOverviewStateSchema,
+  ProjectStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
 type ProjectOverviewState = Message<"ProjectOverviewState"> & {
   id: string;
@@ -40,30 +44,17 @@ type ProjectOverviewState = Message<"ProjectOverviewState"> & {
   priority: number;
 };
 
-type ProjectState = Message<"ProjectState"> & {
-  id: string;
-  name: string;
-  archived: boolean;
-};
-
 class TaskProjection {
-  assignCreate(command: Message<"spine.core.Command">): void {
-    void command;
-  }
-
-  assignArchive(command: Message<"ProjectState">): void {
+  assignCreate(command: CreateProject): void {
     void command;
   }
 }
 
 class TaskAggregate {
-  assignCreate(command: Message<"spine.core.Command">): void {
+  assignCreate(command: CreateProject): void {
     void command;
   }
 }
-
-const { ProjectOverviewStateSchema, ProjectStateSchema } =
-  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
 
 describe("command registration readiness", () => {
   it("rejects non-readiness values as inauthentic", () => {
@@ -77,7 +68,7 @@ describe("command registration readiness", () => {
 
     expectTypeOf<CommandRegistrationReadiness>().toExtend<CommandRegistrationReadinessLookup>();
     expect(readiness.commandTypeNames()).toEqual([]);
-    expect(readiness.findCommandAssignee("spine.core.Command")).toBeUndefined();
+    expect(readiness.findCommandAssignee(CreateProjectSchema.typeName)).toBeUndefined();
     expect(Object.isFrozen(readiness.commandTypeNames())).toBe(true);
   });
 
@@ -99,16 +90,13 @@ describe("command registration readiness", () => {
     const handlers = EntityHandlers.define(
       TaskProjection,
       ProjectOverviewStateSchema,
-      (builder) => [
-        builder.assign(CommandSchema, "assignCreate"),
-        builder.assign(ProjectStateSchema, "assignArchive"),
-      ],
+      (builder) => [builder.assign(CreateProjectSchema, "assignCreate")],
     );
     const readiness = CommandRegistrationReadiness.fromRegistry(
       new HandlerMetadataRegistry([handlers]),
     );
 
-    expect(readiness.commandTypeNames()).toEqual(["ProjectState", "spine.core.Command"]);
+    expect(readiness.commandTypeNames()).toEqual([CreateProjectSchema.typeName]);
   });
 
   it("orders command message names by locale-independent code units", () => {
@@ -133,25 +121,25 @@ describe("command registration readiness", () => {
     const handlers = EntityHandlers.define(
       TaskProjection,
       ProjectOverviewStateSchema,
-      (builder) => [builder.assign(CommandSchema, "assignCreate")],
+      (builder) => [builder.assign(CreateProjectSchema, "assignCreate")],
     );
     const readiness = CommandRegistrationReadiness.fromEntityHandlers([handlers]);
 
-    const assignee = readiness.findCommandAssignee(CommandSchema.typeName);
+    const assignee = readiness.findCommandAssignee(CreateProjectSchema.typeName);
 
     expectTypeOf<
       NonNullable<typeof assignee>
     >().toEqualTypeOf<CommandRegistrationAssigneeMetadata>();
     expect(assignee).toMatchObject({
-      commandFullTypeName: "spine.core.Command",
+      commandFullTypeName: CreateProjectSchema.typeName,
       entityType: TaskProjection,
       entity: {
-        fullTypeName: "ProjectOverviewState",
+        fullTypeName: ProjectOverviewStateSchema.typeName,
       },
       handler: {
         kind: "command-assignment",
         methodName: "assignCreate",
-        messageFullTypeName: "spine.core.Command",
+        messageFullTypeName: CreateProjectSchema.typeName,
       },
     });
     expect(assignee?.registeredHandler.handler).toEqual(handlers.commandAssignments[0]);
@@ -160,26 +148,26 @@ describe("command registration readiness", () => {
 
   it("keeps duplicate command assignment failure owned by HandlerMetadataRegistry", () => {
     const first = EntityHandlers.define(TaskProjection, ProjectOverviewStateSchema, (builder) => [
-      builder.assign(CommandSchema, "assignCreate"),
+      builder.assign(CreateProjectSchema, "assignCreate"),
     ]);
     const second = EntityHandlers.define(TaskAggregate, ProjectStateSchema, (builder) => [
-      builder.assign(CommandSchema, "assignCreate"),
+      builder.assign(CreateProjectSchema, "assignCreate"),
     ]);
 
     expect(() => CommandRegistrationReadiness.fromEntityHandlers([first, second])).toThrow(
       HandlerMetadataRegistryError,
     );
     expect(() => CommandRegistrationReadiness.fromEntityHandlers([first, second])).toThrow(
-      /Duplicate command assignment for "spine\.core\.Command"/,
+      new RegExp(`Duplicate command assignment for "${CreateProjectSchema.typeName}"`),
     );
   });
 
   it("rejects duplicate command assignments exposed by a custom registry lookup", () => {
     const first = EntityHandlers.define(TaskProjection, ProjectOverviewStateSchema, (builder) => [
-      builder.assign(CommandSchema, "assignCreate"),
+      builder.assign(CreateProjectSchema, "assignCreate"),
     ]);
     const second = EntityHandlers.define(TaskAggregate, ProjectStateSchema, (builder) => [
-      builder.assign(CommandSchema, "assignCreate"),
+      builder.assign(CreateProjectSchema, "assignCreate"),
     ]);
     const firstAssignment = createRegisteredCommandAssignment(first);
     const secondAssignment = createRegisteredCommandAssignment(second);
@@ -192,7 +180,7 @@ describe("command registration readiness", () => {
       HandlerMetadataRegistryError,
     );
     expect(() => CommandRegistrationReadiness.fromRegistry(lookup)).toThrow(
-      /Duplicate command assignment for "spine\.core\.Command"/,
+      new RegExp(`Duplicate command assignment for "${CreateProjectSchema.typeName}"`),
     );
   });
 
@@ -200,22 +188,22 @@ describe("command registration readiness", () => {
     const handlers = EntityHandlers.define(
       TaskProjection,
       ProjectOverviewStateSchema,
-      (builder) => [builder.assign(CommandSchema, "assignCreate")],
+      (builder) => [builder.assign(CreateProjectSchema, "assignCreate")],
     );
     const readiness = CommandRegistrationReadiness.fromEntityHandlers([handlers]);
 
     const firstList = readiness.commandTypeNames();
     const secondList = readiness.commandTypeNames();
-    const firstAssignee = readiness.findCommandAssignee(CommandSchema.typeName);
-    const secondAssignee = readiness.findCommandAssignee(CommandSchema.typeName);
+    const firstAssignee = readiness.findCommandAssignee(CreateProjectSchema.typeName);
+    const secondAssignee = readiness.findCommandAssignee(CreateProjectSchema.typeName);
 
-    expect(firstList).toEqual(["spine.core.Command"]);
+    expect(firstList).toEqual([CreateProjectSchema.typeName]);
     expect(Object.isFrozen(firstList)).toBe(true);
     expect(firstList).not.toBe(secondList);
     expect(() => {
       (firstList as string[]).push("example.MutatedCommand");
     }).toThrow(TypeError);
-    expect(readiness.commandTypeNames()).toEqual(["spine.core.Command"]);
+    expect(readiness.commandTypeNames()).toEqual([CreateProjectSchema.typeName]);
 
     expect(firstAssignee).toEqual(secondAssignee);
     expect(firstAssignee).not.toBe(secondAssignee);
@@ -224,17 +212,17 @@ describe("command registration readiness", () => {
       (firstAssignee as { commandFullTypeName: string }).commandFullTypeName =
         "example.MutatedCommand";
     }).toThrow(TypeError);
-    expect(readiness.findCommandAssignee(CommandSchema.typeName)?.commandFullTypeName).toBe(
-      "spine.core.Command",
+    expect(readiness.findCommandAssignee(CreateProjectSchema.typeName)?.commandFullTypeName).toBe(
+      CreateProjectSchema.typeName,
     );
   });
 
   it("keeps returned nested assignee metadata from mutating later lookups", () => {
     const mutableHandler: CommandAssignmentHandlerMetadata = {
       kind: "command-assignment",
-      schema: CommandSchema,
-      descriptor: CommandSchema,
-      messageFullTypeName: CommandSchema.typeName,
+      schema: CreateProjectSchema,
+      descriptor: CreateProjectSchema,
+      messageFullTypeName: CreateProjectSchema.typeName,
       methodName: "assignCreate",
       parameterCount: 1,
       origin: "domestic",
@@ -261,7 +249,7 @@ describe("command registration readiness", () => {
       createRegistryLookupForAssignments([mutableRegisteredHandler]),
     );
 
-    const assignee = readiness.findCommandAssignee(CommandSchema.typeName);
+    const assignee = readiness.findCommandAssignee(CreateProjectSchema.typeName);
     const nestedCommandAssignment = assignee?.entityHandlers.commandAssignments[0];
 
     if (nestedCommandAssignment === undefined) {
@@ -284,7 +272,7 @@ describe("command registration readiness", () => {
         "mutatedRegisteredHandler";
     }).toThrow(TypeError);
 
-    expect(readiness.findCommandAssignee(CommandSchema.typeName)).toMatchObject({
+    expect(readiness.findCommandAssignee(CreateProjectSchema.typeName)).toMatchObject({
       handler: { methodName: "assignCreate" },
       entityHandlers: {
         commandAssignments: [{ methodName: "assignCreate" }],
@@ -297,13 +285,13 @@ describe("command registration readiness", () => {
   });
 
   it("keeps returned assignee schema and descriptor metadata from mutating later lookups", () => {
-    const mutableSchema = { ...CommandSchema };
-    const mutableDescriptor = { ...CommandSchema };
+    const mutableSchema = { ...CreateProjectSchema };
+    const mutableDescriptor = { ...CreateProjectSchema };
     const mutableHandler: CommandAssignmentHandlerMetadata = {
       kind: "command-assignment",
       schema: mutableSchema,
       descriptor: mutableDescriptor,
-      messageFullTypeName: CommandSchema.typeName,
+      messageFullTypeName: CreateProjectSchema.typeName,
       methodName: "assignCreate",
       parameterCount: 1,
       origin: "domestic",
@@ -330,7 +318,7 @@ describe("command registration readiness", () => {
       createRegistryLookupForAssignments([mutableRegisteredHandler]),
     );
 
-    const assignee = readiness.findCommandAssignee(CommandSchema.typeName);
+    const assignee = readiness.findCommandAssignee(CreateProjectSchema.typeName);
 
     expect(Object.isFrozen(assignee?.handler.schema)).toBe(true);
     expect(Object.isFrozen(assignee?.handler.descriptor)).toBe(true);
@@ -342,10 +330,10 @@ describe("command registration readiness", () => {
         "example.MutatedCommandDescriptor";
     }).toThrow(TypeError);
 
-    expect(readiness.findCommandAssignee(CommandSchema.typeName)).toMatchObject({
+    expect(readiness.findCommandAssignee(CreateProjectSchema.typeName)).toMatchObject({
       handler: {
-        schema: { typeName: CommandSchema.typeName },
-        descriptor: { typeName: CommandSchema.typeName },
+        schema: { typeName: CreateProjectSchema.typeName },
+        descriptor: { typeName: CreateProjectSchema.typeName },
       },
     });
   });
@@ -353,9 +341,9 @@ describe("command registration readiness", () => {
   it("ignores caller-supplied entity semantic tags", () => {
     const handler: CommandAssignmentHandlerMetadata = {
       kind: "command-assignment",
-      schema: CommandSchema,
-      descriptor: CommandSchema,
-      messageFullTypeName: CommandSchema.typeName,
+      schema: CreateProjectSchema,
+      descriptor: CreateProjectSchema,
+      messageFullTypeName: CreateProjectSchema.typeName,
       methodName: "assignCreate",
       parameterCount: 1,
       origin: "domestic",
@@ -390,11 +378,11 @@ describe("command registration readiness", () => {
     const handlers = EntityHandlers.define(
       TaskProjection,
       ProjectOverviewStateSchema,
-      (builder) => [builder.assign(CommandSchema, "assignCreate")],
+      (builder) => [builder.assign(CreateProjectSchema, "assignCreate")],
     );
     const readiness = CommandRegistrationReadiness.fromEntityHandlers([handlers]);
 
-    const assignee = readiness.findCommandAssignee(CommandSchema.typeName);
+    const assignee = readiness.findCommandAssignee(CreateProjectSchema.typeName);
 
     expect(handlers.entity.idField).toBe(handlers.entity.firstFieldRoutingHint.field);
     expect(assignee?.entity.idField).toBe(assignee?.entity.firstFieldRoutingHint.field);
@@ -427,8 +415,8 @@ function createRegistryLookupForCommandNames(
   const assignments = commandFullTypeNames.map((commandFullTypeName) => {
     const handler: CommandAssignmentHandlerMetadata = {
       kind: "command-assignment",
-      schema: { ...CommandSchema, typeName: commandFullTypeName },
-      descriptor: { ...CommandSchema, typeName: commandFullTypeName },
+      schema: { ...CreateProjectSchema, typeName: commandFullTypeName },
+      descriptor: { ...CreateProjectSchema, typeName: commandFullTypeName },
       messageFullTypeName: commandFullTypeName,
       methodName: "assignCreate",
       parameterCount: 1,

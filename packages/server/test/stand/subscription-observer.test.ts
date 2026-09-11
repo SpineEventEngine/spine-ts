@@ -46,16 +46,10 @@ import { describe, expect, it } from "vitest";
 import { eventBusAccess, EventBus } from "../../src/bus/event-bus.js";
 import { SubscriptionObservers } from "../../src/stand/subscription-observer.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
-
-type ProjectOverviewState = Message<"ProjectOverviewState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-const { ProjectOverviewStateSchema } =
-  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
+import {
+  type ProjectOverviewState,
+  ProjectOverviewStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 let eventSequence = 0;
 
 describe("SubscriptionObservers", () => {

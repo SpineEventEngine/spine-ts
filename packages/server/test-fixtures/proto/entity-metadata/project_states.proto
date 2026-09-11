@@ -13,6 +13,8 @@
  */
 syntax = "proto3";
 
+package entity_metadata;
+
 import "spine/options.proto";
 
 option (every_is).java_type = "example.tags.ASharedTag";

@@ -124,22 +124,27 @@ import {
   type TaskCreated,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { TaskSchema as TodoTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
+import {
+  type ProjectOverviewState,
+  ProjectOverviewStateSchema,
+  type ProjectState,
+  ProjectStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import {
+  type ProjectSubmissionCreated,
+  ProjectSubmissionCreatedSchema,
+} from "../../test-fixtures/generated/repository-routing/project_validation_events_pb.js";
+import {
+  type CreateReviewProject,
+  CreateReviewProjectSchema,
+} from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
+import {
+  type ReviewProjectState,
+  ReviewProjectStateSchema,
+} from "../../test-fixtures/generated/validation-refusal/project_states_pb.js";
 
 const GeneratedTaskIdSchema = TodoIdSchema;
 let stateChangeSequence = 0;
-
-type ProjectOverviewState = Message<"ProjectOverviewState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type ProjectState = Message<"ProjectState"> & {
-  id: string;
-  name: string;
-  archived: boolean;
-};
 
 type TaskId = Message<"spine.examples.todo.TaskId"> & {
   value: string;
@@ -156,26 +161,8 @@ type Task = Message<"spine.examples.todo.Task"> & {
   taskListId?: TaskListId;
 };
 
-type ReviewProjectState = Message<"example.validation_refusal.ReviewProjectState"> & {
-  id: string;
-  name: string;
-};
-
-type CreateReviewProject = Message<"example.validation_refusal.CreateReviewProject"> & {
-  id: string;
-  name: string;
-};
-
 type TenantInput = string | TenantId;
 
-const { ProjectOverviewStateSchema, ProjectStateSchema } =
-  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
-const ReviewProjectStateSchema = (
-  await import("../../test-fixtures/generated/validation-refusal/project_states_pb.js")
-).ReviewProjectStateSchema as GenMessage<ReviewProjectState>;
-const CreateReviewProjectSchema = (
-  await import("../../test-fixtures/generated/validation-refusal/project_commands_pb.js")
-).CreateReviewProjectSchema as GenMessage<CreateReviewProject>;
 const fileTaskIdFixture = TodoIdSchema.file;
 const fileTaskFixture = TodoTaskSchema.file;
 const TaskIdSchema = messageDesc(fileTaskIdFixture, 0) as GenMessage<TaskId>;
@@ -210,7 +197,7 @@ class ValidatingTaskAggregate extends Aggregate<string, typeof ReviewProjectStat
     return createValidatedEvent(`event-${command.id}`, command.id, command.name);
   }
 
-  applyTask(event: ReviewProjectState): void {
+  applyTask(event: ProjectSubmissionCreated): void {
     this.startTransaction();
     this.update((draft) =>
       Object.assign(
@@ -4312,7 +4299,7 @@ function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate
     ReviewProjectStateSchema,
     (builder) => [
       builder.assign(CreateReviewProjectSchema, "assignTask"),
-      builder.apply(ReviewProjectStateSchema, "applyTask"),
+      builder.apply(ProjectSubmissionCreatedSchema, "applyTask"),
     ],
   );
 
@@ -4502,12 +4489,8 @@ function createValidatedEvent(id: string, aggregateId: string, name: string) {
       ),
     }),
     message: AnyMessages.pack(
-      TaskCreatedSchema,
-      create(TaskCreatedSchema, {
-        id: create(GeneratedTaskIdSchema, { value: aggregateId }),
-        title: name,
-        taskListId: create(TodoTaskListIdSchema, { value: aggregateId }),
-      }),
+      ProjectSubmissionCreatedSchema,
+      create(ProjectSubmissionCreatedSchema, { id: aggregateId, name }),
     ),
   });
 }

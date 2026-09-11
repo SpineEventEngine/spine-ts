@@ -134,49 +134,109 @@ import {
 import { standAccess } from "../../src/stand/stand.js";
 import { SystemClock } from "../../src/runtime/signal-metadata.js";
 import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
-import type * as RepositoryRouting from "../../test-fixtures/generated/repository-routing/project_states_pb.js";
-import type * as RepositoryIdentifiers from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
-import type * as RepositoryCommands from "../../test-fixtures/generated/repository-routing/project_commands_pb.js";
-import type * as RepositoryEvents from "../../test-fixtures/generated/repository-routing/project_events_pb.js";
-import type * as RouteValidation from "../../test-fixtures/generated/repository-routing/project_routing_events_pb.js";
-import type {
-  RepositoryRoutingCreateFollowUpProject as CreateFollowUpProject,
-  RepositoryRoutingProjectSubmissionId as ProjectSubmissionId,
-  RepositoryRoutingCreateProjectSubmission as CreateProjectSubmission,
-  RepositoryRoutingProjectSubmissionCreated as ProjectSubmissionCreated,
-} from "../../test-fixtures/schemas.js";
+import {
+  type AddProjectMilestone,
+  AddProjectMilestoneSchema,
+  type AssignProjectAttributes,
+  AssignProjectAttributesSchema,
+  type CreateNumberedProject,
+  CreateNumberedProjectSchema,
+  type CreateProject,
+  CreateProjectSchema,
+  type DraftProject,
+  DraftProjectSchema,
+  type InviteProjectMembers,
+  InviteProjectMembersSchema,
+  type RegisterProject,
+  RegisterProjectSchema,
+  type ScheduleProjectWorkflow,
+  ScheduleProjectWorkflowSchema,
+} from "../../test-fixtures/generated/repository-routing/project_commands_pb.js";
+import {
+  type NumberedProjectCreated,
+  NumberedProjectCreatedSchema,
+  type ProjectCreated,
+  ProjectCreatedSchema,
+  type ProjectMilestoneAdded,
+  ProjectMilestoneAddedSchema,
+  type ProjectRegistered,
+  ProjectRegisteredSchema,
+  type ProjectWorkflowScheduled,
+  ProjectWorkflowScheduledSchema,
+  type SequencedProjectOverviewCreated,
+  SequencedProjectOverviewCreatedSchema,
+} from "../../test-fixtures/generated/repository-routing/project_events_pb.js";
+import {
+  type ProjectId as RepositoryProjectId,
+  ProjectIdSchema,
+  type ProjectMilestoneId,
+  ProjectMilestoneIdSchema,
+  type ProjectSequenceId,
+  ProjectSequenceIdSchema,
+} from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
+import {
+  type ProjectMemberChanged,
+  ProjectMemberChangedSchema,
+  type ProjectPriorityChanged,
+  ProjectPriorityChangedSchema,
+} from "../../test-fixtures/generated/repository-routing/project_routing_events_pb.js";
+import {
+  type ProjectBacklogState,
+  ProjectBacklogStateSchema,
+  type ProjectMilestoneOverviewState,
+  ProjectMilestoneOverviewStateSchema,
+  type ProjectMilestoneSourceState,
+  ProjectMilestoneSourceStateSchema,
+  type ProjectMilestoneState,
+  ProjectMilestoneStateSchema,
+  type ProjectMilestoneWorkflowState,
+  ProjectMilestoneWorkflowStateSchema,
+  type ProjectOverviewState,
+  ProjectOverviewStateSchema,
+  type ProjectQueueState,
+  ProjectQueueStateSchema,
+  type ProjectState,
+  ProjectStateSchema,
+  type ProjectWorkflowState,
+  ProjectWorkflowStateSchema,
+  type RegisteredProjectState,
+  RegisteredProjectStateSchema,
+  type NumberedProjectState,
+  NumberedProjectStateSchema,
+  type SequencedProjectOverviewState,
+  SequencedProjectOverviewStateSchema,
+  type SequencedProjectSourceState,
+  SequencedProjectSourceStateSchema,
+} from "../../test-fixtures/generated/repository-routing/project_states_pb.js";
+import {
+  type CreateFollowUpProject,
+  CreateFollowUpProjectSchema,
+  type CreateProjectSubmission,
+  CreateProjectSubmissionSchema,
+} from "../../test-fixtures/generated/repository-routing/project_validation_commands_pb.js";
+import {
+  type ProjectSubmissionCreated,
+  ProjectSubmissionCreatedSchema,
+} from "../../test-fixtures/generated/repository-routing/project_validation_events_pb.js";
+import {
+  type ProjectSubmissionId,
+  ProjectSubmissionIdSchema,
+} from "../../test-fixtures/generated/repository-routing/project_validation_identifiers_pb.js";
+import {
+  type AcceptedProjectSubmissionState,
+  AcceptedProjectSubmissionStateSchema,
+  type ProjectSubmissionState,
+  ProjectSubmissionStateSchema,
+} from "../../test-fixtures/generated/repository-routing/project_validation_states_pb.js";
 
 const GeneratedTaskIdSchema = TodoIdSchema;
 
-type ProjectOverviewState = RepositoryRouting.ProjectOverviewState;
-type ProjectCreated = RepositoryEvents.ProjectCreated;
-type ProjectRegistered = RepositoryEvents.ProjectRegistered;
-type DraftProject = RepositoryCommands.DraftProject;
-type ProjectState = RepositoryRouting.ProjectState;
-type CreateProject = RepositoryCommands.CreateProject;
-type InviteProjectMembers = RepositoryCommands.InviteProjectMembers;
-type AssignProjectAttributes = RepositoryCommands.AssignProjectAttributes;
-type RepositoryProjectId = RepositoryIdentifiers.ProjectId;
 type TaskId =
   import("../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js").TaskId;
 type TaskCreated =
   import("../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js").TaskCreated;
 type TaskListId =
   import("../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js").TaskListId;
-type ProjectSequenceId = RepositoryIdentifiers.ProjectSequenceId;
-type SequencedProjectOverviewCreated = RepositoryEvents.SequencedProjectOverviewCreated;
-type ProjectMilestoneId = RepositoryIdentifiers.ProjectMilestoneId;
-type ProjectMilestoneAdded = RepositoryEvents.ProjectMilestoneAdded;
-type AddProjectMilestone = RepositoryCommands.AddProjectMilestone;
-type RegisterProject = RepositoryCommands.RegisterProject;
-type CreateNumberedProject = RepositoryCommands.CreateNumberedProject;
-type ScheduleProjectWorkflow = RepositoryCommands.ScheduleProjectWorkflow;
-type NumberedProjectCreated = RepositoryEvents.NumberedProjectCreated;
-type ProjectWorkflowScheduled = RepositoryEvents.ProjectWorkflowScheduled;
-type ProjectMilestoneSourceState = RepositoryRouting.ProjectMilestoneSourceState;
-type ProjectPriorityChanged = RouteValidation.ProjectPriorityChanged;
-type ProjectMemberChanged = RouteValidation.ProjectMemberChanged;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -198,89 +258,10 @@ function storedSourceAndFreshChild(
 
   return { source, child };
 }
-const {
-  RepositoryRoutingProjectOverviewStateSchema,
-  RepositoryRoutingProjectStateSchema,
-  RepositoryRoutingRegisteredProjectStateSchema,
-  RepositoryRoutingProjectIdSchema,
-  RepositoryRoutingRegisterProjectSchema,
-  RepositoryRoutingProjectBacklogStateSchema,
-  RepositoryRoutingProjectCreatedSchema,
-  RepositoryRoutingProjectRegisteredSchema,
-  RepositoryRoutingDraftProjectSchema,
-  RepositoryRoutingNumberedProjectStateSchema,
-  RepositoryRoutingProjectWorkflowStateSchema,
-  RepositoryRoutingCreateNumberedProjectSchema,
-  RepositoryRoutingScheduleProjectWorkflowSchema,
-  RepositoryRoutingNumberedProjectCreatedSchema,
-  RepositoryRoutingProjectWorkflowScheduledSchema,
-  RepositoryRoutingInviteProjectMembersSchema,
-  RepositoryRoutingAssignProjectAttributesSchema,
-  RepositoryRoutingCreateProjectSchema,
-  RepositoryRoutingProjectQueueStateSchema,
-  RepositoryRoutingProjectSequenceIdSchema,
-  RepositoryRoutingSequencedProjectOverviewStateSchema,
-  RepositoryRoutingSequencedProjectSourceStateSchema,
-  RepositoryRoutingSequencedProjectOverviewCreatedSchema,
-  RepositoryRoutingProjectMilestoneIdSchema,
-  RepositoryRoutingProjectMilestoneOverviewStateSchema,
-  RepositoryRoutingProjectMilestoneStateSchema,
-  RepositoryRoutingProjectMilestoneWorkflowStateSchema,
-  RepositoryRoutingProjectMilestoneAddedSchema,
-  RepositoryRoutingAddProjectMilestoneSchema,
-  RepositoryRoutingProjectMilestoneSourceStateSchema,
-  RepositoryRoutingProjectSubmissionStateSchema,
-  RepositoryRoutingCreateProjectSubmissionSchema,
-  RepositoryRoutingProjectSubmissionIdSchema,
-  RepositoryRoutingProjectSubmissionCreatedSchema,
-  RepositoryRoutingCreateFollowUpProjectSchema,
-  RepositoryRoutingAcceptedProjectSubmissionStateSchema,
-  RepositoryRoutingProjectPriorityChangedSchema,
-  RepositoryRoutingProjectMemberChangedSchema,
-} = FixtureSchemas;
-
-const ProjectOverviewStateSchema = RepositoryRoutingProjectOverviewStateSchema;
-const ProjectStateSchema = RepositoryRoutingProjectStateSchema;
-const RegisteredProjectStateSchema = RepositoryRoutingRegisteredProjectStateSchema;
-const ProjectIdSchema = RepositoryRoutingProjectIdSchema;
-const RegisterProjectSchema = RepositoryRoutingRegisterProjectSchema;
-const ProjectBacklogStateSchema = RepositoryRoutingProjectBacklogStateSchema;
-const ProjectCreatedSchema = RepositoryRoutingProjectCreatedSchema;
-const ProjectRegisteredSchema = RepositoryRoutingProjectRegisteredSchema;
-const DraftProjectSchema = RepositoryRoutingDraftProjectSchema;
-const NumberedProjectStateSchema = RepositoryRoutingNumberedProjectStateSchema;
-const ProjectWorkflowStateSchema = RepositoryRoutingProjectWorkflowStateSchema;
-const CreateNumberedProjectSchema = RepositoryRoutingCreateNumberedProjectSchema;
-const ScheduleProjectWorkflowSchema = RepositoryRoutingScheduleProjectWorkflowSchema;
-const NumberedProjectCreatedSchema = RepositoryRoutingNumberedProjectCreatedSchema;
-const ProjectWorkflowScheduledSchema = RepositoryRoutingProjectWorkflowScheduledSchema;
-const InviteProjectMembersSchema = RepositoryRoutingInviteProjectMembersSchema;
-const AssignProjectAttributesSchema = RepositoryRoutingAssignProjectAttributesSchema;
-const CreateProjectSchema = RepositoryRoutingCreateProjectSchema;
 const TaskIdSchema = TodoIdSchema;
 const TaskSchema = TodoTaskSchema;
 const TaskCreatedSchema = TodoEvents.TaskCreatedSchema;
-const ProjectQueueStateSchema = RepositoryRoutingProjectQueueStateSchema;
-const ProjectSequenceIdSchema = RepositoryRoutingProjectSequenceIdSchema;
-const SequencedProjectOverviewStateSchema = RepositoryRoutingSequencedProjectOverviewStateSchema;
-const SequencedProjectSourceStateSchema = RepositoryRoutingSequencedProjectSourceStateSchema;
-const SequencedProjectOverviewCreatedSchema =
-  RepositoryRoutingSequencedProjectOverviewCreatedSchema;
-const ProjectMilestoneIdSchema = RepositoryRoutingProjectMilestoneIdSchema;
-const ProjectMilestoneOverviewStateSchema = RepositoryRoutingProjectMilestoneOverviewStateSchema;
-const ProjectMilestoneStateSchema = RepositoryRoutingProjectMilestoneStateSchema;
-const ProjectMilestoneWorkflowStateSchema = RepositoryRoutingProjectMilestoneWorkflowStateSchema;
-const ProjectMilestoneAddedSchema = RepositoryRoutingProjectMilestoneAddedSchema;
-const AddProjectMilestoneSchema = RepositoryRoutingAddProjectMilestoneSchema;
-const ProjectMilestoneSourceStateSchema = RepositoryRoutingProjectMilestoneSourceStateSchema;
-const ReviewProjectStateSchema = RepositoryRoutingProjectSubmissionStateSchema;
-const CreateProjectSubmissionSchema = RepositoryRoutingCreateProjectSubmissionSchema;
-const ProjectSubmissionIdSchema = RepositoryRoutingProjectSubmissionIdSchema;
-const ProjectSubmissionCreatedSchema = RepositoryRoutingProjectSubmissionCreatedSchema;
-const CreateFollowUpProjectSchema = RepositoryRoutingCreateFollowUpProjectSchema;
-const ProjectSubmissionIdStateSchema = RepositoryRoutingAcceptedProjectSubmissionStateSchema;
-const ProjectPriorityChangedSchema = RepositoryRoutingProjectPriorityChangedSchema;
-const ProjectMemberChangedSchema = RepositoryRoutingProjectMemberChangedSchema;
+const ProjectSubmissionIdStateSchema = AcceptedProjectSubmissionStateSchema;
 
 class ProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
   createProject(command: CreateProject): void {
@@ -874,7 +855,7 @@ class EnvelopeManagedAggregate extends Aggregate<string, typeof ProjectStateSche
 
 class ValidatingProjectAggregate extends Aggregate<
   string,
-  typeof ReviewProjectStateSchema,
+  typeof ProjectSubmissionStateSchema,
   bigint
 > {
   static assigneeCalls = 0;
@@ -896,7 +877,7 @@ class ValidatingProjectAggregate extends Aggregate<
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ReviewProjectStateSchema, {
+        create(ProjectSubmissionStateSchema, {
           id: event.id,
           name: event.name,
         }),
@@ -11075,7 +11056,7 @@ function createEnvelopeManagedRepository(): Repository<typeof EnvelopeManagedAgg
 function createValidatingRepository(): Repository<typeof ValidatingProjectAggregate> {
   const handlers = EntityHandlers.define(
     ValidatingProjectAggregate,
-    ReviewProjectStateSchema,
+    ProjectSubmissionStateSchema,
     (builder) => [
       builder.assign(CreateProjectSubmissionSchema, "createProject"),
       builder.apply(ProjectSubmissionCreatedSchema, "applyTask"),
@@ -11084,7 +11065,7 @@ function createValidatingRepository(): Repository<typeof ValidatingProjectAggreg
 
   return new Repository({
     entityType: ValidatingProjectAggregate,
-    schema: ReviewProjectStateSchema,
+    schema: ProjectSubmissionStateSchema,
     handlers,
   });
 }

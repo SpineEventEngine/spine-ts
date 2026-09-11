@@ -12,10 +12,6 @@
  * the License.
  */
 
-import { type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -35,7 +31,6 @@ import {
   type Diagnostic,
 } from "typescript";
 import { describe, expect, it } from "vitest";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 import {
   Apply,
@@ -49,18 +44,18 @@ import {
   EntityHandlers,
   materializeDecoratedEntityHandlers,
 } from "../../src/index.js";
-
-type ProjectOverviewState = Message<"ProjectOverviewState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type ProjectState = Message<"ProjectState"> & {
-  id: string;
-  name: string;
-  archived: boolean;
-};
+import {
+  type CreateProject,
+  CreateProjectSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_commands_pb.js";
+import {
+  type ProjectCreated,
+  ProjectCreatedSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_events_pb.js";
+import {
+  ProjectOverviewStateSchema,
+  ProjectStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
 it("creates a public Where method decorator", () => {
   const decorator = Where({ eventField: "board", equals: '{"value":"announcements"}' });
@@ -68,17 +63,14 @@ it("creates a public Where method decorator", () => {
   expect(decorator).toBeTypeOf("function");
 });
 
-const { ProjectOverviewStateSchema, ProjectStateSchema } =
-  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
-
 interface DecoratedClassFactoryInput {
   readonly Assign: typeof Assign;
   readonly Command: typeof Command;
   readonly Subscribe: typeof Subscribe;
   readonly React: typeof React;
   readonly Apply: typeof Apply;
-  readonly CommandSchema: typeof CommandSchema;
-  readonly EventSchema: typeof EventSchema;
+  readonly CreateProjectSchema: typeof CreateProjectSchema;
+  readonly ProjectCreatedSchema: typeof ProjectCreatedSchema;
 }
 
 interface DecoratedClassFactoryOutput {
@@ -102,76 +94,76 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
       Subscribe,
       React,
       Apply,
-      CommandSchema,
-      EventSchema,
+      CreateProjectSchema,
+      ProjectCreatedSchema,
     }) {
       class DecoratedProjection {
-        @Assign(CommandSchema)
+        @Assign(CreateProjectSchema)
         assignCreate(command) {
           void command;
         }
 
-        @Command(CommandSchema)
+        @Command(CreateProjectSchema)
         commandFromCommand(command) {
           void command;
         }
 
-        @Subscribe(EventSchema)
+        @Subscribe(ProjectCreatedSchema)
         subscribeCreated(event) {
           void event;
         }
 
-        @React(EventSchema)
+        @React(ProjectCreatedSchema)
         reactToCreated(event) {
           void event;
         }
 
-        @Apply(EventSchema, { allowImport: true })
+        @Apply(ProjectCreatedSchema, { allowImport: true })
         applyCreated(event) {
           void event;
         }
       }
 
       class DecoratedAggregate {
-        @Assign(CommandSchema)
+        @Assign(CreateProjectSchema)
         assignCreate(command) {
           void command;
         }
 
-        @Apply(EventSchema)
+        @Apply(ProjectCreatedSchema)
         applyCreated(event) {
           void event;
         }
       }
 
       class DecoratedFallbackProjection {
-        @Assign(CommandSchema)
+        @Assign(CreateProjectSchema)
         assignCreate(command) {
           void command;
         }
 
-        @Apply(EventSchema, { allowImport: true })
+        @Apply(ProjectCreatedSchema, { allowImport: true })
         applyCreated(event) {
           void event;
         }
       }
 
       class FirstDecoratedProjection {
-        @Assign(CommandSchema)
+        @Assign(CreateProjectSchema)
         assignCreate(command) {
           void command;
         }
       }
 
       class SecondDecoratedProjection {
-        @Apply(EventSchema)
+        @Apply(ProjectCreatedSchema)
         applyCreated(event) {
           void event;
         }
       }
 
       class SourceCopiedProjection {
-        @Assign(CommandSchema)
+        @Assign(CreateProjectSchema)
         assignCreate(command) {
           void command;
         }
@@ -186,7 +178,7 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
       );
 
       class DecoratedBaseProjection {
-        @Assign(CommandSchema)
+        @Assign(CreateProjectSchema)
         assignCreate(command) {
           void command;
         }
@@ -253,8 +245,8 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
     Subscribe,
     React,
     Apply,
-    CommandSchema,
-    EventSchema,
+    CreateProjectSchema,
+    ProjectCreatedSchema,
   });
 }
 
@@ -397,15 +389,16 @@ describe("handler decorators", () => {
     const metadata = materializeDecoratedEntityHandlers(DecoratedAggregate, ProjectStateSchema);
     const registry = new HandlerMetadataRegistry([metadata]);
 
-    expect(registry.findCommandAssignment("spine.core.Command")?.entityType).toBe(
+    expect(registry.findCommandAssignment(CreateProjectSchema.typeName)?.entityType).toBe(
       DecoratedAggregate,
     );
-    expect(registry.findCommandAssignment("spine.core.Command")?.handler.methodName).toBe(
+    expect(registry.findCommandAssignment(CreateProjectSchema.typeName)?.handler.methodName).toBe(
       "assignCreate",
     );
-    expect(registry.findEventApplication("ProjectState", "spine.core.Event")?.handler).toBe(
-      metadata.eventApplications[0],
-    );
+    expect(
+      registry.findEventApplication(ProjectStateSchema.typeName, ProjectCreatedSchema.typeName)
+        ?.handler,
+    ).toBe(metadata.eventApplications[0]);
   });
 
   it("keeps decorator metadata class-owned and isolated between classes", async () => {
@@ -461,7 +454,7 @@ describe("handler decorators", () => {
   it("uses the same duplicate policy as explicit handler metadata", async () => {
     const { FirstDecoratedProjection } = await createDecoratedClasses();
     class ExplicitProjection {
-      assignCreate(command: Message<"spine.core.Command">): void {
+      assignCreate(command: CreateProject): void {
         void command;
       }
     }
@@ -471,25 +464,25 @@ describe("handler decorators", () => {
       ProjectOverviewStateSchema,
     );
     const explicit = EntityHandlers.define(ExplicitProjection, ProjectStateSchema, (builder) => [
-      builder.assign(CommandSchema, "assignCreate"),
+      builder.assign(CreateProjectSchema, "assignCreate"),
     ]);
 
     expect(() => new HandlerMetadataRegistry([decorated, explicit])).toThrow(
       HandlerMetadataRegistryError,
     );
     expect(() => new HandlerMetadataRegistry([decorated, explicit])).toThrow(
-      /Duplicate command assignment for "spine\.core\.Command"/,
+      new RegExp(`Duplicate command assignment for "${CreateProjectSchema.typeName}"`),
     );
   });
 
   it("materializes the same handler contract as the explicit fallback", async () => {
     const { DecoratedFallbackProjection } = await createDecoratedClasses();
     class ExplicitProjection {
-      assignCreate(command: Message<"spine.core.Command">): void {
+      assignCreate(command: CreateProject): void {
         void command;
       }
 
-      applyCreated(event: Message<"spine.core.Event">): void {
+      applyCreated(event: ProjectCreated): void {
         void event;
       }
     }
@@ -502,8 +495,8 @@ describe("handler decorators", () => {
       ExplicitProjection,
       ProjectOverviewStateSchema,
       (builder) => [
-        builder.assign(CommandSchema, "assignCreate"),
-        builder.apply(EventSchema, "applyCreated", { allowImport: true }),
+        builder.assign(CreateProjectSchema, "assignCreate"),
+        builder.apply(ProjectCreatedSchema, "applyCreated", { allowImport: true }),
       ],
     );
 

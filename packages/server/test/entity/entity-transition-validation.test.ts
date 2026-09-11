@@ -969,7 +969,7 @@ function createProjectRecordState(overrides: ProjectRecordStateOverrides = {}): 
 
 function forgeProjectRecordState(overrides: ProjectRecordStateOverrides = {}): ProjectRecordState {
   return {
-    $typeName: "ProjectRecordState",
+    $typeName: "entity_metadata.ProjectRecordState",
     id: "singular-1",
     fingerprint: new Uint8Array([1, 2]),
     details: create(ProjectProfileSchema, { value: "same" }),

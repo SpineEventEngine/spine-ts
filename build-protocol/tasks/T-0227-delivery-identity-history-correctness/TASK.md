@@ -1219,3 +1219,34 @@ turns, is read-only, and prohibits child-agent dispatch. The review covers the
 whole merge-base diff with emphasis on the corrected fixture domains,
 role-separated Proto sources, direct generated-schema consumers, private
 workspace packages, and unmodified trusted-publishing dependency path.
+
+The second review wave found no release/publishing issue. It found a final
+fixture/API correction batch: remove the remaining broad `schemas.ts` facade
+and positional file-descriptor imports; align `project_routing_events.proto`
+with the `repository_routing` package; remove a stale Review alias for Project
+Submission state; add the missing `entity_metadata` package declaration; and
+replace remaining tests that register framework envelope schemas or entity
+states as application Commands/Events. This work is returned to the same
+existing implementer `/root/fixture_and_sigstore_correction`, explicitly
+`gpt-5.6-terra` / `medium`, with no inherited turns and no child-agent
+dispatch. The new reviewers were read-only; their runtime metadata is limited
+to the immutable configured role/model profiles recorded in their explicit
+dispatches.
+
+The second-wave findings were corrected. `entity_metadata` now has an explicit
+package plus ordinary `CreateProject` and `ProjectCreated` application-signal
+fixtures. Reviewed handler, repository, server-index, and services tests no
+longer register framework envelopes or entity states as application Commands or
+Events. `project_routing_events.proto` now uses the `repository_routing`
+package, and Project Submission tests use their actual state name.
+
+The broad server `test-fixtures/schemas.ts` facade was deleted. All consumers
+now import named generated schemas or the specific independent invalid-fixture
+descriptor directly; scans find no `FixtureSchemas`, `entityMetadata*File`, or
+`handlerRegistry*File` references. Full formatting, tooling typechecking, diff
+whitespace, and generated-output currency pass. Focused corrections pass:
+command/event readiness 14/14 each, handler decorators/metadata 27/27, server
+index/repository 33/33, Spine services 114/114, repository routing 265/265,
+and final facade consumers 96/96. Intentional entity state-subscription tests
+remain because they exercise Spine state-update routing, not application Event
+delivery.

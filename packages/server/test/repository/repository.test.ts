@@ -12,11 +12,7 @@
  * the License.
  */
 
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 import {
   Aggregate,
@@ -35,6 +31,29 @@ import {
   type RepositoryOptions,
 } from "../../src/index.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
+import {
+  type CreateProject,
+  CreateProjectSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_commands_pb.js";
+import {
+  type ProjectCreated,
+  ProjectCreatedSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_events_pb.js";
+import {
+  type ProjectOverviewState,
+  ProjectOverviewStateSchema,
+  ProjectSearchStateSchema,
+  type ProjectState,
+  ProjectStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import {
+  type ProcessManagerState,
+  ProcessManagerStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
+import {
+  type CreateReviewProject,
+  CreateReviewProjectSchema,
+} from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
 
 function expectRepositoryIdentityError(
   error: unknown,
@@ -51,57 +70,17 @@ function expectRepositoryIdentityError(
   }
 }
 
-type ProjectOverviewState = Message<"ProjectOverviewState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type ProjectState = Message<"ProjectState"> & {
-  id: string;
-  name: string;
-  archived: boolean;
-};
-
-type ProjectSearchState = Message<"ProjectSearchState"> & {
-  id: string;
-  searchable: boolean;
-};
-
-type ProcessManagerState = Message<"ProcessManagerState"> & {
-  id: string;
-  queue: string;
-};
-
-type CreateReviewProject = Message<"example.validation_refusal.CreateReviewProject"> & {
-  id: string;
-  name: string;
-};
-
-const { ProjectOverviewStateSchema, ProjectStateSchema, ProjectSearchStateSchema } =
-  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
-
-const CreateReviewProjectSchema = (
-  await import("../../test-fixtures/generated/validation-refusal/project_commands_pb.js")
-).CreateReviewProjectSchema as GenMessage<CreateReviewProject>;
-
-const fileEntityVisibilityFixture = FixtureSchemas.entityMetadataVisibilityFile;
-const ProcessManagerStateSchema = messageDesc(
-  fileEntityVisibilityFixture,
-  0,
-) as GenMessage<ProcessManagerState>;
-
 class TaskAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {}
 class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {}
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
 class RuntimeCheckedAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {}
 class HandlerBackedNumberAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {
-  assignTask(command: ProjectState): void {
+  assignTask(command: CreateProject): void {
     void command;
   }
 }
 class HandlerBackedBigintAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
-  assignTask(command: ProjectState): void {
+  assignTask(command: CreateProject): void {
     void command;
   }
 }
@@ -110,7 +89,7 @@ class HandlerBackedNumberProjection extends Projection<
   typeof ProjectOverviewStateSchema,
   number
 > {
-  subscribeTask(event: ProjectOverviewState): void {
+  subscribeTask(event: ProjectCreated): void {
     void event;
   }
 }
@@ -119,7 +98,7 @@ class HandlerBackedBigintProjection extends Projection<
   typeof ProjectOverviewStateSchema,
   bigint
 > {
-  subscribeTask(event: ProjectOverviewState): void {
+  subscribeTask(event: ProjectCreated): void {
     void event;
   }
 }
@@ -713,22 +692,22 @@ describe("repository identity", () => {
       const numberAggregateHandlers = EntityHandlers.define(
         HandlerBackedNumberAggregate,
         ProjectStateSchema,
-        (builder) => [builder.assign(ProjectStateSchema, "assignTask")],
+        (builder) => [builder.assign(CreateProjectSchema, "assignTask")],
       );
       const bigintAggregateHandlers = EntityHandlers.define(
         HandlerBackedBigintAggregate,
         ProjectStateSchema,
-        (builder) => [builder.assign(ProjectStateSchema, "assignTask")],
+        (builder) => [builder.assign(CreateProjectSchema, "assignTask")],
       );
       const numberProjectionHandlers = EntityHandlers.define(
         HandlerBackedNumberProjection,
         ProjectOverviewStateSchema,
-        (builder) => [builder.subscribe(ProjectOverviewStateSchema, "subscribeTask")],
+        (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeTask")],
       );
       const bigintProjectionHandlers = EntityHandlers.define(
         HandlerBackedBigintProjection,
         ProjectOverviewStateSchema,
-        (builder) => [builder.subscribe(ProjectOverviewStateSchema, "subscribeTask")],
+        (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeTask")],
       );
       new Repository({
         entityType: HandlerBackedBigintAggregate,

@@ -13,7 +13,6 @@
  */
 
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -52,20 +51,17 @@ import { expectWave13ContractToCompile } from "./wave13-compile-contract.js";
 import {
   ProjectStateSchema,
   ProjectOverviewStateSchema,
+  type ProjectState,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import type {
   GeneratedHandlerRecordInput,
   GeneratedHandlerRegistry,
 } from "../../src/handler/generated-handler-registry.js";
 
-type State = Message<"ProjectOverviewState"> & { id: string; name: string; priority: number };
-function stateSchema(index = 0): GenMessage<State> {
-  return (index === 0 ? ProjectOverviewStateSchema : ProjectStateSchema) as GenMessage<State>;
-}
-const StateSchema = stateSchema();
-const SubscribedStateSchema = stateSchema(1);
+const StateSchema = ProjectOverviewStateSchema;
+const SubscribedStateSchema = ProjectStateSchema;
 class ExternalStateProjection extends Projection<string, typeof StateSchema, number> {
-  onExternalState(state: State): void {
+  onExternalState(state: ProjectState): void {
     void state;
   }
 }

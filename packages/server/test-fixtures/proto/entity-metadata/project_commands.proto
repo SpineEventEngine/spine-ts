@@ -15,6 +15,11 @@ syntax = "proto3";
 
 package entity_metadata;
 
+message CreateProject {
+  string id = 1;
+  string name = 2;
+}
+
 message InviteProjectMembers {
   repeated string id = 1;
 }

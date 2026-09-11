@@ -13,14 +13,9 @@
  */
 syntax = "proto3";
 
-package repository_routing;
+package entity_metadata;
 
-import "spine/core/user_id.proto";
-
-message ProjectPriorityChanged {
-  double id = 1;
-}
-
-message ProjectMemberChanged {
-  spine.core.UserId id = 1;
+message ProjectCreated {
+  string id = 1;
+  string name = 2;
 }

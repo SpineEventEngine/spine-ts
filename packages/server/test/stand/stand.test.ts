@@ -57,7 +57,6 @@ import {
   type EventSubscriber,
 } from "../../src/bus/event-bus.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 import { tenant } from "../tenant-fixture.js";
 
 const observedEventBusSubscriptions = vi.hoisted(
@@ -93,24 +92,18 @@ vi.mock("../../src/bus/event-bus.js", async (importOriginal) => {
   };
 });
 
-type ProjectOverviewState = Message<"ProjectOverviewState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
+import {
+  type EmptyState,
+  file_entity_metadata_empty,
+} from "../../test-fixtures/generated/entity-metadata/empty_pb.js";
+import {
+  type ProjectOverviewState,
+  ProjectOverviewStateSchema,
+  type ProjectState,
+  ProjectStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
-type ProjectState = Message<"ProjectState"> & {
-  id: string;
-  name: string;
-  archived: boolean;
-};
-
-type EmptyState = Message<"EmptyState">;
-
-const { ProjectOverviewStateSchema, ProjectStateSchema } =
-  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
-const fileEntityEmptyFixture = FixtureSchemas.entityMetadataEmptyFile;
-const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
+const EmptyStateSchema = messageDesc(file_entity_metadata_empty, 0) as GenMessage<EmptyState>;
 
 describe("Stand", () => {
   it("keeps subscription lifecycle operations out of the Stand access seam", () => {
