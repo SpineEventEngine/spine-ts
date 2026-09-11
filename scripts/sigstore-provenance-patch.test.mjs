@@ -33,23 +33,26 @@ describe("Sigstore provenance patch", () => {
   it("recovers Lerna's resolved Sigstore provenance from an equivalent Rekor entry", async () => {
     const requests = [];
     const existingEntryId = "existing-entry";
-    const entryBody = Buffer.from(JSON.stringify({ apiVersion: "0.0.1", kind: "dsse" })).toString(
-      "base64",
-    );
+    let postedEntry;
     const server = createServer((request, response) => {
       requests.push(`${request.method} ${request.url}`);
       if (request.method === "POST") {
-        response.writeHead(409, {
-          Location: `/api/v1/log/entries/${existingEntryId}`,
+        const chunks = [];
+        request.on("data", (chunk) => chunks.push(chunk));
+        request.on("end", () => {
+          postedEntry = JSON.parse(Buffer.concat(chunks).toString());
+          response.writeHead(409, {
+            Location: `/api/v1/log/entries/${existingEntryId}`,
+          });
+          response.end();
         });
-        response.end();
         return;
       }
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(
         JSON.stringify({
           [existingEntryId]: {
-            body: entryBody,
+            body: Buffer.from(JSON.stringify(postedEntry)).toString("base64"),
             integratedTime: 1,
             logID: "00".repeat(32),
             logIndex: 1,
@@ -57,21 +60,21 @@ describe("Sigstore provenance patch", () => {
         }),
       );
     });
-    server.listen(0, "127.0.0.1");
-    await once(server, "listening");
-    const address = server.address();
-    if (typeof address === "string" || address === null) {
-      throw new Error("Expected the mock Rekor server to listen on a TCP port.");
-    }
-
-    const config = require(sigstoreConfigPath);
-    const bundleBuilder = config.createBundleBuilder("dsseEnvelope", {
-      rekorURL: `http://127.0.0.1:${address.port}`,
-      retry: { retries: 0 },
-      timeout: 1_000,
-    });
-    const [rekorWitness] = Reflect.get(bundleBuilder, "witnesses");
     try {
+      server.listen(0, "127.0.0.1");
+      await once(server, "listening");
+      const address = server.address();
+      if (typeof address === "string" || address === null) {
+        throw new Error("Expected the mock Rekor server to listen on a TCP port.");
+      }
+
+      const config = require(sigstoreConfigPath);
+      const bundleBuilder = config.createBundleBuilder("dsseEnvelope", {
+        rekorURL: `http://127.0.0.1:${address.port}`,
+        retry: { retries: 0 },
+        timeout: 1_000,
+      });
+      const [rekorWitness] = Reflect.get(bundleBuilder, "witnesses");
       const result = await rekorWitness.testify(
         {
           $case: "dsseEnvelope",
@@ -90,9 +93,15 @@ describe("Sigstore provenance patch", () => {
       ]);
       expect(result.tlogEntries).toHaveLength(1);
       expect(result.tlogEntries[0].kindVersion).toEqual({ kind: "dsse", version: "0.0.1" });
+      expect(result.tlogEntries[0].canonicalizedBody).toEqual(
+        Buffer.from(JSON.stringify(postedEntry)),
+      );
     } finally {
-      server.close();
-      await once(server, "close");
+      if (server.listening) {
+        const closed = once(server, "close");
+        server.close();
+        await closed;
+      }
     }
   });
 });

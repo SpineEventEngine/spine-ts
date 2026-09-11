@@ -693,6 +693,11 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   documentation reviewer role, explicitly `gpt-5.6-luna` / `medium`, canonical
   agent ID `/root/provenance_docs_rereview`. Each receives no inherited
   conversation turns and may not spawn sub-agents.
+- Correction re-review found that the first HTTP simulation could accept an
+  unrelated DSSE entry and could leak its local server if setup failed.
+  Documentation re-review was clean. The test now returns the exact posted
+  Rekor record, asserts that exact canonical body is recovered, and closes the
+  server from a setup-enclosing `finally` block.
 
 - `2026-09-11 11:31 WEST`: Restarted the publication investigation after
   reverting the incorrect retry and process-supervision design in `eb4c60ae9`.
