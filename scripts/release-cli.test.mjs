@@ -73,6 +73,75 @@ describe("release CLI", () => {
     expect(calls).toHaveLength(3);
   });
 
+  it("retries a partial registry state even when Lerna exits successfully", async () => {
+    const calls = [];
+    const waits = [];
+    const selections = [];
+    const inspections = [
+      { state: "partial", missingNames: ["@synthetic/dependent"] },
+      { state: "complete", missingNames: [] },
+    ];
+    await expect(
+      recoverPublication({
+        release: {
+          packages: [{ name: "@synthetic/base" }, { name: "@synthetic/dependent" }],
+        },
+        initialNames: ["@synthetic/base", "@synthetic/dependent"],
+        inspect: async () => inspections.shift(),
+        wait: async (milliseconds) => waits.push(milliseconds),
+        createWorkspace: async ({ selectedNames }) => selections.push(selectedNames),
+        runLerna: async () => {
+          calls.push("lerna");
+          return { status: 0, signal: null };
+        },
+        mkdtemp: (prefix) => prefix + calls.length,
+        remove: () => {},
+      }),
+    ).resolves.toMatchObject({ recovered: true, status: 0 });
+    expect(calls).toHaveLength(2);
+    expect(selections).toEqual([
+      ["@synthetic/base", "@synthetic/dependent"],
+      ["@synthetic/dependent"],
+    ]);
+    expect(waits).toEqual([90_000, 180_000]);
+  });
+
+  it("fails closed when the delayed registry inspection reports a wrong tag after status zero", async () => {
+    const runLerna = vi.fn(async () => ({ status: 0, signal: null }));
+    await expect(
+      recoverPublication({
+        release: { packages: [{ name: "@synthetic/base" }] },
+        initialNames: ["@synthetic/base"],
+        inspect: async () => {
+          throw new Error("selected tag");
+        },
+        wait: async () => {},
+        createWorkspace: async () => {},
+        runLerna,
+        mkdtemp: () => "/temporary/workspace",
+        remove: () => {},
+      }),
+    ).rejects.toThrow("selected tag");
+    expect(runLerna).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts status zero only after a delayed exact complete inspection", async () => {
+    const waits = [];
+    await expect(
+      recoverPublication({
+        release: { packages: [{ name: "@synthetic/base" }] },
+        initialNames: ["@synthetic/base"],
+        inspect: async () => ({ state: "complete", missingNames: [] }),
+        wait: async (milliseconds) => waits.push(milliseconds),
+        createWorkspace: async () => {},
+        runLerna: async () => ({ status: 0, signal: null }),
+        mkdtemp: () => "/temporary/workspace",
+        remove: () => {},
+      }),
+    ).resolves.toMatchObject({ status: 0 });
+    expect(waits).toEqual([90_000]);
+  });
+
   it("cleans the publication parent for SIGINT and preserves its exit code", async () => {
     const handlers = new Map();
     const removed = [];

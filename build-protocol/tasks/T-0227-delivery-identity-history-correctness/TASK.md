@@ -402,6 +402,13 @@ verification and review may run concurrently only at stable boundaries.
   controller tests add the distinct nonzero-process and delayed-registry cases,
   so no duplicate local-registry expansion is needed. Focused release checks
   passed 37/37, plus tooling typecheck, TSDoc, formatting, and diff checks.
+- `2026-09-11 10:37 WEST`: The complete review wave found that status zero had
+  returned before a strict registry inspection. The controller now waits and
+  inspects after every Lerna result, including zero. Only exact complete state
+  succeeds; a partial zero result follows the same fresh-workspace,
+  missing-only retry path, and wrong tags or other ambiguous states fail closed.
+  D-0117 and the release runbook now state the same rule. Controller regressions
+  cover zero-plus-partial, zero-plus-wrong-tag, and zero-plus-complete.
 
 ## Decisions
 

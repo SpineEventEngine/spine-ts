@@ -174,7 +174,6 @@ export async function recoverPublication({
         remove(destination);
         active = undefined;
       }
-      if (last.status === 0) return { ...last, recovered: attempt > 0 };
       await wait(delays[attempt]);
       const inspected = await inspect(release);
       if (inspected.state === "complete") return { ...last, recovered: true };
