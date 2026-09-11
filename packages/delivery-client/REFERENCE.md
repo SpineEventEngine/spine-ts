@@ -63,8 +63,8 @@ effects, or a production topology.
 
 Remote admission scans at most 1,000 new raw rows when looking for a retained
 delivered duplicate. The timestamp continuation repeats its cursor row without
-counting it again. A match at candidate 1,000 suppresses delivery; 1,000 misses
-fail closed without reading candidate 1,001.
+counting it again. A match in the 1,000th row suppresses delivery; 1,000 misses
+fail closed without reading a 1,001st row.
 
 ## Remote delivery in an environment
 
