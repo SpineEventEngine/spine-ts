@@ -731,6 +731,18 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   sub-agents. Documentation remains closed because the release runbook and
   decision record were already clean and this correction changed only matching
   implementation TSDoc and deterministic task evidence.
+- `2026-09-11 11:06 WEST`: The fresh lifecycle re-review returned one final
+  correction batch. Performance/reliability found a spawn-error race before
+  completion listeners are installed and insufficient proof of TERM-first,
+  idempotent escalation. Style/maintainability found that direct-PID termination
+  can leave Lerna descendants running, that the production delay timer lacks a
+  direct cancellation regression, and that parent SIGTERM/exit-143 behavior is
+  uncovered. Returned these accepted findings to the existing implementer role,
+  explicitly `gpt-5.6-terra` / medium. The correction must reuse the repository's
+  existing detached process-group termination pattern, attach child completion
+  listeners immediately, extract the existing abortable delay for direct tests,
+  and add bounded process-tree, spawn-error, TERM/KILL, and SIGTERM regressions.
+  The implementer may not spawn sub-agents.
 
 The implementation and independent-review corrections were completed in the
 human-selected current checkout without a separate worktree. The corrected tree
