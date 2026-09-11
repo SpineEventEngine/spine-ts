@@ -61,11 +61,13 @@ delivery and delivered rows are the deduplication fact. This
 package does not add authentication, authorization, durability, exactly-once
 effects, or a production topology.
 
-Delivery reads raw shard pages once. The server delivery policy compares pending
-rows with delivered rows in that page and its bounded recent-delivery cache,
-then removes exact duplicates without treating them as delivered
-acknowledgements. Remote duplicate removal compares the current snapshot before
-sending the existing best-effort removal request.
+Each delivery read requests one bounded logical shard page. Because the remote
+cursor includes its anchor row, filling that logical page may require multiple
+bounded raw-page RPCs. The server delivery policy compares pending rows with
+delivered rows in the logical page and its bounded recent-delivery cache, then
+removes exact duplicates without treating them as delivered acknowledgements.
+Remote duplicate removal compares the current snapshot before sending the
+existing best-effort removal request.
 
 ## Remote delivery in an environment
 

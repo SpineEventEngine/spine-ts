@@ -995,3 +995,10 @@ documentation reviewer role, explicitly `gpt-5.6-luna` / `medium`, with no
 inherited conversation turns and no child-agent dispatch. It covers current
 delivery, identity, history, fixture-policy, and compatibility claims and
 checks for terminology left by the superseded admission design.
+
+The documentation review found one stale statement in
+`packages/delivery-client/REFERENCE.md`: it said raw pages were read once.
+The correction now distinguishes one bounded logical page from the multiple
+bounded raw-page RPCs sometimes needed to move past an inclusive remote cursor.
+The documented timestamp-collision limitation remains unchanged. No other
+documentation contradiction was found.
