@@ -1,6 +1,6 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: Complete
+Status: In progress — npm provenance correction
 Start: `2026-09-10 16:26 WEST`
 Initial closure: `2026-09-10 20:06 WEST`
 Final closure: `2026-09-11 02:19 WEST`
@@ -625,6 +625,26 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   dependency safety, and prohibited-scope compliance.
 
 ## Integration Result
+
+- `2026-09-11 11:31 WEST`: Restarted the publication investigation after
+  reverting the incorrect retry and process-supervision design in `eb4c60ae9`.
+  The resulting tree exactly matched pre-investigation commit `7d95953ff`.
+  The complete GitHub job log identifies `@spine-event-engine/server` as the
+  first failure: `TLOG_CREATE_ENTRY_ERROR` reported an equivalent Rekor entry.
+  Rekor confirms that entry was integrated at `12:43:50Z`, about eight seconds
+  before npm reported the conflict. This is the documented retry-after-success
+  defect in Sigstore: the first create succeeds, a retry receives 409, and
+  Sigstore 4.1.1 treats the equivalent existing entry as fatal because
+  `fetchOnConflict` is explicitly false. Lerna finished packages already queued
+  in the dependency cycle, then withheld `client-node`, `deployment-gce`,
+  `deployment-gke`, and `testing` because each depends on the failed `server`
+  package. Prepared a fresh implementation assignment using the existing
+  implementer role, explicitly `gpt-5.6-terra` / medium with no inherited
+  conversation turns. The correction is limited to enabling Sigstore's existing
+  equivalent-entry recovery through pnpm's dependency patch mechanism, focused
+  installation/release checks, and narrow release documentation. No publication
+  retry, recovery controller, process supervisor, or timeout is permitted. The
+  implementer may not spawn sub-agents.
 
 The implementation and independent-review corrections were completed in the
 human-selected current checkout without a separate worktree. The corrected tree
