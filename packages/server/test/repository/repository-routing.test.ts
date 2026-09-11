@@ -34,7 +34,6 @@ import {
 } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
-  type CommandId,
   type Command as SpineCommand,
   type CommandContext,
   CommandSchema,
@@ -54,7 +53,6 @@ import {
   UserIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
-import type { UserId } from "@spine-event-engine/proto";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { TaskListSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
 import {
@@ -141,45 +139,32 @@ import type * as RepositoryRouting from "../../test-fixtures/generated/repositor
 import type * as RepositoryCommands from "../../test-fixtures/generated/repository-routing/repository_commands_pb.js";
 import type * as RepositoryEvents from "../../test-fixtures/generated/repository-routing/repository_events_pb.js";
 import type * as RouteValidation from "../../test-fixtures/generated/repository-routing/route-validation_pb.js";
-import type * as ValidationRefusal from "../../test-fixtures/generated/repository-routing/validation-refusal_pb.js";
 import type * as ValidationCommands from "../../test-fixtures/generated/repository-routing/validation_refusal_commands_pb.js";
 import type * as ValidationEvents from "../../test-fixtures/generated/repository-routing/validation_refusal_events_pb.js";
 
 const GeneratedTaskIdSchema = TodoIdSchema;
 
 type ProjectionState = RepositoryRouting.ProjectionState;
-type NeutralProjectionState = RepositoryRouting.NeutralProjectionState;
 type ProjectionEvent = RepositoryEvents.ProjectionEvent;
 type GeneratedReactorEvent = RepositoryEvents.GeneratedReactorEvent;
 type ImplicitTaskCommand = RepositoryCommands.ImplicitTaskCommand;
 type AggregateState = RepositoryRouting.AggregateState;
 type TaskCommand = RepositoryCommands.TaskCommand;
 type ProducedTaskCommand = ValidationCommands.ProducedTaskCommand;
-type Int32AggregateState = RepositoryRouting.Int32AggregateState;
-type Int64ProcessManagerState = RepositoryRouting.Int64ProcessManagerState;
 type RepeatedIdCommand = RepositoryCommands.RepeatedIdCommand;
 type MapIdCommand = RepositoryCommands.MapIdCommand;
 type UuidMessageIdAggregateId = RepositoryRouting.UuidMessageIdAggregateId;
-type UuidMessageIdAggregateState = RepositoryRouting.UuidMessageIdAggregateState;
-type ProcessManagerState = RepositoryRouting.ProcessManagerState;
-type ValidatedAggregateState = ValidationRefusal.ValidatedAggregateState;
 type ValidatedTaskCommand = ValidationCommands.ValidatedTaskCommand;
 type ValidatedMessageId = ValidationCommands.ValidatedMessageId;
-type ValidatedMessageIdState = ValidationRefusal.ValidatedMessageIdState;
 type TaskId =
   import("../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js").TaskId;
-type Task = import("../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js").Task;
 type TaskCreated =
   import("../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js").TaskCreated;
 type TaskListId =
   import("../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js").TaskListId;
 type Int64ProjectionId = RepositoryRouting.ProjectionId;
-type Int64MessageIdProjectionState = RepositoryRouting.Int64MessageIdProjectionState;
-type Int64MessageIdSourceState = RepositoryRouting.Int64MessageIdSourceState;
 type Int64MessageIdProjectionEvent = RepositoryEvents.Int64MessageIdProjectionEvent;
 type CompositeRouteId = RepositoryRouting.CompositeRouteId;
-type CompositeRouteState = RepositoryRouting.CompositeRouteState;
-type CompositeRouteAggregateState = RepositoryRouting.CompositeRouteAggregateState;
 type CompositeRouteEvent = RepositoryEvents.CompositeRouteEvent;
 type CompositeRouteCommand = RepositoryCommands.CompositeRouteCommand;
 type UuidMessageIdAggregateCommand = RepositoryCommands.UuidMessageIdAggregateCommand;
@@ -189,7 +174,6 @@ type Int32AggregateEvent = RepositoryEvents.Int32AggregateEvent;
 type Int64ProcessManagerEvent = RepositoryEvents.Int64ProcessManagerEvent;
 type ValidatedTaskEvent = ValidationEvents.ValidatedTaskEvent;
 type CompositeRouteSourceState = RepositoryRouting.CompositeRouteSourceState;
-type CompositeRouteProcessManagerState = RepositoryRouting.CompositeRouteProcessManagerState;
 type NumberRouteEvent = RouteValidation.NumberRouteEvent;
 type WrongIdRouteEvent = RouteValidation.WrongIdRouteEvent;
 

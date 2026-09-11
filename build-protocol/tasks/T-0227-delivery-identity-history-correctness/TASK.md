@@ -977,6 +977,10 @@ Correction evidence recorded 2026-09-11:
   command `pnpm exec vitest run packages/delivery-client/test/remote-inbox-direct.test.ts packages/server/test/repository/repository-routing.test.ts packages/server/test/runtime/standalone-handler-runtime.test.ts --maxWorkers=1`
   passed 287 tests in 3 files. No cache-identity or production/public-export
   changes were made.
+- Preflight lint correction: removed stale generated-type aliases/imports and
+  replaced unsafe test interpolation/non-null assertions without changing
+  behavior. Targeted ESLint for the two corrected tests passed; the same
+  three-file one-worker Vitest command passed 287 tests.
 
 Correction commit `6c92595fc` was pushed to the official feature branch.
 Affected-lane re-review was dispatched to the same independent, initially

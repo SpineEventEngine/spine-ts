@@ -153,20 +153,25 @@ describe("RemoteInbox direct behavior", () => {
     const inbox = new RemoteInbox(client as never);
     const anchor = domainMessage("anchor");
     const earlier = Array.from({ length: 2_000 }, (_, index): ReturnType<typeof domainMessage> => ({
-      ...domainMessage(`earlier-${index}`),
+      ...domainMessage(`earlier-${String(index)}`),
       status: "DELIVERED" as const,
       version: BigInt(index + 2),
       whenReceived: new Date((index + 2) * 1_000),
     }));
+    const pendingSource = earlier[999];
+    const continuationAnchor = earlier[998];
+    if (pendingSource === undefined || continuationAnchor === undefined) {
+      throw new Error("Expected the generated remote page rows.");
+    }
     const pending: ReturnType<typeof domainMessage> = {
-      ...earlier[999]!,
+      ...pendingSource,
       status: "TO_DELIVER",
     };
     earlier[999] = pending;
 
     client.readPage
       .mockResolvedValueOnce([anchor, ...earlier.slice(0, 999)])
-      .mockResolvedValueOnce([earlier[998]!, ...earlier.slice(999, 1_999)]);
+      .mockResolvedValueOnce([continuationAnchor, ...earlier.slice(999, 1_999)]);
 
     await expect(
       inbox.read(ShardIndex.single(), {
