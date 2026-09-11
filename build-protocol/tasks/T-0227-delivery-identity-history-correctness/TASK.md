@@ -1,6 +1,6 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: Complete
+Status: Active — delivery-admission redesign and fixture correction
 Start: `2026-09-10 16:26 WEST`
 Initial closure: `2026-09-10 20:06 WEST`
 Final closure: `2026-09-11 02:19 WEST`
@@ -21,6 +21,43 @@ Last release-verified implementation HEAD: `9f1bdf057`.
 Last pushed behavior/documentation correction HEAD: `8315b4e64`. Later
 task-record-only commits may follow without changing that implementation checkpoint.
 Final release-verified provenance implementation HEAD: `2240709c8`.
+
+## Delivery Admission And Test-Fixture Correction Framing
+
+- `2026-09-11 14:10 WEST`: Reopened this high-risk task after the human rejected
+  the remote client-side scan and the opaque fixture representation. Current
+  JVM behavior remains binding. A valid pending message must never fail merely
+  because 1,000 unrelated inbox rows exist; the literal `1_000` in the JVM is
+  the capacity of a recent-delivery cache, not a scan-failure threshold.
+- The correction must remove remote admission pagination from
+  `RemoteInbox.admit()`, keep exact identity based on signal ID and typed target,
+  and preserve valid delivery without an invented outbox, crash-recovery
+  mechanism, UUID validation, arbitrary row cap, or retry controller.
+- Test fixtures must use readable, role-correct Proto sources and their normal
+  generated schemas. The custom module that stores descriptor sets as Base64
+  source is prohibited. Commands, Events, Entity states, identifiers, and
+  scalar wrappers may not stand in for one another merely because their fields
+  fit. Legitimate Base64 encoding required by authentication, wire formats, or
+  storage keys is not fixture source and remains in scope only if separately
+  incorrect.
+- Design pass 1: existing requirements splitter role, explicitly
+  `gpt-5.6-sol` / `high`, canonical agent ID
+  `/root/admit_design_minimal`.
+- Design pass 2: existing performance/reliability reviewer role, explicitly
+  `gpt-5.6-terra` / `high`, canonical agent ID
+  `/root/admit_design_jvm_cache`.
+- Design pass 3: existing TypeScript/API documentation reviewer role,
+  explicitly `gpt-5.6-terra` / `high`, canonical agent ID
+  `/root/admit_design_server_atomic`.
+- Each design pass received no inherited conversation turns and may not spawn
+  sub-agents. The dispatch surface fixes the stated role/model/reasoning
+  profiles; separate runtime self-introspection is unavailable.
+- A previous fresh independent TypeScript/API review, canonical agent ID
+  `/root/fresh_independent_api_review`, identified remaining wrong-domain
+  signal fixtures across bus, bounded-context, subscription, service,
+  repository, integration-broker, lifecycle, runtime metadata, and core tests.
+  Those findings are inputs to this correction, not accepted blindly; each
+  replacement must be checked against what the test is meant to prove.
 
 ## Sigstore Provenance Correction Framing
 
