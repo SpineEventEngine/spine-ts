@@ -85,19 +85,6 @@ export interface DeliveryInbox {
   ): Promise<InboxMessage | undefined>;
 
   /**
-   * Admits one pending row unless a retained delivered row already represents the same signal at the same typed target.
-   *
-   * @param message Supplies the pending row snapshot.
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns The canonical admitted row for dispatch and recovery, or `undefined`
-   * when retained delivery suppresses it.
-   */
-  admit(
-    message: InboxMessage,
-    options?: DeliveryOperationOptions,
-  ): Promise<InboxMessage | undefined>;
-
-  /**
    * Marks one exact pending Inbox row delivered.
    *
    * @param message Supplies the expected pending row snapshot.
@@ -108,6 +95,20 @@ export interface DeliveryInbox {
     message: InboxMessage,
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined>;
+
+  /**
+   * Removes one exact pending duplicate while the supplied shard session remains current.
+   *
+   * @param message Supplies the pending duplicate snapshot.
+   * @param session Supplies the session that currently holds the message shard.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns Whether the adapter removed the exact pending snapshot.
+   */
+  removeDuplicate(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<boolean>;
 
   /**
    * Removes one delivered snapshot while the supplied shard

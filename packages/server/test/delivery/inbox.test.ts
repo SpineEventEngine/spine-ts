@@ -26,21 +26,28 @@ import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Inbox", () => {
-  it("forwards admission cancellation to direct storage", async () => {
+  it("forwards duplicate-removal cancellation to direct storage", async () => {
     const factory = new InMemoryStorageFactory();
+    const context = { name: "T0227-duplicate", multitenant: false } as const;
     const inbox = new Inbox(
       new InboxStorage({
-        context: { name: "T0227-admit", multitenant: false },
+        context,
         storageFactory: factory,
       }),
     );
+    const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
     const message = createMessage("cancelled", "signal", 1n);
+    const session = await registry.pickUp(
+      message.shard,
+      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+    );
     const controller = new AbortController();
-    const reason = new Error("Admission was cancelled by the caller.");
     await inbox.storage.write(message);
-    controller.abort(reason);
+    controller.abort();
 
-    await expect(inbox.admit(message, { signal: controller.signal })).rejects.toBe(reason);
+    await expect(
+      inbox.removeDuplicate(message, required(session, "session"), { signal: controller.signal }),
+    ).resolves.toBe(false);
     await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "TO_DELIVER" });
   });
 
@@ -281,37 +288,6 @@ describe("Inbox", () => {
       } as never),
     ).toThrow(TypeError);
     expect(() => InboxTargets.shardKey(Identifiers.pack("string", " "))).toThrow(TypeError);
-  });
-
-  it("deduplicates equal typed targets but not printable values from another identifier kind", async () => {
-    const inbox = open("Tasks");
-    const first = {
-      ...input(createMessage("ignored", "same-signal", 1n)),
-      inboxId: {
-        targetId: Identifiers.pack("int32", 42),
-        targetTypeUrl: "type.example.dev/tasks.Typed",
-      },
-    };
-    const duplicate = { ...first, version: 2n };
-    const otherKind = {
-      ...first,
-      signalId: "same-signal",
-      inboxId: {
-        targetId: Identifiers.pack("string", "42"),
-        targetTypeUrl: "type.example.dev/tasks.Typed",
-      },
-      version: 3n,
-    };
-
-    const written = await inbox.receive(first);
-    await inbox.markDelivered(written.message);
-    const sameTyped = await inbox.receive(duplicate);
-    const differentTyped = await inbox.receive(otherKind);
-
-    await expect(inbox.storage.admit(sameTyped.message)).resolves.toBeUndefined();
-    await expect(inbox.storage.admit(differentTyped.message)).resolves.toMatchObject({
-      inboxId: { targetId: Identifiers.pack("string", "42") },
-    });
   });
 });
 

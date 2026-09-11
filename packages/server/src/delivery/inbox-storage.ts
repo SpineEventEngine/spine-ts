@@ -25,7 +25,6 @@ import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/pro
 
 import {
   InboxMessageError,
-  InboxTargets,
   type DeliveryStatus,
   type InboxMessage,
   type InboxMessageId,
@@ -35,12 +34,10 @@ import {
 import { InboxRecords, inboxRecordSpec } from "./inbox-records.js";
 import { ShardIndex } from "./shard-index.js";
 import { shardSessionRecordSpec } from "./sharded-work-registry.js";
-import type { DeliveryOperationOptions, DeliveryWorkSession } from "./delivery-ports.js";
+import type { DeliveryWorkSession } from "./delivery-ports.js";
 
 const defaultReadLimit = 100;
 const maxReadLimit = 1_000;
-const dedupReadLimit = 2;
-const maxDedupReadPages = maxReadLimit / dedupReadLimit;
 
 /**
  * Stores direct generated inbox records in the configured durable family.
@@ -184,6 +181,36 @@ export class InboxStorage {
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
     if (
+      message.status !== "DELIVERED" ||
+      (message.keepUntil !== undefined && message.keepUntil.getTime() > Values.now(this.#now))
+    )
+      return false;
+    return this.#remove(message, session, options);
+  }
+
+  /**
+   * Removes one exact pending duplicate while its leased session remains current.
+   *
+   * @param message Supplies the expected pending snapshot.
+   * @param session Supplies the session that holds the message shard.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns Whether the provider atomically removed the exact pending snapshot.
+   */
+  async removeDuplicate(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    options?: import("./delivery-ports.js").DeliveryOperationOptions,
+  ): Promise<boolean> {
+    if (message.status !== "TO_DELIVER") return false;
+    return this.#remove(message, session, options);
+  }
+
+  async #remove(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    options?: import("./delivery-ports.js").DeliveryOperationOptions,
+  ): Promise<boolean> {
+    if (
       options?.timeoutMs !== undefined &&
       (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 0)
     )
@@ -192,14 +219,9 @@ export class InboxStorage {
       options?.timeoutMs === undefined ? undefined : Values.now(this.#now) + options.timeoutMs;
     const isActive = () =>
       !options?.signal?.aborted && (deadline === undefined || Values.now(this.#now) < deadline);
-    if (!isActive()) return false;
-    if (session.kind !== "LEASED" || session.shard.key() !== message.shard.key()) return false;
-    const expected = InboxRecords.write(message);
-    if (
-      message.status !== "DELIVERED" ||
-      (message.keepUntil !== undefined && message.keepUntil.getTime() > Values.now(this.#now))
-    )
+    if (!isActive() || session.kind !== "LEASED" || session.shard.key() !== message.shard.key())
       return false;
+    const expected = InboxRecords.write(message);
     const cleanup = DeliveryCleanupStorageFactories.create(this.#storageFactory);
     try {
       return await cleanup.remove({
@@ -218,96 +240,6 @@ export class InboxStorage {
       });
     } finally {
       cleanup.close();
-    }
-  }
-
-  /**
-   * Returns one exact pending row while the caller owns its shard.
-   *
-   * @param message Supplies the expected pending snapshot.
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns The admitted row, or `undefined` when it is unavailable or duplicated.
-   */
-  async admit(
-    message: InboxMessage,
-    options?: DeliveryOperationOptions,
-  ): Promise<InboxMessage | undefined> {
-    if (
-      options?.timeoutMs !== undefined &&
-      (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 0)
-    )
-      throw new TypeError("Delivery operation timeout is invalid.");
-    const deadline =
-      options?.timeoutMs === undefined ? undefined : Values.now(this.#now) + options.timeoutMs;
-    const checkActive = () => {
-      if (options?.signal?.aborted)
-        throw options.signal.reason instanceof Error
-          ? options.signal.reason
-          : new Error("Delivery admission was aborted.");
-      if (deadline !== undefined && Values.now(this.#now) >= deadline)
-        throw new Error("Delivery admission deadline expired.");
-    };
-    checkActive();
-    const expected = InboxRecords.write(message);
-    const id = Values.wireId(expected);
-    const storage = this.#storage();
-    try {
-      Values.atomic(storage);
-      checkActive();
-      const current = await storage.read(id);
-      checkActive();
-      if (current === undefined || !Values.same(current, expected)) return undefined;
-      const pending = InboxRecords.read(current, id);
-      if (pending.status !== "TO_DELIVER") return undefined;
-      let after: ReturnType<typeof Values.after> | undefined;
-      for (let page = 0; page < maxDedupReadPages; page++) {
-        checkActive();
-        const delivered = await storage.queryEntries({
-          filters: [
-            { column: "inbox_id", value: expected.inboxId },
-            { column: "signal_id", value: expected.signalId },
-            { column: "status", value: Values.status("DELIVERED") },
-          ],
-          sort: [{ field: "when_received" }, { field: "version" }, { field: "message_id" }],
-          limit: dedupReadLimit,
-          ...(after === undefined ? {} : { after }),
-        });
-        checkActive();
-        const rows = delivered.map((row) => InboxRecords.read(row.record, row.id));
-        for (const row of rows) {
-          checkActive();
-          if (
-            row.signalId === pending.signalId &&
-            InboxTargets.equal(row.inboxId.targetId, pending.inboxId.targetId) &&
-            row.inboxId.targetTypeUrl === pending.inboxId.targetTypeUrl &&
-            (row.keepUntil === undefined || row.keepUntil.getTime() > Values.now(this.#now))
-          ) {
-            checkActive();
-            await storage.compareAndSet(
-              id,
-              current,
-              InboxRecords.write({ ...pending, status: "DELIVERED" }),
-            );
-            return undefined;
-          }
-        }
-        if (rows.length < dedupReadLimit) {
-          checkActive();
-          return pending;
-        }
-        const last = rows.at(-1);
-        if (last === undefined) {
-          checkActive();
-          return pending;
-        }
-        after = Values.after(
-          { messageId: last.id.value, whenReceived: last.whenReceived, version: last.version },
-          pending.shard,
-        );
-      }
-      throw new InboxMessageError("Inbox deduplication scan reached its finite bound.");
-    } finally {
-      storage.close();
     }
   }
 

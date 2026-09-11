@@ -33,6 +33,7 @@ import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
 import { withDeliveryCommitFence } from "../repository/commit-fence.js";
 import type { DeliveryResult, DeliveryRunOptions, DeliveryStrategy } from "./delivery-builder.js";
+import { DeliveryDeduplication } from "./delivery-deduplication.js";
 
 /**
  * Describes an endpoint snapshot supplied for direct Inbox delivery.
@@ -345,31 +346,14 @@ export class Delivery {
       current = validated;
       return true;
     };
-    const cleanupPage = async (): Promise<boolean> => {
+    const cleanupPage = async (messages: readonly InboxMessage[]): Promise<boolean> => {
       if (this.inbox.removeDelivered === undefined) return true;
       if (!(await validate())) return false;
-      let after: import("./inbox.js").InboxReadContinuation | undefined;
-      for (let page = 0; page < 2; page += 1) {
-        let removedAny = false;
-        const delivered = await this.inbox.read(shard, {
-          statuses: ["DELIVERED"],
-          limit: this.pageSize,
-          ...(after === undefined ? {} : { after }),
-          ...(options.operation ?? {}),
-        });
-        for (const message of delivered) {
-          if (options.operation?.signal?.aborted || !(await validate())) return false;
-          const removed = await this.inbox.removeDelivered(message, current, options.operation);
-          if (options.operation?.signal?.aborted || (!removed && !(await validate()))) return false;
-          removedAny ||= removed;
-        }
-        const last = delivered.at(-1);
-        if (removedAny || last === undefined || delivered.length < this.pageSize) break;
-        after = {
-          messageId: last.id.value,
-          whenReceived: last.whenReceived,
-          version: last.version,
-        };
+      for (const message of messages) {
+        if (message.status !== "DELIVERED") continue;
+        if (options.operation?.signal?.aborted || !(await validate())) return false;
+        const removed = await this.inbox.removeDelivered(message, current, options.operation);
+        if (options.operation?.signal?.aborted || (!removed && !(await validate()))) return false;
       }
       return true;
     };
@@ -380,9 +364,11 @@ export class Delivery {
         },
         () => Promise.resolve(options.onMessage(message)),
       );
+    const deduplication = new DeliveryDeduplication(this.inbox);
     const markDelivered = async (message: InboxMessage): Promise<void> => {
       if ((await this.inbox.markDelivered(message, options.operation)) === undefined)
         throw new Error("Inbox message was not marked delivered.");
+      deduplication.recordDelivered(message);
       statistics.delivered += 1;
       options.onDelivered?.(message);
     };
@@ -394,18 +380,18 @@ export class Delivery {
       let after: import("./inbox.js").InboxReadContinuation | undefined;
       for (;;) {
         const messages = await this.inbox.read(shard, {
-          statuses: ["TO_DELIVER"],
           limit: this.pageSize,
           ...(after === undefined ? {} : { after }),
           ...(options.operation ?? {}),
         });
         if (messages.length === 0) {
-          if (!(await cleanupPage())) return complete("STOPPED");
           break;
         }
         const deliveredBefore = statistics.delivered;
+        const page = deduplication.page(messages);
         for (const message of messages) {
           if (options.operation?.signal?.aborted) return complete("STOPPED");
+          if (message.status !== "TO_DELIVER") continue;
           if (!isEndpointMessage(message)) continue;
           if (options.acceptMessage !== undefined && !options.acceptMessage(message)) continue;
           const target = `${message.inboxId.targetTypeUrl}:${InboxTargets.key(message.inboxId.targetId)}`;
@@ -414,42 +400,37 @@ export class Delivery {
           if (!(await safelyBoolean(() => this.#monitor.shouldContinueAfter("PAGE"))))
             return complete("STOPPED");
           if (!(await validate())) return complete("STOPPED");
-          let admitted: InboxMessage | undefined;
+          if (page.isDuplicate(message)) {
+            try {
+              if (!(await this.inbox.removeDuplicate(message, current, options.operation)))
+                throw new Error("Inbox duplicate was not removed.");
+            } catch (error) {
+              statistics.failed += 1;
+              failures.push(Object.freeze({ message: snapshot(message), error }));
+              blockedTargets.add(target);
+            }
+            continue;
+          }
           try {
-            admitted = await this.inbox.admit(message, options.operation);
+            statistics.accepted += 1;
+            await dispatch(message);
+            if (options.operation?.signal?.aborted) return complete("STOPPED");
+            if (!(await validate())) return complete("STOPPED");
+            await markDelivered(message);
           } catch (error) {
             statistics.failed += 1;
             failures.push(Object.freeze({ message: snapshot(message), error }));
-            blockedTargets.add(target);
-            continue;
-          }
-          if (admitted === undefined) {
-            statistics.delivered += 1;
-            options.onDelivered?.(message);
-            continue;
-          }
-          const admittedTarget = `${admitted.inboxId.targetTypeUrl}:${InboxTargets.key(admitted.inboxId.targetId)}`;
-          if (blockedTargets.has(admittedTarget)) continue;
-          try {
-            statistics.accepted += 1;
-            await dispatch(admitted);
-            if (options.operation?.signal?.aborted) return complete("STOPPED");
-            if (!(await validate())) return complete("STOPPED");
-            await markDelivered(admitted);
-          } catch (error) {
-            statistics.failed += 1;
-            failures.push(Object.freeze({ message: snapshot(admitted), error }));
             const reception = new FailedReception(
-              admitted,
+              message,
               error,
               async () => {
                 if (!(await validate())) throw new Error("Shard ownership was lost.");
-                await markDelivered(admitted);
+                await markDelivered(message);
               },
               async () => {
-                await dispatch(admitted);
+                await dispatch(message);
                 if (!(await validate())) throw new Error("Shard ownership was lost.");
-                await markDelivered(admitted);
+                await markDelivered(message);
               },
             );
             const action = await safelyValue(
@@ -460,12 +441,12 @@ export class Delivery {
               !(await safely(() => action.execute())) &&
               !(await safely(() => reception.markDelivered().execute()))
             ) {
-              blockedTargets.add(admittedTarget);
+              blockedTargets.add(target);
             }
             if (ownership.lost) return complete("STOPPED");
           }
         }
-        if (!(await cleanupPage())) return complete("STOPPED");
+        if (!(await cleanupPage(messages))) return complete("STOPPED");
         const last = messages.at(-1);
         if (statistics.delivered !== deliveredBefore) {
           after = undefined;

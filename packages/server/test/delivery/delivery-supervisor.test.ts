@@ -1188,18 +1188,19 @@ class AdmissionInbox implements DeliveryInbox {
     return this.#delegate.readMessage(id, options);
   }
 
-  admit(
-    message: InboxMessage,
-    options?: DeliveryOperationOptions,
-  ): Promise<InboxMessage | undefined> {
-    return this.#delegate.admit(message, options);
-  }
-
   markDelivered(
     message: InboxMessage,
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined> {
     return this.#delegate.markDelivered(message, options);
+  }
+
+  removeDuplicate(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<boolean> {
+    return this.#delegate.removeDuplicate(message, session, options);
   }
 }
 
@@ -1329,8 +1330,8 @@ class RunnerInbox implements DeliveryInbox {
     return Promise.resolve(undefined);
   }
 
-  admit(message: InboxMessage): Promise<InboxMessage> {
-    return Promise.resolve(message);
+  removeDuplicate(): Promise<boolean> {
+    return Promise.resolve(true);
   }
 
   markDelivered(): Promise<undefined> {

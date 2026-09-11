@@ -13,19 +13,19 @@
  */
 
 import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { create } from "@bufbuild/protobuf";
-import { ShardIndex } from "@spine-event-engine/server";
+import { DeliveryBuilder, ShardIndex } from "@spine-event-engine/server";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
 import { DeliveryClient, DeliveryOutcomeUnknownError, RemoteWorkRegistry } from "../src/index.js";
 import { RemoteInbox } from "../src/remote/adapters.js";
 import { domainMessage } from "./shared-fixtures.js";
 
 describe("in-memory delivery core response loss", () => {
-  it("suppresses a retained duplicate through the remote adapter and core", async () => {
+  it("removes a retained duplicate through shared delivery policy and the remote adapter", async () => {
     const core = InMemoryDelivery.create();
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => router.service(InboxService, core.inbox)),
@@ -44,8 +44,24 @@ describe("in-memory delivery core response loss", () => {
     await client.writeOne(retained);
     await expect(inbox.markDelivered(retained)).resolves.toMatchObject({ status: "DELIVERED" });
     await client.writeOne(duplicate);
-    await expect(inbox.admit(duplicate)).resolves.toBeUndefined();
-    await expect(client.findOne(duplicate.id)).resolves.toMatchObject({ status: "DELIVERED" });
+    const shard = ShardIndex.single();
+    const session = { kind: "EXCLUSIVE" as const, shard };
+    const onMessage = vi.fn();
+    const delivery = new DeliveryBuilder()
+      .withContext({ name: "RemoteRetainedDuplicate", multitenant: false })
+      .withStorageFactory({} as never)
+      .withInbox(inbox)
+      .withWorkRegistry({
+        sessionKind: "EXCLUSIVE",
+        pickUp: () => Promise.resolve(session),
+        validateOwnership: () => Promise.resolve(session),
+        release: () => Promise.resolve(true),
+      })
+      .build();
+
+    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
+    expect(onMessage).not.toHaveBeenCalled();
+    await expect(client.findOne(duplicate.id)).resolves.toBeUndefined();
   });
 
   it("recognizes a delivered acknowledgement committed before a lost response", async () => {

@@ -29,7 +29,6 @@ import {
   DeliveryMonitor,
   FailedPickUp,
   FailedReception,
-  type InboxMessage,
   ShardIndex,
   ShardedWorkRegistry,
   UniformAcrossAllShards,
@@ -78,11 +77,11 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
-        admit: async (message) => message,
         markDelivered: async (value) => {
           acknowledgements += 1;
           return value;
         },
+        removeDuplicate: async () => true,
       })
       .withWorkRegistry(registry(shard))
       .build()
@@ -257,8 +256,8 @@ describe("DeliveryMonitor delivery", () => {
       },
       read: async () => [],
       readMessage: async () => undefined,
-      admit: async (message: InboxMessage) => message,
       markDelivered: async () => undefined,
+      removeDuplicate: async () => true,
     };
     const skipped = await build()
       .withInbox(inbox)
@@ -304,8 +303,8 @@ describe("DeliveryMonitor delivery", () => {
           },
           read: async () => (reads++ === 0 ? [message("pending", "target", shard)] : []),
           readMessage: async () => undefined,
-          admit: async (message) => message,
           markDelivered: async (value) => value,
+          removeDuplicate: async () => true,
         })
         .withWorkRegistry(registry(shard))
         .build()
@@ -327,8 +326,8 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
-        admit: async (message) => message,
         markDelivered: async (value) => (acknowledgements++ === 0 ? undefined : value),
+        removeDuplicate: async () => true,
       })
       .withWorkRegistry(registry(shard))
       .build()
@@ -350,8 +349,8 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => [pending],
         readMessage: async () => undefined,
-        admit: async (message) => message,
         markDelivered: async (value) => value,
+        removeDuplicate: async () => true,
       },
       workRegistry: registry(shard),
     });
@@ -426,8 +425,8 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
-        admit: async (message) => message,
         markDelivered: async (value) => value,
+        removeDuplicate: async () => true,
       },
       workRegistry: {
         sessionKind: "EXCLUSIVE",
@@ -460,11 +459,11 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? messages : []),
         readMessage: async () => undefined,
-        admit: async (message) => message,
         markDelivered: async (value) => {
           if (value.signalId === "first") throw new Error("acknowledgement failed");
           return value;
         },
+        removeDuplicate: async () => true,
       })
       .withWorkRegistry(registry(shard))
       .build()
@@ -492,10 +491,10 @@ describe("DeliveryMonitor delivery", () => {
           return [pending];
         },
         readMessage: async () => undefined,
-        admit: async (message) => message,
         markDelivered: async () => {
           throw new Error("mark failed");
         },
+        removeDuplicate: async () => true,
       })
       .withWorkRegistry(registry(shard))
       .build()
@@ -518,10 +517,10 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => [message("pending", "target", shard)],
         readMessage: async () => undefined,
-        admit: async (message) => message,
         markDelivered: async () => {
           throw new Error("must not acknowledge");
         },
+        removeDuplicate: async () => true,
       })
       .withWorkRegistry({ ...registry(shard), validateOwnership: async () => undefined })
       .build()
@@ -544,8 +543,8 @@ describe("DeliveryMonitor delivery", () => {
           },
           read: async () => [],
           readMessage: async () => undefined,
-          admit: async (message) => message,
           markDelivered: async () => undefined,
+          removeDuplicate: async () => true,
         })
         .withWorkRegistry(registry(shard))
         .build(),

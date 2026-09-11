@@ -24,11 +24,13 @@ import {
   InboxMessageIdSchema,
   InboxMessageSchema,
   InboxMessageStatus,
+  WorkerIdSchema,
 } from "@spine-event-engine/proto/delivery";
 
 import { InboxRecords, inboxRecordSpec } from "../../src/delivery/inbox-records.js";
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
+import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { createMessage } from "./inbox-message-fixture.js";
 import { tenant } from "../tenant-fixture.js";
 
@@ -88,7 +90,6 @@ describe("direct InboxMessage storage", () => {
     const message = createMessage("atomic", "atomic", 1n);
     await expect(storage.write(message)).rejects.toThrow("atomic");
     await expect(storage.markDelivered(message)).rejects.toThrow("atomic");
-    await expect(storage.admit(message)).rejects.toThrow("atomic");
   });
 
   it("rejects corrupt generated inbox rows as storage corruption", () => {
@@ -243,226 +244,35 @@ describe("direct InboxMessage storage", () => {
       storage.markDelivered({ ...first, id: { ...first.id, value: "missing" } }),
     ).resolves.toBeUndefined();
     await storage.markDelivered(first);
-    await expect(storage.admit(first)).resolves.toBeUndefined();
-    await expect(storage.admit({ ...second, version: 3n })).resolves.toBeUndefined();
   });
 
-  it("suppresses a pending duplicate when a live delivered predecessor exists", async () => {
+  it("removes only an exact pending duplicate under its current shard session", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "Tasks", multitenant: false } as const;
     const storage = new InboxStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: new InMemoryStorageFactory(),
+      context,
+      storageFactory: factory,
     });
-    const first = createMessage("message-1", "signal-1", 1n);
     const duplicate = createMessage("message-2", "signal-1", 2n);
-
-    await storage.write(first);
-    await storage.write(duplicate);
-    await storage.markDelivered(first);
-
-    await expect(storage.admit(duplicate)).resolves.toBeUndefined();
-    await expect(storage.readMessage(duplicate.id)).resolves.toMatchObject({ status: "DELIVERED" });
-  });
-
-  it("finds an exact delivered predecessor despite more than 1000 unrelated delivered rows", async () => {
-    const storage = new InboxStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: new InMemoryStorageFactory(),
-    });
-    const predecessor = createMessage("predecessor", "signal", 1n);
-    const duplicate = createMessage("duplicate", "signal", 2n);
-
-    await storage.write(predecessor);
-    await storage.markDelivered(predecessor);
-    for (let i = 0; i <= 1_000; i++) {
-      await storage.write({
-        ...createMessage(`unrelated-${String(i)}`, `unrelated-signal-${String(i)}`, BigInt(i)),
-        status: "DELIVERED",
-      });
-    }
+    const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
+    const session = await registry.pickUp(
+      duplicate.shard,
+      create(WorkerIdSchema, {
+        nodeId: { value: "node" },
+        value: "worker",
+      }),
+    );
+    if (session === undefined) throw new Error("Expected a shard session.");
     await storage.write(duplicate);
 
-    await expect(storage.admit(duplicate)).resolves.toBeUndefined();
-    await expect(storage.readMessage(duplicate.id)).resolves.toMatchObject({ status: "DELIVERED" });
-  });
-
-  it("admits a duplicate when its delivered predecessor has expired", async () => {
-    const storage = new InboxStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: new InMemoryStorageFactory(),
-      now: () => new Date("2026-07-02T08:00:01.000Z"),
-    });
-    const expired = {
-      ...createMessage("message-1", "signal-1", 1n),
-      keepUntil: new Date("2026-07-02T08:00:00.000Z"),
-    };
-    const duplicate = createMessage("message-2", "signal-1", 2n);
-
-    await storage.write(expired);
-    await storage.write(duplicate);
-    await storage.markDelivered(expired);
-
-    await expect(storage.admit(duplicate)).resolves.toMatchObject({ id: duplicate.id });
-  });
-
-  it("continues exact delivered-key pages past expired rows to a later live predecessor", async () => {
-    const storage = new InboxStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: new InMemoryStorageFactory(),
-      now: () => new Date("2026-07-02T08:00:01.000Z"),
-    });
-    const expired = [
-      {
-        ...createMessage("expired-1", "signal", 1n),
-        keepUntil: new Date("2026-07-02T08:00:00.000Z"),
-      },
-      {
-        ...createMessage("expired-2", "signal", 2n),
-        keepUntil: new Date("2026-07-02T08:00:00.000Z"),
-      },
-    ];
-    const live = createMessage("live", "signal", 3n);
-    const duplicate = createMessage("duplicate", "signal", 4n);
-
-    for (const message of [...expired, live]) {
-      await storage.write(message);
-      await storage.markDelivered(message);
-    }
-    await storage.write(duplicate);
-
-    await expect(storage.admit(duplicate)).resolves.toBeUndefined();
-  });
-
-  it("stops admission after cancellation during a delivered page without mutating the pending row", async () => {
     const controller = new AbortController();
-    const reason = new Error("Admission was cancelled by the caller.");
-    const pending = createMessage("pending", "signal", 1n);
-    const firstPage = [
-      InboxRecords.write({
-        ...createMessage("first", "other-1", 2n),
-        status: "DELIVERED" as const,
-      }),
-      InboxRecords.write({
-        ...createMessage("second", "other-2", 3n),
-        status: "DELIVERED" as const,
-      }),
-    ];
-    const handle = {
-      atomicCompareAndSet: true,
-      read: vi.fn(() => Promise.resolve(InboxRecords.write(pending))),
-      queryEntries: vi.fn(() => {
-        controller.abort(reason);
-        return Promise.resolve(
-          firstPage.map((record) => {
-            if (record.id === undefined) throw new Error("Expected delivered row ID.");
-            return { id: record.id, record };
-          }),
-        );
-      }),
-      compareAndSet: vi.fn(),
-      close: vi.fn(),
-    };
-    const storage = new InboxStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: { createRecordStorage: () => handle } as never,
-    });
-
-    await expect(storage.admit(pending, { signal: controller.signal })).rejects.toBe(reason);
-    expect(handle.queryEntries).toHaveBeenCalledTimes(1);
-    expect(handle.compareAndSet).not.toHaveBeenCalled();
-  });
-
-  it("stops admission at its deadline after a delivered page without mutating the pending row", async () => {
-    const pending = createMessage("pending", "signal", 1n);
-    let now = 0;
-    const handle = {
-      atomicCompareAndSet: true,
-      read: vi.fn(() => Promise.resolve(InboxRecords.write(pending))),
-      queryEntries: vi.fn(() => {
-        now = 1;
-        return Promise.resolve([]);
-      }),
-      compareAndSet: vi.fn(),
-      close: vi.fn(),
-    };
-    const storage = new InboxStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: { createRecordStorage: () => handle } as never,
-      now: () => new Date(now),
-    });
-
-    await expect(storage.admit(pending, { timeoutMs: 1 })).rejects.toThrow(
-      "Delivery admission deadline expired.",
-    );
-    expect(handle.queryEntries).toHaveBeenCalledTimes(1);
-    expect(handle.compareAndSet).not.toHaveBeenCalled();
-  });
-
-  it("does not admit from a short delivered page after its deadline expires during scanning", async () => {
-    const pending = createMessage("pending", "signal", 1n);
-    let calls = 0;
-    const expired = InboxRecords.write({
-      ...createMessage("expired", pending.signalId, 2n),
-      status: "DELIVERED" as const,
-      keepUntil: new Date(-1),
-    });
-    const handle = {
-      atomicCompareAndSet: true,
-      read: vi.fn(() => Promise.resolve(InboxRecords.write(pending))),
-      queryEntries: vi.fn(() => {
-        if (expired.id === undefined) throw new Error("Expected delivered row ID.");
-        return Promise.resolve([{ id: expired.id, record: expired }]);
-      }),
-      compareAndSet: vi.fn(),
-      close: vi.fn(),
-    };
-    const storage = new InboxStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: { createRecordStorage: () => handle } as never,
-      now: () => new Date(calls++ >= 5 ? 1 : 0),
-    });
-
-    await expect(storage.admit(pending, { timeoutMs: 1 })).rejects.toThrow(
-      "Delivery admission deadline expired.",
-    );
-    expect(handle.queryEntries).toHaveBeenCalledTimes(1);
-    expect(handle.compareAndSet).not.toHaveBeenCalled();
-  });
-
-  it("fails closed when the bounded exact delivered-key scan cannot reach exhaustion", async () => {
-    const duplicate = createMessage("duplicate", "signal", 1_001n);
-    const expired = [
-      {
-        ...createMessage("expired-1", "signal", 1n),
-        status: "DELIVERED" as const,
-        keepUntil: new Date("2026-07-02T08:00:00.000Z"),
-      },
-      {
-        ...createMessage("expired-2", "signal", 2n),
-        status: "DELIVERED" as const,
-        keepUntil: new Date("2026-07-02T08:00:00.000Z"),
-      },
-    ].map(InboxRecords.write);
-    const handle = {
-      atomicCompareAndSet: true,
-      read: vi.fn(() => Promise.resolve(InboxRecords.write(duplicate))),
-      queryEntries: vi.fn(() =>
-        Promise.resolve(
-          expired.map((record) => {
-            if (record.id === undefined) throw new Error("Expected expired row ID.");
-            return { id: record.id, record };
-          }),
-        ),
-      ),
-      close: vi.fn(),
-    };
-    const storage = new InboxStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: { createRecordStorage: () => handle } as never,
-      now: () => new Date("2026-07-02T08:00:01.000Z"),
-    });
-
-    await expect(storage.admit(duplicate)).rejects.toThrow("deduplication scan");
-    expect(handle.queryEntries).toHaveBeenCalledTimes(500);
+    controller.abort();
+    await expect(
+      storage.removeDuplicate(duplicate, session, { signal: controller.signal }),
+    ).resolves.toBe(false);
+    await expect(storage.readMessage(duplicate.id)).resolves.toEqual(duplicate);
+    await expect(storage.removeDuplicate(duplicate, session)).resolves.toBe(true);
+    await expect(storage.readMessage(duplicate.id)).resolves.toBeUndefined();
   });
 
   it("converts a public continuation to durable sort values and excludes its cursor row", async () => {
@@ -532,9 +342,6 @@ describe("direct InboxMessage storage", () => {
     ])
       await expect(storage.read(message.shard, { after })).rejects.toThrow("continuation");
     await expect(storage.read({} as never)).rejects.toThrow("shard");
-    await storage.markDelivered(message);
-    await expect(storage.admit(message)).resolves.toBeUndefined();
     await storage.write(candidate);
-    await expect(storage.admit(candidate)).rejects.toThrow("clock");
   });
 });

@@ -61,10 +61,11 @@ delivery and delivered rows are the deduplication fact. This
 package does not add authentication, authorization, durability, exactly-once
 effects, or a production topology.
 
-Remote admission scans at most 1,000 new raw rows when looking for a retained
-delivered duplicate. The timestamp continuation repeats its cursor row without
-counting it again. A match in the 1,000th row suppresses delivery; 1,000 misses
-fail closed without reading a 1,001st row.
+Delivery reads raw shard pages once. The server delivery policy compares pending
+rows with delivered rows in that page and its bounded recent-delivery cache,
+then removes exact duplicates without treating them as delivered
+acknowledgements. Remote duplicate removal compares the current snapshot before
+sending the existing best-effort removal request.
 
 ## Remote delivery in an environment
 

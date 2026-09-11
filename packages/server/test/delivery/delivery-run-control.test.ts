@@ -144,8 +144,8 @@ class RunnerInbox implements DeliveryInbox {
     return Promise.resolve(undefined);
   }
 
-  admit(message: InboxMessage): Promise<InboxMessage> {
-    return Promise.resolve(message);
+  removeDuplicate(): Promise<boolean> {
+    return Promise.resolve(true);
   }
 
   markDelivered(): Promise<undefined> {

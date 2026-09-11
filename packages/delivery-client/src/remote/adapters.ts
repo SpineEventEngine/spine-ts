@@ -40,6 +40,12 @@ import {
 } from "../client/types.js";
 import { DeliveryMessageCodec, DeliveryRequestCodec, DeliveryShardCodec } from "../wire/codec.js";
 
+interface RemoteInboxPage {
+  readonly messages: readonly InboxMessage[];
+  readonly complete: boolean;
+  readonly last: InboxMessage | undefined;
+}
+
 /**
  * Adapts a delivery-server client to the server-owned inbox port.
  */
@@ -92,38 +98,59 @@ export class RemoteInbox implements DeliveryInbox {
       options.limit === undefined
         ? this.client.pageSize
         : DeliveryRequestCodec.pageSize(options.limit);
+    if (options.statuses !== undefined) return this.#readFiltered(shardIndex, options, limit);
+    const page = await this.#readPage(shardIndex, options.after, limit, options);
+    return Object.freeze(page.messages.slice(0, limit));
+  }
+
+  async #readPage(
+    shardIndex: ShardIndex,
+    after: InboxReadOptions["after"],
+    limit: number,
+    options: DeliveryOperationOptions,
+  ): Promise<RemoteInboxPage> {
+    const pageSize = after === undefined ? limit : Math.min(1_000, limit + 1);
+    const page = await this.client.readPage(shardIndex, {
+      pageSize,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+      ...(after === undefined ? {} : { sinceWhen: RemoteValues.pageAnchor(after.whenReceived) }),
+    });
+    const start = after === undefined ? 0 : RemoteValues.exactAfter(page, after);
+    const last = page.at(-1);
+    const prior = page.at(-2);
+    if (
+      page.length === pageSize &&
+      (last === undefined || prior?.whenReceived.getTime() === last.whenReceived.getTime())
+    )
+      throw new DeliveryPagingError();
+    return {
+      messages: page.slice(start),
+      complete: page.length < pageSize,
+      last,
+    };
+  }
+
+  async #readFiltered(
+    shardIndex: ShardIndex,
+    options: InboxReadOptions & DeliveryOperationOptions,
+    limit: number,
+  ): Promise<readonly InboxMessage[]> {
     let after = options.after;
-    let scanned = 0;
     const result: InboxMessage[] = [];
     while (result.length < limit) {
-      const page = await this.client.readPage(shardIndex, {
-        pageSize: limit,
-        ...(options.signal === undefined ? {} : { signal: options.signal }),
-        ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
-        ...(after === undefined ? {} : { sinceWhen: RemoteValues.pageAnchor(after.whenReceived) }),
-      });
-      const start = after === undefined ? 0 : RemoteValues.exactAfter(page, after);
-      const raw = page.slice(start);
-      if (after !== undefined && page.length === limit && raw.length === 0)
-        throw new DeliveryPagingError();
-      scanned += raw.length;
-      if (scanned > 1_000 + limit) throw new DeliveryPagingError();
-      const last = page.at(-1);
-      const prior = page.at(-2);
-      if (
-        page.length === limit &&
-        (last === undefined || prior?.whenReceived.getTime() === last.whenReceived.getTime())
-      )
-        throw new DeliveryPagingError();
-      for (const message of raw) {
-        if (options.statuses === undefined || options.statuses.includes(message.status)) {
-          result.push(message);
-          if (result.length === limit) return Object.freeze(result);
-        }
+      const page = await this.#readPage(shardIndex, after, limit, options);
+      for (const message of page.messages) {
+        if (options.statuses?.includes(message.status)) result.push(message);
+        if (result.length === limit) return Object.freeze(result);
       }
-      if (page.length < limit) return Object.freeze(result);
-      if (last === undefined) throw new DeliveryPagingError();
-      after = { messageId: last.id.value, whenReceived: last.whenReceived, version: last.version };
+      if (page.complete) return Object.freeze(result);
+      if (page.last === undefined) throw new DeliveryPagingError();
+      after = {
+        messageId: page.last.id.value,
+        whenReceived: page.last.whenReceived,
+        version: page.last.version,
+      };
     }
     return Object.freeze(result);
   }
@@ -140,97 +167,6 @@ export class RemoteInbox implements DeliveryInbox {
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined> {
     return this.client.findOne(id, options);
-  }
-
-  /**
-   * Admits a pending remote row unless a live delivered row has the same signal ID and typed Inbox target.
-   *
-   * @param message Supplies the pending row snapshot.
-   * @param options Bounds remote reads and the retained delivered upsert.
-   * @returns The row to dispatch, or `undefined` when retained delivery suppresses it.
-   */
-  async admit(
-    message: InboxMessage,
-    options?: DeliveryOperationOptions,
-  ): Promise<InboxMessage | undefined> {
-    if (
-      options?.timeoutMs !== undefined &&
-      (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 0)
-    )
-      throw new TypeError("Delivery operation timeout is invalid.");
-    const deadline = options?.timeoutMs === undefined ? undefined : Date.now() + options.timeoutMs;
-    const operation = () => {
-      const now = Date.now();
-      if (options?.signal?.aborted)
-        throw options.signal.reason instanceof Error
-          ? options.signal.reason
-          : new Error("Delivery admission was aborted.");
-      if (deadline !== undefined && now >= deadline)
-        throw new Error("Delivery admission deadline expired.");
-      return {
-        options:
-          deadline === undefined
-            ? options
-            : {
-                ...(options?.signal === undefined ? {} : { signal: options.signal }),
-                timeoutMs: deadline - now,
-              },
-      };
-    };
-    let after: InboxReadOptions["after"];
-    let scanned = 0;
-    for (;;) {
-      const read = operation();
-      const remaining = 1_000 - scanned;
-      const pageSize =
-        after === undefined
-          ? Math.min(this.client.pageSize, remaining)
-          : Math.min(1_000, this.client.pageSize + 1, remaining + 1);
-      const page = await this.client.readPage(message.shard, {
-        pageSize,
-        ...(after === undefined ? {} : { sinceWhen: RemoteValues.pageAnchor(after.whenReceived) }),
-        ...read.options,
-      });
-      operation();
-      const start = after === undefined ? 0 : RemoteValues.exactAfter(page, after);
-      const raw = page.slice(start);
-      if (after !== undefined && page.length === pageSize && raw.length === 0)
-        throw new DeliveryPagingError();
-      const last = page.at(-1);
-      const prior = page.at(-2);
-      if (
-        page.length === pageSize &&
-        (last === undefined || prior?.whenReceived.getTime() === last.whenReceived.getTime())
-      )
-        throw new DeliveryPagingError();
-      for (const candidate of raw) {
-        operation();
-        scanned += 1;
-        if (
-          candidate.status === "DELIVERED" &&
-          candidate.signalId === message.signalId &&
-          candidate.inboxId.targetTypeUrl === message.inboxId.targetTypeUrl &&
-          RemoteValues.sameAny(candidate.inboxId.targetId, message.inboxId.targetId) &&
-          (candidate.keepUntil === undefined || candidate.keepUntil.getTime() > Date.now())
-        ) {
-          const write = operation();
-          await this.client.writeOne({ ...message, status: "DELIVERED" }, write.options);
-          return undefined;
-        }
-        if (scanned === 1_000) throw new DeliveryPagingError();
-      }
-      if (page.length < pageSize) {
-        operation();
-        return message;
-      }
-      if (last === undefined) throw new DeliveryPagingError();
-      after = {
-        messageId: last.id.value,
-        whenReceived: last.whenReceived,
-        version: last.version,
-      };
-    }
-    throw new DeliveryPagingError();
   }
 
   /**
@@ -281,6 +217,31 @@ export class RemoteInbox implements DeliveryInbox {
       (message.keepUntil !== undefined && message.keepUntil.getTime() > Date.now())
     )
       return false;
+    const current = await this.client.findOne(message.id, options);
+    if (current === undefined || !RemoteValues.sameMessage(current, message)) return false;
+    await this.client.removeOne(current, options);
+    return true;
+  }
+
+  /**
+   * Removes one exact pending duplicate while its exclusive shard session remains current.
+   *
+   * Remote removal reads and compares before a separate removal request, so it
+   * cannot provide the direct provider's atomic compare-and-delete guarantee.
+   *
+   * @param message Supplies the pending duplicate snapshot.
+   * @param session Supplies the matching exclusive shard session.
+   * @param options Bounds remote reads and removal.
+   * @returns Whether the snapshot matched when read and the removal request completed.
+   */
+  async removeDuplicate(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<boolean> {
+    if (session.kind !== this.sessionKind || session.shard.key() !== message.shard.key())
+      return false;
+    if (message.status !== "TO_DELIVER") return false;
     const current = await this.client.findOne(message.id, options);
     if (current === undefined || !RemoteValues.sameMessage(current, message)) return false;
     await this.client.removeOne(current, options);

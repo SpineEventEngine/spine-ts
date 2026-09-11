@@ -100,20 +100,6 @@ export class Inbox {
   }
 
   /**
-   * Admits one pending row unless retained delivery already recorded the same signal at the same typed target.
-   *
-   * @param message Supplies the pending row snapshot.
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns The admitted row, or `undefined` when retained delivery suppresses it.
-   */
-  admit(
-    message: InboxMessage,
-    options?: DeliveryOperationOptions,
-  ): Promise<InboxMessage | undefined> {
-    return this.storage.admit(message, options);
-  }
-
-  /**
    * Updates one pending message to delivered when its snapshot still matches.
    *
    * @param message Supplies the pending message snapshot.
@@ -123,6 +109,22 @@ export class Inbox {
    */
   markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
     return this.storage.markDelivered(message);
+  }
+
+  /**
+   * Removes one exact pending duplicate while its shard session remains current.
+   *
+   * @param message Supplies the pending duplicate snapshot.
+   * @param session Supplies the session that holds the message shard.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns Whether storage atomically removed the exact pending snapshot.
+   */
+  removeDuplicate(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<boolean> {
+    return this.storage.removeDuplicate(message, session, options);
   }
 
   /**

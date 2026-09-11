@@ -34,8 +34,8 @@ describe("Delivery fencing", () => {
         receive: () => Promise.reject(new Error("not used")),
         read: () => Promise.resolve([]),
         readMessage: () => Promise.resolve(undefined),
-        admit: (message) => Promise.resolve(message),
         markDelivered: () => Promise.resolve(undefined),
+        removeDuplicate: () => Promise.resolve(true),
       },
       workRegistry: {
         sessionKind: "LEASED",
@@ -72,8 +72,8 @@ describe("Delivery fencing", () => {
         receive: () => Promise.reject(new Error("not used")),
         read: () => Promise.resolve([]),
         readMessage: () => Promise.resolve(undefined),
-        admit: (message) => Promise.resolve(message),
         markDelivered: () => Promise.resolve(undefined),
+        removeDuplicate: () => Promise.resolve(true),
       },
       workRegistry: {
         sessionKind: "LEASED",
