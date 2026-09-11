@@ -1005,6 +1005,15 @@ expectation. The server fixture project explicitly references both its core and
 proto dependencies. After a clean generated build, the exact three-file
 failure set passes 21/21 tests with one worker.
 
+Runtime-build correction commit `d7efbd44d` was pushed. Affected-lane re-review
+was dispatched to `/root/fresh_delivery_api_review` for private package exports,
+project references, and public boundary consequences;
+`/root/fresh_fixture_style_review` for fixture build and readable-source
+maintainability; and `/root/fresh_delivery_reliability_review` for clean-build,
+generated-output, and managed-child lifecycle reliability. These are the same
+existing reviewer roles with their previously explicit `gpt-5.6-terra` /
+`high` configuration and no child-agent dispatch.
+
 Correction commit `6c92595fc` was pushed to the official feature branch.
 Affected-lane re-review was dispatched to the same independent, initially
 zero-context roles: `/root/fresh_delivery_reliability_review`, existing
