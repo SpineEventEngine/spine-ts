@@ -1033,3 +1033,11 @@ Proto generation/style/frozen descriptors, generated build and tooling
 typechecking, repository-wide ESLint and cleanup enforcement, TSDoc, copyright,
 log containment, full formatting, documentation/API exports, Buf lint,
 generated-output currency, and release-readiness checks.
+
+Final security-review assignment at `e79dcbb87`:
+`/root/final_correction_security_review`, existing final security reviewer role,
+explicitly `gpt-5.6-terra` / `high`, with no inherited conversation turns and
+no child-agent dispatch. It covers identity generation/preservation, typed
+deduplication, remote paging bounds, tenant/shard/session fencing, duplicate
+removal and handoff, history/version behavior, fixture/tooling changes,
+trusted-publishing provenance, logging, dependency, and public/wire boundaries.
