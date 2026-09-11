@@ -1,6 +1,6 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: Complete; implementation SHA verified and completion record pending CI
+Status: Complete; local verification, independent review, and CI passed
 Start: `2026-09-10 16:26 WEST`
 Initial closure: `2026-09-10 20:06 WEST`
 Final closure: `2026-09-11 02:19 WEST`
@@ -18,11 +18,10 @@ Implementation commits: authoritative range `31cfe4f0b..HEAD` on
 `fix-delivery-identity-history-correctness`.
 Last release-verified implementation HEAD: `9f1bdf057`.
 Final release-verified provenance implementation HEAD: `2240709c8`.
-Current pushed implementation HEAD:
-`caa3a2ae170b68184000287b66d694cd36a8623c`; its required CI verification
-passed. The completion-record commit that contains this evidence still requires
-CI for its exact SHA. The earlier verified checkpoints above are historical
-only.
+Verified implementation HEAD: `caa3a2ae170b68184000287b66d694cd36a8623c`.
+Verified completion-record predecessor:
+`db82f6d8c3fdb147a605500cff6e5fa892b9c5f9`. Required CI passed for both
+commits. The earlier verified checkpoints above are historical only.
 
 ## Delivery Admission And Test-Fixture Correction Framing
 
@@ -1762,3 +1761,13 @@ push.
 - The implementation is durably ready for human review. The final task-record
   commit must now be pushed and pass CI for its own exact SHA before this task
   is closed in chat.
+
+## Completion-Record CI — 2026-09-12 00:11 WEST
+
+- Completion-record commit `db82f6d8c3fdb147a605500cff6e5fa892b9c5f9`
+  was pushed, and the remote branch was verified to resolve to that exact SHA.
+- GitHub Actions run `34655654113`, job `103447359048`, completed successfully
+  for that commit. `pnpm verify:release`, all-18-package
+  `node scripts/release-cli.mjs prepare --check`, and the final job step passed.
+- Local `HEAD` and the remote branch matched, and the working tree was clean
+  after verification.
