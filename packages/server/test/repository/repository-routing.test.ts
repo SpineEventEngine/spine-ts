@@ -139,8 +139,12 @@ import type * as RepositoryRouting from "../../test-fixtures/generated/repositor
 import type * as RepositoryCommands from "../../test-fixtures/generated/repository-routing/repository_commands_pb.js";
 import type * as RepositoryEvents from "../../test-fixtures/generated/repository-routing/repository_events_pb.js";
 import type * as RouteValidation from "../../test-fixtures/generated/repository-routing/route-validation_pb.js";
-import type * as ValidationCommands from "../../test-fixtures/generated/repository-routing/validation_refusal_commands_pb.js";
-import type * as ValidationEvents from "../../test-fixtures/generated/repository-routing/validation_refusal_events_pb.js";
+import type {
+  RepositoryRoutingProducedTaskCommand as ProducedTaskCommand,
+  RepositoryRoutingValidatedMessageId as ValidatedMessageId,
+  RepositoryRoutingValidatedTaskCommand as ValidatedTaskCommand,
+  RepositoryRoutingValidatedTaskEvent as ValidatedTaskEvent,
+} from "../../test-fixtures/schemas.js";
 
 const GeneratedTaskIdSchema = TodoIdSchema;
 
@@ -150,12 +154,9 @@ type GeneratedReactorEvent = RepositoryEvents.GeneratedReactorEvent;
 type ImplicitTaskCommand = RepositoryCommands.ImplicitTaskCommand;
 type AggregateState = RepositoryRouting.AggregateState;
 type TaskCommand = RepositoryCommands.TaskCommand;
-type ProducedTaskCommand = ValidationCommands.ProducedTaskCommand;
 type RepeatedIdCommand = RepositoryCommands.RepeatedIdCommand;
 type MapIdCommand = RepositoryCommands.MapIdCommand;
 type UuidMessageIdAggregateId = RepositoryRouting.UuidMessageIdAggregateId;
-type ValidatedTaskCommand = ValidationCommands.ValidatedTaskCommand;
-type ValidatedMessageId = ValidationCommands.ValidatedMessageId;
 type TaskId =
   import("../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js").TaskId;
 type TaskCreated =
@@ -172,7 +173,6 @@ type Int32AggregateCommand = RepositoryCommands.Int32AggregateCommand;
 type Int64ProcessManagerCommand = RepositoryCommands.Int64ProcessManagerCommand;
 type Int32AggregateEvent = RepositoryEvents.Int32AggregateEvent;
 type Int64ProcessManagerEvent = RepositoryEvents.Int64ProcessManagerEvent;
-type ValidatedTaskEvent = ValidationEvents.ValidatedTaskEvent;
 type CompositeRouteSourceState = RepositoryRouting.CompositeRouteSourceState;
 type NumberRouteEvent = RouteValidation.NumberRouteEvent;
 type WrongIdRouteEvent = RouteValidation.WrongIdRouteEvent;

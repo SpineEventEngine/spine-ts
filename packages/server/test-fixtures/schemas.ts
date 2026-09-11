@@ -69,6 +69,12 @@ export {
   ProducedTaskCommandSchema as RepositoryRoutingProducedTaskCommandSchema,
 } from "./generated/repository-routing/validation_refusal_commands_pb.js";
 export { ValidatedTaskEventSchema as RepositoryRoutingValidatedTaskEventSchema } from "./generated/repository-routing/validation_refusal_events_pb.js";
+export type {
+  ProducedTaskCommand as RepositoryRoutingProducedTaskCommand,
+  ValidatedMessageId as RepositoryRoutingValidatedMessageId,
+  ValidatedTaskCommand as RepositoryRoutingValidatedTaskCommand,
+} from "./generated/repository-routing/validation_refusal_commands_pb.js";
+export type { ValidatedTaskEvent as RepositoryRoutingValidatedTaskEvent } from "./generated/repository-routing/validation_refusal_events_pb.js";
 export {
   NumberRouteEventSchema as RepositoryRoutingNumberRouteEventSchema,
   WrongIdRouteEventSchema as RepositoryRoutingWrongIdRouteEventSchema,
