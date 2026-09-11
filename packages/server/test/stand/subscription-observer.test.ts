@@ -54,8 +54,8 @@ type ProjectOverviewState = Message<"ProjectOverviewState"> & {
   priority: number;
 };
 
-const fixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectOverviewStateSchema = messageDesc(fixture, 0) as GenMessage<ProjectOverviewState>;
+const { ProjectOverviewStateSchema } =
+  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
 let eventSequence = 0;
 
 describe("SubscriptionObservers", () => {

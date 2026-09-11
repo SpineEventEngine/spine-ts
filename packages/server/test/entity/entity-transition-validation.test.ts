@@ -12,12 +12,23 @@
  * the License.
  */
 
-import { create, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 import {
+  type ProjectCatalogState,
+  ProjectCatalogStateSchema,
+  type ProjectDraftState,
+  type ProjectOverviewState,
+  ProjectOverviewStateSchema,
+  type ProjectProfile,
+  ProjectProfileSchema,
+  type ProjectProfileState,
+  ProjectProfileStateSchema,
+  ProjectDraftStateSchema,
+  type ProjectRecordState,
+  ProjectRecordStateSchema,
+  type ProjectSearchState,
+  ProjectSearchStateSchema,
   DraftProjectStateSchema,
   PublishedProjectStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
@@ -25,85 +36,12 @@ import {
 import * as serverRoot from "../../src/index.js";
 import { validateEntityStateTransition } from "../../src/index.js";
 
-type ProjectOverviewState = Message<"ProjectOverviewState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type ProjectSearchState = Message<"ProjectSearchState"> & {
-  id: string;
-  searchable: string;
-};
-
-type ProjectProfile = Message<"ProjectProfile"> & {
-  value: string;
-  child?: ProjectProfile;
-};
-
-type ProjectProfileState = Message<"ProjectProfileState"> & {
-  id: string;
-  fingerprint: Uint8Array;
-  tags: string[];
-  details?: ProjectProfile;
-  mutableNote: string;
-};
-
-type ProjectRecordState = Message<"ProjectRecordState"> & {
-  id: string;
-  fingerprint: Uint8Array;
-  details?: ProjectProfile;
-  mutableNote: string;
-};
-
-type ProjectCatalogState = Message<"ProjectCatalogState"> & {
-  id: string;
-  labels: Record<string, string>;
-  mutableNote: string;
-};
-
-type ProjectDraftState = Message<"ProjectDraftState"> & {
-  id: string;
-  explicitId?: string;
-  mutableNote: string;
-};
-
 interface ProjectRecordStateOverrides {
   readonly id?: string;
   readonly fingerprint?: Uint8Array;
-  readonly details?: { readonly value?: string; readonly child?: ProjectProfile };
+  readonly details?: { readonly value?: string; readonly child?: ProjectProfile | undefined };
   readonly mutableNote?: string;
 }
-
-const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectOverviewStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectOverviewState>;
-const ProjectSearchStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  2,
-) as GenMessage<ProjectSearchState>;
-const ProjectProfileSchema = messageDesc(
-  fileEntityMetadataFixture,
-  3,
-) as GenMessage<ProjectProfile>;
-const ProjectProfileStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  4,
-) as GenMessage<ProjectProfileState>;
-const ProjectCatalogStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  5,
-) as GenMessage<ProjectCatalogState>;
-const ProjectRecordStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  6,
-) as GenMessage<ProjectRecordState>;
-const ProjectDraftStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  7,
-) as GenMessage<ProjectDraftState>;
 
 describe("entity state transition validation", () => {
   it("exports the public high-level entity state transition validator", () => {

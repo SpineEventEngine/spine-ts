@@ -13,16 +13,11 @@
  */
 
 /* Readable server test-fixture schemas generated from the adjacent Proto sources. */
-export { file_entity_metadata_project_states as entityMetadataMainFile } from "./generated/entity-metadata/project_states_pb.js";
 export { file_entity_metadata_empty as entityMetadataEmptyFile } from "./generated/entity-metadata/empty_pb.js";
 export { file_entity_metadata_unknown_kind as entityMetadataUnknownKindFile } from "./generated/entity-metadata/unknown-kind_pb.js";
 export { file_entity_metadata_invalid_column as entityMetadataInvalidColumnFile } from "./generated/entity-metadata/invalid-column_pb.js";
 export { file_entity_metadata_invalid_tag as entityMetadataInvalidTagFile } from "./generated/entity-metadata/invalid-tag_pb.js";
 export { file_entity_metadata_visibility as entityMetadataVisibilityFile } from "./generated/entity-metadata/visibility_pb.js";
-export { file_handler_registry_commands as handlerRegistryCommandsFile } from "./generated/handler-registry/commands_pb.js";
-export { file_handler_registry_events as handlerRegistryEventsFile } from "./generated/handler-registry/events_pb.js";
-export { file_handler_registry_rejections as handlerRegistryRejectionsFile } from "./generated/handler-registry/rejections_pb.js";
-export { file_handler_registry_states as handlerRegistryStatesFile } from "./generated/handler-registry/states_pb.js";
 export {
   ProjectOverviewStateSchema as RepositoryRoutingProjectOverviewStateSchema,
   ProjectStateSchema as RepositoryRoutingProjectStateSchema,
@@ -67,15 +62,15 @@ export {
 } from "./generated/repository-routing/project_validation_states_pb.js";
 export {
   CreateProjectSubmissionSchema as RepositoryRoutingCreateProjectSubmissionSchema,
-  ProjectSubmissionIdSchema as RepositoryRoutingProjectSubmissionIdSchema,
   CreateFollowUpProjectSchema as RepositoryRoutingCreateFollowUpProjectSchema,
 } from "./generated/repository-routing/project_validation_commands_pb.js";
+export { ProjectSubmissionIdSchema as RepositoryRoutingProjectSubmissionIdSchema } from "./generated/repository-routing/project_validation_identifiers_pb.js";
 export { ProjectSubmissionCreatedSchema as RepositoryRoutingProjectSubmissionCreatedSchema } from "./generated/repository-routing/project_validation_events_pb.js";
 export type {
   CreateFollowUpProject as RepositoryRoutingCreateFollowUpProject,
-  ProjectSubmissionId as RepositoryRoutingProjectSubmissionId,
   CreateProjectSubmission as RepositoryRoutingCreateProjectSubmission,
 } from "./generated/repository-routing/project_validation_commands_pb.js";
+export type { ProjectSubmissionId as RepositoryRoutingProjectSubmissionId } from "./generated/repository-routing/project_validation_identifiers_pb.js";
 export type { ProjectSubmissionCreated as RepositoryRoutingProjectSubmissionCreated } from "./generated/repository-routing/project_validation_events_pb.js";
 export {
   ProjectPriorityChangedSchema as RepositoryRoutingProjectPriorityChangedSchema,

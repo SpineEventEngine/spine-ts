@@ -107,12 +107,8 @@ type ProjectState = Message<"ProjectState"> & {
 
 type EmptyState = Message<"EmptyState">;
 
-const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectOverviewStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectOverviewState>;
-const ProjectStateSchema = messageDesc(fileEntityMetadataFixture, 1) as GenMessage<ProjectState>;
+const { ProjectOverviewStateSchema, ProjectStateSchema } =
+  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
 const fileEntityEmptyFixture = FixtureSchemas.entityMetadataEmptyFile;
 const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
 

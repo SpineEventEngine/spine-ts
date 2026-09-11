@@ -43,7 +43,7 @@ import {
 } from "@spine-event-engine/server";
 import { managedServerApplicationAccess } from "../../test-fixtures/internal.mjs";
 import { UserIdSchema } from "@spine-event-engine/proto";
-import { file_entity_metadata_main } from "../../test-fixtures/dist/generated/entity-metadata/main_pb.js";
+import { file_entity_metadata_project_states } from "../../test-fixtures/dist/generated/entity-metadata/project_states_pb.js";
 
 const endpoint = required("SPINE_MANAGED_REMOTE_DELIVERY_URL");
 const thirdPartyDirectory = required("SPINE_T0210_THIRD_PARTY_DIRECTORY");
@@ -199,7 +199,7 @@ async function generatedRegistryRoot() {
 }
 
 function projectionStateSchema() {
-  return messageDesc(file_entity_metadata_main, 0);
+  return messageDesc(file_entity_metadata_project_states, 0);
 }
 
 function required(name) {

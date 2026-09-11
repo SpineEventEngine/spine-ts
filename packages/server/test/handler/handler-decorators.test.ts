@@ -68,12 +68,8 @@ it("creates a public Where method decorator", () => {
   expect(decorator).toBeTypeOf("function");
 });
 
-const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectOverviewStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectOverviewState>;
-const ProjectStateSchema = messageDesc(fileEntityMetadataFixture, 1) as GenMessage<ProjectState>;
+const { ProjectOverviewStateSchema, ProjectStateSchema } =
+  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
 
 interface DecoratedClassFactoryInput {
   readonly Assign: typeof Assign;

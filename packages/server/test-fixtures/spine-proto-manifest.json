@@ -1,6 +1,6 @@
 {
   "formatVersion": 2,
-  "generationId": "f6164659-a6f1-4c94-b8e9-a6a1d3e5b329",
+  "generationId": "116e0ad5-79f9-4493-8f9c-61c7a78c9d2c",
   "packageName": "@spine-event-engine/server-test-fixtures",
   "packageVersion": "2.0.0-snapshot.11",
   "protoFiles": [
@@ -22,7 +22,11 @@
     "repository-routing/project_states.proto",
     "repository-routing/project_validation_commands.proto",
     "repository-routing/project_validation_events.proto",
+    "repository-routing/project_validation_identifiers.proto",
     "repository-routing/project_validation_states.proto",
+    "server-lifecycle/commands.proto",
+    "server-lifecycle/events.proto",
+    "server-lifecycle/states.proto",
     "validation-refusal/project_commands.proto",
     "validation-refusal/project_states.proto"
   ],
@@ -45,7 +49,11 @@
     "repository-routing/project_states.proto": "generated/repository-routing/project_states_pb.js",
     "repository-routing/project_validation_commands.proto": "generated/repository-routing/project_validation_commands_pb.js",
     "repository-routing/project_validation_events.proto": "generated/repository-routing/project_validation_events_pb.js",
+    "repository-routing/project_validation_identifiers.proto": "generated/repository-routing/project_validation_identifiers_pb.js",
     "repository-routing/project_validation_states.proto": "generated/repository-routing/project_validation_states_pb.js",
+    "server-lifecycle/commands.proto": "generated/server-lifecycle/commands_pb.js",
+    "server-lifecycle/events.proto": "generated/server-lifecycle/events_pb.js",
+    "server-lifecycle/states.proto": "generated/server-lifecycle/states_pb.js",
     "validation-refusal/project_commands.proto": "generated/validation-refusal/project_commands_pb.js",
     "validation-refusal/project_states.proto": "generated/validation-refusal/project_states_pb.js"
   },

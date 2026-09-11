@@ -81,12 +81,8 @@ class AuditProjection {
   }
 }
 
-const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectOverviewStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectOverviewState>;
-const ProjectStateSchema = messageDesc(fileEntityMetadataFixture, 1) as GenMessage<ProjectState>;
+const { ProjectOverviewStateSchema, ProjectStateSchema } =
+  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
 
 describe("event registration readiness", () => {
   it("treats an empty handler registry as valid event readiness", () => {

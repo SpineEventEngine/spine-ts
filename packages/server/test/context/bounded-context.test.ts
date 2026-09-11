@@ -19,7 +19,6 @@ import { pathToFileURL } from "node:url";
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { Identifiers, TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
@@ -80,7 +79,22 @@ import { ServerEnvironment } from "../../src/server/server-environment.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 import { Stand } from "../../src/stand/stand.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
+import {
+  type AssignReviewTask,
+  AssignReviewTaskSchema,
+  type ScheduleReviewTask,
+  ScheduleReviewTaskSchema,
+} from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import {
+  type ReviewStarted,
+  ReviewStartedSchema,
+  type ReviewTaskAssigned,
+  ReviewTaskAssignedSchema,
+} from "../../test-fixtures/generated/handler-registry/events_pb.js";
+import {
+  type ProcessManagerState,
+  ProcessManagerStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
 import { tenant } from "../tenant-fixture.js";
 
 interface InternalSystemPairing {
@@ -133,60 +147,8 @@ type ProjectState = Message<"ProjectState"> & {
   archived: boolean;
 };
 
-type AssignReviewTask = Message<"AssignReviewTask"> & {
-  id: string;
-  name: string;
-};
-
-type ScheduleReviewTask = Message<"ScheduleReviewTask"> & {
-  id: string;
-  name: string;
-};
-
-type ReviewTaskAssigned = Message<"ReviewTaskAssigned"> & {
-  id: string;
-  name: string;
-};
-
-type ReviewStarted = Message<"ReviewStarted"> & {
-  id: string;
-};
-
-type ProcessManagerState = Message<"ProcessManagerState"> & {
-  id: string;
-  queue: string;
-};
-
-const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectOverviewStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectOverviewState>;
-const ProjectStateSchema = messageDesc(fileEntityMetadataFixture, 1) as GenMessage<ProjectState>;
-const fileHandlerRegistryCommandsFixture = FixtureSchemas.handlerRegistryCommandsFile;
-const AssignReviewTaskSchema = messageDesc(
-  fileHandlerRegistryCommandsFixture,
-  2,
-) as GenMessage<AssignReviewTask>;
-const ScheduleReviewTaskSchema = messageDesc(
-  fileHandlerRegistryCommandsFixture,
-  3,
-) as GenMessage<ScheduleReviewTask>;
-const fileHandlerRegistryEventsFixture = FixtureSchemas.handlerRegistryEventsFile;
-const ReviewTaskAssignedSchema = messageDesc(
-  fileHandlerRegistryEventsFixture,
-  1,
-) as GenMessage<ReviewTaskAssigned>;
-const ReviewStartedSchema = messageDesc(
-  fileHandlerRegistryEventsFixture,
-  0,
-) as GenMessage<ReviewStarted>;
-
-const fileEntityVisibilityFixture = FixtureSchemas.entityMetadataVisibilityFile;
-const ProcessManagerStateSchema = messageDesc(
-  fileEntityVisibilityFixture,
-  0,
-) as GenMessage<ProcessManagerState>;
+const { ProjectOverviewStateSchema, ProjectStateSchema } =
+  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
 
 class TaskAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {}
 class DuplicateTaskAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {}

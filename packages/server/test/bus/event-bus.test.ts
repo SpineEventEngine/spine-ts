@@ -14,7 +14,6 @@
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -35,7 +34,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus, type EventDispatcher } from "../../src/index.js";
 import type { ILogLayer } from "loglayer";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
+import {
+  type ReviewFollowUpScheduled,
+  ReviewFollowUpScheduledSchema,
+  type ReviewStarted,
+  ReviewStartedSchema,
+  type ReviewTaskAssigned,
+  ReviewTaskAssignedSchema,
+} from "../../test-fixtures/generated/handler-registry/events_pb.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { tenant } from "../tenant-fixture.js";
 
@@ -55,35 +61,6 @@ vi.mock("@spine-event-engine/core", async (importOriginal) => {
     },
   };
 });
-
-type ReviewTaskAssigned = Message<"ReviewTaskAssigned"> & {
-  id: string;
-  name: string;
-};
-
-type ReviewStarted = Message<"ReviewStarted"> & {
-  id: string;
-};
-
-type ReviewFollowUpScheduled =
-  Message<"spine.server.testing.handlerregistry.ReviewFollowUpScheduled"> & {
-    id: string;
-    name: string;
-  };
-
-const fileHandlerRegistryEventsFixture = FixtureSchemas.handlerRegistryEventsFile;
-const ReviewTaskAssignedSchema = messageDesc(
-  fileHandlerRegistryEventsFixture,
-  1,
-) as GenMessage<ReviewTaskAssigned>;
-const ReviewStartedSchema = messageDesc(
-  fileHandlerRegistryEventsFixture,
-  0,
-) as GenMessage<ReviewStarted>;
-const ReviewFollowUpScheduledSchema = messageDesc(
-  fileHandlerRegistryEventsFixture,
-  2,
-) as GenMessage<ReviewFollowUpScheduled>;
 
 describe("EventBus", () => {
   afterEach(() => {

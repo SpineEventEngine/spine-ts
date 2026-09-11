@@ -137,16 +137,12 @@ type FullVisibilityState = Message<"FullVisibilityState"> & { id: string };
 type HiddenState = Message<"HiddenState"> & { id: string };
 
 // Descriptor fixtures are generated from checked-in test-only .proto sources.
-const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectOverviewStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectOverviewState>;
-const ProjectStateSchema = messageDesc(fileEntityMetadataFixture, 1) as GenMessage<ProjectState>;
-const ProjectSearchStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  2,
-) as GenMessage<ProjectSearchState>;
+const {
+  file_entity_metadata_project_states,
+  ProjectOverviewStateSchema,
+  ProjectSearchStateSchema,
+  ProjectStateSchema,
+} = await import("../test-fixtures/generated/entity-metadata/project_states_pb.js");
 
 it("exports nominal standalone handler base classes", () => {
   class Assignee extends AbstractAssignee {}
@@ -576,7 +572,7 @@ describe("@spine-event-engine/server", () => {
   });
 
   it("uses generated schemas from checked-in fixture Proto sources", () => {
-    expect(FixtureSchemas.entityMetadataMainFile.name).toBe("entity-metadata/main");
+    expect(file_entity_metadata_project_states.name).toBe("entity-metadata/project_states");
   });
 
   it("distinguishes entity schemas from non-entity schemas", () => {

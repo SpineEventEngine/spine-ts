@@ -78,16 +78,8 @@ type CreateReviewProject = Message<"example.validation_refusal.CreateReviewProje
   name: string;
 };
 
-const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectOverviewStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectOverviewState>;
-const ProjectStateSchema = messageDesc(fileEntityMetadataFixture, 1) as GenMessage<ProjectState>;
-const ProjectSearchStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  2,
-) as GenMessage<ProjectSearchState>;
+const { ProjectOverviewStateSchema, ProjectStateSchema, ProjectSearchStateSchema } =
+  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
 
 const CreateReviewProjectSchema = (
   await import("../../test-fixtures/generated/validation-refusal/project_commands_pb.js")

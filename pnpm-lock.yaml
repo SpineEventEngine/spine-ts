@@ -429,6 +429,15 @@ importers:
         specifier: 2.0.0-snapshot.7
         version: 2.0.0-snapshot.7(@bufbuild/protobuf@2.12.1)
 
+  packages/core/test-fixtures:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/proto':
+        specifier: 2.0.0-snapshot.11
+        version: link:../../proto
+
   packages/delivery-client:
     dependencies:
       '@bufbuild/protobuf':
@@ -661,6 +670,18 @@ importers:
         specifier: workspace:*
         version: link:../testing
 
+  packages/server/test-fixtures:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/core':
+        specifier: 2.0.0-snapshot.11
+        version: link:../../core
+      '@spine-event-engine/proto':
+        specifier: 2.0.0-snapshot.11
+        version: link:../../proto
+
   packages/storage:
     dependencies:
       '@bufbuild/protobuf':
@@ -723,6 +744,15 @@ importers:
       '@spine-event-engine/server':
         specifier: workspace:*
         version: link:../server
+
+  packages/testing/test-fixtures:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/proto':
+        specifier: 2.0.0-snapshot.11
+        version: link:../../proto
 
   packages/transport:
     dependencies:

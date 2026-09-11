@@ -1161,3 +1161,52 @@ publishing, dependency/lockfile behavior, deterministic generation, CI
 consequences, and bounded verification. All fields are explicit in dispatch,
 no conversation turns are inherited, reviewers are read-only, and they may not
 spawn sub-agents.
+
+The fresh review wave returned one correction batch:
+
+- update the stale `entity-metadata/main` descriptor assertion and the managed
+  child-process import of deleted `main_pb`;
+- move `ProjectSubmissionId` from the validation Command file to a dedicated
+  identifier source;
+- add the required copyright header to the five newly authored core/testing
+  Proto sources;
+- remove the `entityMetadataMainFile` catch-all descriptor facade and migrate
+  positional consumers to named generated Project schemas;
+- include the three private nested fixture packages in pnpm workspace
+  validation while confirming release packaging still excludes private
+  packages;
+- wrap newly overlong TypeScript exports/imports; and
+- qualify the release guide so “no timeout” means no Sigstore-specific timeout
+  workaround, not the existing bounded registry-selection request.
+
+The consolidated correction remains assigned to the existing implementer
+`/root/fixture_and_sigstore_correction`, explicitly `gpt-5.6-terra` / `medium`,
+with no inherited conversation turns and no child-agent dispatch. Reviewers
+were read-only, so runtime metadata beyond the immutable configured role/model
+profile is unavailable.
+
+All accepted findings were corrected. Stale descriptor and managed-child
+imports now use `entity-metadata/project_states`; `ProjectSubmissionId` has a
+dedicated identifier source; all new Protos have standard headers; direct
+consumers import named generated schemas rather than catch-all file descriptors;
+and all entity-metadata and handler-registry file-descriptor facades have been
+removed. The three private fixture packages are pnpm workspace importers and
+package metadata tests assert both their private status and exclusion from the
+fixed 18-package public release inventory. The release guide now distinguishes
+the absence of a Sigstore-specific timeout workaround from the existing
+10-second registry-selection timeout.
+
+During correction, direct inspection found one additional domain-role defect:
+the server-lifecycle fixture registered a Project state as a Command and
+renamed unrelated Project/Review payloads as lifecycle types. It now has
+separate `StartServer`, `ServerStarted`, and `ServerStatus` Proto sources and
+uses each role directly.
+
+Post-correction evidence: facade scans return zero results; `git diff --check`
+and `pnpm proto:check-generated:current` pass; full formatting and tooling
+typechecking pass. The focused regression profile passes 208/208 tests across
+managed external events, server lifecycle, server package exports, Proto
+workflow, copyright, package metadata, and release policy. Additional direct
+schema-migration suites passed at each slice, including repository routing
+265/265, Spine services 114/114, bounded context 79/79, entity transitions
+58/58, Stand 61/61, and handler bus/metadata suites.

@@ -818,10 +818,18 @@ describe("proto-workflow", () => {
       displayPath: "packages/server/test-fixtures/generated",
       moduleName: "ServerTestFixtures",
     });
-    expect(existsSync("packages/server/test-fixtures/proto/entity-metadata/project_states.proto")).toBe(true);
-    expect(existsSync("packages/server/test-fixtures/proto/entity-metadata/project_commands.proto")).toBe(true);
-    expect(existsSync("packages/server/test-fixtures/generated/entity-metadata/project_states_pb.ts")).toBe(true);
-    expect(existsSync("packages/server/test-fixtures/generated/entity-metadata/project_commands_pb.ts")).toBe(true);
+    expect(
+      existsSync("packages/server/test-fixtures/proto/entity-metadata/project_states.proto"),
+    ).toBe(true);
+    expect(
+      existsSync("packages/server/test-fixtures/proto/entity-metadata/project_commands.proto"),
+    ).toBe(true);
+    expect(
+      existsSync("packages/server/test-fixtures/generated/entity-metadata/project_states_pb.ts"),
+    ).toBe(true);
+    expect(
+      existsSync("packages/server/test-fixtures/generated/entity-metadata/project_commands_pb.ts"),
+    ).toBe(true);
   });
 
   it("generates core and testing fixtures from package-local Proto sources", () => {

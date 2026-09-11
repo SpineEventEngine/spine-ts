@@ -15,7 +15,7 @@ syntax = "proto3";
 
 package repository_routing_project_validation;
 
-import "repository-routing/project_validation_commands.proto";
+import "repository-routing/project_validation_identifiers.proto";
 import "spine/options.proto";
 
 message ProjectSubmissionState {
@@ -26,6 +26,6 @@ message ProjectSubmissionState {
 
 message AcceptedProjectSubmissionState {
   option (entity).kind = AGGREGATE;
-  repository_routing_project_validation_commands.ProjectSubmissionId id = 1 [(set_once) = true];
+  repository_routing_project_validation_identifiers.ProjectSubmissionId id = 1 [(set_once) = true];
   string name = 2 [(column) = true];
 }

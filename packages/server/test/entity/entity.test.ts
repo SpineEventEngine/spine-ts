@@ -14,7 +14,6 @@
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import * as FixtureSchemas from "../../test-fixtures/schemas.js";
@@ -88,11 +87,7 @@ function verifyHistoryDeclarationAbsence(projection: TestProjection): void {
   void (null as unknown as EntityStorageInput);
 }
 
-const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectOverviewStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectOverviewState>;
+import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
 function createProjectOverviewState(
   overrides: Partial<ProjectOverviewState> = {},

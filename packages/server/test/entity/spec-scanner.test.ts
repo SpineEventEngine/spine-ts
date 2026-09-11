@@ -14,7 +14,6 @@
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages } from "@spine-event-engine/core";
 import { VersionSchema } from "@spine-event-engine/proto";
@@ -29,7 +28,12 @@ import {
   EntityRecords,
   entityStorageDescriptor,
 } from "../../src/entity/entity-storage-descriptor.js";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
+import {
+  ProjectOverviewIdSchema,
+  ProjectOverviewStateSchema,
+  ProjectPortfolioStateSchema,
+  ProjectStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
 type ProjectOverviewState = Message<"ProjectOverviewState"> & {
   id: string;
@@ -40,16 +44,7 @@ type ProjectState = Message<"ProjectState"> & { id: string; name: string };
 type ProjectOverviewId = Message<"ProjectOverviewId"> & { value: string };
 type MessageIdState = Message<"MessageIdState"> & { id?: ProjectOverviewId };
 
-const fixtureFile = FixtureSchemas.entityMetadataMainFile;
-
-function fixtureSchemaAt<Shape extends Message>(index: number): GenMessage<Shape> {
-  return messageDesc(fixtureFile, index);
-}
-
-const ProjectOverviewStateSchema = fixtureSchemaAt<ProjectOverviewState>(0);
-const ProjectStateSchema = fixtureSchemaAt<ProjectState>(1);
-const ProjectOverviewIdSchema = fixtureSchemaAt<ProjectOverviewId>(8);
-const MessageIdStateSchema = fixtureSchemaAt<MessageIdState>(9);
+const MessageIdStateSchema = ProjectPortfolioStateSchema;
 
 class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {}
 class AlternateAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {}

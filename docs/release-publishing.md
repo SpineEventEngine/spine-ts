@@ -40,9 +40,10 @@ release automatically. GitHub-hosted runners use Node 24, pnpm 11.9.0, and npm
 
 The [sigstore-js issue #1708](https://github.com/sigstore/sigstore-js/issues/1708) /
 [PR #1709](https://github.com/sigstore/sigstore-js/pull/1709) is unresolved and
-unreleased. Official, unmodified npm trusted publishing remains in use. No retry,
-timeout, custom publisher, or token fallback is configured. Sigstore is not upgraded
-solely for this issue because the latest released configuration still sets
+unreleased. Official, unmodified npm trusted publishing remains in use. No Sigstore-specific
+retry or timeout workaround, custom publisher, or token fallback is configured; the separate
+10-second registry-selection timeout remains in place. Sigstore is not upgraded solely for this
+issue because the latest released configuration still sets
 `fetchOnConflict` to `false`.
 
 Before activation, protect `master`: require pull requests and successful PR

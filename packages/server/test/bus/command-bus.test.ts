@@ -32,31 +32,13 @@ import { commandBusAccess } from "../../src/bus/command-bus.js";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { SignalPublisher } from "../../src/runtime/signal-publisher.js";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 import {
-  type CreateReviewProject,
-  CreateReviewProjectSchema,
-} from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
-
-type AssignReviewTask = Message<"AssignReviewTask"> & {
-  id: string;
-  name: string;
-};
-
-type ScheduleReviewTask = Message<"ScheduleReviewTask"> & {
-  id: string;
-  name: string;
-};
-
-const fileHandlerRegistryCommandsFixture = FixtureSchemas.handlerRegistryCommandsFile;
-const AssignReviewTaskSchema = messageDesc(
-  fileHandlerRegistryCommandsFixture,
-  2,
-) as GenMessage<AssignReviewTask>;
-const ScheduleReviewTaskSchema = messageDesc(
-  fileHandlerRegistryCommandsFixture,
-  3,
-) as GenMessage<ScheduleReviewTask>;
+  type AssignReviewTask,
+  AssignReviewTaskSchema,
+  type ScheduleReviewTask,
+  ScheduleReviewTaskSchema,
+} from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import { CreateReviewProjectSchema } from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
 
 describe("CommandBus", () => {
   it("posts commands asynchronously to exactly one matching dispatcher", async () => {

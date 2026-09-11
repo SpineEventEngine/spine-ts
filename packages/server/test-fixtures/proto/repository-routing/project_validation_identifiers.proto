@@ -13,21 +13,10 @@
  */
 syntax = "proto3";
 
-package spine_ts.testing.projects;
+package repository_routing_project_validation_identifiers;
 
 import "spine/options.proto";
 
-message Project {
-  option (entity).kind = AGGREGATE;
-
-  string id = 1 [(set_once) = true];
-  string name = 2 [(column) = true];
-}
-
-message ProjectOverview {
-  option (entity).kind = PROJECTION;
-
-  string id = 1 [(set_once) = true];
-  string name = 2 [(column) = true];
-  int32 priority = 3 [(column) = true];
+message ProjectSubmissionId {
+  string value = 1 [(required) = true];
 }

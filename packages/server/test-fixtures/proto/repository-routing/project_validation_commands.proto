@@ -17,10 +17,6 @@ package repository_routing_project_validation_commands;
 
 import "spine/options.proto";
 
-message ProjectSubmissionId {
-  string value = 1 [(required) = true];
-}
-
 message CreateProjectSubmission {
   string id = 1;
   string name = 2 [(required) = true];

@@ -19,7 +19,6 @@ import { pathToFileURL } from "node:url";
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { AnyMessages } from "@spine-event-engine/core";
 import {
   EventContextSchema,
@@ -47,23 +46,15 @@ import type { ShardIndex } from "../../src/delivery/shard-index.js";
 import type { EnvironmentGenerationWorker } from "../../src/server/environment-attachment.js";
 import type { EnvironmentDeliveryRuntime } from "../../src/server/environment-delivery-worker.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
+import { StartServerSchema } from "../../test-fixtures/generated/server-lifecycle/commands_pb.js";
+import {
+  type ServerStarted,
+  ServerStartedSchema,
+} from "../../test-fixtures/generated/server-lifecycle/events_pb.js";
+import { ServerStatusSchema } from "../../test-fixtures/generated/server-lifecycle/states_pb.js";
 
-type LifecycleState = Message<"ProjectOverviewState"> & { readonly id: string };
-type LifecycleEvent = Message<"ReviewTaskAssigned"> & {
-  readonly id: string;
-  readonly name: string;
-};
-
-const lifecycleFile = FixtureSchemas.entityMetadataMainFile;
-const LifecycleStateSchema = messageDesc(lifecycleFile, 0) as GenMessage<LifecycleState>;
-const LifecycleEventSchema = messageDesc(
-  FixtureSchemas.handlerRegistryEventsFile,
-  1,
-) as GenMessage<LifecycleEvent>;
-
-class LifecycleProjection extends Projection<string, typeof LifecycleStateSchema, number> {
-  onEvent(event: LifecycleEvent): void {
+class ServerStatusProjection extends Projection<string, typeof ServerStatusSchema, number> {
+  onServerStarted(event: ServerStarted): void {
     void event;
   }
 }
@@ -100,14 +91,14 @@ export async function lifecycleFixture(
   const registry = generatedRegistry([
     {
       receiverKind: "entity",
-      receiverType: LifecycleProjection,
-      stateSchema: LifecycleStateSchema,
+      receiverType: ServerStatusProjection,
+      stateSchema: ServerStatusSchema,
       handlers: [
         {
           kind: "event-subscription" as const,
-          methodName: "onEvent",
+          methodName: "onServerStarted",
           origin: "domestic" as const,
-          signalSchema: LifecycleEventSchema,
+          signalSchema: ServerStartedSchema,
           emittedSchemas: [],
           parameterCount: 1 as const,
         },
@@ -117,16 +108,16 @@ export async function lifecycleFixture(
   const createBuilder = (name: string) =>
     BoundedContext.singleTenant(name)
       .withGeneratedRegistryRoot(registry.root)
-      .add(LifecycleProjection);
+      .add(ServerStatusProjection);
   const createContext = (name: string) => createBuilder(name).buildAsync();
   const createMixedContext = (name: string) =>
     BoundedContext.singleTenant(name)
       .addCommandDispatcher({
-        messageSchemas: () => [LifecycleStateSchema],
+        messageSchemas: () => [StartServerSchema],
         dispatch: () => Promise.resolve(),
       })
       .addEventDispatcher({
-        messageSchemas: () => [LifecycleEventSchema],
+        messageSchemas: () => [ServerStartedSchema],
         dispatch: () => Promise.resolve(),
       })
       .build();
@@ -137,7 +128,7 @@ export async function lifecycleFixture(
   ) =>
     BoundedContext.singleTenant(name)
       .addEventDispatcher({
-        messageSchemas: () => [LifecycleEventSchema],
+        messageSchemas: () => [ServerStartedSchema],
         dispatch: (event) => {
           const id = event.id?.value ?? "missing";
           observed.push(id);
@@ -152,10 +143,7 @@ export async function lifecycleFixture(
         producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: id })),
         version: create(VersionSchema, { number: 1 }),
       }),
-      message: AnyMessages.pack(
-        LifecycleEventSchema,
-        create(LifecycleEventSchema, { id, name: id }),
-      ),
+      message: AnyMessages.pack(ServerStartedSchema, create(ServerStartedSchema, { id, name: id })),
     });
   const context = await createContext("Lifecycle");
 

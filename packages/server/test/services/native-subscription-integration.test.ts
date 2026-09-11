@@ -13,8 +13,6 @@
  */
 
 import { create, type Message, type MessageInitShape } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
@@ -53,7 +51,10 @@ import {
   NativeProcessManagerStateSchema,
   NativeProjectOverviewStateSchema,
 } from "../../test-fixtures/native-subscription-fixtures.js";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
+import {
+  type AssignReviewTask,
+  AssignReviewTaskSchema,
+} from "../../test-fixtures/generated/handler-registry/commands_pb.js";
 import {
   TaskCreatedSchema,
   type TaskCreated,
@@ -63,15 +64,8 @@ import {
   TaskListIdSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
-type NativeAssignReviewTask = Message<"AssignReviewTask"> & { id: string; name: string };
-
-const NativeAssignReviewTaskSchema = messageDesc(
-  FixtureSchemas.handlerRegistryCommandsFile,
-  2,
-) as GenMessage<NativeAssignReviewTask>;
-
 class NativeAggregate extends Aggregate<string, typeof NativeProjectStateSchema, bigint> {
-  assign(command: NativeAssignReviewTask): TaskCreated {
+  assign(command: AssignReviewTask): TaskCreated {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -111,7 +105,7 @@ class NativeProcessManager extends ProcessManager<
   typeof NativeProcessManagerStateSchema,
   number
 > {
-  assign(command: NativeAssignReviewTask): void {
+  assign(command: AssignReviewTask): void {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -144,7 +138,7 @@ describe("native service subscriptions", () => {
           entityType: NativeAggregate,
           schema: NativeProjectStateSchema,
           handlers: EntityHandlers.define(NativeAggregate, NativeProjectStateSchema, (builder) => [
-            builder.assign(NativeAssignReviewTaskSchema, "assign"),
+            builder.assign(AssignReviewTaskSchema, "assign"),
           ]),
           events: [TaskCreatedSchema],
         }),
@@ -281,7 +275,7 @@ function createProcessManagerContext(name: string): BoundedContext {
           NativeProcessManager,
           NativeProcessManagerStateSchema,
           (builder) => [
-            builder.assign(NativeAssignReviewTaskSchema, "assign"),
+            builder.assign(AssignReviewTaskSchema, "assign"),
             builder.react(TaskCreatedSchema, "react"),
           ],
         ),
@@ -305,10 +299,7 @@ function createAggregateCommand(id: string, name: string) {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: `command-${id}` }),
     context: create(CommandContextSchema, { actorContext: createActorContext() }),
-    message: AnyMessages.pack(
-      NativeAssignReviewTaskSchema,
-      create(NativeAssignReviewTaskSchema, { id, name }),
-    ),
+    message: AnyMessages.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema, { id, name })),
   });
 }
 

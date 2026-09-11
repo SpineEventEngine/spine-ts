@@ -18,10 +18,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { create, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { describe, expect, it } from "vitest";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 import {
   GeneratedRegistryDiscovery,
@@ -30,15 +27,20 @@ import {
 import { type GeneratedHandlerRegistry } from "../../src/handler/generated-handler-registry.js";
 import { HandlerRegistryIngestionError } from "../../src/handler/generated-handler-registry.js";
 import { HandlerMetadataRegistry } from "../../src/handler/handler-metadata.js";
+import {
+  type StartReview,
+  StartReviewSchema,
+} from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import {
+  type ReviewStarted,
+  ReviewStartedSchema,
+} from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 type ProjectOverviewState = Message<"ProjectOverviewState"> & {
   id: string;
   name: string;
   priority: number;
 };
-type StartReview = Message<"spine.server.testing.StartReview">;
-type ReviewStarted = Message<"spine.server.testing.ReviewStarted">;
-
 class DiscoveredProjection {
   assignCreate(command: StartReview): ReviewStarted {
     void command;
@@ -46,19 +48,8 @@ class DiscoveredProjection {
   }
 }
 
-const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectOverviewStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectOverviewState>;
-const StartReviewSchema = messageDesc(
-  FixtureSchemas.handlerRegistryCommandsFile,
-  0,
-) as GenMessage<StartReview>;
-const ReviewStartedSchema = messageDesc(
-  FixtureSchemas.handlerRegistryEventsFile,
-  0,
-) as GenMessage<ReviewStarted>;
+const { ProjectOverviewStateSchema } =
+  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
 
 describe("generated registry discovery", () => {
   it("loads generated registries from explicit file URLs", async () => {

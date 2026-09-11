@@ -12,11 +12,18 @@
  * the License.
  */
 
-import { create, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { create } from "@bufbuild/protobuf";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import * as FixtureSchemas from "../../test-fixtures/schemas.js";
+import {
+  ProjectOverviewStateSchema,
+  ProjectProfileSchema,
+  ProjectProfileStateSchema,
+  ProjectRecordStateSchema,
+  type ProjectOverviewState,
+  type ProjectProfile,
+  type ProjectProfileState,
+  type ProjectRecordState,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
 import * as serverRoot from "../../src/index.js";
 import {
@@ -26,50 +33,6 @@ import {
   EntityTransactionStateError,
   type EntityTransactionVersionMetadata,
 } from "../../src/index.js";
-
-type ProjectOverviewState = Message<"ProjectOverviewState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type ProjectProfile = Message<"ProjectProfile"> & {
-  value: string;
-  child?: ProjectProfile;
-};
-
-type ProjectProfileState = Message<"ProjectProfileState"> & {
-  id: string;
-  fingerprint: Uint8Array;
-  tags: string[];
-  details?: ProjectProfile;
-  mutableNote: string;
-};
-
-type ProjectRecordState = Message<"ProjectRecordState"> & {
-  id: string;
-  fingerprint: Uint8Array;
-  details?: ProjectProfile;
-  mutableNote: string;
-};
-
-const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
-const ProjectOverviewStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectOverviewState>;
-const ProjectProfileSchema = messageDesc(
-  fileEntityMetadataFixture,
-  3,
-) as GenMessage<ProjectProfile>;
-const ProjectProfileStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  4,
-) as GenMessage<ProjectProfileState>;
-const ProjectRecordStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  6,
-) as GenMessage<ProjectRecordState>;
 
 function createProjectOverviewState(
   overrides: Partial<ProjectOverviewState> = {},
