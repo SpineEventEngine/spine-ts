@@ -272,6 +272,13 @@ verification and review may run concurrently only at stable boundaries.
   suites. All fixture checkpoints through `3eb292b65` were pushed immediately.
   The final repository-routing gate passed TypeScript tooling, ESLint, Prettier,
   diff hygiene, and 265/265 tests.
+- `2026-09-11 01:20 WEST`: Prepared a fresh correction review wave with no
+  inherited conversation turns. Explicit assignments: existing
+  performance/reliability reviewer role, `gpt-5.6-terra`, high; existing
+  TypeScript/API reviewer role, `gpt-5.6-terra`, high; existing documentation
+  reviewer role, `gpt-5.6-luna`, medium. Each reviewer is read-only and may not
+  spawn sub-agents. Runtime self-introspection is not exposed, so the immutable
+  configured role/profile is the available runtime evidence.
 
 ## Decisions
 
