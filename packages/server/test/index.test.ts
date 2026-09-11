@@ -12,17 +12,13 @@
  * the License.
  */
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { CommandSchema, file_spine_options } from "@spine-event-engine/proto";
-import {
-  serverEntityMetadataFixtureGeneration,
-  serverEntityMetadataTestFixtures,
-} from "../test-fixtures/entity-metadata-fixtures.js";
+import { CommandSchema } from "@spine-event-engine/proto";
+import * as FixtureSchemas from "../test-fixtures/schemas.js";
 
 import * as serverRoot from "../src/index.js";
 import {
@@ -140,27 +136,8 @@ type ProcessManagerState = Message<"ProcessManagerState"> & { id: string; queue:
 type FullVisibilityState = Message<"FullVisibilityState"> & { id: string };
 type HiddenState = Message<"HiddenState"> & { id: string };
 
-function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Server entity metadata fixture descriptor set is empty.");
-  }
-
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    imports,
-  );
-}
-
 // Descriptor fixtures are generated from checked-in test-only .proto sources.
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
+const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
 const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
@@ -192,38 +169,28 @@ class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof AggregateStat
   }
 }
 
-const fileEntityEmptyFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.empty.descriptorSetBase64,
-);
+const fileEntityEmptyFixture = FixtureSchemas.entityMetadataEmptyFile;
 const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
 
-const fileEntityUnknownKindFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.unknownKind.descriptorSetBase64,
-);
+const fileEntityUnknownKindFixture = FixtureSchemas.entityMetadataUnknownKindFile;
 const UnknownKindStateSchema = messageDesc(
   fileEntityUnknownKindFixture,
   0,
 ) as GenMessage<UnknownKindState>;
 
-const fileEntityInvalidColumnFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.invalidColumn.descriptorSetBase64,
-);
+const fileEntityInvalidColumnFixture = FixtureSchemas.entityMetadataInvalidColumnFile;
 const InvalidColumnStateSchema = messageDesc(
   fileEntityInvalidColumnFixture,
   0,
 ) as GenMessage<InvalidColumnState>;
 
-const fileEntityInvalidTagFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.invalidTag.descriptorSetBase64,
-);
+const fileEntityInvalidTagFixture = FixtureSchemas.entityMetadataInvalidTagFile;
 const InvalidTagStateSchema = messageDesc(
   fileEntityInvalidTagFixture,
   0,
 ) as GenMessage<InvalidTagState>;
 
-const fileEntityVisibilityFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
-);
+const fileEntityVisibilityFixture = FixtureSchemas.entityMetadataVisibilityFile;
 const ProcessManagerStateSchema = messageDesc(
   fileEntityVisibilityFixture,
   0,
@@ -608,13 +575,8 @@ describe("@spine-event-engine/server", () => {
     expect(describeEntityMetadata(GenericStateSchema).columns).toEqual([]);
   });
 
-  it("documents the checked-in fixture regeneration path", () => {
-    expect(serverEntityMetadataFixtureGeneration.command).toBe(
-      "node scripts/generate-server-test-fixtures.mjs",
-    );
-    expect(serverEntityMetadataFixtureGeneration.protoRoot).toBe(
-      "packages/server/test-fixtures/proto/entity-metadata",
-    );
+  it("uses generated schemas from checked-in fixture Proto sources", () => {
+    expect(FixtureSchemas.entityMetadataMainFile.name).toBe("entity-metadata/main");
   });
 
   it("distinguishes entity schemas from non-entity schemas", () => {

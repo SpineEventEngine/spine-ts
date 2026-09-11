@@ -12,17 +12,13 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { create } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
   DoubleValueSchema,
   Int64ValueSchema,
   StringValueSchema,
   TimestampSchema,
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
 } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import {
@@ -37,31 +33,12 @@ import {
   OriginSchema,
   TenantIdSchema,
   UserIdSchema,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import { FixedClock, SignalMetadata } from "../../src/runtime/signal-metadata.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
-
-type TaskCommand = Message<"TaskCommand"> & { id: string; name: string };
-type TaskEvent = Message<"TaskEvent"> & { id: string; name: string };
-function fixtureFile(descriptorSetBase64: string) {
-  const descriptor = fromBinary(FileDescriptorSetSchema, Buffer.from(descriptorSetBase64, "base64"))
-    .file[0];
-  if (descriptor === undefined) throw new Error("Signal metadata fixture descriptor set is empty.");
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-}
-const TaskCommandSchema = messageDesc(
-  fixtureFile(serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64),
-  2,
-) as GenMessage<TaskCommand>;
-const TaskEventSchema = messageDesc(
-  fixtureFile(serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64),
-  1,
-) as GenMessage<TaskEvent>;
+import { TaskCommandSchema } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import { TaskEventSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 describe("SignalMetadata", () => {
   it("creates fresh ids, timestamps, and actor/tenant command contexts", () => {

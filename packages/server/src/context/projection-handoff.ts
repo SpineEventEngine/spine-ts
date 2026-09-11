@@ -157,7 +157,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
                   InboxHandoff.sameMessageId(message.id, written.message.id) ||
                   (message.label === "UPDATE_SUBSCRIBER" &&
                     this.#targets.has(message.inboxId.targetTypeUrl)),
-                onAcknowledged: (message) => {
+                onResolved: (message) => {
                   this.#recordAcknowledgement(message);
                 },
                 replayFailureMessage: "Projection inbox replay failed.",

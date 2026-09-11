@@ -12,17 +12,12 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import {
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
-  StringValueSchema,
-  TimestampSchema,
-} from "@bufbuild/protobuf/wkt";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages } from "@spine-event-engine/core";
-import { VersionSchema, file_spine_options } from "@spine-event-engine/proto";
+import { VersionSchema } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -34,24 +29,14 @@ import {
   EntityRecords,
   entityStorageDescriptor,
 } from "../../src/entity/entity-storage-descriptor.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 type ProjectionState = Message<"ProjectionState"> & { id: string; name: string; priority: number };
 type AggregateState = Message<"AggregateState"> & { id: string; name: string };
 type ProjectionId = Message<"ProjectionId"> & { value: string };
 type MessageIdState = Message<"MessageIdState"> & { id?: ProjectionId };
 
-const fixtureDescriptorSet = fromBinary(
-  FileDescriptorSetSchema,
-  Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-);
-const fixtureDescriptor = fixtureDescriptorSet.file[0];
-if (fixtureDescriptor === undefined)
-  throw new Error("Server entity fixture descriptor set is empty.");
-const fixtureFile = fileDesc(
-  Buffer.from(toBinary(FileDescriptorProtoSchema, fixtureDescriptor)).toString("base64"),
-  [file_spine_options],
-);
+const fixtureFile = FixtureSchemas.entityMetadataMainFile;
 
 function fixtureSchemaAt<Shape extends Message>(index: number): GenMessage<Shape> {
   return messageDesc(fixtureFile, index);

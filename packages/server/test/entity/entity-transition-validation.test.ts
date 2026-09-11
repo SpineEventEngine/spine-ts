@@ -12,25 +12,15 @@
  * the License.
  */
 
-import {
-  clone,
-  create,
-  fromBinary,
-  setExtension,
-  toBinary,
-  type Message,
-} from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import {
-  FieldOptionsSchema,
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
-} from "@bufbuild/protobuf/wkt";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { describe, expect, it } from "vitest";
-import { file_spine_options } from "@spine-event-engine/proto";
-import { required } from "@spine-event-engine/proto/generated/spine/options_pb.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as FixtureSchemas from "../../test-fixtures/schemas.js";
+import {
+  ExplicitOptionalStateSchema,
+  ExplicitRequiredStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/main_pb.js";
 
 import * as serverRoot from "../../src/index.js";
 import { validateEntityStateTransition } from "../../src/index.js";
@@ -85,50 +75,7 @@ interface SingularSetOnceStateOverrides {
   readonly mutableNote?: string;
 }
 
-function createFixtureFileDescriptor(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Server entity transition validation fixture descriptor set is empty.");
-  }
-
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-}
-
-function projectionStateWithRequired(value: boolean) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-  );
-  const source = descriptorSet.file[0];
-  if (source === undefined) throw new Error("Entity metadata fixture descriptor is missing.");
-  const descriptor = clone(FileDescriptorProtoSchema, source);
-  const state = descriptor.messageType[0];
-  const id = state?.field[0];
-  if (state === undefined || id === undefined) {
-    throw new Error("Projection state ID fixture is missing.");
-  }
-  descriptor.name = value ? "explicit_required_state.proto" : "explicit_optional_state.proto";
-  state.name = value ? "ExplicitRequiredState" : "ExplicitOptionalState";
-  id.options ??= create(FieldOptionsSchema);
-  setExtension(id.options, required, value);
-  descriptor.messageType = [state];
-  const file = fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    [file_spine_options],
-  );
-  return messageDesc(file, 0) as GenMessage<ProjectionState>;
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
+const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
 const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
@@ -154,8 +101,6 @@ const OptionalSetOnceStateSchema = messageDesc(
   fileEntityMetadataFixture,
   7,
 ) as GenMessage<OptionalSetOnceState>;
-const ExplicitRequiredStateSchema = projectionStateWithRequired(true);
-const ExplicitOptionalStateSchema = projectionStateWithRequired(false);
 
 describe("entity state transition validation", () => {
   it("exports the public high-level entity state transition validator", () => {

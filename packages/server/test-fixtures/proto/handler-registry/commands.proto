@@ -13,7 +13,17 @@
  */
 syntax = "proto3";
 package spine.server.testing.handlerregistry;
-message StartReview { string id = 1; }
-message ScheduleReview { string id = 1; }
-message TaskCommand { string id = 1; string name = 2; }
-message ProcessManagerTaskCommand { string id = 1; string name = 2; }
+message StartReview {
+  string id = 1;
+}
+message ScheduleReview {
+  string id = 1;
+}
+message TaskCommand {
+  string id = 1;
+  string name = 2;
+}
+message ProcessManagerTaskCommand {
+  string id = 1;
+  string name = 2;
+}

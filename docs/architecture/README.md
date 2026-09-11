@@ -788,13 +788,12 @@ replays that exact row. Process-manager replay validates the row label, pending
 `TO_DELIVER` status, tenant context, payload/schema, target type URL, and routed
 target ID before handler code.
 
-Inbox duplicate admission is limited by its 30-second deduplication window.
-That window is not replay retention: accepted rows remain subject to their
-Inbox delivery lifecycle and can be replayed after the duplicate window ends.
-Within the live window, normal local and remote admission suppresses a matching
-signal ID only for the same typed Inbox target. A different target or a newly
-created signal with a different ID is not suppressed because its payload happens
-to be equal.
+Inbox delivery reads bounded raw pages and removes pending duplicates by signal
+ID plus typed Inbox target. Duplicate evidence comes from delivered rows in the
+current page and a process-local cache of the 1,000 most recent deliveries. The
+30-second deduplication window controls how long delivered rows are retained;
+it is not replay retention. A different target or a newly created signal with a
+different ID is not suppressed because its payload happens to be equal.
 Bounded contexts create internal system-pairing metadata and a tenant index.
 Single-tenant indexes are constant and reject tenant recording. Multitenant
 indexes are catalog views: MySQL enumerates configured tenant/database entries,

@@ -24,8 +24,19 @@ const recentDeliveries = new WeakMap<DeliveryInbox, RecentDeliveries>();
 export class DeliveryDeduplication {
   readonly #recent: RecentDeliveries;
 
+  /**
+   * Creates duplicate tracking for one Inbox store.
+   *
+   * @param inbox The Inbox store whose recent deliveries are tracked.
+   */
   constructor(inbox: DeliveryInbox) {
-    this.#recent = recentDeliveryCache(inbox);
+    const current = recentDeliveries.get(inbox);
+    if (current !== undefined) {
+      this.#recent = current;
+    } else {
+      this.#recent = new RecentDeliveries();
+      recentDeliveries.set(inbox, this.#recent);
+    }
   }
 
   /**
@@ -39,7 +50,7 @@ export class DeliveryDeduplication {
   }
 
   /**
-   * Remembers one successfully acknowledged delivery.
+   * Records one successfully acknowledged delivery.
    *
    * @param message The acknowledged Inbox message.
    */
@@ -54,7 +65,9 @@ class DeliveryPageDeduplication {
 
   constructor(messages: readonly InboxMessage[], recent: RecentDeliveries) {
     this.#identities = new Set(
-      messages.filter((message) => message.status === "DELIVERED").map(deliveryIdentity),
+      messages
+        .filter((message) => message.status === "DELIVERED")
+        .map((message) => RecentDeliveries.key(message)),
     );
     this.#recent = recent;
   }
@@ -64,7 +77,7 @@ class DeliveryPageDeduplication {
    * and remembers a first occurrence for later rows in the same page.
    */
   isDuplicate(message: InboxMessage): boolean {
-    const identity = deliveryIdentity(message);
+    const identity = RecentDeliveries.key(message);
     if (this.#identities.has(identity) || this.#recent.has(identity)) return true;
     this.#identities.add(identity);
     return false;
@@ -79,7 +92,7 @@ class RecentDeliveries {
   }
 
   add(message: InboxMessage): void {
-    const identity = deliveryIdentity(message);
+    const identity = RecentDeliveries.key(message);
     this.#identities.delete(identity);
     this.#identities.set(identity, undefined);
     if (this.#identities.size > recentDeliveryCapacity) {
@@ -87,20 +100,12 @@ class RecentDeliveries {
       if (oldest !== undefined) this.#identities.delete(oldest);
     }
   }
-}
 
-function recentDeliveryCache(inbox: DeliveryInbox): RecentDeliveries {
-  const current = recentDeliveries.get(inbox);
-  if (current !== undefined) return current;
-  const created = new RecentDeliveries();
-  recentDeliveries.set(inbox, created);
-  return created;
-}
-
-function deliveryIdentity(message: InboxMessage): string {
-  return JSON.stringify([
-    message.signalId,
-    message.inboxId.targetTypeUrl,
-    InboxTargets.key(message.inboxId.targetId),
-  ]);
+  static key(message: InboxMessage): string {
+    return JSON.stringify([
+      message.signalId,
+      message.inboxId.targetTypeUrl,
+      InboxTargets.key(message.inboxId.targetId),
+    ]);
+  }
 }

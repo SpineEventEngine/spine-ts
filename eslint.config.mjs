@@ -10,6 +10,7 @@ export default tseslint.config(
       ".worktrees/**",
       "docs/api/reference/**",
       "packages/*/generated/**",
+      "packages/*/test-fixtures/generated/**",
       "examples/*/generated/**",
       "examples/*/*/generated/**",
       "eslint.config.mjs",

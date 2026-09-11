@@ -45,6 +45,21 @@ export const modelAtomicTargets = [
     moduleName: "ServerBlackBoxTests",
   },
   {
+    displayPath: "packages/server/test-fixtures/generated",
+    packagePath: "packages/server/test-fixtures",
+    moduleName: "ServerTestFixtures",
+  },
+  {
+    displayPath: "packages/core/test-fixtures/generated",
+    packagePath: "packages/core/test-fixtures",
+    moduleName: "CoreTestFixtures",
+  },
+  {
+    displayPath: "packages/testing/test-fixtures/generated",
+    packagePath: "packages/testing/test-fixtures",
+    moduleName: "TestingTestFixtures",
+  },
+  {
     displayPath: "examples/todo/generated",
     packagePath: "examples/todo",
     moduleName: "Todo",

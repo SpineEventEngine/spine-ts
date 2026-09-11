@@ -17,7 +17,7 @@ import type { Message, MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { AnySchema, FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -39,6 +39,10 @@ import {
   file_spine_options,
   type_url_prefix,
 } from "@spine-event-engine/proto";
+import {
+  TaskCommandSchema as TestTaskCommandSchema,
+  TaskEventSchema as TestTaskEventSchema,
+} from "../test-fixtures/generated/signal_envelopes_pb.js";
 
 import {
   DEFAULT_TYPE_URL_PREFIX,
@@ -60,27 +64,6 @@ import {
 type SignalMessage = Message & {
   readonly $typeName: string;
 };
-type TestTaskCommand = Message<"example.signal.TaskCommand"> & { fieldName: string[] };
-type TestTaskEvent = Message<"example.signal.TaskEvent"> & { fieldName: string[] };
-function signalFixture(name: "TaskCommand" | "TaskEvent") {
-  return fileDesc(
-    Buffer.from(
-      toBinary(
-        FileDescriptorProtoSchema,
-        create(FileDescriptorProtoSchema, {
-          name: `${name}.proto`,
-          package: "example.signal",
-          messageType: [{ name, field: [{ name: "field_name", number: 1, label: 3, type: 9 }] }],
-        }),
-      ),
-    ).toString("base64"),
-  );
-}
-const TestTaskCommandSchema = messageDesc(
-  signalFixture("TaskCommand"),
-  0,
-) as GenMessage<TestTaskCommand>;
-const TestTaskEventSchema = messageDesc(signalFixture("TaskEvent"), 0) as GenMessage<TestTaskEvent>;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 describe("MessageInterfaces", () => {

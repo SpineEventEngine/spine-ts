@@ -12,17 +12,14 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { TypeRegistry } from "@spine-event-engine/core";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
   type ActorContext,
@@ -32,7 +29,6 @@ import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
-  file_spine_options,
   TenantIdSchema,
   type UserId,
   UserIdSchema,
@@ -53,7 +49,10 @@ import { ServerEnvironment as DirectSourceServerEnvironment } from "../../src/se
 import { resetServerEnvironmentForTest as resetDirectSourceServerEnvironment } from "../../src/testing/index.js";
 import { RecordingTransportFactory } from "./wave13-red-support.js";
 import { expectWave13ContractToCompile } from "./wave13-compile-contract.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import {
+  AggregateStateSchema,
+  ProjectionStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/main_pb.js";
 import type {
   GeneratedHandlerRecordInput,
   GeneratedHandlerRegistry,
@@ -61,18 +60,7 @@ import type {
 
 type State = Message<"ProjectionState"> & { id: string; name: string; priority: number };
 function stateSchema(index = 0): GenMessage<State> {
-  const set = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-  );
-  const descriptor = set.file[0];
-  if (descriptor === undefined) throw new Error("State registry fixture descriptor is empty.");
-  return messageDesc(
-    fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-      file_spine_options,
-    ]),
-    index,
-  );
+  return (index === 0 ? ProjectionStateSchema : AggregateStateSchema) as GenMessage<State>;
 }
 const StateSchema = stateSchema();
 const SubscribedStateSchema = stateSchema(1);

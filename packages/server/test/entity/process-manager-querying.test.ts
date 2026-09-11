@@ -12,17 +12,7 @@
  * the License.
  */
 
-import {
-  clone,
-  create,
-  fromBinary,
-  toBinary,
-  type Message,
-  type MessageShape,
-} from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import { create, type MessageShape } from "@bufbuild/protobuf";
 import { AnyMessages, EntityColumn, EntityQuery } from "@spine-event-engine/core";
 import { GeneratedEntityColumns } from "@spine-event-engine/core/codegen";
 import {
@@ -33,7 +23,6 @@ import {
   TenantIdSchema,
   UserIdSchema,
   ZoneIdSchema,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
@@ -49,81 +38,19 @@ import {
 import { processManagerQueryAccess } from "../../src/entity/entity.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { QueryReader } from "../../src/services/query-reader.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
-
-type ProjectionState = Message<"ProjectionState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type ProjectionEvent = Message<"ProjectionEvent"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type ProcessManagerState = Message<"ProcessManagerState"> & {
-  id: string;
-  queue: string;
-};
-
-type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
-  id: string;
-  name: string;
-};
-
-function fixtureFile(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-  if (descriptor === undefined) throw new Error("Process Manager query fixture is empty.");
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-}
-
-const entityFixture = fixtureFile(serverEntityMetadataTestFixtures.main.descriptorSetBase64);
-const ProjectionStateSchema = messageDesc(entityFixture, 0) as GenMessage<ProjectionState>;
-
-const eventFixture = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, entityFixture.proto);
-  const event = descriptor.messageType[0];
-  if (event === undefined) throw new Error("Projection Event fixture is missing.");
-  descriptor.name = "process_manager_query_events.proto";
-  descriptor.messageType = [event];
-  event.name = "ProjectionEvent";
-  if (event.options !== undefined) {
-    event.options.$unknown = event.options.$unknown?.filter((field) => field.no !== 73_903);
-  }
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const ProjectionEventSchema = messageDesc(eventFixture, 0) as GenMessage<ProjectionEvent>;
-
-const processManagerFixture = fixtureFile(
-  serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
-);
-const ProcessManagerStateSchema = messageDesc(
-  processManagerFixture,
-  0,
-) as GenMessage<ProcessManagerState>;
-
-const commandFixture = fileDesc(
-  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
-    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
-    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
-    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
-    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
-  [file_spine_options],
-);
-const ValidatedTaskCommandSchema = messageDesc(
-  commandFixture,
-  1,
-) as GenMessage<ValidatedTaskCommand>;
+import {
+  type ProjectionState,
+  ProjectionStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/main_pb.js";
+import { ProcessManagerStateSchema } from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
+import {
+  type ProjectionEvent,
+  ProjectionEventSchema,
+} from "../../test-fixtures/generated/repository-routing/repository_events_pb.js";
+import {
+  type ValidatedTaskCommand,
+  ValidatedTaskCommandSchema,
+} from "../../test-fixtures/generated/validation-refusal/command_pb.js";
 
 const projectionColumns = EntityColumn.register(
   ProjectionStateSchema,

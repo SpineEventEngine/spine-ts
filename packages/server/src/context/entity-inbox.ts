@@ -345,7 +345,7 @@ export class LocalEntityInbox implements EntityInbox {
           this.#targets
             .get(nextMessage.inboxId.targetTypeUrl)
             ?.labels.includes(nextMessage.label) === true),
-      onAcknowledged: (nextMessage) => {
+      onResolved: (nextMessage) => {
         this.#recordAcknowledgement(nextMessage);
       },
       replayFailureMessage: "Entity Inbox replay failed.",

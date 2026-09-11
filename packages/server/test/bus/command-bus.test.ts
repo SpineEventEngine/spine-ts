@@ -14,8 +14,7 @@
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -25,17 +24,15 @@ import {
   EventIdSchema,
   EventSchema,
   UserIdSchema,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
-import { fromBinary, toBinary } from "@bufbuild/protobuf";
 
 import { CommandBus, type CommandDispatcher } from "../../src/index.js";
 import { commandBusAccess } from "../../src/bus/command-bus.js";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { SignalPublisher } from "../../src/runtime/signal-publisher.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 type TaskCommand = Message<"TaskCommand"> & {
   id: string;
@@ -52,26 +49,7 @@ type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCom
   name: string;
 };
 
-function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Command bus fixture descriptor set is empty.");
-  }
-
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    imports,
-  );
-}
-
-const fileHandlerRegistryCommandsFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
-);
+const fileHandlerRegistryCommandsFixture = FixtureSchemas.handlerRegistryCommandsFile;
 const TaskCommandSchema = messageDesc(
   fileHandlerRegistryCommandsFixture,
   2,
@@ -80,14 +58,7 @@ const ProcessManagerTaskCommandSchema = messageDesc(
   fileHandlerRegistryCommandsFixture,
   3,
 ) as GenMessage<ProcessManagerTaskCommand>;
-const fileValidationRefusalFixture = fileDesc(
-  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
-    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
-    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
-    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
-    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
-  [file_spine_options],
-);
+const fileValidationRefusalFixture = FixtureSchemas.validationRefusalCommandFile;
 const ValidatedTaskCommandSchema = messageDesc(
   fileValidationRefusalFixture,
   1,

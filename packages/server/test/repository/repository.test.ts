@@ -12,13 +12,11 @@
  * the License.
  */
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { file_spine_options } from "@spine-event-engine/proto";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 import {
   Aggregate,
@@ -80,25 +78,7 @@ type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCom
   name: string;
 };
 
-function createFixtureFileDescriptor(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Server repository fixture descriptor set is empty.");
-  }
-
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
+const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
 const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
@@ -109,22 +89,13 @@ const AggregateStateSchema = messageDesc(
 ) as GenMessage<AggregateState>;
 const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
 
-const fileValidatedTaskCommandFixture = fileDesc(
-  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
-    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
-    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
-    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
-    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
-  [file_spine_options],
-);
+const fileValidatedTaskCommandFixture = FixtureSchemas.validationRefusalCommandFile;
 const ValidatedTaskCommandSchema = messageDesc(
   fileValidatedTaskCommandFixture,
   1,
 ) as GenMessage<ValidatedTaskCommand>;
 
-const fileEntityVisibilityFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
-);
+const fileEntityVisibilityFixture = FixtureSchemas.entityMetadataVisibilityFile;
 const ProcessManagerStateSchema = messageDesc(
   fileEntityVisibilityFixture,
   0,

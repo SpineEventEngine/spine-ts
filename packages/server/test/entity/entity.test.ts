@@ -12,18 +12,12 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import {
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
-  TimestampSchema,
-  type Timestamp,
-} from "@bufbuild/protobuf/wkt";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { file_spine_options } from "@spine-event-engine/proto";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 import * as serverRoot from "../../src/index.js";
 import {
@@ -94,25 +88,7 @@ function verifyHistoryDeclarationAbsence(projection: TestProjection): void {
   void (null as unknown as EntityStorageInput);
 }
 
-function createFixtureFileDescriptor(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Server entity fixture descriptor set is empty.");
-  }
-
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
+const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
 const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,

@@ -12,38 +12,21 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import {
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
-  type StringValue,
-} from "@bufbuild/protobuf/wkt";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { file_spine_options, type EventContext } from "@spine-event-engine/proto";
+import type { EventContext } from "@spine-event-engine/proto";
 import { EventRouting, Projection } from "@spine-event-engine/server";
 
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import { ProjectionStateSchema } from "../../test-fixtures/generated/entity-metadata/main_pb.js";
+import {
+  type TaskEvent,
+  TaskEventSchema,
+} from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
-type State = Message<"ProjectionState"> & { id: string; name: string; priority: number };
-
-const set = fromBinary(
-  FileDescriptorSetSchema,
-  Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-);
-const descriptor = set.file[0];
-if (descriptor === undefined) throw new Error("Wave 13 origin fixture has no descriptor.");
-export const Wave13OriginStateSchema = messageDesc(
-  fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]),
-  0,
-) as GenMessage<State>;
+export const Wave13OriginStateSchema = ProjectionStateSchema;
 
 export class Wave13OriginProjection extends Projection<
   string,
@@ -58,23 +41,23 @@ export class Wave13OriginProjection extends Projection<
     this.externalContexts = [];
   }
 
-  onDomestic(event: StringValue, context: EventContext): void {
+  onDomestic(event: TaskEvent, context: EventContext): void {
     Wave13OriginProjection.domesticContexts.push(context);
     this.record(event, "domestic");
   }
 
-  onExternal(event: StringValue, context: EventContext): void {
+  onExternal(event: TaskEvent, context: EventContext): void {
     Wave13OriginProjection.externalContexts.push(context);
     this.record(event, "external");
   }
 
-  private record(event: StringValue, origin: string): void {
+  private record(event: TaskEvent, origin: string): void {
     this.update((draft) =>
       Object.assign(
         draft,
         create(Wave13OriginStateSchema, {
-          id: event.value,
-          name: `${origin}:${event.value}`,
+          id: event.id,
+          name: `${origin}:${event.id}`,
           priority: 1,
         }),
       ),
@@ -82,10 +65,9 @@ export class Wave13OriginProjection extends Projection<
   }
 }
 
-export const wave13OriginRouting = EventRouting.create<string>().route(
-  StringValueSchema,
-  (event) => [event.value],
-);
+export const wave13OriginRouting = EventRouting.create<string>().route(TaskEventSchema, (event) => [
+  event.id,
+]);
 
 export function createWave13OriginRegistry(): { readonly clear: () => void; readonly root: URL } {
   const root = mkdtempSync(join(tmpdir(), "spine-wave13-origin-registry-"));
@@ -101,7 +83,7 @@ export function createWave13OriginRegistry(): { readonly clear: () => void; read
           {
             kind: "event-subscription",
             methodName: "onDomestic",
-            signalSchema: StringValueSchema,
+            signalSchema: TaskEventSchema,
             emittedSchemas: [],
             parameterCount: 2,
             origin: "domestic",
@@ -109,7 +91,7 @@ export function createWave13OriginRegistry(): { readonly clear: () => void; read
           {
             kind: "event-subscription",
             methodName: "onExternal",
-            signalSchema: StringValueSchema,
+            signalSchema: TaskEventSchema,
             emittedSchemas: [],
             parameterCount: 2,
             origin: "external",

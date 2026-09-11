@@ -302,16 +302,17 @@ lost acknowledgement can redeliver after restart and downstream handling must
 be idempotent. `DeliveryMonitor` is the explicit failure-policy seam: by
 default it marks a failed reception delivered and continues independent targets;
 an application can instead choose the immediate repeat action.
-Normal local and remote admission suppresses a retained duplicate only when its
-signal ID and typed Inbox target match a delivered row whose `keepUntil` is
-still live. A different target or a new signal ID remains independently
+Normal local and remote delivery reads every status in a bounded page. It
+removes a pending duplicate when its signal ID and typed Inbox target match a
+delivered row in that page or one of the 1,000 most recent deliveries remembered
+by the process. A different target or a new signal ID remains independently
 deliverable, even when the domain payload is equal.
 
-Each delivery drain is bounded to one page, not to a total backlog: an active
-lease owner can take later pages while its policy retains the shard. The
-30-second Inbox deduplication window controls duplicate admission only. It is
-not a replay-retention period; accepted rows follow their Inbox lifecycle and
-may be replayed after the duplicate window has elapsed.
+Each Inbox read is bounded to one page, not to a total backlog: an active drain
+can advance through later pages while it retains the shard. The 30-second Inbox
+deduplication window controls how long delivered rows remain available as
+duplicate evidence. It is not a replay-retention period; accepted rows follow
+their Inbox lifecycle and may be replayed after the duplicate window has elapsed.
 The framework persists no attempts, quarantine, receipts, markers, timers, backoff,
 dead-letter storage, or scheduler policy.
 Process-manager

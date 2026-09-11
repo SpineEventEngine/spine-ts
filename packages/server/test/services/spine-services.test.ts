@@ -14,16 +14,14 @@
 
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
-import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
   BoolValueSchema,
   BytesValueSchema,
   DoubleValueSchema,
   EmptySchema,
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
   FieldMaskSchema,
   Int32ValueSchema,
   Int64ValueSchema,
@@ -57,7 +55,6 @@ import {
   UserIdSchema,
   ValidationErrorSchema,
   VersionSchema,
-  file_spine_options,
   type Event,
 } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
@@ -127,7 +124,7 @@ import {
   type TaskCreated,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { TaskSchema as TodoTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 const GeneratedTaskIdSchema = TodoIdSchema;
 let stateChangeSequence = 0;
@@ -171,26 +168,7 @@ type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCom
 
 type TenantInput = string | TenantId;
 
-function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Spine services fixture descriptor set is empty.");
-  }
-
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    imports,
-  );
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
+const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
 const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
@@ -199,14 +177,7 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
-const fileValidationRefusalFixture = fileDesc(
-  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
-    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
-    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
-    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
-    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
-  [file_spine_options],
-);
+const fileValidationRefusalFixture = FixtureSchemas.validationRefusalCommandFile;
 const ValidatedAggregateStateSchema = messageDesc(
   fileValidationRefusalFixture,
   0,
@@ -2400,9 +2371,9 @@ describe("SpineServices", () => {
     expect(event.context?.rejection?.commandMessage).toBeUndefined();
     expect(event.context?.rejection?.stacktrace).toBe("");
     expect(source.context?.rejection?.command).toEqual(command);
-    // Verify that security redaction did not mutate the legacy source payload.
+    // Verify that security redaction did not mutate the role-correct legacy command payload.
     // eslint-disable-next-line @typescript-eslint/no-deprecated
-    expect(source.context?.rejection?.commandMessage?.value.byteLength).toBeGreaterThan(0);
+    expect(source.context?.rejection?.commandMessage).toEqual(command.message);
     expect(source.context?.rejection?.stacktrace).toBe("rejection stack");
     expect(internallyDispatched).toEqual([source]);
     expect(internallyDispatched[0]?.context?.rejection).toEqual(source.context?.rejection);
@@ -4475,8 +4446,8 @@ function createRejectionEvent(
       rejection: create(RejectionEventContextSchema, {
         command,
         commandMessage: AnyMessages.pack(
-          StringValueSchema,
-          create(StringValueSchema, { value: "legacy rejected command payload" }),
+          ValidatedTaskCommandSchema,
+          create(ValidatedTaskCommandSchema, { id: "task-rejected", name: "Task" }),
         ),
         stacktrace,
       }),

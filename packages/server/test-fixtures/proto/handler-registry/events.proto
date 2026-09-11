@@ -13,9 +13,15 @@
  */
 syntax = "proto3";
 package spine.server.testing.handlerregistry;
+
 import "spine/options.proto";
-message ReviewStarted { string id = 1; }
-message TaskEvent { string id = 1; string name = 2; }
+message ReviewStarted {
+  string id = 1;
+}
+message TaskEvent {
+  string id = 1;
+  string name = 2;
+}
 message ValidatedTaskEvent {
   string id = 1;
   string name = 2 [(required) = true];

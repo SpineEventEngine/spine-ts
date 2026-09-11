@@ -12,13 +12,11 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
   AnySchema,
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
   BoolValueSchema,
   BytesValueSchema,
   DoubleValueSchema,
@@ -32,7 +30,6 @@ import {
   EventSchema,
   RejectionEventContextSchema,
   type EventContext,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import {
   CompositeFilterSchema,
@@ -49,7 +46,7 @@ import { describe, expect, it } from "vitest";
 import { eventBusAccess, EventBus } from "../../src/bus/event-bus.js";
 import { SubscriptionObservers } from "../../src/stand/subscription-observer.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -57,19 +54,7 @@ type ProjectionState = Message<"ProjectionState"> & {
   priority: number;
 };
 
-function fixtureFile(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-  if (descriptor === undefined) throw new Error("Expected fixture descriptor.");
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-}
-
-const fixture = fixtureFile(serverEntityMetadataTestFixtures.main.descriptorSetBase64);
+const fixture = FixtureSchemas.entityMetadataMainFile;
 const ProjectionStateSchema = messageDesc(fixture, 0) as GenMessage<ProjectionState>;
 let eventSequence = 0;
 

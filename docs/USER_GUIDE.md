@@ -365,10 +365,11 @@ concurrent delivery, but a handler effect and the delivered transition are not
 one transaction. A lost acknowledgement can redeliver after restart, so make
 downstream effects idempotent. The framework does not add attempt history,
 quarantine records, scheduled retry policy, or exactly-once side effects.
-While a delivered row's `keepUntil` is still live, normal local and remote
-admission suppresses the same signal ID only for the same typed Inbox target.
-The same signal may still reach a different target, and a newly created signal
-with a different ID is not suppressed merely because its payload is equal.
+Local and remote delivery removes a pending duplicate when its signal ID and
+typed Inbox target match a delivered row in the current page or a recent local
+delivery remembered by the bounded cache. The same signal may still reach a
+different target, and a newly created signal with a different ID is not
+suppressed merely because its payload is equal.
 
 Continue with the [server reference](../packages/server/REFERENCE.md) for
 framework and server contracts.

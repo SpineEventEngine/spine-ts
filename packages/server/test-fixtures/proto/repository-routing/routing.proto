@@ -1,0 +1,111 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+package repository_routing;
+
+import "spine/core/command.proto";
+import "spine/core/user_id.proto";
+import "spine/options.proto";
+
+message ProjectionState {
+  option (entity).kind = PROJECTION;
+  string id = 1 [(set_once) = true];
+  string name = 2 [(column) = true];
+  int32 priority = 3 [(column) = true];
+}
+
+message AggregateState {
+  option (entity).kind = AGGREGATE;
+  option (entity).visibility = QUERY;
+  string id = 1 [(set_once) = true];
+  string name = 2 [(column) = true];
+  bool archived = 3;
+}
+
+message UuidMessageIdAggregateState {
+  option (entity).kind = AGGREGATE;
+  spine.core.CommandId id = 1 [(set_once) = true];
+  string name = 2 [(column) = true];
+  int32 priority = 3 [(column) = true];
+}
+message NeutralProjectionState {
+  option (entity).kind = PROJECTION;
+  string id = 1 [(set_once) = true];
+  string name = 2 [(column) = true];
+  int32 priority = 3 [(column) = true];
+}
+
+message Int32AggregateState {
+  option (entity).kind = AGGREGATE;
+  int32 id = 1 [(set_once) = true];
+  string name = 2;
+}
+
+message Int64ProcessManagerState {
+  option (entity).kind = PROCESS_MANAGER;
+  int64 id = 1 [(set_once) = true];
+  string queue = 2;
+}
+
+message ProcessManagerState {
+  option (entity).kind = PROCESS_MANAGER;
+  option (entity).visibility = SUBSCRIBE;
+  string id = 1;
+  string queue = 2 [(column) = true];
+}
+
+message ProjectionId {
+  int64 value = 1;
+}
+
+message Int64MessageIdProjectionState {
+  option (entity).kind = PROJECTION;
+  ProjectionId id = 1 [(set_once) = true];
+  string name = 2 [(column) = true];
+}
+
+message Int64MessageIdSourceState {
+  option (entity).kind = PROJECTION;
+  ProjectionId id = 1 [(set_once) = true];
+  string name = 2 [(column) = true];
+}
+
+message CompositeRouteId {
+  spine.core.UserId reader = 1;
+  int32 number = 2;
+}
+
+message CompositeRouteState {
+  option (entity).kind = PROJECTION;
+  CompositeRouteId id = 1 [(set_once) = true];
+  string name = 2 [(column) = true];
+}
+
+message CompositeRouteAggregateState {
+  option (entity).kind = AGGREGATE;
+  CompositeRouteId id = 1 [(set_once) = true];
+  string name = 2 [(column) = true];
+}
+
+message CompositeRouteProcessManagerState {
+  option (entity).kind = PROCESS_MANAGER;
+  CompositeRouteId id = 1 [(set_once) = true];
+  string queue = 2;
+}
+
+message CompositeRouteSourceState {
+  option (entity).kind = PROJECTION;
+  CompositeRouteId id = 1 [(set_once) = true];
+  string name = 2 [(column) = true];
+}

@@ -14,12 +14,7 @@
 
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import {
-  AnySchema,
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
-} from "@bufbuild/protobuf/wkt";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -57,41 +52,13 @@ import {
   requireContractMember,
 } from "./wave13-red-support.js";
 import { Wave13OriginStateSchema } from "./wave13-origin-repository.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import {
+  ReviewStartedSchema,
+  TaskEventSchema,
+  ValidatedTaskEventSchema,
+} from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 type TaskEvent = Message<"TaskEvent"> & { id: string; name: string };
-type ReviewStarted = Message<"ReviewStarted"> & { id: string };
-type ValidatedTaskEvent = Message<"spine.server.testing.handlerregistry.ValidatedTaskEvent"> & {
-  id: string;
-  name: string;
-};
-
-function fixtureFile(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-  if (descriptor === undefined) throw new Error("Integration broker event fixture is empty.");
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    [],
-  );
-}
-
-const handlerRegistryEventsFixture = fixtureFile(
-  serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64,
-);
-const TaskEventSchema = messageDesc(handlerRegistryEventsFixture, 1) as GenMessage<TaskEvent>;
-const ReviewStartedSchema = messageDesc(
-  handlerRegistryEventsFixture,
-  0,
-) as GenMessage<ReviewStarted>;
-const ValidatedTaskEventSchema = messageDesc(
-  handlerRegistryEventsFixture,
-  2,
-) as GenMessage<ValidatedTaskEvent>;
-
 class TaskEventOriginProjection extends Projection<string, typeof Wave13OriginStateSchema, number> {
   static externalContexts: EventContext[] = [];
 
@@ -201,6 +168,22 @@ function createStandaloneGeneratedRegistryRoot(receivers: readonly object[]): UR
     "utf8",
   );
   return pathToFileURL(root);
+}
+
+function createEntityGeneratedRegistryRoot(
+  receivers: readonly {
+    readonly entityType: object;
+    readonly stateSchema: GenMessage<Message>;
+    readonly handlers: readonly object[];
+  }[],
+): URL {
+  return createStandaloneGeneratedRegistryRoot(
+    receivers.map(({ entityType, ...receiver }) => ({
+      receiverKind: "entity" as const,
+      receiverType: entityType,
+      ...receiver,
+    })),
+  );
 }
 
 describe("Wave 13 IntegrationBroker", () => {
@@ -453,12 +436,32 @@ describe("Wave 13 IntegrationBroker", () => {
       await close(p, c);
     }
   });
+  it("loads an entity state schema from a standalone generated registry root", async () => {
+    const registryRoot = createEntityGeneratedRegistryRoot([
+      {
+        entityType: TaskEventOriginProjection,
+        stateSchema: Wave13OriginStateSchema,
+        handlers: [],
+      },
+    ]);
+
+    const registry = (await import(
+      new URL("generated/handler/generated-handler-registry.js", `${registryRoot.href}/`).href
+    )) as unknown as {
+      readonly generatedHandlerRegistry: {
+        readonly receivers: readonly { readonly stateSchema?: unknown }[];
+      };
+    };
+
+    expect(registry.generatedHandlerRegistry.receivers[0]?.stateSchema).toBe(
+      Wave13OriginStateSchema,
+    );
+  });
   it("RED-15 validates the existing tenant boundary and isolates imported tenants", async () => {
     await broker("tenant-aware imported intake");
-    const registryRoot = createStandaloneGeneratedRegistryRoot([
+    const registryRoot = createEntityGeneratedRegistryRoot([
       {
-        receiverKind: "entity",
-        receiverType: TaskEventOriginProjection,
+        entityType: TaskEventOriginProjection,
         stateSchema: Wave13OriginStateSchema,
         handlers: [
           {

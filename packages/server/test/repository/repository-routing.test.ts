@@ -12,20 +12,13 @@
  * the License.
  */
 
-import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
   type Any,
   AnySchema,
   BoolValueSchema,
   DoubleValueSchema,
-  DescriptorProtoSchema,
-  FieldDescriptorProto_Label,
-  FieldDescriptorProtoSchema,
-  FieldDescriptorProto_Type,
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
   Int32ValueSchema,
   Int64ValueSchema,
   StringValueSchema,
@@ -60,7 +53,6 @@ import {
   type TenantId,
   UserIdSchema,
   VersionSchema,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import type { UserId } from "@spine-event-engine/proto";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
@@ -144,7 +136,7 @@ import {
 import { standAccess } from "../../src/stand/stand.js";
 import { SystemClock } from "../../src/runtime/signal-metadata.js";
 import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 const GeneratedTaskIdSchema = TodoIdSchema;
 
@@ -369,593 +361,118 @@ function storedSourceAndFreshChild(
 
   return { source, child };
 }
+const {
+  RepositoryRoutingProjectionStateSchema,
+  RepositoryRoutingAggregateStateSchema,
+  RepositoryRoutingUuidMessageIdAggregateStateSchema,
+  RepositoryRoutingUuidMessageIdAggregateCommandSchema,
+  RepositoryRoutingNeutralProjectionStateSchema,
+  RepositoryRoutingProjectionEventSchema,
+  RepositoryRoutingGeneratedReactorEventSchema,
+  RepositoryRoutingImplicitTaskCommandSchema,
+  RepositoryRoutingInt32AggregateStateSchema,
+  RepositoryRoutingInt64ProcessManagerStateSchema,
+  RepositoryRoutingInt32AggregateCommandSchema,
+  RepositoryRoutingInt64ProcessManagerCommandSchema,
+  RepositoryRoutingInt32AggregateEventSchema,
+  RepositoryRoutingInt64ProcessManagerEventSchema,
+  RepositoryRoutingRepeatedIdCommandSchema,
+  RepositoryRoutingMapIdCommandSchema,
+  RepositoryRoutingTaskCommandSchema,
+  RepositoryRoutingProcessManagerStateSchema,
+  RepositoryRoutingProjectionIdSchema,
+  RepositoryRoutingInt64MessageIdProjectionStateSchema,
+  RepositoryRoutingInt64MessageIdSourceStateSchema,
+  RepositoryRoutingInt64MessageIdProjectionEventSchema,
+  RepositoryRoutingCompositeRouteIdSchema,
+  RepositoryRoutingCompositeRouteStateSchema,
+  RepositoryRoutingCompositeRouteAggregateStateSchema,
+  RepositoryRoutingCompositeRouteProcessManagerStateSchema,
+  RepositoryRoutingCompositeRouteEventSchema,
+  RepositoryRoutingCompositeRouteCommandSchema,
+  RepositoryRoutingCompositeRouteSourceStateSchema,
+  RepositoryRoutingValidatedAggregateStateSchema,
+  RepositoryRoutingValidatedTaskCommandSchema,
+  RepositoryRoutingValidatedTaskEventSchema,
+  RepositoryRoutingProducedTaskCommandSchema,
+  RepositoryRoutingValidatedMessageIdStateSchema,
+  RepositoryRoutingNumberRouteEventSchema,
+  RepositoryRoutingWrongIdRouteEventSchema,
+} = FixtureSchemas;
 
-function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Repository routing fixture descriptor set is empty.");
-  }
-
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    imports,
-  );
-}
-
-function fixtureMessageSchema<T extends Message>(
-  file: Parameters<typeof messageDesc>[0],
-  name: string,
-): GenMessage<T> {
-  const index = file.proto.messageType.findIndex((message) => message.name === name);
-  if (index === -1) throw new Error(`Fixture message declaration "${name}" is missing.`);
-  return messageDesc(file, index);
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
-const fileUuidMessageIdFixture = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, fileEntityMetadataFixture.proto);
-  const state = descriptor.messageType.find((message) => message.name === "ProjectionState");
-  const aggregate = descriptor.messageType.find((message) => message.name === "AggregateState");
-  const stateId = state?.field.find((field) => field.name === "id");
-  if (state === undefined || aggregate === undefined || stateId === undefined) {
-    throw new Error("UUID message-ID fixture declarations are missing.");
-  }
-  descriptor.name = "uuid_message_id_state.proto";
-  descriptor.dependency.push(CommandIdSchema.file.proto.name);
-  state.name = "UuidMessageIdState";
-  stateId.type = FieldDescriptorProto_Type.MESSAGE;
-  stateId.typeName = ".spine.core.CommandId";
-  const aggregateState = clone(DescriptorProtoSchema, state);
-  aggregateState.name = "UuidMessageIdAggregateState";
-  aggregateState.options = clone(DescriptorProtoSchema, aggregate).options;
-  descriptor.messageType.push(aggregateState);
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-    CommandIdSchema.file,
-  ]);
-})();
-const fileProjectionEventFixture = (() => {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-  );
-  const source = descriptorSet.file[0];
-  const state = source?.messageType[0];
-  if (source === undefined || state === undefined) {
-    throw new Error("Entity metadata fixture ProjectionState declaration is missing.");
-  }
-  const descriptor = clone(FileDescriptorProtoSchema, source);
-  const event = descriptor.messageType[0];
-  if (event === undefined) throw new Error("Projection Event fixture declaration is missing.");
-  descriptor.name = "projection_events.proto";
-  descriptor.messageType = [event];
-  event.name = "ProjectionEvent";
-  if (event.options !== undefined) {
-    event.options.$unknown = event.options.$unknown?.filter((field) => field.no !== 73_903);
-  }
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const fileGeneratedReactorEventFixture = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, fileProjectionEventFixture.proto);
-  const event = descriptor.messageType[0];
-  if (event === undefined) throw new Error("Generated reactor event fixture is missing.");
-  descriptor.name = "generated_reactor_events.proto";
-  event.name = "GeneratedReactorEvent";
-  event.options = undefined;
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const fileNeutralProjectionStateFixture = (() => {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-  );
-  const source = descriptorSet.file[0];
-  const state = source?.messageType[0];
-  if (source === undefined || state === undefined) {
-    throw new Error("Neutral ProjectionState fixture declaration is missing.");
-  }
-  const descriptor = clone(FileDescriptorProtoSchema, source);
-  const neutral = descriptor.messageType[0];
-  if (neutral === undefined) throw new Error("Neutral ProjectionState fixture is missing.");
-  descriptor.name = "neutral_projection_state.proto";
-  descriptor.messageType = [neutral];
-  neutral.name = "NeutralProjectionState";
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const fileImplicitCommandFixture = (() => {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-  );
-  const source = descriptorSet.file[0];
-  const state = source?.messageType[0];
-  if (source === undefined || state === undefined) {
-    throw new Error("Implicit Command fixture declaration is missing.");
-  }
-  const descriptor = clone(FileDescriptorProtoSchema, source);
-  const command = descriptor.messageType[0];
-  if (command === undefined) throw new Error("Implicit Command fixture is missing.");
-  descriptor.name = "implicit_commands.proto";
-  descriptor.messageType = [command];
-  command.name = "ImplicitTaskCommand";
-  if (command.options !== undefined) {
-    command.options.$unknown = command.options.$unknown?.filter((field) => field.no !== 73_903);
-  }
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const fileInt64MessageIdFixture = (() => {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-  );
-  const source = descriptorSet.file[0];
-  if (source === undefined) throw new Error("Entity metadata fixture descriptor set is empty.");
-  const descriptor = clone(FileDescriptorProtoSchema, source);
-  const id = descriptor.messageType.find((message) => message.name === "ProjectionId");
-  const value = id?.field[0];
-  const state = descriptor.messageType.find(
-    (message) => message.name === "MessageIdProjectionState",
-  );
-  if (id === undefined || value === undefined || state === undefined) {
-    throw new Error("Entity metadata fixture message-ID declarations are missing.");
-  }
-  id.name = "Int64ProjectionId";
-  value.type = FieldDescriptorProto_Type.INT64;
-  state.name = "Int64MessageIdProjectionState";
-  const idField = state.field[0];
-  if (idField === undefined) throw new Error("Message-ID state ID field is missing.");
-  idField.typeName = ".Int64ProjectionId";
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const fileInt64MessageIdEventFixture = (() => {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-  );
-  const source = descriptorSet.file[0];
-  if (source === undefined) throw new Error("Entity metadata fixture descriptor set is empty.");
-  const descriptor = clone(FileDescriptorProtoSchema, source);
-  const id = descriptor.messageType.find((message) => message.name === "ProjectionId");
-  const value = id?.field[0];
-  const event = descriptor.messageType.find(
-    (message) => message.name === "MessageIdProjectionState",
-  );
-  if (id === undefined || value === undefined || event === undefined) {
-    throw new Error("Message-ID Event fixture declarations are missing.");
-  }
-  descriptor.name = "int64_projection_events.proto";
-  descriptor.messageType = [id, event];
-  id.name = "Int64ProjectionId";
-  value.type = FieldDescriptorProto_Type.INT64;
-  event.name = "Int64MessageIdProjectionEvent";
-  const idField = event.field[0];
-  if (idField === undefined) throw new Error("Message-ID Event ID field is missing.");
-  idField.typeName = ".Int64ProjectionId";
-  if (event.options !== undefined) {
-    event.options.$unknown = event.options.$unknown?.filter((field) => field.no !== 73_903);
-  }
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const fileInt64MessageIdSourceFixture = (() => {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-  );
-  const source = descriptorSet.file[0];
-  if (source === undefined) throw new Error("Entity metadata fixture descriptor set is empty.");
-  const descriptor = clone(FileDescriptorProtoSchema, source);
-  const state = descriptor.messageType.find(
-    (message) => message.name === "MessageIdProjectionState",
-  );
-  if (state === undefined) throw new Error("Message-ID source state declaration is missing.");
-  descriptor.name = "int64_message_id_source.proto";
-  descriptor.dependency = [source.name];
-  descriptor.messageType = [state];
-  state.name = "Int64MessageIdSourceState";
-  const idField = state.field[0];
-  if (idField === undefined) throw new Error("Message-ID source state ID field is missing.");
-  idField.typeName = ".Int64ProjectionId";
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    fileInt64MessageIdFixture,
-  ]);
-})();
-const fileCompositeRouteFixture = (() => {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-  );
-  const source = descriptorSet.file[0];
-  if (source === undefined) throw new Error("Entity metadata fixture descriptor set is empty.");
-  const descriptor = clone(FileDescriptorProtoSchema, source);
-  const id = descriptor.messageType.find((message) => message.name === "ProjectionId");
-  const state = descriptor.messageType.find(
-    (message) => message.name === "MessageIdProjectionState",
-  );
-  const aggregate = descriptor.messageType.find((message) => message.name === "AggregateState");
-  if (id === undefined || state === undefined || aggregate === undefined) {
-    throw new Error("Composite message-ID fixture declarations are missing.");
-  }
-  const originalIdField = id.field[0];
-  if (originalIdField === undefined) throw new Error("Composite ID field is missing.");
-  id.name = "CompositeRouteId";
-  id.field = [
-    create(FieldDescriptorProtoSchema, {
-      ...clone(FieldDescriptorProtoSchema, originalIdField),
-      name: "reader",
-      number: 1,
-      label: FieldDescriptorProto_Label.OPTIONAL,
-      type: FieldDescriptorProto_Type.MESSAGE,
-      typeName: ".spine.core.UserId",
-      jsonName: "reader",
-    }),
-    create(FieldDescriptorProtoSchema, {
-      name: "number",
-      number: 2,
-      label: FieldDescriptorProto_Label.OPTIONAL,
-      type: FieldDescriptorProto_Type.INT32,
-      jsonName: "number",
-    }),
-  ];
-  state.name = "CompositeRouteState";
-  const stateId = state.field[0];
-  if (stateId === undefined) throw new Error("Composite state ID field is missing.");
-  stateId.typeName = ".CompositeRouteId";
-  const event = clone(DescriptorProtoSchema, state);
-  event.name = "CompositeRouteEvent";
-  event.options = undefined;
-  const command = clone(DescriptorProtoSchema, state);
-  command.name = "CompositeRouteCommand";
-  command.options = undefined;
-  const sourceState = clone(DescriptorProtoSchema, state);
-  sourceState.name = "CompositeRouteSourceState";
-  const aggregateState = clone(DescriptorProtoSchema, state);
-  aggregateState.name = "CompositeRouteAggregateState";
-  aggregateState.options = clone(DescriptorProtoSchema, aggregate).options;
-  descriptor.messageType.push(event, command, sourceState, aggregateState);
-  descriptor.dependency.push(UserIdSchema.file.proto.name);
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-    UserIdSchema.file,
-  ]);
-})();
-const fileUuidMessageIdCommandFixture = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, fileUuidMessageIdFixture.proto);
-  const command = descriptor.messageType.find(
-    (message) => message.name === "UuidMessageIdAggregateState",
-  );
-  if (command === undefined) throw new Error("UUID message-ID command fixture is missing.");
-  descriptor.name = "uuid_message_id_command.proto";
-  command.name = "UuidMessageIdAggregateCommand";
-  command.options = undefined;
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-    CommandIdSchema.file,
-  ]);
-})();
-const fileNumericCommandFixture = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, fileEntityMetadataFixture.proto);
-  const int32 = descriptor.messageType.find((message) => message.name === "Int32AggregateState");
-  const int64 = descriptor.messageType.find(
-    (message) => message.name === "Int64ProcessManagerState",
-  );
-  if (int32 === undefined || int64 === undefined)
-    throw new Error("Numeric command fixtures are missing.");
-  descriptor.name = "numeric_commands.proto";
-  int32.name = "Int32AggregateCommand";
-  int32.options = undefined;
-  int64.name = "Int64ProcessManagerCommand";
-  int64.options = undefined;
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const fileNumericEventFixture = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, fileNumericCommandFixture.proto);
-  const int32 = descriptor.messageType.find((message) => message.name === "Int32AggregateCommand");
-  const int64 = descriptor.messageType.find(
-    (message) => message.name === "Int64ProcessManagerCommand",
-  );
-  if (int32 === undefined || int64 === undefined)
-    throw new Error("Numeric event fixtures are missing.");
-  descriptor.name = "numeric_events.proto";
-  int32.name = "Int32AggregateEvent";
-  int64.name = "Int64ProcessManagerEvent";
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const ProjectionStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectionState>;
-const UuidMessageIdAggregateStateSchema = fixtureMessageSchema<UuidMessageIdAggregateState>(
-  fileUuidMessageIdFixture,
-  "UuidMessageIdAggregateState",
-);
-const UuidMessageIdAggregateCommandSchema = fixtureMessageSchema<UuidMessageIdAggregateCommand>(
-  fileUuidMessageIdCommandFixture,
-  "UuidMessageIdAggregateCommand",
-);
-const NeutralProjectionStateSchema = messageDesc(
-  fileNeutralProjectionStateFixture,
-  0,
-) as GenMessage<NeutralProjectionState>;
-const ProjectionEventSchema = messageDesc(
-  fileProjectionEventFixture,
-  0,
-) as GenMessage<ProjectionEvent>;
-const GeneratedReactorEventSchema = messageDesc(
-  fileGeneratedReactorEventFixture,
-  0,
-) as GenMessage<GeneratedReactorEvent>;
-const ImplicitTaskCommandSchema = messageDesc(
-  fileImplicitCommandFixture,
-  0,
-) as GenMessage<ImplicitTaskCommand>;
-const AggregateStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  1,
-) as GenMessage<AggregateState>;
-const fileHandlerRegistryCommandsFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
-);
-const TaskCommandSchema = messageDesc(
-  fileHandlerRegistryCommandsFixture,
-  2,
-) as GenMessage<TaskCommand>;
-const Int32AggregateStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  10,
-) as GenMessage<Int32AggregateState>;
-const Int64ProcessManagerStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  11,
-) as GenMessage<Int64ProcessManagerState>;
-const Int32AggregateCommandSchema = fixtureMessageSchema<Int32AggregateCommand>(
-  fileNumericCommandFixture,
-  "Int32AggregateCommand",
-);
-const Int64ProcessManagerCommandSchema = fixtureMessageSchema<Int64ProcessManagerCommand>(
-  fileNumericCommandFixture,
-  "Int64ProcessManagerCommand",
-);
-const Int32AggregateEventSchema = fixtureMessageSchema<Int32AggregateEvent>(
-  fileNumericEventFixture,
-  "Int32AggregateEvent",
-);
-const Int64ProcessManagerEventSchema = fixtureMessageSchema<Int64ProcessManagerEvent>(
-  fileNumericEventFixture,
-  "Int64ProcessManagerEvent",
-);
-const RepeatedIdCommandSchema = messageDesc(
-  fileEntityMetadataFixture,
-  12,
-) as GenMessage<RepeatedIdCommand>;
-const MapIdCommandSchema = messageDesc(fileEntityMetadataFixture, 13) as GenMessage<MapIdCommand>;
-const fileEntityVisibilityFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
-);
-const ProcessManagerStateSchema = messageDesc(
-  fileEntityVisibilityFixture,
-  0,
-) as GenMessage<ProcessManagerState>;
-const fileCompositeRouteProcessManagerFixture = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, ProcessManagerStateSchema.file.proto);
-  const state = descriptor.messageType[0];
-  if (state === undefined) throw new Error("Process-manager state declaration is missing.");
-  const stateId = state.field[0];
-  if (stateId === undefined) throw new Error("Process-manager state ID field is missing.");
-  descriptor.name = "composite_route_process_manager.proto";
-  descriptor.dependency.push(fileCompositeRouteFixture.proto.name);
-  state.name = "CompositeRouteProcessManagerState";
-  stateId.type = FieldDescriptorProto_Type.MESSAGE;
-  stateId.typeName = ".CompositeRouteId";
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-    fileCompositeRouteFixture,
-  ]);
-})();
-const CompositeRouteProcessManagerStateSchema = messageDesc(
-  fileCompositeRouteProcessManagerFixture,
-  0,
-) as GenMessage<CompositeRouteProcessManagerState>;
-const fileValidationRefusalFixture = fileDesc(
-  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
-    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
-    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
-    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
-    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
-  [file_spine_options],
-);
-const ValidatedAggregateStateSchema = messageDesc(
-  fileValidationRefusalFixture,
-  0,
-) as GenMessage<ValidatedAggregateState>;
-const ValidatedTaskCommandSchema = messageDesc(
-  fileValidationRefusalFixture,
-  1,
-) as GenMessage<ValidatedTaskCommand>;
-const fileValidatedTaskEventFixture = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, fileValidationRefusalFixture.proto);
-  const event = descriptor.messageType.find((message) => message.name === "ValidatedTaskCommand");
-  if (event === undefined) throw new Error("Validated task event fixture is missing.");
-  descriptor.name = "validation_refusal_events.proto";
-  event.name = "ValidatedTaskEvent";
-  event.options = undefined;
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const ValidatedTaskEventSchema = fixtureMessageSchema<ValidatedTaskEvent>(
-  fileValidatedTaskEventFixture,
-  "ValidatedTaskEvent",
-);
-const fileCommandSubstitutionFixture = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, fileValidationRefusalFixture.proto);
-  descriptor.name = "validation_refusal_commands.proto";
-  const command = descriptor.messageType.find((message) => message.name === "ValidatedTaskCommand");
-  if (command === undefined) throw new Error("Command substitution input fixture is missing.");
-  const output = clone(DescriptorProtoSchema, command);
-  output.name = "ProducedTaskCommand";
-  descriptor.messageType.push(output);
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const ProducedTaskCommandSchema = fixtureMessageSchema<ProducedTaskCommand>(
-  fileCommandSubstitutionFixture,
-  "ProducedTaskCommand",
-);
-const fileValidatedMessageIdFixture = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, fileValidationRefusalFixture.proto);
-  const state = descriptor.messageType.find(
-    (message) => message.name === "ValidatedAggregateState",
-  );
-  const stateId = state?.field.find((field) => field.name === "id");
-  if (state === undefined || stateId === undefined) {
-    throw new Error("Validated message-ID state declaration is missing.");
-  }
-  state.name = "ValidatedMessageIdState";
-  stateId.type = FieldDescriptorProto_Type.MESSAGE;
-  stateId.typeName = ".example.validation_refusal.ValidatedTaskCommand";
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const ValidatedMessageIdStateSchema = messageDesc(
-  fileValidatedMessageIdFixture,
-  0,
-) as GenMessage<ValidatedMessageIdState>;
-const fileTaskIdFixture = TodoIdSchema.file;
-const fileTaskFixture = TodoTaskSchema.file;
-const fileTaskEventsFixture = TodoEvents.TaskCreatedSchema.file;
-const fileNumberRouteFixture = fileDesc(
-  Buffer.from(
-    toBinary(
-      FileDescriptorProtoSchema,
-      create(FileDescriptorProtoSchema, {
-        name: "spine_ts/test/number_route.proto",
-        package: "spine_ts.test",
-        syntax: "proto3",
-        messageType: [
-          {
-            name: "NumberRouteEvent",
-            field: [
-              {
-                name: "id",
-                number: 1,
-                label: FieldDescriptorProto_Label.OPTIONAL,
-                type: FieldDescriptorProto_Type.DOUBLE,
-                jsonName: "id",
-              },
-            ],
-          },
-        ],
-      }),
-    ),
-  ).toString("base64"),
-);
-const fileWrongIdRouteFixture = fileDesc(
-  Buffer.from(
-    toBinary(
-      FileDescriptorProtoSchema,
-      create(FileDescriptorProtoSchema, {
-        name: "spine_ts/test/wrong_id_route.proto",
-        package: "spine_ts.test",
-        syntax: "proto3",
-        messageType: [
-          {
-            name: "WrongIdRouteEvent",
-            field: [
-              {
-                name: "id",
-                number: 1,
-                label: FieldDescriptorProto_Label.OPTIONAL,
-                type: FieldDescriptorProto_Type.MESSAGE,
-                typeName: ".spine.core.UserId",
-                jsonName: "id",
-              },
-            ],
-          },
-        ],
-      }),
-    ),
-  ).toString("base64"),
-  [UserIdSchema.file],
-);
-const TaskIdSchema = messageDesc(fileTaskIdFixture, 0) as GenMessage<TaskId>;
-const TaskSchema = messageDesc(fileTaskFixture, 0) as GenMessage<Task>;
-const TaskCreatedSchema = messageDesc(fileTaskEventsFixture, 0) as GenMessage<TaskCreated>;
-const NumberRouteEventSchema = messageDesc(
-  fileNumberRouteFixture,
-  0,
-) as GenMessage<NumberRouteEvent>;
-const WrongIdRouteEventSchema = messageDesc(
-  fileWrongIdRouteFixture,
-  0,
-) as GenMessage<WrongIdRouteEvent>;
-const Int64ProjectionIdSchema = messageDesc(
-  fileInt64MessageIdFixture,
-  8,
-) as GenMessage<Int64ProjectionId>;
-const Int64MessageIdProjectionStateSchema = messageDesc(
-  fileInt64MessageIdFixture,
-  9,
-) as GenMessage<Int64MessageIdProjectionState>;
-const Int64MessageIdSourceStateSchema = messageDesc(
-  fileInt64MessageIdSourceFixture,
-  0,
-) as GenMessage<Int64MessageIdSourceState>;
-const Int64MessageIdProjectionEventSchema = messageDesc(
-  fileInt64MessageIdEventFixture,
-  1,
-) as GenMessage<Int64MessageIdProjectionEvent>;
-const CompositeRouteIdSchema = fixtureMessageSchema<CompositeRouteId>(
-  fileCompositeRouteFixture,
-  "CompositeRouteId",
-);
-const CompositeRouteStateSchema = fixtureMessageSchema<CompositeRouteState>(
-  fileCompositeRouteFixture,
-  "CompositeRouteState",
-);
-const CompositeRouteAggregateStateSchema = fixtureMessageSchema<CompositeRouteAggregateState>(
-  fileCompositeRouteFixture,
-  "CompositeRouteAggregateState",
-);
-const CompositeRouteEventSchema = fixtureMessageSchema<CompositeRouteEvent>(
-  fileCompositeRouteFixture,
-  "CompositeRouteEvent",
-);
-const CompositeRouteCommandSchema = fixtureMessageSchema<CompositeRouteCommand>(
-  fileCompositeRouteFixture,
-  "CompositeRouteCommand",
-);
-const CompositeRouteSourceStateSchema = fixtureMessageSchema<CompositeRouteSourceState>(
-  fileCompositeRouteFixture,
-  "CompositeRouteSourceState",
-);
+const ProjectionStateSchema = RepositoryRoutingProjectionStateSchema as GenMessage<ProjectionState>;
+const AggregateStateSchema = RepositoryRoutingAggregateStateSchema as GenMessage<AggregateState>;
+const UuidMessageIdAggregateStateSchema =
+  RepositoryRoutingUuidMessageIdAggregateStateSchema as GenMessage<UuidMessageIdAggregateState>;
+const UuidMessageIdAggregateCommandSchema =
+  RepositoryRoutingUuidMessageIdAggregateCommandSchema as GenMessage<UuidMessageIdAggregateCommand>;
+const NeutralProjectionStateSchema =
+  RepositoryRoutingNeutralProjectionStateSchema as GenMessage<NeutralProjectionState>;
+const ProjectionEventSchema = RepositoryRoutingProjectionEventSchema as GenMessage<ProjectionEvent>;
+const GeneratedReactorEventSchema =
+  RepositoryRoutingGeneratedReactorEventSchema as GenMessage<GeneratedReactorEvent>;
+const ImplicitTaskCommandSchema =
+  RepositoryRoutingImplicitTaskCommandSchema as GenMessage<ImplicitTaskCommand>;
+const Int32AggregateStateSchema =
+  RepositoryRoutingInt32AggregateStateSchema as GenMessage<Int32AggregateState>;
+const Int64ProcessManagerStateSchema =
+  RepositoryRoutingInt64ProcessManagerStateSchema as GenMessage<Int64ProcessManagerState>;
+const Int32AggregateCommandSchema =
+  RepositoryRoutingInt32AggregateCommandSchema as GenMessage<Int32AggregateCommand>;
+const Int64ProcessManagerCommandSchema =
+  RepositoryRoutingInt64ProcessManagerCommandSchema as GenMessage<Int64ProcessManagerCommand>;
+const Int32AggregateEventSchema =
+  RepositoryRoutingInt32AggregateEventSchema as GenMessage<Int32AggregateEvent>;
+const Int64ProcessManagerEventSchema =
+  RepositoryRoutingInt64ProcessManagerEventSchema as GenMessage<Int64ProcessManagerEvent>;
+const RepeatedIdCommandSchema =
+  RepositoryRoutingRepeatedIdCommandSchema as GenMessage<RepeatedIdCommand>;
+const MapIdCommandSchema = RepositoryRoutingMapIdCommandSchema as GenMessage<MapIdCommand>;
+const TaskCommandSchema = RepositoryRoutingTaskCommandSchema as GenMessage<TaskCommand>;
+const TaskIdSchema = TodoIdSchema as GenMessage<TaskId>;
+const TaskSchema = TodoTaskSchema as GenMessage<Task>;
+const TaskCreatedSchema = TodoEvents.TaskCreatedSchema as GenMessage<TaskCreated>;
+const ProcessManagerStateSchema =
+  RepositoryRoutingProcessManagerStateSchema as GenMessage<ProcessManagerState>;
+const Int64ProjectionIdSchema =
+  RepositoryRoutingProjectionIdSchema as GenMessage<Int64ProjectionId>;
+const Int64MessageIdProjectionStateSchema =
+  RepositoryRoutingInt64MessageIdProjectionStateSchema as GenMessage<Int64MessageIdProjectionState>;
+const Int64MessageIdSourceStateSchema =
+  RepositoryRoutingInt64MessageIdSourceStateSchema as GenMessage<Int64MessageIdSourceState>;
+const Int64MessageIdProjectionEventSchema =
+  RepositoryRoutingInt64MessageIdProjectionEventSchema as GenMessage<Int64MessageIdProjectionEvent>;
+const CompositeRouteIdSchema =
+  RepositoryRoutingCompositeRouteIdSchema as GenMessage<CompositeRouteId>;
+const CompositeRouteStateSchema =
+  RepositoryRoutingCompositeRouteStateSchema as GenMessage<CompositeRouteState>;
+const CompositeRouteAggregateStateSchema =
+  RepositoryRoutingCompositeRouteAggregateStateSchema as GenMessage<CompositeRouteAggregateState>;
+const CompositeRouteProcessManagerStateSchema =
+  RepositoryRoutingCompositeRouteProcessManagerStateSchema as GenMessage<CompositeRouteProcessManagerState>;
+const CompositeRouteEventSchema =
+  RepositoryRoutingCompositeRouteEventSchema as GenMessage<CompositeRouteEvent>;
+const CompositeRouteCommandSchema =
+  RepositoryRoutingCompositeRouteCommandSchema as GenMessage<CompositeRouteCommand>;
+const CompositeRouteSourceStateSchema =
+  RepositoryRoutingCompositeRouteSourceStateSchema as GenMessage<CompositeRouteSourceState>;
+const ValidatedAggregateStateSchema =
+  RepositoryRoutingValidatedAggregateStateSchema as GenMessage<ValidatedAggregateState>;
+const ValidatedTaskCommandSchema =
+  RepositoryRoutingValidatedTaskCommandSchema as GenMessage<ValidatedTaskCommand>;
+const ValidatedTaskEventSchema =
+  RepositoryRoutingValidatedTaskEventSchema as GenMessage<ValidatedTaskEvent>;
+const ProducedTaskCommandSchema =
+  RepositoryRoutingProducedTaskCommandSchema as GenMessage<ProducedTaskCommand>;
+const ValidatedMessageIdStateSchema =
+  RepositoryRoutingValidatedMessageIdStateSchema as GenMessage<ValidatedMessageIdState>;
+const NumberRouteEventSchema =
+  RepositoryRoutingNumberRouteEventSchema as GenMessage<NumberRouteEvent>;
+const WrongIdRouteEventSchema =
+  RepositoryRoutingWrongIdRouteEventSchema as GenMessage<WrongIdRouteEvent>;
 
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: AggregateState): void {
+  assignTask(command: TaskCommand): void {
     void command;
   }
 
@@ -1127,16 +644,13 @@ class CompositeRouteProcessManager extends ProcessManager<
   }
 }
 
-class Int32RoutingAggregate extends ProcessManager<
-  number,
-  typeof Int32AggregateStateSchema,
-  number
-> {
-  assign(command: Int32AggregateCommand): void {
+class Int32RoutingAggregate extends Aggregate<number, typeof Int32AggregateStateSchema, bigint> {
+  assign(command: Int32AggregateCommand): Int32AggregateEvent {
     this.update((draft) => {
       draft.id = command.id;
       draft.name = command.name;
     });
+    return create(Int32AggregateEventSchema, { id: command.id, name: command.name });
   }
 
   react(event: Int32AggregateEvent): void {
@@ -1512,7 +1026,7 @@ class MultiManagedAggregate extends Aggregate<string, typeof AggregateStateSchem
 }
 
 class EmptyManagedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: AggregateState): undefined {
+  assignTask(command: TaskCommand): undefined {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -1528,7 +1042,7 @@ class EmptyManagedAggregate extends Aggregate<string, typeof AggregateStateSchem
 }
 
 class EnvelopeManagedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: AggregateState): SpineEvent {
+  assignTask(command: TaskCommand): SpineEvent {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -1624,14 +1138,14 @@ class ValidatingProcessManager extends ProcessManager<
 }
 
 class TransitionViolatingAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: AggregateState) {
+  assignTask(command: TaskCommand) {
     this.update((draft) =>
       Object.assign(
         draft,
         create(AggregateStateSchema, {
           id: `${command.id}-changed`,
           name: command.name,
-          archived: command.archived,
+          archived: false,
         }),
       ),
     );
@@ -1640,14 +1154,14 @@ class TransitionViolatingAggregate extends Aggregate<string, typeof AggregateSta
 }
 
 class RecoveringTransitionAggregate extends TransitionViolatingAggregate {
-  override assignTask(command: AggregateState) {
+  override assignTask(command: TaskCommand) {
     this.update((draft) =>
       Object.assign(
         draft,
         create(AggregateStateSchema, {
           id: command.id,
           name: `${command.name} recovered`,
-          archived: command.archived,
+          archived: false,
         }),
       ),
     );
@@ -1658,7 +1172,7 @@ class RecoveringTransitionAggregate extends TransitionViolatingAggregate {
 class AsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static resolveCommand: ((eventName: string) => void) | undefined;
 
-  assignTask(command: AggregateState): Promise<SpineEvent> {
+  assignTask(command: TaskCommand): Promise<SpineEvent> {
     return new Promise((resolve) => {
       AsyncAssigneeAggregate.resolveCommand = (eventName) => {
         this.update((draft) =>
@@ -1667,7 +1181,7 @@ class AsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSche
             create(AggregateStateSchema, {
               id: command.id,
               name: `${eventName} (applied)`,
-              archived: command.archived,
+              archived: false,
             }),
           ),
         );
@@ -1688,14 +1202,14 @@ class RejectedAsyncAssigneeAggregate extends Aggregate<
     this.rejectCommand = undefined;
   }
 
-  assignTask(command: AggregateState): Promise<SpineEvent> {
+  assignTask(command: TaskCommand): Promise<SpineEvent> {
     this.update((draft) =>
       Object.assign(
         draft,
         create(AggregateStateSchema, {
           id: command.id,
           name: `${command.name} provisional`,
-          archived: command.archived,
+          archived: false,
         }),
       ),
     );
@@ -1720,7 +1234,7 @@ class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof AggregateSta
     release();
   }
 
-  assignTask(command: AggregateState): Promise<SpineEvent> {
+  assignTask(command: TaskCommand): Promise<SpineEvent> {
     SerialAsyncAssigneeAggregate.started.push(command.name);
     return new Promise<void>((resolve) => {
       SerialAsyncAssigneeAggregate.releases.push(resolve);
@@ -1731,7 +1245,7 @@ class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof AggregateSta
           create(AggregateStateSchema, {
             id: command.id,
             name: `${command.name} (applied)`,
-            archived: command.archived,
+            archived: false,
           }),
         ),
       );
@@ -1771,7 +1285,7 @@ class MalformedEventAggregate extends Aggregate<string, typeof AggregateStateSch
     });
   }
 
-  applyTask(event: AggregateState): void {
+  applyTask(event: ProjectionEvent): void {
     void event;
   }
 }
@@ -1783,12 +1297,12 @@ class BigintVersionAggregate extends Aggregate<string, typeof AggregateStateSche
     this.observedVersions = [];
   }
 
-  assignTask(command: AggregateState) {
+  assignTask(command: TaskCommand) {
     BigintVersionAggregate.observedVersions.push(this.version);
     return createAggregateEvent(`event-bigint-${command.name}`, command.id, 0, command.name);
   }
 
-  applyTask(event: AggregateState): void {
+  applyTask(event: ProjectionEvent): void {
     this.startTransaction();
     this.update((draft) =>
       Object.assign(
@@ -1796,7 +1310,7 @@ class BigintVersionAggregate extends Aggregate<string, typeof AggregateStateSche
         create(AggregateStateSchema, {
           id: event.id,
           name: event.name,
-          archived: event.archived,
+          archived: false,
         }),
       ),
     );
@@ -1805,7 +1319,7 @@ class BigintVersionAggregate extends Aggregate<string, typeof AggregateStateSche
 }
 
 class ProjectionProducingAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: AggregateState) {
+  assignTask(command: TaskCommand) {
     return createProjectionEvent(
       `event-${command.name}`,
       command.id,
@@ -1836,7 +1350,7 @@ class CommandTenantProjectionProducingAggregate extends Aggregate<
   typeof AggregateStateSchema,
   bigint
 > {
-  assignTask(command: AggregateState) {
+  assignTask(command: TaskCommand) {
     return createProjectionEvent(`event-${command.name}`, command.id);
   }
 
@@ -2235,8 +1749,8 @@ class TaskCreatedScalarProjection extends Projection<string, typeof ProjectionSt
   }
 }
 
-class TaskCreatedScalarAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTaskCreated(command: TaskCreated): void {
+class CreateTaskScalarAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignCreateTask(command: CreateTask): void {
     void command;
   }
 }
@@ -2432,7 +1946,7 @@ class DiagnosticOnlyProcessManager extends ProcessManager<
 > {
   static calls = 0;
 
-  assignTask(command: AggregateState): ProjectionEvent {
+  assignTask(command: TaskCommand): ProjectionEvent {
     DiagnosticOnlyProcessManager.calls += 1;
     return create(ProjectionEventSchema, {
       id: command.id,
@@ -5431,8 +4945,8 @@ describe("repository signal routing", () => {
   });
 
   it("routes a generated TaskId to a primitive Entity target through an explicit custom route", () => {
-    const repository = createTaskCreatedScalarAggregateRepository(
-      CommandRouting.create<string>().route(TaskCreatedSchema, (message) => {
+    const repository = createCreateTaskScalarAggregateRepository(
+      CommandRouting.create<string>().route(CreateTaskSchema, (message) => {
         if (message.id === undefined) throw new Error("Expected a Task ID.");
         return message.id.value;
       }),
@@ -5445,8 +4959,8 @@ describe("repository signal routing", () => {
           id: create(CommandIdSchema, { uuid: "command-explicit-scalar-task" }),
           context: create(CommandContextSchema),
           message: AnyMessages.pack(
-            TaskCreatedSchema,
-            create(TaskCreatedSchema, {
+            CreateTaskSchema,
+            create(CreateTaskSchema, {
               id,
               taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
               title: "Explicit scalar task",
@@ -6497,7 +6011,7 @@ describe("repository signal routing", () => {
     expect(int32Repository.routeCommand(int32Command).entityId).toBe(42);
     await expect(
       requireEntityInboxTarget(int32Repository).replay(int32Message),
-    ).resolves.toBeUndefined();
+    ).resolves.toBeTypeOf("function");
 
     const int64Factory = new InMemoryStorageFactory();
     const int64Repository = createInt64RoutingRepository();
@@ -10158,7 +9672,7 @@ describe("repository signal routing", () => {
       priority: 2,
     });
     const delivered = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
-    expect(delivered).toHaveLength(2);
+    expect(delivered).toHaveLength(1);
     expect(
       delivered.every(
         (message) =>
@@ -10212,8 +9726,8 @@ describe("repository signal routing", () => {
         context: { name: "Tasks", multitenant: false },
         storageFactory: factory,
       }).inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
-      expect(delivered).toHaveLength(3);
-      expect(delivered.filter((row) => row.signalId === firstId)).toHaveLength(2);
+      expect(delivered).toHaveLength(2);
+      expect(delivered.filter((row) => row.signalId === firstId)).toHaveLength(1);
       expect(delivered.filter((row) => row.signalId === secondId)).toHaveLength(1);
       expect(
         delivered.every(
@@ -11343,6 +10857,7 @@ function createInt32RoutingRepository(
     entityType: Int32RoutingAggregate,
     schema: Int32AggregateStateSchema,
     handlers,
+    events: [Int32AggregateEventSchema],
     ...(commandRouting === undefined ? {} : { commandRouting }),
   });
 }
@@ -11411,17 +10926,17 @@ function createTaskCreatedScalarProjectionRepository(): Repository<
   });
 }
 
-function createTaskCreatedScalarAggregateRepository(
+function createCreateTaskScalarAggregateRepository(
   commandRouting?: CommandRouting<string>,
-): Repository<typeof TaskCreatedScalarAggregate> {
+): Repository<typeof CreateTaskScalarAggregate> {
   const handlers = EntityHandlers.define(
-    TaskCreatedScalarAggregate,
+    CreateTaskScalarAggregate,
     AggregateStateSchema,
-    (builder) => [builder.assign(TaskCreatedSchema, "assignTaskCreated")],
+    (builder) => [builder.assign(CreateTaskSchema, "assignCreateTask")],
   );
 
   return new Repository({
-    entityType: TaskCreatedScalarAggregate,
+    entityType: CreateTaskScalarAggregate,
     schema: AggregateStateSchema,
     handlers,
     ...(commandRouting === undefined ? {} : { commandRouting }),

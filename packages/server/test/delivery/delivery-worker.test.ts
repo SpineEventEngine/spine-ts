@@ -304,6 +304,28 @@ describe("Delivery direct worker", () => {
     expect(seen).toBe(1);
   });
 
+  it("reports when the selected direct message is removed as a duplicate", async () => {
+    const shard = ShardIndex.single();
+    const first = message("same-signal", "target", shard);
+    const duplicate = { ...message("duplicate-row", "target", shard), signalId: first.signalId };
+    const rows = [first];
+    const delivery = createDelivery({
+      rows,
+      mark: async (row) => {
+        remove(rows, row);
+        return row;
+      },
+    });
+
+    await delivery.drainMessage(first, () => undefined);
+    rows.push(duplicate);
+
+    await expect(delivery.drainMessage(duplicate, () => undefined)).resolves.toMatchObject({
+      acknowledged: true,
+      run: { accepted: 0, delivered: 0, failed: 0 },
+    });
+  });
+
   it("runs one owned delivered cleanup page after each delivery page and on an empty drain", async () => {
     const shard = ShardIndex.single();
     const pending = message("pending", "target", shard);

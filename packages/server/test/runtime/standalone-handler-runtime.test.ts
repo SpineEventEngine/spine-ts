@@ -12,12 +12,10 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
-import { CommandSchema, EventSchema, file_spine_options } from "@spine-event-engine/proto";
+import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, it } from "vitest";
 
@@ -29,68 +27,14 @@ import {
 import type { GeneratedStandaloneHandlerGroup } from "../../src/handler/generated-handler-registry.js";
 import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
 import { EventDispatcherRegistry } from "../../src/bus/event-dispatcher-registry.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import { AggregateStateSchema } from "../../test-fixtures/generated/entity-metadata/main_pb.js";
+import { TaskCommandSchema } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import { TaskEventSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
+import { ReviewRejectedSchema } from "../../test-fixtures/generated/handler-registry/rejections_pb.js";
 
 type TaskEvent = Message<"TaskEvent"> & { id: string; name: string };
 type TaskCommand = Message<"TaskCommand"> & { id: string; name: string };
 type AggregateState = Message<"AggregateState"> & { id: string; name: string; archived: boolean };
-
-const descriptorSet = fromBinary(
-  FileDescriptorSetSchema,
-  Buffer.from(serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64, "base64"),
-);
-const descriptor = descriptorSet.file[0];
-if (descriptor === undefined) throw new Error("Expected Event fixture descriptor.");
-const TaskEventSchema = messageDesc(
-  fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]),
-  1,
-) as GenMessage<TaskEvent>;
-const commandDescriptorSet = fromBinary(
-  FileDescriptorSetSchema,
-  Buffer.from(
-    serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
-    "base64",
-  ),
-);
-const commandDescriptor = commandDescriptorSet.file[0];
-if (commandDescriptor === undefined) throw new Error("Expected Command fixture descriptor.");
-const TaskCommandSchema = messageDesc(
-  fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, commandDescriptor)).toString("base64"), [
-    file_spine_options,
-  ]),
-  2,
-) as GenMessage<TaskCommand>;
-const rejectionDescriptorSet = fromBinary(
-  FileDescriptorSetSchema,
-  Buffer.from(
-    serverEntityMetadataTestFixtures.handlerRegistryRejections.descriptorSetBase64,
-    "base64",
-  ),
-);
-const rejectionDescriptor = rejectionDescriptorSet.file[0];
-if (rejectionDescriptor === undefined) throw new Error("Expected rejection fixture descriptor.");
-type ReviewRejected = Message<"ReviewRejected"> & { id: string };
-const ReviewRejectedSchema = messageDesc(
-  fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, rejectionDescriptor)).toString("base64"),
-    [file_spine_options],
-  ),
-  0,
-) as GenMessage<ReviewRejected>;
-const stateDescriptorSet = fromBinary(
-  FileDescriptorSetSchema,
-  Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-);
-const stateDescriptor = stateDescriptorSet.file[0];
-if (stateDescriptor === undefined) throw new Error("Expected state fixture descriptor.");
-const AggregateStateSchema = messageDesc(
-  fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, stateDescriptor)).toString("base64"), [
-    file_spine_options,
-  ]),
-  1,
-) as GenMessage<AggregateState>;
 
 class FilteredSubscriber extends AbstractEventSubscriber {
   readonly calls: string[] = [];

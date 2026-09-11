@@ -1,0 +1,50 @@
+{
+  "formatVersion": 2,
+  "generationId": "5aff88c5-5c39-4f35-b733-e232547d303f",
+  "packageName": "@spine-event-engine/server-test-fixtures",
+  "packageVersion": "2.0.0-snapshot.11",
+  "protoFiles": [
+    "entity-metadata/empty.proto",
+    "entity-metadata/invalid-column.proto",
+    "entity-metadata/invalid-tag.proto",
+    "entity-metadata/main.proto",
+    "entity-metadata/unknown-kind.proto",
+    "entity-metadata/visibility.proto",
+    "handler-registry/commands.proto",
+    "handler-registry/events.proto",
+    "handler-registry/rejections.proto",
+    "handler-registry/states.proto",
+    "repository-routing/repository_commands.proto",
+    "repository-routing/repository_events.proto",
+    "repository-routing/route-validation.proto",
+    "repository-routing/routing.proto",
+    "repository-routing/validation-refusal.proto",
+    "repository-routing/validation_refusal_commands.proto",
+    "repository-routing/validation_refusal_events.proto",
+    "validation-refusal/command.proto"
+  ],
+  "generatedExports": {
+    "entity-metadata/empty.proto": "generated/entity-metadata/empty_pb.js",
+    "entity-metadata/invalid-column.proto": "generated/entity-metadata/invalid-column_pb.js",
+    "entity-metadata/invalid-tag.proto": "generated/entity-metadata/invalid-tag_pb.js",
+    "entity-metadata/main.proto": "generated/entity-metadata/main_pb.js",
+    "entity-metadata/unknown-kind.proto": "generated/entity-metadata/unknown-kind_pb.js",
+    "entity-metadata/visibility.proto": "generated/entity-metadata/visibility_pb.js",
+    "handler-registry/commands.proto": "generated/handler-registry/commands_pb.js",
+    "handler-registry/events.proto": "generated/handler-registry/events_pb.js",
+    "handler-registry/rejections.proto": "generated/handler-registry/rejections_pb.js",
+    "handler-registry/states.proto": "generated/handler-registry/states_pb.js",
+    "repository-routing/repository_commands.proto": "generated/repository-routing/repository_commands_pb.js",
+    "repository-routing/repository_events.proto": "generated/repository-routing/repository_events_pb.js",
+    "repository-routing/route-validation.proto": "generated/repository-routing/route-validation_pb.js",
+    "repository-routing/routing.proto": "generated/repository-routing/routing_pb.js",
+    "repository-routing/validation-refusal.proto": "generated/repository-routing/validation-refusal_pb.js",
+    "repository-routing/validation_refusal_commands.proto": "generated/repository-routing/validation_refusal_commands_pb.js",
+    "repository-routing/validation_refusal_events.proto": "generated/repository-routing/validation_refusal_events_pb.js",
+    "validation-refusal/command.proto": "generated/validation-refusal/command_pb.js"
+  },
+  "dependencies": [
+    "@spine-event-engine/proto"
+  ],
+  "moduleExport": "serverTestFixturesProtoModule"
+}

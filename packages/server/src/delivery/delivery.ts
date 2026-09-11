@@ -49,7 +49,7 @@ export type DeliveryEndpointMessage = InboxMessage;
 export type OnDeliveryMessage = (message: DeliveryEndpointMessage) => void | Promise<void>;
 
 /**
- * Reports one direct drain and whether it durably acknowledged the selected message.
+ * Reports one direct drain and whether it durably resolved the selected message.
  *
  * @internal
  */
@@ -62,7 +62,8 @@ export interface DeliveryDirectRun {
   readonly run: DeliveryRun;
 
   /**
-   * Indicates whether this drain durably marked the selected message delivered.
+   * Indicates whether this drain marked the selected message delivered or
+   * removed it as a duplicate.
    */
   readonly acknowledged: boolean;
 }
@@ -271,6 +272,14 @@ export class Delivery {
           readonly onDelivered?: (message: InboxMessage) => void;
 
           /**
+           * Observes successful removal of a duplicate Inbox message.
+           *
+           * @param message Contains the removed duplicate.
+           * @internal
+           */
+          readonly onDuplicateRemoved?: (message: InboxMessage) => void;
+
+          /**
            * Selects messages owned by this direct callback.
            *
            * @param message Contains a pending Inbox message.
@@ -282,6 +291,8 @@ export class Delivery {
   ): Promise<DeliveryDirectRun> {
     const onMessage = typeof input === "function" ? input : input.onMessage;
     const observeDelivered = typeof input === "function" ? undefined : input.onDelivered;
+    const observeDuplicateRemoved =
+      typeof input === "function" ? undefined : input.onDuplicateRemoved;
     let acknowledged = false;
     const run = await this.drain(message.shard, {
       onMessage,
@@ -292,6 +303,11 @@ export class Delivery {
         acknowledged ||=
           next.id.value === message.id.value && next.id.shard.key() === message.id.shard.key();
         observeDelivered?.(next);
+      },
+      onDuplicateRemoved: (next) => {
+        acknowledged ||=
+          next.id.value === message.id.value && next.id.shard.key() === message.id.shard.key();
+        observeDuplicateRemoved?.(next);
       },
     });
     return Object.freeze({ run, acknowledged });
@@ -404,6 +420,7 @@ export class Delivery {
             try {
               if (!(await this.inbox.removeDuplicate(message, current, options.operation)))
                 throw new Error("Inbox duplicate was not removed.");
+              options.onDuplicateRemoved?.(message);
             } catch (error) {
               statistics.failed += 1;
               failures.push(Object.freeze({ message: snapshot(message), error }));
@@ -556,6 +573,14 @@ export interface DeliveryDrainOptions {
    * @internal
    */
   readonly onDelivered?: (message: InboxMessage) => void;
+
+  /**
+   * Observes successful removal of a duplicate Inbox message.
+   *
+   * @param message Contains the removed duplicate.
+   * @internal
+   */
+  readonly onDuplicateRemoved?: (message: InboxMessage) => void;
 
   /**
    * Determines whether this drain callback owns a message.

@@ -86,7 +86,6 @@ message OptionalSetOnceState {
 
 // Identifies a Projection state with a message-shaped ID.
 message ProjectionId {
-
   // The identifier value.
   string value = 1;
 }
@@ -103,7 +102,7 @@ message MessageIdProjectionState {
 }
 
 message Int32AggregateState {
-  option (entity).kind = PROCESS_MANAGER;
+  option (entity).kind = AGGREGATE;
 
   int32 id = 1 [(set_once) = true];
   string name = 2;
@@ -122,4 +121,16 @@ message RepeatedIdCommand {
 
 message MapIdCommand {
   map<string, string> id = 1;
+}
+
+message ExplicitRequiredState {
+  option (entity).kind = PROJECTION;
+
+  string id = 1 [(required) = true];
+}
+
+message ExplicitOptionalState {
+  option (entity).kind = PROJECTION;
+
+  string id = 1 [(required) = false];
 }

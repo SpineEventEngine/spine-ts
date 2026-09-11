@@ -12,13 +12,17 @@
  * the License.
  */
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { CommandSchema, file_spine_options } from "@spine-event-engine/proto";
+import { type Message } from "@bufbuild/protobuf";
+import { CommandSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import { ProjectionStateSchema as StateSchema } from "../../test-fixtures/generated/entity-metadata/main_pb.js";
+import {
+  ScheduleReviewSchema,
+  StartReviewSchema,
+} from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import { ReviewStartedSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
+import { ReviewRejectedSchema } from "../../test-fixtures/generated/handler-registry/rejections_pb.js";
+import { ReviewStateSchema } from "../../test-fixtures/generated/handler-registry/states_pb.js";
 import {
   AbstractAssignee,
   AbstractCommander,
@@ -38,52 +42,6 @@ import type {
   StandaloneReceiverConstructor,
 } from "../../src/handler/generated-handler-registry.js";
 
-type State = Message<"ProjectionState"> & { id: string; name: string; priority: number };
-const descriptorSet = fromBinary(
-  FileDescriptorSetSchema,
-  Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-);
-const descriptor = descriptorSet.file[0];
-if (descriptor === undefined) throw new Error("Expected Entity fixture descriptor.");
-const StateSchema = messageDesc(
-  fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]),
-  0,
-) as GenMessage<State>;
-
-function handlerRegistrySchema(descriptorSetBase64: string, index: number) {
-  const set = fromBinary(FileDescriptorSetSchema, Buffer.from(descriptorSetBase64, "base64"));
-  const descriptor = set.file[0];
-  if (descriptor === undefined) throw new Error("Expected handler-registry fixture descriptor.");
-  return messageDesc(
-    fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-      file_spine_options,
-    ]),
-    index,
-  );
-}
-
-const StartReviewSchema = handlerRegistrySchema(
-  serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
-  0,
-);
-const ScheduleReviewSchema = handlerRegistrySchema(
-  serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
-  1,
-);
-const ReviewStartedSchema = handlerRegistrySchema(
-  serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64,
-  0,
-);
-const ReviewRejectedSchema = handlerRegistrySchema(
-  serverEntityMetadataTestFixtures.handlerRegistryRejections.descriptorSetBase64,
-  0,
-);
-const ReviewStateSchema = handlerRegistrySchema(
-  serverEntityMetadataTestFixtures.handlerRegistryStates.descriptorSetBase64,
-  0,
-);
 class Manager extends ProcessManager<string, typeof StateSchema, number> {
   substitute(command: Message<"spine.server.testing.StartReview">) {
     return command;

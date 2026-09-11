@@ -351,12 +351,13 @@ export interface LocalInboxDrainOptions {
   readonly acceptMessage?: (message: InboxMessage) => boolean;
 
   /**
-   * Observes exact durable acknowledgements produced by the same shard drain.
+   * Observes exact durable delivery or duplicate removal produced by the same
+   * shard drain.
    *
-   * @param message Contains the acknowledged Inbox message.
+   * @param message Contains the resolved Inbox message.
    * @internal
    */
-  readonly onAcknowledged?: (message: InboxMessage) => void;
+  readonly onResolved?: (message: InboxMessage) => void;
 
   /**
    * Explains a replay failure that lacks an Error instance.
@@ -531,7 +532,12 @@ export const InboxHandoff: Readonly<{
         node,
         onMessage: onReplay,
         ...(options.acceptMessage === undefined ? {} : { acceptMessage: options.acceptMessage }),
-        ...(options.onAcknowledged === undefined ? {} : { onDelivered: options.onAcknowledged }),
+        ...(options.onResolved === undefined
+          ? {}
+          : {
+              onDelivered: options.onResolved,
+              onDuplicateRemoved: options.onResolved,
+            }),
       });
       if (direct.acknowledged) return;
       const run = direct.run;

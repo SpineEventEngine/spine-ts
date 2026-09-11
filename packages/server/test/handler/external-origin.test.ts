@@ -16,7 +16,6 @@ import { Buffer } from "node:buffer";
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { EventContextSchema, EventIdSchema } from "@spine-event-engine/proto";
 import { AnyMessages } from "@spine-event-engine/core";
 import ts from "typescript";
@@ -33,6 +32,7 @@ import {
   wave13OriginRouting,
   Wave13OriginProjection,
 } from "../integration/wave13-origin-repository.js";
+import { TaskEventSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 describe("Wave 13 external receptor origin", () => {
   it("RED-03 excludes imported events from a domestic receptor", async () => {
@@ -124,7 +124,7 @@ function event(externalOrigin: boolean) {
     $typeName: "spine.core.Event",
     id: create(EventIdSchema, { value }),
     context: create(EventContextSchema, { external: externalOrigin }),
-    message: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value })),
+    message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema, { id: value, name: value })),
   } as never;
 }
 

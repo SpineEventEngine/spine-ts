@@ -16,10 +16,7 @@ function policy() {
   );
 }
 
-const trackedGeneratedTypeScript = new Set([
-  "examples/message-board/app/src/model-registry.ts",
-  "packages/server/test-fixtures/entity-metadata-fixtures.ts",
-]);
+const trackedGeneratedTypeScript = new Set(["examples/message-board/app/src/model-registry.ts"]);
 
 /* Classifies repository-owned generated TypeScript for copyright enforcement. */
 export function isGeneratedTypeScriptPath(path) {

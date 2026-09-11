@@ -699,12 +699,14 @@ before source client/storage. `DeliverySource` is not configured on
 durable supervisor state, topology failover, exactly-once effects, or automatic
 retry of unknown remote mutations.
 
-Each drain operation is bounded to one page. That bound limits a single
-operation, not the total pending work: an active lease owner can take another
-page while its policy retains the shard. The 30-second Inbox deduplication
-window controls duplicate admission only; it is not a replay-retention period.
-Persisted accepted rows follow their delivery lifecycle and may be replayed
-according to that lifecycle after the deduplication window has elapsed.
+Each Inbox read is bounded to one page. That bound does not limit the total
+pending work: an active drain can advance to another page while it retains the
+shard. Delivery compares pending rows with delivered rows in the current page
+and a process-local cache of the 1,000 most recent deliveries, then removes
+duplicates. The 30-second Inbox deduplication window controls how long delivered
+rows remain available as duplicate evidence; it is not a replay-retention
+period. Persisted accepted rows follow their delivery lifecycle and may be
+replayed according to that lifecycle after the deduplication window has elapsed.
 
 `DeliveryMonitor` is an instantiable, customizable policy seam exposing
 asynchronous continuation, start/completion, failed-reception, pickup-failure,

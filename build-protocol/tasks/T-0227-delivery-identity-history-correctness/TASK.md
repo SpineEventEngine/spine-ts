@@ -805,3 +805,94 @@ The original delivery, identity, and history corrections were release-verified
 at `9f1bdf057`; the npm provenance correction was release-verified at
 `2240709c8`. The work was completed in the human-selected current checkout
 without a separate worktree. No pull request or merge was created.
+
+## Superseding Delivery And Fixture Correction — 2026-09-11
+
+The earlier retained-delivery admission design and its verification claims are
+superseded. A comparison with current Spine JVM showed that `1_000` is the
+capacity of an in-process recent-delivery cache, not a row-scan limit. The JVM
+identity is the signal ID plus the complete typed Inbox target. A raw page uses
+both delivered rows in that page and the recent cache as duplicate evidence;
+duplicate pending rows are removed instead of being counted as delivered.
+
+- Implementation checkpoint `d3064916f` replaced the admission scan with the
+  JVM page/cache model and was pushed to `origin`.
+- Focused delivery evidence at that checkpoint: 9 files and 160 tests passed;
+  targeted ESLint and the delivery TypeScript error scan were clean.
+- Repository-routing then exposed a local-handoff integration defect: a row
+  removed as a duplicate was successful delivery work, but the handoff only
+  recognized a delivered transition. The correction reports exact duplicate
+  removal separately and lets the handoff resolve that exact in-flight row.
+  Four focused files and 351 tests pass with this correction.
+- The prior test-only Base64 descriptor bundle was rejected. Test messages are
+  moving to ordinary readable `.proto` sources in normal private model
+  packages. Generated output may contain protoc-generated encoding; handwritten
+  fixtures may not replace readable source declarations with encoded
+  descriptors.
+
+Implementation assignments use the existing implementer role and explicitly
+configured `gpt-5.6-terra` / `medium`, with no inherited conversation turns and
+no child-agent dispatch:
+
+- `/root/finish_server_genfile_consumers`: direct generated-file migration for
+  bounded server consumers; completed with 19 files and 544 focused tests.
+- `/root/finish_repository_routing_fixtures`: readable repository-routing model
+  migration; completed mechanically, then returned seven handoff failures that
+  the current implementation context reduced to the resolved handoff defect and
+  two stale storage expectations.
+- `/root/fix_integration_core_testing_fixtures`: integration, core, and testing
+  model packages plus focused generation routing; superseded after repeated
+  partial returns.
+- `/root/finish_core_testing_fixture_roles`: completed the same bounded core
+  and testing migration. Core passed 89 focused tests, the Node BlackBox
+  contract passed 16, and generated-source policy passed 9. Long build and
+  Proto-workflow summaries were not captured and are not accepted as passing;
+  the orchestrator reruns those gates.
+- `/root/correct_signal_fixture_roles`: role-correct Command/Event messages for
+  bus, context, services, runtime, and lifecycle tests; completed.
+- `/root/correct_repository_fixture_roles`: role-correct Command/Event messages
+  for repository-routing tests; completed. Proto generation and generated-code
+  typechecking passed, the focused file passed 265/265 tests, and its role scan
+  found no remaining Command/Event/state substitutions.
+
+The bus, context, services, runtime, and lifecycle role correction also passed
+328 focused typechecked tests and 51 lifecycle integration tests. It replaced a
+remaining generic string wrapper in a rejection fixture with the actual command
+payload. A fresh integrated scan remains required because this bounded pass did
+not add new schemas.
+
+The first replacement fixture assignment omitted explicit dispatch fields and
+was interrupted before acceptance. Its output is not accepted as review or
+verification evidence. Final task/release verification and a new independent
+review wave remain required after the fixture corrections converge.
+
+`/root/fix_fixture_lint_cleanup` uses the existing implementer role with
+explicit `gpt-5.6-terra` / `medium`, no inherited turns, and no child-agent
+dispatch. Its bounded scope is mechanical cleanup of stale imports/types and
+the ESLint exclusion for ignored nested generated output after the first
+integrated lint run reported 50 errors and 17 generated-file warnings.
+
+The integrated fixture migration and delivery handoff correction now pass the
+following deterministic checks:
+
+- The complete affected test set passed in one worker: 35 files and 1,194
+  tests. This includes server delivery, handler metadata, entity transitions,
+  repository routing, integration, core fixture use, and the testing-package
+  BlackBox contract.
+- After simplifying the recent-delivery helper, the exact delivery and local
+  handoff regression set passed again: 4 files and 101 tests.
+- The TSDoc checker regression for deleted tracked sources passed 57/57 tests.
+- The copyright checker regression for deleted tracked sources passed 23/23
+  tests.
+- `pnpm lint` passed. This includes Proto generation and policy checks,
+  generated-source build/typechecking, repository-wide ESLint, cleanup rules,
+  TSDoc enforcement, and copyright enforcement.
+- The ordinary Proto workflow generated private server, core, and testing
+  fixture models from readable `.proto` files. Generated fixture directories
+  are ignored and are not committed.
+
+The lint run revealed that both the TSDoc and copyright source enumerators
+treated tracked files deleted from the working tree as readable current files.
+Both enumerators now exclude Git-reported working-tree deletions, while broken
+or escaping symlinks remain errors. Focused regression tests cover each
+correction.

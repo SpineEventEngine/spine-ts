@@ -164,7 +164,10 @@ export function checkCopyright({
 export function gitFiles(runGit = git) {
   const result = runGit(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
   if (result.status !== 0) throw new Error("copyright enumeration failed: git ls-files");
-  return result.stdout.split("\0").filter((path) => path !== "");
+  const deleted = runGit(["ls-files", "-z", "--deleted"]);
+  if (deleted.status !== 0) throw new Error("copyright enumeration failed: git ls-files --deleted");
+  const deletedPaths = new Set(deleted.stdout.split("\0"));
+  return result.stdout.split("\0").filter((path) => path !== "" && !deletedPaths.has(path));
 }
 
 function gitOutput(runGit, args, failure) {

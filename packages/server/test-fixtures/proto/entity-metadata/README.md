@@ -1,6 +1,6 @@
 # Entity-metadata test Protos
 
-These `.proto` files are test-only fixtures for `packages/server/test/index.test.ts`.
+These `.proto` files are test-only fixtures for the server package tests.
 They intentionally live outside the curated production `proto/` root so the
 server tests can exercise descriptor options without adding test-only messages
 to the public schema package.
@@ -9,19 +9,19 @@ to the public schema package.
 
 ## 🚀 Regenerate after a change
 
-Regenerate the checked-in descriptor module after editing any test Proto:
+Regenerate the standard test schemas after editing any test Proto:
 
 ```shell
-node scripts/generate-server-test-fixtures.mjs
+pnpm proto:generate
 ```
 
-Validate that the generated module matches the readable sources:
+Validate that generated output matches the readable sources:
 
 ```shell
-node scripts/generate-server-test-fixtures.mjs --check
+pnpm proto:check-generated
 ```
 
-## ⚠️ Why there is no package
+## Fixture package
 
-The test Protos are package-less on purpose. Buf accepts these custom Spine option
-fixtures when the test files omit a `package` declaration.
+`packages/server/test-fixtures` is a private model package. Its generated output
+is ignored and recreated by the repository's normal Proto workflow.

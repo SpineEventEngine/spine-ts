@@ -1,0 +1,18 @@
+{
+  "formatVersion": 2,
+  "generationId": "d4db37c9-7666-4dfc-8a7f-3f695ca9445d",
+  "packageName": "@spine-event-engine/core-test-fixtures",
+  "packageVersion": "2.0.0-snapshot.11",
+  "protoFiles": [
+    "entity_columns.proto",
+    "signal_envelopes.proto"
+  ],
+  "generatedExports": {
+    "entity_columns.proto": "generated/entity_columns_pb.js",
+    "signal_envelopes.proto": "generated/signal_envelopes_pb.js"
+  },
+  "dependencies": [
+    "@spine-event-engine/proto"
+  ],
+  "moduleExport": "coreTestFixturesProtoModule"
+}

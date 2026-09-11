@@ -13,15 +13,13 @@
  */
 
 import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
-import { Buffer } from "node:buffer";
 import { join } from "node:path";
 import { clearInterval, setInterval } from "node:timers";
 import { pathToFileURL } from "node:url";
 import process from "node:process";
 
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { TypeRegistry } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -44,8 +42,8 @@ import {
   UniformAcrossAllShards,
 } from "@spine-event-engine/server";
 import { managedServerApplicationAccess } from "../../test-fixtures/internal.mjs";
-import { file_spine_options, UserIdSchema } from "@spine-event-engine/proto";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.ts";
+import { UserIdSchema } from "@spine-event-engine/proto";
+import * as FixtureSchemas from "../../test-fixtures/schemas.ts";
 
 const endpoint = required("SPINE_MANAGED_REMOTE_DELIVERY_URL");
 const thirdPartyDirectory = required("SPINE_T0210_THIRD_PARTY_DIRECTORY");
@@ -201,18 +199,7 @@ async function generatedRegistryRoot() {
 }
 
 function projectionStateSchema() {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-  if (descriptor === undefined) throw new Error("T-0210 projection descriptor is missing.");
-  return messageDesc(
-    fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-      file_spine_options,
-    ]),
-    0,
-  );
+  return messageDesc(FixtureSchemas.entityMetadataMainFile, 0);
 }
 
 function required(name) {

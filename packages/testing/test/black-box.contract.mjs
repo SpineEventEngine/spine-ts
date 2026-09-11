@@ -1,21 +1,14 @@
-/* global Buffer, URL, setTimeout */
+/* global setTimeout */
 
 import { BoundedContext } from "@spine-event-engine/server";
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import {
-  DescriptorProtoSchema,
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
-  StringValueSchema,
-} from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
   TenantIdSchema,
   ZoneIdSchema,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
@@ -26,27 +19,13 @@ import {
   TopicSchema,
 } from "@spine-event-engine/proto/client";
 import { Aggregate, EntityHandlers, Projection, Repository } from "@spine-event-engine/server";
-import { readFileSync } from "node:fs";
-
-const fixtureSource = readFileSync(
-  new URL("./fixtures/entity-metadata-fixture.ts", import.meta.url),
-  "utf8",
-);
-const descriptorArray =
-  /export const testingDescriptorSetBase64 = \[([\s\S]*?)\]\.join\(""\)/u.exec(fixtureSource);
-if (descriptorArray === null) throw new Error("testing descriptor fixture array is missing");
-const testingDescriptorSetBase64 = [...descriptorArray[1].matchAll(/"([^"]+)"/g)]
-  .map((match) => match[1])
-  .join("");
-const fixtureFile = descriptor(testingDescriptorSetBase64);
-const ProjectionStateSchema = messageDesc(fixtureFile, 0);
-const AggregateStateSchema = messageDesc(fixtureFile, 1);
-const EventStateSchema = messageDesc(fixtureFile, 2);
-const projectionEventIndex = fixtureFile.messages.findIndex(
-  ({ typeName }) => typeName === "ProjectionEvent",
-);
-if (projectionEventIndex < 0) throw new Error("projection Event fixture missing");
-const ProjectionEventSchema = messageDesc(fixtureFile, projectionEventIndex);
+import {
+  AggregateStateSchema,
+  ProjectionEventSchema,
+  ProjectionStateSchema,
+  TaskCommandSchema,
+  TaskObservedSchema,
+} from "../test-fixtures/generated/black_box_pb.ts";
 
 class TaskAggregate extends Aggregate {
   assignTask(command) {
@@ -87,8 +66,8 @@ export function registerBlackBoxContract(test, testing) {
     try {
       const scope = blackBox.asGuest();
       const posted = await scope.post(
-        AggregateStateSchema,
-        create(AggregateStateSchema, { id: "task-1", name: "First" }),
+        TaskCommandSchema,
+        create(TaskCommandSchema, { id: "task-1", name: "First" }),
       );
       if (posted.kind !== "ok") throw new Error("command was not accepted");
       if (blackBox.assertCommands().length !== 0)
@@ -136,8 +115,8 @@ export function registerBlackBoxContract(test, testing) {
       }
       const next = subscription.updates[Symbol.asyncIterator]().next();
       const posted = await scope.post(
-        AggregateStateSchema,
-        create(AggregateStateSchema, { id: "task-state", name: "State" }),
+        TaskCommandSchema,
+        create(TaskCommandSchema, { id: "task-state", name: "State" }),
       );
       if (posted.kind !== "ok") throw new Error("command was not accepted");
       const update = await next;
@@ -210,18 +189,18 @@ export function registerBlackBoxContract(test, testing) {
     const blackBox = await BlackBox.from(eventContext());
     try {
       const scope = blackBox.asGuest();
-      const events = await scope.createSubscription(topic(EventStateSchema), { kind: "event" });
+      const events = await scope.createSubscription(topic(TaskObservedSchema), { kind: "event" });
       await events.activate();
       const iterator = events.updates[Symbol.asyncIterator]();
       const pending = iterator.next();
       const update = await emitUntil(pending, () =>
-        scope.postEvent(EventStateSchema, create(EventStateSchema, { id: "event-1" })),
+        scope.postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "event-1" })),
       );
       if (
         update.done ||
         update.value.kind !== "update" ||
         update.value.update.update.case !== "eventUpdates" ||
-        AnyMessages.unpack(update.value.update.update.value.event[0]?.message, EventStateSchema)
+        AnyMessages.unpack(update.value.update.update.value.event[0]?.message, TaskObservedSchema)
           ?.id !== "event-1" ||
         update.value.update.update.value.event[0]?.context === undefined
       ) {
@@ -254,7 +233,7 @@ export function registerBlackBoxContract(test, testing) {
     try {
       await blackBox
         .onBehalfOf("alice")
-        .postEvent(EventStateSchema, create(EventStateSchema, { id: "imported" }));
+        .postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "imported" }));
       const context = await blackBox.eventually(
         () => contexts[0],
         (value) => value !== undefined,
@@ -283,7 +262,7 @@ export function registerBlackBoxContract(test, testing) {
     try {
       await blackBox
         .onBehalfOf("external-system")
-        .postExternalEvent(EventStateSchema, create(EventStateSchema, { id: "external" }));
+        .postExternalEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "external" }));
       const context = await blackBox.eventually(
         () => contexts[0],
         (value) => value !== undefined,
@@ -310,10 +289,12 @@ export function registerBlackBoxContract(test, testing) {
     });
     try {
       await Promise.all([
-        blackBox.asGuest().postEvent(EventStateSchema, create(EventStateSchema, { id: "guest" })),
+        blackBox
+          .asGuest()
+          .postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "guest" })),
         blackBox
           .onBehalfOf("bob")
-          .postEvent(EventStateSchema, create(EventStateSchema, { id: "actor" })),
+          .postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "actor" })),
       ]);
       const captured = await blackBox.eventually(
         () => contexts,
@@ -377,7 +358,7 @@ export function registerBlackBoxContract(test, testing) {
     const scope = blackBox.asGuest();
     await blackBox.close();
     await assertFailure(
-      () => scope.post(AggregateStateSchema, create(AggregateStateSchema)),
+      () => scope.post(TaskCommandSchema, create(TaskCommandSchema)),
       BlackBoxClosedError,
     );
     await assertFailure(() => scope.send(query("missing")), BlackBoxClosedError);
@@ -386,11 +367,12 @@ export function registerBlackBoxContract(test, testing) {
       BlackBoxClosedError,
     );
     await assertFailure(
-      () => scope.postEvent(EventStateSchema, create(EventStateSchema, { id: "closed" })),
+      () => scope.postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "closed" })),
       BlackBoxClosedError,
     );
     await assertFailure(
-      () => scope.postExternalEvent(EventStateSchema, create(EventStateSchema, { id: "closed" })),
+      () =>
+        scope.postExternalEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "closed" })),
       BlackBoxClosedError,
     );
   });
@@ -514,7 +496,7 @@ export function registerBlackBoxContract(test, testing) {
     try {
       await blackBox
         .asGuest()
-        .postEvent(EventStateSchema, create(EventStateSchema, { id: "deferred" }));
+        .postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "deferred" }));
       const context = await blackBox.eventually(
         () => contexts[0],
         (value) => value !== undefined,
@@ -547,7 +529,7 @@ export function registerBlackBoxContract(test, testing) {
       try {
         await blackBox
           .asGuest()
-          .postEvent(EventStateSchema, create(EventStateSchema, { id: "zone" }));
+          .postEvent(TaskObservedSchema, create(TaskObservedSchema, { id: "zone" }));
         const context = await blackBox.eventually(
           () => contexts[0],
           (value) => value !== undefined,
@@ -571,7 +553,7 @@ function taskContext() {
         entityType: TaskAggregate,
         schema: AggregateStateSchema,
         handlers: EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
-          builder.assign(AggregateStateSchema, "assignTask"),
+          builder.assign(TaskCommandSchema, "assignTask"),
           builder.apply(ProjectionEventSchema, "applyTask"),
         ]),
       }),
@@ -590,7 +572,7 @@ function taskContext() {
 function eventContext() {
   return BoundedContext.singleTenant("Events")
     .addEventDispatcher({
-      messageSchemas: () => [EventStateSchema],
+      messageSchemas: () => [TaskObservedSchema],
       dispatch: () => Promise.resolve(),
     })
     .build();
@@ -601,7 +583,7 @@ function capturingContext(name, contexts, multitenant) {
     : BoundedContext.singleTenant(name);
   return builder
     .addEventDispatcher({
-      messageSchemas: () => [EventStateSchema],
+      messageSchemas: () => [TaskObservedSchema],
       dispatch: (event) => {
         contexts.push(event.context);
         return Promise.resolve();
@@ -612,8 +594,8 @@ function capturingContext(name, contexts, multitenant) {
 function externalCapturingContext(name, contexts) {
   return BoundedContext.multitenant(name)
     .addEventDispatcher({
-      messageSchemas: () => [EventStateSchema],
-      externalEventSchemas: () => [EventStateSchema],
+      messageSchemas: () => [TaskObservedSchema],
+      externalEventSchemas: () => [TaskObservedSchema],
       dispatch: (event) => {
         contexts.push(event.context);
         return Promise.resolve();
@@ -656,23 +638,6 @@ function topic(schema) {
 }
 function state(id, name, priority = 1) {
   return create(ProjectionStateSchema, { id, name, priority });
-}
-function descriptor(base64) {
-  const set = fromBinary(FileDescriptorSetSchema, Buffer.from(base64, "base64"));
-  const file = set.file[0];
-  if (file === undefined) throw new Error("fixture missing");
-  const projection = file.messageType[0];
-  if (projection === undefined) throw new Error("projection fixture missing");
-  file.messageType.push(
-    create(DescriptorProtoSchema, {
-      ...projection,
-      name: "ProjectionEvent",
-      options: undefined,
-    }),
-  );
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, file)).toString("base64"), [
-    file_spine_options,
-  ]);
 }
 async function emitUntil(pending, emit) {
   const deadline = Date.now() + 2_000;

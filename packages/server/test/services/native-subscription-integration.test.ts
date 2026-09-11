@@ -12,17 +12,10 @@
  * the License.
  */
 
-import {
-  create,
-  fromBinary,
-  toBinary,
-  type Message,
-  type MessageInitShape,
-} from "@bufbuild/protobuf";
+import { create, type Message, type MessageInitShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -34,7 +27,6 @@ import {
   EventSchema,
   TenantIdSchema,
   UserIdSchema,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
 import {
@@ -61,7 +53,7 @@ import {
   NativeProcessManagerStateSchema,
   NativeProjectionStateSchema,
 } from "../../test-fixtures/native-subscription-fixtures.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 import {
   TaskCreatedSchema,
   type TaskCreated,
@@ -73,22 +65,8 @@ import {
 
 type NativeTaskCommand = Message<"TaskCommand"> & { id: string; name: string };
 
-function createFixtureFileDescriptor(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-  if (descriptor === undefined) throw new Error("Native command fixture descriptor set is empty.");
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-}
-
 const NativeTaskCommandSchema = messageDesc(
-  createFixtureFileDescriptor(
-    serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
-  ),
+  FixtureSchemas.handlerRegistryCommandsFile,
   2,
 ) as GenMessage<NativeTaskCommand>;
 

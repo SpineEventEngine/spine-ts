@@ -12,17 +12,12 @@
  * the License.
  */
 
-import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import {
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
-  StringValueSchema,
-  TimestampSchema,
-} from "@bufbuild/protobuf/wkt";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
-import { EventSchema, VersionSchema, file_spine_options } from "@spine-event-engine/proto";
+import { EventSchema, VersionSchema } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
   ColumnTypes,
@@ -62,7 +57,7 @@ import {
   type EventSubscriber,
 } from "../../src/bus/event-bus.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 import { tenant } from "../tenant-fixture.js";
 
 const observedEventBusSubscriptions = vi.hoisted(
@@ -112,26 +107,7 @@ type AggregateState = Message<"AggregateState"> & {
 
 type EmptyState = Message<"EmptyState">;
 
-function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Stand fixture descriptor set is empty.");
-  }
-
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    imports,
-  );
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
+const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
 const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
@@ -140,9 +116,7 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
-const fileEntityEmptyFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.empty.descriptorSetBase64,
-);
+const fileEntityEmptyFixture = FixtureSchemas.entityMetadataEmptyFile;
 const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
 
 describe("Stand", () => {

@@ -18,10 +18,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { create, type Message } from "@bufbuild/protobuf";
-import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { Identifiers, TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
@@ -38,7 +36,6 @@ import {
   type TenantId,
   UserIdSchema,
   VersionSchema,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import {
   EventStore,
@@ -83,7 +80,7 @@ import { ServerEnvironment } from "../../src/server/server-environment.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 import { Stand } from "../../src/stand/stand.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 import { tenant } from "../tenant-fixture.js";
 
 interface InternalSystemPairing {
@@ -160,26 +157,7 @@ type ProcessManagerState = Message<"ProcessManagerState"> & {
   queue: string;
 };
 
-function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Server bounded-context fixture descriptor set is empty.");
-  }
-
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    imports,
-  );
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
+const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
 const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
@@ -188,9 +166,7 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
-const fileHandlerRegistryCommandsFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
-);
+const fileHandlerRegistryCommandsFixture = FixtureSchemas.handlerRegistryCommandsFile;
 const TaskCommandSchema = messageDesc(
   fileHandlerRegistryCommandsFixture,
   2,
@@ -199,18 +175,14 @@ const ProcessManagerTaskCommandSchema = messageDesc(
   fileHandlerRegistryCommandsFixture,
   3,
 ) as GenMessage<ProcessManagerTaskCommand>;
-const fileHandlerRegistryEventsFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64,
-);
+const fileHandlerRegistryEventsFixture = FixtureSchemas.handlerRegistryEventsFile;
 const TaskEventSchema = messageDesc(fileHandlerRegistryEventsFixture, 1) as GenMessage<TaskEvent>;
 const ReviewStartedSchema = messageDesc(
   fileHandlerRegistryEventsFixture,
   0,
 ) as GenMessage<ReviewStarted>;
 
-const fileEntityVisibilityFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
-);
+const fileEntityVisibilityFixture = FixtureSchemas.entityMetadataVisibilityFile;
 const ProcessManagerStateSchema = messageDesc(
   fileEntityVisibilityFixture,
   0,

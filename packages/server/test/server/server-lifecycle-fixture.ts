@@ -17,10 +17,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { AnyMessages } from "@spine-event-engine/core";
 import {
   EventContextSchema,
@@ -28,7 +27,6 @@ import {
   EventSchema,
   UserIdSchema,
   VersionSchema,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
@@ -49,15 +47,15 @@ import type { ShardIndex } from "../../src/delivery/shard-index.js";
 import type { EnvironmentGenerationWorker } from "../../src/server/environment-attachment.js";
 import type { EnvironmentDeliveryRuntime } from "../../src/server/environment-delivery-worker.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 type LifecycleState = Message<"ProjectionState"> & { readonly id: string };
 type LifecycleEvent = Message<"TaskEvent"> & { readonly id: string; readonly name: string };
 
-const lifecycleFile = fixtureFile(serverEntityMetadataTestFixtures.main.descriptorSetBase64);
+const lifecycleFile = FixtureSchemas.entityMetadataMainFile;
 const LifecycleStateSchema = messageDesc(lifecycleFile, 0) as GenMessage<LifecycleState>;
 const LifecycleEventSchema = messageDesc(
-  fixtureFile(serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64),
+  FixtureSchemas.handlerRegistryEventsFile,
   1,
 ) as GenMessage<LifecycleEvent>;
 
@@ -421,20 +419,6 @@ function rejectedEvidence(shard: ShardIndex, obligation: DeliveryRunObligation, 
       failures: Object.freeze([]),
     }),
   });
-}
-
-function fixtureFile(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-  if (descriptor === undefined) {
-    throw new Error("Lifecycle fixture descriptor set is empty.");
-  }
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
 }
 
 function generatedRegistry(

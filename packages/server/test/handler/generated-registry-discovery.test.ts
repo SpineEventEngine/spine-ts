@@ -17,13 +17,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { file_spine_options } from "@spine-event-engine/proto";
+import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { describe, expect, it } from "vitest";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as FixtureSchemas from "../../test-fixtures/schemas.js";
 
 import {
   GeneratedRegistryDiscovery,
@@ -48,40 +46,17 @@ class DiscoveredProjection {
   }
 }
 
-function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Generated registry discovery fixture descriptor set is empty.");
-  }
-
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    imports,
-  );
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
+const fileEntityMetadataFixture = FixtureSchemas.entityMetadataMainFile;
 const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
 ) as GenMessage<ProjectionState>;
 const StartReviewSchema = messageDesc(
-  createFixtureFileDescriptor(
-    serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
-  ),
+  FixtureSchemas.handlerRegistryCommandsFile,
   0,
 ) as GenMessage<StartReview>;
 const ReviewStartedSchema = messageDesc(
-  createFixtureFileDescriptor(
-    serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64,
-  ),
+  FixtureSchemas.handlerRegistryEventsFile,
   0,
 ) as GenMessage<ReviewStarted>;
 

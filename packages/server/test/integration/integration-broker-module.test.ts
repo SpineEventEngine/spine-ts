@@ -12,15 +12,8 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import {
-  AnySchema,
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
-  StringValueSchema,
-} from "@bufbuild/protobuf/wkt";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextNameSchema,
@@ -45,41 +38,11 @@ import {
   wrapExternalEvent,
 } from "../../src/integration/external-messages.js";
 import { RecordingTransportFactory } from "./wave13-red-support.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
-
-type TaskEvent = Message<"TaskEvent"> & { id: string; name: string };
-type ReviewStarted = Message<"ReviewStarted"> & { id: string };
-type ValidatedTaskEvent = Message<"spine.server.testing.handlerregistry.ValidatedTaskEvent"> & {
-  id: string;
-  name: string;
-};
-
-function fixtureFile(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-  if (descriptor === undefined)
-    throw new Error("Integration broker module event fixture is empty.");
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    [],
-  );
-}
-
-const handlerRegistryEventsFixture = fixtureFile(
-  serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64,
-);
-const TaskEventSchema = messageDesc(handlerRegistryEventsFixture, 1) as GenMessage<TaskEvent>;
-const ReviewStartedSchema = messageDesc(
-  handlerRegistryEventsFixture,
-  0,
-) as GenMessage<ReviewStarted>;
-const ValidatedTaskEventSchema = messageDesc(
-  handlerRegistryEventsFixture,
-  2,
-) as GenMessage<ValidatedTaskEvent>;
+import {
+  ReviewStartedSchema,
+  TaskEventSchema,
+  ValidatedTaskEventSchema,
+} from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 function registeredEventBus() {
   const bus = eventBusAccess.createForgettingBus();
