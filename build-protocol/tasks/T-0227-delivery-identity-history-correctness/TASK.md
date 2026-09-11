@@ -1,6 +1,6 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: Local implementation and review complete; exact-SHA CI pending
+Status: Complete; implementation SHA verified and completion record pending CI
 Start: `2026-09-10 16:26 WEST`
 Initial closure: `2026-09-10 20:06 WEST`
 Final closure: `2026-09-11 02:19 WEST`
@@ -18,11 +18,11 @@ Implementation commits: authoritative range `31cfe4f0b..HEAD` on
 `fix-delivery-identity-history-correctness`.
 Last release-verified implementation HEAD: `9f1bdf057`.
 Final release-verified provenance implementation HEAD: `2240709c8`.
-Current pushed HEAD: `dca2feae85e936111828120631aea9e2574ae538`; its CI
-verification failed. The corrected implementation and review results are local
-and ready for a new commit. Local release verification passed; required CI for
-the exact final commit SHA remains pending. The earlier verified checkpoints
-above are historical only.
+Current pushed implementation HEAD:
+`caa3a2ae170b68184000287b66d694cd36a8623c`; its required CI verification
+passed. The completion-record commit that contains this evidence still requires
+CI for its exact SHA. The earlier verified checkpoints above are historical
+only.
 
 ## Delivery Admission And Test-Fixture Correction Framing
 
@@ -1749,3 +1749,16 @@ push.
   timeout was introduced.
 - The remaining completion gate is CI success for the exact commit pushed from
   this verified working tree.
+
+## Implementation Commit CI — 2026-09-11 23:48 WEST
+
+- Commit `caa3a2ae170b68184000287b66d694cd36a8623c` was pushed to
+  `origin/fix-delivery-identity-history-correctness`, and the remote branch was
+  verified to resolve to that exact SHA.
+- GitHub Actions run `34654036112`, job `103442423422`, completed successfully
+  for that commit. Dependency installation, `pnpm verify:release`,
+  `node scripts/release-cli.mjs prepare --check`, cleanup steps, and the final
+  job step all passed.
+- The implementation is durably ready for human review. The final task-record
+  commit must now be pushed and pass CI for its own exact SHA before this task
+  is closed in chat.
