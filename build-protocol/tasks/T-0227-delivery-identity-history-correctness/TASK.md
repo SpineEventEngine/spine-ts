@@ -760,6 +760,16 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   using the existing performance/reliability and style/maintainability roles,
   both explicitly `gpt-5.6-terra` / high. Each reviewer is read-only, receives
   no inherited conversation turns, and may not spawn sub-agents.
+- `2026-09-11 11:22 WEST`: The final process review found that leader close can
+  cancel escalation while a resistant descendant remains, that the attempt
+  deadline starts after optional readiness, and that Windows taskkill failures
+  are discarded. It also found the delay-timer test proves prompt resolution but
+  not timer disposal. Returned one accepted batch to the existing implementer,
+  explicitly `gpt-5.6-terra` / medium, to reuse `processGroupLiveness`,
+  `taskkillOutcome`, and `waitForChildClose`; start the deadline immediately;
+  await group termination independently of leader close; surface Windows
+  failure; and prove timer disposal with deterministic timer injection. The
+  implementer may not spawn sub-agents.
 
 The implementation and independent-review corrections were completed in the
 human-selected current checkout without a separate worktree. The corrected tree
