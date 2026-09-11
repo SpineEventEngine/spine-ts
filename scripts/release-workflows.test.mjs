@@ -9,18 +9,7 @@ const approvedPnpmSetup = "0ebf47130e4866e96fce0953f49152a61190b271";
 const npmVersionCheck =
   "node --version | grep -Fx 'v24.18.0' && npm --version | grep -Fx '11.16.0'";
 const isolatedLernaPublish =
-  [
-    "set -euo pipefail",
-    'publication_parent="$(mktemp -d "$RUNNER_TEMP/spine-lerna-publication.XXXXXX")"',
-    'publication_workspace="$publication_parent/workspace"',
-    "trap 'rm -rf \"$publication_parent\"' EXIT",
-    'node scripts/release-cli.mjs prepare-publication-workspace --output "$publication_workspace"',
-    'TAG="$(node scripts/release-cli.mjs tag)"',
-    "(",
-    '  cd "$publication_workspace"',
-    '  "$GITHUB_WORKSPACE/node_modules/.bin/lerna" publish from-package --contents .publish --concurrency 1 --ignore-scripts --no-git-reset --dist-tag "$TAG" --registry https://registry.npmjs.org/ --git-head "$GITHUB_SHA" --summary-file "$GITHUB_STEP_SUMMARY" --yes',
-    ")",
-  ].join("\n") + "\n";
+  ["set -euo pipefail", "node scripts/release-cli.mjs recover-publication"].join("\n") + "\n";
 const publishStepsAllowlist = [
   {
     uses: "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
@@ -166,16 +155,31 @@ describe("release workflows", () => {
     expect(source).not.toMatch(
       /secrets\.|npm login|whoami|unpublish|provenance=false|snapshot-publisher/u,
     );
-    expect(source).toContain('node_modules/.bin/lerna" publish from-package');
+    expect(source).toContain("recover-publication");
     expect(source).toContain("set -euo pipefail");
-    expect(source).toContain("prepare-publication-workspace");
-    expect(source).toContain('cd "$publication_workspace"');
-    expect(source).toContain('node_modules/.bin/lerna" publish from-package --contents');
+    expect(source).not.toContain("prepare-publication-workspace");
     expect(source).not.toContain("--scope");
     expect(source).not.toContain("release-publisher");
     expect(readFileSync(join(root, "scripts/release-cli.mjs"), "utf8")).not.toMatch(
       /release-publisher|publishRelease|createPublicRegistry/u,
     );
+    const controller = readFileSync(join(root, "scripts/release-cli.mjs"), "utf8");
+    expect(controller).toContain('join(root, "node_modules/.bin/lerna")');
+    for (const flag of [
+      '"--contents"',
+      '".publish"',
+      '"--concurrency"',
+      '"--ignore-scripts"',
+      '"--no-git-reset"',
+      '"--dist-tag"',
+      '"--registry"',
+      '"https://registry.npmjs.org/"',
+      '"--git-head"',
+      '"--summary-file"',
+      '"--yes"',
+    ])
+      expect(controller).toContain(flag);
+    expect(controller).toContain("90_000, 180_000, 360_000");
   });
 
   it("pins every action to a full immutable SHA and disables checkout credentials", () => {

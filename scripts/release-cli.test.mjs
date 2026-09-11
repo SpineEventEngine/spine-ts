@@ -8,11 +8,115 @@ import {
   createPublicationWorkspace,
   main,
   prepareRelease,
+  recoverPublication,
   stageReleaseContents,
 } from "./release-cli.mjs";
 import { frameworkPackageNames } from "./package-artifacts.mjs";
 
 describe("release CLI", () => {
+  it("retries only strict missing names after a delayed partial publication", async () => {
+    const release = {
+      tag: "snapshot",
+      version: "2.0.0-snapshot.5",
+      packages: [{ name: "@synthetic/base" }, { name: "@synthetic/dependent" }],
+    };
+    const attempts = [];
+    const waits = [];
+    const removed = [];
+    const inspections = [
+      { state: "partial", missingNames: ["@synthetic/dependent"] },
+      { state: "complete", missingNames: [] },
+    ];
+    await expect(
+      recoverPublication({
+        release,
+        initialNames: ["@synthetic/base", "@synthetic/dependent"],
+        inspect: async () => inspections.shift(),
+        wait: async (milliseconds) => waits.push(milliseconds),
+        createWorkspace: async ({ selectedNames, destination }) => {
+          attempts.push({ selectedNames, destination });
+        },
+        runLerna: async () => ({ status: 1, signal: null }),
+        mkdtemp: (prefix) => prefix + attempts.length,
+        remove: (directory) => removed.push(directory),
+      }),
+    ).resolves.toEqual({ status: 1, signal: null, recovered: true });
+    expect(waits).toEqual([90_000, 180_000]);
+    expect(attempts.map(({ selectedNames }) => selectedNames)).toEqual([
+      ["@synthetic/base", "@synthetic/dependent"],
+      ["@synthetic/dependent"],
+    ]);
+    expect(removed).toHaveLength(2);
+  });
+
+  it("does not invoke Lerna a fourth time after the final delayed inspection", async () => {
+    const calls = [];
+    await expect(
+      recoverPublication({
+        release: {
+          tag: "snapshot",
+          version: "2.0.0-snapshot.5",
+          packages: [{ name: "@synthetic/base" }],
+        },
+        initialNames: ["@synthetic/base"],
+        inspect: async () => ({ state: "partial", missingNames: ["@synthetic/base"] }),
+        wait: async () => {},
+        createWorkspace: async () => {},
+        runLerna: async () => {
+          calls.push("lerna");
+          return { status: 1, signal: "SIGTERM" };
+        },
+        mkdtemp: (prefix) => prefix + calls.length,
+        remove: () => {},
+      }),
+    ).rejects.toThrow("remaining packages: @synthetic/base; last status: 1; last signal: SIGTERM");
+    expect(calls).toHaveLength(3);
+  });
+
+  it("cleans the publication parent for SIGINT and preserves its exit code", async () => {
+    const handlers = new Map();
+    const removed = [];
+    await expect(
+      recoverPublication({
+        release: { packages: [{ name: "@synthetic/base" }] },
+        initialNames: ["@synthetic/base"],
+        inspect: async () => ({ state: "complete", missingNames: [] }),
+        wait: async () => {},
+        createWorkspace: async () => {},
+        runLerna: async () => handlers.get("SIGINT")(),
+        mkdtemp: () => "/temporary/workspace",
+        remove: (directory) => removed.push(directory),
+        registerSignal: (signal, handler) => {
+          handlers.set(signal, handler);
+          return () => {};
+        },
+        exit: (code) => {
+          expect(code).toBe(130);
+          throw new Error("signal exit");
+        },
+      }),
+    ).rejects.toThrow("signal exit");
+    expect(removed).toContain("/temporary/workspace");
+  });
+
+  it("rejects invalid initial and delayed partial selections before Lerna", async () => {
+    const runLerna = vi.fn(async () => ({ status: 1, signal: null }));
+    const base = {
+      release: { packages: [{ name: "@synthetic/base" }] },
+      inspect: async () => ({ state: "partial", missingNames: [] }),
+      wait: async () => {},
+      createWorkspace: async () => {},
+      runLerna,
+      mkdtemp: () => "/temporary/workspace",
+      remove: () => {},
+    };
+    await expect(recoverPublication({ ...base, initialNames: [] })).rejects.toThrow("selection");
+    await expect(
+      recoverPublication({ ...base, initialNames: ["@synthetic/base"] }),
+    ).rejects.toThrow("selection");
+    expect(runLerna).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["publish", "verify-registry"])("rejects the removed %s command", (command) => {
     const result = spawnSync(process.execPath, ["scripts/release-cli.mjs", command], {
       cwd: new URL("..", import.meta.url).pathname,
@@ -29,6 +133,16 @@ describe("release CLI", () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("Supported commands");
+  });
+
+  it("refuses publication recovery without its GitHub SHA and summary inputs", () => {
+    const result = spawnSync(process.execPath, ["scripts/release-cli.mjs", "recover-publication"], {
+      cwd: new URL("..", import.meta.url).pathname,
+      encoding: "utf8",
+      env: { ...process.env, GITHUB_SHA: undefined, GITHUB_STEP_SUMMARY: undefined },
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("requires GITHUB_SHA and GITHUB_STEP_SUMMARY");
   });
 
   it("prints the policy-derived tag without a publication capability", async () => {

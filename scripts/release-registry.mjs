@@ -32,18 +32,17 @@ export function assertRegistryReleaseState(release, records) {
     if (exists && record["dist-tags"][release.tag] !== release.version)
       throw new Error("registry does not expose " + name + " at the selected tag");
   }
-  if (published === release.packages.length)
-    throw new Error("release version is already fully published");
+  return published === release.packages.length ? "complete" : "partial";
 }
 
 /**
- * Reads one public-registry packument for each package without mutation.
+ * Reads the exact release state without permitting an ambiguous registry result.
  *
  * @param {{ tag: string, version: string, packages: readonly { name: string }[] }} release expected release
  * @param {(url: string) => Promise<Response>} fetchResponse fetch implementation
  * @param {{ timeoutMs?: number }} options registry read options
  */
-export async function selectUnpublishedPackageNames(
+export async function inspectRegistryReleaseState(
   release,
   fetchResponse,
   { timeoutMs = 10_000 } = {},
@@ -73,10 +72,28 @@ export async function selectUnpublishedPackageNames(
       controller.abort();
     }
   }
-  assertRegistryReleaseState(release, records);
-  return release.packages
+  const state = assertRegistryReleaseState(release, records);
+  const missingNames = release.packages
     .filter(({ name }) => !(release.version in (records.get(name)?.versions ?? {})))
     .map(({ name }) => name);
+  return { state, missingNames };
+}
+
+/**
+ * Reads one public-registry packument for each package without mutation.
+ *
+ * @param {{ tag: string, version: string, packages: readonly { name: string }[] }} release expected release
+ * @param {(url: string) => Promise<Response>} fetchResponse fetch implementation
+ * @param {{ timeoutMs?: number }} options registry read options
+ */
+export async function selectUnpublishedPackageNames(
+  release,
+  fetchResponse,
+  { timeoutMs = 10_000 } = {},
+) {
+  const result = await inspectRegistryReleaseState(release, fetchResponse, { timeoutMs });
+  if (result.state === "complete") throw new Error("release version is already fully published");
+  return result.missingNames;
 }
 
 export const verifyRegistryReleaseState = selectUnpublishedPackageNames;

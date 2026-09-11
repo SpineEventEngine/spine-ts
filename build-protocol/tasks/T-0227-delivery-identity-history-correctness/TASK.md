@@ -357,7 +357,7 @@ verification and review may run concurrently only at stable boundaries.
   turns, followed by the existing implementer role as `gpt-5.6-terra` / medium.
   Neither role may spawn sub-agents; immutable role configuration is the available
   runtime-profile evidence.
-- `2026-09-11 10:24 WEST`: The architecture check confirmed a bounded same-job
+- `2026-09-11 10:22 WEST`: The architecture check confirmed a bounded same-job
   recovery is sufficient. After a nonzero Lerna result, the job must allow npm
   registry convergence, strictly distinguish complete, partial, and ambiguous
   states, accept nonzero only when all 18 exact versions and selected tags are
@@ -369,6 +369,27 @@ verification and review may run concurrently only at stable boundaries.
   existing implementer role is now explicitly dispatched as `gpt-5.6-terra` /
   medium for the registry seam, bounded controller, workflow wiring, tests, and
   narrow release documentation. The implementer may not spawn sub-agents.
+- `2026-09-11 10:27 WEST`: Implemented the bounded same-job publication
+  recovery. The controller creates a fresh disposable workspace for each of at
+  most three Lerna calls, waits 90, 180, and 360 seconds after nonzero results,
+  and performs a strict complete/partial registry inspection after each wait.
+  It accepts a delayed complete state, retries only exact missing package names,
+  and reports missing names with the final process status and signal on
+  exhaustion. Preparation and downloaded release artifacts remain outside this
+  controller and occur once. Focused release controller, registry, workflow,
+  and local Lerna registry tests passed (34 tests). Static checks remain next;
+  `verify:release` was not run.
+- `2026-09-11 10:32 WEST`: Accepted the publication-recovery correction batch.
+  The controller now uses the existing SIGINT/SIGTERM cleanup pattern for its
+  temporary parent, preserves exit codes 130 and 143, validates initial and
+  delayed partial selections before mutation, and rejects missing GitHub SHA or
+  step-summary inputs before the first Lerna call. Focused tests cover signal
+  cleanup, invalid selections, and absent inputs. The existing local Lerna
+  registry test already proves that a partial publication retries only the
+  missing package and that a stored complete selection performs no PUT; the
+  controller tests add the distinct nonzero-process and delayed-registry cases,
+  so no duplicate local-registry expansion is needed. Focused release checks
+  passed 37/37, plus tooling typecheck, TSDoc, formatting, and diff checks.
 
 ## Decisions
 

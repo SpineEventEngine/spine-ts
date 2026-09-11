@@ -9,7 +9,7 @@ const release = {
 };
 
 describe("release registry preflight", () => {
-  it("permits an absent or partial release and rejects a fully published release", () => {
+  it("classifies an absent, partial, or complete release after validating every tag", () => {
     expect(() => assertRegistryReleaseState(release, new Map())).not.toThrow();
     expect(() =>
       assertRegistryReleaseState(
@@ -33,7 +33,7 @@ describe("release registry preflight", () => {
         ]),
       ),
     ).toThrow("selected tag");
-    expect(() =>
+    expect(
       assertRegistryReleaseState(
         release,
         new Map(
@@ -46,7 +46,7 @@ describe("release registry preflight", () => {
           ]),
         ),
       ),
-    ).toThrow("already fully published");
+    ).toBe("complete");
   });
 
   it("fails closed for ambiguous registry metadata", () => {

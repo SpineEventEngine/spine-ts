@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 
 import { packFrameworkArtifacts, proveExactTarballConsumer } from "./snapshot-artifacts.mjs";
 import { expectedReleaseModel, readReleaseManifests } from "./release-policy.mjs";
-import { verifyRegistryReleaseState } from "./release-registry.mjs";
+import { inspectRegistryReleaseState, verifyRegistryReleaseState } from "./release-registry.mjs";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 const run = (command, args, cwd = root) => {
@@ -118,6 +118,82 @@ export function createPublicationWorkspace({
   }
 }
 
+/**
+ * Publishes an exact selection at most three times, allowing the registry to
+ * converge after a nonzero Lerna result before selecting a fresh retry set.
+ */
+export async function recoverPublication({
+  release,
+  initialNames,
+  inspect,
+  wait,
+  createWorkspace,
+  runLerna,
+  mkdtemp,
+  remove,
+  cleanup = () => {},
+  registerSignal,
+  exit,
+}) {
+  const expectedNames = new Set(release.packages.map(({ name }) => name));
+  const validateSelection = (names, state = "partial") => {
+    if (
+      state !== "partial" ||
+      !Array.isArray(names) ||
+      !names.length ||
+      new Set(names).size !== names.length ||
+      names.some((name) => !expectedNames.has(name))
+    )
+      throw new Error("registry selection is not a non-empty unique release-package subset");
+    return names;
+  };
+  let active;
+  let stopped = false;
+  const stop = (code) => {
+    if (stopped) return;
+    stopped = true;
+    if (active !== undefined) remove(active);
+    cleanup();
+    exit?.(code);
+  };
+  const unregister = ["SIGINT", "SIGTERM"].map(
+    (signal) => registerSignal?.(signal, () => stop(signal === "SIGINT" ? 130 : 143)) ?? (() => {}),
+  );
+  let selectedNames = initialNames;
+  let last = { status: null, signal: null };
+  const delays = [90_000, 180_000, 360_000];
+  try {
+    selectedNames = validateSelection(selectedNames);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const destination = mkdtemp("spine-lerna-publication-");
+      active = destination;
+      try {
+        await createWorkspace({ destination, selectedNames });
+        last = await runLerna({ destination, selectedNames });
+      } finally {
+        remove(destination);
+        active = undefined;
+      }
+      if (last.status === 0) return { ...last, recovered: attempt > 0 };
+      await wait(delays[attempt]);
+      const inspected = await inspect(release);
+      if (inspected.state === "complete") return { ...last, recovered: true };
+      selectedNames = validateSelection(inspected.missingNames, inspected.state);
+    }
+  } finally {
+    for (const removeHandler of unregister) removeHandler();
+    cleanup();
+  }
+  throw new Error(
+    "publication recovery exhausted; remaining packages: " +
+      selectedNames.join(", ") +
+      "; last status: " +
+      last.status +
+      "; last signal: " +
+      (last.signal ?? "none"),
+  );
+}
+
 export async function main({ argv = process.argv, dependencies = {} } = {}) {
   const {
     createWorkspace = createPublicationWorkspace,
@@ -159,6 +235,70 @@ export async function main({ argv = process.argv, dependencies = {} } = {}) {
     return;
   }
   if (argv[2] === "preflight") return verifyRegistry(release, fetchResponse);
+  if (argv[2] === "recover-publication") {
+    const sha = process.env.GITHUB_SHA;
+    const summary = process.env.GITHUB_STEP_SUMMARY;
+    if (sha === undefined || summary === undefined)
+      throw new Error("recover-publication requires GITHUB_SHA and GITHUB_STEP_SUMMARY");
+    const initialNames = await verifyRegistry(release, fetchResponse);
+    const parent = mkdtempSync(join(tmpdir(), "spine-lerna-publication-"));
+    const createWorkspace = async ({ destination, selectedNames }) => {
+      createPublicationWorkspace({
+        destination,
+        entries: readManifests(root),
+        selectedNames,
+        copy: (source, target) => cpSync(join(root, source), target, { recursive: true }),
+        mkdir: (path) => mkdirSync(path, { recursive: true }),
+        write: writeFileSync,
+      });
+    };
+    return recoverPublication({
+      release,
+      initialNames,
+      inspect: (expected) => inspectRegistryReleaseState(expected, fetchResponse),
+      wait: (milliseconds) =>
+        new Promise((resolveWait) => globalThis.setTimeout(resolveWait, milliseconds)),
+      createWorkspace: ({ destination, selectedNames }) =>
+        createWorkspace({ destination, selectedNames }),
+      runLerna: ({ destination }) => {
+        const args = [
+          "publish",
+          "from-package",
+          "--contents",
+          ".publish",
+          "--concurrency",
+          "1",
+          "--ignore-scripts",
+          "--no-git-reset",
+          "--dist-tag",
+          release.tag,
+          "--registry",
+          "https://registry.npmjs.org/",
+          "--git-head",
+          sha,
+          "--summary-file",
+          summary,
+          "--yes",
+        ];
+        const result = spawnSync(join(root, "node_modules/.bin/lerna"), args, {
+          cwd: destination,
+          stdio: "inherit",
+        });
+        return { status: result.status, signal: result.signal };
+      },
+      mkdtemp: () => {
+        const workspace = join(parent, "workspace-" + Math.random().toString(36).slice(2));
+        return workspace;
+      },
+      remove: (directory) => rmSync(directory, { force: true, recursive: true }),
+      cleanup: () => rmSync(parent, { force: true, recursive: true }),
+      registerSignal: (signal, handler) => {
+        process.once(signal, handler);
+        return () => process.off(signal, handler);
+      },
+      exit: (code) => process.exit(code),
+    });
+  }
   if (argv[2] === "prepare-publication-workspace") {
     const output = option(argv, "--output");
     if (output === undefined) throw new Error("prepare-publication-workspace requires --output");
@@ -190,7 +330,7 @@ export async function main({ argv = process.argv, dependencies = {} } = {}) {
     return;
   }
   throw new Error(
-    "Supported commands are prepare, tag, preflight, and prepare-publication-workspace",
+    "Supported commands are prepare, tag, preflight, recover-publication, and prepare-publication-workspace",
   );
 }
 if (
