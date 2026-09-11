@@ -416,6 +416,18 @@ verification and review may run concurrently only at stable boundaries.
   style/maintainability role as `gpt-5.6-terra` / high, and the existing
   documentation role as `gpt-5.6-luna` / medium. Each reviewer is read-only,
   receives no inherited conversation turns, and may not spawn sub-agents.
+- `2026-09-11 10:47 WEST`: The focused re-review wave returned one correction
+  batch. Performance/reliability found that synchronous Lerna execution blocks
+  the installed signal handlers and has no attempt deadline, so cancellation or
+  a stalled child can prevent cleanup and bounded recovery. Style/maintainability
+  found that the interrupt test does not assert parent cleanup and the controller
+  TSDoc still limits convergence checks to nonzero exits. Documentation review
+  was clean and independently passed 29 focused tests. Returned the accepted
+  findings to the existing implementer role, explicitly `gpt-5.6-terra` /
+  medium, for asynchronous supervised execution, a defined attempt deadline,
+  child termination before cleanup, integration-style signal and timeout tests,
+  the missing cleanup assertion, and the narrow TSDoc correction. The implementer
+  may not spawn sub-agents.
 
 ## Decisions
 
