@@ -1149,3 +1149,15 @@ Correction verification so far:
   repository-routing suite passes 265/265 with one worker.
 - Focused handler and repository consumer runs passed 363/363, 295/295,
   144/144, and 59/59 at their respective correction checkpoints.
+
+Fresh zero-context review at `1ac4b3eb3` is assigned to the existing
+style/maintainability reviewer (`gpt-5.6-terra` / `high`) for fixture domain
+quality, role separation, naming, formatting, consumer readability, and diff
+hygiene; the existing TypeScript/API documentation reviewer
+(`gpt-5.6-terra` / `high`) for generated contracts, imports, package boundaries,
+public/wire/storage compatibility, and test meaning; and the existing
+performance/reliability reviewer (`gpt-5.6-terra` / `high`) for trusted
+publishing, dependency/lockfile behavior, deterministic generation, CI
+consequences, and bounded verification. All fields are explicit in dispatch,
+no conversation turns are inherited, reviewers are read-only, and they may not
+spawn sub-agents.
