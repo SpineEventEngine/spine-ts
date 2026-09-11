@@ -754,6 +754,12 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   across four release suites, tooling typecheck, TSDoc, formatting, and diff
   hygiene; ESLint then identified one test-global spelling corrected before the
   final rerun.
+- `2026-09-11 11:16 WEST`: The completed process-group correction passed 49/49
+  focused release tests, tooling typecheck, TSDoc, ESLint, formatting, and diff
+  hygiene, then was pushed as `b1bd0f751`. Prepared the final focused re-review
+  using the existing performance/reliability and style/maintainability roles,
+  both explicitly `gpt-5.6-terra` / high. Each reviewer is read-only, receives
+  no inherited conversation turns, and may not spawn sub-agents.
 
 The implementation and independent-review corrections were completed in the
 human-selected current checkout without a separate worktree. The corrected tree
