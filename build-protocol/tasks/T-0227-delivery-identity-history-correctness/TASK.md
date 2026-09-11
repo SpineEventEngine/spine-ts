@@ -1,6 +1,6 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: Complete
+Status: In progress — publish workflow correction
 Start: `2026-09-10 16:26 WEST`
 Initial closure: `2026-09-10 20:06 WEST`
 Final closure: `2026-09-11 02:19 WEST`
@@ -344,6 +344,19 @@ verification and review may run concurrently only at stable boundaries.
   every release gate, 290/290 test files, 4,676/4,676 tests, and all global
   coverage thresholds. The independent correction review is complete with no
   open finding.
+- `2026-09-11 10:12 WEST`: Reopened after the human reported failed publish job
+  `102874382039` for merged `2.0.0-snapshot.10`. Public job metadata proves the
+  isolated Lerna publication step failed after preparation succeeded. Public npm
+  metadata proves a partial release: 13 packages reached `snapshot.10`, while
+  `client-node`, `deployment-gce`, `deployment-gke`, `server`, and `testing`
+  remained at `snapshot.8`; those five had previously published through the same
+  trusted workflow and repository. The current workflow can select missing
+  packages on a later run but makes no bounded retry in the merge-triggered run.
+  Prepared an architecture check using the existing requirements-splitter role,
+  explicitly dispatched as `gpt-5.6-sol` / high with no inherited conversation
+  turns, followed by the existing implementer role as `gpt-5.6-terra` / medium.
+  Neither role may spawn sub-agents; immutable role configuration is the available
+  runtime-profile evidence.
 
 ## Decisions
 
