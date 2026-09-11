@@ -14,11 +14,12 @@ Reviewer sub-agents: Existing performance/reliability, style/maintainability,
 TypeScript/API, documentation, and final security reviewer roles
 Implementation commits: authoritative range `31cfe4f0b..HEAD` on
 `fix-delivery-identity-history-correctness`; independent-review correction
-checkpoints through `329446c87` are pushed to `origin`.
+checkpoints through `2617fdeb5` are pushed to `origin`.
 Last release-verified implementation HEAD: `47c77cde6`; this evidence predates
 the current correction cycle and must be refreshed before closure.
-Current pushed correction HEAD: `329446c87`; correction re-review and final
-verification are in progress.
+Last pushed behavior/documentation correction HEAD: `2617fdeb5`. Later
+task-record-only commits may follow without changing that implementation checkpoint.
+Final verification is in progress.
 
 Task classification: High-risk
 Classification reason: the corrections affect new-signal identity, generated
@@ -311,6 +312,13 @@ verification and review may run concurrently only at stable boundaries.
   passed 54/54 focused tests and all static gates; `329446c87` is pushed. Fresh
   TypeScript/API re-review returned clean. Documentation re-review requested one
   remaining remote-cleanup qualification and this checkpoint update.
+- `2026-09-11 01:47 WEST`: Qualified server cleanup documentation: direct local
+  storage has provider-atomic exact removal, while remote cleanup reads and
+  compares before a separate best-effort removal request. API-documentation and
+  audience checks passed; `2617fdeb5` is pushed. A final fresh reliability review
+  is clean after withdrawing an incorrect response-loss concern: committed remote
+  admission suppresses only an already-proven retained duplicate, while an
+  uncommitted write leaves the row pending.
 
 ## Decisions
 
