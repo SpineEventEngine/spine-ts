@@ -977,3 +977,14 @@ Correction evidence recorded 2026-09-11:
   command `pnpm exec vitest run packages/delivery-client/test/remote-inbox-direct.test.ts packages/server/test/repository/repository-routing.test.ts packages/server/test/runtime/standalone-handler-runtime.test.ts --maxWorkers=1`
   passed 287 tests in 3 files. No cache-identity or production/public-export
   changes were made.
+
+Correction commit `6c92595fc` was pushed to the official feature branch.
+Affected-lane re-review was dispatched to the same independent, initially
+zero-context roles: `/root/fresh_delivery_reliability_review`, existing
+performance/reliability reviewer at explicit `gpt-5.6-terra` / `high` for
+remote logical paging; `/root/fresh_fixture_style_review`, existing
+style/maintainability reviewer at explicit `gpt-5.6-terra` / `high` for fixture
+domain roles and readability; and `/root/fresh_delivery_api_review`, existing
+TypeScript/API documentation reviewer at explicit `gpt-5.6-terra` / `high` for
+generated types and public/package boundaries. They may not edit files or
+spawn sub-agents.
