@@ -14,10 +14,10 @@ Reviewer sub-agents: Existing performance/reliability, style/maintainability,
 TypeScript/API, documentation, and final security reviewer roles
 Implementation commits: authoritative range `31cfe4f0b..HEAD` on
 `fix-delivery-identity-history-correctness`; independent-review correction
-checkpoints through `0cade9d46` are pushed to `origin`.
+checkpoints through `329446c87` are pushed to `origin`.
 Last release-verified implementation HEAD: `47c77cde6`; this evidence predates
 the current correction cycle and must be refreshed before closure.
-Current pushed correction HEAD: `9e5ed6718`; correction re-review and final
+Current pushed correction HEAD: `329446c87`; correction re-review and final
 verification are in progress.
 
 Task classification: High-risk
@@ -305,6 +305,12 @@ verification and review may run concurrently only at stable boundaries.
   (`gpt-5.6-terra`, high), and documentation (`gpt-5.6-luna`, medium). These
   existing read-only reviewer roles may not spawn sub-agents; immutable role
   configuration is the available runtime-profile evidence.
+- `2026-09-11 01:44 WEST`: Reliability re-review found a final successful-return
+  deadline gap after page scanning. The existing implementer added per-candidate
+  checks and a final check before every pending-row return. Independent acceptance
+  passed 54/54 focused tests and all static gates; `329446c87` is pushed. Fresh
+  TypeScript/API re-review returned clean. Documentation re-review requested one
+  remaining remote-cleanup qualification and this checkpoint update.
 
 ## Decisions
 
