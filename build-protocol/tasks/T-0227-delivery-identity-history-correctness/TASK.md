@@ -300,6 +300,11 @@ verification and review may run concurrently only at stable boundaries.
   ESLint, Prettier, and diff hygiene. Documentation review corrections passed
   API-documentation and audience checks. Commits `9e83f43f0` and `9e5ed6718`
   are pushed to `origin`.
+- `2026-09-11 01:40 WEST`: Prepared the post-correction review with no inherited
+  turns: performance/reliability (`gpt-5.6-terra`, high), TypeScript/API
+  (`gpt-5.6-terra`, high), and documentation (`gpt-5.6-luna`, medium). These
+  existing read-only reviewer roles may not spawn sub-agents; immutable role
+  configuration is the available runtime-profile evidence.
 
 ## Decisions
 
