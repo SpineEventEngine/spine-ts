@@ -17,8 +17,8 @@ Implementation commits: authoritative range `31cfe4f0b..HEAD` on
 checkpoints through `0cade9d46` are pushed to `origin`.
 Last release-verified implementation HEAD: `47c77cde6`; this evidence predates
 the current correction cycle and must be refreshed before closure.
-Current pushed correction HEAD: `0cade9d46`; admission-budget and documentation
-corrections are in progress.
+Current pushed correction HEAD: `9e5ed6718`; correction re-review and final
+verification are in progress.
 
 Task classification: High-risk
 Classification reason: the corrections affect new-signal identity, generated
@@ -290,6 +290,16 @@ verification and review may run concurrently only at stable boundaries.
   `gpt-5.6-terra`, medium, with sole ownership of the affected delivery sources
   and focused tests. The implementer may not spawn sub-agents. Runtime metadata
   beyond the immutable configured role/profile is unavailable.
+- `2026-09-11 01:38 WEST`: Accepted the implementation batch after one returned
+  correction: abort/expiry must reject rather than use `undefined`, because
+  `undefined` means retained-duplicate suppression to the delivery loop. Local
+  and remote admission now share one admission-measured budget, stop before
+  further I/O, preserve an `Error` abort reason, reject invalid timeout values,
+  and pass decreasing remaining time to remote reads and the delivered upsert.
+  Independent acceptance passed 52/52 focused tests, TypeScript tooling, TSDoc,
+  ESLint, Prettier, and diff hygiene. Documentation review corrections passed
+  API-documentation and audience checks. Commits `9e83f43f0` and `9e5ed6718`
+  are pushed to `origin`.
 
 ## Decisions
 
