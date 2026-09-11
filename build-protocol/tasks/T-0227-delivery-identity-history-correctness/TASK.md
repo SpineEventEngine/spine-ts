@@ -1087,3 +1087,12 @@ trusted-publishing provenance, logging, dependency, and public/wire boundaries.
 The final security review is clean. It found no release-blocking issue in the
 reviewed identity, delivery, history, fixture/tooling, provenance, logging,
 dependency, or public/wire behavior.
+
+Final release verification passed after the private fixture build correction.
+`pnpm verify:release` passed every release gate and all 4,663 tests in 290 test
+files with one Vitest worker. The clean managed child-process scenarios passed,
+confirming that plain Node can load the compiled private fixture modules. Total
+coverage was 93.22% statements, 90.06% branches, 92.79% functions, and 94.37%
+lines. `node scripts/release-cli.mjs prepare --check` also passed, packing all
+18 public packages at `2.0.0-snapshot.11` and installing them together in a
+clean consumer project.
