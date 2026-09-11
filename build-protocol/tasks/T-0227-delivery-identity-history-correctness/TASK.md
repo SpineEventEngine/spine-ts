@@ -685,6 +685,14 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   IDs. The correction keeps patch integrity checks while replacing the private
   runtime assertions with a simulated Rekor 409/GET behavior test, makes the
   retirement steps consistent, and records all dispatched agent IDs.
+- Fresh correction re-review dispatch at `ffd50900d`: existing
+  performance/reliability reviewer role, explicitly `gpt-5.6-terra` / `high`,
+  canonical agent ID `/root/provenance_reliability_rereview`; existing
+  style/maintainability reviewer role, explicitly `gpt-5.6-terra` / `high`,
+  canonical agent ID `/root/provenance_style_rereview`; and existing
+  documentation reviewer role, explicitly `gpt-5.6-luna` / `medium`, canonical
+  agent ID `/root/provenance_docs_rereview`. Each receives no inherited
+  conversation turns and may not spawn sub-agents.
 
 - `2026-09-11 11:31 WEST`: Restarted the publication investigation after
   reverting the incorrect retry and process-supervision design in `eb4c60ae9`.
