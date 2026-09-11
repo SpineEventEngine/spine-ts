@@ -1250,3 +1250,10 @@ index/repository 33/33, Spine services 114/114, repository routing 265/265,
 and final facade consumers 96/96. Intentional entity state-subscription tests
 remain because they exercise Spine state-update routing, not application Event
 delivery.
+
+Affected-lane re-review at `b75811efd` is assigned to the same second-wave
+style/maintainability and TypeScript/API documentation reviewer instances,
+whose explicit immutable profiles are `gpt-5.6-terra` / `high`. They remain
+read-only and may not spawn sub-agents. The release/reliability lane is not
+reopened because its clean Sigstore/workspace findings were not materially
+changed by the server test-fixture consumer migration.
