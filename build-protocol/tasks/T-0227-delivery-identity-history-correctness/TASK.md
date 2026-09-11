@@ -1210,3 +1210,12 @@ workflow, copyright, package metadata, and release policy. Additional direct
 schema-migration suites passed at each slice, including repository routing
 265/265, Spine services 114/114, bounded context 79/79, entity transitions
 58/58, Stand 61/61, and handler bus/metadata suites.
+
+Second fresh zero-context review of the complete branch at `973229382` is
+assigned to new instances of the existing style/maintainability,
+TypeScript/API documentation, and performance/reliability reviewer roles. Each
+dispatch explicitly uses `gpt-5.6-terra` / `high`, inherits no conversation
+turns, is read-only, and prohibits child-agent dispatch. The review covers the
+whole merge-base diff with emphasis on the corrected fixture domains,
+role-separated Proto sources, direct generated-schema consumers, private
+workspace packages, and unmodified trusted-publishing dependency path.
