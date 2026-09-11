@@ -917,3 +917,32 @@ conversation turns and may not spawn sub-agents:
 The desktop surface exposes the immutable configured role/profile but not
 separate runtime self-introspection. Each dispatch supplied both required
 fields explicitly and matches the configured role profile.
+
+The first fresh review wave returned five proposed findings. Their verified
+dispositions are:
+
+- Accepted: `pnpm typecheck:tooling` fails because migrated tests retain
+  handwritten `Message<"...">` aliases whose unqualified type names conflict
+  with the generated package-qualified message types.
+- Accepted: a continued remote read with a logical page size of 1,000 fetches
+  the inclusive anchor plus 999 later rows. Returning those 999 rows directly
+  makes `Delivery` mistake a full remote wire page for exhaustion. Remote raw
+  reads must keep fetching until they fill the requested logical page or the
+  source is actually exhausted.
+- Accepted: the repository-routing test aliases a handler-registry command
+  schema instead of declaring its own domain command.
+- Accepted: repository-routing fixtures use `CommandId` and a command payload
+  as entity identifiers. Dedicated identifier messages must replace those
+  role substitutions while preserving the intended identifier-shape and
+  validation tests.
+- Rejected: adding context or tenant to the recent-delivery identity. Current
+  Spine JVM `DeliveredMessagesCache` is one cache per `Delivery`; that delivery
+  may serve multiple bounded contexts and tenants, and `DispatchingId` contains
+  only the signal ID and complete Inbox target. Adding scope would diverge from
+  the binding implementation. Spine-generated signal IDs provide the global
+  signal identity expected by this policy.
+
+The API reviewer also confirmed that the new schemas remain fixture-local:
+production Proto output, public package exports, and wire behavior are
+unchanged. Its API documentation check and 118 focused delivery/client tests
+passed.
