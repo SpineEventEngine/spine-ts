@@ -946,3 +946,12 @@ The API reviewer also confirmed that the new schemas remain fixture-local:
 production Proto output, public package exports, and wire behavior are
 unchanged. Its API documentation check and 118 focused delivery/client tests
 passed.
+
+Review-correction assignment at `8d7f48634`:
+`/root/fix_review_correction_batch`, existing implementer role, explicitly
+`gpt-5.6-terra` / `medium`, no inherited conversation turns, and no child-agent
+dispatch. Its bounded paths are the remote Inbox adapter and focused tests,
+repository-routing fixture Proto sources/generated imports and tests, and the
+standalone handler runtime fixture types. It may not change the accepted JVM
+deduplication identity, public APIs, production Proto schemas, or introduce
+publication/delivery retries, extra timeouts, or encoded fixture source.
