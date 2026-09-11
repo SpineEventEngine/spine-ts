@@ -1,9 +1,10 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: In progress — npm provenance correction
+Status: Complete
 Start: `2026-09-10 16:26 WEST`
 Initial closure: `2026-09-10 20:06 WEST`
 Final closure: `2026-09-11 02:19 WEST`
+Provenance correction closure: `2026-09-11 12:11 WEST`
 Baseline commit: `6d64848e0`
 Task log path: `build-protocol/tasks/T-0227-delivery-identity-history-correctness/TASK.md`
 Branch: `fix-delivery-identity-history-correctness`
@@ -19,7 +20,7 @@ checkpoints through `8315b4e64` are pushed to `origin`.
 Last release-verified implementation HEAD: `9f1bdf057`.
 Last pushed behavior/documentation correction HEAD: `8315b4e64`. Later
 task-record-only commits may follow without changing that implementation checkpoint.
-Final verification for the provenance correction is pending.
+Final release-verified provenance implementation HEAD: `2240709c8`.
 
 ## Sigstore Provenance Correction Framing
 
@@ -698,6 +699,35 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   Documentation re-review was clean. The test now returns the exact posted
   Rekor record, asserts that exact canonical body is recovered, and closes the
   server from a setup-enclosing `finally` block.
+- Final affected-lane re-review dispatch at `2240709c8`: existing
+  performance/reliability reviewer role, explicitly `gpt-5.6-terra` / `high`,
+  canonical agent ID `/root/provenance_reliability_final`; and existing
+  style/maintainability reviewer role, explicitly `gpt-5.6-terra` / `high`,
+  canonical agent ID `/root/provenance_style_final`. Both receive no inherited
+  conversation turns and may not spawn sub-agents. Documentation is unchanged
+  from its clean re-review.
+- Final affected-lane re-reviews are clean. The documentation re-review was
+  already clean; performance/reliability and style/maintainability independently
+  confirmed that the exact-entry assertion and server cleanup resolve their
+  findings without adding new ones.
+- Final security-review dispatch at `2240709c8`: existing final security
+  reviewer role, explicitly `gpt-5.6-terra` / `high`, canonical agent ID
+  `/root/provenance_security_final`. It receives no inherited conversation turns
+  and may not spawn sub-agents.
+- Final security review is clean. It confirmed the patch keeps provenance
+  enabled, uses Sigstore's existing equivalent-entry lookup, and introduces no
+  publication retry, timeout, orchestration, or trusted-publishing bypass.
+- Bounded preflight passed with
+  `pnpm verify:task --no-coverage scripts/sigstore-provenance-patch.test.mjs`.
+  It ran generation, build/type, lint/policy, formatting, documentation/API,
+  release-readiness, and focused tests. Coverage is N/A because the changed
+  executable file is a pnpm patch to third-party JavaScript rather than an
+  instrumentable repository TypeScript source file.
+- GitHub Actions run
+  [`34591190167`](https://github.com/SpineEventEngine/spine-ts/actions/runs/34591190167)
+  passed for implementation commit `2240709c8` in 20m5s. It completed the
+  frozen install, `pnpm verify:release`, and
+  `node scripts/release-cli.mjs prepare --check`.
 
 - `2026-09-11 11:31 WEST`: Restarted the publication investigation after
   reverting the incorrect retry and process-supervision design in `eb4c60ae9`.
@@ -720,6 +750,6 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   implementer may not spawn sub-agents.
 
 The original delivery, identity, and history corrections were release-verified
-at `9f1bdf057`. The later npm provenance correction is still in progress in the
-human-selected current checkout without a separate worktree. No pull request or
-merge was created.
+at `9f1bdf057`; the npm provenance correction was release-verified at
+`2240709c8`. The work was completed in the human-selected current checkout
+without a separate worktree. No pull request or merge was created.
