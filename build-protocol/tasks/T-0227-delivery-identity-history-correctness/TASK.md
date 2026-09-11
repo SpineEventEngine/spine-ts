@@ -1,8 +1,9 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: In progress — independent-review corrections
+Status: Complete
 Start: `2026-09-10 16:26 WEST`
 Initial closure: `2026-09-10 20:06 WEST`
+Final closure: `2026-09-11 02:19 WEST`
 Baseline commit: `6d64848e0`
 Task log path: `build-protocol/tasks/T-0227-delivery-identity-history-correctness/TASK.md`
 Branch: `fix-delivery-identity-history-correctness`
@@ -15,11 +16,10 @@ TypeScript/API, documentation, and final security reviewer roles
 Implementation commits: authoritative range `31cfe4f0b..HEAD` on
 `fix-delivery-identity-history-correctness`; independent-review correction
 checkpoints through `8315b4e64` are pushed to `origin`.
-Last release-verified implementation HEAD: `47c77cde6`; this evidence predates
-the current correction cycle and must be refreshed before closure.
+Last release-verified implementation HEAD: `9f1bdf057`.
 Last pushed behavior/documentation correction HEAD: `8315b4e64`. Later
 task-record-only commits may follow without changing that implementation checkpoint.
-Final verification is in progress.
+Final verification is complete.
 
 Task classification: High-risk
 Classification reason: the corrections affect new-signal identity, generated
@@ -340,6 +340,10 @@ verification and review may run concurrently only at stable boundaries.
   internal wording in reader documentation. Those deterministic changes did not
   alter the reviewed runtime contracts. The complete restarted preflight passed
   all shared gates and 105/105 focused tests across six delivery suites.
+- `2026-09-11 02:19 WEST`: Final `pnpm verify:release` passed at `9f1bdf057`:
+  every release gate, 290/290 test files, 4,676/4,676 tests, and all global
+  coverage thresholds. The independent correction review is complete with no
+  open finding.
 
 ## Decisions
 
@@ -567,6 +571,13 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   Buf lint, generated cleanliness, release readiness, and 105/105 focused tests
   across six local/remote delivery suites. The profile intentionally used
   `--no-coverage`; the required release profile provides repository-wide coverage.
+- Final `pnpm verify:release` passed at `9f1bdf057`: 290 files and 4,676/4,676
+  tests; 93.22% statements, 90.06% branches, 92.77% functions, and 94.38% lines.
+  All Proto, generated build/tooling, lint, cleanup, TSDoc, copyright, formatting,
+  documentation, generated-cleanliness, logging-containment, production-dependency,
+  release-readiness, packaging, and consumer-install checks passed. Expected
+  volatile Stand registry warnings and two deprecated transitive dependencies
+  remained non-failing.
 
 ## Open Risks And Follow-Up Routing
 
@@ -615,9 +626,9 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
 
 ## Integration Result
 
-The initial implementation was completed in the human-selected current checkout
-without a separate worktree and release-verified at `47c77cde6`. Version
-`2.0.0-snapshot.11` and all workspace manifests remain aligned. The task is now
-reopened for the independent-review corrections recorded above; a fresh complete
-review wave and release verification are required before this section can record a
-new final result. No pull request or merge was created.
+The implementation and independent-review corrections were completed in the
+human-selected current checkout without a separate worktree. The corrected tree
+was release-verified at `9f1bdf057`. Version `2.0.0-snapshot.11` and all workspace
+manifests remain aligned. Fresh zero-memory documentation and final security
+reviews are clean, all accepted findings are fixed, and the branch is ready for
+human review. No pull request or merge was created.
