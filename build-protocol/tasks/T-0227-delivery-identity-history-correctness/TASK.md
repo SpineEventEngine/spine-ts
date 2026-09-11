@@ -409,6 +409,13 @@ verification and review may run concurrently only at stable boundaries.
   missing-only retry path, and wrong tags or other ambiguous states fail closed.
   D-0117 and the release runbook now state the same rule. Controller regressions
   cover zero-plus-partial, zero-plus-wrong-tag, and zero-plus-complete.
+- `2026-09-11 10:42 WEST`: The review correction passed 40/40 focused release
+  tests, tooling typecheck, and diff hygiene, and was pushed as `e613d9583`.
+  Prepared a focused re-review of the substantively affected concerns using the
+  existing performance/reliability role as `gpt-5.6-terra` / high, the existing
+  style/maintainability role as `gpt-5.6-terra` / high, and the existing
+  documentation role as `gpt-5.6-luna` / medium. Each reviewer is read-only,
+  receives no inherited conversation turns, and may not spawn sub-agents.
 
 ## Decisions
 
