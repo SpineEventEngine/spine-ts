@@ -1,7 +1,7 @@
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -20,6 +20,55 @@ const option = (argv, name) => {
     return undefined;
   return argv[index + 1];
 };
+
+/**
+ * Supervises one publication process with a bounded deadline.
+ */
+export async function supervisePublicationProcess({
+  command,
+  args,
+  cwd,
+  timeoutMs,
+  forceKillGraceMs = 10_000,
+  spawnOptions = {},
+  waitForStart = Promise.resolve(),
+  onChild,
+}) {
+  const child = spawn(command, args, { cwd, stdio: "inherit", ...spawnOptions });
+  let timedOut = false;
+  let closed = false;
+  let forceKill;
+  let terminating = false;
+  const terminate = () => {
+    if (terminating || closed) return;
+    terminating = true;
+    child.kill("SIGTERM");
+    forceKill = globalThis.setTimeout(() => {
+      if (!closed) child.kill("SIGKILL");
+    }, forceKillGraceMs);
+  };
+  onChild?.({ child, terminate });
+  let timeout;
+  await waitForStart;
+  timeout = globalThis.setTimeout(() => {
+    timedOut = true;
+    terminate();
+  }, timeoutMs);
+  try {
+    const [status, signal] = await new Promise((resolveClose, rejectClose) => {
+      child.once("close", (...result) => {
+        closed = true;
+        resolveClose(result);
+      });
+      child.once("error", rejectClose);
+    });
+    if (timedOut) throw new Error("Lerna publication attempt timed out after " + timeoutMs + "ms");
+    return { status, signal };
+  } finally {
+    globalThis.clearTimeout(timeout);
+    globalThis.clearTimeout(forceKill);
+  }
+}
 
 export function prepareRelease({
   root,
@@ -120,7 +169,7 @@ export function createPublicationWorkspace({
 
 /**
  * Publishes an exact selection at most three times, allowing the registry to
- * converge after a nonzero Lerna result before selecting a fresh retry set.
+ * converge after each Lerna result before selecting a fresh retry set.
  */
 export async function recoverPublication({
   release,
@@ -147,14 +196,16 @@ export async function recoverPublication({
       throw new Error("registry selection is not a non-empty unique release-package subset");
     return names;
   };
-  let active;
+  const abortController = new globalThis.AbortController();
+  let terminate = () => {};
   let stopped = false;
+  let stopCode;
   const stop = (code) => {
     if (stopped) return;
     stopped = true;
-    if (active !== undefined) remove(active);
-    cleanup();
-    exit?.(code);
+    stopCode = code;
+    abortController.abort();
+    terminate();
   };
   const unregister = ["SIGINT", "SIGTERM"].map(
     (signal) => registerSignal?.(signal, () => stop(signal === "SIGINT" ? 130 : 143)) ?? (() => {}),
@@ -166,15 +217,23 @@ export async function recoverPublication({
     selectedNames = validateSelection(selectedNames);
     for (let attempt = 0; attempt < 3; attempt++) {
       const destination = mkdtemp("spine-lerna-publication-");
-      active = destination;
       try {
         await createWorkspace({ destination, selectedNames });
-        last = await runLerna({ destination, selectedNames });
+        if (stopped) break;
+        last = await runLerna({
+          destination,
+          selectedNames,
+          onChild: (control) => {
+            terminate = control.terminate;
+          },
+        });
       } finally {
         remove(destination);
-        active = undefined;
+        terminate = () => {};
       }
-      await wait(delays[attempt]);
+      if (stopped) break;
+      await wait(delays[attempt], abortController.signal);
+      if (stopped) break;
       const inspected = await inspect(release);
       if (inspected.state === "complete") return { ...last, recovered: true };
       selectedNames = validateSelection(inspected.missingNames, inspected.state);
@@ -182,6 +241,7 @@ export async function recoverPublication({
   } finally {
     for (const removeHandler of unregister) removeHandler();
     cleanup();
+    if (stopCode !== undefined) exit?.(stopCode);
   }
   throw new Error(
     "publication recovery exhausted; remaining packages: " +
@@ -255,11 +315,23 @@ export async function main({ argv = process.argv, dependencies = {} } = {}) {
       release,
       initialNames,
       inspect: (expected) => inspectRegistryReleaseState(expected, fetchResponse),
-      wait: (milliseconds) =>
-        new Promise((resolveWait) => globalThis.setTimeout(resolveWait, milliseconds)),
+      wait: (milliseconds, signal) =>
+        new Promise((resolveWait) => {
+          if (signal.aborted) return resolveWait();
+          const timer = globalThis.setTimeout(done, milliseconds);
+          const onAbort = () => {
+            globalThis.clearTimeout(timer);
+            done();
+          };
+          function done() {
+            signal.removeEventListener("abort", onAbort);
+            resolveWait();
+          }
+          signal.addEventListener("abort", onAbort, { once: true });
+        }),
       createWorkspace: ({ destination, selectedNames }) =>
         createWorkspace({ destination, selectedNames }),
-      runLerna: ({ destination }) => {
+      runLerna: ({ destination, onChild }) => {
         const args = [
           "publish",
           "from-package",
@@ -279,11 +351,13 @@ export async function main({ argv = process.argv, dependencies = {} } = {}) {
           summary,
           "--yes",
         ];
-        const result = spawnSync(join(root, "node_modules/.bin/lerna"), args, {
+        return supervisePublicationProcess({
+          command: join(root, "node_modules/.bin/lerna"),
+          args,
           cwd: destination,
-          stdio: "inherit",
+          timeoutMs: 20 * 60_000,
+          onChild,
         });
-        return { status: result.status, signal: result.signal };
       },
       mkdtemp: () => {
         const workspace = join(parent, "workspace-" + Math.random().toString(36).slice(2));

@@ -710,6 +710,20 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
 
 ## Integration Result
 
+- `2026-09-11 10:48 WEST`: Replaced the synchronous Lerna launch with an
+  asynchronously supervised child. SIGINT/SIGTERM now first terminate that
+  child; cleanup and conventional exit follow its close event. Each attempt has
+  a 20-minute deadline appropriate for the 18-package sequential publication.
+  Both cancellation and deadline expiry use one idempotent termination path:
+  SIGTERM followed by SIGKILL after a 10-second grace period if required.
+  Focused real-child tests use a readiness handshake and a child that ignores
+  SIGTERM, then prove SIGKILL and active/parent cleanup after close. Additional
+  regressions prove cancellation before child launch or during convergence
+  prevents publication, retry, and registry inspection, and clears the real
+  delay timer. The controller TSDoc now correctly says every result receives a
+  convergence check. Final focused acceptance passed 44/44 tests across four
+  release suites, tooling typecheck, TSDoc, formatting, and diff hygiene.
+
 The implementation and independent-review corrections were completed in the
 human-selected current checkout without a separate worktree. The corrected tree
 was release-verified at `9f1bdf057`. Version `2.0.0-snapshot.11` and all workspace

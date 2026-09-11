@@ -10,6 +10,7 @@ import {
   prepareRelease,
   recoverPublication,
   stageReleaseContents,
+  supervisePublicationProcess,
 } from "./release-cli.mjs";
 import { frameworkPackageNames } from "./package-artifacts.mjs";
 
@@ -145,6 +146,7 @@ describe("release CLI", () => {
   it("cleans the publication parent for SIGINT and preserves its exit code", async () => {
     const handlers = new Map();
     const removed = [];
+    let parentCleanups = 0;
     await expect(
       recoverPublication({
         release: { packages: [{ name: "@synthetic/base" }] },
@@ -155,6 +157,7 @@ describe("release CLI", () => {
         runLerna: async () => handlers.get("SIGINT")(),
         mkdtemp: () => "/temporary/workspace",
         remove: (directory) => removed.push(directory),
+        cleanup: () => parentCleanups++,
         registerSignal: (signal, handler) => {
           handlers.set(signal, handler);
           return () => {};
@@ -166,6 +169,107 @@ describe("release CLI", () => {
       }),
     ).rejects.toThrow("signal exit");
     expect(removed).toContain("/temporary/workspace");
+    expect(removed.filter((directory) => directory === "/temporary/workspace")).toHaveLength(1);
+    expect(parentCleanups).toBe(1);
+  });
+
+  it("terminates a real running child before signal cleanup", async () => {
+    const handlers = new Map();
+    const removed = [];
+    const wait = vi.fn();
+    const inspect = vi.fn(async () => ({ state: "complete", missingNames: [] }));
+    let closed = false;
+    let closeSignal;
+    const completion = recoverPublication({
+      release: { packages: [{ name: "@synthetic/base" }] },
+      initialNames: ["@synthetic/base"],
+      inspect,
+      wait,
+      createWorkspace: async () => {},
+      runLerna: ({ onChild }) =>
+        supervisePublicationProcess({
+          command: process.execPath,
+          args: [
+            "-e",
+            "process.on('SIGTERM', () => {}); process.stdout.write('ready\\n'); setInterval(() => {}, 1000)",
+          ],
+          cwd: process.cwd(),
+          timeoutMs: 5_000,
+          forceKillGraceMs: 20,
+          spawnOptions: { stdio: "pipe" },
+          onChild: ({ child, terminate }) => {
+            onChild({ child, terminate });
+            child.once("close", (_status, signal) => {
+              closed = true;
+              closeSignal = signal;
+            });
+            child.stdout.once("data", () => handlers.get("SIGINT")());
+          },
+        }),
+      mkdtemp: () => "/temporary/workspace",
+      remove: (directory) => removed.push(directory),
+      cleanup: () => removed.push("/temporary/parent"),
+      registerSignal: (signal, handler) => {
+        handlers.set(signal, handler);
+        return () => {};
+      },
+      exit: (code) => {
+        expect(code).toBe(130);
+        expect(closed).toBe(true);
+        throw new Error("signal exit");
+      },
+    });
+    await expect(completion).rejects.toThrow("signal exit");
+    expect(removed).toEqual(["/temporary/workspace", "/temporary/parent"]);
+    expect(wait).not.toHaveBeenCalled();
+    expect(inspect).not.toHaveBeenCalled();
+    expect(closeSignal).toBe("SIGKILL");
+  });
+
+  it("terminates and cleans a stalled publication child at its deadline", async () => {
+    const removed = [];
+    let closed = false;
+    let closeSignal;
+    await expect(
+      recoverPublication({
+        release: { packages: [{ name: "@synthetic/base" }] },
+        initialNames: ["@synthetic/base"],
+        inspect: async () => ({ state: "complete", missingNames: [] }),
+        wait: async () => {},
+        createWorkspace: async () => {},
+        runLerna: ({ onChild }) =>
+          (() => {
+            let ready;
+            const readyPromise = new Promise((resolveReady) => (ready = resolveReady));
+            return supervisePublicationProcess({
+              command: process.execPath,
+              args: [
+                "-e",
+                "process.on('SIGTERM', () => {}); process.stdout.write('ready\\n'); setInterval(() => {}, 1000)",
+              ],
+              cwd: process.cwd(),
+              timeoutMs: 20,
+              forceKillGraceMs: 20,
+              spawnOptions: { stdio: "pipe" },
+              onChild: ({ child, terminate }) => {
+                onChild({ child, terminate });
+                child.stdout.once("data", () => ready());
+                child.once("close", (_status, signal) => {
+                  closed = true;
+                  closeSignal = signal;
+                });
+              },
+              waitForStart: readyPromise,
+            });
+          })(),
+        mkdtemp: () => "/temporary/workspace",
+        remove: (directory) => removed.push(directory),
+        cleanup: () => removed.push("/temporary/parent"),
+      }),
+    ).rejects.toThrow("timed out");
+    expect(closed).toBe(true);
+    expect(closeSignal).toBe("SIGKILL");
+    expect(removed).toEqual(["/temporary/workspace", "/temporary/parent"]);
   });
 
   it("rejects invalid initial and delayed partial selections before Lerna", async () => {
@@ -183,6 +287,77 @@ describe("release CLI", () => {
     await expect(
       recoverPublication({ ...base, initialNames: ["@synthetic/base"] }),
     ).rejects.toThrow("selection");
+    expect(runLerna).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels after workspace preparation before starting Lerna", async () => {
+    const handlers = new Map();
+    const runLerna = vi.fn();
+    const wait = vi.fn();
+    const inspect = vi.fn();
+    const removed = [];
+    await expect(
+      recoverPublication({
+        release: { packages: [{ name: "@synthetic/base" }] },
+        initialNames: ["@synthetic/base"],
+        createWorkspace: async () => handlers.get("SIGINT")(),
+        runLerna,
+        wait,
+        inspect,
+        mkdtemp: () => "/temporary/workspace",
+        remove: (directory) => removed.push(directory),
+        cleanup: () => removed.push("/temporary/parent"),
+        registerSignal: (signal, handler) => {
+          handlers.set(signal, handler);
+          return () => {};
+        },
+        exit: (code) => {
+          expect(code).toBe(130);
+          throw new Error("signal exit");
+        },
+      }),
+    ).rejects.toThrow("signal exit");
+    expect(runLerna).not.toHaveBeenCalled();
+    expect(wait).not.toHaveBeenCalled();
+    expect(inspect).not.toHaveBeenCalled();
+    expect(removed).toEqual(["/temporary/workspace", "/temporary/parent"]);
+  });
+
+  it("cancels during convergence waiting without inspecting or retrying", async () => {
+    const handlers = new Map();
+    const runLerna = vi.fn(async () => ({ status: 1, signal: null }));
+    const inspect = vi.fn();
+    await expect(
+      recoverPublication({
+        release: { packages: [{ name: "@synthetic/base" }] },
+        initialNames: ["@synthetic/base"],
+        createWorkspace: async () => {},
+        runLerna,
+        wait: async (_milliseconds, signal) =>
+          await new Promise((resolveWait) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                expect(signal.aborted).toBe(true);
+                resolveWait();
+              },
+              { once: true },
+            );
+            handlers.get("SIGINT")();
+          }),
+        inspect,
+        mkdtemp: () => "/temporary/workspace",
+        remove: () => {},
+        registerSignal: (signal, handler) => {
+          handlers.set(signal, handler);
+          return () => {};
+        },
+        exit: () => {
+          throw new Error("signal exit");
+        },
+      }),
+    ).rejects.toThrow("signal exit");
+    expect(inspect).not.toHaveBeenCalled();
     expect(runLerna).toHaveBeenCalledTimes(1);
   });
 
