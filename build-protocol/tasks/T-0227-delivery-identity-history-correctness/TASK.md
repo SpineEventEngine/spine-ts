@@ -319,6 +319,16 @@ verification and review may run concurrently only at stable boundaries.
   is clean after withdrawing an incorrect response-loss concern: committed remote
   admission suppresses only an already-proven retained duplicate, while an
   uncommitted write leaves the row pending.
+- `2026-09-11 01:51 WEST`: A new documentation-reviewer invocation with no
+  inherited conversation turns returned clean. It independently confirmed the
+  signal-ID generation and preservation wording, typed-target retained
+  deduplication, Aggregate history behavior, Projection handler rejection,
+  local-versus-remote cleanup guarantees, compatibility statement, and checkpoint
+  convention. Tooling typecheck, TSDoc, API-documentation, audience, and diff
+  checks also passed. Prepared the final security review with no inherited turns,
+  explicitly dispatching the existing security reviewer role as
+  `gpt-5.6-terra` / high. The reviewer is read-only and may not spawn sub-agents;
+  immutable role configuration is the available runtime-profile evidence.
 
 ## Decisions
 
@@ -579,6 +589,8 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   reconfirmed durable-before-acknowledgement behavior, no endpoint dispatch for suppressed
   duplicates, bounded local/remote admission, coalesced Admin transitions, and unchanged
   tenant/session/shard boundaries.
+- Fresh post-correction documentation review: clean. The reviewer used no inherited
+  conversation turns and confirmed all changed behavior claims and task evidence.
 
 ## Integration Result
 
