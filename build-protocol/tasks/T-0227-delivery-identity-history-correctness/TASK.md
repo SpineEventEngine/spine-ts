@@ -37,6 +37,14 @@ Final verification for the provenance correction is pending.
   no child assignment or review role is active in this bounded implementation
   context. Runtime profile is configured by the dispatch surface and cannot be
   independently introspected here.
+- Review dispatch at implementation commit `154f3497a`: existing
+  performance/reliability reviewer role, explicitly `gpt-5.6-terra` / `high`;
+  existing style/maintainability reviewer role, explicitly `gpt-5.6-terra` /
+  `high`; and existing documentation reviewer role, explicitly
+  `gpt-5.6-luna` / `medium`. Each review receives no inherited conversation
+  turns and may not spawn sub-agents. TypeScript/API review is N/A because the
+  correction changes no TypeScript declaration, public API, wire contract, or
+  serialized data. Final security review follows correction convergence.
 
 Task classification: High-risk
 Classification reason: the corrections affect new-signal identity, generated
