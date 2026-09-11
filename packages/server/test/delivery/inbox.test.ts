@@ -26,6 +26,24 @@ import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Inbox", () => {
+  it("forwards admission cancellation to direct storage", async () => {
+    const factory = new InMemoryStorageFactory();
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "T0227-admit", multitenant: false },
+        storageFactory: factory,
+      }),
+    );
+    const message = createMessage("cancelled", "signal", 1n);
+    const controller = new AbortController();
+    const reason = new Error("Admission was cancelled by the caller.");
+    await inbox.storage.write(message);
+    controller.abort(reason);
+
+    await expect(inbox.admit(message, { signal: controller.signal })).rejects.toBe(reason);
+    await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "TO_DELIVER" });
+  });
+
   it("removes an eligible exact delivered snapshot only while its shard session is current", async () => {
     const factory = new InMemoryStorageFactory();
     const context = { name: "T0191", multitenant: false } as const;

@@ -332,6 +332,71 @@ describe("direct InboxMessage storage", () => {
     await expect(storage.admit(duplicate)).resolves.toBeUndefined();
   });
 
+  it("stops admission after cancellation during a delivered page without mutating the pending row", async () => {
+    const controller = new AbortController();
+    const reason = new Error("Admission was cancelled by the caller.");
+    const pending = createMessage("pending", "signal", 1n);
+    const firstPage = [
+      InboxRecords.write({
+        ...createMessage("first", "other-1", 2n),
+        status: "DELIVERED" as const,
+      }),
+      InboxRecords.write({
+        ...createMessage("second", "other-2", 3n),
+        status: "DELIVERED" as const,
+      }),
+    ];
+    const handle = {
+      atomicCompareAndSet: true,
+      read: vi.fn(() => Promise.resolve(InboxRecords.write(pending))),
+      queryEntries: vi.fn(() => {
+        controller.abort(reason);
+        return Promise.resolve(
+          firstPage.map((record) => {
+            if (record.id === undefined) throw new Error("Expected delivered row ID.");
+            return { id: record.id, record };
+          }),
+        );
+      }),
+      compareAndSet: vi.fn(),
+      close: vi.fn(),
+    };
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: { createRecordStorage: () => handle } as never,
+    });
+
+    await expect(storage.admit(pending, { signal: controller.signal })).rejects.toBe(reason);
+    expect(handle.queryEntries).toHaveBeenCalledTimes(1);
+    expect(handle.compareAndSet).not.toHaveBeenCalled();
+  });
+
+  it("stops admission at its deadline after a delivered page without mutating the pending row", async () => {
+    const pending = createMessage("pending", "signal", 1n);
+    let now = 0;
+    const handle = {
+      atomicCompareAndSet: true,
+      read: vi.fn(() => Promise.resolve(InboxRecords.write(pending))),
+      queryEntries: vi.fn(() => {
+        now = 1;
+        return Promise.resolve([]);
+      }),
+      compareAndSet: vi.fn(),
+      close: vi.fn(),
+    };
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: { createRecordStorage: () => handle } as never,
+      now: () => new Date(now),
+    });
+
+    await expect(storage.admit(pending, { timeoutMs: 1 })).rejects.toThrow(
+      "Delivery admission deadline expired.",
+    );
+    expect(handle.queryEntries).toHaveBeenCalledTimes(1);
+    expect(handle.compareAndSet).not.toHaveBeenCalled();
+  });
+
   it("fails closed when the bounded exact delivered-key scan cannot reach exhaustion", async () => {
     const duplicate = createMessage("duplicate", "signal", 1_001n);
     const expired = [

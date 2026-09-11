@@ -103,10 +103,14 @@ export class Inbox {
    * Admits one pending row unless retained delivery already recorded the same signal at the same typed target.
    *
    * @param message Supplies the pending row snapshot.
+   * @param options Propagates cancellation and a delivery deadline.
    * @returns The admitted row, or `undefined` when retained delivery suppresses it.
    */
-  admit(message: InboxMessage): Promise<InboxMessage | undefined> {
-    return this.storage.admit(message);
+  admit(
+    message: InboxMessage,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxMessage | undefined> {
+    return this.storage.admit(message, options);
   }
 
   /**

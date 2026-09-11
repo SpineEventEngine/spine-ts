@@ -153,9 +153,34 @@ export class RemoteInbox implements DeliveryInbox {
     message: InboxMessage,
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined> {
+    if (
+      options?.timeoutMs !== undefined &&
+      (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 0)
+    )
+      throw new TypeError("Delivery operation timeout is invalid.");
+    const deadline = options?.timeoutMs === undefined ? undefined : Date.now() + options.timeoutMs;
+    const operation = () => {
+      const now = Date.now();
+      if (options?.signal?.aborted)
+        throw options.signal.reason instanceof Error
+          ? options.signal.reason
+          : new Error("Delivery admission was aborted.");
+      if (deadline !== undefined && now >= deadline)
+        throw new Error("Delivery admission deadline expired.");
+      return {
+        options:
+          deadline === undefined
+            ? options
+            : {
+                ...(options?.signal === undefined ? {} : { signal: options.signal }),
+                timeoutMs: deadline - now,
+              },
+      };
+    };
     let after: InboxReadOptions["after"];
     let scanned = 0;
     for (;;) {
+      const read = operation();
       const remaining = 1_000 - scanned;
       const pageSize =
         after === undefined
@@ -164,9 +189,9 @@ export class RemoteInbox implements DeliveryInbox {
       const page = await this.client.readPage(message.shard, {
         pageSize,
         ...(after === undefined ? {} : { sinceWhen: RemoteValues.pageAnchor(after.whenReceived) }),
-        ...(options?.signal === undefined ? {} : { signal: options.signal }),
-        ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+        ...read.options,
       });
+      operation();
       const start = after === undefined ? 0 : RemoteValues.exactAfter(page, after);
       const raw = page.slice(start);
       if (after !== undefined && page.length === pageSize && raw.length === 0)
@@ -187,7 +212,8 @@ export class RemoteInbox implements DeliveryInbox {
           RemoteValues.sameAny(candidate.inboxId.targetId, message.inboxId.targetId) &&
           (candidate.keepUntil === undefined || candidate.keepUntil.getTime() > Date.now())
         ) {
-          await this.client.writeOne({ ...message, status: "DELIVERED" }, options);
+          const write = operation();
+          await this.client.writeOne({ ...message, status: "DELIVERED" }, write.options);
           return undefined;
         }
         if (scanned === 1_000) throw new DeliveryPagingError();
@@ -228,7 +254,7 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Best-effort removes an expired delivered row while its exclusive shard session remains current.
+   * Removes an expired delivered row while its exclusive shard session remains current.
    *
    * The remote API exposes a read followed by a removal call, not an atomic
    * compare-and-delete operation. Another writer may therefore change the row

@@ -110,7 +110,7 @@ export interface DeliveryInbox {
   ): Promise<InboxMessage | undefined>;
 
   /**
-   * Requests removal of one delivered snapshot while the supplied shard
+   * Removes one delivered snapshot while the supplied shard
    * session remains current.
    *
    * Built-in direct Inbox storage implements this through its provider-owned

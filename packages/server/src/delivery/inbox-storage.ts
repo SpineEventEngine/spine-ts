@@ -35,7 +35,7 @@ import {
 import { InboxRecords, inboxRecordSpec } from "./inbox-records.js";
 import { ShardIndex } from "./shard-index.js";
 import { shardSessionRecordSpec } from "./sharded-work-registry.js";
-import type { DeliveryWorkSession } from "./delivery-ports.js";
+import type { DeliveryOperationOptions, DeliveryWorkSession } from "./delivery-ports.js";
 
 const defaultReadLimit = 100;
 const maxReadLimit = 1_000;
@@ -225,20 +225,43 @@ export class InboxStorage {
    * Returns one exact pending row while the caller owns its shard.
    *
    * @param message Supplies the expected pending snapshot.
+   * @param options Propagates cancellation and a delivery deadline.
    * @returns The admitted row, or `undefined` when it is unavailable or duplicated.
    */
-  async admit(message: InboxMessage): Promise<InboxMessage | undefined> {
+  async admit(
+    message: InboxMessage,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxMessage | undefined> {
+    if (
+      options?.timeoutMs !== undefined &&
+      (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 0)
+    )
+      throw new TypeError("Delivery operation timeout is invalid.");
+    const deadline =
+      options?.timeoutMs === undefined ? undefined : Values.now(this.#now) + options.timeoutMs;
+    const checkActive = () => {
+      if (options?.signal?.aborted)
+        throw options.signal.reason instanceof Error
+          ? options.signal.reason
+          : new Error("Delivery admission was aborted.");
+      if (deadline !== undefined && Values.now(this.#now) >= deadline)
+        throw new Error("Delivery admission deadline expired.");
+    };
+    checkActive();
     const expected = InboxRecords.write(message);
     const id = Values.wireId(expected);
     const storage = this.#storage();
     try {
       Values.atomic(storage);
+      checkActive();
       const current = await storage.read(id);
+      checkActive();
       if (current === undefined || !Values.same(current, expected)) return undefined;
       const pending = InboxRecords.read(current, id);
       if (pending.status !== "TO_DELIVER") return undefined;
       let after: ReturnType<typeof Values.after> | undefined;
       for (let page = 0; page < maxDedupReadPages; page++) {
+        checkActive();
         const delivered = await storage.queryEntries({
           filters: [
             { column: "inbox_id", value: expected.inboxId },
@@ -249,6 +272,7 @@ export class InboxStorage {
           limit: dedupReadLimit,
           ...(after === undefined ? {} : { after }),
         });
+        checkActive();
         const rows = delivered.map((row) => InboxRecords.read(row.record, row.id));
         if (
           rows.some(
@@ -259,6 +283,7 @@ export class InboxStorage {
               (row.keepUntil === undefined || row.keepUntil.getTime() > Values.now(this.#now)),
           )
         ) {
+          checkActive();
           await storage.compareAndSet(
             id,
             current,

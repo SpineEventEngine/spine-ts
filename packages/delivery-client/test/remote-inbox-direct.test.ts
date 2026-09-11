@@ -198,6 +198,72 @@ describe("RemoteInbox direct behavior", () => {
     ).resolves.toMatchObject({ id: duplicate.id });
   });
 
+  it("stops admission after cancellation during a page without reading another page or retaining delivery", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const duplicate = domainMessage("duplicate");
+    const controller = new AbortController();
+    const reason = new Error("Admission was cancelled by the caller.");
+    client.readPage.mockImplementationOnce(() => {
+      controller.abort(reason);
+      return Promise.resolve([
+        { ...domainMessage("first"), signalId: "other-1" },
+        { ...domainMessage("second"), signalId: "other-2" },
+      ]);
+    });
+
+    await expect(inbox.admit(duplicate, { signal: controller.signal })).rejects.toBe(reason);
+    expect(client.readPage).toHaveBeenCalledTimes(1);
+    expect(client.writeOne).not.toHaveBeenCalled();
+  });
+
+  it("stops admission at its deadline after a page without reading another page or retaining delivery", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const duplicate = domainMessage("duplicate");
+    const now = vi
+      .spyOn(Date, "now")
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValue(1);
+    client.readPage.mockResolvedValueOnce([
+      { ...domainMessage("first"), signalId: "other-1" },
+      { ...domainMessage("second"), signalId: "other-2" },
+    ]);
+
+    await expect(inbox.admit(duplicate, { timeoutMs: 1 })).rejects.toThrow(
+      "Delivery admission deadline expired.",
+    );
+    expect(client.readPage).toHaveBeenCalledTimes(1);
+    expect(client.writeOne).not.toHaveBeenCalled();
+    now.mockRestore();
+  });
+
+  it("passes the remaining admission budget to its delivered read and upsert", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const duplicate = domainMessage("duplicate");
+    const delivered = { ...domainMessage("delivered"), status: "DELIVERED" as const };
+    const now = vi
+      .spyOn(Date, "now")
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(1)
+      .mockReturnValueOnce(2);
+    client.readPage.mockResolvedValueOnce([delivered]);
+
+    await expect(inbox.admit(duplicate, { timeoutMs: 5 })).resolves.toBeUndefined();
+    expect(client.readPage).toHaveBeenCalledWith(
+      ShardIndex.single(),
+      expect.objectContaining({ timeoutMs: 5 }),
+    );
+    expect(client.writeOne).toHaveBeenCalledWith(
+      expect.objectContaining({ id: duplicate.id, status: "DELIVERED" }),
+      { timeoutMs: 3 },
+    );
+    now.mockRestore();
+  });
+
   it.each([1, 2, 17, 1_000])(
     "finds a matching retained row at new raw candidate 1,000 with page size %i",
     async (pageSize) => {
