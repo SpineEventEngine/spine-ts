@@ -69,6 +69,9 @@ it("resolves its managed-host access seam outside the published package", async 
   const source = await readFile(childPath, "utf8");
 
   expect(source).toContain('from "../../test-fixtures/internal.mjs"');
+  expect(source).toContain(
+    'from "../../test-fixtures/dist/generated/entity-metadata/main_pb.js"',
+  );
 });
 
 it("starts concurrent managed fixtures on independent Coordinator ports", async () => {

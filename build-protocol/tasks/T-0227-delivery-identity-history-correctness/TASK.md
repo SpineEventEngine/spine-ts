@@ -982,6 +982,29 @@ Correction evidence recorded 2026-09-11:
   behavior. Targeted ESLint for the two corrected tests passed; the same
   three-file one-worker Vitest command passed 287 tests.
 
+- Runtime-build correction: private server, core, and testing fixture packages
+  now have composite TypeScript targets for their exported generated modules;
+  root build references and clean-output targets include their `dist` roots.
+  The managed external-events child imports the compiled server fixture module
+  directly, so plain Node no longer resolves an unbuilt `.js` specifier through
+  `schemas.ts`. Focused regressions first failed for missing fixture outputs and
+  the uncompiled import. `pnpm proto:generate`, `pnpm typecheck:build:generated`,
+  and one-worker Vitest for generated-clean, cleaner, and managed external
+  events passed 21 tests. No dynamic descriptors, Base64 fixtures, production
+state changes, commits, or pushes were introduced.
+
+The first converged `pnpm verify:release` run passed every non-test gate and
+then ran 4,662 tests. It exposed one stale generated-target expectation and a
+plain-Node runtime gap: Vitest resolves generated `.js` specifiers to generated
+`.ts` source, but the managed child requires compiled `.js`. Three subsequent
+managed-child failures were consequences of that missing runtime output. The
+correction adds composite build targets for all three private fixture packages,
+includes their `dist` roots in deterministic cleanup, imports the compiled
+server fixture in the child, and updates the complete generated-target
+expectation. The server fixture project explicitly references both its core and
+proto dependencies. After a clean generated build, the exact three-file
+failure set passes 21/21 tests with one worker.
+
 Correction commit `6c92595fc` was pushed to the official feature branch.
 Affected-lane re-review was dispatched to the same independent, initially
 zero-context roles: `/root/fresh_delivery_reliability_review`, existing
