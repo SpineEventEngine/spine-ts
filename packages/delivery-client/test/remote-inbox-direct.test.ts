@@ -198,7 +198,7 @@ describe("RemoteInbox direct behavior", () => {
     ).resolves.toMatchObject({ id: duplicate.id });
   });
 
-  it("stops admission after cancellation during a page without reading another page or retaining delivery", async () => {
+  it("stops after cancellation during a page without another read or retained delivery", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
     const duplicate = domainMessage("duplicate");
