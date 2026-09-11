@@ -25,3 +25,5 @@ allowBuilds:
   "@bufbuild/buf": true
   nx: false
   protobufjs: false
+patchedDependencies:
+  sigstore@4.1.1: patches/sigstore@4.1.1.patch

@@ -19,7 +19,24 @@ checkpoints through `8315b4e64` are pushed to `origin`.
 Last release-verified implementation HEAD: `9f1bdf057`.
 Last pushed behavior/documentation correction HEAD: `8315b4e64`. Later
 task-record-only commits may follow without changing that implementation checkpoint.
-Final verification is complete.
+Final verification for the provenance correction is pending.
+
+## Sigstore Provenance Correction Framing
+
+- `2026-09-11 11:45 WEST`: Classified the provenance correction as **standard**:
+  it changes the transitive Sigstore runtime configuration that Lerna uses for
+  trusted publication, plus its locked dependency metadata, deterministic
+  release check, and runbook. It does not change a public or serialized
+  framework contract, persistence, authentication, or the publication workflow
+  control flow. The bounded acceptance criteria are: pnpm declares and locks a
+  `sigstore@4.1.1` patch; Lerna/libnpmpublish resolves that patched runtime; and
+  its effective Rekor witness enables existing-entry fetch on equivalent-entry
+  conflict. No publication retry, recovery controller, subprocess supervision,
+  timeout, package orchestration, or provenance disablement is allowed.
+- Assignment: existing implementer role, explicitly `gpt-5.6-terra` / `medium`;
+  no child assignment or review role is active in this bounded implementation
+  context. Runtime profile is configured by the dispatch surface and cannot be
+  independently introspected here.
 
 Task classification: High-risk
 Classification reason: the corrections affect new-signal identity, generated
@@ -626,6 +643,34 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
 
 ## Integration Result
 
+- `2026-09-11 12:35 WEST`: RED/GREEN implementation evidence for the Sigstore
+  provenance correction: the new focused test first failed because neither a
+  pnpm patch declaration nor lock entry existed and the actual
+  Lerna/libnpmpublish-resolved `sigstore@4.1.1` Rekor witness exposed
+  `fetchOnConflict: false`. pnpm's supported `patch` / `patch-commit` workflow
+  generated `patches/sigstore@4.1.1.patch`, which changes only the existing
+  witness option to `true`; `pnpm install` applied it. The GREEN test constructs
+  the effective DSSE bundle builder from the dependency resolution used by
+  Lerna/libnpmpublish and observes
+  `rekorWitness.tlogV1.fetchOnConflict === true`; it also checks the declared
+  patch path, patch SHA-256 lock entry, and
+  patched snapshot. The strongest deterministic seam is that constructed
+  runtime object. A complete no-network 409/fetch simulation would require
+  reaching into unpatched `@sigstore/sign` transport internals and would test a
+  dependency behavior outside this patch; the patch changes only the proven
+  option that activates its existing path.
+- Added narrow release-runbook context for upstream [sigstore-js issue
+  #1708](https://github.com/sigstore/sigstore-js/issues/1708) and [PR
+  #1709](https://github.com/sigstore/sigstore-js/pull/1709), including the
+  removal condition: Lerna/libnpmpublish must resolve an upstream released
+  Sigstore version with equivalent-entry recovery before removing this patch.
+- Focused validation is green: `pnpm install --frozen-lockfile`; 28 tests over
+  `sigstore-provenance-patch`, release readiness, and Lerna workspace behavior;
+  targeted ESLint; `pnpm typecheck:tooling`; repository format check; diff
+  hygiene; documentation audience; and release-readiness checks. Remaining work
+  is the applicable review wave and one converged dependency/release
+  verification profile, not further implementation in this bounded context.
+
 - `2026-09-11 11:31 WEST`: Restarted the publication investigation after
   reverting the incorrect retry and process-supervision design in `eb4c60ae9`.
   The resulting tree exactly matched pre-investigation commit `7d95953ff`.
@@ -646,9 +691,7 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   retry, recovery controller, process supervisor, or timeout is permitted. The
   implementer may not spawn sub-agents.
 
-The implementation and independent-review corrections were completed in the
-human-selected current checkout without a separate worktree. The corrected tree
-was release-verified at `9f1bdf057`. Version `2.0.0-snapshot.11` and all workspace
-manifests remain aligned. Fresh zero-memory documentation and final security
-reviews are clean, all accepted findings are fixed, and the branch is ready for
-human review. No pull request or merge was created.
+The original delivery, identity, and history corrections were release-verified
+at `9f1bdf057`. The later npm provenance correction is still in progress in the
+human-selected current checkout without a separate worktree. No pull request or
+merge was created.
