@@ -723,6 +723,14 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   delay timer. The controller TSDoc now correctly says every result receives a
   convergence check. Final focused acceptance passed 44/44 tests across four
   release suites, tooling typecheck, TSDoc, formatting, and diff hygiene.
+- `2026-09-11 11:00 WEST`: The lifecycle correction and acceptance evidence were
+  pushed as `2f36dabc4`. Prepared fresh focused re-reviews using the existing
+  performance/reliability role as `gpt-5.6-terra` / high and the existing
+  style/maintainability role as `gpt-5.6-terra` / high. Both reviewers are
+  read-only, receive no inherited conversation turns, and may not spawn
+  sub-agents. Documentation remains closed because the release runbook and
+  decision record were already clean and this correction changed only matching
+  implementation TSDoc and deterministic task evidence.
 
 The implementation and independent-review corrections were completed in the
 human-selected current checkout without a separate worktree. The corrected tree
