@@ -279,6 +279,16 @@ verification and review may run concurrently only at stable boundaries.
   reviewer role, `gpt-5.6-luna`, medium. Each reviewer is read-only and may not
   spawn sub-agents. Runtime self-introspection is not exposed, so the immutable
   configured role/profile is the available runtime evidence.
+- `2026-09-11 01:24 WEST`: Fresh performance/reliability review passed 373
+  focused tests and reported one P2: local admission dropped operation controls,
+  while remote admission restarted the full timeout on every page. Fresh
+  TypeScript/API review reported only one P1 release-gate issue: the corrected
+  cleanup TSDoc summaries did not start with verbs accepted by the repository
+  checker; its diff, API-documentation, and audience checks passed. Returned one
+  accepted batch to the existing implementer role, explicitly dispatched as
+  `gpt-5.6-terra`, medium, with sole ownership of the affected delivery sources
+  and focused tests. The implementer may not spawn sub-agents. Runtime metadata
+  beyond the immutable configured role/profile is unavailable.
 
 ## Decisions
 
