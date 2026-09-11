@@ -379,6 +379,18 @@ verification and review may run concurrently only at stable boundaries.
   controller and occur once. Focused release controller, registry, workflow,
   and local Lerna registry tests passed (34 tests). Static checks remain next;
   `verify:release` was not run.
+- `2026-09-11 10:34 WEST`: Independent acceptance found and returned one
+  correction batch: signal-triggered parent cleanup, strict validation of every
+  retry selection, and complete required GitHub flag pairs. The existing
+  implementer corrected all three test-first. Independent acceptance then passed
+  37/37 focused release tests, tooling typecheck, TSDoc, formatting, and diff
+  hygiene. Implementation commit `4e44f4d6d` is pushed to `origin`. Prepared one
+  review wave using existing roles with explicit profiles: performance/reliability
+  `gpt-5.6-terra` / high, style/maintainability `gpt-5.6-terra` / high, and
+  documentation `gpt-5.6-luna` / medium. Each reviewer is read-only and may not
+  spawn sub-agents. TypeScript/API review is N/A because the correction changes no
+  published TypeScript declaration or runtime package API. Final security review
+  follows after this wave converges.
 - `2026-09-11 10:32 WEST`: Accepted the publication-recovery correction batch.
   The controller now uses the existing SIGINT/SIGTERM cleanup pattern for its
   temporary parent, preserves exit codes 130 and 143, validates initial and
