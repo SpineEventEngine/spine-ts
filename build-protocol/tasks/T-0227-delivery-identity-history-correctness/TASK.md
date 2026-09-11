@@ -14,10 +14,11 @@ Reviewer sub-agents: Existing performance/reliability, style/maintainability,
 TypeScript/API, documentation, and final security reviewer roles
 Implementation commits: authoritative range `31cfe4f0b..HEAD` on
 `fix-delivery-identity-history-correctness`; independent-review correction
-checkpoints through `3eb292b65` are pushed to `origin`.
+checkpoints through `0cade9d46` are pushed to `origin`.
 Last release-verified implementation HEAD: `47c77cde6`; this evidence predates
 the current correction cycle and must be refreshed before closure.
-Current correction HEAD: `3eb292b65`; documentation corrections are in progress.
+Current pushed correction HEAD: `0cade9d46`; admission-budget and documentation
+corrections are in progress.
 
 Task classification: High-risk
 Classification reason: the corrections affect new-signal identity, generated
@@ -307,13 +308,20 @@ verification and review may run concurrently only at stable boundaries.
 
 ## Files Changed
 
-- `packages/server/src/runtime/signal-metadata.ts` — F10 fresh framework-created IDs.
-- `packages/server/test/runtime/signal-metadata.test.ts` — F10 focused regression test.
-- `packages/server/src/repository/repository.ts` — HISTORY01-A dispatch version binding
-  and one-version Aggregate persistence for command and event-reactor paths.
-- `packages/server/test/repository/repository-routing.test.ts` — domain-correct
-  UUID/composite Aggregate fixtures and HISTORY01-A command/reactor regression cases.
-- This task record.
+The authoritative inventory is `git diff --name-only 6d64848e0..HEAD`. Its
+behavioral groups are:
+
+- core/server signal factories, metadata, routing, repository version/history,
+  handler-analysis, delivery admission, and their focused tests;
+- delivery-client and delivery-server adapters, integration tests, and retained
+  row behavior;
+- client, server, and example callers migrated away from caller-selected new
+  signal IDs;
+- domain-correct Protobuf fixtures across bus, context, service, lifecycle,
+  metadata, broker, and repository tests;
+- API, architecture, user, package-reference, and To-Do example documentation;
+- workspace version manifests, lockfile/generated version alignment, and this
+  task record.
 
 ## Tests Run
 

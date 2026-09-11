@@ -259,6 +259,10 @@ the core validation facade by default, then pack it as Spine-aware `Any`.
 Supplied contexts are cloned before embedding so later caller-side mutation does
 not mutate returned envelopes.
 
+The UUID guarantee applies to IDs created by these helpers. Existing Command and
+Event envelopes are decoded, transported, stored, and retransmitted without
+UUID-format validation of their retained IDs.
+
 Apart from creating the signal ID, the helpers deliberately define no runtime
 policy. They do not generate timestamps, actor or tenant context, event producer
 IDs, entity versions, origins, command system properties, storage records,
@@ -787,6 +791,10 @@ target ID before handler code.
 Inbox duplicate admission is limited by its 30-second deduplication window.
 That window is not replay retention: accepted rows remain subject to their
 Inbox delivery lifecycle and can be replayed after the duplicate window ends.
+Within the live window, normal local and remote admission suppresses a matching
+signal ID only for the same typed Inbox target. A different target or a newly
+created signal with a different ID is not suppressed because its payload happens
+to be equal.
 Bounded contexts create internal system-pairing metadata and a tenant index.
 Single-tenant indexes are constant and reject tenant recording. Multitenant
 indexes are catalog views: MySQL enumerates configured tenant/database entries,

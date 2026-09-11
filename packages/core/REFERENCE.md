@@ -80,7 +80,8 @@ clone caller-supplied contexts, and pack the supplied domain message. They use
 `crypto.randomUUID()` when available, otherwise secure `crypto.getRandomValues()`;
 they fail when neither secure API exists. They do not create timestamps, actor
 context, tenant context, storage records, or routing data. Existing envelope
-transport and storage continue to retain their supplied IDs.
+transport and storage continue to retain their supplied IDs without validating
+that those existing values have UUID format.
 
 ## Registry
 

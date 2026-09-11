@@ -83,6 +83,9 @@ the current shard lease; the client keeps no local removal record. A delivered
 row is the deduplication fact, but a handler effect and its acknowledgement are
 not one transaction. If an acknowledgement is lost, delivery can happen again
 after restart, so make downstream effects idempotent.
+While `keepUntil` is live, remote admission suppresses the same signal ID only
+for the same typed Inbox target. A different target or a newly generated signal
+ID remains independently deliverable, even when its payload is equal.
 
 <!-- docs-snippet-path: packages/delivery-client/src/remote/adapters.ts -->
 

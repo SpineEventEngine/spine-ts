@@ -302,6 +302,10 @@ lost acknowledgement can redeliver after restart and downstream handling must
 be idempotent. `DeliveryMonitor` is the explicit failure-policy seam: by
 default it marks a failed reception delivered and continues independent targets;
 an application can instead choose the immediate repeat action.
+Normal local and remote admission suppresses a retained duplicate only when its
+signal ID and typed Inbox target match a delivered row whose `keepUntil` is
+still live. A different target or a new signal ID remains independently
+deliverable, even when the domain payload is equal.
 
 Each delivery drain is bounded to one page, not to a total backlog: an active
 lease owner can take later pages while its policy retains the shard. The
@@ -938,6 +942,9 @@ tests inject `Clock` and use fixed source envelopes. This seam is
 local runtime metadata only; it does not discover handlers, load generated
 registries, materialize application handlers, manage transport, storage, tracing,
 or end-user envelope APIs.
+Existing Command and Event envelopes retain their supplied IDs without UUID-format
+validation; the UUID guarantee applies to newly generated IDs, not to decoding,
+transport, or retransmission of an existing envelope.
 It does not broaden end-user APIs into framework `Command`/`Event` envelopes,
 does not reintroduce `@Apply`, and does not expose manual transaction-control
 APIs.
