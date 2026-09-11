@@ -5,7 +5,7 @@ Start with the [browser client overview](README.md) for a first connection.
 
 ## Transports and request scopes
 
-`Client.forGrpcWeb(baseUrl, options)` always uses gRPC-Web. `Client.forConnect` always uses binary Connect (`application/proto`). Connect is optional only when the selected gateway already supports it; neither factory probes or falls back to the other protocol. `Client.usingTransport(source, options)` accepts an application or platform `ClientTransport`, including a request-ID factory and optional close hook.
+`Client.forGrpcWeb(baseUrl, options)` always uses gRPC-Web. `Client.forConnect` always uses binary Connect (`application/proto`). Connect is optional only when the selected gateway already supports it; neither factory probes or falls back to the other protocol. `Client.usingTransport(source, options)` accepts an application or platform `ClientTransport` containing a Connect transport and an optional close hook. Each `post()` creates its Command through the core signal-envelope helper, which assigns a fresh secure UUID-based Command ID.
 
 `ClientOptions` select tenant, zone, bounded subscription settings, and an optional `onReauthenticateBeforeReconnect` callback. `BrowserClientOptions` also accept per-call synchronous metadata and Fetch credential mode. The application supplies metadata; the client does not log it. `asGuest()` and `onBehalfOf(user)` return immutable request scopes. An empty actor is rejected.
 

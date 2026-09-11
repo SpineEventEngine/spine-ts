@@ -110,18 +110,19 @@ export interface DeliveryInbox {
   ): Promise<InboxMessage | undefined>;
 
   /**
-   * Removes one exact delivered snapshot atomically while a direct shard
+   * Requests removal of one delivered snapshot while the supplied shard
    * session remains current.
    *
    * Built-in direct Inbox storage implements this through its provider-owned
    * ownership-and-delete operation. Custom structural ports may omit this
-   * optional retention capability. Remote inboxes retain delivered rows until
-   * their existing expiration and then remove the exact snapshot.
+   * optional retention capability. A remote adapter may only be able to check
+   * the snapshot and then issue a separate removal request, so this interface
+   * does not promise atomic compare-and-delete for every implementation.
    *
    * @param message Supplies the expected delivered row snapshot.
    * @param session Supplies the currently owned shard session.
    * @param options Propagates cancellation and a delivery deadline.
-   * @returns `true` only when the exact snapshot was removed under current ownership.
+   * @returns Whether the adapter completed its supported removal operation.
    */
   removeDelivered?(
     message: InboxMessage,

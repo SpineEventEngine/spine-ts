@@ -53,8 +53,9 @@ local session and permits a new pickup. Do not release a stale session.
 `RemoteInbox` and `RemoteWorkRegistry` satisfy the server delivery-builder
 ports. `RemoteInbox` rereads the exact pending remote row before acknowledgement
 and upserts that exact row as `DELIVERED`. An exact retained `DELIVERED` row is
-an idempotent acknowledgement after a lost response; expired exact rows are later
-removed through the existing cleanup path. It creates no local attempt history,
+an idempotent acknowledgement after a lost response. Expired-row cleanup first
+checks the remote snapshot and then sends a separate removal request; it is
+best effort, not an atomic compare-and-delete guarantee. It creates no local attempt history,
 receipt, fingerprint, or quarantine record. Shard ownership excludes concurrent
 delivery and delivered rows are the deduplication fact. This
 package does not add authentication, authorization, durability, exactly-once

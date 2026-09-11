@@ -251,18 +251,20 @@ before binary decoding and returns `undefined` on decode failure, keeping type
 URL comparison and malformed payload handling inside the core module interface.
 Callers should not parse or concatenate type URL strings directly.
 
-`SignalEnvelopes.command()` and `SignalEnvelopes.event()` construct generated `spine.core.Command` and
-`spine.core.Event` messages from caller-supplied generated IDs, generated
-contexts, schemas, and already-built domain messages. They validate the enclosed
-domain message through the core validation facade by default, then pack it as
-Spine-aware `Any`. Supplied IDs and contexts are cloned before embedding so
-later caller-side mutation does not mutate returned envelopes.
+`SignalEnvelopes.command()` and `SignalEnvelopes.event()` construct generated
+`spine.core.Command` and `spine.core.Event` messages from generated contexts,
+schemas, and already-built domain messages. Each call assigns a fresh ID from a
+secure UUID generator. The helpers validate the enclosed domain message through
+the core validation facade by default, then pack it as Spine-aware `Any`.
+Supplied contexts are cloned before embedding so later caller-side mutation does
+not mutate returned envelopes.
 
-The helpers deliberately define no runtime policy. They do not generate UUIDs,
-timestamps, actor or tenant context, event producer IDs, entity versions,
-origins, command system properties, storage records, acknowledgements, delivery
-state, bus dispatch, handler registration, or transport metadata. Those
-responsibilities belong to the server/runtime layers that run the workflow.
+Apart from creating the signal ID, the helpers deliberately define no runtime
+policy. They do not generate timestamps, actor or tenant context, event producer
+IDs, entity versions, origins, command system properties, storage records,
+acknowledgements, delivery state, bus dispatch, handler registration, or
+transport metadata. Those responsibilities belong to the server/runtime layers
+that run the workflow.
 
 ## Server Entity Metadata
 

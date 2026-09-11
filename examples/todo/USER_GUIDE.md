@@ -560,7 +560,7 @@ try {
     pendingUpdate = iterator.next();
     void pendingUpdate.catch(() => undefined);
     const ack = await withTimeout(
-      commands.post(createTaskCommand(taskId, suffix)),
+      commands.post(createTaskCommand(taskId)),
       "CreateTask acknowledgement",
       1_000,
     );
@@ -622,9 +622,8 @@ try {
   session.abort();
 }
 
-function createTaskCommand(taskId, commandSuffix) {
+function createTaskCommand(taskId) {
   return SignalEnvelopes.command({
-    id: metadata.commandId(`subscription-command-${commandSuffix}`),
     context: metadata.commandContext({ actorContext }),
     schema: CreateTaskSchema,
     message: create(CreateTaskSchema, {

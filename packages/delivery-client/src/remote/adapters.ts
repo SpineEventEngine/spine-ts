@@ -228,12 +228,16 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Removes an exact expired delivered row while its exclusive shard session remains current.
+   * Best-effort removes an expired delivered row while its exclusive shard session remains current.
+   *
+   * The remote API exposes a read followed by a removal call, not an atomic
+   * compare-and-delete operation. Another writer may therefore change the row
+   * between the equality check and removal.
    *
    * @param message Supplies the delivered snapshot.
    * @param session Supplies the matching exclusive shard session.
    * @param options Bounds remote reads and removal.
-   * @returns Whether the exact expired snapshot was removed.
+   * @returns Whether the snapshot matched when read and the removal request completed.
    */
   async removeDelivered(
     message: InboxMessage,

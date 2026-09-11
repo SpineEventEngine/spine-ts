@@ -344,7 +344,6 @@ const repository = new Repository({
 const context = BoundedContext.singleTenant("Projects").add(repository).build();
 await context.commandBus().post(
   SignalEnvelopes.command({
-    id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
     context: create(CommandContextSchema),
     schema: ApproveProjectSchema,
     message: create(ApproveProjectSchema, { project, status: "approved" }),

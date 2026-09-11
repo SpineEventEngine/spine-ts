@@ -1,8 +1,8 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: Complete
+Status: In progress — independent-review corrections
 Start: `2026-09-10 16:26 WEST`
-End: `2026-09-10 20:06 WEST`
+Initial closure: `2026-09-10 20:06 WEST`
 Baseline commit: `6d64848e0`
 Task log path: `build-protocol/tasks/T-0227-delivery-identity-history-correctness/TASK.md`
 Branch: `fix-delivery-identity-history-correctness`
@@ -12,12 +12,12 @@ Authoring sub-agent: Existing implementer role, explicitly dispatched as
 `gpt-5.6-terra`, medium reasoning; runtime metadata was not exposed
 Reviewer sub-agents: Existing performance/reliability, style/maintainability,
 TypeScript/API, documentation, and final security reviewer roles
-Implementation commits: `094316a06`, `6a7edf4d6`, `054174f06`, `00f27b8f6`,
-`e1772bacf`, `8c0d06a01`, `12980eb50`, `8ff5c1116`, `bf05955be`,
-`80b344a62`, `2f0f24075`, and `47c77cde6`
-Release-verified implementation HEAD: `47c77cde6`
-Final branch HEAD: closure record commit on
-`fix-delivery-identity-history-correctness`
+Implementation commits: authoritative range `31cfe4f0b..HEAD` on
+`fix-delivery-identity-history-correctness`; independent-review correction
+checkpoints through `3eb292b65` are pushed to `origin`.
+Last release-verified implementation HEAD: `47c77cde6`; this evidence predates
+the current correction cycle and must be refreshed before closure.
+Current correction HEAD: `3eb292b65`; documentation corrections are in progress.
 
 Task classification: High-risk
 Classification reason: the corrections affect new-signal identity, generated
@@ -192,19 +192,23 @@ verification and review may run concurrently only at stable boundaries.
 - `2026-09-10 16:31 WEST`: Inspected `packages/server/src/runtime/signal-metadata.ts`
   and its focused test. Local `spine-jvm-docs/` does not contain the corresponding
   factory source, so this slice follows the task's recorded current-JVM requirement
-  and limits the correction to the existing `SignalIds` UUID source.
+  and limits the correction to the then-existing internal UUID source. That
+  temporary seam was removed by a later public-API correction; current framework
+  and core creation paths generate IDs internally.
 - `2026-09-10 16:31 WEST`: F10 RED confirmed after a locked dependency install and
   generated build: `pnpm exec vitest run packages/server/test/runtime/signal-metadata.test.ts --passWithNoTests`
   failed only because `commandFromCommand()` produced `existing-command-id-1` instead
   of the injected fresh ID `new-command-from-command` (13 passing tests, 1 failing).
 - `2026-09-10 16:32 WEST`: F10 GREEN passed. Each framework-created Command or Event
-  now asks the existing `SignalIds` source for an ID; causal origins still retain the
-  source envelope ID. No UUID-format validation was added.
+  then asked the internal ID source for a fresh ID; causal origins retained the
+  source envelope ID. No UUID-format validation was added. Later correction commits
+  removed caller injection of that source and moved fresh ID creation into the
+  owning signal factories.
 - `2026-09-10 16:37 WEST`: Review correction F10-API removed caller-selected IDs and
-  obsolete causal-sequence parameters from `SignalIds` and `SignalMetadata`. The
-  non-empty check remains solely an invariant for values returned by the injected
-  internal generator; it performs no UUID-format validation. Existing envelopes in
-  tests now construct their protobuf IDs directly.
+  obsolete causal-sequence parameters from the then-current internal ID seam and
+  `SignalMetadata`. Subsequent commits removed the injectable seam itself. Current
+  creation APIs generate fresh IDs internally and perform no UUID-format validation;
+  tests that need existing envelopes construct their protobuf IDs directly.
 - `2026-09-10 16:37 WEST`: Correction RED confirmed by the focused runtime test:
   no-sequence event calls reached the obsolete third parameter and threw while reading
   `undefined.producerId` (10 passing, 4 failing). The revised API then passed the
@@ -253,6 +257,21 @@ verification and review may run concurrently only at stable boundaries.
   outside F02. Distributed/shared-storage nodes use the same normal delivery pipeline.
   The existing TS delivery-server `writeOne` upsert supports the required remote
   delivered snapshot, so no new wire or storage lifecycle concept is needed.
+- `2026-09-11 00:10 WEST`: Reopened the task at the human's request for a fresh,
+  memory-free independent review. The performance/reliability reviewer
+  (`gpt-5.6-terra`, high) reported no finding after 450 tests. The TypeScript/API
+  reviewer (`gpt-5.6-terra`, high) reported four findings: make retained-row
+  admission mandatory, replace wrong-domain Protobuf test fixtures, correct stale
+  signal-ID documentation, and narrow remote cleanup's atomicity claims. Both model
+  and reasoning selections were explicit; the review surface exposed no additional
+  runtime metadata.
+- `2026-09-11 01:16 WEST`: Required `DeliveryInbox.admit`, removed its bypass,
+  migrated all structural test ports, and pushed `169bfc6b2`. Replaced state,
+  identifier, WKT, and Command-as-Event test payloads with domain-correct Command
+  and Event fixtures across bus, service, lifecycle, metadata, broker, and repository
+  suites. All fixture checkpoints through `3eb292b65` were pushed immediately.
+  The final repository-routing gate passed TypeScript tooling, ESLint, Prettier,
+  diff hygiene, and 265/265 tests.
 
 ## Decisions
 
@@ -301,8 +320,9 @@ verification and review may run concurrently only at stable boundaries.
   version assertions. Final focused verification passed: 277 tests across the routing
   and signal-metadata suites; focused Prettier and `git diff --check` passed.
 - Default-ID strengthening adds a unit assertion that two new Commands and two new
-  Events have UUID-shaped, pairwise distinct IDs through the default `SignalIds`
-  source. It does not add production UUID validation. The combined focused suites
+  Events have UUID-shaped, pairwise distinct IDs through the then-current default ID
+  source. The later API correction removed that injectable seam without changing the
+  behavior. It does not add production UUID validation. The combined focused suites
   then passed 278 tests; Prettier and `git diff --check` remained clean.
 - HISTORY01-A RED: the two new command/reactor version tests failed as intended. The
   command case observed committed state version `2n` where `1n` was required; the
@@ -369,13 +389,14 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   their fresh framework metadata ID (no target suffix); `UNSUPPORTED_ASSIGN_HANDLER`
   is exported in handler metadata; remote timestamp-only pagination rejects a full
   non-progressing cursor page while retaining its existing finite 1000-row scan bound.
-  No RPC or arbitrary-depth indexed lookup is claimed. SignalIds documentation now
-  states only the non-empty generated-value requirement. Remote retention, handler
+  No RPC or arbitrary-depth indexed lookup is claimed. Signal identity documentation
+  records internally generated IDs without adding validation of existing envelopes.
+  Remote retention, handler
   rejection, Aggregate dispatch version, and sparse history behavior are recorded in
   package references.
 - Consolidated acceptance profile: existing implementer, configured `gpt-5.6-terra`
   medium (runtime metadata unavailable). Accepted: fresh Aggregate child IDs, exported
-  Assign rejection code, non-progressing remote page rejection, corrected SignalIds and
+  Assign rejection code, non-progressing remote page rejection, corrected signal-ID and
   RemoteInbox TSDoc, and package references. Rejected: a retained-lookup RPC or indexed
   arbitrary-depth remote lookup; JVM remote pagination is timestamp-only and the TS
   retained scan remains finite (1000 rows). The serialized affected-suite command passed
@@ -406,15 +427,15 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
 
 ## Documentation And Public API Impact
 
-| Area                          | Impact                                                                                                                |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Package README                | Update only if current public behavior claims conflict with the correction.                                           |
-| TypeDoc/API docs              | Correct ID-creation and supported-handler claims where affected.                                                      |
-| Public API additions/removals | New-signal metadata factories no longer accept caller IDs; `DeliveryInbox` gains an optional retained-admission seam. |
-| Framework `USER_GUIDE.md`     | Update only if it documents affected behavior.                                                                        |
-| Example `USER_GUIDE.md`       | N/A unless an affected example fails.                                                                                 |
-| API examples                  | Preserve public Delivery client usage; adjust only invalid Projection assignment examples if any.                     |
-| Compatibility                 | No compatibility layer for prior snapshot behavior.                                                                   |
+| Area                          | Impact                                                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Package README                | Update only if current public behavior claims conflict with the correction.                                                                      |
+| TypeDoc/API docs              | Correct ID-creation and supported-handler claims where affected.                                                                                 |
+| Public API additions/removals | New-signal factories no longer accept caller IDs; `DeliveryInbox.admit` is required so normal delivery cannot bypass retained-row deduplication. |
+| Framework `USER_GUIDE.md`     | Update only if it documents affected behavior.                                                                                                   |
+| Example `USER_GUIDE.md`       | N/A unless an affected example fails.                                                                                                            |
+| API examples                  | Preserve public Delivery client usage; adjust only invalid Projection assignment examples if any.                                                |
+| Compatibility                 | No compatibility layer for prior snapshot behavior.                                                                                              |
 
 ## Security Impact
 
@@ -482,7 +503,8 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
 - Style/maintainability: clean after removing multi-target ID suffix plumbing, restoring
   duplicate-test intent, and correcting reference placement.
 - TypeScript/API docs: clean after exporting `UNSUPPORTED_ASSIGN_HANDLER`, correcting
-  SignalIds/RemoteInbox TSDoc, and adding direct multi-target UUID coverage.
+  the then-current ID-source and `RemoteInbox` TSDoc, and adding direct multi-target
+  UUID coverage. This disposition predates the current no-memory review.
 - Documentation: clean after replacing stale remote-removal text and documenting handler,
   identity, Aggregate-version, and sparse-history behavior.
 - Final security: clean. Atomic typed-target admission, bounded fail-closed remote
@@ -506,8 +528,9 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
 
 ## Integration Result
 
-Completed in the human-selected current checkout without a separate worktree. Version
-`2.0.0-snapshot.11` is unused at the verified registry boundary, all 27 workspace
-manifests and fixed internal pins are aligned, generated Proto package metadata is
-aligned, and the release-verified implementation tree is pushed to
-`origin/fix-delivery-identity-history-correctness`. No pull request or merge was created.
+The initial implementation was completed in the human-selected current checkout
+without a separate worktree and release-verified at `47c77cde6`. Version
+`2.0.0-snapshot.11` and all workspace manifests remain aligned. The task is now
+reopened for the independent-review corrections recorded above; a fresh complete
+review wave and release verification are required before this section can record a
+new final result. No pull request or merge was created.
