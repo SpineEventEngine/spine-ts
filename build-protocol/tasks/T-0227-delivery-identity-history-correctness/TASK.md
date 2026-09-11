@@ -1002,3 +1002,10 @@ The correction now distinguishes one bounded logical page from the multiple
 bounded raw-page RPCs sometimes needed to move past an inclusive remote cursor.
 The documented timestamp-collision limitation remains unchanged. No other
 documentation contradiction was found.
+
+Documentation correction commit `788513686` was pushed. The affected-lane
+documentation re-review is clean: the reference now accurately describes the
+bounded logical read, bounded raw-page RPC continuation, and unchanged
+timestamp-only cursor limitation. All accepted review findings are resolved;
+the reliability, style/maintainability, TypeScript/API documentation, and
+documentation lanes are clean after their affected corrections.
