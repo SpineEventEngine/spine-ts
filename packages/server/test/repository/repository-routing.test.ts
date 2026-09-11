@@ -65,6 +65,10 @@ import {
 import type { UserId } from "@spine-event-engine/proto";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { TaskListSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
+import {
+  type CreateTask,
+  CreateTaskSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import {
   type TaskAlreadyDone as TaskAlreadyDoneMessage,
@@ -157,6 +161,12 @@ type NeutralProjectionState = Message<"NeutralProjectionState"> & {
 };
 
 type ProjectionEvent = Message<"ProjectionEvent"> & {
+  id: string;
+  name: string;
+  priority: number;
+};
+
+type GeneratedReactorEvent = Message<"GeneratedReactorEvent"> & {
   id: string;
   name: string;
   priority: number;
@@ -288,6 +298,39 @@ type CompositeRouteEvent = Message<"CompositeRouteEvent"> & {
   name: string;
 };
 
+type CompositeRouteCommand = Message<"CompositeRouteCommand"> & {
+  id?: CompositeRouteId;
+  name: string;
+};
+
+type UuidMessageIdAggregateCommand = Message<"UuidMessageIdAggregateCommand"> & {
+  id?: CommandId;
+  name: string;
+  priority: number;
+};
+
+type Int32AggregateCommand = Message<"Int32AggregateCommand"> & {
+  id: number;
+  name: string;
+};
+
+type Int64ProcessManagerCommand = Message<"Int64ProcessManagerCommand"> & {
+  id: bigint;
+  queue: string;
+};
+
+type Int32AggregateEvent = Message<"Int32AggregateEvent"> & { id: number; name: string };
+
+type Int64ProcessManagerEvent = Message<"Int64ProcessManagerEvent"> & {
+  id: bigint;
+  queue: string;
+};
+
+type ValidatedTaskEvent = Message<"example.validation_refusal.ValidatedTaskEvent"> & {
+  id: string;
+  name: string;
+};
+
 type CompositeRouteSourceState = Message<"CompositeRouteSourceState"> & {
   id?: CompositeRouteId;
   name: string;
@@ -397,6 +440,17 @@ const fileProjectionEventFixture = (() => {
   if (event.options !== undefined) {
     event.options.$unknown = event.options.$unknown?.filter((field) => field.no !== 73_903);
   }
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+})();
+const fileGeneratedReactorEventFixture = (() => {
+  const descriptor = clone(FileDescriptorProtoSchema, fileProjectionEventFixture.proto);
+  const event = descriptor.messageType[0];
+  if (event === undefined) throw new Error("Generated reactor event fixture is missing.");
+  descriptor.name = "generated_reactor_events.proto";
+  event.name = "GeneratedReactorEvent";
+  event.options = undefined;
   return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
     file_spine_options,
   ]);
@@ -568,16 +622,65 @@ const fileCompositeRouteFixture = (() => {
   const event = clone(DescriptorProtoSchema, state);
   event.name = "CompositeRouteEvent";
   event.options = undefined;
+  const command = clone(DescriptorProtoSchema, state);
+  command.name = "CompositeRouteCommand";
+  command.options = undefined;
   const sourceState = clone(DescriptorProtoSchema, state);
   sourceState.name = "CompositeRouteSourceState";
   const aggregateState = clone(DescriptorProtoSchema, state);
   aggregateState.name = "CompositeRouteAggregateState";
   aggregateState.options = clone(DescriptorProtoSchema, aggregate).options;
-  descriptor.messageType.push(event, sourceState, aggregateState);
+  descriptor.messageType.push(event, command, sourceState, aggregateState);
   descriptor.dependency.push(UserIdSchema.file.proto.name);
   return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
     file_spine_options,
     UserIdSchema.file,
+  ]);
+})();
+const fileUuidMessageIdCommandFixture = (() => {
+  const descriptor = clone(FileDescriptorProtoSchema, fileUuidMessageIdFixture.proto);
+  const command = descriptor.messageType.find(
+    (message) => message.name === "UuidMessageIdAggregateState",
+  );
+  if (command === undefined) throw new Error("UUID message-ID command fixture is missing.");
+  descriptor.name = "uuid_message_id_command.proto";
+  command.name = "UuidMessageIdAggregateCommand";
+  command.options = undefined;
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+    CommandIdSchema.file,
+  ]);
+})();
+const fileNumericCommandFixture = (() => {
+  const descriptor = clone(FileDescriptorProtoSchema, fileEntityMetadataFixture.proto);
+  const int32 = descriptor.messageType.find((message) => message.name === "Int32AggregateState");
+  const int64 = descriptor.messageType.find(
+    (message) => message.name === "Int64ProcessManagerState",
+  );
+  if (int32 === undefined || int64 === undefined)
+    throw new Error("Numeric command fixtures are missing.");
+  descriptor.name = "numeric_commands.proto";
+  int32.name = "Int32AggregateCommand";
+  int32.options = undefined;
+  int64.name = "Int64ProcessManagerCommand";
+  int64.options = undefined;
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+})();
+const fileNumericEventFixture = (() => {
+  const descriptor = clone(FileDescriptorProtoSchema, fileNumericCommandFixture.proto);
+  const int32 = descriptor.messageType.find((message) => message.name === "Int32AggregateCommand");
+  const int64 = descriptor.messageType.find(
+    (message) => message.name === "Int64ProcessManagerCommand",
+  );
+  if (int32 === undefined || int64 === undefined)
+    throw new Error("Numeric event fixtures are missing.");
+  descriptor.name = "numeric_events.proto";
+  int32.name = "Int32AggregateEvent";
+  int64.name = "Int64ProcessManagerEvent";
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
   ]);
 })();
 const ProjectionStateSchema = messageDesc(
@@ -588,6 +691,10 @@ const UuidMessageIdAggregateStateSchema = fixtureMessageSchema<UuidMessageIdAggr
   fileUuidMessageIdFixture,
   "UuidMessageIdAggregateState",
 );
+const UuidMessageIdAggregateCommandSchema = fixtureMessageSchema<UuidMessageIdAggregateCommand>(
+  fileUuidMessageIdCommandFixture,
+  "UuidMessageIdAggregateCommand",
+);
 const NeutralProjectionStateSchema = messageDesc(
   fileNeutralProjectionStateFixture,
   0,
@@ -596,6 +703,10 @@ const ProjectionEventSchema = messageDesc(
   fileProjectionEventFixture,
   0,
 ) as GenMessage<ProjectionEvent>;
+const GeneratedReactorEventSchema = messageDesc(
+  fileGeneratedReactorEventFixture,
+  0,
+) as GenMessage<GeneratedReactorEvent>;
 const ImplicitTaskCommandSchema = messageDesc(
   fileImplicitCommandFixture,
   0,
@@ -619,6 +730,22 @@ const Int64ProcessManagerStateSchema = messageDesc(
   fileEntityMetadataFixture,
   11,
 ) as GenMessage<Int64ProcessManagerState>;
+const Int32AggregateCommandSchema = fixtureMessageSchema<Int32AggregateCommand>(
+  fileNumericCommandFixture,
+  "Int32AggregateCommand",
+);
+const Int64ProcessManagerCommandSchema = fixtureMessageSchema<Int64ProcessManagerCommand>(
+  fileNumericCommandFixture,
+  "Int64ProcessManagerCommand",
+);
+const Int32AggregateEventSchema = fixtureMessageSchema<Int32AggregateEvent>(
+  fileNumericEventFixture,
+  "Int32AggregateEvent",
+);
+const Int64ProcessManagerEventSchema = fixtureMessageSchema<Int64ProcessManagerEvent>(
+  fileNumericEventFixture,
+  "Int64ProcessManagerEvent",
+);
 const RepeatedIdCommandSchema = messageDesc(
   fileEntityMetadataFixture,
   12,
@@ -667,6 +794,21 @@ const ValidatedTaskCommandSchema = messageDesc(
   fileValidationRefusalFixture,
   1,
 ) as GenMessage<ValidatedTaskCommand>;
+const fileValidatedTaskEventFixture = (() => {
+  const descriptor = clone(FileDescriptorProtoSchema, fileValidationRefusalFixture.proto);
+  const event = descriptor.messageType.find((message) => message.name === "ValidatedTaskCommand");
+  if (event === undefined) throw new Error("Validated task event fixture is missing.");
+  descriptor.name = "validation_refusal_events.proto";
+  event.name = "ValidatedTaskEvent";
+  event.options = undefined;
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+})();
+const ValidatedTaskEventSchema = fixtureMessageSchema<ValidatedTaskEvent>(
+  fileValidatedTaskEventFixture,
+  "ValidatedTaskEvent",
+);
 const fileCommandSubstitutionFixture = (() => {
   const descriptor = clone(FileDescriptorProtoSchema, fileValidationRefusalFixture.proto);
   descriptor.name = "validation_refusal_commands.proto";
@@ -803,6 +945,10 @@ const CompositeRouteEventSchema = fixtureMessageSchema<CompositeRouteEvent>(
   fileCompositeRouteFixture,
   "CompositeRouteEvent",
 );
+const CompositeRouteCommandSchema = fixtureMessageSchema<CompositeRouteCommand>(
+  fileCompositeRouteFixture,
+  "CompositeRouteCommand",
+);
 const CompositeRouteSourceStateSchema = fixtureMessageSchema<CompositeRouteSourceState>(
   fileCompositeRouteFixture,
   "CompositeRouteSourceState",
@@ -860,9 +1006,9 @@ class ImplicitIdAggregate extends Aggregate<string, typeof AggregateStateSchema,
 class BlankStateIdAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static calls = 0;
 
-  assign(command: AggregateState): void {
-    this.update((draft) => Object.assign(draft, command, { id: "" }));
+  assign(command: TaskCommand): void {
     BlankStateIdAggregate.calls += 1;
+    this.update((draft) => Object.assign(draft, command, { id: "" }));
   }
 }
 
@@ -873,12 +1019,12 @@ class BlankStateIdProcessManager extends ProcessManager<
 > {
   static calls = 0;
 
-  assign(command: AggregateState): void {
+  assign(command: TaskCommand): void {
+    BlankStateIdProcessManager.calls += 1;
     this.update((draft) => {
       draft.id = "";
       draft.queue = command.name;
     });
-    BlankStateIdProcessManager.calls += 1;
   }
 }
 
@@ -886,11 +1032,11 @@ class BlankStateIdProjection extends Projection<string, typeof ProjectionStateSc
   static calls = 0;
 
   subscribe(event: ProjectionEvent): void {
+    BlankStateIdProjection.calls += 1;
     this.update((draft) => {
       draft.id = "";
       draft.name = event.name;
     });
-    BlankStateIdProjection.calls += 1;
   }
 }
 
@@ -912,7 +1058,7 @@ class UuidMessageIdAggregate extends Aggregate<
   typeof UuidMessageIdAggregateStateSchema,
   bigint
 > {
-  assign(command: UuidMessageIdAggregateState): void {
+  assign(command: UuidMessageIdAggregateCommand): void {
     this.update((draft) => Object.assign(draft, command));
   }
 }
@@ -932,7 +1078,7 @@ class CompositeRouteAggregate extends Aggregate<
   typeof CompositeRouteAggregateStateSchema,
   bigint
 > {
-  assign(command: CompositeRouteAggregateState): void {
+  assign(command: CompositeRouteCommand): void {
     this.update((draft) => Object.assign(draft, command));
   }
 }
@@ -964,7 +1110,7 @@ class CompositeRouteProcessManager extends ProcessManager<
     );
   }
 
-  assignAndProduce(command: CompositeRouteEvent): CompositeRouteEvent {
+  assignAndProduce(command: CompositeRouteCommand): CompositeRouteEvent {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -986,11 +1132,14 @@ class Int32RoutingAggregate extends ProcessManager<
   typeof Int32AggregateStateSchema,
   number
 > {
-  assign(command: Int32AggregateState): void {
-    this.update((draft) => Object.assign(draft, command));
+  assign(command: Int32AggregateCommand): void {
+    this.update((draft) => {
+      draft.id = command.id;
+      draft.name = command.name;
+    });
   }
 
-  react(event: Int32AggregateState): void {
+  react(event: Int32AggregateEvent): void {
     void event;
   }
 }
@@ -1000,11 +1149,14 @@ class Int64RoutingProcessManager extends ProcessManager<
   typeof Int64ProcessManagerStateSchema,
   number
 > {
-  assign(command: Int64ProcessManagerState): void {
-    this.update((draft) => Object.assign(draft, command));
+  assign(command: Int64ProcessManagerCommand): void {
+    this.update((draft) => {
+      draft.id = command.id;
+      draft.queue = command.queue;
+    });
   }
 
-  react(event: Int64ProcessManagerState): void {
+  react(event: Int64ProcessManagerEvent): void {
     void event;
   }
 }
@@ -1030,7 +1182,7 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
     this.failure = failure;
   }
 
-  assignTask(command: AggregateState) {
+  assignTask(command: TaskCommand) {
     ExecutingTaskAggregate.assigneeCalls++;
 
     if (ExecutingTaskAggregate.failure !== undefined) {
@@ -1046,7 +1198,14 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
       return create(EventSchema, {
         id: create(EventIdSchema, { value: `event-${command.name}` }),
         context: create(EventContextSchema),
-        message: AnyMessages.pack(AggregateStateSchema, command),
+        message: AnyMessages.pack(
+          ProjectionEventSchema,
+          create(ProjectionEventSchema, {
+            id: command.id,
+            name: command.name,
+            priority: 1,
+          }),
+        ),
       });
     }
 
@@ -1074,11 +1233,11 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
       id: create(EventIdSchema, { value: `event-${command.name}` }),
       context: create(EventContextSchema),
       message: AnyMessages.pack(
-        AggregateStateSchema,
-        create(AggregateStateSchema, {
+        ProjectionEventSchema,
+        create(ProjectionEventSchema, {
           id: command.id,
           name: command.name,
-          archived: false,
+          priority: 1,
         }),
       ),
     });
@@ -1094,7 +1253,7 @@ class ManagedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema
     this.failure = failure;
   }
 
-  assignTask(command: AggregateState): AggregateState {
+  assignTask(command: TaskCommand): ProjectionEvent {
     ManagedTaskAggregate.assigneeCalls++;
     this.update((draft) =>
       Object.assign(
@@ -1109,10 +1268,9 @@ class ManagedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema
     if (ManagedTaskAggregate.failure !== undefined) {
       throw ManagedTaskAggregate.failure;
     }
-    return create(AggregateStateSchema, {
+    return create(ProjectionEventSchema, {
       id: command.id,
       name: `${command.name} event`,
-      archived: false,
     });
   }
 }
@@ -1158,7 +1316,7 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSc
     release?.();
   }
 
-  async assignTask(command: TaskCommand, context: CommandContext): Promise<AggregateState> {
+  async assignTask(command: TaskCommand, context: CommandContext): Promise<ProjectionEvent> {
     GeneratedTwoArgAggregate.argumentCounts.push(arguments.length);
     GeneratedTwoArgAggregate.contexts.push(context);
     GeneratedTwoArgAggregate.observedStateNames.push(this.state.name);
@@ -1169,10 +1327,9 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSc
       throw TaskAlreadyDone.create({ id: create(GeneratedTaskIdSchema, { value: command.id }) });
     }
     if (this.isArchived || this.isDeleted) {
-      return create(AggregateStateSchema, {
+      return create(ProjectionEventSchema, {
         id: command.id,
         name: `${command.name} event`,
-        archived: false,
       });
     }
     this.update((draft) =>
@@ -1185,10 +1342,9 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSc
         }),
       ),
     );
-    return create(AggregateStateSchema, {
+    return create(ProjectionEventSchema, {
       id: command.id,
       name: `${command.name} event`,
-      archived: false,
     });
   }
 }
@@ -1207,7 +1363,7 @@ class GeneratedReactorAggregate extends Aggregate<string, typeof AggregateStateS
   reactProjection(
     event: ProjectionEvent,
     context: EventContext,
-  ): AggregateState | AggregateState[] {
+  ): GeneratedReactorEvent | GeneratedReactorEvent[] {
     GeneratedReactorAggregate.argumentCounts.push(arguments.length);
     GeneratedReactorAggregate.contexts.push(context);
     if (GeneratedReactorAggregate.failure !== undefined) {
@@ -1223,13 +1379,12 @@ class GeneratedReactorAggregate extends Aggregate<string, typeof AggregateStateS
         }),
       ),
     );
-    const produced = create(AggregateStateSchema, {
+    const produced = create(GeneratedReactorEventSchema, {
       id: event.id,
       name: `${event.name} reacted event`,
-      archived: false,
     });
     return event.name === "two events"
-      ? [produced, clone(AggregateStateSchema, produced)]
+      ? [produced, clone(GeneratedReactorEventSchema, produced)]
       : produced;
   }
 }
@@ -1263,7 +1418,7 @@ class ProducingGuardedAggregate extends Aggregate<string, typeof AggregateStateS
     this.calls = 0;
   }
 
-  reactProjection(event: ProjectionEvent): AggregateState {
+  reactProjection(event: ProjectionEvent): GeneratedReactorEvent {
     ProducingGuardedAggregate.calls++;
     this.update((draft) =>
       Object.assign(
@@ -1275,10 +1430,10 @@ class ProducingGuardedAggregate extends Aggregate<string, typeof AggregateStateS
         }),
       ),
     );
-    return create(AggregateStateSchema, {
+    return create(GeneratedReactorEventSchema, {
       id: this.id,
       name: `${event.name} produced`,
-      archived: false,
+      priority: 1,
     });
   }
 }
@@ -1330,7 +1485,7 @@ class GeneratedCommandingProcessManager extends ProcessManager<
 }
 
 class MultiManagedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: AggregateState): readonly AggregateState[] {
+  assignTask(command: TaskCommand): readonly ProjectionEvent[] {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -1342,15 +1497,15 @@ class MultiManagedAggregate extends Aggregate<string, typeof AggregateStateSchem
       ),
     );
     return [
-      create(AggregateStateSchema, {
+      create(ProjectionEventSchema, {
         id: command.id,
         name: `${command.name} one event`,
-        archived: false,
+        priority: 1,
       }),
-      create(AggregateStateSchema, {
+      create(ProjectionEventSchema, {
         id: command.id,
         name: `${command.name} two event`,
-        archived: false,
+        priority: 1,
       }),
     ];
   }
@@ -1406,7 +1561,7 @@ class ValidatingTaskAggregate extends Aggregate<
     return createValidatedEvent(`event-${command.id}`, command.id, command.name);
   }
 
-  applyTask(event: ValidatedAggregateState): void {
+  applyTask(event: ValidatedTaskEvent): void {
     ValidatingTaskAggregate.applierCalls++;
     this.startTransaction();
     this.update((draft) =>
@@ -1586,7 +1741,7 @@ class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof AggregateSta
 }
 
 class NoApplierAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: AggregateState): AggregateState {
+  assignTask(command: TaskCommand): ProjectionEvent {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -1597,14 +1752,13 @@ class NoApplierAggregate extends Aggregate<string, typeof AggregateStateSchema, 
         }),
       ),
     );
-    return create(AggregateStateSchema, {
+    return create(ProjectionEventSchema, {
       id: command.id,
       name: `${command.name} event`,
-      archived: false,
     });
   }
 
-  reactTask(event: AggregateState): void {
+  reactTask(event: ProjectionEvent): void {
     void event;
   }
 }
@@ -1754,22 +1908,22 @@ class FilteredEventAggregate extends Aggregate<string, typeof AggregateStateSche
     this.calls = [];
   }
 
-  reactAnnouncements(event: ProjectionEvent): AggregateState {
+  reactAnnouncements(event: ProjectionEvent): GeneratedReactorEvent {
     FilteredEventAggregate.calls.push(`announcements:${event.name}`);
     return this.result(event);
   }
 
-  reactFallback(event: ProjectionEvent): AggregateState {
+  reactFallback(event: ProjectionEvent): GeneratedReactorEvent {
     FilteredEventAggregate.calls.push(`fallback:${event.name}`);
     return this.result(event);
   }
 
-  private result(event: ProjectionEvent): AggregateState {
+  private result(event: ProjectionEvent): GeneratedReactorEvent {
     this.update((draft) => {
       draft.id = event.id;
       draft.name = event.name;
     });
-    return create(AggregateStateSchema, { id: event.id, name: event.name });
+    return create(GeneratedReactorEventSchema, { id: event.id, name: event.name, priority: 1 });
   }
 }
 
@@ -2037,7 +2191,7 @@ class ReactingTaskProjection extends Projection<string, typeof ProjectionStateSc
 }
 
 class UserIdProjection extends Projection<string, typeof ProjectionStateSchema, number> {
-  subscribeUser(event: UserId): void {
+  subscribeUser(event: ProjectionEvent): void {
     void event;
   }
 }
@@ -2059,8 +2213,14 @@ class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint
 }
 
 class MessageIdProducingAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
-  assignTask(command: Task): TaskCreated {
-    this.update((draft) => Object.assign(draft, command));
+  assignTask(command: CreateTask): TaskCreated {
+    this.update((draft) =>
+      Object.assign(draft, {
+        id: command.id,
+        taskListId: command.taskListId,
+        title: command.title,
+      }),
+    );
     return create(TaskCreatedSchema, {
       ...(command.id === undefined ? {} : { id: command.id }),
       taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
@@ -2121,7 +2281,7 @@ class RoutingProcessManager extends ProcessManager<
     this.failure = failure;
   }
 
-  assignTask(command: AggregateState): ProjectionEvent {
+  assignTask(command: TaskCommand): ProjectionEvent {
     RoutingProcessManager.commandCalls++;
     if (command.name.endsWith("-lifecycle")) {
       if (command.name === "archive-lifecycle") this.archiveDraft();
@@ -2165,7 +2325,7 @@ class RoutingProcessManager extends ProcessManager<
     }
   }
 
-  commandTask(event: ProjectionEvent): AggregateState {
+  commandTask(event: ProjectionEvent): TaskCommand {
     RoutingProcessManager.commandReactionCalls++;
     this.update((draft) =>
       Object.assign(
@@ -2176,14 +2336,13 @@ class RoutingProcessManager extends ProcessManager<
         }),
       ),
     );
-    return create(AggregateStateSchema, {
+    return create(TaskCommandSchema, {
       id: event.id,
       name: `${event.name} follow-up command`,
-      archived: false,
     });
   }
 
-  reactTaskWithEvent(event: ProjectionEvent): AggregateState {
+  reactTaskWithEvent(event: ProjectionEvent): GeneratedReactorEvent {
     RoutingProcessManager.eventCalls++;
     this.update((draft) =>
       Object.assign(
@@ -2194,10 +2353,10 @@ class RoutingProcessManager extends ProcessManager<
         }),
       ),
     );
-    return create(AggregateStateSchema, {
+    return create(GeneratedReactorEventSchema, {
       id: event.id,
       name: `${event.name} produced event`,
-      archived: false,
+      priority: 1,
     });
   }
 }
@@ -2255,14 +2414,14 @@ class FilteredProcessManager extends ProcessManager<
     FilteredProcessManager.calls.push(`react-fallback:${event.name}`);
   }
 
-  commandAnnouncements(event: ProjectionEvent): AggregateState {
+  commandAnnouncements(event: ProjectionEvent): TaskCommand {
     FilteredProcessManager.calls.push(`command-announcements:${event.name}`);
-    return create(AggregateStateSchema, { id: event.id, name: event.name });
+    return create(TaskCommandSchema, { id: event.id, name: event.name });
   }
 
-  commandFallback(event: ProjectionEvent): AggregateState {
+  commandFallback(event: ProjectionEvent): TaskCommand {
     FilteredProcessManager.calls.push(`command-fallback:${event.name}`);
-    return create(AggregateStateSchema, { id: event.id, name: event.name });
+    return create(TaskCommandSchema, { id: event.id, name: event.name });
   }
 }
 
@@ -2446,7 +2605,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [ProjectionEventSchema],
         dispatch: (event) => {
           observed.push(event.id?.value ?? "missing");
           return Promise.resolve();
@@ -2904,7 +3063,7 @@ describe("repository signal routing", () => {
             CommandIdSchema,
             create(CommandIdSchema, { uuid: "command-rejected" }),
           ),
-          typeUrl: TypeUrls.derive(AggregateStateSchema),
+          typeUrl: TypeUrls.derive(TaskCommandSchema),
         }),
         actorContext: create(ActorContextSchema, {
           actor: create(UserIdSchema, { value: "user-1" }),
@@ -3078,7 +3237,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedTwoArgAggregateRepository())
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [ProjectionEventSchema],
         dispatch: (event) => {
           published.push(event.id?.value ?? "missing");
           return Promise.resolve();
@@ -3209,7 +3368,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedTwoArgAggregateRepository())
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [ProjectionEventSchema],
         dispatch: (event) => {
           observed.push(event.id?.value ?? "missing");
           return Promise.resolve();
@@ -3242,7 +3401,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.multitenant("Tasks")
       .add(createGeneratedReactorRepository())
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [GeneratedReactorEventSchema],
         dispatch: (event) => {
           observed.push(event.id?.value ?? "missing");
           return Promise.resolve();
@@ -3294,7 +3453,7 @@ describe("repository signal routing", () => {
       value: create(OriginSchema, {
         message: create(MessageIdSchema, {
           id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-          typeUrl: TypeUrls.derive(AggregateStateSchema),
+          typeUrl: TypeUrls.derive(TaskCommandSchema),
         }),
         actorContext: create(ActorContextSchema, {
           tenantId: createTenantId("tenant-b"),
@@ -3337,7 +3496,7 @@ describe("repository signal routing", () => {
         stored.filter(
           (event) =>
             event.context?.version?.number === 0 &&
-            AnyMessages.unpack(event.message as never, AggregateStateSchema) !== undefined,
+            AnyMessages.unpack(event.message as never, GeneratedReactorEventSchema) !== undefined,
         ),
       ).toHaveLength(2);
       await expect(storage.readCurrent("task-reactor-multi")).resolves.toMatchObject({
@@ -3463,7 +3622,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createGeneratedReactorRepository())
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [GeneratedReactorEventSchema],
         dispatch: (event) => {
           observed.push(event.id?.value ?? "missing");
           return Promise.resolve();
@@ -3477,7 +3636,7 @@ describe("repository signal routing", () => {
       .post(createProjectionEvent("event-follow-up-source", "task-follow-up"));
     await context
       .eventBus()
-      .post(createAggregateEvent("event-later-external", "task-follow-up", 2));
+      .post(createGeneratedReactorEvent("event-later-external", "task-follow-up", 2));
     await context.close();
 
     expect(observed).toHaveLength(2);
@@ -3540,7 +3699,7 @@ describe("repository signal routing", () => {
     const sourceGrandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-        typeUrl: TypeUrls.derive(AggregateStateSchema),
+        typeUrl: TypeUrls.derive(TaskCommandSchema),
       }),
       actorContext: sourceActorContext,
     });
@@ -3828,7 +3987,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [ProjectionEventSchema],
         dispatch: () => {
           dispatchAttempted.resolve();
           return Promise.reject(dispatchFailure);
@@ -3872,7 +4031,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [ProjectionEventSchema],
         dispatch: async (event) => {
           if (event.id?.value === "event-Outer") {
             nestedPosted.resolve();
@@ -4283,7 +4442,7 @@ describe("repository signal routing", () => {
 
     expect(route).toMatchObject({
       entityId: "task-1",
-      messageFullTypeName: AggregateStateSchema.typeName,
+      messageFullTypeName: TaskCommandSchema.typeName,
       invocation: "deferred",
     });
     expectTypeOf(route.entityId).toEqualTypeOf<string>();
@@ -4304,8 +4463,8 @@ describe("repository signal routing", () => {
           id: create(CommandIdSchema, { uuid: "command-uuid-message-id" }),
           context: create(CommandContextSchema),
           message: AnyMessages.pack(
-            UuidMessageIdAggregateStateSchema,
-            create(UuidMessageIdAggregateStateSchema, { id, name: "UUID", priority: 1 }),
+            UuidMessageIdAggregateCommandSchema,
+            create(UuidMessageIdAggregateCommandSchema, { id, name: "UUID", priority: 1 }),
           ),
         }),
       ).entityId,
@@ -4323,14 +4482,14 @@ describe("repository signal routing", () => {
     });
     const commandRepository = createCompositeRouteAggregateRepository();
     const projectionRepository = createCompositeRouteProjectionRepository();
-    const message = create(CompositeRouteAggregateStateSchema, { id: idA, name: "Composite" });
+    const message = create(CompositeRouteCommandSchema, { id: idA, name: "Composite" });
 
     expect(
       commandRepository.routeCommand(
         create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: "composite-command" }),
           context: create(CommandContextSchema),
-          message: AnyMessages.pack(CompositeRouteAggregateStateSchema, message),
+          message: AnyMessages.pack(CompositeRouteCommandSchema, message),
         }),
       ).entityId,
     ).toEqual(idA);
@@ -4384,7 +4543,7 @@ describe("repository signal routing", () => {
     });
     let routeCalls = 0;
     const repository = createCompositeRouteAggregateRepository(
-      CommandRouting.create<CompositeRouteId>().route(CompositeRouteAggregateStateSchema, () => {
+      CommandRouting.create<CompositeRouteId>().route(CompositeRouteCommandSchema, () => {
         routeCalls += 1;
         return routedId;
       }),
@@ -4396,8 +4555,8 @@ describe("repository signal routing", () => {
           id: create(CommandIdSchema, { uuid: "command-composite-custom" }),
           context: create(CommandContextSchema),
           message: AnyMessages.pack(
-            CompositeRouteAggregateStateSchema,
-            create(CompositeRouteAggregateStateSchema, {
+            CompositeRouteCommandSchema,
+            create(CompositeRouteCommandSchema, {
               id: declarationId,
               name: "Custom",
             }),
@@ -4471,7 +4630,7 @@ describe("repository signal routing", () => {
 
   it("uses an exact Command route instead of the declaration-first field", () => {
     const repository = createRoutingRepository(
-      CommandRouting.create<string>().route(AggregateStateSchema, () => "custom-task"),
+      CommandRouting.create<string>().route(TaskCommandSchema, () => "custom-task"),
     );
 
     expect(
@@ -4484,7 +4643,7 @@ describe("repository signal routing", () => {
   it("applies exact routes before replacement defaults", () => {
     const exact = createRoutingRepository(
       CommandRouting.create<string>()
-        .route(AggregateStateSchema, () => "exact")
+        .route(TaskCommandSchema, () => "exact")
         .replaceDefault(() => "replacement"),
     );
     const replacement = createRoutingRepository(
@@ -4497,8 +4656,8 @@ describe("repository signal routing", () => {
   });
 
   it("selects a Command interface route after exact routes and before the default", () => {
-    const token = MessageInterfaces.define<object, readonly [typeof AggregateStateSchema]>([
-      AggregateStateSchema,
+    const token = MessageInterfaces.define<object, readonly [typeof TaskCommandSchema]>([
+      TaskCommandSchema,
     ]);
     const repository = createRoutingRepository(
       CommandRouting.create<string>()
@@ -4513,7 +4672,7 @@ describe("repository signal routing", () => {
       createRoutingRepository(
         CommandRouting.create<string>()
           .route(token, () => "interface")
-          .route(AggregateStateSchema, () => "exact"),
+          .route(TaskCommandSchema, () => "exact"),
       ).routeCommand(createAggregateCommand("command-interface-exact", "field")).entityId,
     ).toBe("exact");
   });
@@ -4521,8 +4680,8 @@ describe("repository signal routing", () => {
   it("rejects a Command interface token with an unregistered member at construction", () => {
     const token = MessageInterfaces.define<
       object,
-      readonly [typeof AggregateStateSchema, typeof ProjectionStateSchema]
-    >([AggregateStateSchema, ProjectionStateSchema]);
+      readonly [typeof TaskCommandSchema, typeof ValidatedTaskCommandSchema]
+    >([TaskCommandSchema, ValidatedTaskCommandSchema]);
 
     expect(() =>
       createRoutingRepository(CommandRouting.create<string>().route(token, () => "target")),
@@ -4542,7 +4701,7 @@ describe("repository signal routing", () => {
   it("rejects routes that cannot apply to a registered Command", () => {
     expect(() =>
       createRoutingRepository(
-        CommandRouting.create<string>().route(ProjectionStateSchema, () => "target"),
+        CommandRouting.create<string>().route(ValidatedTaskCommandSchema, () => "target"),
       ),
     ).toThrow(/unregistered exact route/);
   });
@@ -4550,24 +4709,24 @@ describe("repository signal routing", () => {
   it("rejects missing and incompatible custom Command route results", () => {
     expect(() =>
       createRoutingRepository(
-        CommandRouting.create<string>().route(AggregateStateSchema, () => "   "),
+        CommandRouting.create<string>().route(TaskCommandSchema, () => "   "),
       ).routeCommand(createAggregateCommand("command-blank-custom", "first")),
     ).toThrow(/ID compatible with the Entity state/);
     expect(() =>
       createRoutingRepository(
-        CommandRouting.create<string>().route(AggregateStateSchema, () => 42 as never),
+        CommandRouting.create<string>().route(TaskCommandSchema, () => 42 as never),
       ).routeCommand(createAggregateCommand("command-number-custom", "first")),
     ).toThrow(/ID compatible with the Entity state/);
     expect(() =>
       createInt32RoutingRepository(
-        CommandRouting.create<number>().route(Int32AggregateStateSchema, () => 2 ** 31),
+        CommandRouting.create<number>().route(Int32AggregateCommandSchema, () => 2 ** 31),
       ).routeCommand(
         create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: "command-range-custom" }),
           context: create(CommandContextSchema),
           message: AnyMessages.pack(
-            Int32AggregateStateSchema,
-            create(Int32AggregateStateSchema, { id: 1, name: "Range" }),
+            Int32AggregateCommandSchema,
+            create(Int32AggregateCommandSchema, { id: 1, name: "Range" }),
           ),
         }),
       ),
@@ -4576,7 +4735,7 @@ describe("repository signal routing", () => {
 
   it("rejects a non-message custom Command ID before dispatch", () => {
     const repository = createMessageIdProducingRepository(
-      CommandRouting.create<TaskId>().route(TaskSchema, () => undefined as never),
+      CommandRouting.create<TaskId>().route(CreateTaskSchema, () => undefined as never),
     );
 
     expect(() =>
@@ -4666,8 +4825,8 @@ describe("repository signal routing", () => {
       id: create(CommandIdSchema, { uuid: "command-default-int32" }),
       context: create(CommandContextSchema),
       message: AnyMessages.pack(
-        Int32AggregateStateSchema,
-        create(Int32AggregateStateSchema, { id: 0, name: "Default" }),
+        Int32AggregateCommandSchema,
+        create(Int32AggregateCommandSchema, { id: 0, name: "Default" }),
       ),
     });
 
@@ -4888,8 +5047,8 @@ describe("repository signal routing", () => {
       id: create(CommandIdSchema, { uuid: "command-composite-producer" }),
       context: create(CommandContextSchema),
       message: AnyMessages.pack(
-        CompositeRouteEventSchema,
-        create(CompositeRouteEventSchema, { id, name: "Produce" }),
+        CompositeRouteCommandSchema,
+        create(CompositeRouteCommandSchema, { id, name: "Produce" }),
       ),
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
@@ -5203,8 +5362,8 @@ describe("repository signal routing", () => {
           id: create(EventIdSchema, { value: "event-int32-producer" }),
           context: create(EventContextSchema, { producerId: Identifiers.pack("int32", 0) }),
           message: AnyMessages.pack(
-            Int32AggregateStateSchema,
-            create(Int32AggregateStateSchema, { id: 42, name: "Int32" }),
+            Int32AggregateEventSchema,
+            create(Int32AggregateEventSchema, { id: 42, name: "Int32" }),
           ),
         }),
       ).entityIds,
@@ -5215,8 +5374,8 @@ describe("repository signal routing", () => {
           id: create(EventIdSchema, { value: "event-int64-producer" }),
           context: create(EventContextSchema, { producerId: Identifiers.pack("int64", 0n) }),
           message: AnyMessages.pack(
-            Int64ProcessManagerStateSchema,
-            create(Int64ProcessManagerStateSchema, { id: 42n, queue: "Int64" }),
+            Int64ProcessManagerEventSchema,
+            create(Int64ProcessManagerEventSchema, { id: 42n, queue: "Int64" }),
           ),
         }),
       ).entityIds,
@@ -5232,13 +5391,16 @@ describe("repository signal routing", () => {
           producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "producer" })),
           version: create(VersionSchema, { number: 1 }),
         }),
-        message: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "user-id-task" })),
+        message: AnyMessages.pack(
+          ProjectionEventSchema,
+          create(ProjectionEventSchema, { id: "user-id-task", name: "User route", priority: 1 }),
+        ),
       }),
     );
 
     expect(route).toMatchObject({
       entityIds: ["user-id-task"],
-      messageFullTypeName: UserIdSchema.typeName,
+      messageFullTypeName: ProjectionEventSchema.typeName,
       invocation: "deferred",
     });
   });
@@ -5598,7 +5760,7 @@ describe("repository signal routing", () => {
       });
       expect(diagnostics[0]?.context?.origin).toMatchObject({
         case: "pastMessage",
-        value: { message: { typeUrl: TypeUrls.derive(AggregateStateSchema) } },
+        value: { message: { typeUrl: TypeUrls.derive(TaskCommandSchema) } },
       });
       expect(context.eventBus().acceptedEventTypes()).not.toContain(
         TypeUrls.derive(CommandDispatchedToHandlerSchema),
@@ -5812,15 +5974,15 @@ describe("repository signal routing", () => {
     expect(
       storedEnvelope.message === undefined
         ? undefined
-        : AnyMessages.unpack(storedEnvelope.message, AggregateStateSchema),
+        : AnyMessages.unpack(storedEnvelope.message, TaskCommandSchema),
     ).toEqual(
       command.message === undefined
         ? undefined
-        : AnyMessages.unpack(command.message, AggregateStateSchema),
+        : AnyMessages.unpack(command.message, TaskCommandSchema),
     );
   });
 
-  it("rejects process-manager command routing with a missing first-field ID before handler code", async () => {
+  it("rejects a process-manager command with a missing domain ID before handler code", async () => {
     RoutingProcessManager.reset();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerAssignRepository())
@@ -5828,7 +5990,7 @@ describe("repository signal routing", () => {
 
     await expect(
       context.commandBus().post(createAggregateCommand("command-pm-missing-id", "")),
-    ).rejects.toThrow("Repository command routing requires a non-empty first field.");
+    ).rejects.toBeInstanceOf(CommandValidationError);
     expect(RoutingProcessManager.commandCalls).toBe(0);
     await expect(context.stand().read(ProcessManagerStateSchema, "")).resolves.toBeUndefined();
   });
@@ -6069,8 +6231,8 @@ describe("repository signal routing", () => {
   it("does not call Command interface routing again during replay", async () => {
     RoutingProcessManager.reset();
     let routeCalls = 0;
-    const token = MessageInterfaces.define<object, readonly [typeof AggregateStateSchema]>([
-      AggregateStateSchema,
+    const token = MessageInterfaces.define<object, readonly [typeof TaskCommandSchema]>([
+      TaskCommandSchema,
     ]);
     const routing = CommandRouting.create<string>().route(token, (message) => {
       routeCalls += 1;
@@ -6116,7 +6278,7 @@ describe("repository signal routing", () => {
 
   it("does not call custom Aggregate routing again for a stored message ID", async () => {
     let routeCalls = 0;
-    const routing = CommandRouting.create<TaskId>().route(TaskSchema, (message) => {
+    const routing = CommandRouting.create<TaskId>().route(CreateTaskSchema, (message) => {
       routeCalls += 1;
       if (message.id === undefined) throw new Error("Expected a Task ID.");
       return message.id;
@@ -6173,7 +6335,7 @@ describe("repository signal routing", () => {
     });
     let routeCalls = 0;
     const commandRouting = CommandRouting.create<CompositeRouteId>().route(
-      CompositeRouteEventSchema,
+      CompositeRouteCommandSchema,
       (message) => {
         routeCalls += 1;
         if (message.id === undefined) throw new Error("Expected a composite Command ID.");
@@ -6194,8 +6356,8 @@ describe("repository signal routing", () => {
       id: create(CommandIdSchema, { uuid: "command-composite-handoff" }),
       context: create(CommandContextSchema),
       message: AnyMessages.pack(
-        CompositeRouteEventSchema,
-        create(CompositeRouteEventSchema, { id, name: "Composite command" }),
+        CompositeRouteCommandSchema,
+        create(CompositeRouteCommandSchema, { id, name: "Composite command" }),
       ),
     });
     try {
@@ -6314,8 +6476,8 @@ describe("repository signal routing", () => {
       id: create(CommandIdSchema, { uuid: "command-numeric-int32" }),
       context: create(CommandContextSchema),
       message: AnyMessages.pack(
-        Int32AggregateStateSchema,
-        create(Int32AggregateStateSchema, { id: 42, name: "Int32" }),
+        Int32AggregateCommandSchema,
+        create(Int32AggregateCommandSchema, { id: 42, name: "Int32" }),
       ),
     });
     const int32Message = await storeEntityInboxCommand(
@@ -6347,8 +6509,8 @@ describe("repository signal routing", () => {
       id: create(CommandIdSchema, { uuid: "command-numeric-int64" }),
       context: create(CommandContextSchema),
       message: AnyMessages.pack(
-        Int64ProcessManagerStateSchema,
-        create(Int64ProcessManagerStateSchema, { id: 42n, queue: "Int64" }),
+        Int64ProcessManagerCommandSchema,
+        create(Int64ProcessManagerCommandSchema, { id: 42n, queue: "Int64" }),
       ),
     });
     const int64Message = await storeEntityInboxCommand(
@@ -6401,8 +6563,8 @@ describe("repository signal routing", () => {
           id: create(CommandIdSchema, { uuid: "command-int32-producer" }),
           context: create(CommandContextSchema),
           message: AnyMessages.pack(
-            Int32AggregateStateSchema,
-            create(Int32AggregateStateSchema, { id: 42, name: "Int32" }),
+            Int32AggregateCommandSchema,
+            create(Int32AggregateCommandSchema, { id: 42, name: "Int32" }),
           ),
         }),
       );
@@ -6411,8 +6573,8 @@ describe("repository signal routing", () => {
           id: create(CommandIdSchema, { uuid: "command-int64-producer" }),
           context: create(CommandContextSchema),
           message: AnyMessages.pack(
-            Int64ProcessManagerStateSchema,
-            create(Int64ProcessManagerStateSchema, { id: 42n, queue: "Int64" }),
+            Int64ProcessManagerCommandSchema,
+            create(Int64ProcessManagerCommandSchema, { id: 42n, queue: "Int64" }),
           ),
         }),
       );
@@ -6700,7 +6862,7 @@ describe("repository signal routing", () => {
             CommandIdSchema,
             create(CommandIdSchema, { uuid: "command-pm-dispatch" }),
           ),
-          typeUrl: TypeUrls.derive(AggregateStateSchema),
+          typeUrl: TypeUrls.derive(TaskCommandSchema),
         }),
         actorContext: create(ActorContextSchema, {
           actor: create(UserIdSchema, { value: "user-1" }),
@@ -7224,7 +7386,7 @@ describe("repository signal routing", () => {
     const postJournalContext = BoundedContext.singleTenant("Tasks")
       .add(postJournalRepository)
       .addCommandDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [TaskCommandSchema],
         dispatch: () => {
           publicationAttempts++;
           return Promise.reject(new Error("publication failed after journal"));
@@ -7630,7 +7792,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.multitenant("Tasks")
       .add(createProcessManagerEventRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [TaskCommandSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -7643,7 +7805,7 @@ describe("repository signal routing", () => {
     const sourceGrandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-        typeUrl: TypeUrls.derive(AggregateStateSchema),
+        typeUrl: TypeUrls.derive(TaskCommandSchema),
       }),
       actorContext: sourceActorContext,
     });
@@ -7672,11 +7834,10 @@ describe("repository signal routing", () => {
     if (producedMessage === undefined) {
       throw new Error("Expected a process-manager produced command message.");
     }
-    expect(AnyMessages.unpack(producedMessage, AggregateStateSchema)).toEqual(
-      create(AggregateStateSchema, {
+    expect(AnyMessages.unpack(producedMessage, TaskCommandSchema)).toEqual(
+      create(TaskCommandSchema, {
         id: "pm-event-command",
         name: "Task follow-up command",
-        archived: false,
       }),
     );
   });
@@ -7688,7 +7849,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .addCommandDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [TaskCommandSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -7722,7 +7883,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerCommandOnlyRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [TaskCommandSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -7751,11 +7912,10 @@ describe("repository signal routing", () => {
     if (producedMessage === undefined) {
       throw new Error("Expected a process-manager produced command message.");
     }
-    expect(AnyMessages.unpack(producedMessage, AggregateStateSchema)).toEqual(
-      create(AggregateStateSchema, {
+    expect(AnyMessages.unpack(producedMessage, TaskCommandSchema)).toEqual(
+      create(TaskCommandSchema, {
         id: "pm-first-field",
         name: "Task follow-up command",
-        archived: false,
       }),
     );
   });
@@ -7767,7 +7927,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerEventProducingRepository())
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [GeneratedReactorEventSchema],
         dispatch: () => {
           dispatchAttempted.resolve();
           return Promise.reject(new Error("process-manager event dispatch failed"));
@@ -7822,7 +7982,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [GeneratedReactorEventSchema],
         dispatch: (event) => {
           dispatchedEventIds.push(event.id?.value ?? "");
           return Promise.resolve();
@@ -7854,14 +8014,14 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerMixedEventRepository())
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [GeneratedReactorEventSchema],
         dispatch: (event) => {
           eventDispatches.push(event.id?.value ?? "");
           return Promise.resolve();
         },
       })
       .addCommandDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [TaskCommandSchema],
         dispatch: (command) => {
           commandDispatches.push(command.id?.uuid ?? "");
           return Promise.reject(new Error("mixed process-manager command dispatch failed"));
@@ -7979,7 +8139,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Filtered aggregates")
       .add(createFilteredAggregateRepository())
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [GeneratedReactorEventSchema],
         dispatch: () => Promise.resolve(),
       })
       .build();
@@ -8011,7 +8171,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Filtered process managers")
       .add(createFilteredProcessManagerRepository())
       .addCommandDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [TaskCommandSchema],
         dispatch: (command) => {
           commands.push(command);
           return Promise.resolve();
@@ -8423,7 +8583,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerAssignRepository())
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [ProjectionEventSchema],
         dispatch: (event) => {
           dispatched.push(event);
           return Promise.resolve();
@@ -8464,7 +8624,10 @@ describe("repository signal routing", () => {
     try {
       await context.commandBus().post(createAggregateCommand("command-state-change", "changed"));
 
-      await waitForCondition(() => changes.length === 1);
+      await waitForCondition(() => changes.length >= 1);
+      expect(changes.map((event) => event.message?.typeUrl)).toEqual([
+        TypeUrls.derive(EntityStateChangedSchema),
+      ]);
       expect(changes).toHaveLength(1);
       expect(changes[0]).toMatchObject({
         message: { typeUrl: TypeUrls.derive(EntityStateChangedSchema) },
@@ -8477,7 +8640,7 @@ describe("repository signal routing", () => {
       const change = AnyMessages.unpack(event.message, EntityStateChangedSchema);
       expect(change).toMatchObject({
         entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
-        signalId: [{ typeUrl: TypeUrls.derive(AggregateStateSchema) }],
+        signalId: [{ typeUrl: TypeUrls.derive(TaskCommandSchema) }],
         newState: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
         newVersion: { number: 1 },
       });
@@ -8531,7 +8694,7 @@ describe("repository signal routing", () => {
     let clockTick = 0;
     const clock = vi
       .spyOn(SystemClock.prototype, "now")
-      .mockImplementation(() => new Date(1_000 + clockTick++ * 1_000));
+      .mockImplementation(() => new Date(1_000 + clockTick++));
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
       .addEventDispatcher({
@@ -8558,7 +8721,10 @@ describe("repository signal routing", () => {
       await context
         .commandBus()
         .post(createAggregateCommand("clock-archive", "clock-id", "archive-lifecycle"));
-      await waitForCondition(() => changes.length === 1);
+      await waitForCondition(() => changes.length >= 1);
+      expect(changes.map((event) => event.message?.typeUrl)).toEqual([
+        TypeUrls.derive(EntityArchivedSchema),
+      ]);
       const archived = AnyMessages.unpack(changes[0]?.message as never, EntityArchivedSchema);
       expect(archived?.when).toEqual(changes[0]?.context?.timestamp);
     } finally {
@@ -8618,7 +8784,7 @@ describe("repository signal routing", () => {
         const lifecycle = AnyMessages.unpack(changes[index]?.message as never, schema);
         expect(lifecycle).toMatchObject({
           entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
-          signalId: [{ typeUrl: TypeUrls.derive(AggregateStateSchema) }],
+          signalId: [{ typeUrl: TypeUrls.derive(TaskCommandSchema) }],
         });
         expect(lifecycle?.version?.number).toBeGreaterThan(0);
       }
@@ -8879,7 +9045,7 @@ describe("repository signal routing", () => {
       await waitForCondition(() => pmChanges.length === 1);
       expect(readStateChange(pmChanges[0])).toMatchObject({
         entity: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
-        signalId: [{ typeUrl: TypeUrls.derive(AggregateStateSchema) }],
+        signalId: [{ typeUrl: TypeUrls.derive(TaskCommandSchema) }],
       });
     } finally {
       await processManager.close();
@@ -10436,7 +10602,7 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
+        messageSchemas: () => [ProjectionEventSchema],
         dispatch: () => Promise.reject(thrown),
       })
       .build();
@@ -10591,7 +10757,7 @@ describe("repository signal routing", () => {
 
   it("rejects structurally fabricated handler metadata", () => {
     const handlers = EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
-      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.assign(TaskCommandSchema, "assignTask"),
     ]);
     const fabricated = { ...handlers } as unknown as EntityHandlersMetadata<
       TaskAggregate,
@@ -10640,7 +10806,7 @@ function createRoutingRepository(
   eventRouting?: EventRouting<string>,
 ): Repository<typeof TaskAggregate> {
   const handlers = EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(AggregateStateSchema, "assignTask"),
+    builder.assign(TaskCommandSchema, "assignTask"),
     builder.react(ProjectionEventSchema, "reactToProjection"),
   ]);
 
@@ -10684,7 +10850,7 @@ function createBlankStateIdAggregateRepository(): Repository<typeof BlankStateId
     entityType: BlankStateIdAggregate,
     schema: AggregateStateSchema,
     handlers: EntityHandlers.define(BlankStateIdAggregate, AggregateStateSchema, (builder) => [
-      builder.assign(AggregateStateSchema, "assign"),
+      builder.assign(TaskCommandSchema, "assign"),
     ]),
   });
 }
@@ -10698,7 +10864,7 @@ function createBlankStateIdProcessManagerRepository(): Repository<
     handlers: EntityHandlers.define(
       BlankStateIdProcessManager,
       ProcessManagerStateSchema,
-      (builder) => [builder.assign(AggregateStateSchema, "assign")],
+      (builder) => [builder.assign(TaskCommandSchema, "assign")],
     ),
   });
 }
@@ -10777,7 +10943,7 @@ function createFilteredAggregateRepository(): Repository<typeof FilteredEventAgg
         methodName: "reactAnnouncements",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [GeneratedReactorEventSchema],
         where: { eventField: "name", equals: "announcements" },
       },
       {
@@ -10785,7 +10951,7 @@ function createFilteredAggregateRepository(): Repository<typeof FilteredEventAgg
         methodName: "reactFallback",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [GeneratedReactorEventSchema],
       },
     ],
   );
@@ -10826,7 +10992,7 @@ function createFilteredProcessManagerRepository(): Repository<typeof FilteredPro
         methodName: "commandAnnouncements",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [TaskCommandSchema],
         where: { eventField: "name", equals: "announcements" },
       },
       {
@@ -10834,7 +11000,7 @@ function createFilteredProcessManagerRepository(): Repository<typeof FilteredPro
         methodName: "commandFallback",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [TaskCommandSchema],
       },
     ],
   );
@@ -10890,7 +11056,7 @@ function createCompositeRouteAggregateRepository(
   const handlers = EntityHandlers.define(
     CompositeRouteAggregate,
     CompositeRouteAggregateStateSchema,
-    (builder) => [builder.assign(CompositeRouteAggregateStateSchema, "assign")],
+    (builder) => [builder.assign(CompositeRouteCommandSchema, "assign")],
   );
 
   return new Repository({
@@ -10905,7 +11071,7 @@ function createUuidMessageIdAggregateRepository(): Repository<typeof UuidMessage
   const handlers = EntityHandlers.define(
     UuidMessageIdAggregate,
     UuidMessageIdAggregateStateSchema,
-    (builder) => [builder.assign(UuidMessageIdAggregateStateSchema, "assign")],
+    (builder) => [builder.assign(UuidMessageIdAggregateCommandSchema, "assign")],
   );
 
   return new Repository({
@@ -10926,7 +11092,7 @@ function createCompositeRouteProcessManagerRepository(
     (builder) =>
       options.produces === true
         ? [
-            builder.assign(CompositeRouteEventSchema, "assignAndProduce"),
+            builder.assign(CompositeRouteCommandSchema, "assignAndProduce"),
             builder.react(CompositeRouteEventSchema, "react"),
           ]
         : [builder.react(CompositeRouteEventSchema, "react")],
@@ -11125,7 +11291,7 @@ function createContextMutatingGeneratedProjectionRepository(): Repository<
 
 function createUserIdProjectionRepository(): Repository<typeof UserIdProjection> {
   const handlers = EntityHandlers.define(UserIdProjection, ProjectionStateSchema, (builder) => [
-    builder.subscribe(UserIdSchema, "subscribeUser"),
+    builder.subscribe(ProjectionEventSchema, "subscribeUser"),
   ]);
 
   return new Repository({
@@ -11169,8 +11335,8 @@ function createInt32RoutingRepository(
     Int32RoutingAggregate,
     Int32AggregateStateSchema,
     (builder) => [
-      builder.assign(Int32AggregateStateSchema, "assign"),
-      builder.react(Int32AggregateStateSchema, "react"),
+      builder.assign(Int32AggregateCommandSchema, "assign"),
+      builder.react(Int32AggregateEventSchema, "react"),
     ],
   );
   return new Repository({
@@ -11186,8 +11352,8 @@ function createInt64RoutingRepository(): Repository<typeof Int64RoutingProcessMa
     Int64RoutingProcessManager,
     Int64ProcessManagerStateSchema,
     (builder) => [
-      builder.assign(Int64ProcessManagerStateSchema, "assign"),
-      builder.react(Int64ProcessManagerStateSchema, "react"),
+      builder.assign(Int64ProcessManagerCommandSchema, "assign"),
+      builder.react(Int64ProcessManagerEventSchema, "react"),
     ],
   );
   return new Repository({
@@ -11217,7 +11383,7 @@ function createMessageIdProducingRepository(
   commandRouting?: CommandRouting<TaskId>,
 ): Repository<typeof MessageIdProducingAggregate> {
   const handlers = EntityHandlers.define(MessageIdProducingAggregate, TaskSchema, (builder) => [
-    builder.assign(TaskSchema, "assignTask"),
+    builder.assign(CreateTaskSchema, "assignTask"),
   ]);
 
   return new Repository({
@@ -11308,33 +11474,33 @@ function createExecutingRepository(): Repository<typeof ExecutingTaskAggregate> 
   const handlers = EntityHandlers.define(
     ExecutingTaskAggregate,
     AggregateStateSchema,
-    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
   );
 
   return new Repository({
     entityType: ExecutingTaskAggregate,
     schema: AggregateStateSchema,
     handlers,
-    events: [AggregateStateSchema, TaskAlreadyDoneSchema],
+    events: [ProjectionEventSchema, TaskAlreadyDoneSchema],
   });
 }
 
 function createManagedRepository(): Repository<typeof ManagedTaskAggregate> {
   const handlers = EntityHandlers.define(ManagedTaskAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(AggregateStateSchema, "assignTask"),
+    builder.assign(TaskCommandSchema, "assignTask"),
   ]);
 
   return new Repository({
     entityType: ManagedTaskAggregate,
     schema: AggregateStateSchema,
     handlers,
-    events: [AggregateStateSchema, TaskAlreadyDoneSchema],
+    events: [ProjectionEventSchema, TaskAlreadyDoneSchema],
   });
 }
 
 function createMessageIdRejectingRepository(): Repository<typeof MessageIdRejectingAggregate> {
   const handlers = EntityHandlers.define(MessageIdRejectingAggregate, TaskSchema, (builder) => [
-    builder.assign(TaskSchema, "assignTask"),
+    builder.assign(CreateTaskSchema, "assignTask"),
   ]);
 
   return new Repository({
@@ -11357,7 +11523,7 @@ function createGeneratedTwoArgAggregateRepository(): Repository<typeof Generated
             kind: "command-assignment",
             methodName: "assignTask",
             signalSchema: TaskCommandSchema,
-            emittedSchemas: [AggregateStateSchema],
+            emittedSchemas: [ProjectionEventSchema],
             parameterCount: 2,
             origin: "domestic",
           },
@@ -11370,7 +11536,7 @@ function createGeneratedTwoArgAggregateRepository(): Repository<typeof Generated
     entityType: GeneratedTwoArgAggregate,
     schema: AggregateStateSchema,
     handlers,
-    events: [AggregateStateSchema, TaskAlreadyDoneSchema],
+    events: [ProjectionEventSchema, TaskAlreadyDoneSchema],
   });
 }
 
@@ -11388,7 +11554,7 @@ function createGeneratedReactorRepository(
             kind: "event-reaction",
             methodName: "reactProjection",
             signalSchema: ProjectionEventSchema,
-            emittedSchemas: [AggregateStateSchema],
+            emittedSchemas: [GeneratedReactorEventSchema],
             parameterCount: 2,
             origin: "domestic",
           },
@@ -11401,6 +11567,7 @@ function createGeneratedReactorRepository(
     entityType: GeneratedReactorAggregate,
     schema: AggregateStateSchema,
     handlers,
+    events: [GeneratedReactorEventSchema],
     ...(guarded ? { doubleDispatchGuard: { depth: 1 } } : {}),
   });
 }
@@ -11418,7 +11585,7 @@ function createGuardedAggregateRepository(
         methodName: "reactProjection",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [ProjectionEventSchema],
       },
     ],
   );
@@ -11443,7 +11610,7 @@ function createProducingGuardedAggregateRepository(): Repository<typeof Producin
         methodName: "reactProjection",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [GeneratedReactorEventSchema],
       },
     ],
   );
@@ -11452,7 +11619,7 @@ function createProducingGuardedAggregateRepository(): Repository<typeof Producin
     entityType: ProducingGuardedAggregate,
     schema: AggregateStateSchema,
     handlers,
-    events: [AggregateStateSchema],
+    events: [GeneratedReactorEventSchema],
     doubleDispatchGuard: true,
   });
 }
@@ -11504,27 +11671,27 @@ function createGeneratedCommandingRepository(): Repository<
 
 function createMultiManagedRepository(): Repository<typeof MultiManagedAggregate> {
   const handlers = EntityHandlers.define(MultiManagedAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(AggregateStateSchema, "assignTask"),
+    builder.assign(TaskCommandSchema, "assignTask"),
   ]);
 
   return new Repository({
     entityType: MultiManagedAggregate,
     schema: AggregateStateSchema,
     handlers,
-    events: [AggregateStateSchema],
+    events: [ProjectionEventSchema],
   });
 }
 
 function createEmptyManagedRepository(): Repository<typeof EmptyManagedAggregate> {
   const handlers = EntityHandlers.define(EmptyManagedAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(AggregateStateSchema, "assignTask"),
+    builder.assign(TaskCommandSchema, "assignTask"),
   ]);
 
   return new Repository({
     entityType: EmptyManagedAggregate,
     schema: AggregateStateSchema,
     handlers,
-    events: [AggregateStateSchema],
+    events: [ProjectionEventSchema],
   });
 }
 
@@ -11532,14 +11699,14 @@ function createEnvelopeManagedRepository(): Repository<typeof EnvelopeManagedAgg
   const handlers = EntityHandlers.define(
     EnvelopeManagedAggregate,
     AggregateStateSchema,
-    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
   );
 
   return new Repository({
     entityType: EnvelopeManagedAggregate,
     schema: AggregateStateSchema,
     handlers,
-    events: [AggregateStateSchema],
+    events: [ProjectionEventSchema],
   });
 }
 
@@ -11549,7 +11716,7 @@ function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate
     ValidatedAggregateStateSchema,
     (builder) => [
       builder.assign(ValidatedTaskCommandSchema, "assignTask"),
-      builder.apply(ValidatedAggregateStateSchema, "applyTask"),
+      builder.apply(ValidatedTaskEventSchema, "applyTask"),
     ],
   );
 
@@ -11604,7 +11771,7 @@ function createTransitionViolatingRepository(): Repository<typeof TransitionViol
   const handlers = EntityHandlers.define(
     TransitionViolatingAggregate,
     AggregateStateSchema,
-    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
   );
 
   return new Repository({
@@ -11618,7 +11785,7 @@ function createRecoveringTransitionRepository(): Repository<typeof RecoveringTra
   const handlers = EntityHandlers.define(
     RecoveringTransitionAggregate,
     AggregateStateSchema,
-    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
   );
 
   return new Repository({
@@ -11632,7 +11799,7 @@ function createAsyncAssigneeRepository(): Repository<typeof AsyncAssigneeAggrega
   const handlers = EntityHandlers.define(
     AsyncAssigneeAggregate,
     AggregateStateSchema,
-    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
   );
 
   return new Repository({
@@ -11648,7 +11815,7 @@ function createRejectedAsyncAssigneeRepository(): Repository<
   const handlers = EntityHandlers.define(
     RejectedAsyncAssigneeAggregate,
     AggregateStateSchema,
-    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
   );
 
   return new Repository({
@@ -11662,7 +11829,7 @@ function createSerialAsyncAssigneeRepository(): Repository<typeof SerialAsyncAss
   const handlers = EntityHandlers.define(
     SerialAsyncAssigneeAggregate,
     AggregateStateSchema,
-    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
   );
 
   return new Repository({
@@ -11677,8 +11844,8 @@ function createBigintVersionRepository(): Repository<typeof BigintVersionAggrega
     BigintVersionAggregate,
     AggregateStateSchema,
     (builder) => [
-      builder.assign(AggregateStateSchema, "assignTask"),
-      builder.apply(AggregateStateSchema, "applyTask"),
+      builder.assign(TaskCommandSchema, "assignTask"),
+      builder.apply(ProjectionEventSchema, "applyTask"),
     ],
   );
 
@@ -11694,7 +11861,7 @@ function createProjectionProducingRepository(): Repository<typeof ProjectionProd
     ProjectionProducingAggregate,
     AggregateStateSchema,
     (builder) => [
-      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.assign(TaskCommandSchema, "assignTask"),
       builder.apply(ProjectionEventSchema, "applyProjection"),
     ],
   );
@@ -11713,7 +11880,7 @@ function createTenantProjectionRepo(): Repository<
     CommandTenantProjectionProducingAggregate,
     AggregateStateSchema,
     (builder) => [
-      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.assign(TaskCommandSchema, "assignTask"),
       builder.apply(ProjectionEventSchema, "applyProjection"),
     ],
   );
@@ -11731,7 +11898,7 @@ function createProcessManagerAssignRepository(
   const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
     ProcessManagerStateSchema,
-    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
     [
       {
         kind: "command-assignment",
@@ -11802,7 +11969,7 @@ function createProcessManagerCommandAndReactRepository(): Repository<typeof Rout
     RoutingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [
-      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.assign(TaskCommandSchema, "assignTask"),
       builder.react(ProjectionEventSchema, "reactTask"),
     ],
     [
@@ -11835,7 +12002,7 @@ function createDiagnosticOnlyProcessManagerRepository(): Repository<
   const handlers = HandlerMetadataValues.defineArity(
     DiagnosticOnlyProcessManager,
     ProcessManagerStateSchema,
-    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    (builder) => [builder.assign(TaskCommandSchema, "assignTask")],
     [
       {
         kind: "command-assignment",
@@ -11970,7 +12137,7 @@ function createProcessManagerEventRepository(): Repository<typeof RoutingProcess
         methodName: "commandTask",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [TaskCommandSchema],
       },
     ],
   );
@@ -11993,7 +12160,7 @@ function createProcessManagerEventProducingRepository(): Repository<typeof Routi
         methodName: "reactTaskWithEvent",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [GeneratedReactorEventSchema],
       },
     ],
   );
@@ -12016,7 +12183,7 @@ function createProcessManagerCommandOnlyRepository(): Repository<typeof RoutingP
         methodName: "commandTask",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [TaskCommandSchema],
       },
     ],
   );
@@ -12070,7 +12237,7 @@ function createGuardedProcessManagerCommandOnlyRepository(): Repository<
         methodName: "commandTask",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [TaskCommandSchema],
       },
     ],
   );
@@ -12098,14 +12265,14 @@ function createProcessManagerMixedEventRepository(): Repository<typeof RoutingPr
         methodName: "reactTaskWithEvent",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [GeneratedReactorEventSchema],
       },
       {
         kind: "command-reaction",
         methodName: "commandTask",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [AggregateStateSchema],
+        emittedSchemas: [TaskCommandSchema],
       },
     ],
   );
@@ -12147,15 +12314,15 @@ function createThrowingProjectionRepository(): Repository<typeof ThrowingTaskPro
 
 function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
   const handlers = EntityHandlers.define(NoApplierAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(AggregateStateSchema, "assignTask"),
-    builder.react(AggregateStateSchema, "reactTask"),
+    builder.assign(TaskCommandSchema, "assignTask"),
+    builder.react(ProjectionEventSchema, "reactTask"),
   ]);
 
   return new Repository({
     entityType: NoApplierAggregate,
     schema: AggregateStateSchema,
     handlers,
-    events: [AggregateStateSchema],
+    events: [ProjectionEventSchema],
   });
 }
 
@@ -12164,8 +12331,8 @@ function createMalformedEventRepository(): Repository<typeof MalformedEventAggre
     MalformedEventAggregate,
     AggregateStateSchema,
     (builder) => [
-      builder.assign(AggregateStateSchema, "assignTask"),
-      builder.apply(AggregateStateSchema, "applyTask"),
+      builder.assign(TaskCommandSchema, "assignTask"),
+      builder.apply(ProjectionEventSchema, "applyTask"),
     ],
   );
 
@@ -12193,12 +12360,35 @@ function createAggregateEvent(
       version: create(VersionSchema, { number: version }),
     }),
     message: AnyMessages.pack(
-      AggregateStateSchema,
-      create(AggregateStateSchema, {
+      ProjectionEventSchema,
+      create(ProjectionEventSchema, {
         id: aggregateId,
         name,
-        archived: false,
+        priority: 1,
       }),
+    ),
+  });
+}
+
+function createGeneratedReactorEvent(
+  id: string,
+  aggregateId: string,
+  version: number,
+  name = "Task",
+): SpineEvent {
+  return create(EventSchema, {
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema, {
+      producerId: AnyMessages.pack(
+        StringValueSchema,
+        create(StringValueSchema, { value: aggregateId }),
+      ),
+      timestamp: create(TimestampSchema, { seconds: BigInt(version) }),
+      version: create(VersionSchema, { number: version }),
+    }),
+    message: AnyMessages.pack(
+      GeneratedReactorEventSchema,
+      create(GeneratedReactorEventSchema, { id: aggregateId, name, priority: 1 }),
     ),
   });
 }
@@ -12222,11 +12412,10 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task", 
       }),
     }),
     message: AnyMessages.pack(
-      AggregateStateSchema,
-      create(AggregateStateSchema, {
+      TaskCommandSchema,
+      create(TaskCommandSchema, {
         id: aggregateId,
         name,
-        archived: false,
       }),
     ),
   });
@@ -12303,12 +12492,11 @@ function createTaskCommand(id: string, taskId: string, title = "Task") {
       }),
     }),
     message: AnyMessages.pack(
-      TaskSchema,
-      create(TaskSchema, {
+      CreateTaskSchema,
+      create(CreateTaskSchema, {
         id: create(TaskIdSchema, { value: taskId }),
         taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
         title,
-        completed: false,
       }),
     ),
   });
@@ -12454,8 +12642,7 @@ function readAggregateId(command: SpineCommand): string {
   const message =
     command.message === undefined
       ? undefined
-      : (AnyMessages.unpack(command.message, AggregateStateSchema) ??
-        AnyMessages.unpack(command.message, TaskCommandSchema));
+      : AnyMessages.unpack(command.message, TaskCommandSchema);
 
   if (message === undefined) {
     const validated =
@@ -12496,8 +12683,8 @@ function createValidatedEvent(id: string, aggregateId: string, name: string): Sp
       version: create(VersionSchema, { number: 1 }),
     }),
     message: AnyMessages.pack(
-      ValidatedAggregateStateSchema,
-      create(ValidatedAggregateStateSchema, {
+      ValidatedTaskEventSchema,
+      create(ValidatedTaskEventSchema, {
         id: aggregateId,
         name,
       }),
@@ -12512,7 +12699,6 @@ function createProjectionEvent(
     readonly producerId?: string;
     readonly name?: string;
     readonly producerNumber?: number;
-    readonly producerMessage?: AggregateState;
     readonly importTenantId?: string;
     readonly importTenantKind?: TenantKind;
     readonly pastMessageTenantId?: string;
@@ -12580,7 +12766,7 @@ function projectionEventOrigin(options: {
       value: create(OriginSchema, {
         message: create(MessageIdSchema, {
           id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-          typeUrl: TypeUrls.derive(AggregateStateSchema),
+          typeUrl: TypeUrls.derive(TaskCommandSchema),
         }),
         actorContext: create(ActorContextSchema, {
           tenantId: createTenantId(options.pastMessageTenantId, options.pastMessageTenantKind),
@@ -12622,11 +12808,7 @@ function createTenantId(value: string, kind: TenantKind = "value") {
 function projectionProducerId(options: {
   readonly producerId?: string;
   readonly producerNumber?: number;
-  readonly producerMessage?: AggregateState;
 }) {
-  if (options.producerMessage !== undefined) {
-    return AnyMessages.pack(AggregateStateSchema, options.producerMessage);
-  }
   if (options.producerNumber !== undefined) {
     return AnyMessages.pack(
       DoubleValueSchema,
