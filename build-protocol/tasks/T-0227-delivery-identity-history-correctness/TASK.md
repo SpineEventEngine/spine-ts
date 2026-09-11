@@ -58,6 +58,21 @@ Final release-verified provenance implementation HEAD: `2240709c8`.
   repository, integration-broker, lifecycle, runtime metadata, and core tests.
   Those findings are inputs to this correction, not accepted blindly; each
   replacement must be checked against what the test is meant to prove.
+- Design disposition: reject the additive `AdmitOne` RPC because it creates a
+  stronger server-authoritative protocol than current Spine JVM and changes the
+  frozen wire contract. Replace per-message admission scans with one shared
+  page-level delivery policy: read each shard page without status filtering,
+  deduplicate pending rows against delivered rows in that page and a
+  JVM-equivalent 1,000-identity recent-delivery cache, dispatch survivors, then
+  persist and clean up through the existing adapters. A private cache registry
+  keyed by the long-lived inbox adapter preserves the cache across the
+  short-lived `Delivery` wrappers used by remote context handoff without adding
+  a public cache API.
+- Delivery redesign implementation assignment: existing implementer role,
+  explicitly `gpt-5.6-terra` / `medium`, canonical agent ID to be recorded at
+  dispatch. It receives the shared delivery policy, direct and remote adapter
+  changes, focused tests, and narrow documentation. It may not change fixture
+  generation or unrelated test payloads, and may not spawn sub-agents.
 
 ## Sigstore Provenance Correction Framing
 
