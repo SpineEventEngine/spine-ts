@@ -991,7 +991,7 @@ Correction evidence recorded 2026-09-11:
   the uncompiled import. `pnpm proto:generate`, `pnpm typecheck:build:generated`,
   and one-worker Vitest for generated-clean, cleaner, and managed external
   events passed 21 tests. No dynamic descriptors, Base64 fixtures, production
-state changes, commits, or pushes were introduced.
+  state changes, commits, or pushes were introduced.
 
 The first converged `pnpm verify:release` run passed every non-test gate and
 then ran 4,662 tests. It exposed one stale generated-target expectation and a
