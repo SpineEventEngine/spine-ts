@@ -59,17 +59,8 @@ identity, and same-version recovery is by name/version only. Final verification
 checks every one of the 18 package versions and the aggregate selected tag;
 investigate any mismatch rather than attempting same-version repair.
 
-After every Lerna result, including status zero, the same publish job waits and
-checks the public registry. A complete exact release is accepted only after that
-check. Otherwise, it creates a new temporary workspace for only the
-still-missing package names and tries again. It does this at most three times,
-with waits of 90, 180, and 360 seconds after each attempt. The last check can
-confirm completion but cannot start a fourth attempt. A timeout, server error,
-malformed registry response, or wrong selected tag stops the job without another
-publish attempt. Every temporary workspace is removed.
-
-If the final registry check still shows a missing version or selected tag, stop
-and investigate; do not overwrite, repair tags separately, unpublish, or reuse
-the affected version for same-version mutation. Do not use tokens, login/whoami,
-or disable provenance. Pause merges if the fixed queue approaches GitHub's 100
+If final registry verification shows a missing version or selected tag, stop and
+investigate; do not overwrite, repair tags separately, unpublish, or reuse the
+affected version for same-version mutation. Do not use tokens, login/whoami, or
+disable provenance. Pause merges if the fixed queue approaches GitHub's 100
 pending-run ceiling.

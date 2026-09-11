@@ -5698,13 +5698,6 @@ checks are deliberately lost. The old publisher remains tracked but unreachable
 until one successful live Lerna release, then a separate versioned cleanup owns
 its deletion. This decision supersedes only D-0115's custom-engine details.
 
-After every Lerna result, the merge-triggered job may use at most two fresh
-same-job retry workspaces. It waits 90, 180, then 360 seconds before strict
-registry checks. A complete exact release makes that attempt successful; a
-partial release selects only exact missing names, even after status zero. The
-final check cannot start a fourth Lerna process. Ambiguous registry responses
-fail closed.
-
 ## D-0118: Develop Only Through Official Feature Branches
 
 Status: Accepted

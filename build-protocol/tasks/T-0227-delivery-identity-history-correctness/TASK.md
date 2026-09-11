@@ -1,6 +1,6 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: In progress — publish workflow correction
+Status: Complete
 Start: `2026-09-10 16:26 WEST`
 Initial closure: `2026-09-10 20:06 WEST`
 Final closure: `2026-09-11 02:19 WEST`
@@ -344,90 +344,6 @@ verification and review may run concurrently only at stable boundaries.
   every release gate, 290/290 test files, 4,676/4,676 tests, and all global
   coverage thresholds. The independent correction review is complete with no
   open finding.
-- `2026-09-11 10:12 WEST`: Reopened after the human reported failed publish job
-  `102874382039` for merged `2.0.0-snapshot.10`. Public job metadata proves the
-  isolated Lerna publication step failed after preparation succeeded. Public npm
-  metadata proves a partial release: 13 packages reached `snapshot.10`, while
-  `client-node`, `deployment-gce`, `deployment-gke`, `server`, and `testing`
-  remained at `snapshot.8`; those five had previously published through the same
-  trusted workflow and repository. The current workflow can select missing
-  packages on a later run but makes no bounded retry in the merge-triggered run.
-  Prepared an architecture check using the existing requirements-splitter role,
-  explicitly dispatched as `gpt-5.6-sol` / high with no inherited conversation
-  turns, followed by the existing implementer role as `gpt-5.6-terra` / medium.
-  Neither role may spawn sub-agents; immutable role configuration is the available
-  runtime-profile evidence.
-- `2026-09-11 10:22 WEST`: The architecture check confirmed a bounded same-job
-  recovery is sufficient. After a nonzero Lerna result, the job must allow npm
-  registry convergence, strictly distinguish complete, partial, and ambiguous
-  states, accept nonzero only when all 18 exact versions and selected tags are
-  present, and otherwise retry only the exact missing package set in a fresh
-  disposable workspace. Preparation and downloaded artifacts remain unchanged.
-  Three publication attempts use fixed waits of 90, 180, and a final 360 seconds;
-  the last wait can recognize completion but cannot authorize a fourth attempt.
-  Timeouts, server errors, malformed records, and wrong tags fail closed. The
-  existing implementer role is now explicitly dispatched as `gpt-5.6-terra` /
-  medium for the registry seam, bounded controller, workflow wiring, tests, and
-  narrow release documentation. The implementer may not spawn sub-agents.
-- `2026-09-11 10:27 WEST`: Implemented the bounded same-job publication
-  recovery. The controller creates a fresh disposable workspace for each of at
-  most three Lerna calls, waits 90, 180, and 360 seconds after nonzero results,
-  and performs a strict complete/partial registry inspection after each wait.
-  It accepts a delayed complete state, retries only exact missing package names,
-  and reports missing names with the final process status and signal on
-  exhaustion. Preparation and downloaded release artifacts remain outside this
-  controller and occur once. Focused release controller, registry, workflow,
-  and local Lerna registry tests passed (34 tests). Static checks remain next;
-  `verify:release` was not run.
-- `2026-09-11 10:34 WEST`: Independent acceptance found and returned one
-  correction batch: signal-triggered parent cleanup, strict validation of every
-  retry selection, and complete required GitHub flag pairs. The existing
-  implementer corrected all three test-first. Independent acceptance then passed
-  37/37 focused release tests, tooling typecheck, TSDoc, formatting, and diff
-  hygiene. Implementation commit `4e44f4d6d` is pushed to `origin`. Prepared one
-  review wave using existing roles with explicit profiles: performance/reliability
-  `gpt-5.6-terra` / high, style/maintainability `gpt-5.6-terra` / high, and
-  documentation `gpt-5.6-luna` / medium. Each reviewer is read-only and may not
-  spawn sub-agents. TypeScript/API review is N/A because the correction changes no
-  published TypeScript declaration or runtime package API. Final security review
-  follows after this wave converges.
-- `2026-09-11 10:32 WEST`: Accepted the publication-recovery correction batch.
-  The controller now uses the existing SIGINT/SIGTERM cleanup pattern for its
-  temporary parent, preserves exit codes 130 and 143, validates initial and
-  delayed partial selections before mutation, and rejects missing GitHub SHA or
-  step-summary inputs before the first Lerna call. Focused tests cover signal
-  cleanup, invalid selections, and absent inputs. The existing local Lerna
-  registry test already proves that a partial publication retries only the
-  missing package and that a stored complete selection performs no PUT; the
-  controller tests add the distinct nonzero-process and delayed-registry cases,
-  so no duplicate local-registry expansion is needed. Focused release checks
-  passed 37/37, plus tooling typecheck, TSDoc, formatting, and diff checks.
-- `2026-09-11 10:37 WEST`: The complete review wave found that status zero had
-  returned before a strict registry inspection. The controller now waits and
-  inspects after every Lerna result, including zero. Only exact complete state
-  succeeds; a partial zero result follows the same fresh-workspace,
-  missing-only retry path, and wrong tags or other ambiguous states fail closed.
-  D-0117 and the release runbook now state the same rule. Controller regressions
-  cover zero-plus-partial, zero-plus-wrong-tag, and zero-plus-complete.
-- `2026-09-11 10:42 WEST`: The review correction passed 40/40 focused release
-  tests, tooling typecheck, and diff hygiene, and was pushed as `e613d9583`.
-  Prepared a focused re-review of the substantively affected concerns using the
-  existing performance/reliability role as `gpt-5.6-terra` / high, the existing
-  style/maintainability role as `gpt-5.6-terra` / high, and the existing
-  documentation role as `gpt-5.6-luna` / medium. Each reviewer is read-only,
-  receives no inherited conversation turns, and may not spawn sub-agents.
-- `2026-09-11 10:47 WEST`: The focused re-review wave returned one correction
-  batch. Performance/reliability found that synchronous Lerna execution blocks
-  the installed signal handlers and has no attempt deadline, so cancellation or
-  a stalled child can prevent cleanup and bounded recovery. Style/maintainability
-  found that the interrupt test does not assert parent cleanup and the controller
-  TSDoc still limits convergence checks to nonzero exits. Documentation review
-  was clean and independently passed 29 focused tests. Returned the accepted
-  findings to the existing implementer role, explicitly `gpt-5.6-terra` /
-  medium, for asynchronous supervised execution, a defined attempt deadline,
-  child termination before cleanup, integration-style signal and timeout tests,
-  the missing cleanup assertion, and the narrow TSDoc correction. The implementer
-  may not spawn sub-agents.
 
 ## Decisions
 
@@ -709,67 +625,6 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   dependency safety, and prohibited-scope compliance.
 
 ## Integration Result
-
-- `2026-09-11 10:48 WEST`: Replaced the synchronous Lerna launch with an
-  asynchronously supervised child. SIGINT/SIGTERM now first terminate that
-  child; cleanup and conventional exit follow its close event. Each attempt has
-  a 20-minute deadline appropriate for the 18-package sequential publication.
-  Both cancellation and deadline expiry use one idempotent termination path:
-  SIGTERM followed by SIGKILL after a 10-second grace period if required.
-  Focused real-child tests use a readiness handshake and a child that ignores
-  SIGTERM, then prove SIGKILL and active/parent cleanup after close. Additional
-  regressions prove cancellation before child launch or during convergence
-  prevents publication, retry, and registry inspection, and clears the real
-  delay timer. The controller TSDoc now correctly says every result receives a
-  convergence check. Final focused acceptance passed 44/44 tests across four
-  release suites, tooling typecheck, TSDoc, formatting, and diff hygiene.
-- `2026-09-11 11:00 WEST`: The lifecycle correction and acceptance evidence were
-  pushed as `2f36dabc4`. Prepared fresh focused re-reviews using the existing
-  performance/reliability role as `gpt-5.6-terra` / high and the existing
-  style/maintainability role as `gpt-5.6-terra` / high. Both reviewers are
-  read-only, receive no inherited conversation turns, and may not spawn
-  sub-agents. Documentation remains closed because the release runbook and
-  decision record were already clean and this correction changed only matching
-  implementation TSDoc and deterministic task evidence.
-- `2026-09-11 11:06 WEST`: The fresh lifecycle re-review returned one final
-  correction batch. Performance/reliability found a spawn-error race before
-  completion listeners are installed and insufficient proof of TERM-first,
-  idempotent escalation. Style/maintainability found that direct-PID termination
-  can leave Lerna descendants running, that the production delay timer lacks a
-  direct cancellation regression, and that parent SIGTERM/exit-143 behavior is
-  uncovered. Returned these accepted findings to the existing implementer role,
-  explicitly `gpt-5.6-terra` / medium. The correction must reuse the repository's
-  existing detached process-group termination pattern, attach child completion
-  listeners immediately, extract the existing abortable delay for direct tests,
-  and add bounded process-tree, spawn-error, TERM/KILL, and SIGTERM regressions.
-  The implementer may not spawn sub-agents.
-- `2026-09-11 11:14 WEST`: Corrected the final lifecycle findings by reusing the
-  established detached process-group termination plan. Spawn failure listeners
-  now attach immediately; a missing executable settles even if startup readiness
-  never arrives. Cancellation and attempt deadlines send one group SIGTERM and
-  one delayed SIGKILL when necessary. Real parent-plus-descendant tests cover
-  both SIGINT/130 and SIGTERM/143, prove the descendant is gone before cleanup,
-  and prevent registry work after cancellation. A direct test covers the real
-  abortable convergence timer. Final focused acceptance passed 49/49 tests
-  across four release suites, tooling typecheck, TSDoc, formatting, and diff
-  hygiene; ESLint then identified one test-global spelling corrected before the
-  final rerun.
-- `2026-09-11 11:16 WEST`: The completed process-group correction passed 49/49
-  focused release tests, tooling typecheck, TSDoc, ESLint, formatting, and diff
-  hygiene, then was pushed as `b1bd0f751`. Prepared the final focused re-review
-  using the existing performance/reliability and style/maintainability roles,
-  both explicitly `gpt-5.6-terra` / high. Each reviewer is read-only, receives
-  no inherited conversation turns, and may not spawn sub-agents.
-- `2026-09-11 11:22 WEST`: The final process review found that leader close can
-  cancel escalation while a resistant descendant remains, that the attempt
-  deadline starts after optional readiness, and that Windows taskkill failures
-  are discarded. It also found the delay-timer test proves prompt resolution but
-  not timer disposal. Returned one accepted batch to the existing implementer,
-  explicitly `gpt-5.6-terra` / medium, to reuse `processGroupLiveness`,
-  `taskkillOutcome`, and `waitForChildClose`; start the deadline immediately;
-  await group termination independently of leader close; surface Windows
-  failure; and prove timer disposal with deterministic timer injection. The
-  implementer may not spawn sub-agents.
 
 The implementation and independent-review corrections were completed in the
 human-selected current checkout without a separate worktree. The corrected tree

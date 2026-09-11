@@ -1,14 +1,13 @@
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { packFrameworkArtifacts, proveExactTarballConsumer } from "./snapshot-artifacts.mjs";
 import { expectedReleaseModel, readReleaseManifests } from "./release-policy.mjs";
-import { inspectRegistryReleaseState, verifyRegistryReleaseState } from "./release-registry.mjs";
-import { terminationPlan } from "./snapshot-process-termination.mjs";
+import { verifyRegistryReleaseState } from "./release-registry.mjs";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 const run = (command, args, cwd = root) => {
@@ -21,97 +20,6 @@ const option = (argv, name) => {
     return undefined;
   return argv[index + 1];
 };
-
-/**
- * Supervises one publication process with a bounded deadline.
- */
-export async function supervisePublicationProcess({
-  command,
-  args,
-  cwd,
-  timeoutMs,
-  forceKillGraceMs = 10_000,
-  spawnOptions = {},
-  waitForStart = Promise.resolve(),
-  signalProcess,
-  onChild,
-}) {
-  const child = spawn(command, args, {
-    cwd,
-    detached: process.platform !== "win32",
-    stdio: "inherit",
-    ...spawnOptions,
-  });
-  let timedOut = false;
-  let closed = false;
-  const settled = new Promise((resolveClose, rejectClose) => {
-    child.once("close", (...result) => {
-      closed = true;
-      resolveClose(result);
-    });
-    child.once("error", rejectClose);
-  });
-  let forceKill;
-  let terminating = false;
-  const terminate = () => {
-    if (terminating || closed) return;
-    terminating = true;
-    if (signalProcess !== undefined) signalProcess(child, "SIGTERM");
-    else signalGroup("SIGTERM");
-    forceKill = globalThis.setTimeout(() => {
-      if (!closed) {
-        if (signalProcess !== undefined) signalProcess(child, "SIGKILL");
-        else signalGroup("SIGKILL");
-      }
-    }, forceKillGraceMs);
-  };
-  const signalGroup = (signal) => {
-    if (process.platform === "win32") {
-      const plan = terminationPlan("win32", child.pid);
-      spawnSync(plan.command, plan.args, { stdio: "ignore" });
-      return;
-    }
-    try {
-      process.kill(-child.pid, signal);
-    } catch (error) {
-      if (error?.code !== "ESRCH") throw error;
-    }
-  };
-  onChild?.({ child, terminate });
-  let timeout;
-  await Promise.race([waitForStart, settled]);
-  timeout = globalThis.setTimeout(() => {
-    timedOut = true;
-    terminate();
-  }, timeoutMs);
-  try {
-    const [status, signal] = await settled;
-    if (timedOut) throw new Error("Lerna publication attempt timed out after " + timeoutMs + "ms");
-    return { status, signal };
-  } finally {
-    globalThis.clearTimeout(timeout);
-    globalThis.clearTimeout(forceKill);
-  }
-}
-
-/**
- * Waits for registry convergence unless cancellation aborts the delay.
- */
-export function waitForConvergenceDelay(milliseconds, signal) {
-  return new Promise((resolveWait) => {
-    if (signal.aborted) return resolveWait();
-    const timer = globalThis.setTimeout(done, milliseconds);
-    const onAbort = () => {
-      globalThis.clearTimeout(timer);
-      done();
-    };
-    function done() {
-      signal.removeEventListener("abort", onAbort);
-      resolveWait();
-    }
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-}
 
 export function prepareRelease({
   root,
@@ -210,92 +118,6 @@ export function createPublicationWorkspace({
   }
 }
 
-/**
- * Publishes an exact selection at most three times, allowing the registry to
- * converge after each Lerna result before selecting a fresh retry set.
- */
-export async function recoverPublication({
-  release,
-  initialNames,
-  inspect,
-  wait,
-  createWorkspace,
-  runLerna,
-  mkdtemp,
-  remove,
-  cleanup = () => {},
-  registerSignal,
-  exit,
-}) {
-  const expectedNames = new Set(release.packages.map(({ name }) => name));
-  const validateSelection = (names, state = "partial") => {
-    if (
-      state !== "partial" ||
-      !Array.isArray(names) ||
-      !names.length ||
-      new Set(names).size !== names.length ||
-      names.some((name) => !expectedNames.has(name))
-    )
-      throw new Error("registry selection is not a non-empty unique release-package subset");
-    return names;
-  };
-  const abortController = new globalThis.AbortController();
-  let terminate = () => {};
-  let stopped = false;
-  let stopCode;
-  const stop = (code) => {
-    if (stopped) return;
-    stopped = true;
-    stopCode = code;
-    abortController.abort();
-    terminate();
-  };
-  const unregister = ["SIGINT", "SIGTERM"].map(
-    (signal) => registerSignal?.(signal, () => stop(signal === "SIGINT" ? 130 : 143)) ?? (() => {}),
-  );
-  let selectedNames = initialNames;
-  let last = { status: null, signal: null };
-  const delays = [90_000, 180_000, 360_000];
-  try {
-    selectedNames = validateSelection(selectedNames);
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const destination = mkdtemp("spine-lerna-publication-");
-      try {
-        await createWorkspace({ destination, selectedNames });
-        if (stopped) break;
-        last = await runLerna({
-          destination,
-          selectedNames,
-          onChild: (control) => {
-            terminate = control.terminate;
-          },
-        });
-      } finally {
-        remove(destination);
-        terminate = () => {};
-      }
-      if (stopped) break;
-      await wait(delays[attempt], abortController.signal);
-      if (stopped) break;
-      const inspected = await inspect(release);
-      if (inspected.state === "complete") return { ...last, recovered: true };
-      selectedNames = validateSelection(inspected.missingNames, inspected.state);
-    }
-  } finally {
-    for (const removeHandler of unregister) removeHandler();
-    cleanup();
-    if (stopCode !== undefined) exit?.(stopCode);
-  }
-  throw new Error(
-    "publication recovery exhausted; remaining packages: " +
-      selectedNames.join(", ") +
-      "; last status: " +
-      last.status +
-      "; last signal: " +
-      (last.signal ?? "none"),
-  );
-}
-
 export async function main({ argv = process.argv, dependencies = {} } = {}) {
   const {
     createWorkspace = createPublicationWorkspace,
@@ -337,71 +159,6 @@ export async function main({ argv = process.argv, dependencies = {} } = {}) {
     return;
   }
   if (argv[2] === "preflight") return verifyRegistry(release, fetchResponse);
-  if (argv[2] === "recover-publication") {
-    const sha = process.env.GITHUB_SHA;
-    const summary = process.env.GITHUB_STEP_SUMMARY;
-    if (sha === undefined || summary === undefined)
-      throw new Error("recover-publication requires GITHUB_SHA and GITHUB_STEP_SUMMARY");
-    const initialNames = await verifyRegistry(release, fetchResponse);
-    const parent = mkdtempSync(join(tmpdir(), "spine-lerna-publication-"));
-    const createWorkspace = async ({ destination, selectedNames }) => {
-      createPublicationWorkspace({
-        destination,
-        entries: readManifests(root),
-        selectedNames,
-        copy: (source, target) => cpSync(join(root, source), target, { recursive: true }),
-        mkdir: (path) => mkdirSync(path, { recursive: true }),
-        write: writeFileSync,
-      });
-    };
-    return recoverPublication({
-      release,
-      initialNames,
-      inspect: (expected) => inspectRegistryReleaseState(expected, fetchResponse),
-      wait: waitForConvergenceDelay,
-      createWorkspace: ({ destination, selectedNames }) =>
-        createWorkspace({ destination, selectedNames }),
-      runLerna: ({ destination, onChild }) => {
-        const args = [
-          "publish",
-          "from-package",
-          "--contents",
-          ".publish",
-          "--concurrency",
-          "1",
-          "--ignore-scripts",
-          "--no-git-reset",
-          "--dist-tag",
-          release.tag,
-          "--registry",
-          "https://registry.npmjs.org/",
-          "--git-head",
-          sha,
-          "--summary-file",
-          summary,
-          "--yes",
-        ];
-        return supervisePublicationProcess({
-          command: join(root, "node_modules/.bin/lerna"),
-          args,
-          cwd: destination,
-          timeoutMs: 20 * 60_000,
-          onChild,
-        });
-      },
-      mkdtemp: () => {
-        const workspace = join(parent, "workspace-" + Math.random().toString(36).slice(2));
-        return workspace;
-      },
-      remove: (directory) => rmSync(directory, { force: true, recursive: true }),
-      cleanup: () => rmSync(parent, { force: true, recursive: true }),
-      registerSignal: (signal, handler) => {
-        process.once(signal, handler);
-        return () => process.off(signal, handler);
-      },
-      exit: (code) => process.exit(code),
-    });
-  }
   if (argv[2] === "prepare-publication-workspace") {
     const output = option(argv, "--output");
     if (output === undefined) throw new Error("prepare-publication-workspace requires --output");
@@ -433,7 +190,7 @@ export async function main({ argv = process.argv, dependencies = {} } = {}) {
     return;
   }
   throw new Error(
-    "Supported commands are prepare, tag, preflight, recover-publication, and prepare-publication-workspace",
+    "Supported commands are prepare, tag, preflight, and prepare-publication-workspace",
   );
 }
 if (
