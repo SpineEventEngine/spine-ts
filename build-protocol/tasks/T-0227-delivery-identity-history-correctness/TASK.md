@@ -896,3 +896,24 @@ treated tracked files deleted from the working tree as readable current files.
 Both enumerators now exclude Git-reported working-tree deletions, while broken
 or escaping symlinks remain errors. Focused regression tests cover each
 correction.
+
+Implementation and deterministic-check checkpoint `c8bf1fa98` was pushed to
+the official feature branch before independent review.
+
+Fresh independent review assignments at `c8bf1fa98` receive no inherited
+conversation turns and may not spawn sub-agents:
+
+- `/root/fresh_delivery_reliability_review`: existing
+  performance/reliability reviewer role, explicitly `gpt-5.6-terra` / `high`;
+  delivery correctness, bounded resources, cache scope, duplicate removal, and
+  local-handoff lifecycle.
+- `/root/fresh_fixture_style_review`: existing style/maintainability reviewer
+  role, explicitly `gpt-5.6-terra` / `high`; delivery clarity, readable fixture
+  structure, checker changes, and affected-path maintainability.
+- `/root/fresh_delivery_api_review`: existing TypeScript/API documentation
+  reviewer role, explicitly `gpt-5.6-terra` / `high`; TypeScript contracts,
+  package/export boundaries, wire compatibility, and public documentation.
+
+The desktop surface exposes the immutable configured role/profile but not
+separate runtime self-introspection. Each dispatch supplied both required
+fields explicitly and matches the configured role profile.
