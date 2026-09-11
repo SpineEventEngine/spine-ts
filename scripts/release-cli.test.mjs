@@ -11,10 +11,63 @@ import {
   recoverPublication,
   stageReleaseContents,
   supervisePublicationProcess,
+  waitForConvergenceDelay,
 } from "./release-cli.mjs";
 import { frameworkPackageNames } from "./package-artifacts.mjs";
 
 describe("release CLI", () => {
+  it("aborts a real convergence delay without retaining its timer", async () => {
+    const controller = new globalThis.AbortController();
+    const started = Date.now();
+    const waiting = waitForConvergenceDelay(1_000, controller.signal);
+    controller.abort();
+    await waiting;
+    expect(Date.now() - started).toBeLessThan(100);
+  });
+
+  it("settles a failed spawn even if its startup gate never resolves", async () => {
+    await expect(
+      supervisePublicationProcess({
+        command: "/definitely/missing-spine-command",
+        args: [],
+        cwd: process.cwd(),
+        timeoutMs: 1_000,
+        waitForStart: new Promise(() => {}),
+      }),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("sends TERM once before one delayed KILL for repeated termination", async () => {
+    const signals = [];
+    await expect(
+      supervisePublicationProcess({
+        command: process.execPath,
+        args: [
+          "-e",
+          "process.on('SIGTERM',()=>{});process.stdout.write('ready\\n');setInterval(()=>{},1000)",
+        ],
+        cwd: process.cwd(),
+        timeoutMs: 5_000,
+        forceKillGraceMs: 20,
+        spawnOptions: { stdio: "pipe" },
+        onChild: ({ child, terminate }) => {
+          child.stdout.once("data", () => {
+            terminate();
+            terminate();
+          });
+        },
+        signalProcess: (child, signal) => {
+          signals.push(signal);
+          try {
+            child.kill(signal);
+          } catch (error) {
+            if (error?.code !== "ESRCH") throw error;
+          }
+        },
+      }),
+    ).resolves.toMatchObject({ signal: "SIGKILL" });
+    expect(signals).toEqual(["SIGTERM", "SIGKILL"]);
+  });
   it("retries only strict missing names after a delayed partial publication", async () => {
     const release = {
       tag: "snapshot",
@@ -173,13 +226,17 @@ describe("release CLI", () => {
     expect(parentCleanups).toBe(1);
   });
 
-  it("terminates a real running child before signal cleanup", async () => {
+  it.each([
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+  ])("terminates a real process group for %s before cleanup", async (receivedSignal, exitCode) => {
     const handlers = new Map();
     const removed = [];
     const wait = vi.fn();
     const inspect = vi.fn(async () => ({ state: "complete", missingNames: [] }));
     let closed = false;
     let closeSignal;
+    let descendant;
     const completion = recoverPublication({
       release: { packages: [{ name: "@synthetic/base" }] },
       initialNames: ["@synthetic/base"],
@@ -191,7 +248,7 @@ describe("release CLI", () => {
           command: process.execPath,
           args: [
             "-e",
-            "process.on('SIGTERM', () => {}); process.stdout.write('ready\\n'); setInterval(() => {}, 1000)",
+            "const {spawn}=require('node:child_process');process.on('SIGTERM',()=>{});const child=spawn(process.execPath,['-e',\"process.on('SIGTERM',()=>{});setInterval(()=>{},1000)\"],{stdio:'ignore'});process.stdout.write(String(child.pid)+'\\n');setInterval(()=>{},1000)",
           ],
           cwd: process.cwd(),
           timeoutMs: 5_000,
@@ -203,7 +260,10 @@ describe("release CLI", () => {
               closed = true;
               closeSignal = signal;
             });
-            child.stdout.once("data", () => handlers.get("SIGINT")());
+            child.stdout.once("data", (chunk) => {
+              descendant = Number(String(chunk).trim());
+              handlers.get(receivedSignal)();
+            });
           },
         }),
       mkdtemp: () => "/temporary/workspace",
@@ -214,7 +274,7 @@ describe("release CLI", () => {
         return () => {};
       },
       exit: (code) => {
-        expect(code).toBe(130);
+        expect(code).toBe(exitCode);
         expect(closed).toBe(true);
         throw new Error("signal exit");
       },
@@ -224,6 +284,7 @@ describe("release CLI", () => {
     expect(wait).not.toHaveBeenCalled();
     expect(inspect).not.toHaveBeenCalled();
     expect(closeSignal).toBe("SIGKILL");
+    expect(() => process.kill(descendant, 0)).toThrow();
   });
 
   it("terminates and cleans a stalled publication child at its deadline", async () => {
@@ -357,6 +418,38 @@ describe("release CLI", () => {
         },
       }),
     ).rejects.toThrow("signal exit");
+    expect(inspect).not.toHaveBeenCalled();
+    expect(runLerna).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses exit 143 for SIGTERM without inspecting or retrying", async () => {
+    const handlers = new Map();
+    const inspect = vi.fn();
+    const runLerna = vi.fn(async () => ({ status: 1, signal: null }));
+    await expect(
+      recoverPublication({
+        release: { packages: [{ name: "@synthetic/base" }] },
+        initialNames: ["@synthetic/base"],
+        createWorkspace: async () => {},
+        runLerna,
+        wait: async (_milliseconds, signal) =>
+          await new Promise((resolveWait) => {
+            signal.addEventListener("abort", resolveWait, { once: true });
+            handlers.get("SIGTERM")();
+          }),
+        inspect,
+        mkdtemp: () => "/temporary/workspace",
+        remove: () => {},
+        registerSignal: (signal, handler) => {
+          handlers.set(signal, handler);
+          return () => {};
+        },
+        exit: (code) => {
+          expect(code).toBe(143);
+          throw new Error("term exit");
+        },
+      }),
+    ).rejects.toThrow("term exit");
     expect(inspect).not.toHaveBeenCalled();
     expect(runLerna).toHaveBeenCalledTimes(1);
   });

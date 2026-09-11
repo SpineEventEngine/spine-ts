@@ -743,6 +743,17 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   listeners immediately, extract the existing abortable delay for direct tests,
   and add bounded process-tree, spawn-error, TERM/KILL, and SIGTERM regressions.
   The implementer may not spawn sub-agents.
+- `2026-09-11 11:14 WEST`: Corrected the final lifecycle findings by reusing the
+  established detached process-group termination plan. Spawn failure listeners
+  now attach immediately; a missing executable settles even if startup readiness
+  never arrives. Cancellation and attempt deadlines send one group SIGTERM and
+  one delayed SIGKILL when necessary. Real parent-plus-descendant tests cover
+  both SIGINT/130 and SIGTERM/143, prove the descendant is gone before cleanup,
+  and prevent registry work after cancellation. A direct test covers the real
+  abortable convergence timer. Final focused acceptance passed 49/49 tests
+  across four release suites, tooling typecheck, TSDoc, formatting, and diff
+  hygiene; ESLint then identified one test-global spelling corrected before the
+  final rerun.
 
 The implementation and independent-review corrections were completed in the
 human-selected current checkout without a separate worktree. The corrected tree

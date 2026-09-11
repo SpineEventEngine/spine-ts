@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { packFrameworkArtifacts, proveExactTarballConsumer } from "./snapshot-artifacts.mjs";
 import { expectedReleaseModel, readReleaseManifests } from "./release-policy.mjs";
 import { inspectRegistryReleaseState, verifyRegistryReleaseState } from "./release-registry.mjs";
+import { terminationPlan } from "./snapshot-process-termination.mjs";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 const run = (command, args, cwd = root) => {
@@ -32,42 +33,84 @@ export async function supervisePublicationProcess({
   forceKillGraceMs = 10_000,
   spawnOptions = {},
   waitForStart = Promise.resolve(),
+  signalProcess,
   onChild,
 }) {
-  const child = spawn(command, args, { cwd, stdio: "inherit", ...spawnOptions });
+  const child = spawn(command, args, {
+    cwd,
+    detached: process.platform !== "win32",
+    stdio: "inherit",
+    ...spawnOptions,
+  });
   let timedOut = false;
   let closed = false;
+  const settled = new Promise((resolveClose, rejectClose) => {
+    child.once("close", (...result) => {
+      closed = true;
+      resolveClose(result);
+    });
+    child.once("error", rejectClose);
+  });
   let forceKill;
   let terminating = false;
   const terminate = () => {
     if (terminating || closed) return;
     terminating = true;
-    child.kill("SIGTERM");
+    if (signalProcess !== undefined) signalProcess(child, "SIGTERM");
+    else signalGroup("SIGTERM");
     forceKill = globalThis.setTimeout(() => {
-      if (!closed) child.kill("SIGKILL");
+      if (!closed) {
+        if (signalProcess !== undefined) signalProcess(child, "SIGKILL");
+        else signalGroup("SIGKILL");
+      }
     }, forceKillGraceMs);
+  };
+  const signalGroup = (signal) => {
+    if (process.platform === "win32") {
+      const plan = terminationPlan("win32", child.pid);
+      spawnSync(plan.command, plan.args, { stdio: "ignore" });
+      return;
+    }
+    try {
+      process.kill(-child.pid, signal);
+    } catch (error) {
+      if (error?.code !== "ESRCH") throw error;
+    }
   };
   onChild?.({ child, terminate });
   let timeout;
-  await waitForStart;
+  await Promise.race([waitForStart, settled]);
   timeout = globalThis.setTimeout(() => {
     timedOut = true;
     terminate();
   }, timeoutMs);
   try {
-    const [status, signal] = await new Promise((resolveClose, rejectClose) => {
-      child.once("close", (...result) => {
-        closed = true;
-        resolveClose(result);
-      });
-      child.once("error", rejectClose);
-    });
+    const [status, signal] = await settled;
     if (timedOut) throw new Error("Lerna publication attempt timed out after " + timeoutMs + "ms");
     return { status, signal };
   } finally {
     globalThis.clearTimeout(timeout);
     globalThis.clearTimeout(forceKill);
   }
+}
+
+/**
+ * Waits for registry convergence unless cancellation aborts the delay.
+ */
+export function waitForConvergenceDelay(milliseconds, signal) {
+  return new Promise((resolveWait) => {
+    if (signal.aborted) return resolveWait();
+    const timer = globalThis.setTimeout(done, milliseconds);
+    const onAbort = () => {
+      globalThis.clearTimeout(timer);
+      done();
+    };
+    function done() {
+      signal.removeEventListener("abort", onAbort);
+      resolveWait();
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 export function prepareRelease({
@@ -315,20 +358,7 @@ export async function main({ argv = process.argv, dependencies = {} } = {}) {
       release,
       initialNames,
       inspect: (expected) => inspectRegistryReleaseState(expected, fetchResponse),
-      wait: (milliseconds, signal) =>
-        new Promise((resolveWait) => {
-          if (signal.aborted) return resolveWait();
-          const timer = globalThis.setTimeout(done, milliseconds);
-          const onAbort = () => {
-            globalThis.clearTimeout(timer);
-            done();
-          };
-          function done() {
-            signal.removeEventListener("abort", onAbort);
-            resolveWait();
-          }
-          signal.addEventListener("abort", onAbort, { once: true });
-        }),
+      wait: waitForConvergenceDelay,
       createWorkspace: ({ destination, selectedNames }) =>
         createWorkspace({ destination, selectedNames }),
       runLerna: ({ destination, onChild }) => {
