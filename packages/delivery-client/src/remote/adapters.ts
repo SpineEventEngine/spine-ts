@@ -204,6 +204,7 @@ export class RemoteInbox implements DeliveryInbox {
       )
         throw new DeliveryPagingError();
       for (const candidate of raw) {
+        operation();
         scanned += 1;
         if (
           candidate.status === "DELIVERED" &&
@@ -218,7 +219,10 @@ export class RemoteInbox implements DeliveryInbox {
         }
         if (scanned === 1_000) throw new DeliveryPagingError();
       }
-      if (page.length < pageSize) return message;
+      if (page.length < pageSize) {
+        operation();
+        return message;
+      }
       if (last === undefined) throw new DeliveryPagingError();
       after = {
         messageId: last.id.value,

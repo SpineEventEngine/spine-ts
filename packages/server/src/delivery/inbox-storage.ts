@@ -274,26 +274,32 @@ export class InboxStorage {
         });
         checkActive();
         const rows = delivered.map((row) => InboxRecords.read(row.record, row.id));
-        if (
-          rows.some(
-            (row) =>
-              row.signalId === pending.signalId &&
-              InboxTargets.equal(row.inboxId.targetId, pending.inboxId.targetId) &&
-              row.inboxId.targetTypeUrl === pending.inboxId.targetTypeUrl &&
-              (row.keepUntil === undefined || row.keepUntil.getTime() > Values.now(this.#now)),
-          )
-        ) {
+        for (const row of rows) {
           checkActive();
-          await storage.compareAndSet(
-            id,
-            current,
-            InboxRecords.write({ ...pending, status: "DELIVERED" }),
-          );
-          return undefined;
+          if (
+            row.signalId === pending.signalId &&
+            InboxTargets.equal(row.inboxId.targetId, pending.inboxId.targetId) &&
+            row.inboxId.targetTypeUrl === pending.inboxId.targetTypeUrl &&
+            (row.keepUntil === undefined || row.keepUntil.getTime() > Values.now(this.#now))
+          ) {
+            checkActive();
+            await storage.compareAndSet(
+              id,
+              current,
+              InboxRecords.write({ ...pending, status: "DELIVERED" }),
+            );
+            return undefined;
+          }
         }
-        if (rows.length < dedupReadLimit) return pending;
+        if (rows.length < dedupReadLimit) {
+          checkActive();
+          return pending;
+        }
         const last = rows.at(-1);
-        if (last === undefined) return pending;
+        if (last === undefined) {
+          checkActive();
+          return pending;
+        }
         after = Values.after(
           { messageId: last.id.value, whenReceived: last.whenReceived, version: last.version },
           pending.shard,

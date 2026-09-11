@@ -239,6 +239,32 @@ describe("RemoteInbox direct behavior", () => {
     now.mockRestore();
   });
 
+  it("does not admit from a short page after its deadline expires during scanning", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const duplicate = domainMessage("duplicate");
+    const expired = {
+      ...domainMessage("expired"),
+      signalId: duplicate.signalId,
+      status: "DELIVERED" as const,
+      keepUntil: new Date(-1),
+    };
+    const now = vi
+      .spyOn(Date, "now")
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValue(1);
+    client.readPage.mockResolvedValueOnce([expired]);
+
+    await expect(inbox.admit(duplicate, { timeoutMs: 1 })).rejects.toThrow(
+      "Delivery admission deadline expired.",
+    );
+    expect(client.readPage).toHaveBeenCalledTimes(1);
+    expect(client.writeOne).not.toHaveBeenCalled();
+    now.mockRestore();
+  });
+
   it("passes the remaining admission budget to its delivered read and upsert", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
@@ -249,7 +275,8 @@ describe("RemoteInbox direct behavior", () => {
       .mockReturnValueOnce(0)
       .mockReturnValueOnce(0)
       .mockReturnValueOnce(1)
-      .mockReturnValueOnce(2);
+      .mockReturnValueOnce(2)
+      .mockReturnValueOnce(3);
     client.readPage.mockResolvedValueOnce([delivered]);
 
     await expect(inbox.admit(duplicate, { timeoutMs: 5 })).resolves.toBeUndefined();
@@ -259,7 +286,7 @@ describe("RemoteInbox direct behavior", () => {
     );
     expect(client.writeOne).toHaveBeenCalledWith(
       expect.objectContaining({ id: duplicate.id, status: "DELIVERED" }),
-      { timeoutMs: 3 },
+      { timeoutMs: 2 },
     );
     now.mockRestore();
   });

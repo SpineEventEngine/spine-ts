@@ -397,6 +397,37 @@ describe("direct InboxMessage storage", () => {
     expect(handle.compareAndSet).not.toHaveBeenCalled();
   });
 
+  it("does not admit from a short delivered page after its deadline expires during scanning", async () => {
+    const pending = createMessage("pending", "signal", 1n);
+    let calls = 0;
+    const expired = InboxRecords.write({
+      ...createMessage("expired", pending.signalId, 2n),
+      status: "DELIVERED" as const,
+      keepUntil: new Date(-1),
+    });
+    const handle = {
+      atomicCompareAndSet: true,
+      read: vi.fn(() => Promise.resolve(InboxRecords.write(pending))),
+      queryEntries: vi.fn(() => {
+        if (expired.id === undefined) throw new Error("Expected delivered row ID.");
+        return Promise.resolve([{ id: expired.id, record: expired }]);
+      }),
+      compareAndSet: vi.fn(),
+      close: vi.fn(),
+    };
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: { createRecordStorage: () => handle } as never,
+      now: () => new Date(calls++ >= 5 ? 1 : 0),
+    });
+
+    await expect(storage.admit(pending, { timeoutMs: 1 })).rejects.toThrow(
+      "Delivery admission deadline expired.",
+    );
+    expect(handle.queryEntries).toHaveBeenCalledTimes(1);
+    expect(handle.compareAndSet).not.toHaveBeenCalled();
+  });
+
   it("fails closed when the bounded exact delivered-key scan cannot reach exhaustion", async () => {
     const duplicate = createMessage("duplicate", "signal", 1_001n);
     const expired = [
