@@ -1,1 +1,10 @@
-{"formatVersion":1,"mode":"model","packageName":"@spine-event-engine/core-test-fixtures","protoRoot":"proto","generatedRoot":"generated","exportRoot":"generated","dependencies":["@spine-event-engine/proto"],"moduleExport":"coreTestFixturesProtoModule"}
+{
+  "formatVersion": 1,
+  "mode": "model",
+  "packageName": "@spine-event-engine/core-test-fixtures",
+  "protoRoot": "proto",
+  "generatedRoot": "generated",
+  "exportRoot": "generated",
+  "dependencies": ["@spine-event-engine/proto"],
+  "moduleExport": "coreTestFixturesProtoModule"
+}

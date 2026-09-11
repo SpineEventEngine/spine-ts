@@ -1013,3 +1013,15 @@ bounded logical read, bounded raw-page RPC continuation, and unchanged
 timestamp-only cursor limitation. All accepted review findings are resolved;
 the reliability, style/maintainability, TypeScript/API documentation, and
 documentation lanes are clean after their affected corrections.
+
+The first complete cheap-preflight attempts exposed deterministic cleanup that
+the narrower checks had missed: stale test type aliases and unsafe assertions,
+then two overlong generated-type import lines. Correction commits
+`b5772da35` and `805ddfcf6` were pushed; targeted ESLint, cleanup enforcement,
+tooling typecheck, and the 287-test focused set pass after those corrections.
+
+GitHub release verification and the local preflight then identified the same
+remaining formatting failure: four new private fixture JSON files had not been
+formatted. Prettier reformatted the core and testing fixture `package.json` and
+`spine-proto.json` files. This is the cause of the red CI runs through
+`805ddfcf6`; no runtime or test behavior failed at that point.
