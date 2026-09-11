@@ -1025,3 +1025,11 @@ remaining formatting failure: four new private fixture JSON files had not been
 formatted. Prettier reformatted the core and testing fixture `package.json` and
 `spine-proto.json` files. This is the cause of the red CI runs through
 `805ddfcf6`; no runtime or test behavior failed at that point.
+
+Formatting correction commit `9441dd8f0` was pushed. The complete bounded
+preflight then passed with `pnpm verify:task -- --no-coverage` over seven
+focused files: 417/417 tests passed. The profile also passed Node compatibility,
+Proto generation/style/frozen descriptors, generated build and tooling
+typechecking, repository-wide ESLint and cleanup enforcement, TSDoc, copyright,
+log containment, full formatting, documentation/API exports, Buf lint,
+generated-output currency, and release-readiness checks.
