@@ -47,8 +47,10 @@ and [PR #1709](https://github.com/sigstore/sigstore-js/pull/1709), which propose
 the same default for npm provenance callers.
 
 Remove the patch only after Lerna/libnpmpublish resolves an upstream released
-Sigstore version with this behavior, then update the lockfile and keep the
-focused `scripts/sigstore-provenance-patch.test.mjs` check green.
+Sigstore version with this behavior. When removing it, update the lockfile,
+retire the patch-file and patch-hash assertions in
+`scripts/sigstore-provenance-patch.test.mjs`, and retain its simulated HTTP 409
+test against the resolved upstream version.
 
 Before activation, protect `master`: require pull requests and successful PR
 verification, prohibit direct pushes, and disable bypass. Repository code cannot

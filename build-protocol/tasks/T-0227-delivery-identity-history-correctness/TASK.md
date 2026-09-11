@@ -34,17 +34,20 @@ Final verification for the provenance correction is pending.
   conflict. No publication retry, recovery controller, subprocess supervision,
   timeout, package orchestration, or provenance disablement is allowed.
 - Assignment: existing implementer role, explicitly `gpt-5.6-terra` / `medium`;
-  no child assignment or review role is active in this bounded implementation
-  context. Runtime profile is configured by the dispatch surface and cannot be
-  independently introspected here.
+  canonical agent ID `/root/fix_sigstore_provenance_conflict`. Runtime profile
+  is configured by the dispatch surface and cannot be independently
+  introspected here.
 - Review dispatch at implementation commit `154f3497a`: existing
   performance/reliability reviewer role, explicitly `gpt-5.6-terra` / `high`;
+  canonical agent ID `/root/provenance_reliability_review`;
   existing style/maintainability reviewer role, explicitly `gpt-5.6-terra` /
-  `high`; and existing documentation reviewer role, explicitly
-  `gpt-5.6-luna` / `medium`. Each review receives no inherited conversation
-  turns and may not spawn sub-agents. TypeScript/API review is N/A because the
-  correction changes no TypeScript declaration, public API, wire contract, or
-  serialized data. Final security review follows correction convergence.
+  `high`; canonical agent ID `/root/provenance_style_review`; and existing
+  documentation reviewer role, explicitly `gpt-5.6-luna` / `medium`; canonical
+  agent ID `/root/provenance_docs_review`. Each review receives no inherited
+  conversation turns and may not spawn sub-agents. TypeScript/API review is N/A
+  because the correction changes no TypeScript declaration, public API, wire
+  contract, or serialized data. Final security review follows correction
+  convergence.
 
 Task classification: High-risk
 Classification reason: the corrections affect new-signal identity, generated
@@ -659,14 +662,11 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   generated `patches/sigstore@4.1.1.patch`, which changes only the existing
   witness option to `true`; `pnpm install` applied it. The GREEN test constructs
   the effective DSSE bundle builder from the dependency resolution used by
-  Lerna/libnpmpublish and observes
-  `rekorWitness.tlogV1.fetchOnConflict === true`; it also checks the declared
-  patch path, patch SHA-256 lock entry, and
-  patched snapshot. The strongest deterministic seam is that constructed
-  runtime object. A complete no-network 409/fetch simulation would require
-  reaching into unpatched `@sigstore/sign` transport internals and would test a
-  dependency behavior outside this patch; the patch changes only the proven
-  option that activates its existing path.
+  Lerna/libnpmpublish. A local mock Rekor endpoint returns HTTP 409 with the
+  existing entry location, then returns that entry to the follow-up GET. The
+  test verifies both requests and the recovered transparency-log material. It
+  also checks the declared patch path, patch SHA-256 lock entry, and patched
+  snapshot.
 - Added narrow release-runbook context for upstream [sigstore-js issue
   #1708](https://github.com/sigstore/sigstore-js/issues/1708) and [PR
   #1709](https://github.com/sigstore/sigstore-js/pull/1709), including the
@@ -678,6 +678,13 @@ packages/delivery-server/test/core/inbox-service.test.ts --passWithNoTests` pass
   hygiene; documentation audience; and release-readiness checks. Remaining work
   is the applicable review wave and one converged dependency/release
   verification profile, not further implementation in this bounded context.
+- Independent review at `f061cceda` returned one correction batch. All three
+  reviewers found that the patch-removal instruction conflicted with the
+  patch-specific test. Style/maintainability also found private pnpm path,
+  constructor-name, and Sigstore-field assertions and missing canonical agent
+  IDs. The correction keeps patch integrity checks while replacing the private
+  runtime assertions with a simulated Rekor 409/GET behavior test, makes the
+  retirement steps consistent, and records all dispatched agent IDs.
 
 - `2026-09-11 11:31 WEST`: Restarted the publication investigation after
   reverting the incorrect retry and process-supervision design in `eb4c60ae9`.
