@@ -148,6 +148,39 @@ describe("RemoteInbox direct behavior", () => {
     ).rejects.toBeInstanceOf(DeliveryPagingError);
   });
 
+  it("fills a 1000-message logical page past an inclusive remote cursor", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const anchor = domainMessage("anchor");
+    const earlier = Array.from({ length: 2_000 }, (_, index): ReturnType<typeof domainMessage> => ({
+      ...domainMessage(`earlier-${index}`),
+      status: "DELIVERED" as const,
+      version: BigInt(index + 2),
+      whenReceived: new Date((index + 2) * 1_000),
+    }));
+    const pending: ReturnType<typeof domainMessage> = {
+      ...earlier[999]!,
+      status: "TO_DELIVER",
+    };
+    earlier[999] = pending;
+
+    client.readPage
+      .mockResolvedValueOnce([anchor, ...earlier.slice(0, 999)])
+      .mockResolvedValueOnce([earlier[998]!, ...earlier.slice(999, 1_999)]);
+
+    await expect(
+      inbox.read(ShardIndex.single(), {
+        after: {
+          messageId: anchor.id.value,
+          whenReceived: anchor.whenReceived,
+          version: anchor.version,
+        },
+        limit: 1_000,
+      }),
+    ).resolves.toEqual([...earlier.slice(0, 999), pending]);
+    expect(client.readPage).toHaveBeenCalledTimes(2);
+  });
+
   it("fences changed authoritative rows and returns an immutable delivered acknowledgement", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);

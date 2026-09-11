@@ -955,3 +955,25 @@ repository-routing fixture Proto sources/generated imports and tests, and the
 standalone handler runtime fixture types. It may not change the accepted JVM
 deduplication identity, public APIs, production Proto schemas, or introduce
 publication/delivery retries, extra timeouts, or encoded fixture source.
+
+Correction evidence recorded 2026-09-11:
+
+- The new `RemoteInbox` regression first failed under
+  `pnpm exec vitest run packages/delivery-client/test/remote-inbox-direct.test.ts --maxWorkers=1`:
+  an inclusive continuation at logical limit 1,000 returned only 999 rows.
+  The regression has an inclusive anchor, 2,000 subsequent raw rows, and a
+  pending row on the second raw page. `RemoteInbox` now uses the existing
+  continuation collector for both filtered and unfiltered reads, stopping only
+  after the logical page is full or the remote source reports completion.
+- Repository-routing now declares its fixture-local `TaskCommand`,
+  `UuidMessageIdAggregateId`, and required `ValidatedMessageId` messages in
+  readable Proto source. The UUID-shaped identifier and required-field route
+  validation remain covered without using `CommandId` or a command payload as
+  an entity identifier. Generated fixture types replace handwritten
+  `Message<"...">` declarations and schema casts in repository-routing and
+  standalone handler tests.
+- `pnpm proto:generate` passed, including authored-Proto checks and frozen
+  descriptor verification. `pnpm typecheck:tooling` passed. The focused test
+  command `pnpm exec vitest run packages/delivery-client/test/remote-inbox-direct.test.ts packages/server/test/repository/repository-routing.test.ts packages/server/test/runtime/standalone-handler-runtime.test.ts --maxWorkers=1`
+  passed 287 tests in 3 files. No cache-identity or production/public-export
+  changes were made.

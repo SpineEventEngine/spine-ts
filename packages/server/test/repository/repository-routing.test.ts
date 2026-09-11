@@ -137,209 +137,61 @@ import { standAccess } from "../../src/stand/stand.js";
 import { SystemClock } from "../../src/runtime/signal-metadata.js";
 import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
 import * as FixtureSchemas from "../../test-fixtures/schemas.js";
+import type * as RepositoryRouting from "../../test-fixtures/generated/repository-routing/routing_pb.js";
+import type * as RepositoryCommands from "../../test-fixtures/generated/repository-routing/repository_commands_pb.js";
+import type * as RepositoryEvents from "../../test-fixtures/generated/repository-routing/repository_events_pb.js";
+import type * as RouteValidation from "../../test-fixtures/generated/repository-routing/route-validation_pb.js";
+import type * as ValidationRefusal from "../../test-fixtures/generated/repository-routing/validation-refusal_pb.js";
+import type * as ValidationCommands from "../../test-fixtures/generated/repository-routing/validation_refusal_commands_pb.js";
+import type * as ValidationEvents from "../../test-fixtures/generated/repository-routing/validation_refusal_events_pb.js";
 
 const GeneratedTaskIdSchema = TodoIdSchema;
 
-type ProjectionState = Message<"ProjectionState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type NeutralProjectionState = Message<"NeutralProjectionState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type ProjectionEvent = Message<"ProjectionEvent"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type GeneratedReactorEvent = Message<"GeneratedReactorEvent"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type ImplicitTaskCommand = Message<"ImplicitTaskCommand"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type AggregateState = Message<"AggregateState"> & {
-  id: string;
-  name: string;
-  archived: boolean;
-};
-
-type TaskCommand = Message<"TaskCommand"> & {
-  id: string;
-  name: string;
-};
-
-type ProducedTaskCommand = Message<"example.validation_refusal.ProducedTaskCommand"> & {
-  id: string;
-  name: string;
-};
-
-type Int32AggregateState = Message<"Int32AggregateState"> & {
-  id: number;
-  name: string;
-};
-
-type Int64ProcessManagerState = Message<"Int64ProcessManagerState"> & {
-  id: bigint;
-  queue: string;
-};
-
-type RepeatedIdCommand = Message<"RepeatedIdCommand"> & {
-  id: string[];
-};
-
-type MapIdCommand = Message<"MapIdCommand"> & {
-  id: Record<string, string>;
-};
-
-type UuidMessageIdAggregateState = Message<"UuidMessageIdAggregateState"> & {
-  id?: CommandId;
-  name: string;
-  priority: number;
-};
-
-type ProcessManagerState = Message<"ProcessManagerState"> & {
-  id: string;
-  queue: string;
-};
-
-type ValidatedAggregateState = Message<"example.validation_refusal.ValidatedAggregateState"> & {
-  id: string;
-  name: string;
-};
-
-type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
-  id: string;
-  name: string;
-};
-
-type ValidatedMessageIdState = Message<"example.validation_refusal.ValidatedMessageIdState"> & {
-  id?: ValidatedTaskCommand;
-  name: string;
-};
-
-type TaskId = Message<"spine.examples.todo.TaskId"> & {
-  value: string;
-};
-
-type Task = Message<"spine.examples.todo.Task"> & {
-  id?: TaskId;
-  taskListId?: TaskListId;
-  title: string;
-  completed: boolean;
-};
-
-type TaskCreated = Message<"spine.examples.todo.TaskCreated"> & {
-  id?: TaskId;
-  title: string;
-  taskListId?: TaskListId;
-};
-
-type TaskListId = Message<"spine.examples.todo.TaskListId"> & {
-  value: string;
-};
-
-type Int64ProjectionId = Message<"Int64ProjectionId"> & {
-  value: bigint;
-};
-
-type Int64MessageIdProjectionState = Message<"Int64MessageIdProjectionState"> & {
-  id?: Int64ProjectionId;
-  name: string;
-};
-
-type Int64MessageIdSourceState = Message<"Int64MessageIdSourceState"> & {
-  id?: Int64ProjectionId;
-  name: string;
-};
-
-type Int64MessageIdProjectionEvent = Message<"Int64MessageIdProjectionEvent"> & {
-  id?: Int64ProjectionId;
-  name: string;
-};
-
-type CompositeRouteId = Message<"CompositeRouteId"> & {
-  reader?: UserId;
-  number: number;
-};
-
-type CompositeRouteState = Message<"CompositeRouteState"> & {
-  id?: CompositeRouteId;
-  name: string;
-};
-
-type CompositeRouteAggregateState = Message<"CompositeRouteAggregateState"> & {
-  id?: CompositeRouteId;
-  name: string;
-};
-
-type CompositeRouteEvent = Message<"CompositeRouteEvent"> & {
-  id?: CompositeRouteId;
-  name: string;
-};
-
-type CompositeRouteCommand = Message<"CompositeRouteCommand"> & {
-  id?: CompositeRouteId;
-  name: string;
-};
-
-type UuidMessageIdAggregateCommand = Message<"UuidMessageIdAggregateCommand"> & {
-  id?: CommandId;
-  name: string;
-  priority: number;
-};
-
-type Int32AggregateCommand = Message<"Int32AggregateCommand"> & {
-  id: number;
-  name: string;
-};
-
-type Int64ProcessManagerCommand = Message<"Int64ProcessManagerCommand"> & {
-  id: bigint;
-  queue: string;
-};
-
-type Int32AggregateEvent = Message<"Int32AggregateEvent"> & { id: number; name: string };
-
-type Int64ProcessManagerEvent = Message<"Int64ProcessManagerEvent"> & {
-  id: bigint;
-  queue: string;
-};
-
-type ValidatedTaskEvent = Message<"example.validation_refusal.ValidatedTaskEvent"> & {
-  id: string;
-  name: string;
-};
-
-type CompositeRouteSourceState = Message<"CompositeRouteSourceState"> & {
-  id?: CompositeRouteId;
-  name: string;
-};
-
-type CompositeRouteProcessManagerState = Message<"CompositeRouteProcessManagerState"> & {
-  id?: CompositeRouteId;
-  queue: string;
-};
-
-type NumberRouteEvent = Message<"spine_ts.test.NumberRouteEvent"> & {
-  id: number;
-};
-
-type WrongIdRouteEvent = Message<"spine_ts.test.WrongIdRouteEvent"> & {
-  id?: UserId;
-};
+type ProjectionState = RepositoryRouting.ProjectionState;
+type NeutralProjectionState = RepositoryRouting.NeutralProjectionState;
+type ProjectionEvent = RepositoryEvents.ProjectionEvent;
+type GeneratedReactorEvent = RepositoryEvents.GeneratedReactorEvent;
+type ImplicitTaskCommand = RepositoryCommands.ImplicitTaskCommand;
+type AggregateState = RepositoryRouting.AggregateState;
+type TaskCommand = RepositoryCommands.TaskCommand;
+type ProducedTaskCommand = ValidationCommands.ProducedTaskCommand;
+type Int32AggregateState = RepositoryRouting.Int32AggregateState;
+type Int64ProcessManagerState = RepositoryRouting.Int64ProcessManagerState;
+type RepeatedIdCommand = RepositoryCommands.RepeatedIdCommand;
+type MapIdCommand = RepositoryCommands.MapIdCommand;
+type UuidMessageIdAggregateId = RepositoryRouting.UuidMessageIdAggregateId;
+type UuidMessageIdAggregateState = RepositoryRouting.UuidMessageIdAggregateState;
+type ProcessManagerState = RepositoryRouting.ProcessManagerState;
+type ValidatedAggregateState = ValidationRefusal.ValidatedAggregateState;
+type ValidatedTaskCommand = ValidationCommands.ValidatedTaskCommand;
+type ValidatedMessageId = ValidationCommands.ValidatedMessageId;
+type ValidatedMessageIdState = ValidationRefusal.ValidatedMessageIdState;
+type TaskId =
+  import("../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js").TaskId;
+type Task = import("../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js").Task;
+type TaskCreated =
+  import("../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js").TaskCreated;
+type TaskListId =
+  import("../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js").TaskListId;
+type Int64ProjectionId = RepositoryRouting.ProjectionId;
+type Int64MessageIdProjectionState = RepositoryRouting.Int64MessageIdProjectionState;
+type Int64MessageIdSourceState = RepositoryRouting.Int64MessageIdSourceState;
+type Int64MessageIdProjectionEvent = RepositoryEvents.Int64MessageIdProjectionEvent;
+type CompositeRouteId = RepositoryRouting.CompositeRouteId;
+type CompositeRouteState = RepositoryRouting.CompositeRouteState;
+type CompositeRouteAggregateState = RepositoryRouting.CompositeRouteAggregateState;
+type CompositeRouteEvent = RepositoryEvents.CompositeRouteEvent;
+type CompositeRouteCommand = RepositoryCommands.CompositeRouteCommand;
+type UuidMessageIdAggregateCommand = RepositoryCommands.UuidMessageIdAggregateCommand;
+type Int32AggregateCommand = RepositoryCommands.Int32AggregateCommand;
+type Int64ProcessManagerCommand = RepositoryCommands.Int64ProcessManagerCommand;
+type Int32AggregateEvent = RepositoryEvents.Int32AggregateEvent;
+type Int64ProcessManagerEvent = RepositoryEvents.Int64ProcessManagerEvent;
+type ValidatedTaskEvent = ValidationEvents.ValidatedTaskEvent;
+type CompositeRouteSourceState = RepositoryRouting.CompositeRouteSourceState;
+type CompositeRouteProcessManagerState = RepositoryRouting.CompositeRouteProcessManagerState;
+type NumberRouteEvent = RouteValidation.NumberRouteEvent;
+type WrongIdRouteEvent = RouteValidation.WrongIdRouteEvent;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -365,6 +217,7 @@ const {
   RepositoryRoutingProjectionStateSchema,
   RepositoryRoutingAggregateStateSchema,
   RepositoryRoutingUuidMessageIdAggregateStateSchema,
+  RepositoryRoutingUuidMessageIdAggregateIdSchema,
   RepositoryRoutingUuidMessageIdAggregateCommandSchema,
   RepositoryRoutingNeutralProjectionStateSchema,
   RepositoryRoutingProjectionEventSchema,
@@ -393,6 +246,7 @@ const {
   RepositoryRoutingCompositeRouteSourceStateSchema,
   RepositoryRoutingValidatedAggregateStateSchema,
   RepositoryRoutingValidatedTaskCommandSchema,
+  RepositoryRoutingValidatedMessageIdSchema,
   RepositoryRoutingValidatedTaskEventSchema,
   RepositoryRoutingProducedTaskCommandSchema,
   RepositoryRoutingValidatedMessageIdStateSchema,
@@ -400,76 +254,48 @@ const {
   RepositoryRoutingWrongIdRouteEventSchema,
 } = FixtureSchemas;
 
-const ProjectionStateSchema = RepositoryRoutingProjectionStateSchema as GenMessage<ProjectionState>;
-const AggregateStateSchema = RepositoryRoutingAggregateStateSchema as GenMessage<AggregateState>;
-const UuidMessageIdAggregateStateSchema =
-  RepositoryRoutingUuidMessageIdAggregateStateSchema as GenMessage<UuidMessageIdAggregateState>;
-const UuidMessageIdAggregateCommandSchema =
-  RepositoryRoutingUuidMessageIdAggregateCommandSchema as GenMessage<UuidMessageIdAggregateCommand>;
-const NeutralProjectionStateSchema =
-  RepositoryRoutingNeutralProjectionStateSchema as GenMessage<NeutralProjectionState>;
-const ProjectionEventSchema = RepositoryRoutingProjectionEventSchema as GenMessage<ProjectionEvent>;
-const GeneratedReactorEventSchema =
-  RepositoryRoutingGeneratedReactorEventSchema as GenMessage<GeneratedReactorEvent>;
-const ImplicitTaskCommandSchema =
-  RepositoryRoutingImplicitTaskCommandSchema as GenMessage<ImplicitTaskCommand>;
-const Int32AggregateStateSchema =
-  RepositoryRoutingInt32AggregateStateSchema as GenMessage<Int32AggregateState>;
-const Int64ProcessManagerStateSchema =
-  RepositoryRoutingInt64ProcessManagerStateSchema as GenMessage<Int64ProcessManagerState>;
-const Int32AggregateCommandSchema =
-  RepositoryRoutingInt32AggregateCommandSchema as GenMessage<Int32AggregateCommand>;
-const Int64ProcessManagerCommandSchema =
-  RepositoryRoutingInt64ProcessManagerCommandSchema as GenMessage<Int64ProcessManagerCommand>;
-const Int32AggregateEventSchema =
-  RepositoryRoutingInt32AggregateEventSchema as GenMessage<Int32AggregateEvent>;
-const Int64ProcessManagerEventSchema =
-  RepositoryRoutingInt64ProcessManagerEventSchema as GenMessage<Int64ProcessManagerEvent>;
-const RepeatedIdCommandSchema =
-  RepositoryRoutingRepeatedIdCommandSchema as GenMessage<RepeatedIdCommand>;
-const MapIdCommandSchema = RepositoryRoutingMapIdCommandSchema as GenMessage<MapIdCommand>;
-const TaskCommandSchema = RepositoryRoutingTaskCommandSchema as GenMessage<TaskCommand>;
-const TaskIdSchema = TodoIdSchema as GenMessage<TaskId>;
-const TaskSchema = TodoTaskSchema as GenMessage<Task>;
-const TaskCreatedSchema = TodoEvents.TaskCreatedSchema as GenMessage<TaskCreated>;
-const ProcessManagerStateSchema =
-  RepositoryRoutingProcessManagerStateSchema as GenMessage<ProcessManagerState>;
-const Int64ProjectionIdSchema =
-  RepositoryRoutingProjectionIdSchema as GenMessage<Int64ProjectionId>;
-const Int64MessageIdProjectionStateSchema =
-  RepositoryRoutingInt64MessageIdProjectionStateSchema as GenMessage<Int64MessageIdProjectionState>;
-const Int64MessageIdSourceStateSchema =
-  RepositoryRoutingInt64MessageIdSourceStateSchema as GenMessage<Int64MessageIdSourceState>;
-const Int64MessageIdProjectionEventSchema =
-  RepositoryRoutingInt64MessageIdProjectionEventSchema as GenMessage<Int64MessageIdProjectionEvent>;
-const CompositeRouteIdSchema =
-  RepositoryRoutingCompositeRouteIdSchema as GenMessage<CompositeRouteId>;
-const CompositeRouteStateSchema =
-  RepositoryRoutingCompositeRouteStateSchema as GenMessage<CompositeRouteState>;
-const CompositeRouteAggregateStateSchema =
-  RepositoryRoutingCompositeRouteAggregateStateSchema as GenMessage<CompositeRouteAggregateState>;
+const ProjectionStateSchema = RepositoryRoutingProjectionStateSchema;
+const AggregateStateSchema = RepositoryRoutingAggregateStateSchema;
+const UuidMessageIdAggregateStateSchema = RepositoryRoutingUuidMessageIdAggregateStateSchema;
+const UuidMessageIdAggregateIdSchema = RepositoryRoutingUuidMessageIdAggregateIdSchema;
+const UuidMessageIdAggregateCommandSchema = RepositoryRoutingUuidMessageIdAggregateCommandSchema;
+const NeutralProjectionStateSchema = RepositoryRoutingNeutralProjectionStateSchema;
+const ProjectionEventSchema = RepositoryRoutingProjectionEventSchema;
+const GeneratedReactorEventSchema = RepositoryRoutingGeneratedReactorEventSchema;
+const ImplicitTaskCommandSchema = RepositoryRoutingImplicitTaskCommandSchema;
+const Int32AggregateStateSchema = RepositoryRoutingInt32AggregateStateSchema;
+const Int64ProcessManagerStateSchema = RepositoryRoutingInt64ProcessManagerStateSchema;
+const Int32AggregateCommandSchema = RepositoryRoutingInt32AggregateCommandSchema;
+const Int64ProcessManagerCommandSchema = RepositoryRoutingInt64ProcessManagerCommandSchema;
+const Int32AggregateEventSchema = RepositoryRoutingInt32AggregateEventSchema;
+const Int64ProcessManagerEventSchema = RepositoryRoutingInt64ProcessManagerEventSchema;
+const RepeatedIdCommandSchema = RepositoryRoutingRepeatedIdCommandSchema;
+const MapIdCommandSchema = RepositoryRoutingMapIdCommandSchema;
+const TaskCommandSchema = RepositoryRoutingTaskCommandSchema;
+const TaskIdSchema = TodoIdSchema;
+const TaskSchema = TodoTaskSchema;
+const TaskCreatedSchema = TodoEvents.TaskCreatedSchema;
+const ProcessManagerStateSchema = RepositoryRoutingProcessManagerStateSchema;
+const Int64ProjectionIdSchema = RepositoryRoutingProjectionIdSchema;
+const Int64MessageIdProjectionStateSchema = RepositoryRoutingInt64MessageIdProjectionStateSchema;
+const Int64MessageIdSourceStateSchema = RepositoryRoutingInt64MessageIdSourceStateSchema;
+const Int64MessageIdProjectionEventSchema = RepositoryRoutingInt64MessageIdProjectionEventSchema;
+const CompositeRouteIdSchema = RepositoryRoutingCompositeRouteIdSchema;
+const CompositeRouteStateSchema = RepositoryRoutingCompositeRouteStateSchema;
+const CompositeRouteAggregateStateSchema = RepositoryRoutingCompositeRouteAggregateStateSchema;
 const CompositeRouteProcessManagerStateSchema =
-  RepositoryRoutingCompositeRouteProcessManagerStateSchema as GenMessage<CompositeRouteProcessManagerState>;
-const CompositeRouteEventSchema =
-  RepositoryRoutingCompositeRouteEventSchema as GenMessage<CompositeRouteEvent>;
-const CompositeRouteCommandSchema =
-  RepositoryRoutingCompositeRouteCommandSchema as GenMessage<CompositeRouteCommand>;
-const CompositeRouteSourceStateSchema =
-  RepositoryRoutingCompositeRouteSourceStateSchema as GenMessage<CompositeRouteSourceState>;
-const ValidatedAggregateStateSchema =
-  RepositoryRoutingValidatedAggregateStateSchema as GenMessage<ValidatedAggregateState>;
-const ValidatedTaskCommandSchema =
-  RepositoryRoutingValidatedTaskCommandSchema as GenMessage<ValidatedTaskCommand>;
-const ValidatedTaskEventSchema =
-  RepositoryRoutingValidatedTaskEventSchema as GenMessage<ValidatedTaskEvent>;
-const ProducedTaskCommandSchema =
-  RepositoryRoutingProducedTaskCommandSchema as GenMessage<ProducedTaskCommand>;
-const ValidatedMessageIdStateSchema =
-  RepositoryRoutingValidatedMessageIdStateSchema as GenMessage<ValidatedMessageIdState>;
-const NumberRouteEventSchema =
-  RepositoryRoutingNumberRouteEventSchema as GenMessage<NumberRouteEvent>;
-const WrongIdRouteEventSchema =
-  RepositoryRoutingWrongIdRouteEventSchema as GenMessage<WrongIdRouteEvent>;
+  RepositoryRoutingCompositeRouteProcessManagerStateSchema;
+const CompositeRouteEventSchema = RepositoryRoutingCompositeRouteEventSchema;
+const CompositeRouteCommandSchema = RepositoryRoutingCompositeRouteCommandSchema;
+const CompositeRouteSourceStateSchema = RepositoryRoutingCompositeRouteSourceStateSchema;
+const ValidatedAggregateStateSchema = RepositoryRoutingValidatedAggregateStateSchema;
+const ValidatedTaskCommandSchema = RepositoryRoutingValidatedTaskCommandSchema;
+const ValidatedMessageIdSchema = RepositoryRoutingValidatedMessageIdSchema;
+const ValidatedTaskEventSchema = RepositoryRoutingValidatedTaskEventSchema;
+const ProducedTaskCommandSchema = RepositoryRoutingProducedTaskCommandSchema;
+const ValidatedMessageIdStateSchema = RepositoryRoutingValidatedMessageIdStateSchema;
+const NumberRouteEventSchema = RepositoryRoutingNumberRouteEventSchema;
+const WrongIdRouteEventSchema = RepositoryRoutingWrongIdRouteEventSchema;
 
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: TaskCommand): void {
@@ -571,7 +397,7 @@ class Int64MessageIdProjection extends Projection<
 }
 
 class UuidMessageIdAggregate extends Aggregate<
-  CommandId,
+  UuidMessageIdAggregateId,
   typeof UuidMessageIdAggregateStateSchema,
   bigint
 > {
@@ -1092,7 +918,7 @@ class ValidatingTaskAggregate extends Aggregate<
 }
 
 class ValidatedMessageIdRouteAggregate extends Aggregate<
-  ValidatedTaskCommand,
+  ValidatedMessageId,
   typeof ValidatedMessageIdStateSchema,
   bigint
 > {
@@ -3965,12 +3791,15 @@ describe("repository signal routing", () => {
   });
 
   it("routes a generated UUID message ID", () => {
-    const id = create(CommandIdSchema, { uuid: "uuid-message-id" });
+    const id = create(UuidMessageIdAggregateIdSchema, { value: "uuid-message-id" });
     const publicMessageId: MessageId = id;
     const repository = createUuidMessageIdAggregateRepository();
 
     expect(publicMessageId).toBe(id);
-    expect(id).toEqual({ $typeName: CommandIdSchema.typeName, uuid: "uuid-message-id" });
+    expect(id).toEqual({
+      $typeName: UuidMessageIdAggregateIdSchema.typeName,
+      value: "uuid-message-id",
+    });
     expect(
       repository.routeCommand(
         create(CommandSchema, {
@@ -4263,8 +4092,8 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Validated message ID")
       .add(
         createValidatedMessageIdRouteRepository(
-          CommandRouting.create<ValidatedTaskCommand>().route(ValidatedTaskCommandSchema, () =>
-            create(ValidatedTaskCommandSchema, { id: "route-id", name: "" }),
+          CommandRouting.create<ValidatedMessageId>().route(ValidatedTaskCommandSchema, () =>
+            create(ValidatedMessageIdSchema, { value: "" }),
           ),
         ),
       )
@@ -11243,7 +11072,7 @@ function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate
 }
 
 function createValidatedMessageIdRouteRepository(
-  commandRouting?: CommandRouting<ValidatedTaskCommand>,
+  commandRouting?: CommandRouting<ValidatedMessageId>,
 ): Repository<typeof ValidatedMessageIdRouteAggregate> {
   const handlers = EntityHandlers.define(
     ValidatedMessageIdRouteAggregate,

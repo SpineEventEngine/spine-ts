@@ -27,14 +27,19 @@ import {
 import type { GeneratedStandaloneHandlerGroup } from "../../src/handler/generated-handler-registry.js";
 import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
 import { EventDispatcherRegistry } from "../../src/bus/event-dispatcher-registry.js";
-import { AggregateStateSchema } from "../../test-fixtures/generated/entity-metadata/main_pb.js";
-import { TaskCommandSchema } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
-import { TaskEventSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
+import {
+  AggregateStateSchema,
+  type AggregateState,
+} from "../../test-fixtures/generated/entity-metadata/main_pb.js";
+import {
+  TaskCommandSchema,
+  type TaskCommand,
+} from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import {
+  TaskEventSchema,
+  type TaskEvent,
+} from "../../test-fixtures/generated/handler-registry/events_pb.js";
 import { ReviewRejectedSchema } from "../../test-fixtures/generated/handler-registry/rejections_pb.js";
-
-type TaskEvent = Message<"TaskEvent"> & { id: string; name: string };
-type TaskCommand = Message<"TaskCommand"> & { id: string; name: string };
-type AggregateState = Message<"AggregateState"> & { id: string; name: string; archived: boolean };
 
 class FilteredSubscriber extends AbstractEventSubscriber {
   readonly calls: string[] = [];

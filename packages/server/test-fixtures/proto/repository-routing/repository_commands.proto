@@ -15,12 +15,16 @@ syntax = "proto3";
 package repository_routing;
 
 import "repository-routing/routing.proto";
-import "spine/core/command.proto";
 
 message UuidMessageIdAggregateCommand {
-  spine.core.CommandId id = 1;
+  UuidMessageIdAggregateId id = 1;
   string name = 2;
   int32 priority = 3;
+}
+
+message TaskCommand {
+  string id = 1;
+  string name = 2;
 }
 
 message ImplicitTaskCommand {

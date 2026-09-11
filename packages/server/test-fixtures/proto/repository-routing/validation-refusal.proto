@@ -24,6 +24,6 @@ message ValidatedAggregateState {
 
 message ValidatedMessageIdState {
   option (entity).kind = AGGREGATE;
-  repository_routing_validation_commands.ValidatedTaskCommand id = 1 [(set_once) = true];
+  repository_routing_validation_commands.ValidatedMessageId id = 1 [(set_once) = true];
   string name = 2 [(column) = true];
 }

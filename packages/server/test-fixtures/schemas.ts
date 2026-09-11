@@ -20,7 +20,6 @@ export { file_entity_metadata_invalid_column as entityMetadataInvalidColumnFile 
 export { file_entity_metadata_invalid_tag as entityMetadataInvalidTagFile } from "./generated/entity-metadata/invalid-tag_pb.js";
 export { file_entity_metadata_visibility as entityMetadataVisibilityFile } from "./generated/entity-metadata/visibility_pb.js";
 export { file_handler_registry_commands as handlerRegistryCommandsFile } from "./generated/handler-registry/commands_pb.js";
-export { TaskCommandSchema as RepositoryRoutingTaskCommandSchema } from "./generated/handler-registry/commands_pb.js";
 export { file_handler_registry_events as handlerRegistryEventsFile } from "./generated/handler-registry/events_pb.js";
 export { file_handler_registry_rejections as handlerRegistryRejectionsFile } from "./generated/handler-registry/rejections_pb.js";
 export { file_handler_registry_states as handlerRegistryStatesFile } from "./generated/handler-registry/states_pb.js";
@@ -28,6 +27,7 @@ export {
   ProjectionStateSchema as RepositoryRoutingProjectionStateSchema,
   AggregateStateSchema as RepositoryRoutingAggregateStateSchema,
   UuidMessageIdAggregateStateSchema as RepositoryRoutingUuidMessageIdAggregateStateSchema,
+  UuidMessageIdAggregateIdSchema as RepositoryRoutingUuidMessageIdAggregateIdSchema,
   NeutralProjectionStateSchema as RepositoryRoutingNeutralProjectionStateSchema,
   Int32AggregateStateSchema as RepositoryRoutingInt32AggregateStateSchema,
   Int64ProcessManagerStateSchema as RepositoryRoutingInt64ProcessManagerStateSchema,
@@ -43,6 +43,7 @@ export {
 } from "./generated/repository-routing/routing_pb.js";
 export {
   UuidMessageIdAggregateCommandSchema as RepositoryRoutingUuidMessageIdAggregateCommandSchema,
+  TaskCommandSchema as RepositoryRoutingTaskCommandSchema,
   ImplicitTaskCommandSchema as RepositoryRoutingImplicitTaskCommandSchema,
   Int32AggregateCommandSchema as RepositoryRoutingInt32AggregateCommandSchema,
   Int64ProcessManagerCommandSchema as RepositoryRoutingInt64ProcessManagerCommandSchema,
@@ -64,6 +65,7 @@ export {
 } from "./generated/repository-routing/validation-refusal_pb.js";
 export {
   ValidatedTaskCommandSchema as RepositoryRoutingValidatedTaskCommandSchema,
+  ValidatedMessageIdSchema as RepositoryRoutingValidatedMessageIdSchema,
   ProducedTaskCommandSchema as RepositoryRoutingProducedTaskCommandSchema,
 } from "./generated/repository-routing/validation_refusal_commands_pb.js";
 export { ValidatedTaskEventSchema as RepositoryRoutingValidatedTaskEventSchema } from "./generated/repository-routing/validation_refusal_events_pb.js";

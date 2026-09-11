@@ -16,6 +16,10 @@ package repository_routing_validation_commands;
 
 import "spine/options.proto";
 
+message ValidatedMessageId {
+  string value = 1 [(required) = true];
+}
+
 message ValidatedTaskCommand {
   string id = 1;
   string name = 2 [(required) = true];

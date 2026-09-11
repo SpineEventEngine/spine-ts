@@ -14,7 +14,6 @@
 syntax = "proto3";
 package repository_routing;
 
-import "spine/core/command.proto";
 import "spine/core/user_id.proto";
 import "spine/options.proto";
 
@@ -33,9 +32,13 @@ message AggregateState {
   bool archived = 3;
 }
 
+message UuidMessageIdAggregateId {
+  string value = 1;
+}
+
 message UuidMessageIdAggregateState {
   option (entity).kind = AGGREGATE;
-  spine.core.CommandId id = 1 [(set_once) = true];
+  UuidMessageIdAggregateId id = 1 [(set_once) = true];
   string name = 2 [(column) = true];
   int32 priority = 3 [(column) = true];
 }

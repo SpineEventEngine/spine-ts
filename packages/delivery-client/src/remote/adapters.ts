@@ -98,9 +98,7 @@ export class RemoteInbox implements DeliveryInbox {
       options.limit === undefined
         ? this.client.pageSize
         : DeliveryRequestCodec.pageSize(options.limit);
-    if (options.statuses !== undefined) return this.#readFiltered(shardIndex, options, limit);
-    const page = await this.#readPage(shardIndex, options.after, limit, options);
-    return Object.freeze(page.messages.slice(0, limit));
+    return this.#readCollected(shardIndex, options, limit);
   }
 
   async #readPage(
@@ -131,7 +129,7 @@ export class RemoteInbox implements DeliveryInbox {
     };
   }
 
-  async #readFiltered(
+  async #readCollected(
     shardIndex: ShardIndex,
     options: InboxReadOptions & DeliveryOperationOptions,
     limit: number,
@@ -141,7 +139,8 @@ export class RemoteInbox implements DeliveryInbox {
     while (result.length < limit) {
       const page = await this.#readPage(shardIndex, after, limit, options);
       for (const message of page.messages) {
-        if (options.statuses?.includes(message.status)) result.push(message);
+        if (options.statuses === undefined || options.statuses.includes(message.status))
+          result.push(message);
         if (result.length === limit) return Object.freeze(result);
       }
       if (page.complete) return Object.freeze(result);
