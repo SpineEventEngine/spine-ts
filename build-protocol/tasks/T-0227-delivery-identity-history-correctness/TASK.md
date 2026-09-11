@@ -988,3 +988,10 @@ domain roles and readability; and `/root/fresh_delivery_api_review`, existing
 TypeScript/API documentation reviewer at explicit `gpt-5.6-terra` / `high` for
 generated types and public/package boundaries. They may not edit files or
 spawn sub-agents.
+
+All three affected-lane re-reviews are clean. Fresh documentation review is
+assigned at `8dccfdc07` to `/root/fresh_correction_docs_review`, the existing
+documentation reviewer role, explicitly `gpt-5.6-luna` / `medium`, with no
+inherited conversation turns and no child-agent dispatch. It covers current
+delivery, identity, history, fixture-policy, and compatibility claims and
+checks for terminology left by the superseded admission design.
