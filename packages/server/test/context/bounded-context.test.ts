@@ -135,12 +135,6 @@ interface InternalDeliveryDescriptor {
   transition(scopes: readonly unknown[], onReady: (ready: unknown) => void): Promise<void>;
 }
 
-type ProjectOverviewState = Message<"ProjectOverviewState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
 type ProjectState = Message<"ProjectState"> & {
   id: string;
   name: string;

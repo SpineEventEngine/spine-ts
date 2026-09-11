@@ -15,13 +15,14 @@
 import type { TenantId } from "@spine-event-engine/proto";
 
 import { Delivery } from "../delivery/delivery.js";
-import type { InboxMessage } from "../delivery/inbox.js";
+import type { InboxMessage, InboxWriteResult } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import type { ProjectionInbox, ProjectionInboxTarget } from "../repository/repository.js";
 import {
   type DeliveryEndpoint,
   DeliveryReadiness,
   InboxHandoff,
+  type LocalInboxDrainOptions,
   type OnDeliveryReady,
 } from "./local-inbox-handoff.js";
 
@@ -119,10 +120,19 @@ export class LocalProjectionInbox implements ProjectionInbox {
     input: ProjectionInput,
     deliveryTenantId?: TenantId,
   ): Promise<InboxMessage> {
-    if (deliveryTenantId !== undefined) {
-      await this.#keepTenant(deliveryTenantId);
+    if (deliveryTenantId !== undefined) await this.#keepTenant(deliveryTenantId);
+    const written = await this.#writeInboxRow(delivery, input);
+    this.#trackMessage(written.message);
+    try {
+      await this.#drainWritten(delivery, written.message, deliveryTenantId);
+      return written.message;
+    } finally {
+      this.#untrackMessage(written.message);
     }
-    const written = await delivery.inbox.receive({
+  }
+
+  #writeInboxRow(delivery: Delivery, input: ProjectionInput): Promise<InboxWriteResult> {
+    return delivery.inbox.receive({
       inboxId: input.inboxId,
       signalId: input.signalId,
       label: input.label,
@@ -133,44 +143,47 @@ export class LocalProjectionInbox implements ProjectionInbox {
       ...(input.signal === undefined ? {} : { signal: input.signal }),
       ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
     });
+  }
 
-    const endpoint =
-      written.outcome === "WRITTEN"
-        ? InboxHandoff.configuredEndpoint(
-            written.message,
-            this.#endpoints.get(written.message.inboxId.targetTypeUrl) ?? [],
-          )
-        : undefined;
-    this.#trackMessage(written.message);
-    try {
-      await this.#readiness
-        .claim(endpoint === undefined ? undefined : InboxHandoff.ready(endpoint, deliveryTenantId))
-        .complete(() =>
-          this.#isAcknowledged(written.message)
-            ? Promise.resolve()
-            : InboxHandoff.drain({
-                delivery,
-                received: written.message,
-                node: this.#contextName,
-                onReplay: (message) => this.#replay(message, deliveryTenantId),
-                acceptMessage: (message) =>
-                  InboxHandoff.sameMessageId(message.id, written.message.id) ||
-                  (message.label === "UPDATE_SUBSCRIBER" &&
-                    this.#targets.has(message.inboxId.targetTypeUrl)),
-                onResolved: (message) => {
-                  this.#recordAcknowledgement(message);
-                },
-                replayFailureMessage: "Projection inbox replay failed.",
-                skippedMessage:
-                  "Projection inbox delivery was skipped before the target row was delivered.",
-                unfinishedMessage:
-                  "Projection inbox delivery did not reach the target row before the local drain finished.",
-              }),
-        );
-      return written.message;
-    } finally {
-      this.#untrackMessage(written.message);
-    }
+  async #drainWritten(
+    delivery: Delivery,
+    message: InboxMessage,
+    deliveryTenantId?: TenantId,
+  ): Promise<void> {
+    const endpoint = InboxHandoff.configuredEndpoint(
+      message,
+      this.#endpoints.get(message.inboxId.targetTypeUrl) ?? [],
+    );
+    await this.#readiness
+      .claim(endpoint === undefined ? undefined : InboxHandoff.ready(endpoint, deliveryTenantId))
+      .complete(() =>
+        this.#isAcknowledged(message)
+          ? Promise.resolve()
+          : InboxHandoff.drain(this.#drainOptions(delivery, message, deliveryTenantId)),
+      );
+  }
+
+  #drainOptions(
+    delivery: Delivery,
+    message: InboxMessage,
+    deliveryTenantId?: TenantId,
+  ): LocalInboxDrainOptions {
+    return {
+      delivery,
+      received: message,
+      node: this.#contextName,
+      onReplay: (next) => this.#replay(next, deliveryTenantId),
+      acceptMessage: (next) =>
+        InboxHandoff.sameMessageId(next.id, message.id) ||
+        (next.label === "UPDATE_SUBSCRIBER" && this.#targets.has(next.inboxId.targetTypeUrl)),
+      onResolved: (next) => {
+        this.#recordAcknowledgement(next);
+      },
+      replayFailureMessage: "Projection inbox replay failed.",
+      skippedMessage: "Projection inbox delivery was skipped before the target row was delivered.",
+      unfinishedMessage:
+        "Projection inbox delivery did not reach the target row before the local drain finished.",
+    };
   }
 
   #trackMessage(message: InboxMessage): void {

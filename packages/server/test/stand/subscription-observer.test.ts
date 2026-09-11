@@ -13,8 +13,6 @@
  */
 
 import { create, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
   AnySchema,
   BoolValueSchema,

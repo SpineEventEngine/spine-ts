@@ -1004,6 +1004,31 @@ describe("Delivery direct worker", () => {
     });
     expect(seen).toBe(0);
   });
+
+  it("stops after retaining a bounded sample of distinct target failures", async () => {
+    const shard = ShardIndex.single();
+    const rows = Array.from({ length: 101 }, (_, index) => {
+      const signal = `failed-${String(index)}`;
+      const target = `target-${String(index)}`;
+      const delivered = {
+        ...message(`${signal}-delivered`, target, shard),
+        signalId: signal,
+        status: "DELIVERED" as const,
+      };
+      const pending = { ...message(`${signal}-pending`, target, shard), signalId: signal };
+      return [delivered, pending];
+    }).flat();
+    const delivery = createDelivery({
+      rows,
+      pageSize: rows.length,
+      removeDuplicate: async () => false,
+    });
+
+    const run = await delivery.drain(shard, { onMessage: () => undefined });
+
+    expect(run).toMatchObject({ status: "STOPPED", failed: 100 });
+    expect(run.failures).toHaveLength(100);
+  });
 });
 
 function createDelivery(config: {

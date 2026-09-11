@@ -14,7 +14,6 @@
 
 import { clone, create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
 import { EventSchema, VersionSchema } from "@spine-event-engine/proto";
@@ -92,18 +91,12 @@ vi.mock("../../src/bus/event-bus.js", async (importOriginal) => {
   };
 });
 
-import {
-  type EmptyState,
-  file_entity_metadata_empty,
-} from "../../test-fixtures/generated/entity-metadata/empty_pb.js";
+import { EmptyStateSchema } from "../../test-fixtures/generated/entity-metadata/empty_pb.js";
 import {
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
-  type ProjectState,
   ProjectStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
-
-const EmptyStateSchema = messageDesc(file_entity_metadata_empty, 0) as GenMessage<EmptyState>;
 
 describe("Stand", () => {
   it("keeps subscription lifecycle operations out of the Stand access seam", () => {

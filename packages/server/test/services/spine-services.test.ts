@@ -15,8 +15,6 @@
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
 import { clone, create, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
   BoolValueSchema,
   BytesValueSchema,
@@ -116,14 +114,14 @@ import { spineServicesAccess } from "../../src/services/spine-services.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
 import {
-  TaskIdSchema as TodoIdSchema,
+  TaskIdSchema,
   TaskListIdSchema as TodoTaskListIdSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import {
   TaskCreatedSchema,
   type TaskCreated,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
-import { TaskSchema as TodoTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
+import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
@@ -138,35 +136,16 @@ import {
   type CreateReviewProject,
   CreateReviewProjectSchema,
 } from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
-import {
-  type ReviewProjectState,
-  ReviewProjectStateSchema,
-} from "../../test-fixtures/generated/validation-refusal/project_states_pb.js";
+import { ReviewProjectStateSchema } from "../../test-fixtures/generated/validation-refusal/project_states_pb.js";
 
-const GeneratedTaskIdSchema = TodoIdSchema;
+const GeneratedTaskIdSchema = TaskIdSchema;
 let stateChangeSequence = 0;
 
 type TaskId = Message<"spine.examples.todo.TaskId"> & {
   value: string;
 };
 
-type TaskListId = Message<"spine.examples.todo.TaskListId"> & {
-  value: string;
-};
-
-type Task = Message<"spine.examples.todo.Task"> & {
-  id?: TaskId;
-  title: string;
-  completed: boolean;
-  taskListId?: TaskListId;
-};
-
 type TenantInput = string | TenantId;
-
-const fileTaskIdFixture = TodoIdSchema.file;
-const fileTaskFixture = TodoTaskSchema.file;
-const TaskIdSchema = messageDesc(fileTaskIdFixture, 0) as GenMessage<TaskId>;
-const TaskSchema = messageDesc(fileTaskFixture, 0) as GenMessage<Task>;
 
 class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
   subscribeTask(event: TaskCreated): void {

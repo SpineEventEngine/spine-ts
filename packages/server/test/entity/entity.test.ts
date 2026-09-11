@@ -13,7 +13,6 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { describe, expect, expectTypeOf, it } from "vitest";
 

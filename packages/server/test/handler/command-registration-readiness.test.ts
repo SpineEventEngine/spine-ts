@@ -12,7 +12,6 @@
  * the License.
  */
 
-import type { Message } from "@bufbuild/protobuf";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
@@ -37,12 +36,6 @@ import {
   ProjectOverviewStateSchema,
   ProjectStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
-
-type ProjectOverviewState = Message<"ProjectOverviewState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
 
 class TaskProjection {
   assignCreate(command: CreateProject): void {

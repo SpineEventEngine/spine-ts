@@ -118,6 +118,30 @@ describe("repository state-history cache", () => {
     await expect(cache.read(3)).resolves.toEqual([]);
   });
 
+  it("rejects a duplicate or ascending version inside an initial page", async () => {
+    const cache = RepositoryHistory.createCache(
+      () => Promise.resolve([record(5n), record(5n), record(4n)]),
+      (value) => value.version,
+      { requireDescendingVersions: true },
+    );
+
+    await expect(cache.read(3)).resolves.toEqual([]);
+  });
+
+  it("rejects a duplicate or ascending version inside a continuation page", async () => {
+    const cache = RepositoryHistory.createCache(
+      (_depth, startingFromVersion) =>
+        Promise.resolve(
+          startingFromVersion === undefined ? [record(5n), record(4n)] : [record(6n), record(6n)],
+        ),
+      (value) => value.version,
+      { requireDescendingVersions: true },
+    );
+
+    await cache.read(2);
+    await expect(cache.read(4)).resolves.toEqual([]);
+  });
+
   it("does not let a stale deferred read repopulate an invalidated cache", async () => {
     let resolve: ((records: readonly ReturnType<typeof record>[]) => void) | undefined;
     const cache = RepositoryHistory.createCache(
@@ -206,6 +230,23 @@ describe("repository state-history cache", () => {
     await expect(cache.read(2)).resolves.toEqual([record(5n), record(4n)]);
     await expect(cache.read(3)).resolves.toEqual([record(6n), record(5n), record(4n)]);
     expect(calls).toEqual([undefined, 4n, undefined]);
+  });
+
+  it("rejects an unordered refreshed page after a newer continuation", async () => {
+    let calls = 0;
+    const cache = RepositoryHistory.createCache(
+      (_depth, startingFromVersion) => {
+        calls += 1;
+        if (calls === 1) return Promise.resolve([record(5n), record(4n)]);
+        if (startingFromVersion !== undefined) return Promise.resolve([record(6n)]);
+        return Promise.resolve([record(7n), record(7n), record(6n)]);
+      },
+      (value) => value.version,
+      { requireDescendingVersions: true },
+    );
+
+    await expect(cache.read(2)).resolves.toEqual([record(5n), record(4n)]);
+    await expect(cache.read(3)).resolves.toEqual([]);
   });
 
   it("does not retain a refreshed page invalidated while it is loading", async () => {

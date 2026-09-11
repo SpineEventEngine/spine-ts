@@ -40,16 +40,11 @@ import {
   ProjectCreatedSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_events_pb.js";
 import {
-  type ProjectOverviewState,
   ProjectOverviewStateSchema,
   ProjectSearchStateSchema,
-  type ProjectState,
   ProjectStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
-import {
-  type ProcessManagerState,
-  ProcessManagerStateSchema,
-} from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
+import { ProcessManagerStateSchema } from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
 import {
   type CreateReviewProject,
   CreateReviewProjectSchema,

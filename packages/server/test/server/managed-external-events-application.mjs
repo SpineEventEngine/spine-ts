@@ -19,7 +19,6 @@ import { pathToFileURL } from "node:url";
 import process from "node:process";
 
 import { create } from "@bufbuild/protobuf";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { TypeRegistry } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -43,14 +42,14 @@ import {
 } from "@spine-event-engine/server";
 import { managedServerApplicationAccess } from "../../test-fixtures/internal.mjs";
 import { UserIdSchema } from "@spine-event-engine/proto";
-import { file_entity_metadata_project_states } from "../../test-fixtures/dist/generated/entity-metadata/project_states_pb.js";
+import { ProjectOverviewStateSchema } from "../../test-fixtures/dist/generated/entity-metadata/project_states_pb.js";
 
 const endpoint = required("SPINE_MANAGED_REMOTE_DELIVERY_URL");
 const thirdPartyDirectory = required("SPINE_T0210_THIRD_PARTY_DIRECTORY");
 const isManagedChild = process.env.SPINE_MANAGED_SERVER_CHILD === "true";
 const delivery = RemoteDelivery.connectTo({ endpoint });
 const strategy = UniformAcrossAllShards.forNumber(2);
-const ExternalStateSchema = projectionStateSchema();
+const ExternalStateSchema = ProjectOverviewStateSchema;
 
 class ExternalTaskProjection extends Projection {
   onExternalTaskCreated(event) {
@@ -196,10 +195,6 @@ async function generatedRegistryRoot() {
       await rm(root, { recursive: true, force: true });
     },
   };
-}
-
-function projectionStateSchema() {
-  return messageDesc(file_entity_metadata_project_states, 0);
 }
 
 function required(name) {

@@ -69,8 +69,26 @@ export const InboxHandlers: Readonly<{
     state: InMemoryDeliveryState,
     admission: MutationAdmission,
     onMessageTransition?: (shard: ShardIndex, delta: 1 | -1) => void,
-  ): ServiceImpl<typeof InboxService> => ({
-    writeOne: async (request, context) => {
+  ): ServiceImpl<typeof InboxService> =>
+    Object.freeze({
+      writeOne: InboxOperations.writeOne(state, admission, onMessageTransition),
+      writeMany: InboxOperations.writeMany(state, admission, onMessageTransition),
+      removeOne: InboxOperations.removeOne(state, admission, onMessageTransition),
+      removeMany: InboxOperations.removeMany(state, admission, onMessageTransition),
+      findOne: InboxOperations.findOne(state),
+      findManyInShard: InboxOperations.findManyInShard(state),
+      newestMessageToDeliver: InboxOperations.newestMessageToDeliver(state),
+    }),
+});
+
+const InboxOperations = {
+  writeOne:
+    (
+      state: InMemoryDeliveryState,
+      admission: MutationAdmission,
+      onMessageTransition?: (shard: ShardIndex, delta: 1 | -1) => void,
+    ): ServiceImpl<typeof InboxService>["writeOne"] =>
+    async (request, context) => {
       const message = InboxMessages.required(request.message);
       await admission.run(context.signal, () => {
         const prior = state.messages.get(DeliveryMessages.key(message.message));
@@ -81,7 +99,13 @@ export const InboxHandlers: Readonly<{
       });
       return {};
     },
-    writeMany: async (request, context) => {
+  writeMany:
+    (
+      state: InMemoryDeliveryState,
+      admission: MutationAdmission,
+      onMessageTransition?: (shard: ShardIndex, delta: 1 | -1) => void,
+    ): ServiceImpl<typeof InboxService>["writeMany"] =>
+    async (request, context) => {
       const shard = InboxShards.required(request.shard);
       InboxMessages.requiredBatchLength(request.message.length);
       const messages = request.message.map(InboxMessages.required);
@@ -102,7 +126,13 @@ export const InboxHandlers: Readonly<{
       });
       return {};
     },
-    removeOne: async (request, context) => {
+  removeOne:
+    (
+      state: InMemoryDeliveryState,
+      admission: MutationAdmission,
+      onMessageTransition?: (shard: ShardIndex, delta: 1 | -1) => void,
+    ): ServiceImpl<typeof InboxService>["removeOne"] =>
+    async (request, context) => {
       const message = InboxMessages.required(request.message);
       await admission.run(context.signal, () => {
         const prior = state.messages.get(DeliveryMessages.key(message.message));
@@ -111,7 +141,13 @@ export const InboxHandlers: Readonly<{
       });
       return {};
     },
-    removeMany: async (request, context) => {
+  removeMany:
+    (
+      state: InMemoryDeliveryState,
+      admission: MutationAdmission,
+      onMessageTransition?: (shard: ShardIndex, delta: 1 | -1) => void,
+    ): ServiceImpl<typeof InboxService>["removeMany"] =>
+    async (request, context) => {
       const shard = InboxShards.required(request.shard);
       InboxMessages.requiredBatchLength(request.message.length);
       const messages = request.message.map(InboxMessages.required);
@@ -128,7 +164,9 @@ export const InboxHandlers: Readonly<{
       });
       return {};
     },
-    findOne: (request) => {
+  findOne:
+    (state: InMemoryDeliveryState): ServiceImpl<typeof InboxService>["findOne"] =>
+    (request) => {
       if (request.index === undefined || request.uuid.trim().length === 0)
         throw InboxResponses.invalid("Delivery message identity is missing.");
       InboxShards.required(request.index);
@@ -138,7 +176,9 @@ export const InboxHandlers: Readonly<{
         message === undefined ? {} : { message: DeliveryMessages.copy(message) },
       );
     },
-    findManyInShard: (request) => {
+  findManyInShard:
+    (state: InMemoryDeliveryState): ServiceImpl<typeof InboxService>["findManyInShard"] =>
+    (request) => {
       const shard = InboxShards.required(request.shard);
       if (!Number.isInteger(request.pageSize) || request.pageSize < 1 || request.pageSize > 1_000)
         throw InboxResponses.invalid("Delivery page size must be between 1 and 1000.");
@@ -163,7 +203,9 @@ export const InboxHandlers: Readonly<{
         "Delivery page exceeds the 4 MiB response limit; request a smaller page.",
       );
     },
-    newestMessageToDeliver: (shard) => {
+  newestMessageToDeliver:
+    (state: InMemoryDeliveryState): ServiceImpl<typeof InboxService>["newestMessageToDeliver"] =>
+    (shard) => {
       const key = DeliveryShards.key(InboxShards.required(shard));
       const newest = [...state.messages.values()]
         .filter(
@@ -179,8 +221,7 @@ export const InboxHandlers: Readonly<{
         newest === undefined ? {} : { message: DeliveryMessages.copy(newest) },
       );
     },
-  }),
-});
+};
 
 /**
  * Describes a validated Inbox message and its encoded record size.

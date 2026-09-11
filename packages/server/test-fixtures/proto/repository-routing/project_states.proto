@@ -15,8 +15,8 @@ syntax = "proto3";
 
 package repository_routing;
 
-import "spine/options.proto";
 import "repository-routing/project_identifiers.proto";
+import "spine/options.proto";
 
 message ProjectOverviewState {
   option (entity).kind = PROJECTION;

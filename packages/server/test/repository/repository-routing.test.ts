@@ -116,7 +116,6 @@ import {
   type EntityHandlersMetadata,
   type EventDispatcher,
   type InboxMessage,
-  type MessageId,
   SpecScanner,
   StateUpdateRouting,
 } from "../../src/index.js";
@@ -181,31 +180,21 @@ import {
   ProjectPriorityChangedSchema,
 } from "../../test-fixtures/generated/repository-routing/project_routing_events_pb.js";
 import {
-  type ProjectBacklogState,
   ProjectBacklogStateSchema,
-  type ProjectMilestoneOverviewState,
   ProjectMilestoneOverviewStateSchema,
   type ProjectMilestoneSourceState,
   ProjectMilestoneSourceStateSchema,
-  type ProjectMilestoneState,
   ProjectMilestoneStateSchema,
-  type ProjectMilestoneWorkflowState,
   ProjectMilestoneWorkflowStateSchema,
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
-  type ProjectQueueState,
   ProjectQueueStateSchema,
   type ProjectState,
   ProjectStateSchema,
-  type ProjectWorkflowState,
   ProjectWorkflowStateSchema,
-  type RegisteredProjectState,
   RegisteredProjectStateSchema,
-  type NumberedProjectState,
   NumberedProjectStateSchema,
-  type SequencedProjectOverviewState,
   SequencedProjectOverviewStateSchema,
-  type SequencedProjectSourceState,
   SequencedProjectSourceStateSchema,
 } from "../../test-fixtures/generated/repository-routing/project_states_pb.js";
 import {
@@ -223,9 +212,7 @@ import {
   ProjectSubmissionIdSchema,
 } from "../../test-fixtures/generated/repository-routing/project_validation_identifiers_pb.js";
 import {
-  type AcceptedProjectSubmissionState,
   AcceptedProjectSubmissionStateSchema,
-  type ProjectSubmissionState,
   ProjectSubmissionStateSchema,
 } from "../../test-fixtures/generated/repository-routing/project_validation_states_pb.js";
 
@@ -6786,6 +6773,66 @@ describe("repository signal routing", () => {
     await context.close();
   });
 
+  it("trims completed lanes behind an active lane without breaking its serialization", async () => {
+    BlockingProcessManager.reset();
+    BlockingProcessManager.blockingId = "pm-guard-trim-active";
+    const factory = new CountingProbeStorageFactory(false, true);
+    const repository = createGuardedBlockingPmRepo(1);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const target = requireEntityInboxTarget(repository);
+    const active = createProjectCreated("event-guard-trim-active", "pm-guard-trim-active");
+    const evicted = createProjectCreated("event-guard-trim-evicted", "pm-guard-trim-evicted");
+    const first = target.replay(
+      await storePmInboxEvent(delivery, active, new Date("2026-07-24T20:00:00.000Z"), 1n),
+    );
+    await waitForCondition(() => BlockingProcessManager.startedCalls === 1);
+    await target.replay(
+      await storePmInboxEvent(delivery, evicted, new Date("2026-07-24T20:00:01.000Z"), 2n),
+    );
+    await target.replay(
+      await storePmInboxEvent(
+        delivery,
+        createProjectCreated("event-guard-trim-two", "pm-guard-trim-two"),
+        new Date("2026-07-24T20:00:02.000Z"),
+        3n,
+      ),
+    );
+    await target.replay(
+      await storePmInboxEvent(
+        delivery,
+        createProjectCreated("event-guard-trim-three", "pm-guard-trim-three"),
+        new Date("2026-07-24T20:00:03.000Z"),
+        4n,
+      ),
+    );
+    await target.replay(
+      await storePmInboxEvent(delivery, evicted, new Date("2026-07-24T20:00:04.000Z"), 5n, {
+        signalId: "delivery-row-guard-trim-evicted",
+      }),
+    );
+    await waitForCondition(() => BlockingProcessManager.startedCalls === 5);
+
+    const duplicateActive = target.replay(
+      await storePmInboxEvent(delivery, active, new Date("2026-07-24T20:00:05.000Z"), 6n, {
+        signalId: "delivery-row-guard-trim-active",
+      }),
+    );
+    await expect(Promise.race([duplicateActive.then(() => "resolved"), delay(150)])).resolves.toBe(
+      "pending",
+    );
+    BlockingProcessManager.release();
+    await expect(Promise.all([first, duplicateActive])).resolves.toEqual([undefined, undefined]);
+    expect(BlockingProcessManager.completedCalls).toBe(5);
+    await context.close();
+  });
+
   it("uses the stored process-manager target and rejects other invalid replay rows", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
@@ -11406,7 +11453,7 @@ function createBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
   });
 }
 
-function createGuardedBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
+function createGuardedBlockingPmRepo(depth = 100): Repository<typeof BlockingProcessManager> {
   const handlers = EntityHandlers.define(
     BlockingProcessManager,
     ProjectQueueStateSchema,
@@ -11418,7 +11465,7 @@ function createGuardedBlockingPmRepo(): Repository<typeof BlockingProcessManager
     schema: ProjectQueueStateSchema,
     handlers,
     processManagerEventHistory: true,
-    doubleDispatchGuard: true,
+    doubleDispatchGuard: { depth },
   });
 }
 
@@ -12417,13 +12464,19 @@ class CountingProbeStorageFactory extends InMemoryStorageFactory {
   closed = 0;
   closedProbes = 0;
 
-  constructor(private readonly failRead = false) {
+  constructor(
+    private readonly failRead = false,
+    private readonly hideGuardHistory = false,
+  ) {
     super();
   }
 
   override createEntityStorage(input: unknown): unknown {
     const storage = super.createEntityStorage(input) as {
-      readonly current: unknown;
+      readonly current: {
+        read(id: unknown): Promise<unknown>;
+        write(record: unknown): Promise<void>;
+      };
       readonly states: unknown;
       readonly events: {
         append(record: {
@@ -12443,9 +12496,16 @@ class CountingProbeStorageFactory extends InMemoryStorageFactory {
     this.opened++;
     let closed = false;
     let probed = false;
+    let readCurrent = false;
 
     return {
-      current: storage.current,
+      current: {
+        read: async (id: unknown) => {
+          readCurrent = true;
+          return storage.current.read(id);
+        },
+        write: (record: unknown) => storage.current.write(record),
+      },
       states: storage.states,
       events: {
         append: (record: {
@@ -12461,6 +12521,7 @@ class CountingProbeStorageFactory extends InMemoryStorageFactory {
         ): Promise<readonly SpineEvent[]> => {
           probed = true;
           if (this.failRead) return Promise.reject(new Error("guard probe read failed"));
+          if (this.hideGuardHistory && !readCurrent) return Promise.resolve([]);
           return storage.events.backward(entityId, depth, startingFromVersion);
         },
       },

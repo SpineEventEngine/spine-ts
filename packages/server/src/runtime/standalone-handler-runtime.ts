@@ -185,63 +185,84 @@ export class StandaloneHandlerRuntime {
   }
 
   #publish(binding: Binding, output: unknown, source: Command | Event): Promise<void> {
-    const values =
-      output === undefined || output === null ? [] : Array.isArray(output) ? output : [output];
-    const required =
-      binding.handler.kind === "command-assignment" ||
-      binding.handler.kind === "command-substitution";
-    if (required && values.length === 0)
+    const values = StandaloneHandlerRuntime.#outputValues(output);
+    if (!this.#canPublish(binding, values)) return Promise.resolve();
+    for (const value of values) this.#publishValue(binding, value, source);
+    return Promise.resolve();
+  }
+
+  #canPublish(binding: Binding, values: readonly unknown[]): boolean {
+    const subscriber =
+      binding.handler.kind === "event-subscription" ||
+      binding.handler.kind === "state-subscription";
+    if (subscriber && values.length !== 0)
+      throw new Error(
+        `Standalone subscriber "${binding.handler.methodName}" must not return signals.`,
+      );
+    if (
+      !subscriber &&
+      (binding.handler.kind === "command-assignment" ||
+        binding.handler.kind === "command-substitution") &&
+      values.length === 0
+    )
       throw new Error(
         `Standalone ${binding.handler.kind} "${binding.handler.methodName}" must return a signal.`,
       );
-    if (
-      binding.handler.kind === "event-subscription" ||
-      binding.handler.kind === "state-subscription"
-    ) {
-      if (values.length !== 0)
-        throw new Error(
-          `Standalone subscriber "${binding.handler.methodName}" must not return signals.`,
-        );
-      return Promise.resolve();
-    }
-    for (const value of values) {
-      const schema = binding.handler.emittedSchemas.find(
-        (candidate) => (value as { $typeName?: string }).$typeName === candidate.typeName,
+    return !subscriber;
+  }
+
+  #publishValue(binding: Binding, value: unknown, source: Command | Event): void {
+    const schema = binding.handler.emittedSchemas.find(
+      (candidate) => (value as { $typeName?: string }).$typeName === candidate.typeName,
+    );
+    if (schema === undefined)
+      throw new Error(
+        `Standalone handler "${binding.handler.methodName}" returned an undeclared signal.`,
       );
-      if (schema === undefined)
-        throw new Error(
-          `Standalone handler "${binding.handler.methodName}" returned an undeclared signal.`,
-        );
-      if (
-        binding.handler.kind === "command-substitution" ||
-        binding.handler.kind === "command-reaction"
-      ) {
-        const metadata =
-          "uuid" in (source.id ?? {})
-            ? this.#metadata.commandFromCommand(source as Command)
-            : this.#metadata.commandFromEvent(source as Event);
-        void this.#publisher.publishCommand(
-          create(CommandSchema, {
-            id: metadata.id,
-            context: metadata.context,
-            message: AnyMessages.pack(schema, value as never),
-          }),
-        );
-      } else {
-        const metadata =
-          "uuid" in (source.id ?? {})
-            ? this.#metadata.eventFromCommand(source as Command, {})
-            : this.#metadata.eventFromEvent(source as Event, {});
-        void this.#publisher.publishEvent(
-          create(EventSchema, {
-            id: metadata.id,
-            context: metadata.context,
-            message: AnyMessages.pack(schema, value as never),
-          }),
-        );
-      }
-    }
-    return Promise.resolve();
+    if (
+      binding.handler.kind === "command-substitution" ||
+      binding.handler.kind === "command-reaction"
+    ) {
+      this.#publishCommand(schema, value, source);
+    } else this.#publishEvent(schema, value, source);
+  }
+
+  #publishCommand(schema: MessageSchema, value: unknown, source: Command | Event): void {
+    const metadata =
+      "uuid" in (source.id ?? {})
+        ? this.#metadata.commandFromCommand(source as Command)
+        : this.#metadata.commandFromEvent(source as Event);
+    void this.#publisher.publishCommand(
+      create(CommandSchema, {
+        id: metadata.id,
+        context: metadata.context,
+        message: AnyMessages.pack(schema, value as never),
+      }),
+    );
+  }
+
+  #publishEvent(schema: MessageSchema, value: unknown, source: Command | Event): void {
+    const metadata =
+      "uuid" in (source.id ?? {})
+        ? this.#metadata.eventFromCommand(source as Command, {})
+        : this.#metadata.eventFromEvent(source as Event, {});
+    void this.#publisher.publishEvent(
+      create(EventSchema, {
+        id: metadata.id,
+        context: metadata.context,
+        message: AnyMessages.pack(schema, value as never),
+      }),
+    );
+  }
+
+  /**
+   * Normalizes optional handler output into a list of values.
+   *
+   * @param output A handler result that may be absent, singular, or an array.
+   * @returns An empty list for nullish output; otherwise the array or a single-item list.
+   */
+  static #outputValues(output: unknown): readonly unknown[] {
+    return output === undefined || output === null ? [] : Array.isArray(output) ? output : [output];
   }
 
   /**

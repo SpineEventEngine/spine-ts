@@ -14,7 +14,6 @@
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -33,9 +32,7 @@ import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { SignalPublisher } from "../../src/runtime/signal-publisher.js";
 import {
-  type AssignReviewTask,
   AssignReviewTaskSchema,
-  type ScheduleReviewTask,
   ScheduleReviewTaskSchema,
 } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
 import { CreateReviewProjectSchema } from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";

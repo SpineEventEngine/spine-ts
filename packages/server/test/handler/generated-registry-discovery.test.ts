@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { create, type Message } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -36,11 +36,6 @@ import {
   ReviewStartedSchema,
 } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
-type ProjectOverviewState = Message<"ProjectOverviewState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
 class DiscoveredProjection {
   assignCreate(command: StartReview): ReviewStarted {
     void command;

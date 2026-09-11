@@ -1557,7 +1557,18 @@ class AggregateCommandExecution {
 
   async run(replayedRoute?: RepositoryCommandRoute): Promise<EntityInboxFollowUp | undefined> {
     void RepositorySignals.requireCommandId(this.#command);
+    const intake = this.#readIntake(replayedRoute);
+    if (intake === undefined) return undefined;
+    return this.#runAssignee(intake);
+  }
 
+  #readIntake(replayedRoute?: RepositoryCommandRoute):
+    | {
+        readonly message: unknown;
+        readonly route: RepositoryCommandRoute;
+        readonly assignee: RepositoryCommandAssignee;
+      }
+    | undefined {
     const commandMessage = EntityInvocation.requireSignalMessage(this.#command.message, "command");
     const commandSchema = RepositoryRoutes.schemaForTypeUrl(
       this.#routing.commandSchemas,
@@ -1565,29 +1576,26 @@ class AggregateCommandExecution {
       "command",
     );
     const message = EntityInvocation.unpackRequired(commandMessage, commandSchema, "command");
-
     const route = replayedRoute ?? this.#repository.routeCommand(this.#command);
     const assignee = this.#routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
+    return assignee === undefined ? undefined : Object.freeze({ message, route, assignee });
+  }
 
-    if (assignee === undefined) {
-      return undefined;
-    }
-
-    const loaded = await this.#support.loadAggregate(route.entityId);
-    HandlerDispatchPublisher.command(
-      this.#runtime,
-      this.#repository,
-      this.#command,
-      route.entityId,
-    );
+  async #runAssignee(intake: {
+    readonly message: unknown;
+    readonly route: RepositoryCommandRoute;
+    readonly assignee: RepositoryCommandAssignee;
+  }): Promise<EntityInboxFollowUp | undefined> {
+    const loaded = await this.#support.loadAggregate(intake.route.entityId);
+    this.#publishCommandDispatch(intake.route.entityId);
     const commandContext = EntityInvocation.commandHandlerContext(this.#command);
     let produced: unknown;
     try {
       produced = await this.#invokeAssignee(
         loaded.entity,
-        assignee.handler.methodName,
-        message,
-        assignee.handler.parameterCount,
+        intake.assignee.handler.methodName,
+        intake.message,
+        intake.assignee.handler.parameterCount,
         commandContext,
       );
     } catch (error) {
@@ -1598,25 +1606,39 @@ class AggregateCommandExecution {
         this.#runtime,
         this.#repository,
         this.#command,
-        route.entityId,
+        intake.route.entityId,
         error,
       );
     }
+    const events = this.#requiredEvents(produced, intake.route.entityId, loaded.version);
+    return this.#persistAssigneeResult(loaded, intake.route.entityId, events);
+  }
+
+  #publishCommandDispatch(entityId: unknown): void {
+    HandlerDispatchPublisher.command(this.#runtime, this.#repository, this.#command, entityId);
+  }
+
+  #requiredEvents(produced: unknown, entityId: unknown, version: bigint): readonly Event[] {
     const events = this.#bindProducedEvents(
       this.#support.normalizeProducedSignals(produced),
-      route.entityId,
-      loaded.version,
+      entityId,
+      version,
       true,
     );
-
-    if (events.length === 0) {
+    if (events.length === 0)
       throw new Error("Repository aggregate command handlers must return at least one event.");
-    }
+    return events;
+  }
 
+  #persistAssigneeResult(
+    loaded: LoadedAggregate,
+    entityId: unknown,
+    events: readonly Event[],
+  ): Promise<EntityInboxFollowUp | undefined> {
     const committedVersion = loaded.version + 1n;
-    return await this.#support.persistAggregateAndDispatch(
+    return this.#support.persistAggregateAndDispatch(
       loaded,
-      route.entityId,
+      entityId,
       committedVersion,
       events,
       (event) => this.#runtime.publisher.publishCommittedEvent(event),
@@ -1626,7 +1648,7 @@ class AggregateCommandExecution {
           this.#runtime,
           this.#repository,
           this.#command,
-          route.entityId,
+          entityId,
           loaded.oldState,
           loaded.current === undefined
             ? undefined
@@ -1800,37 +1822,7 @@ class AggregateEventExecution {
   ): Promise<void> {
     const loaded = await this.#support.loadAggregate(entityId);
     const produced = await this.#invokeHandlers(entityId, loaded, intake);
-
-    if (produced.length > 0) {
-      const dispatch = await this.#support.persistAggregateAndDispatch(
-        loaded,
-        entityId,
-        loaded.version + 1n,
-        produced,
-        (event) => this.#runtime.publisher.publishReactorEvent(event),
-        () => {
-          if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
-          EntityStateChangePublisher.event(
-            this.#runtime,
-            this.#repository,
-            this.#event,
-            entityId,
-            loaded.oldState,
-            loaded.current === undefined
-              ? undefined
-              : {
-                  archived: loaded.current.lifecycleFlags?.archived ?? false,
-                  deleted: loaded.current.lifecycleFlags?.deleted ?? false,
-                },
-            RepositoryEntities.repositoryState(loaded.entity) as Message,
-            RepositoryEntities.repositoryLifecycle(loaded.entity),
-            RepositorySignals.eventVersionNumber(loaded.version + 1n),
-          );
-        },
-      );
-      void dispatch();
-    }
-
+    await this.#persistProducedEvents(loaded, entityId, produced);
     await this.#support.appendDiagnosticEvent(
       loaded,
       entityId,
@@ -1838,6 +1830,51 @@ class AggregateEventExecution {
     );
 
     return undefined;
+  }
+
+  async #persistProducedEvents(
+    loaded: LoadedAggregate,
+    entityId: unknown,
+    produced: readonly Event[],
+  ): Promise<void> {
+    if (produced.length === 0) return;
+    const dispatch = await this.#support.persistAggregateAndDispatch(
+      loaded,
+      entityId,
+      loaded.version + 1n,
+      produced,
+      (event) => this.#runtime.publisher.publishReactorEvent(event),
+      () => {
+        this.#publishStateChange(loaded, entityId);
+      },
+    );
+    void dispatch();
+  }
+
+  #publishStateChange(loaded: LoadedAggregate, entityId: unknown): void {
+    if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
+    EntityStateChangePublisher.event(
+      this.#runtime,
+      this.#repository,
+      this.#event,
+      entityId,
+      loaded.oldState,
+      this.#lifecycleSnapshot(loaded),
+      RepositoryEntities.repositoryState(loaded.entity) as Message,
+      RepositoryEntities.repositoryLifecycle(loaded.entity),
+      RepositorySignals.eventVersionNumber(loaded.version + 1n),
+    );
+  }
+
+  #lifecycleSnapshot(
+    loaded: LoadedAggregate,
+  ): { readonly archived: boolean; readonly deleted: boolean } | undefined {
+    return loaded.current === undefined
+      ? undefined
+      : {
+          archived: loaded.current.lifecycleFlags?.archived ?? false,
+          deleted: loaded.current.lifecycleFlags?.deleted ?? false,
+        };
   }
 
   async #invokeHandlers(
@@ -1853,38 +1890,50 @@ class AggregateEventExecution {
 
     transactionalEntityAccess.start(loaded.entity);
     try {
-      if (intake.reactors.length > 0) {
-        HandlerDispatchPublisher.reactor(this.#runtime, this.#repository, this.#event, entityId);
-      }
-      for (const reactor of intake.reactors) {
-        const produced = await EntityInvocation.invokeEntityMethod(
-          loaded.entity,
-          reactor.handler.methodName,
-          intake.message,
-          reactor.handler.parameterCount,
-          eventContext,
-        );
-        events.push(
-          ...this.#bindProducedEvents(
-            this.#support.normalizeProducedSignals(produced),
-            entityId,
-            loaded.version,
-          ),
-        );
-      }
-
-      const commit = await commitFenced(loaded.entity, (current) =>
-        transactionalEntityAccess.commit(current),
-      );
-      if (commit.status === "rejected") {
-        throw new TransitionValidationError(commit.validation.error);
-      }
-
+      await this.#invokeReactors(entityId, loaded, intake, eventContext, events);
+      await this.#commitEntity(loaded.entity);
       return Object.freeze(events);
     } catch (error) {
       transactionalEntityAccess.rollback(loaded.entity);
       throw error;
     }
+  }
+
+  async #invokeReactors(
+    entityId: unknown,
+    loaded: LoadedAggregate,
+    intake: {
+      readonly message: unknown;
+      readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
+    },
+    eventContext: unknown,
+    events: Event[],
+  ): Promise<void> {
+    if (intake.reactors.length > 0)
+      HandlerDispatchPublisher.reactor(this.#runtime, this.#repository, this.#event, entityId);
+    for (const reactor of intake.reactors) {
+      const produced = await EntityInvocation.invokeEntityMethod(
+        loaded.entity,
+        reactor.handler.methodName,
+        intake.message,
+        reactor.handler.parameterCount,
+        eventContext,
+      );
+      events.push(
+        ...this.#bindProducedEvents(
+          this.#support.normalizeProducedSignals(produced),
+          entityId,
+          loaded.version,
+        ),
+      );
+    }
+  }
+
+  async #commitEntity(entity: object): Promise<void> {
+    const commit = await commitFenced(entity, (current) =>
+      transactionalEntityAccess.commit(current),
+    );
+    if (commit.status === "rejected") throw new TransitionValidationError(commit.validation.error);
   }
 
   #bindProducedEvents(
@@ -2629,6 +2678,18 @@ class ProcessManagerCommandExecution {
       this.#command.context?.actorContext,
       tenantId,
     );
+    try {
+      return await this.#invokeCommandHandler(entity, assignee, message);
+    } finally {
+      releaseQuery();
+    }
+  }
+
+  async #invokeCommandHandler(
+    entity: object,
+    assignee: RepositoryCommandAssignee,
+    message: unknown,
+  ): Promise<readonly unknown[]> {
     transactionalEntityAccess.start(entity);
     try {
       const produced = await EntityInvocation.invokeEntityMethod(
@@ -2649,8 +2710,6 @@ class ProcessManagerCommandExecution {
     } catch (error) {
       transactionalEntityAccess.rollback(entity);
       throw error;
-    } finally {
-      releaseQuery();
     }
   }
 
@@ -2921,38 +2980,8 @@ class ProcessManagerEventExecution {
 
     transactionalEntityAccess.start(entity);
     try {
-      if (intake.reactors.length > 0) {
-        HandlerDispatchPublisher.reactor(this.#runtime, this.#repository, this.#event, entityId);
-      }
-      for (const reactor of intake.reactors) {
-        const produced = await EntityInvocation.invokeEntityMethod(
-          entity,
-          reactor.handler.methodName,
-          intake.message,
-          reactor.handler.parameterCount,
-          eventContext,
-        );
-        events.push(...this.#support.normalizeProducedSignals(produced));
-      }
-
-      for (const commander of intake.commanders) {
-        const produced = await EntityInvocation.invokeEntityMethod(
-          entity,
-          commander.handler.methodName,
-          intake.message,
-          commander.handler.parameterCount,
-          eventContext,
-        );
-        commands.push(...this.#support.normalizeProducedSignals(produced));
-      }
-
-      const commit = await commitFenced(entity, (current) =>
-        transactionalEntityAccess.commit(current),
-      );
-      if (commit.status === "rejected") {
-        throw new TransitionValidationError(commit.validation.error);
-      }
-
+      await this.#invokeEventHandlers(entityId, entity, intake, eventContext, events, commands);
+      await this.#commitEntity(entity);
       return Object.freeze({
         commands: Object.freeze(commands),
         events: Object.freeze(events),
@@ -2963,6 +2992,52 @@ class ProcessManagerEventExecution {
     } finally {
       releaseQuery();
     }
+  }
+
+  async #invokeEventHandlers(
+    entityId: unknown,
+    entity: object,
+    intake: {
+      readonly message: unknown;
+      readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
+      readonly commanders: readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
+    },
+    context: unknown,
+    events: unknown[],
+    commands: unknown[],
+  ): Promise<void> {
+    if (intake.reactors.length > 0)
+      HandlerDispatchPublisher.reactor(this.#runtime, this.#repository, this.#event, entityId);
+    await this.#invokeHandlersInto(entity, intake.reactors, intake.message, context, events);
+    await this.#invokeHandlersInto(entity, intake.commanders, intake.message, context, commands);
+  }
+
+  async #invokeHandlersInto(
+    entity: object,
+    handlers: readonly RegisteredHandlerMetadata<
+      EventReactionHandlerMetadata | CommandReactionHandlerMetadata
+    >[],
+    message: unknown,
+    context: unknown,
+    output: unknown[],
+  ): Promise<void> {
+    for (const handler of handlers) {
+      const produced = await EntityInvocation.invokeEntityMethod(
+        entity,
+        handler.handler.methodName,
+        message,
+        handler.handler.parameterCount,
+        context,
+      );
+      output.push(...this.#support.normalizeProducedSignals(produced));
+    }
+  }
+
+  async #commitEntity(entity: object): Promise<void> {
+    const commit = await commitFenced(entity, (current) =>
+      transactionalEntityAccess.commit(current),
+    );
+    if (commit.status === "rejected") throw new TransitionValidationError(commit.validation.error);
   }
 
   #bindProducedEvents(produced: readonly unknown[], entityId: unknown): readonly Event[] {
@@ -5126,92 +5201,7 @@ const RepositoryHistoryInternals = {
     readonly read: (depth: number) => Promise<readonly T[]>;
     readonly clear: () => void;
   } {
-    const { requireDescendingVersions = false, cacheCompleteVersionGroups = false } = options;
-    let entries: readonly T[] = Object.freeze([]);
-    let exhausted = false;
-    let continuation = Promise.resolve();
-    let nextVersion: bigint | undefined;
-    let newestVersion: bigint | undefined;
-    let generation = 0;
-    const clear = (): void => {
-      generation += 1;
-      entries = Object.freeze([]);
-      exhausted = false;
-      nextVersion = undefined;
-      newestVersion = undefined;
-    };
-    return Object.freeze({
-      read: async (depth: number): Promise<readonly T[]> => {
-        await continuation;
-        if (entries.length >= depth || exhausted) return entries.slice(0, depth);
-        let result: readonly T[] | undefined;
-        const next = continuation.then(async () => {
-          if (entries.length >= depth || exhausted) return;
-          const readGeneration = generation;
-          const requested = Math.max(1, depth - entries.length);
-          if (cacheCompleteVersionGroups) {
-            const loaded = await load(requested + 1, nextVersion);
-            if (readGeneration !== generation) return;
-            const combined = [...entries, ...loaded];
-            const short = loaded.length < requested + 1;
-            const terminal = loaded.at(-1);
-            const terminalVersion = terminal === undefined ? undefined : versionOf(terminal);
-            const cachedLength =
-              short || terminalVersion === undefined
-                ? loaded.length
-                : loaded.findIndex((entry) => versionOf(entry) === terminalVersion);
-            const cacheable = loaded.slice(0, Math.max(0, cachedLength));
-            entries = Object.freeze([...entries, ...cacheable]);
-            const cachedLast = cacheable.at(-1);
-            nextVersion = cachedLast === undefined ? nextVersion : versionOf(cachedLast);
-            exhausted = short;
-            result = Object.freeze(combined.slice(0, depth));
-            return;
-          }
-          const loaded = await load(requested, nextVersion);
-          if (readGeneration !== generation) return;
-          const latest = loaded[0] === undefined ? undefined : versionOf(loaded[0]);
-          const oldest = entries.at(-1);
-          const oldestVersion = oldest === undefined ? undefined : versionOf(oldest);
-          if (
-            newestVersion !== undefined &&
-            latest !== undefined &&
-            latest > newestVersion &&
-            nextVersion !== undefined
-          ) {
-            clear();
-            const refreshed = await load(depth);
-            if (readGeneration + 1 !== generation) return;
-            entries = Object.freeze([...refreshed]);
-            newestVersion = refreshed[0] === undefined ? undefined : versionOf(refreshed[0]);
-            const refreshedLast = refreshed.at(-1);
-            nextVersion = refreshedLast === undefined ? undefined : versionOf(refreshedLast);
-            exhausted = refreshed.length < depth;
-            return;
-          }
-          if (
-            requireDescendingVersions &&
-            oldestVersion !== undefined &&
-            latest !== undefined &&
-            latest >= oldestVersion
-          ) {
-            clear();
-            return;
-          }
-          const combined = [...entries, ...loaded];
-          entries = Object.freeze(combined);
-          newestVersion ??= latest;
-          const loadedLast = loaded.at(-1);
-          nextVersion = loadedLast === undefined ? nextVersion : versionOf(loadedLast);
-          exhausted = loaded.length < requested;
-        });
-        // spine-log-boundary: server.repository_history_prefetch
-        continuation = next.catch(() => undefined);
-        await next;
-        return result ?? entries.slice(0, depth);
-      },
-      clear,
-    });
+    return new RepositoryHistoryCache(load, versionOf, options).api();
   },
 
   cloneHistoryState(state: Message | undefined): Message | undefined {
@@ -5227,6 +5217,166 @@ const RepositoryHistoryInternals = {
   },
 };
 Object.freeze(RepositoryHistoryInternals);
+
+class RepositoryHistoryCache<T> {
+  readonly #load: (depth: number, startingFromVersion?: bigint) => Promise<readonly T[]>;
+  readonly #versionOf: (entry: T) => bigint | undefined;
+  readonly #requireDescendingVersions: boolean;
+  readonly #cacheCompleteVersionGroups: boolean;
+  #entries: readonly T[] = Object.freeze([]);
+  #exhausted = false;
+  #continuation = Promise.resolve();
+  #nextVersion: bigint | undefined;
+  #newestVersion: bigint | undefined;
+  #generation = 0;
+
+  constructor(
+    load: (depth: number, startingFromVersion?: bigint) => Promise<readonly T[]>,
+    versionOf: (entry: T) => bigint | undefined,
+    options: {
+      readonly requireDescendingVersions?: boolean;
+      readonly cacheCompleteVersionGroups?: boolean;
+    },
+  ) {
+    this.#load = load;
+    this.#versionOf = versionOf;
+    this.#requireDescendingVersions = options.requireDescendingVersions ?? false;
+    this.#cacheCompleteVersionGroups = options.cacheCompleteVersionGroups ?? false;
+  }
+
+  api(): { readonly read: (depth: number) => Promise<readonly T[]>; readonly clear: () => void } {
+    return Object.freeze({
+      read: (depth) => this.read(depth),
+      clear: () => {
+        this.clear();
+      },
+    });
+  }
+
+  clear(): void {
+    this.#generation += 1;
+    this.#entries = Object.freeze([]);
+    this.#exhausted = false;
+    this.#nextVersion = undefined;
+    this.#newestVersion = undefined;
+  }
+
+  async read(depth: number): Promise<readonly T[]> {
+    await this.#continuation;
+    if (this.#isSatisfied(depth)) return this.#entries.slice(0, depth);
+    let result: readonly T[] | undefined;
+    const next = this.#continuation.then(async () => {
+      if (this.#isSatisfied(depth)) return;
+      result = await this.#extend(depth);
+    });
+    // spine-log-boundary: server.repository_history_prefetch
+    this.#continuation = next.catch(() => undefined);
+    await next;
+    return result ?? this.#entries.slice(0, depth);
+  }
+
+  #isSatisfied(depth: number): boolean {
+    return this.#entries.length >= depth || this.#exhausted;
+  }
+
+  async #extend(depth: number): Promise<readonly T[] | undefined> {
+    const generation = this.#generation;
+    const requested = Math.max(1, depth - this.#entries.length);
+    return this.#cacheCompleteVersionGroups
+      ? this.#extendCompleteGroups(depth, requested, generation)
+      : this.#extendVersioned(depth, requested, generation);
+  }
+
+  async #extendCompleteGroups(
+    depth: number,
+    requested: number,
+    generation: number,
+  ): Promise<readonly T[] | undefined> {
+    const loaded = await this.#load(requested + 1, this.#nextVersion);
+    if (generation !== this.#generation) return undefined;
+    const combined = [...this.#entries, ...loaded];
+    const cacheable = this.#completeGroups(loaded, requested);
+    this.#append(cacheable);
+    this.#exhausted = loaded.length < requested + 1;
+    return Object.freeze(combined.slice(0, depth));
+  }
+
+  #completeGroups(loaded: readonly T[], requested: number): readonly T[] {
+    const terminal = loaded.at(-1);
+    const terminalVersion = terminal === undefined ? undefined : this.#versionOf(terminal);
+    const length =
+      loaded.length < requested + 1 || terminalVersion === undefined
+        ? loaded.length
+        : loaded.findIndex((entry) => this.#versionOf(entry) === terminalVersion);
+    return loaded.slice(0, Math.max(0, length));
+  }
+
+  async #extendVersioned(depth: number, requested: number, generation: number): Promise<undefined> {
+    const loaded = await this.#load(requested, this.#nextVersion);
+    if (generation !== this.#generation) return undefined;
+    const latest = loaded[0] === undefined ? undefined : this.#versionOf(loaded[0]);
+    if (this.#hasInvalidPage(loaded)) {
+      this.clear();
+      return undefined;
+    }
+    if (this.#hasNewerPage(latest)) return this.#refresh(depth, generation);
+    if (this.#hasInvalidContinuation(latest)) {
+      this.clear();
+      return undefined;
+    }
+    this.#append(loaded);
+    this.#newestVersion ??= latest;
+    this.#exhausted = loaded.length < requested;
+    return undefined;
+  }
+
+  #hasInvalidPage(loaded: readonly T[]): boolean {
+    if (!this.#requireDescendingVersions) return false;
+    for (let index = 1; index < loaded.length; index += 1) {
+      const newer = this.#versionOf(loaded[index - 1] as T);
+      const older = this.#versionOf(loaded[index] as T);
+      if (newer !== undefined && older !== undefined && newer <= older) return true;
+    }
+    return false;
+  }
+
+  #hasNewerPage(latest: bigint | undefined): boolean {
+    return (
+      this.#newestVersion !== undefined &&
+      latest !== undefined &&
+      latest > this.#newestVersion &&
+      this.#nextVersion !== undefined
+    );
+  }
+
+  #hasInvalidContinuation(latest: bigint | undefined): boolean {
+    const oldest = this.#entries.at(-1);
+    const oldestVersion = oldest === undefined ? undefined : this.#versionOf(oldest);
+    return (
+      this.#requireDescendingVersions &&
+      oldestVersion !== undefined &&
+      latest !== undefined &&
+      latest >= oldestVersion
+    );
+  }
+
+  async #refresh(depth: number, generation: number): Promise<undefined> {
+    this.clear();
+    const refreshed = await this.#load(depth);
+    if (generation + 1 !== this.#generation) return undefined;
+    if (this.#hasInvalidPage(refreshed)) return undefined;
+    this.#append(refreshed);
+    this.#newestVersion = refreshed[0] === undefined ? undefined : this.#versionOf(refreshed[0]);
+    this.#exhausted = refreshed.length < depth;
+    return undefined;
+  }
+
+  #append(loaded: readonly T[]): void {
+    this.#entries = Object.freeze([...this.#entries, ...loaded]);
+    const last = loaded.at(-1);
+    this.#nextVersion = last === undefined ? this.#nextVersion : this.#versionOf(last);
+  }
+}
 
 /**
  * Internal dispatch guards operations.
@@ -5310,11 +5460,10 @@ const DispatchGuards = {
 
   trimGuardLanes(guards: RepositoryDispatchGuards, depth: number): void {
     while (guards.order.length > depth) {
-      const key = guards.order[0];
+      const index = guards.order.findIndex((key) => guards.lanes.get(key)?.active === 0);
+      if (index < 0) return;
+      const [key] = guards.order.splice(index, 1);
       if (key === undefined) return;
-      const guard = guards.lanes.get(key);
-      if (guard?.active !== 0) return;
-      guards.order.shift();
       guards.lanes.delete(key);
     }
   },
@@ -6172,25 +6321,30 @@ const RepositoryDispatch = {
     const route = acceptedRoute ?? repository.routeEvent(event);
 
     switch (repository.entityFamily) {
-      case "aggregate": {
-        const execution = new AggregateEventExecution(repository, routing, runtime, event);
-        for (const entityId of route.entityIds) {
-          await DispatchGuards.guardedEntityEventDispatch(
-            repository,
-            runtime,
-            event,
-            entityId,
-            () => execution.runTarget(entityId, route),
-          );
-        }
+      case "aggregate":
+        await RepositoryDispatch.dispatchAggregateEvent(repository, routing, runtime, event, route);
         return;
-      }
       case "process-manager":
         await new ProcessManagerEventExecution(repository, routing, runtime, event).run(route);
         return;
       case "projection":
         await new ProjectionEventExecution(repository, routing, runtime, event).run(route);
         return;
+    }
+  },
+
+  async dispatchAggregateEvent(
+    repository: RepositoryView & { routeEvent(event: Event): RepositoryEventRoute },
+    routing: RepositoryRouting,
+    runtime: RepositoryRuntime,
+    event: Event,
+    route: RepositoryEventRoute,
+  ): Promise<void> {
+    const execution = new AggregateEventExecution(repository, routing, runtime, event);
+    for (const entityId of route.entityIds) {
+      await DispatchGuards.guardedEntityEventDispatch(repository, runtime, event, entityId, () =>
+        execution.runTarget(entityId, route),
+      );
     }
   },
 

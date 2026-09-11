@@ -197,6 +197,15 @@ export interface BuildWhereOptions {
   readonly equals: string;
 }
 
+interface AnalyzedMethodInput {
+  readonly node: ts.MethodDeclaration;
+  readonly handler: HandlerDecoratorUse;
+  readonly whereUses: readonly DecoratorUse[];
+  readonly className: string;
+  readonly scope: AnalyzerScope;
+  readonly method: string | undefined;
+}
+
 /**
  * Stable diagnostic codes emitted by build-time handler analysis.
  */
@@ -532,93 +541,27 @@ const HandlerSources = Object.freeze({
     const apply = decorators.find((decorator) => decorator.name === "Apply");
     const handler = decorators.find(HandlerSources.isHandlerUse);
     const whereUses = decorators.filter((decorator) => decorator.name === "Where");
-
-    if (apply !== undefined) {
-      HandlerTypes.pushDiagnostic(
-        scope,
-        "APPLY_DECORATOR",
-        apply.node,
-        "Generated registries do not support @Apply.",
-        className,
-        HandlerTypes.methodName(node),
-      );
-    }
-    if (handler === undefined) {
-      if (whereUses.length > 0) {
-        HandlerTypes.pushDiagnostic(
-          scope,
-          "INVALID_WHERE",
-          whereUses[0]?.node ?? node,
-          "@Where requires an Event-consuming @Subscribe, @React, or @Command handler.",
-          className,
-          HandlerTypes.methodName(node),
-        );
-      }
-      return undefined;
-    }
-
     const method = HandlerTypes.methodName(node);
-    if (entityBase === "Projection" && handler.name === "Assign") {
-      HandlerTypes.pushDiagnostic(
-        scope,
-        "UNSUPPORTED_ASSIGN_HANDLER",
-        handler.node,
-        "Projection handlers cannot use @Assign.",
-        className,
-        method,
-      );
-      return undefined;
-    }
-    if ((entityBase === "Aggregate" || entityBase === "Projection") && handler.name === "Command") {
-      HandlerTypes.pushDiagnostic(
-        scope,
-        "UNSUPPORTED_COMMAND_HANDLER",
-        handler.node,
-        "Only Process Managers support @Command handlers.",
-        className,
-        method,
-      );
-      return undefined;
-    }
-    if (
-      receiverKind === "standalone" &&
-      !HandlerSources.allowsStandaloneDecorator(entityBase, handler.name)
-    ) {
-      HandlerTypes.pushDiagnostic(
-        scope,
-        "UNSUPPORTED_COMMAND_HANDLER",
-        handler.node,
-        `@${handler.name} is not legal for standalone ${entityBase ?? "receiver"}.`,
-        className,
-        method,
-      );
-      return undefined;
-    }
-    const invalid = HandlerSources.validateHandlerNode(
+    const use = {
       node,
-      handler.name,
-      receiverKind === "entity" ? stateSchema : undefined,
-      receiverKind !== "standalone",
-      scope,
+      apply,
+      handler,
+      whereUses,
       className,
+      entityBase,
+      stateSchema,
+      receiverKind,
+      scope,
       method,
-    );
-    if (handler.hasArguments) {
-      HandlerTypes.pushDiagnostic(
-        scope,
-        "SCHEMA_BEARING_DECORATOR",
-        handler.node,
-        `@${handler.name}(...) is not supported in analyzed app source.`,
-        className,
-        method,
-      );
-      return undefined;
-    }
-    if (invalid) {
-      return undefined;
-    }
+    };
+    if (!HandlerSources.validMethodUse(use)) return undefined;
+    return HandlerSources.analyzeValidMethod(use);
+  },
 
-    const origin = HandlerSources.externalOrigin(node.parameters, scope, className, method);
+  analyzeValidMethod(input: AnalyzedMethodInput): BuildHandlerRecord | undefined {
+    const { className, handler, method, node, scope, whereUses } = input;
+    const parameters = node.parameters;
+    const origin = HandlerSources.externalOrigin(parameters, scope, className, method);
     if (origin === undefined) return undefined;
     const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
     const emittedSchemas = HandlerSources.emittedSchemaUses(
@@ -626,14 +569,10 @@ const HandlerSources = Object.freeze({
       handler.name,
       scope.imports,
     )?.map((schema) => schema.reference);
-    if (signal === undefined || emittedSchemas === undefined || method === undefined) {
+    if (signal === undefined || emittedSchemas === undefined || method === undefined)
       return undefined;
-    }
-    if (
-      !HandlerSources.validContextParameter(node.parameters, signal.kind, scope, className, method)
-    ) {
+    if (!HandlerSources.validContextParameter(parameters, signal.kind, scope, className, method))
       return undefined;
-    }
     const where = HandlerSources.whereDeclaration(
       whereUses,
       handler,
@@ -642,19 +581,198 @@ const HandlerSources = Object.freeze({
       className,
       method,
     );
-    if (whereUses.length > 0 && where === undefined) {
-      return undefined;
-    }
+    if (whereUses.length > 0 && where === undefined) return undefined;
+    return HandlerSources.buildHandlerRecord(
+      node,
+      handler,
+      signal,
+      method,
+      emittedSchemas,
+      origin.value,
+      where,
+    );
+  },
 
+  buildHandlerRecord(
+    node: ts.MethodDeclaration,
+    handler: HandlerDecoratorUse,
+    signal: SchemaUse,
+    method: string,
+    emittedSchemas: readonly SchemaReference[],
+    origin: "domestic" | "external",
+    where: BuildWhereOptions | undefined,
+  ): BuildHandlerRecord {
     return {
       kind: HandlerSources.handlerKind(handler.name, signal.kind),
       methodName: method,
       signalSchema: signal.reference,
       emittedSchemas,
       parameterCount: node.parameters.length as GeneratedHandlerParameterCount,
-      origin: origin.value,
+      origin,
       ...(where === undefined ? {} : { where }),
     };
+  },
+
+  validMethodUse(input: {
+    readonly node: ts.MethodDeclaration;
+    readonly apply: DecoratorUse | undefined;
+    readonly handler: HandlerDecoratorUse | undefined;
+    readonly whereUses: readonly DecoratorUse[];
+    readonly className: string;
+    readonly entityBase: string | undefined;
+    readonly stateSchema: SchemaReference | undefined;
+    readonly receiverKind: "entity" | "standalone" | undefined;
+    readonly scope: AnalyzerScope;
+    readonly method: string | undefined;
+  }): input is typeof input & { readonly handler: HandlerDecoratorUse } {
+    HandlerSources.reportUnsupportedApply(input);
+    if (input.handler === undefined) return HandlerSources.reportMissingHandler(input);
+    const { className, handler, method, node, scope } = input;
+    if (!HandlerSources.validHandlerKind({ ...input, handler })) return false;
+    if (!HandlerSources.validBareHandlerDecorator(handler, scope, className, method)) return false;
+    return !HandlerSources.validateHandlerNode(
+      node,
+      handler.name,
+      input.receiverKind === "entity" ? input.stateSchema : undefined,
+      input.receiverKind !== "standalone",
+      scope,
+      className,
+      method,
+    );
+  },
+
+  reportUnsupportedApply(input: {
+    readonly apply: DecoratorUse | undefined;
+    readonly scope: AnalyzerScope;
+    readonly className: string;
+    readonly method: string | undefined;
+  }): void {
+    if (input.apply === undefined) return;
+    HandlerTypes.pushDiagnostic(
+      input.scope,
+      "APPLY_DECORATOR",
+      input.apply.node,
+      "Generated registries do not support @Apply.",
+      input.className,
+      input.method,
+    );
+  },
+
+  reportMissingHandler(input: {
+    readonly whereUses: readonly DecoratorUse[];
+    readonly node: ts.MethodDeclaration;
+    readonly scope: AnalyzerScope;
+    readonly className: string;
+    readonly method: string | undefined;
+  }): false {
+    if (input.whereUses.length > 0)
+      HandlerTypes.pushDiagnostic(
+        input.scope,
+        "INVALID_WHERE",
+        input.whereUses[0]?.node ?? input.node,
+        "@Where requires an Event-consuming @Subscribe, @React, or @Command handler.",
+        input.className,
+        input.method,
+      );
+    return false;
+  },
+
+  validBareHandlerDecorator(
+    handler: HandlerDecoratorUse,
+    scope: AnalyzerScope,
+    className: string,
+    method: string | undefined,
+  ): boolean {
+    if (!handler.hasArguments) return true;
+    HandlerTypes.pushDiagnostic(
+      scope,
+      "SCHEMA_BEARING_DECORATOR",
+      handler.node,
+      `@${handler.name}(...) is not supported in analyzed app source.`,
+      className,
+      method,
+    );
+    return false;
+  },
+
+  validHandlerKind(input: {
+    readonly handler: HandlerDecoratorUse;
+    readonly entityBase: string | undefined;
+    readonly receiverKind: "entity" | "standalone" | undefined;
+    readonly scope: AnalyzerScope;
+    readonly className: string;
+    readonly method: string | undefined;
+  }): boolean {
+    return (
+      HandlerSources.validEntityHandlerKind(input) &&
+      HandlerSources.validStandaloneHandlerKind(input)
+    );
+  },
+
+  validEntityHandlerKind(input: {
+    readonly handler: HandlerDecoratorUse;
+    readonly entityBase: string | undefined;
+    readonly scope: AnalyzerScope;
+    readonly className: string;
+    readonly method: string | undefined;
+  }): boolean {
+    const { className, entityBase, handler, method, scope } = input;
+    if (entityBase === "Projection" && handler.name === "Assign")
+      return HandlerSources.unsupported(
+        scope,
+        "UNSUPPORTED_ASSIGN_HANDLER",
+        handler.node,
+        "Projection handlers cannot use @Assign.",
+        className,
+        method,
+      );
+    return (
+      (entityBase !== "Aggregate" && entityBase !== "Projection") ||
+      handler.name !== "Command" ||
+      HandlerSources.unsupported(
+        scope,
+        "UNSUPPORTED_COMMAND_HANDLER",
+        handler.node,
+        "Only Process Managers support @Command handlers.",
+        className,
+        method,
+      )
+    );
+  },
+
+  validStandaloneHandlerKind(input: {
+    readonly handler: HandlerDecoratorUse;
+    readonly entityBase: string | undefined;
+    readonly receiverKind: "entity" | "standalone" | undefined;
+    readonly scope: AnalyzerScope;
+    readonly className: string;
+    readonly method: string | undefined;
+  }): boolean {
+    const { className, entityBase, handler, method, receiverKind, scope } = input;
+    return (
+      receiverKind !== "standalone" ||
+      HandlerSources.allowsStandaloneDecorator(entityBase, handler.name) ||
+      HandlerSources.unsupported(
+        scope,
+        "UNSUPPORTED_COMMAND_HANDLER",
+        handler.node,
+        `@${handler.name} is not legal for standalone ${entityBase ?? "receiver"}.`,
+        className,
+        method,
+      )
+    );
+  },
+
+  unsupported(
+    scope: AnalyzerScope,
+    code: BuildHandlerDiagnosticCode,
+    node: ts.Node,
+    message: string,
+    className: string,
+    method: string | undefined,
+  ): false {
+    HandlerTypes.pushDiagnostic(scope, code, node, message, className, method);
+    return false;
   },
 
   whereDeclaration(

@@ -12,8 +12,9 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
+import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { TenantIdSchema } from "@spine-event-engine/proto";
 import type {
   InboxMessage as WireInboxMessage,
   InboxMessageId as WireInboxMessageId,
@@ -53,7 +54,7 @@ export class InboxStorage {
    * @param options Configures the storage context, factory, and optional clock.
    */
   constructor(options: InboxStorageOptions) {
-    this.#context = options.context;
+    this.#context = Values.snapshotContext(options.context);
     this.#storageFactory = options.storageFactory;
     this.#now = options.now ?? (() => new Date());
     Object.freeze(this);
@@ -210,17 +211,41 @@ export class InboxStorage {
     session: DeliveryWorkSession,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
+    const isActive = this.#activeOperation(options);
+    if (
+      isActive === undefined ||
+      !isActive() ||
+      session.kind !== "LEASED" ||
+      !this.#matchesSession(message, session)
+    )
+      return false;
+    return this.#removeCurrent(message, session, options, isActive);
+  }
+
+  #activeOperation(
+    options: import("./delivery-ports.js").DeliveryOperationOptions | undefined,
+  ): (() => boolean) | undefined {
     if (
       options?.timeoutMs !== undefined &&
       (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 0)
     )
-      return false;
+      return undefined;
     const deadline =
       options?.timeoutMs === undefined ? undefined : Values.now(this.#now) + options.timeoutMs;
-    const isActive = () =>
+    return () =>
       !options?.signal?.aborted && (deadline === undefined || Values.now(this.#now) < deadline);
-    if (!isActive() || session.kind !== "LEASED" || session.shard.key() !== message.shard.key())
-      return false;
+  }
+
+  #matchesSession(message: InboxMessage, session: DeliveryWorkSession): boolean {
+    return session.kind === "LEASED" && session.shard.key() === message.shard.key();
+  }
+
+  async #removeCurrent(
+    message: InboxMessage,
+    session: Extract<DeliveryWorkSession, { readonly kind: "LEASED" }>,
+    options: import("./delivery-ports.js").DeliveryOperationOptions | undefined,
+    isActive: () => boolean,
+  ): Promise<boolean> {
     const expected = InboxRecords.write(message);
     const cleanup = DeliveryCleanupStorageFactories.create(this.#storageFactory);
     try {
@@ -273,6 +298,15 @@ export interface InboxStorageOptions {
 }
 
 const Values = Object.freeze({
+  snapshotContext(context: StorageContext): StorageContext {
+    return context.multitenant
+      ? {
+          name: context.name,
+          multitenant: true,
+          tenantId: clone(TenantIdSchema, context.tenantId),
+        }
+      : { name: context.name, multitenant: false };
+  },
   status(value: DeliveryStatus): number {
     return { TO_DELIVER: 1, SCHEDULED: 2, DELIVERED: 3, TO_CATCH_UP: 4 }[value];
   },
@@ -357,7 +391,7 @@ const Values = Object.freeze({
       ? {
           name: `${context.name}.delivery.inbox`,
           multitenant: true,
-          tenantId: context.tenantId,
+          tenantId: clone(TenantIdSchema, context.tenantId),
         }
       : { name: `${context.name}.delivery.inbox`, multitenant: false };
   },

@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
-import { SignalEnvelopes } from "@spine-event-engine/core";
+import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   AdminService,
   InboxService,
@@ -42,6 +42,7 @@ import {
   TaskIdSchema,
   TaskListIdSchema,
 } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_id_pb.js";
+import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import { DeliveryAssembly } from "@spine-event-engine/delivery-server/testing";
 import { SignalMetadata } from "../../src/index.js";
 import { afterEach, expect, it } from "vitest";
@@ -163,7 +164,7 @@ function externalStateTopic() {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t0210-external-state" }),
     target: create(TargetSchema, {
-      type: "type.googleapis.com/ProjectOverviewState",
+      type: TypeUrls.derive(ProjectOverviewStateSchema),
       criterion: { case: "includeAll", value: true },
     }),
     context: metadata.actorContext({ actor: create(UserIdSchema, { value: "t0210" }) }),

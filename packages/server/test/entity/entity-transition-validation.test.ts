@@ -15,19 +15,15 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import {
-  type ProjectCatalogState,
   ProjectCatalogStateSchema,
-  type ProjectDraftState,
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
   type ProjectProfile,
   ProjectProfileSchema,
-  type ProjectProfileState,
   ProjectProfileStateSchema,
   ProjectDraftStateSchema,
   type ProjectRecordState,
   ProjectRecordStateSchema,
-  type ProjectSearchState,
   ProjectSearchStateSchema,
   DraftProjectStateSchema,
   PublishedProjectStateSchema,
@@ -201,7 +197,7 @@ describe("entity state transition validation", () => {
 
     const [violation] = result.violations;
 
-    expect(violation.typeName).toBe("ProjectOverviewState");
+    expect(violation.typeName).toBe(ProjectOverviewStateSchema.typeName);
     expect(violation.fieldPath?.fieldName).toEqual(["id"]);
     expect(violation.fieldValue).toBeUndefined();
     expect(result.error.$typeName).toBe("spine.validation.ValidationError");
@@ -881,15 +877,15 @@ describe("entity state transition validation", () => {
     expectNoValueLeak(result, "private-map-value", "secret-previous-map", "secret-next-map");
   });
 
-  it("rejects explicit optional set-once fields as unsupported even when unchanged", () => {
+  it("allows unchanged oneof set-once fields", () => {
     const previous = create(ProjectDraftStateSchema, {
       id: "optional-1",
-      explicitId: "private-explicit-optional",
+      identifier: { case: "explicitId", value: "private-explicit-optional" },
       mutableNote: "secret-previous-optional",
     });
     const next = create(ProjectDraftStateSchema, {
       id: "optional-1",
-      explicitId: "private-explicit-optional",
+      identifier: { case: "explicitId", value: "private-explicit-optional" },
       mutableNote: "secret-next-optional",
     });
 
@@ -899,16 +895,9 @@ describe("entity state transition validation", () => {
       next,
     });
 
-    expectSetOnceViolation(result, "explicit_id");
-    expect(result.error?.constraintViolation[0]?.message?.withPlaceholders).toBe(
-      "Explicit optional set-once fields are not supported by entity state transition validation.",
-    );
-    expectNoValueLeak(
-      result,
-      "private-explicit-optional",
-      "secret-previous-optional",
-      "secret-next-optional",
-    );
+    expect(result.valid).toBe(true);
+    expect(result.violations).toEqual([]);
+    expect(result.error).toBeUndefined();
   });
 
   it("rejects creation transitions with map-valued set-once fields as unsupported", () => {

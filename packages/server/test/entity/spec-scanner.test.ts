@@ -35,14 +35,7 @@ import {
   ProjectStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
-type ProjectOverviewState = Message<"ProjectOverviewState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-type ProjectState = Message<"ProjectState"> & { id: string; name: string };
 type ProjectOverviewId = Message<"ProjectOverviewId"> & { value: string };
-type MessageIdState = Message<"MessageIdState"> & { id?: ProjectOverviewId };
 
 const MessageIdStateSchema = ProjectPortfolioStateSchema;
 

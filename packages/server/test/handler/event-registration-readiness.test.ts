@@ -216,7 +216,8 @@ describe("event registration readiness", () => {
     );
     expect(() => EventRegistrationReadiness.fromEntityHandlers([first, second])).toThrow(
       new RegExp(
-        `Duplicate event application for entity "${ProjectOverviewStateSchema.typeName}" and event "${ProjectCreatedSchema.typeName}"`,
+        `Duplicate event application for entity "${ProjectOverviewStateSchema.typeName}" ` +
+          `and event "${ProjectCreatedSchema.typeName}"`,
       ),
     );
   });
@@ -238,7 +239,8 @@ describe("event registration readiness", () => {
     );
     expect(() => EventRegistrationReadiness.fromRegistry(customLookup)).toThrow(
       new RegExp(
-        `Duplicate event application for entity "${ProjectOverviewStateSchema.typeName}" and event "${ProjectCreatedSchema.typeName}"`,
+        `Duplicate event application for entity "${ProjectOverviewStateSchema.typeName}" ` +
+          `and event "${ProjectCreatedSchema.typeName}"`,
       ),
     );
   });

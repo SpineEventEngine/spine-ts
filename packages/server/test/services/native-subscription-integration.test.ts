@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, type Message, type MessageInitShape } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {

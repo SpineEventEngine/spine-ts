@@ -798,6 +798,282 @@ describe("check-cleanup-rules", () => {
     expect(result.stderr).toContain("packages/demo/test/index.test.ts");
   });
 
+  it("rejects a modified production callable over 35 physical lines", () => {
+    const repoRoot = createFixture();
+    const body = Array.from({ length: 35 }, (_, index) => `  void ${index};`);
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.ts"),
+      ["export function register(): void {", ...body, "}", ""].join("\n"),
+    );
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "modified production/example callables exceed 35 physical lines",
+    );
+    expect(result.stderr).toContain("register");
+  });
+
+  it("counts modified named arrow callables", () => {
+    const repoRoot = createFixture();
+    const body = Array.from({ length: 35 }, (_, index) => `  void ${index};`);
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.ts"),
+      ["export const register = (): void => {", ...body, "};", ""].join("\n"),
+    );
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "modified production/example callables exceed 35 physical lines",
+    );
+    expect(result.stderr).toContain("register");
+  });
+
+  it("fails clearly when Git cannot classify changed lines", () => {
+    const repoRoot = createFixture();
+    const git = (root, args) =>
+      args[0] === "diff"
+        ? { status: 1, stdout: "", stderr: "simulated diff failure", signal: null }
+        : spawnSync("git", args, { cwd: root, encoding: "utf8" });
+
+    expect(() => checkCleanupRules(repoRoot, git)).toThrow(
+      "Unable to classify changed source with git diff.",
+    );
+  });
+
+  it("rejects embedded descriptor payload contracts in package test fixtures", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "packages/demo/test-fixtures"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "packages/demo/test-fixtures/entity-metadata-fixtures.ts"),
+      ["export const entityMetadataFixture = {", '  descriptorSetBase64: "AAE=",', "};", ""].join(
+        "\n",
+      ),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "fixture descriptor consumer"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("fixture consumers must use named generated schemas");
+    expect(result.stderr).toContain("embedded generated descriptor payload contract");
+  });
+
+  it("allows ordinary authentication and data Base64 decoding", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "packages/demo/test"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "packages/demo/test/auth-data.test.ts"),
+      [
+        'const session = fromBase64("c2Vzc2lvbg==");',
+        'const bytes = Buffer.from("cGF5bG9hZA==", "base64");',
+        "void session;",
+        "void bytes;",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "base64 fixture"], repoRoot);
+
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
+  it("rejects positional schemas reconstructed from imported generated descriptors", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "packages/demo/test"), { recursive: true });
+    for (const [name, factory] of [
+      ["message", "messageDesc"],
+      ["enum", "enumDesc"],
+      ["service", "serviceDesc"],
+    ]) {
+      writeFileSync(
+        join(repoRoot, `packages/demo/test/${name}-fixture.test.ts`),
+        [
+          'import { file_entity_metadata } from "../generated/entity_metadata_pb.js";',
+          `const schema = ${factory}(file_entity_metadata, 0);`,
+          "void schema;",
+          "",
+        ].join("\n"),
+      );
+    }
+    writeFileSync(
+      join(repoRoot, "packages/demo/test/schema-file-alias.test.ts"),
+      [
+        'import { TodoIdSchema } from "../generated/todo_pb.js";',
+        "const fileTaskIdFixture = TodoIdSchema.file;",
+        "const schema = messageDesc(fileTaskIdFixture, 0);",
+        "void schema;",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(repoRoot, "packages/demo/test/schema-file-destructure.test.ts"),
+      [
+        'import { TaskSchema } from "../generated/task_pb.js";',
+        "const { file: taskFile } = TaskSchema;",
+        "const schema = messageDesc(taskFile, 0);",
+        "void schema;",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(repoRoot, "packages/demo/test/schema-namespace-alias.test.ts"),
+      [
+        'import * as generated from "../generated/task_pb.js";',
+        "const { file: fileAlias } = generated.TaskSchema;",
+        "const reconstruct = messageDesc;",
+        "const schema = reconstruct(fileAlias, 0);",
+        "void schema;",
+        "",
+      ].join("\n"),
+    );
+    for (const factory of ["messageDesc", "enumDesc", "serviceDesc"]) {
+      writeFileSync(
+        join(repoRoot, `packages/demo/test/${factory}-import-alias.test.ts`),
+        [
+          `import { ${factory} as reconstruct } from "@bufbuild/protobuf/codegenv2";`,
+          'import { file_task } from "../generated/task_pb.js";',
+          "const schema = reconstruct(file_task, 0);",
+          "void schema;",
+          "",
+        ].join("\n"),
+      );
+    }
+    writeFileSync(
+      join(repoRoot, "packages/demo/test/unrelated-factory.test.ts"),
+      [
+        'import { messageDesc as reconstruct } from "unrelated-descriptors";',
+        'import { file_task } from "../generated/task_pb.js";',
+        "const local = enumDesc;",
+        "const first = reconstruct(file_task, 0);",
+        "const second = local(file_task, 0);",
+        "void first;",
+        "void second;",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "positional generated schemas"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("packages/demo/test/messageDesc-import-alias.test.ts");
+    expect(result.stderr).toContain("packages/demo/test/enumDesc-import-alias.test.ts");
+    expect(result.stderr).toContain("packages/demo/test/serviceDesc-import-alias.test.ts");
+    expect(result.stderr).not.toContain("packages/demo/test/unrelated-factory.test.ts");
+    expect(result.stderr).toContain("positional generated schema reconstruction");
+  });
+
+  it("rejects positional schemas reconstructed in authored MJS fixture consumers", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "packages/demo/test"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "packages/demo/test/managed-events.mjs"),
+      [
+        'import { messageDesc } from "@bufbuild/protobuf/codegenv2";',
+        'import { file_entity_metadata_project_states } from "../generated/states_pb.js";',
+        "const schema = messageDesc(file_entity_metadata_project_states, 0);",
+        "void schema;",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "mjs positional schema"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("packages/demo/test/managed-events.mjs");
+    expect(result.stderr).toContain("positional generated schema reconstruction");
+  });
+
+  it("allows dynamic descriptor construction tests and generator-output strings", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "packages/demo/test"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "packages/demo/test/dynamic-descriptor.test.ts"),
+      [
+        'import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";',
+        "const descriptor = create(FileDescriptorProtoSchema, {});",
+        'const file = fileDesc("AAE=");',
+        "const schema = messageDesc(file, 0);",
+        'const generatorOutput = "descriptorSetBase64: messageDesc(file_generated, 0)";',
+        "void descriptor;",
+        "void schema;",
+        "void generatorOutput;",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "dynamic descriptor fixture"], repoRoot);
+
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
+  it("allows lexical shadows of authoritative descriptor factories", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "packages/demo/test"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "packages/demo/test/shadowed-factory.test.ts"),
+      [
+        'import { messageDesc } from "@bufbuild/protobuf/codegenv2";',
+        'import { file_task } from "../generated/task_pb.js";',
+        "{",
+        "  const messageDesc = (file, index) => ({ file, index });",
+        "  const schema = messageDesc(file_task, 0);",
+        "  void schema;",
+        "}",
+        "void messageDesc;",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "shadowed descriptor factory"], repoRoot);
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
+  it("allows parameter shadows while retaining outside authoritative descriptor calls", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "packages/demo/test"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "packages/demo/test/parameter-shadow.test.ts"),
+      [
+        'import { messageDesc } from "@bufbuild/protobuf/codegenv2";',
+        'import { file_task } from "../generated/task_pb.js";',
+        "const useShadow = (messageDesc) => messageDesc(file_task, 0);",
+        "const shadowed = useShadow((file, index) => ({ file, index }));",
+        "const authoritative = messageDesc(file_task, 0);",
+        "void shadowed;",
+        "void authoritative;",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "parameter shadow"], repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("packages/demo/test/parameter-shadow.test.ts");
+  });
+
+  it("allows a parameter-shadowed authoritative factory without an outside call", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "packages/demo/test"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "packages/demo/test/parameter-shadow-only.test.ts"),
+      [
+        'import { messageDesc } from "@bufbuild/protobuf/codegenv2";',
+        'import { file_task } from "../generated/task_pb.js";',
+        "const useShadow = (messageDesc) => messageDesc(file_task, 0);",
+        "void useShadow;",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "parameter shadow only"], repoRoot);
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
   it("rejects forbidden end-user example handler patterns", () => {
     const repoRoot = createFixture();
     writeExampleSource(

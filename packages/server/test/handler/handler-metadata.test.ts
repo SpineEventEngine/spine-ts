@@ -387,7 +387,8 @@ describe("handler metadata registry", () => {
     );
     expect(() => new HandlerMetadataRegistry([first, second])).toThrow(
       new RegExp(
-        `Duplicate event application for entity "${ProjectOverviewStateSchema.typeName}" and event "${ProjectCreatedSchema.typeName}"`,
+        `Duplicate event application for entity "${ProjectOverviewStateSchema.typeName}" ` +
+          `and event "${ProjectCreatedSchema.typeName}"`,
       ),
     );
   });

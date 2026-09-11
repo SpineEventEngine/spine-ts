@@ -52,8 +52,10 @@ therefore includes those cleanup gates.
 - Keep declaration order aligned with file intent: the primary declaration
   matching the file purpose comes first, followed by supporting types, classes,
   objects, and constants.
-- Keep methods and constructors small. Target 35 lines including the
-  declaration; split by semantic sub-step only when the result is clearer.
+- New or modified production/example functions, methods, accessors, and
+  constructors may contain at most 35 physical lines including their
+  declaration. `lint:cleanup` checks the branch and local diff; generated,
+  frozen, and unchanged baseline code is excluded.
 - Keep names short and explicit. Avoid `Utils`. Avoid repeating domain context
   already fixed by the file, class, package, or subsystem.
 - Code names must have no more than four semantic components, counting each
@@ -162,7 +164,9 @@ package is `spine.examples.<domain>` and its type URL prefix is
 `type.spine.examples.<domain>`, where `<domain>` is exactly `messageboard`, `projects`,
 `orders`, or `todo`. Authored example paths, packages, and imports contain no
 `v1` component. Manifest-declared frozen copied Proto sources remain exempt and
-unchanged.
+unchanged. `check-owned-proto-style` covers tracked authored framework, example,
+and package test-fixture Proto sources. It mechanically checks source layout
+and signal-file roles; reviewers still judge domain meaning and fixture quality.
 
 Every production package has a beginner-oriented `README.md` for people and a
 sibling `REFERENCE.md` for agents. The README links to the reference and states

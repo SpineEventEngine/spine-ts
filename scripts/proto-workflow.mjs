@@ -117,7 +117,14 @@ export function removeRetiredStandSubscriptionOutputs(root = repoRoot) {
   }
 }
 
-export function main(argv = process.argv.slice(2)) {
+export function main(
+  argv = process.argv.slice(2),
+  run = runCommand,
+  {
+    formatCommands: formatCommandProvider = authoredProtoFormatCommands,
+    generate = generateTargets,
+  } = {},
+) {
   const command = argv[0];
 
   if (command !== "lint" && command !== "generate") {
@@ -139,7 +146,7 @@ export function main(argv = process.argv.slice(2)) {
     return 0;
   }
 
-  const verifyStatus = runCommand("proto source verification", process.execPath, [
+  const verifyStatus = run("proto source verification", process.execPath, [
     join(repoRoot, "scripts/verify-proto-sources.mjs"),
   ]);
 
@@ -147,7 +154,7 @@ export function main(argv = process.argv.slice(2)) {
     return verifyStatus;
   }
 
-  const ownedStyleStatus = runCommand("authored framework Proto style", process.execPath, [
+  const ownedStyleStatus = run("authored framework Proto style", process.execPath, [
     join(repoRoot, "scripts/check-owned-proto-style.mjs"),
   ]);
 
@@ -155,7 +162,7 @@ export function main(argv = process.argv.slice(2)) {
     return ownedStyleStatus;
   }
 
-  const exampleQualityStatus = runCommand("authored example Proto quality", process.execPath, [
+  const exampleQualityStatus = run("authored example Proto quality", process.execPath, [
     join(repoRoot, "scripts/check-example-proto-quality.mjs"),
   ]);
 
@@ -163,7 +170,7 @@ export function main(argv = process.argv.slice(2)) {
     return exampleQualityStatus;
   }
 
-  const rejectionNamingStatus = runCommand("rejection source naming", process.execPath, [
+  const rejectionNamingStatus = run("rejection source naming", process.execPath, [
     join(repoRoot, "scripts/check-rejection-conventions.mjs"),
   ]);
 
@@ -171,7 +178,7 @@ export function main(argv = process.argv.slice(2)) {
     return rejectionNamingStatus;
   }
 
-  const descriptorStatus = runCommand("frozen descriptor compatibility", process.execPath, [
+  const descriptorStatus = run("frozen descriptor compatibility", process.execPath, [
     join(repoRoot, "packages/proto/scripts/verify-descriptor-compatibility.mjs"),
   ]);
 
@@ -179,11 +186,129 @@ export function main(argv = process.argv.slice(2)) {
     return descriptorStatus;
   }
 
-  if (command === "generate") {
-    return generateTargets({ prepareBootstrap: prepareProtoToolsBootstrap });
+  let formatCommands;
+  try {
+    formatCommands = formatCommandProvider();
+  } catch (error) {
+    console.error(error.message);
+    return 1;
+  }
+  for (const { label, args } of formatCommands) {
+    const formatStatus = run(label, resolveBufExecutable(), args);
+    if (formatStatus !== 0) return formatStatus;
   }
 
-  return runCommand("buf lint", resolveBufExecutable(), ["lint"]);
+  if (command === "generate") {
+    return generate({ prepareBootstrap: prepareProtoToolsBootstrap });
+  }
+
+  return run("buf lint", resolveBufExecutable(), ["lint"]);
+}
+
+const workspaceProtoRoots = [
+  "packages/proto/proto",
+  "examples/todo/proto",
+  "examples/projects/proto",
+  "examples/orders/proto",
+];
+const externalProtoRoots = [
+  "packages/server/test-fixtures/proto",
+  "packages/core/test-fixtures/proto",
+  "packages/testing/test-fixtures/proto",
+  "packages/server-blackbox-tests/proto",
+  "examples/message-board/model/proto",
+];
+
+export function authoredProtoFormatCommands(
+  root = repoRoot,
+  git = (args, options) => spawnSync("git", args, options),
+) {
+  const manifest = JSON.parse(
+    readFileSync(join(root, "packages/proto/proto/spine-sources.json"), "utf8"),
+  );
+  const frozen = new Set((manifest.sources ?? []).map(({ localPath }) => localPath));
+  const base = git(["merge-base", "origin/master", "HEAD"], {
+    cwd: root,
+    encoding: "buffer",
+  });
+  const baseRef = gitOutput(base).trim();
+  if (base.status !== 0 || !baseRef) throw new Error("Unable to classify authored Proto sources.");
+  const paths = new Set();
+  for (const args of [
+    ["diff", "--name-only", "-z", `${baseRef}...HEAD`, "--", "*.proto"],
+    ["diff", "--name-only", "-z", "--", "*.proto"],
+    ["diff", "--name-only", "-z", "--cached", "--", "*.proto"],
+    ["ls-files", "--others", "--exclude-standard", "-z", "--", "*.proto"],
+  ]) {
+    const result = git(args, { cwd: root, encoding: "buffer" });
+    if (result.status !== 0) throw new Error("Unable to classify authored Proto sources.");
+    for (const path of gitOutput(result).split("\0")) {
+      if (
+        path.endsWith(".proto") &&
+        existsSync(join(root, path)) &&
+        !frozen.has(path) &&
+        !isGeneratedProtoPath(path)
+      )
+        paths.add(path);
+    }
+  }
+  const workspacePaths = [];
+  const affectedExternalRoots = new Set();
+  const changedPaths = [...paths].sort();
+  for (const path of changedPaths) {
+    if (workspaceProtoRoots.some((protoRoot) => isPathWithin(path, protoRoot))) {
+      workspacePaths.push(path);
+      continue;
+    }
+    const externalRoot = externalProtoRoots.find((protoRoot) => isPathWithin(path, protoRoot));
+    if (externalRoot !== undefined) {
+      affectedExternalRoots.add(externalRoot);
+      continue;
+    }
+    throw new Error(`Changed Proto source is outside a recognized Buf root: ${path}`);
+  }
+  const commands = [];
+  if (workspacePaths.length > 0) {
+    commands.push({
+      label: "buf format workspace",
+      args: [
+        "format",
+        "--diff",
+        "--exit-code",
+        ...workspacePaths.flatMap((path) => ["--path", path]),
+      ],
+    });
+  }
+  for (const protoRoot of [...affectedExternalRoots].sort()) {
+    commands.push({
+      label: `buf format ${protoRoot}`,
+      args: [
+        "format",
+        protoRoot,
+        "--diff",
+        "--exit-code",
+        ...changedPaths
+          .filter((path) => isPathWithin(path, protoRoot))
+          .flatMap((path) => ["--path", path]),
+      ],
+    });
+  }
+  return commands;
+}
+
+function gitOutput(result) {
+  if (typeof result.stdout === "string") return result.stdout;
+  return result.stdout?.toString("utf8") ?? "";
+}
+
+function isPathWithin(path, root) {
+  return path === root || path.startsWith(`${root}/`);
+}
+
+function isGeneratedProtoPath(path) {
+  return path
+    .split("/")
+    .some((segment) => segment === ".generated" || segment.startsWith(".generated-"));
 }
 
 function runCommand(label, executable, args) {

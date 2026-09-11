@@ -35,11 +35,8 @@ import { EventBus, type EventDispatcher } from "../../src/index.js";
 import type { ILogLayer } from "loglayer";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
 import {
-  type ReviewFollowUpScheduled,
   ReviewFollowUpScheduledSchema,
-  type ReviewStarted,
   ReviewStartedSchema,
-  type ReviewTaskAssigned,
   ReviewTaskAssignedSchema,
 } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";

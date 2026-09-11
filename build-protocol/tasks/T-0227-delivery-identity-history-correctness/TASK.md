@@ -1,6 +1,6 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: Active — delivery-admission redesign and fixture correction
+Status: Local implementation and review complete; exact-SHA CI pending
 Start: `2026-09-10 16:26 WEST`
 Initial closure: `2026-09-10 20:06 WEST`
 Final closure: `2026-09-11 02:19 WEST`
@@ -15,12 +15,14 @@ Authoring sub-agent: Existing implementer role, explicitly dispatched as
 Reviewer sub-agents: Existing performance/reliability, style/maintainability,
 TypeScript/API, documentation, and final security reviewer roles
 Implementation commits: authoritative range `31cfe4f0b..HEAD` on
-`fix-delivery-identity-history-correctness`; independent-review correction
-checkpoints through `8315b4e64` are pushed to `origin`.
+`fix-delivery-identity-history-correctness`.
 Last release-verified implementation HEAD: `9f1bdf057`.
-Last pushed behavior/documentation correction HEAD: `8315b4e64`. Later
-task-record-only commits may follow without changing that implementation checkpoint.
 Final release-verified provenance implementation HEAD: `2240709c8`.
+Current pushed HEAD: `dca2feae85e936111828120631aea9e2574ae538`; its CI
+verification failed. The corrected implementation and review results are local
+and ready for a new commit. Local release verification passed; required CI for
+the exact final commit SHA remains pending. The earlier verified checkpoints
+above are historical only.
 
 ## Delivery Admission And Test-Fixture Correction Framing
 
@@ -1257,3 +1259,493 @@ whose explicit immutable profiles are `gpt-5.6-terra` / `high`. They remain
 read-only and may not spawn sub-agents. The release/reliability lane is not
 reopened because its clean Sigstore/workspace findings were not materially
 changed by the server test-fixture consumer migration.
+
+## Enforced Protocol Correction And Final Closure
+
+Human review on `2026-09-11` found that several written quality rules were not
+reliably enforced. In particular, package test-fixture Proto files were outside
+the authored-Proto style check, the 35-line method target was prose only, and
+task verification trusted caller-selected tests. The task is reopened until
+these enforcement gaps are corrected and the complete branch is re-audited
+under the updated protocol.
+
+This is a standard build-tooling and whole-branch correction. It changes shared
+verification behavior but does not change a public, wire, or storage contract.
+The final branch still requires `verify:release` because the surrounding task
+contains runtime, Proto, dependency, and release changes.
+
+### Acceptance criteria
+
+- `BUILD_PROTOCOL.md` contains the enforced execution cycle accepted by the
+  human, without duplicating `CODE_QUALITY.md` as another policy source.
+- Objective rules have executable checks or are explicitly identified as
+  reviewer judgment.
+- The authored-Proto checks cover package test fixtures as well as framework
+  and example Proto, enforce formatting and signal-file naming/layout, and have
+  regression tests for the review escapes.
+- New or modified production/example functions, methods, accessors, and
+  constructors are mechanically limited to 35 physical lines, with generated,
+  frozen, and unchanged baseline code excluded and with focused regression
+  tests.
+- Ordinary fixture consumers cannot substitute encoded descriptors or
+  positional descriptor lookup for named generated schemas when those schemas
+  exist.
+- Task verification derives its mandatory gates from the complete Git change
+  set. Caller-supplied test paths may add coverage but may not suppress required
+  checks. Unknown classifications fail closed.
+- The complete branch is checked for Proto domain/layout, method length, TSDoc,
+  fixture-source, and generated-schema violations and all confirmed findings
+  are corrected.
+- One complete relevant review wave is resolved, `verify:release` passes, every
+  commit is pushed immediately, and required CI is green for the exact final
+  commit before the task is described as ready.
+
+### Execution and model routing
+
+- Protocol/checker implementation: existing implementer role, explicit
+  `gpt-5.6-terra` / `medium`, test-first, one writer for
+  `BUILD_PROTOCOL.md`, `CODE_QUALITY.md`, verification/checker scripts, their
+  tests, and package script wiring. The implementer may not spawn sub-agents.
+- Current-branch rule inventory: orchestrator-dispatched read-only repository
+  scan, explicit `gpt-5.6-luna` / `medium`, covering Proto filenames/layout,
+  function length, TSDoc, encoded descriptor substitutions, positional schema
+  access, and generated leftovers. It may not edit or spawn sub-agents.
+- CI and verification audit: orchestrator-dispatched read-only repository and
+  public GitHub scan, explicit `gpt-5.6-luna` / `medium`, covering the exact
+  pushed SHA, red jobs, local reproduction commands, and process cleanup. It
+  may not edit or spawn sub-agents.
+- After deterministic convergence, relevant existing reviewers receive one
+  whole-branch concern each with explicit configured models and reasoning.
+
+The execution surface supports explicit child model and reasoning dispatch.
+Runtime self-introspection may be unavailable; acceptance uses the explicit
+dispatch fields and immutable configured role where applicable.
+
+### Applicability matrix
+
+| Changed area                         | Objective checks                                      | Focused tests                               | Review concern                    |
+| ------------------------------------ | ----------------------------------------------------- | ------------------------------------------- | --------------------------------- |
+| Build protocol and quality rules     | Markdown format, link/policy consistency              | Documentation-only checker tests            | Documentation and maintainability |
+| Proto enforcement                    | Proto formatter, Buf lint, source-role/layout checker | Proto checker and workflow tests            | Domain/API correctness            |
+| TypeScript structure enforcement     | Cleanup checker and ESLint                            | Cleanup-checker tests                       | Maintainability                   |
+| TSDoc and fixture-source enforcement | TSDoc and generated-source checks                     | Checker regression tests                    | TypeScript/API documentation      |
+| Task verification selection          | Git change classifier and fail-closed gate planner    | `verify-task` tests                         | Reliability                       |
+| Complete feature branch              | All applicable static and focused gates               | Affected package suites, then release suite | All materially affected concerns  |
+
+### Estimate
+
+- Checker tests and implementation: 2–3 hours.
+- Verification integration: 1–2 hours.
+- Complete branch audit and corrections: 1–2 hours.
+- Review, release verification, commits, pushes, and reporting: about 1 hour of
+  agent work, plus external CI waiting.
+
+### Enforcement audit evidence
+
+The read-only CI audit ran with explicit `gpt-5.6-luna` / `medium` dispatch.
+Public GitHub evidence identifies one failed `verify` check for exact branch
+commit `dca2feae`, in workflow run `34630822700`, job `103366939718`.
+Installation passed and `pnpm verify:release` failed after 153 seconds; release
+preparation and publication did not run. Public unauthenticated APIs do not
+expose the command log, so local release verification must establish the exact
+failing subcommand. The audit also found no repeated Proto generation in the
+release expansion, but found no CI job timeout and no process timeout around
+individual `verify:task` gates.
+
+The read-only whole-branch rule audit ran with explicit `gpt-5.6-luna` /
+`medium` dispatch. It found five changed lines over 120 characters, 35 unused
+branch-added imports, three remaining positional descriptor lookups where named
+generated schemas exist, and abandoned `.generated-*` staging directories. It
+found no new encoded descriptor source, no changed production/example callable
+over 35 physical lines, and no current TSDoc failure. The mechanical findings
+form one correction batch after the enforcement implementation converges.
+
+The first enforcement implementation attempt reached RED then GREEN for Proto
+role coverage (4/4) and mandatory task verification (10/10), but the checker
+and test edits disappeared from the shared checkout before handoff. The same
+explicit `gpt-5.6-terra` / `medium` implementation context was re-dispatched as
+the sole writer to reapply its recoverable patch and verify the resulting diff.
+
+The restored enforcement implementation added authored fixture Proto scanning,
+changed-callable length checks, generated-schema consumer checks, affected-test
+selection, and the enforced protocol boundary. Focused Proto/task-verification
+tests pass 16/16. Orchestrator inspection found and returned gaps for untracked
+files, Git failure handling, descriptor bypasses, generic fixture filenames,
+Buf formatting, and duplicate test selection; those corrections are present.
+The original implementation context could not add direct tests for two private
+process seams. A replacement bounded implementation assignment is therefore
+recorded for `/root/enforcement_test_seams`, explicit `gpt-5.6-terra` /
+`medium`, with no inherited turns and no child dispatch. It is the sole writer
+for the cleanup and Proto-workflow command-runner seams and their two missing
+regressions; it may not change branch runtime behavior, commit, or push.
+
+The replacement enforcement assignment completed. Focused tests established
+the Git-failure and Buf-format ordering seams, and follow-up tests narrowed the
+descriptor rule to the actual rejected patterns without rejecting ordinary
+Base64 data. The final enforcement evidence is 223/223 passing across the
+owned-Proto, cleanup, and Proto-workflow suites, followed by 117/117 passing for
+the JavaScript descriptor-consumer extension. `git diff --check` passes.
+
+Applying the new checks to the branch produced one frozen mechanical correction
+batch: five lines over 120 characters; three positional generated-schema
+reconstructions; 14 changed production/example callables over 35 physical
+lines; the `optional` keyword and one missing documentation separation in
+`entity-metadata/project_states.proto`; and the unused imports reported by
+targeted server ESLint. Ten abandoned `.generated-*` staging directories were
+moved intact to `/tmp/spine-stale-generated.uZmVzJ`; no tracked source was
+deleted.
+
+The branch correction is assigned to `/root/enforced_branch_correction`, the
+existing implementer role with explicit `gpt-5.6-terra` / `medium`, no inherited
+turns, and no child dispatch. It is the sole writer for the listed production,
+Proto, and consumer-test files. It must preserve behavior, use semantic
+sub-steps rather than relocation-only helpers, remove unused imports, replace
+positional descriptors with named generated schemas, run focused tests, and
+return only after the new mechanical gates pass. It may not edit enforcement
+scripts, commit, or push.
+
+Orchestrator inspection of the resulting task-test planner found one remaining
+efficiency defect: when mandatory package or repository-wide tests already
+cover caller-selected focused paths, `verify:task` can run those focused tests
+again. A bounded follow-up is assigned to the existing
+`/root/enforcement_test_seams` implementer context, whose explicit immutable
+profile is `gpt-5.6-terra` / `medium`. It is the sole writer for
+`scripts/verify-task.mjs` and its test, may not spawn sub-agents, and must make
+the mandatory and additive test plan cover the complete change set without
+executing an already-covered path twice.
+
+That planner follow-up completed test-first. `plannedTaskTests()` retains the
+mandatory package or repository-wide suite, drops caller-selected paths already
+covered by it, and retains focused paths outside a mandatory package scope.
+The full `verify-task` test file passes 13/13 and `git diff --check` passes.
+
+The original branch-correction context was stopped after three consecutive
+bounded turns returned partial status without completing any requested callable
+group. This is a demonstrated execution blocker, not a design change. The
+remaining mechanical production correction is reassigned to
+`/root/callable_correction`, the existing implementer role with explicit
+`gpt-5.6-terra` / `medium`, no inherited turns, and no child dispatch. It is the
+sole writer for the delivery-server inbox service, build-time handler analyzer,
+server delivery/inbox storage, and repository files until the callable gate is
+green. It may not edit enforcement scripts, Proto/test fixtures, commit, or
+push.
+
+That replacement reduced the callable gate from twelve findings to two while
+keeping the proto-tools, delivery-server, and server TypeScript builds green.
+It then stalled twice on the single `Delivery.drain()` decomposition without a
+technical blocker. The delivery-only remainder is reassigned to
+`/root/delivery_drain_correction`, existing implementer role, explicit
+`gpt-5.6-terra` / `medium`, no inherited turns, and no child dispatch. It is the
+sole writer for `packages/server/src/delivery/delivery.ts`, may not commit or
+push, and must preserve deadline, cancellation, paging, duplicate, and removal
+behavior while making the mechanical callable gate pass.
+
+The delivery-only replacement completed. It introduced a stateful
+`DeliveryDrain` collaborator without changing the public API; server
+typechecking, focused lint, all 266 delivery tests with one worker, diff
+whitespace, and the delivery portion of the callable gate pass. The only
+remaining callable failure is `createHistoryCache()` in the repository. That
+one-file remainder is assigned to `/root/history_cache_correction`, existing
+implementer role, explicit `gpt-5.6-terra` / `medium`, no inherited turns, and
+no child dispatch. It is the sole writer for
+`packages/server/src/repository/repository.ts`, may not commit or push, and
+must preserve aggregate-history ordering, version, cache, and error behavior.
+
+The final accepted documentation corrections are assigned to the existing
+`/root/tsdoc_correction` implementer context, whose explicit immutable profile
+is `gpt-5.6-terra` / `medium`. It is the sole writer for `BUILD_PROTOCOL.md` and
+this task record during the batch, may not spawn sub-agents, commit, or push,
+and must make the current checkpoint/pending verification state unambiguous
+while keeping the exact-final-SHA rule normative in only one section.
+
+All accepted first-wave findings were corrected, and the complete deterministic
+preflight passed again in one run. Affected-lane re-review is dispatched without
+inherited turns: `/root/maintainability_rereview` uses the existing
+style/maintainability reviewer role with explicit `gpt-5.6-terra` / `high`;
+`/root/reliability_rereview` uses the existing performance/reliability reviewer
+role with explicit `gpt-5.6-terra` / `high`; and `/root/api_rereview` uses the
+existing TypeScript/API documentation reviewer role with explicit
+`gpt-5.6-terra` / `high`. Each is read-only, restricted to corrected findings
+and regression risk, and may not spawn sub-agents. Documentation and final
+security affected-lane rechecks follow when capacity becomes available.
+
+The final security gate is clean. Final maintainability/reliability review
+identified one shared planner defect and one narrow checker escape: mixed-scope
+coverage must run as one Vitest invocation, and descriptor factories aliased in
+their import declaration must be recognized. This final test-first correction
+returns to `/root/enforcement_test_seams` under its already recorded explicit
+`gpt-5.6-terra` / `medium` implementer profile, with sole write scope over the
+two enforcement scripts/tests and no child dispatch, commit, or push.
+
+The final enforcement correction passed its focused tests and the complete
+deterministic preflight passed once more. Final narrow rechecks are dispatched
+without inherited turns: `/root/enforcement_maintainability_close` uses the
+existing style/maintainability reviewer role with explicit
+`gpt-5.6-terra` / `high`; `/root/enforcement_reliability_close` uses the
+existing performance/reliability reviewer role with explicit
+`gpt-5.6-terra` / `high`; and `/root/final_documentation_close` uses the
+existing documentation reviewer role with explicit `gpt-5.6-luna` / `medium`.
+They are read-only, concern-specific, and may not spawn sub-agents.
+
+The narrow close confirmed coverage command composition but found three final
+test/planner details: descriptor-factory provenance must follow the actual
+`@bufbuild/protobuf/codegenv2` module without flagging unrelated same-named
+functions, repeated requested paths must be deduplicated, and shared-path
+coverage fallback needs a direct regression. These return test-first to
+`/root/enforcement_test_seams` under its recorded explicit
+`gpt-5.6-terra` / `medium` profile and existing restricted script/test scope.
+
+The corrected enforcement suites pass 135/135 with full ESLint, cleanup,
+tooling typecheck, and diff whitespace green. The exact final planner/checker
+changes are returned for narrow read-only closure to the existing
+`/root/enforcement_maintainability_close` and
+`/root/enforcement_reliability_close` contexts under their recorded explicit
+`gpt-5.6-terra` / `high` reviewer profiles. Neither may edit or spawn children.
+
+Final resolution checks are clean. Coverage sources and requested test paths
+are deduplicated in first-seen order; mixed and shared coverage plans use one
+Vitest process with coverage settings once. Descriptor factories are tied to
+the authoritative `@bufbuild/protobuf/codegenv2` binding, including aliases,
+while block-local and parameter shadowing are allowed. The paired shadowing
+regressions prove both rejection and allowance. The final enforcement suites
+pass 139/139; maintainability and reliability reviewers mark their findings
+resolved. Documentation, API/Proto, and final security lanes are clean. The
+pre-existing unauthenticated delivery control plane and the JVM-equivalent
+non-atomic acknowledgement/session boundary remain explicitly out of this
+task; neither was changed or partially implemented.
+
+The first release-profile attempt was stopped after the new Proto-format gate
+printed diffs for frozen/unchanged baseline sources and continued because
+`--exit-code` was missing. No test worker remained. Investigation established
+that root `buf.yaml` covers framework/examples but not package test-fixture
+roots. The previous enforcement context could not safely complete the required
+grouped-command redesign. This demonstrated tooling blocker is reassigned to
+`/root/proto_format_gate_correction`, existing implementer role with explicit
+`gpt-5.6-terra` / `medium`, no inherited turns, and no child dispatch. It is the
+sole writer for `scripts/proto-workflow.mjs` and its test, may not change Proto
+sources, commit, or push, and must format-check only changed non-frozen files in
+one command per recognized source root with `--exit-code`.
+
+The grouped workflow tests pass 107/107. Direct lint then exposed one conflict
+between Buf canonical formatting and the custom style checker: the checker
+requires a blank line between a message opening brace and its first documented
+field, while Buf removes it. The style-rule compatibility fix is assigned to
+`/root/proto_style_compatibility`, existing implementer role with explicit
+`gpt-5.6-terra` / `medium`, no inherited turns, and no child dispatch. It is the
+sole writer for `scripts/check-owned-proto-style.mjs` and its test, may not edit
+Proto sources, commit, or push, and must retain separation checks everywhere
+except directly after an opening brace.
+
+The grouped Proto workflow suite passes 107/107, the style compatibility suite
+passes 8/8 after a focused RED/GREEN regression, and direct `pnpm proto:lint`
+is quiet and green. The new workflow/style surface is dispatched for final
+zero-context read-only review: `/root/proto_gate_maintainability_review` uses
+the existing style/maintainability reviewer role with explicit
+`gpt-5.6-terra` / `high`, and `/root/proto_gate_reliability_review` uses the
+existing performance/reliability reviewer role with explicit
+`gpt-5.6-terra` / `high`. Neither may edit or spawn sub-agents.
+
+Both final Proto enforcement reviewers mark their findings resolved. External
+fixture-root commands now scope to changed repository-relative paths; Git path
+classification is NUL-safe and fails closed for unknown roots; execution-order
+tests are independent of checkout state; direct role tests reject entity kinds
+in both command and event files; and the Buf-compatible brace exception remains
+narrow. The workflow suite passes 110/110, the style suite passes 8/8, and
+direct `pnpm proto:lint` is green. The earlier release-profile run was stopped
+before completion because its formatter gate was invalid; it is not accepted as
+release evidence. A fresh complete preflight and release run are required.
+
+The corrected release-profile run passed every static/generated/package gate
+but its 4,706-test coverage suite failed five tests: two entity-column generator
+tests, one release-workspace discovery test, and two managed-external-event
+integration tests. Root-cause investigation is dispatched in three independent
+read-only lanes without inherited turns: `/root/debug_entity_columns`,
+`/root/debug_release_workspace`, and `/root/debug_managed_external_events`, all
+as orchestrator scanning functions with explicit `gpt-5.6-luna` / `medium`.
+They may not edit or spawn sub-agents and must reproduce, trace current-diff
+causation, compare working patterns, and return a minimal tested hypothesis
+before implementation.
+
+All five release-test failures were reproduced and traced. Workspace discovery
+correctly includes three new private test-fixture packages, so only stale total
+and private-count expectations need updating; the 18 public release boundary
+and 26-path release inventory remain unchanged. Entity-column tests import
+three removed pre-domain fixture names and must use the current project state
+schemas/expected generated names. Managed external-event tests hard-code an
+unqualified state type URL while runtime registration uses the schema-derived
+canonical URL. One test-only correction batch is assigned to the existing
+`/root/domain_fixture_correction` implementer context under its recorded
+explicit `gpt-5.6-terra` / `medium` profile. It is the sole writer for the three
+failing test files, may not change production or release policy, spawn children,
+commit, or push.
+
+The release-test correction batch passed 15/15 focused tests. Lerna discovery
+expects 29 total/11 private workspaces and explicitly preserves the exact 18
+public packages; entity-column tests use the current project-domain schemas;
+and the managed external-event target derives its canonical URL from the named
+schema. Production generator/routing and release policy were unchanged. Full
+ESLint, cleanup, tooling typecheck, formatting, and diff whitespace pass. These
+deterministic test-fixture corrections do not reopen reviewer lanes; a complete
+cheap preflight is required before retrying the release profile.
+
+Affected-lane re-review kept the API/Proto lane clean but returned a second
+correction batch. Reliability found that the cloned public tenant remained
+mutable and that refresh pages bypassed history ordering validation.
+Maintainability found one remaining forwarding-only inbox layer, whole-suite
+fallback for otherwise classifiable multi-package changes, and namespace/factory
+alias escapes in positional descriptor detection. Delivery/tenant plus inbox
+factory corrections return first to `/root/delivery_drain_correction`; history
+refresh validation then returns to `/root/history_cache_correction`; enforcement
+planner/checker corrections then return to `/root/enforcement_test_seams`.
+Their previously recorded explicit implementer profiles remain
+`gpt-5.6-terra` / `medium`; assignments are sequential, non-overlapping, do not
+permit child dispatch, commits, or pushes.
+
+The second correction batch converged and the complete deterministic preflight
+passed again. Final affected-lane rechecks are dispatched without inherited
+turns: `/root/final_maintainability_gate` uses the existing
+style/maintainability reviewer role with explicit `gpt-5.6-terra` / `high`;
+`/root/final_reliability_gate` uses the existing performance/reliability
+reviewer role with explicit `gpt-5.6-terra` / `high`; and
+`/root/final_security_gate` uses the existing security reviewer role with
+explicit `gpt-5.6-terra` / `high`. All are read-only, limited to corrected
+findings and nearby regressions, and may not spawn sub-agents. The API/Proto
+lane remains accepted because the second batch did not change its reviewed
+surface. Final documentation review follows when a slot becomes available.
+
+The history-cache assignment completed with a cohesive
+`RepositoryHistoryCache` helper. Server typechecking, focused lint, 327
+repository tests with one worker, diff whitespace, and the full callable gate
+pass. A fresh whole-repository ESLint run then found 44 real errors after one
+new abandoned generated staging directory was moved intact to
+`/tmp/spine-stale-generated.1k0qFc`: three non-null assertions introduced by
+the analyzer extraction, 39 stale imports, and two stand-test typing errors.
+
+The independent domain/API review also identified remaining application-signal
+fixtures that still pack entity states, identifiers, WKT scalars, Events as
+Commands, or Commands as Events. The affected tests are command bus, event bus,
+bounded context, native subscriptions, Spine services, repository routing,
+both integration-broker suites, signal metadata, server lifecycle, and core
+signal creation. Their correction plus the current ESLint batch is assigned to
+`/root/domain_fixture_correction`, existing implementer role, explicit
+`gpt-5.6-terra` / `medium`, no inherited turns, and no child dispatch. It is the
+sole writer for those tests, their role-specific test-fixture Proto sources and
+generated outputs, the stand test, and the build-time analyzer. It may not edit
+runtime production outside the analyzer, enforcement scripts, or protocol
+documents, and may not commit or push.
+
+After the correction batches converged, the complete deterministic pre-review
+profile passed in one run: generated TypeScript build, tooling typecheck, full
+ESLint, cleanup/callable enforcement, TSDoc, copyright, logging containment,
+formatting, documentation audience/API checks, Buf lint, generated-output
+currency, and release readiness.
+
+The complete independent review wave is dispatched without inherited turns.
+`/root/final_maintainability_review` uses the existing
+style/maintainability reviewer role with explicit `gpt-5.6-terra` / `high`;
+`/root/final_reliability_review` uses the existing performance/reliability
+reviewer role with explicit `gpt-5.6-terra` / `high`; and
+`/root/final_api_contract_review` uses the existing TypeScript/API
+documentation reviewer role with explicit `gpt-5.6-terra` / `high`. Each is
+read-only, receives concern-specific paths, and may not spawn sub-agents. A
+documentation review and the required final security review will follow in the
+same wave when execution capacity becomes available.
+
+The first three review lanes completed. Maintainability reported three P2
+findings: a forwarding-only inbox factory, forwarding-only analyzer helpers,
+and a destructured-generated-descriptor escape in the cleanup checker.
+Reliability reported two P1 and three P2 findings: acknowledgement is not
+atomically fenced by the current shard session; mandatory test planning drops
+an explicit coverage request; history-page ordering checks omit adjacent items;
+guard-lane trimming stops behind an active oldest lane; and long delivery
+failure runs retain unbounded target/sample state. The API/Proto reviewer
+confirmed the oneof wire number, fixture roles, manifests, generated schemas,
+and snapshot versions, but reported two P2 internal API leaks from an extracted
+public standalone-runtime helper and exported delivery-deduplication helper.
+
+The remaining same-wave lanes are dispatched without inherited turns.
+`/root/final_protocol_docs_review` uses the existing documentation reviewer
+role with explicit `gpt-5.6-luna` / `medium`, and
+`/root/final_security_recheck` uses the existing security reviewer role with
+explicit `gpt-5.6-terra` / `high`. Both are read-only, concern-specific, and may
+not spawn sub-agents.
+
+The remaining review lanes completed. Documentation reported a stale top-level
+checkpoint summary and duplicated exact-SHA readiness wording. Security
+reported one relevant mutable-tenant snapshot defect and one broader
+unauthenticated cleartext delivery-control-plane concern. The latter is
+pre-existing: neither `packages/delivery-server/src/server/config.ts` nor
+`delivery-server.ts` differs from `origin/master` in committed or local changes.
+Adding TLS/authentication/authorization would be a new subsystem outside this
+task and is therefore recorded but not implemented. The mutable nested tenant
+snapshot is accepted because it can split inbox access from the shard fence.
+
+The frozen correction batch is returned to the relevant existing
+implementation contexts sequentially. Delivery corrections go first to
+`/root/delivery_drain_correction`, whose explicit immutable implementer profile
+is `gpt-5.6-terra` / `medium`: atomically fence delivered acknowledgement by
+the current shard session, bound long-drain failure state, deep-clone the tenant
+boundary, and remove the package-internal deduplication export. It is the sole
+writer for delivery runtime/storage/provider contracts and focused tests during
+this batch, may not spawn sub-agents, commit, or push.
+
+Implementation confirmed that session-fenced acknowledgement crosses an
+existing contract boundary: direct storage exposes an atomic session check only
+for removal, while `markDelivered` is a separate inbox compare-and-swap, and
+the remote Inbox RPC carries no shard session. This is a demonstrated atomicity
+and serialized-contract blocker. One architecture pass is assigned to the
+existing requirements-splitter role as `/root/ack_fencing_design`, explicit
+`gpt-5.6-sol` / `high`, without inherited turns. It is read-only, may not spawn
+sub-agents, and must identify the smallest Spine-JVM-aligned direct and remote
+contract change without inventing an outbox or unrelated recovery mechanism.
+The delivery implementer continues the independent accepted corrections while
+that decision is prepared.
+
+The architecture pass established that current Spine JVM also performs the
+ordinary inbox delivered write separately from shard-session validation. An
+atomic fence would require a new Spine-TS-only RPC plus a broader storage
+mutation contract. That would be a stronger new protocol rather than JVM parity
+and conflicts with the approved no-overengineering scope. The review's race is
+recorded as a real pre-existing JVM/TS limitation, but its proposed P1 change is
+rejected for this task. No new acknowledgement RPC, outbox, recovery mechanism,
+UUID validation, or persisted fencing concept will be introduced.
+
+The two accepted repository reliability findings are returned to
+`/root/history_cache_correction`, whose explicit immutable implementer profile
+is `gpt-5.6-terra` / `medium`. It is the sole writer for repository runtime and
+focused tests during this batch: validate every adjacent version within history
+pages and across page/cache boundaries, and trim the least-recent inactive
+guard lane even when an older lane is active. It may not spawn sub-agents,
+commit, or push.
+
+The complete deterministic preflight exposed two TSDoc regressions after the
+runtime and verification refactors: the new standalone-runtime `outputValues`
+method lacks a complete contract, and an internal `verify-task` comment uses a
+TSDoc opener. Their bounded correction is assigned to
+`/root/tsdoc_correction`, existing implementer role, explicit
+`gpt-5.6-terra` / `medium`, no inherited turns, and no child dispatch. It is the
+sole writer for those two files until `lint:tsdoc` passes and may not commit or
+push.
+
+## Final Local Verification — 2026-09-11 23:25 WEST
+
+- The complete cheap preflight passed after all accepted review corrections.
+  It covered generated TypeScript, tooling typechecking, full ESLint, cleanup
+  and callable-size enforcement, TSDoc, copyright, logging containment,
+  formatting, documentation audience and API checks, Buf lint, generated-file
+  currency, and release readiness.
+- The one permitted converged `pnpm verify:release` run passed: 289 test files
+  and 4,706 tests passed with one Vitest worker. Coverage was 93.25% statements,
+  90.07% branches, 92.88% functions, and 94.41% lines.
+- Release verification packed all 18 public workspace packages and installed
+  them together into a clean consumer project. This proves the release set no
+  longer omits the five packages missed by the earlier publication workflow.
+- `node scripts/release-cli.mjs prepare --check` separately passed for all 18
+  public packages at `2.0.0-snapshot.11`.
+- `git diff --check` passed, and no `.generated-*` staging directory remains in
+  the working tree.
+- No new acknowledgement RPC, outbox, crash-recovery mechanism, UUID
+  validation, third-party patch, publication batch controller, or per-package
+  timeout was introduced.
+- The remaining completion gate is CI success for the exact commit pushed from
+  this verified working tree.

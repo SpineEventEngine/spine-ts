@@ -20,7 +20,6 @@ import {
   ProjectProfileStateSchema,
   ProjectRecordStateSchema,
   type ProjectOverviewState,
-  type ProjectProfile,
   type ProjectProfileState,
   type ProjectRecordState,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
