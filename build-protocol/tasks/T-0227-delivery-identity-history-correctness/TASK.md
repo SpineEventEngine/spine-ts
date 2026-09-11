@@ -357,6 +357,18 @@ verification and review may run concurrently only at stable boundaries.
   turns, followed by the existing implementer role as `gpt-5.6-terra` / medium.
   Neither role may spawn sub-agents; immutable role configuration is the available
   runtime-profile evidence.
+- `2026-09-11 10:24 WEST`: The architecture check confirmed a bounded same-job
+  recovery is sufficient. After a nonzero Lerna result, the job must allow npm
+  registry convergence, strictly distinguish complete, partial, and ambiguous
+  states, accept nonzero only when all 18 exact versions and selected tags are
+  present, and otherwise retry only the exact missing package set in a fresh
+  disposable workspace. Preparation and downloaded artifacts remain unchanged.
+  Three publication attempts use fixed waits of 90, 180, and a final 360 seconds;
+  the last wait can recognize completion but cannot authorize a fourth attempt.
+  Timeouts, server errors, malformed records, and wrong tags fail closed. The
+  existing implementer role is now explicitly dispatched as `gpt-5.6-terra` /
+  medium for the registry seam, bounded controller, workflow wiring, tests, and
+  narrow release documentation. The implementer may not spawn sub-agents.
 
 ## Decisions
 
