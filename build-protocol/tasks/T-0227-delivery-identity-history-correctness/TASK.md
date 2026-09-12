@@ -1848,3 +1848,20 @@ fully corrected in both paths without a retention-boundary regression,
 overengineering, or conflict with the Human Requirements Ledger. The other
 clean lanes are not reopened because the correction does not affect their
 reviewed surfaces.
+
+The fresh affected resolution review completed under the explicitly dispatched
+`gpt-5.6-terra` / `high` profile. Additional runtime self-inspection was not
+exposed; the explicit dispatch fields are the accepted metadata. It reported no
+P0–P3 findings and marked the original P1 resolved. Past, equal-to-current-time,
+and absent retention deadlines do not seed persisted page evidence; a future
+deadline still does. Existing retained-duplicate tests preserve active-window
+suppression, while the new direct and remote tests preserve expired-row
+delivery and cleanup. The separate recent 1,000-identity cache remains
+unchanged and intentionally time-independent, matching the accepted JVM
+behavior.
+
+Fresh review convergence: style/maintainability clean; documentation clean;
+TypeScript/API clean; performance/reliability clean after correction; security
+clean; Human Requirements Ledger compliant. The reviewer repeated the two
+focused files with 48/48 tests passing and `git diff --check` passing. The task
+may proceed to the complete cheap preflight and one release verification run.
