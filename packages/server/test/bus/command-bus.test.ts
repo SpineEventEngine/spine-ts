@@ -14,9 +14,7 @@
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandSchema,
@@ -25,88 +23,32 @@ import {
   EventIdSchema,
   EventSchema,
   UserIdSchema,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
-import { fromBinary, toBinary } from "@bufbuild/protobuf";
 
 import { CommandBus, type CommandDispatcher } from "../../src/index.js";
 import { commandBusAccess } from "../../src/bus/command-bus.js";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { SignalPublisher } from "../../src/runtime/signal-publisher.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
-
-type ProjectionState = Message<"ProjectionState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type AggregateState = Message<"AggregateState"> & {
-  id: string;
-  name: string;
-  archived: boolean;
-};
-
-type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
-  id: string;
-  name: string;
-};
-
-function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Command bus fixture descriptor set is empty.");
-  }
-
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    imports,
-  );
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
-const ProjectionStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectionState>;
-const AggregateStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  1,
-) as GenMessage<AggregateState>;
-const fileValidationRefusalFixture = fileDesc(
-  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
-    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
-    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
-    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
-    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
-  [file_spine_options],
-);
-const ValidatedTaskCommandSchema = messageDesc(
-  fileValidationRefusalFixture,
-  1,
-) as GenMessage<ValidatedTaskCommand>;
+import {
+  AssignReviewTaskSchema,
+  ScheduleReviewTaskSchema,
+} from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import { CreateReviewProjectSchema } from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
 
 describe("CommandBus", () => {
   it("posts commands asynchronously to exactly one matching dispatcher", async () => {
     const observed: string[] = [];
-    const matching = createCommandDispatcher([ProjectionStateSchema], (command) => {
+    const matching = createCommandDispatcher([AssignReviewTaskSchema], (command) => {
       observed.push(`matching:${command.id?.uuid ?? "missing"}`);
     });
-    const other = createCommandDispatcher([AggregateStateSchema], (command) => {
+    const other = createCommandDispatcher([ScheduleReviewTaskSchema], (command) => {
       observed.push(`other:${command.id?.uuid ?? "missing"}`);
     });
     const bus = new CommandBus([matching, other]);
 
-    const completion = bus.post(createProjectionCommand("command-1"));
+    const completion = bus.post(createAssignReviewTask("command-1"));
 
     observed.push("after-post");
     expect(observed).toEqual(["after-post"]);
@@ -117,14 +59,14 @@ describe("CommandBus", () => {
   });
 
   it("rejects duplicate command dispatcher registration for one command message type", () => {
-    const first = createCommandDispatcher([ProjectionStateSchema], () => undefined);
-    const second = createCommandDispatcher([ProjectionStateSchema], () => undefined);
+    const first = createCommandDispatcher([AssignReviewTaskSchema], () => undefined);
+    const second = createCommandDispatcher([AssignReviewTaskSchema], () => undefined);
     const bus = new CommandBus();
 
     bus.register(first);
 
     expect(() => bus.register(second)).toThrow(
-      `Duplicate command dispatcher for "${TypeUrls.derive(ProjectionStateSchema)}".`,
+      `Duplicate command dispatcher for "${TypeUrls.derive(AssignReviewTaskSchema)}".`,
     );
   });
 
@@ -137,7 +79,7 @@ describe("CommandBus", () => {
         if (attempts === 1) {
           throw new Error("command schema read failed");
         }
-        return [ProjectionStateSchema];
+        return [AssignReviewTaskSchema];
       },
       dispatch: (command) => {
         observed.push(`dispatch:${command.id?.uuid ?? "missing"}`);
@@ -149,7 +91,7 @@ describe("CommandBus", () => {
     expect(() => bus.register(dispatcher)).toThrow("command schema read failed");
     expect(bus.register(dispatcher)).toBe(dispatcher);
 
-    await bus.post(createProjectionCommand("command-retry"));
+    await bus.post(createAssignReviewTask("command-retry"));
 
     expect(observed).toEqual(["dispatch:command-retry"]);
   });
@@ -157,30 +99,30 @@ describe("CommandBus", () => {
   it("deduplicates repeated schemas from one command dispatcher", async () => {
     const observed: string[] = [];
     const dispatcher = createCommandDispatcher(
-      [ProjectionStateSchema, ProjectionStateSchema],
+      [AssignReviewTaskSchema, AssignReviewTaskSchema],
       (command) => {
         observed.push(`dispatch:${command.id?.uuid ?? "missing"}`);
       },
     );
     const bus = new CommandBus([dispatcher]);
 
-    expect(bus.acceptedCommandTypes()).toEqual([TypeUrls.derive(ProjectionStateSchema)]);
+    expect(bus.acceptedCommandTypes()).toEqual([TypeUrls.derive(AssignReviewTaskSchema)]);
 
-    await bus.post(createProjectionCommand("command-deduplicated"));
+    await bus.post(createAssignReviewTask("command-deduplicated"));
 
     expect(observed).toEqual(["dispatch:command-deduplicated"]);
   });
 
   it("ignores registering the same command dispatcher twice", async () => {
     const observed: string[] = [];
-    const dispatcher = createCommandDispatcher([ProjectionStateSchema], (command) => {
+    const dispatcher = createCommandDispatcher([AssignReviewTaskSchema], (command) => {
       observed.push(`dispatch:${command.id?.uuid ?? "missing"}`);
     });
     const bus = new CommandBus([dispatcher]);
 
     expect(bus.register(dispatcher)).toBe(dispatcher);
 
-    await bus.post(createProjectionCommand("command-same-dispatcher"));
+    await bus.post(createAssignReviewTask("command-same-dispatcher"));
 
     expect(observed).toEqual(["dispatch:command-same-dispatcher"]);
   });
@@ -195,7 +137,7 @@ describe("CommandBus", () => {
           reentered = true;
           bus.register(dispatcher);
         }
-        return [ProjectionStateSchema];
+        return [AssignReviewTaskSchema];
       },
       dispatch: (command) => {
         observed.push(`dispatch:${command.id?.uuid ?? "missing"}`);
@@ -204,7 +146,7 @@ describe("CommandBus", () => {
     };
 
     bus.register(dispatcher);
-    await bus.post(createProjectionCommand("command-reentrant"));
+    await bus.post(createAssignReviewTask("command-reentrant"));
 
     expect(observed).toEqual(["dispatch:command-reentrant"]);
   });
@@ -212,8 +154,8 @@ describe("CommandBus", () => {
   it("rejects posting commands without a registered dispatcher", async () => {
     const bus = new CommandBus();
 
-    await expect(bus.post(createProjectionCommand("command-2"))).rejects.toThrow(
-      `No command dispatcher registered for "${TypeUrls.derive(ProjectionStateSchema)}".`,
+    await expect(bus.post(createAssignReviewTask("command-2"))).rejects.toThrow(
+      `No command dispatcher registered for "${TypeUrls.derive(AssignReviewTaskSchema)}".`,
     );
   });
 
@@ -230,7 +172,7 @@ describe("CommandBus", () => {
   });
 
   it("rejects commands with a blank message type URL", async () => {
-    const command = createProjectionCommand("command-blank-message");
+    const command = createAssignReviewTask("command-blank-message");
     const bus = new CommandBus();
 
     if (command.message !== undefined) {
@@ -275,7 +217,7 @@ describe("CommandBus", () => {
     const gate = createSignal();
     const observed: string[] = [];
     const dispatcher: CommandDispatcher = {
-      messageSchemas: () => [ProjectionStateSchema, ValidatedTaskCommandSchema],
+      messageSchemas: () => [AssignReviewTaskSchema, CreateReviewProjectSchema],
       dispatch: async (command) => {
         observed.push(command.id?.uuid ?? "missing");
         if (command.id?.uuid === "command-blocking") {
@@ -285,7 +227,7 @@ describe("CommandBus", () => {
     };
     const bus = new CommandBus([dispatcher]);
 
-    const first = bus.post(createProjectionCommand("command-blocking"));
+    const first = bus.post(createAssignReviewTask("command-blocking"));
     const second = bus.post(createValidatedCommand("command-queued-invalid", "task-invalid", ""));
     let secondSettled = false;
     void second.then(
@@ -312,9 +254,9 @@ describe("CommandBus", () => {
   it("rejects nested posts from active command dispatch", async () => {
     const observed: string[] = [];
     const context: { bus?: CommandBus } = {};
-    const dispatcher = createCommandDispatcher([ProjectionStateSchema], async (command) => {
+    const dispatcher = createCommandDispatcher([AssignReviewTaskSchema], async (command) => {
       observed.push(`outer:${command.id?.uuid ?? "missing"}`);
-      await expect(context.bus?.post(createProjectionCommand("command-nested"))).rejects.toThrow(
+      await expect(context.bus?.post(createAssignReviewTask("command-nested"))).rejects.toThrow(
         "Cannot enqueue runtime work from an active runtime work item.",
       );
       observed.push("after-rejection");
@@ -322,7 +264,7 @@ describe("CommandBus", () => {
     const bus = new CommandBus([dispatcher]);
     context.bus = bus;
 
-    await bus.post(createProjectionCommand("command-3"));
+    await bus.post(createAssignReviewTask("command-3"));
 
     expect(observed).toEqual(["outer:command-3", "after-rejection"]);
   });
@@ -330,7 +272,7 @@ describe("CommandBus", () => {
   it("queues an internal follow-up command after active command dispatch", async () => {
     const observed: string[] = [];
     const context: { bus?: CommandBus } = {};
-    const dispatcher = createCommandDispatcher([ValidatedTaskCommandSchema], (command) => {
+    const dispatcher = createCommandDispatcher([CreateReviewProjectSchema], (command) => {
       observed.push(command.id?.uuid ?? "missing");
       if (command.id?.uuid === "command-outer") {
         const bus = context.bus;
@@ -526,7 +468,7 @@ describe("CommandBus", () => {
 
 function createCommandDispatcher(
   schemas: readonly GenMessage<Message>[],
-  onDispatch: (command: ReturnType<typeof createProjectionCommand>) => void | Promise<void>,
+  onDispatch: (command: ReturnType<typeof createAssignReviewTask>) => void | Promise<void>,
 ): CommandDispatcher {
   return {
     messageSchemas: () => schemas,
@@ -538,25 +480,23 @@ function createValidatedCommandDispatcher(
   onDispatch: (command: ReturnType<typeof createValidatedCommand>) => void | Promise<void>,
 ): CommandDispatcher {
   return {
-    messageSchemas: () => [ValidatedTaskCommandSchema],
+    messageSchemas: () => [CreateReviewProjectSchema],
     dispatch: (command) => Promise.resolve(onDispatch(command)),
   };
 }
 
-function createProjectionCommand(id: string) {
-  return SignalEnvelopes.command({
+function createAssignReviewTask(id: string) {
+  return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    schema: ProjectionStateSchema,
-    message: create(ProjectionStateSchema, {
-      id: "task-1",
-      name: "Task",
-      priority: 1,
-    }),
+    message: AnyMessages.pack(
+      AssignReviewTaskSchema,
+      create(AssignReviewTaskSchema, { id: "task-1", name: "Task" }),
+    ),
   });
 }
 
@@ -569,8 +509,8 @@ function createValidatedCommand(id: string, aggregateId: string, name: string) {
       }),
     }),
     message: AnyMessages.pack(
-      ValidatedTaskCommandSchema,
-      create(ValidatedTaskCommandSchema, {
+      CreateReviewProjectSchema,
+      create(CreateReviewProjectSchema, {
         id: aggregateId,
         name,
       }),

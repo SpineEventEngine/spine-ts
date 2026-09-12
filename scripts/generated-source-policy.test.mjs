@@ -23,11 +23,13 @@ describe("generated source policy", () => {
       "examples/message-board/model/dist/generated",
       "examples/message-board/app/generated/handler",
       "examples/message-board/app/dist/generated",
+      "packages/server/test-fixtures/generated",
+      "packages/core/test-fixtures/generated",
+      "packages/testing/test-fixtures/generated",
     ];
     const files = [
       "examples/message-board/app/src/model-registry.ts",
       "examples/message-board/app/dist/src/model-registry.d.ts",
-      "packages/server/test-fixtures/entity-metadata-fixtures.ts",
     ].map((path) => join(process.cwd(), path));
     for (const root of roots) {
       const directoryRoot = join(process.cwd(), root);

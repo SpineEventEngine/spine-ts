@@ -17,13 +17,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { file_spine_options } from "@spine-event-engine/proto";
+import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import {
   GeneratedRegistryDiscovery,
@@ -32,14 +27,14 @@ import {
 import { type GeneratedHandlerRegistry } from "../../src/handler/generated-handler-registry.js";
 import { HandlerRegistryIngestionError } from "../../src/handler/generated-handler-registry.js";
 import { HandlerMetadataRegistry } from "../../src/handler/handler-metadata.js";
-
-type ProjectionState = Message<"ProjectionState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-type StartReview = Message<"spine.server.testing.StartReview">;
-type ReviewStarted = Message<"spine.server.testing.ReviewStarted">;
+import {
+  type StartReview,
+  StartReviewSchema,
+} from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import {
+  type ReviewStarted,
+  ReviewStartedSchema,
+} from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 class DiscoveredProjection {
   assignCreate(command: StartReview): ReviewStarted {
@@ -48,42 +43,8 @@ class DiscoveredProjection {
   }
 }
 
-function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Generated registry discovery fixture descriptor set is empty.");
-  }
-
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    imports,
-  );
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
-const ProjectionStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectionState>;
-const StartReviewSchema = messageDesc(
-  createFixtureFileDescriptor(
-    serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
-  ),
-  0,
-) as GenMessage<StartReview>;
-const ReviewStartedSchema = messageDesc(
-  createFixtureFileDescriptor(
-    serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64,
-  ),
-  0,
-) as GenMessage<ReviewStarted>;
+const { ProjectOverviewStateSchema } =
+  await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
 
 describe("generated registry discovery", () => {
   it("loads generated registries from explicit file URLs", async () => {
@@ -277,15 +238,14 @@ describe("generated registry discovery", () => {
         {
           receiverKind: "entity",
           receiverType: DiscoveredProjection,
-          stateSchema: ProjectionStateSchema,
+          stateSchema: ProjectOverviewStateSchema,
           handlers: [
             {
               kind: "command-assignment",
               methodName: "assignCreate",
-              signalSchema: StartReviewSchema,
-              emittedSchemas: [ReviewStartedSchema],
+              input: { schema: StartReviewSchema, origin: "domestic" },
+              outcomes: { returned: [ReviewStartedSchema], thrown: [] },
               parameterCount: 1,
-              origin: "domestic",
             },
           ],
         },

@@ -351,12 +351,13 @@ export interface LocalInboxDrainOptions {
   readonly acceptMessage?: (message: InboxMessage) => boolean;
 
   /**
-   * Observes exact durable acknowledgements produced by the same shard drain.
+   * Observes exact durable delivery or duplicate removal produced by the same
+   * shard drain.
    *
-   * @param message Contains the acknowledged Inbox message.
+   * @param message Contains the resolved Inbox message.
    * @internal
    */
-  readonly onAcknowledged?: (message: InboxMessage) => void;
+  readonly onResolved?: (message: InboxMessage) => void;
 
   /**
    * Explains a replay failure that lacks an Error instance.
@@ -423,6 +424,9 @@ export const InboxHandoff: Readonly<{
   }): Promise<InboxMessage>;
   drain(options: LocalInboxDrainOptions): Promise<void>;
   runDrain(options: LocalInboxDrainOptions): Promise<void>;
+  drainAttempt(options: LocalInboxDrainOptions): Promise<"ACKNOWLEDGED" | "IDLE" | "RETRY">;
+  drainInput(options: LocalInboxDrainOptions): Parameters<Delivery["drainMessage"]>[1];
+  replayFailure(error: unknown, message: string): Error;
   key(input: LocalInboxKeyInput, tenantId?: TenantId): string;
   sameMessageId(
     left: {
@@ -516,49 +520,48 @@ export const InboxHandoff: Readonly<{
   },
 
   async runDrain(options: LocalInboxDrainOptions): Promise<void> {
-    const {
-      delivery,
-      received,
-      node,
-      onReplay,
-      replayFailureMessage,
-      skippedMessage,
-      unfinishedMessage,
-    } = options;
-
     for (let attempt = 0; attempt < drainLimit; attempt += 1) {
-      const direct = await delivery.drainMessage(received, {
-        node,
-        onMessage: onReplay,
-        ...(options.acceptMessage === undefined ? {} : { acceptMessage: options.acceptMessage }),
-        ...(options.onAcknowledged === undefined ? {} : { onDelivered: options.onAcknowledged }),
-      });
-      if (direct.acknowledged) return;
-      const run = direct.run;
-      const target = await delivery.inbox.readMessage(received.id);
-
-      if (target?.status === "DELIVERED") {
-        return;
-      }
-
-      const failure = run.failures.find(({ message }) =>
-        InboxHandoff.sameMessageId(message.id, received.id),
-      );
-
-      if (failure !== undefined) {
-        throw failure.error instanceof Error
-          ? failure.error
-          : new Error(replayFailureMessage, { cause: failure.error });
-      }
-      if (run.status === "SKIPPED") {
-        throw new Error(skippedMessage);
-      }
-      if (run.accepted === 0 && run.delivered === 0 && run.failed === 0) {
-        break;
-      }
+      const outcome = await InboxHandoff.drainAttempt(options);
+      if (outcome === "ACKNOWLEDGED") return;
+      if (outcome === "IDLE") break;
     }
+    throw new Error(options.unfinishedMessage);
+  },
 
-    throw new Error(unfinishedMessage);
+  async drainAttempt(options: LocalInboxDrainOptions): Promise<"ACKNOWLEDGED" | "IDLE" | "RETRY"> {
+    const direct = await options.delivery.drainMessage(
+      options.received,
+      InboxHandoff.drainInput(options),
+    );
+    if (
+      direct.acknowledged ||
+      (await options.delivery.inbox.readMessage(options.received.id))?.status === "DELIVERED"
+    )
+      return "ACKNOWLEDGED";
+    const failure = direct.run.failures.find(({ message }) =>
+      InboxHandoff.sameMessageId(message.id, options.received.id),
+    );
+    if (failure !== undefined)
+      throw InboxHandoff.replayFailure(failure.error, options.replayFailureMessage);
+    if (direct.run.status === "SKIPPED") throw new Error(options.skippedMessage);
+    return direct.run.accepted === 0 && direct.run.delivered === 0 && direct.run.failed === 0
+      ? "IDLE"
+      : "RETRY";
+  },
+
+  drainInput(options: LocalInboxDrainOptions): Parameters<Delivery["drainMessage"]>[1] {
+    return {
+      node: options.node,
+      onMessage: options.onReplay,
+      ...(options.acceptMessage === undefined ? {} : { acceptMessage: options.acceptMessage }),
+      ...(options.onResolved === undefined
+        ? {}
+        : { onDelivered: options.onResolved, onDuplicateRemoved: options.onResolved }),
+    };
+  },
+
+  replayFailure(error: unknown, message: string): Error {
+    return error instanceof Error ? error : new Error(message, { cause: error });
   },
 
   key(input: LocalInboxKeyInput, deliveryTenantId?: TenantId): string {

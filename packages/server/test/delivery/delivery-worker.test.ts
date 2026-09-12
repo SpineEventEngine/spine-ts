@@ -15,9 +15,10 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/require-await */
 
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { Identifiers } from "@spine-event-engine/core";
+import { EventSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
@@ -30,6 +31,292 @@ import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
 
 describe("Delivery direct worker", () => {
+  it("deduplicates pending identities in one raw page without inbox admission", async () => {
+    const shard = ShardIndex.single();
+    const first = message("same-signal", "target", shard);
+    const duplicate = { ...message("second-row", "target", shard), signalId: first.signalId };
+    const dispatched: string[] = [];
+    const acknowledged: string[] = [];
+    const removed: string[] = [];
+    const reads: (readonly string[] | undefined)[] = [];
+    const pages = [[first, duplicate], []] as DeliveryEndpointMessage[][];
+    const delivery = createDelivery({
+      read: async (options) => {
+        reads.push(options?.statuses);
+        return pages.shift() ?? [];
+      },
+      mark: async (row) => {
+        acknowledged.push(row.id.value);
+        return { ...row, status: "DELIVERED" };
+      },
+      removeDuplicate: async (row) => {
+        removed.push(row.id.value);
+        return true;
+      },
+    });
+
+    await expect(
+      delivery.drain(shard, {
+        onMessage: (row) => {
+          dispatched.push(row.id.value);
+        },
+      }),
+    ).resolves.toMatchObject({ status: "DRAINED", accepted: 1, delivered: 1 });
+
+    expect(dispatched).toEqual([first.id.value]);
+    expect(acknowledged).toEqual([first.id.value]);
+    expect(removed).toEqual([duplicate.id.value]);
+    expect(reads).toEqual([undefined, undefined]);
+  });
+
+  it("delivers after an expired retained identity is cleaned from a new wrapper", async () => {
+    const shard = ShardIndex.single();
+    const expired = {
+      ...message("expired", "target", shard),
+      keepUntil: new Date(Date.now() - 60_000),
+      status: "DELIVERED" as const,
+    };
+    const pending = { ...message("pending", "target", shard), signalId: expired.signalId };
+    const rows = [expired, pending];
+    const dispatched: string[] = [];
+    const removed: string[] = [];
+    const delivery = createDelivery({
+      rows,
+      mark: async (row) => {
+        remove(rows, row);
+        return { ...row, status: "DELIVERED" as const };
+      },
+      remove: async (row) => {
+        removed.push(row.id.value);
+        remove(rows, row);
+        return true;
+      },
+    });
+
+    await delivery.drain(shard, {
+      onMessage: (row) => {
+        dispatched.push(row.id.value);
+      },
+    });
+
+    expect(dispatched).toEqual([pending.id.value]);
+    expect(removed).toEqual([expired.id.value]);
+  });
+
+  it("delivers the same signal to different typed targets", async () => {
+    const shard = ShardIndex.single();
+    const firstTarget = message("same-signal", "first", shard);
+    const secondTarget = {
+      ...message("second-row", "second", shard),
+      signalId: firstTarget.signalId,
+    };
+    const secondTargetType = {
+      ...message("third-row", "first", shard),
+      signalId: firstTarget.signalId,
+      inboxId: {
+        ...firstTarget.inboxId,
+        targetTypeUrl: "type.example.dev/tasks.OtherTarget",
+      },
+    };
+    const rows = [firstTarget, secondTarget, secondTargetType];
+    const dispatched: string[] = [];
+    const removed: string[] = [];
+    const delivery = createDelivery({
+      rows,
+      mark: async (row) => {
+        remove(rows, row);
+        return { ...row, status: "DELIVERED" };
+      },
+      removeDuplicate: async (row) => {
+        removed.push(row.id.value);
+        remove(rows, row);
+        return true;
+      },
+    });
+
+    await delivery.drain(shard, {
+      onMessage: (row) => {
+        dispatched.push(row.id.value);
+      },
+    });
+
+    expect(dispatched).toEqual([
+      firstTarget.id.value,
+      secondTarget.id.value,
+      secondTargetType.id.value,
+    ]);
+    expect(removed).toEqual([]);
+  });
+
+  it("continues past 1000 unrelated rows without treating cache capacity as a scan limit", async () => {
+    const shard = ShardIndex.single();
+    const unrelated = Array.from({ length: 1_000 }, (_, index) => ({
+      ...message(`delivered-${String(index)}`, `target-${String(index)}`, shard),
+      status: "DELIVERED" as const,
+      whenReceived: new Date(index),
+    }));
+    const pending = {
+      ...message("pending", "pending-target", shard),
+      whenReceived: new Date(1_001),
+    };
+    let pendingDelivered = false;
+    const read = async (options?: InboxReadOptions): Promise<DeliveryEndpointMessage[]> => {
+      const rows = pendingDelivered ? unrelated : [...unrelated, pending];
+      const after = options?.after?.messageId;
+      const start = after === undefined ? 0 : rows.findIndex((row) => row.id.value === after) + 1;
+      return rows.slice(start, start + (options?.limit ?? 1_000));
+    };
+    const dispatched: string[] = [];
+    const delivery = createDelivery({
+      pageSize: 1_000,
+      read,
+      mark: async (row) => {
+        pendingDelivered = true;
+        return { ...row, status: "DELIVERED" };
+      },
+    });
+
+    await expect(
+      delivery.drain(shard, {
+        onMessage: (row) => {
+          dispatched.push(row.id.value);
+        },
+      }),
+    ).resolves.toMatchObject({ status: "DRAINED", delivered: 1 });
+    expect(dispatched).toEqual([pending.id.value]);
+  });
+
+  it("evicts the oldest recent identity after 1000 newer deliveries", async () => {
+    const shard = ShardIndex.single();
+    const first = message("first-signal", "first-target", shard);
+    const rows = [first];
+    const inbox = {
+      sessionKind: "LEASED" as const,
+      receive: async () => {
+        throw new Error("not used");
+      },
+      read: async () => [...rows],
+      readMessage: async () => undefined,
+      markDelivered: async (row: DeliveryEndpointMessage) => {
+        remove(rows, row);
+        return { ...row, status: "DELIVERED" as const };
+      },
+      removeDuplicate: async (row: DeliveryEndpointMessage) => {
+        remove(rows, row);
+        return true;
+      },
+    };
+    const options = {
+      context: { name: "RecentDeliveryCapacity", multitenant: false as const },
+      storageFactory: new InMemoryStorageFactory(),
+      inbox,
+      workRegistry: localRegistry(shard),
+      pageSize: 1_000,
+    };
+    const dispatched: string[] = [];
+    await new Delivery(options).drain(shard, {
+      onMessage: (row) => {
+        dispatched.push(row.signalId);
+      },
+    });
+    rows.push(
+      ...Array.from({ length: 1_000 }, (_, index) =>
+        message(`newer-${String(index)}`, `target-${String(index)}`, shard),
+      ),
+    );
+    await new Delivery(options).drain(shard, { onMessage: () => undefined });
+    rows.push({ ...message("duplicate-row", "first-target", shard), signalId: first.signalId });
+
+    await new Delivery(options).drain(shard, {
+      onMessage: (row) => {
+        dispatched.push(row.signalId);
+      },
+    });
+
+    expect(dispatched).toEqual([first.signalId, first.signalId]);
+  });
+
+  it("retains an acknowledged identity across short-lived delivery wrappers", async () => {
+    const shard = ShardIndex.single();
+    const first = message("same-signal", "target", shard);
+    const duplicate = { ...message("second-row", "target", shard), signalId: first.signalId };
+    const pages = [[first], [], [duplicate], []] as DeliveryEndpointMessage[][];
+    const inbox = {
+      sessionKind: "LEASED" as const,
+      receive: async () => {
+        throw new Error("not used");
+      },
+      read: async () => pages.shift() ?? [],
+      readMessage: async () => undefined,
+      markDelivered: async (row: DeliveryEndpointMessage) => ({
+        ...row,
+        status: "DELIVERED" as const,
+      }),
+      removeDuplicate: async () => true,
+    };
+    const dispatched: string[] = [];
+    const options = {
+      context: { name: "RetainedPageIdentity", multitenant: false as const },
+      storageFactory: new InMemoryStorageFactory(),
+      inbox,
+      workRegistry: localRegistry(shard),
+    };
+
+    await new Delivery(options).drain(shard, {
+      onMessage: (row) => {
+        dispatched.push(row.id.value);
+      },
+    });
+    await new Delivery(options).drain(shard, {
+      onMessage: (row) => {
+        dispatched.push(row.id.value);
+      },
+    });
+
+    expect(dispatched).toEqual([first.id.value]);
+  });
+
+  it("suppresses a retained duplicate through the normal local delivery drain", async () => {
+    const shard = ShardIndex.single();
+    const delivery = new Delivery({
+      context: { name: "RetainedDelivery", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const first = message("signal", "target", shard);
+    const duplicate = { ...message("signal", "target", shard), version: 2n };
+    const { id: _firstId, ...firstInput } = first;
+    const { id: _duplicateId, ...duplicateInput } = duplicate;
+    void _firstId;
+    void _duplicateId;
+
+    const signal = create(AnySchema, {
+      typeUrl: "type.spine.io/spine.core.Event",
+      value: toBinary(EventSchema, create(EventSchema)),
+    });
+    const firstWrite = await delivery.inbox.receive({
+      ...firstInput,
+      signal,
+    });
+    await delivery.inbox.receive({
+      ...duplicateInput,
+      signal,
+    });
+
+    const delivered: string[] = [];
+    const acknowledged: string[] = [];
+    await delivery.drain(shard, {
+      onMessage: (row) => {
+        delivered.push(row.id.value);
+      },
+      onDelivered: (row) => {
+        acknowledged.push(row.id.value);
+      },
+    });
+
+    expect(delivered).toHaveLength(1);
+    expect(acknowledged).toEqual([firstWrite.message.id.value]);
+  });
+
   it("reports exact acknowledgement through the callback shorthand", async () => {
     const shard = ShardIndex.single();
     const target = message("target", "target", shard);
@@ -51,23 +338,37 @@ describe("Delivery direct worker", () => {
     expect(seen).toBe(1);
   });
 
+  it("reports when the selected direct message is removed as a duplicate", async () => {
+    const shard = ShardIndex.single();
+    const first = message("same-signal", "target", shard);
+    const duplicate = { ...message("duplicate-row", "target", shard), signalId: first.signalId };
+    const rows = [first];
+    const delivery = createDelivery({
+      rows,
+      mark: async (row) => {
+        remove(rows, row);
+        return row;
+      },
+    });
+
+    await delivery.drainMessage(first, () => undefined);
+    rows.push(duplicate);
+
+    await expect(delivery.drainMessage(duplicate, () => undefined)).resolves.toMatchObject({
+      acknowledged: true,
+      run: { accepted: 0, delivered: 0, failed: 0 },
+    });
+  });
+
   it("runs one owned delivered cleanup page after each delivery page and on an empty drain", async () => {
     const shard = ShardIndex.single();
     const pending = message("pending", "target", shard);
     const delivered = { ...pending, status: "DELIVERED" as const };
-    let pendingReads = 0;
-    let cleanupReads = 0;
+    let reads = 0;
     let removals = 0;
     const delivery = createDelivery({
       pageSize: 1,
-      read: async (options) => {
-        if (options?.statuses?.includes("DELIVERED")) {
-          cleanupReads += 1;
-          return cleanupReads === 1 ? [delivered] : [];
-        }
-        pendingReads += 1;
-        return pendingReads === 1 ? [pending] : [];
-      },
+      read: async () => (reads++ === 0 ? [pending] : reads === 2 ? [delivered] : []),
       remove: async () => {
         removals += 1;
         return true;
@@ -78,7 +379,7 @@ describe("Delivery direct worker", () => {
       status: "DRAINED",
       delivered: 1,
     });
-    expect(cleanupReads).toBe(2);
+    expect(reads).toBe(3);
     expect(removals).toBe(1);
   });
 
@@ -88,7 +389,7 @@ describe("Delivery direct worker", () => {
     const controller = new AbortController();
     let removals = 0;
     const delivery = createDelivery({
-      read: async (options) => (options?.statuses?.includes("DELIVERED") ? [delivered] : []),
+      read: async () => [delivered],
       remove: async () => {
         removals += 1;
         controller.abort();
@@ -110,8 +411,7 @@ describe("Delivery direct worker", () => {
     const controller = new AbortController();
     let removals = 0;
     const delivery = createDelivery({
-      read: async (options) => {
-        if (!options?.statuses?.includes("DELIVERED")) return [];
+      read: async () => {
         controller.abort();
         return [delivered];
       },
@@ -137,9 +437,10 @@ describe("Delivery direct worker", () => {
       { ...message("second", "second", shard), status: "DELIVERED" as const },
     ];
     const removed: string[] = [];
+    const pages = [delivered, []] as DeliveryEndpointMessage[][];
     const delivery = createDelivery({
       pageSize: 2,
-      read: async (options) => (options?.statuses?.includes("DELIVERED") ? delivered : []),
+      read: async () => pages.shift() ?? [],
       remove: async (row) => {
         removed.push(row.signalId);
         return true;
@@ -164,8 +465,7 @@ describe("Delivery direct worker", () => {
     const delivery = createDelivery({
       pageSize: 2,
       read: async (options) => {
-        if (!options?.statuses?.includes("DELIVERED")) return [];
-        const after = options.after?.messageId;
+        const after = options?.after?.messageId;
         const start =
           after === undefined ? 0 : catalog.findIndex((row) => row.id.value === after) + 1;
         return catalog.slice(start, start + 2);
@@ -187,7 +487,7 @@ describe("Delivery direct worker", () => {
     const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
     let validations = 0;
     const delivery = createDelivery({
-      read: async (options) => (options?.statuses?.includes("DELIVERED") ? [delivered] : []),
+      read: async () => [delivered],
       remove: async () => false,
       registry: {
         pickUp: async () => session(shard),
@@ -206,7 +506,7 @@ describe("Delivery direct worker", () => {
     const observed: number[] = [];
     const delivery = createDelivery({
       read: async (options) => {
-        if (options?.statuses?.includes("DELIVERED")) observed.push(options.timeoutMs!);
+        if (options?.timeoutMs !== undefined) observed.push(options.timeoutMs);
         return [];
       },
       remove: async () => true,
@@ -217,23 +517,20 @@ describe("Delivery direct worker", () => {
     let customCleanupReads = 0;
     await expect(
       createDelivery({
-        read: async (options) => {
-          if (options?.statuses?.includes("DELIVERED")) customCleanupReads += 1;
+        read: async () => {
+          customCleanupReads += 1;
           return [];
         },
       }).drain(shard, { onMessage: () => undefined }),
     ).resolves.toMatchObject({ status: "DRAINED" });
-    expect(customCleanupReads).toBe(0);
+    expect(customCleanupReads).toBe(1);
   });
 
   it("stops before cleanup deletion when the shard fence is lost", async () => {
     const shard = ShardIndex.single();
     let removals = 0;
     const delivery = createDelivery({
-      read: async (options) =>
-        options?.statuses?.includes("DELIVERED")
-          ? [{ ...message("old", "target", shard), status: "DELIVERED" as const }]
-          : [],
+      read: async () => [{ ...message("old", "target", shard), status: "DELIVERED" as const }],
       remove: async () => {
         removals += 1;
         return true;
@@ -555,6 +852,40 @@ describe("Delivery direct worker", () => {
     expect(calls).toBe(2);
   });
 
+  it("retries and acknowledges the pending snapshot after dispatch failure", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("pending", "target", shard);
+    const rows = [pending];
+    const dispatched: string[] = [];
+    const acknowledged: string[] = [];
+    const delivery = createDelivery({
+      rows,
+      mark: async (row) => {
+        acknowledged.push(row.id.value);
+        remove(rows, pending);
+        return row;
+      },
+      monitor: new (class extends DeliveryMonitor {
+        override onReceptionFailure(
+          reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0],
+        ) {
+          return reception.repeatDispatching();
+        }
+      })(),
+    });
+    let attempts = 0;
+    const run = await delivery.drain(shard, {
+      onMessage: (row) => {
+        dispatched.push(row.id.value);
+        attempts += 1;
+        if (attempts === 1) throw new Error("dispatch failed");
+      },
+    });
+    expect(run.failures[0]?.message.id.value).toBe("pending");
+    expect(dispatched).toEqual(["pending", "pending"]);
+    expect(acknowledged).toEqual(["pending"]);
+  });
+
   it.each([false, new Error("release failed")])(
     "contains unsuccessful shard release and does not complete the monitor",
     async (release) => {
@@ -575,10 +906,11 @@ describe("Delivery direct worker", () => {
 
   it("blocks only a target after acknowledgement failure and does not spin", async () => {
     const shard = ShardIndex.single();
-    const first = message("first", "same", shard);
-    const blocked = message("blocked", "same", shard);
+    const first = message("first", "input", shard);
+    const input = message("input", "input", shard);
+    const blocked = message("blocked", "canonical", shard);
     const other = message("other", "other", shard);
-    const rows = [first, blocked, other];
+    const rows = [first, input, blocked, other];
     const seen: string[] = [];
     let reads = 0;
     const delivery = createDelivery({
@@ -599,9 +931,9 @@ describe("Delivery direct worker", () => {
         if (row.signalId === "first") throw new Error("dispatch failed");
       },
     });
-    expect(seen).toEqual(["first", "other"]);
+    expect(seen).toEqual(["first", "blocked", "other"]);
     expect(reads).toBe(2);
-    expect(rows.map((row) => row.signalId)).toEqual(["first", "blocked"]);
+    expect(rows.map((row) => row.signalId)).toEqual(["first", "input"]);
   });
 
   it("advances beyond a full blocked page to deliver an independent target", async () => {
@@ -706,6 +1038,31 @@ describe("Delivery direct worker", () => {
     });
     expect(seen).toBe(0);
   });
+
+  it("stops after retaining a bounded sample of distinct target failures", async () => {
+    const shard = ShardIndex.single();
+    const rows = Array.from({ length: 101 }, (_, index) => {
+      const signal = `failed-${String(index)}`;
+      const target = `target-${String(index)}`;
+      const delivered = {
+        ...message(`${signal}-delivered`, target, shard),
+        signalId: signal,
+        status: "DELIVERED" as const,
+      };
+      const pending = { ...message(`${signal}-pending`, target, shard), signalId: signal };
+      return [delivered, pending];
+    }).flat();
+    const delivery = createDelivery({
+      rows,
+      pageSize: rows.length,
+      removeDuplicate: async () => false,
+    });
+
+    const run = await delivery.drain(shard, { onMessage: () => undefined });
+
+    expect(run).toMatchObject({ status: "STOPPED", failed: 100 });
+    expect(run.failures).toHaveLength(100);
+  });
 });
 
 function createDelivery(config: {
@@ -723,6 +1080,7 @@ function createDelivery(config: {
     options?: InboxReadOptions & DeliveryOperationOptions,
   ) => Promise<DeliveryEndpointMessage[]>;
   mark?: (row: DeliveryEndpointMessage) => Promise<DeliveryEndpointMessage | undefined>;
+  removeDuplicate?: (row: DeliveryEndpointMessage) => Promise<boolean>;
   remove?: (row: DeliveryEndpointMessage) => Promise<boolean>;
   monitor?: DeliveryMonitor;
   pageSize?: number;
@@ -742,6 +1100,11 @@ function createDelivery(config: {
       read: async (_shard, options) => config.read?.(options) ?? [...rows],
       readMessage: async () => undefined,
       markDelivered: async (row) => config.mark?.(row) ?? row,
+      removeDuplicate: async (row) => {
+        if (config.removeDuplicate !== undefined) return config.removeDuplicate(row);
+        remove(rows, row);
+        return true;
+      },
       ...(config.remove === undefined
         ? {}
         : { removeDelivered: async (row) => config.remove!(row) }),
@@ -755,6 +1118,15 @@ function createDelivery(config: {
         config.registry?.release(current as ReturnType<typeof session>, operation) ?? true,
     },
   });
+}
+function localRegistry(shard: ShardIndex) {
+  return {
+    sessionKind: "LEASED" as const,
+    pickUp: async () => session(shard),
+    renew: async (current: ReturnType<typeof session>) => current,
+    validateOwnership: async (current: ReturnType<typeof session>) => current,
+    release: async () => true,
+  };
 }
 function workerId(node: string, value: string): WorkerId {
   return create(WorkerIdSchema, { nodeId: { value: node }, value });

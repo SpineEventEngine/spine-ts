@@ -1,0 +1,11 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "generated",
+    "outDir": "dist/generated",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": ["generated/**/*.ts"],
+  "references": [{ "path": "../../proto" }]
+}

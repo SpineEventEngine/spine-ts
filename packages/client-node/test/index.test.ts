@@ -89,7 +89,7 @@ describe("@spine-event-engine/client-node", () => {
     expectTypeOf<ClientOperationOptions>().toExtend<{ readonly signal?: AbortSignal }>();
     expectTypeOf<ClientOptions["tenant"]>().toEqualTypeOf<string | TenantId | undefined>();
     expectTypeOf<ClientOutcome>().toExtend<{ readonly kind: string }>();
-    expectTypeOf<ClientTransport>().toExtend<{ createRequestId(): string }>();
+    expectTypeOf<ClientTransport>().not.toExtend<{ createRequestId(): string }>();
     expectTypeOf<Subscription>().toExtend<{
       activate(): Promise<void>;
       cancel(): Promise<void>;

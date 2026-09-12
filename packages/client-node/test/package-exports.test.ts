@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 import { EntityColumn, EntityQuery, EntityQueryBuilder } from "../dist/index.js";
 import * as clientRoot from "../dist/index.js";
 import { GeneratedEntityColumns } from "../dist/codegen/index.js";
-import { ProjectionStateSchema } from "../../core/test-fixtures/entity-column-fixtures.js";
+import { ProjectOverviewStateSchema } from "../../core/test-fixtures/entity-column-fixtures.js";
 import {
   EntityColumn as CoreEntityColumn,
   EntityQuery as CoreEntityQuery,
@@ -99,19 +99,19 @@ describe("@spine-event-engine/client-node built exports", () => {
     expect("GeneratedEntityColumns" in clientRoot).toBe(false);
     expect(GeneratedEntityColumns.define).toBeTypeOf("function");
 
-    const definition = GeneratedEntityColumns.define(ProjectionStateSchema, {
-      title: { field: ProjectionStateSchema.field.title, comparison: "ordering" },
-      priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" },
-      status: { field: ProjectionStateSchema.field.status, comparison: "equality" },
-      dueAt: { field: ProjectionStateSchema.field.dueAt, comparison: "ordering" },
-      owner: { field: ProjectionStateSchema.field.owner, comparison: "equality" },
-      fingerprint: { field: ProjectionStateSchema.field.fingerprint, comparison: "equality" },
-      active: { field: ProjectionStateSchema.field.active, comparison: "equality" },
-      sequence: { field: ProjectionStateSchema.field.sequence, comparison: "ordering" },
+    const definition = GeneratedEntityColumns.define(ProjectOverviewStateSchema, {
+      title: { field: ProjectOverviewStateSchema.field.title, comparison: "ordering" },
+      priority: { field: ProjectOverviewStateSchema.field.priority, comparison: "ordering" },
+      status: { field: ProjectOverviewStateSchema.field.status, comparison: "equality" },
+      dueAt: { field: ProjectOverviewStateSchema.field.dueAt, comparison: "ordering" },
+      owner: { field: ProjectOverviewStateSchema.field.owner, comparison: "equality" },
+      fingerprint: { field: ProjectOverviewStateSchema.field.fingerprint, comparison: "equality" },
+      active: { field: ProjectOverviewStateSchema.field.active, comparison: "equality" },
+      sequence: { field: ProjectOverviewStateSchema.field.sequence, comparison: "ordering" },
     });
-    const columns = EntityColumn.register(ProjectionStateSchema, definition);
+    const columns = EntityColumn.register(ProjectOverviewStateSchema, definition);
 
-    expect(columns.title.descriptor).toBe(ProjectionStateSchema.field.title);
-    expect(EntityColumn.register(ProjectionStateSchema, definition)).toBe(columns);
+    expect(columns.title.descriptor).toBe(ProjectOverviewStateSchema.field.title);
+    expect(EntityColumn.register(ProjectOverviewStateSchema, definition)).toBe(columns);
   });
 });

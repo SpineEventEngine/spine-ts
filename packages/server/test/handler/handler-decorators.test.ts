@@ -12,11 +12,6 @@
  * the License.
  */
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { CommandSchema, EventSchema, file_spine_options } from "@spine-event-engine/proto";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -36,7 +31,6 @@ import {
   type Diagnostic,
 } from "typescript";
 import { describe, expect, it } from "vitest";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import {
   Apply,
@@ -46,22 +40,23 @@ import {
   HandlerMetadataRegistryError,
   React,
   Subscribe,
+  Throws,
   Where,
   EntityHandlers,
   materializeDecoratedEntityHandlers,
 } from "../../src/index.js";
-
-type ProjectionState = Message<"ProjectionState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type AggregateState = Message<"AggregateState"> & {
-  id: string;
-  name: string;
-  archived: boolean;
-};
+import {
+  type CreateProject,
+  CreateProjectSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_commands_pb.js";
+import {
+  type ProjectCreated,
+  ProjectCreatedSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_events_pb.js";
+import {
+  ProjectOverviewStateSchema,
+  ProjectStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
 it("creates a public Where method decorator", () => {
   const decorator = Where({ eventField: "board", equals: '{"value":"announcements"}' });
@@ -69,34 +64,15 @@ it("creates a public Where method decorator", () => {
   expect(decorator).toBeTypeOf("function");
 });
 
-function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
+it("rejects an empty declared rejection list", () => {
+  expect(() => Throws()).toThrow("@Throws requires at least one generated rejection declaration.");
+});
+
+it("rejects a declaration without a generated message schema", () => {
+  expect(() => Throws({ schema: {} } as never)).toThrow(
+    "@Throws accepts only generated rejection declarations.",
   );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Server handler decorator fixture descriptor set is empty.");
-  }
-
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    imports,
-  );
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
-const ProjectionStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectionState>;
-const AggregateStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  1,
-) as GenMessage<AggregateState>;
+});
 
 interface DecoratedClassFactoryInput {
   readonly Assign: typeof Assign;
@@ -104,8 +80,8 @@ interface DecoratedClassFactoryInput {
   readonly Subscribe: typeof Subscribe;
   readonly React: typeof React;
   readonly Apply: typeof Apply;
-  readonly CommandSchema: typeof CommandSchema;
-  readonly EventSchema: typeof EventSchema;
+  readonly CreateProjectSchema: typeof CreateProjectSchema;
+  readonly ProjectCreatedSchema: typeof ProjectCreatedSchema;
 }
 
 interface DecoratedClassFactoryOutput {
@@ -129,76 +105,76 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
       Subscribe,
       React,
       Apply,
-      CommandSchema,
-      EventSchema,
+      CreateProjectSchema,
+      ProjectCreatedSchema,
     }) {
       class DecoratedProjection {
-        @Assign(CommandSchema)
+        @Assign(CreateProjectSchema)
         assignCreate(command) {
           void command;
         }
 
-        @Command(CommandSchema)
+        @Command(CreateProjectSchema)
         commandFromCommand(command) {
           void command;
         }
 
-        @Subscribe(EventSchema)
+        @Subscribe(ProjectCreatedSchema)
         subscribeCreated(event) {
           void event;
         }
 
-        @React(EventSchema)
+        @React(ProjectCreatedSchema)
         reactToCreated(event) {
           void event;
         }
 
-        @Apply(EventSchema, { allowImport: true })
+        @Apply(ProjectCreatedSchema, { allowImport: true })
         applyCreated(event) {
           void event;
         }
       }
 
       class DecoratedAggregate {
-        @Assign(CommandSchema)
+        @Assign(CreateProjectSchema)
         assignCreate(command) {
           void command;
         }
 
-        @Apply(EventSchema)
+        @Apply(ProjectCreatedSchema)
         applyCreated(event) {
           void event;
         }
       }
 
       class DecoratedFallbackProjection {
-        @Assign(CommandSchema)
+        @Assign(CreateProjectSchema)
         assignCreate(command) {
           void command;
         }
 
-        @Apply(EventSchema, { allowImport: true })
+        @Apply(ProjectCreatedSchema, { allowImport: true })
         applyCreated(event) {
           void event;
         }
       }
 
       class FirstDecoratedProjection {
-        @Assign(CommandSchema)
+        @Assign(CreateProjectSchema)
         assignCreate(command) {
           void command;
         }
       }
 
       class SecondDecoratedProjection {
-        @Apply(EventSchema)
+        @Apply(ProjectCreatedSchema)
         applyCreated(event) {
           void event;
         }
       }
 
       class SourceCopiedProjection {
-        @Assign(CommandSchema)
+        @Assign(CreateProjectSchema)
         assignCreate(command) {
           void command;
         }
@@ -213,7 +189,7 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
       );
 
       class DecoratedBaseProjection {
-        @Assign(CommandSchema)
+        @Assign(CreateProjectSchema)
         assignCreate(command) {
           void command;
         }
@@ -280,8 +256,8 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
     Subscribe,
     React,
     Apply,
-    CommandSchema,
-    EventSchema,
+    CreateProjectSchema,
+    ProjectCreatedSchema,
   });
 }
 
@@ -384,7 +360,7 @@ describe("handler decorators", () => {
     const { DecoratedProjection } = await createDecoratedClasses();
 
     expect(() =>
-      materializeDecoratedEntityHandlers(DecoratedProjection, ProjectionStateSchema),
+      materializeDecoratedEntityHandlers(DecoratedProjection, ProjectOverviewStateSchema),
     ).toThrow(/generated registry metadata with emitted schemas/);
   });
 
@@ -392,7 +368,7 @@ describe("handler decorators", () => {
     const { BareDecoratedProjection } = await createDecoratedClasses();
 
     expect(() =>
-      materializeDecoratedEntityHandlers(BareDecoratedProjection, ProjectionStateSchema),
+      materializeDecoratedEntityHandlers(BareDecoratedProjection, ProjectOverviewStateSchema),
     ).toThrow(
       'Decorated handler "assignCreate" was declared without a schema; use generated registry ' +
         "metadata or explicit EntityHandlers.define() registration.",
@@ -421,18 +397,19 @@ describe("handler decorators", () => {
   it("registers materialized decorator metadata through the caller-owned registry", async () => {
     const { DecoratedAggregate } = await createDecoratedClasses();
 
-    const metadata = materializeDecoratedEntityHandlers(DecoratedAggregate, AggregateStateSchema);
+    const metadata = materializeDecoratedEntityHandlers(DecoratedAggregate, ProjectStateSchema);
     const registry = new HandlerMetadataRegistry([metadata]);
 
-    expect(registry.findCommandAssignment("spine.core.Command")?.entityType).toBe(
+    expect(registry.findCommandAssignment(CreateProjectSchema.typeName)?.entityType).toBe(
       DecoratedAggregate,
     );
-    expect(registry.findCommandAssignment("spine.core.Command")?.handler.methodName).toBe(
+    expect(registry.findCommandAssignment(CreateProjectSchema.typeName)?.handler.methodName).toBe(
       "assignCreate",
     );
-    expect(registry.findEventApplication("AggregateState", "spine.core.Event")?.handler).toBe(
-      metadata.eventApplications[0],
-    );
+    expect(
+      registry.findEventApplication(ProjectStateSchema.typeName, ProjectCreatedSchema.typeName)
+        ?.handler,
+    ).toBe(metadata.eventApplications[0]);
   });
 
   it("keeps decorator metadata class-owned and isolated between classes", async () => {
@@ -440,11 +417,11 @@ describe("handler decorators", () => {
 
     const first = materializeDecoratedEntityHandlers(
       FirstDecoratedProjection,
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
     );
     const second = materializeDecoratedEntityHandlers(
       SecondDecoratedProjection,
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
     );
 
     expect(first.handlers.map((handler) => handler.methodName)).toEqual(["assignCreate"]);
@@ -457,11 +434,11 @@ describe("handler decorators", () => {
 
     const source = materializeDecoratedEntityHandlers(
       SourceCopiedProjection,
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
     );
     const borrowing = materializeDecoratedEntityHandlers(
       BorrowingProjection,
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
     );
 
     expect(source.handlers.map((handler) => handler.methodName)).toEqual(["assignCreate"]);
@@ -472,10 +449,13 @@ describe("handler decorators", () => {
     const { DecoratedBaseProjection, UndecoratedOverrideProjection } =
       await createDecoratedClasses();
 
-    const base = materializeDecoratedEntityHandlers(DecoratedBaseProjection, ProjectionStateSchema);
+    const base = materializeDecoratedEntityHandlers(
+      DecoratedBaseProjection,
+      ProjectOverviewStateSchema,
+    );
     const subclass = materializeDecoratedEntityHandlers(
       UndecoratedOverrideProjection,
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
     );
 
     expect(base.handlers.map((handler) => handler.methodName)).toEqual(["assignCreate"]);
@@ -485,47 +465,51 @@ describe("handler decorators", () => {
   it("uses the same duplicate policy as explicit handler metadata", async () => {
     const { FirstDecoratedProjection } = await createDecoratedClasses();
     class ExplicitProjection {
-      assignCreate(command: Message<"spine.core.Command">): void {
+      assignCreate(command: CreateProject): void {
         void command;
       }
     }
 
     const decorated = materializeDecoratedEntityHandlers(
       FirstDecoratedProjection,
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
     );
-    const explicit = EntityHandlers.define(ExplicitProjection, AggregateStateSchema, (builder) => [
-      builder.assign(CommandSchema, "assignCreate"),
+    const explicit = EntityHandlers.define(ExplicitProjection, ProjectStateSchema, (builder) => [
+      builder.assign(CreateProjectSchema, "assignCreate"),
     ]);
 
     expect(() => new HandlerMetadataRegistry([decorated, explicit])).toThrow(
       HandlerMetadataRegistryError,
     );
     expect(() => new HandlerMetadataRegistry([decorated, explicit])).toThrow(
-      /Duplicate command assignment for "spine\.core\.Command"/,
+      new RegExp(`Duplicate command assignment for "${CreateProjectSchema.typeName}"`),
     );
   });
 
   it("materializes the same handler contract as the explicit fallback", async () => {
     const { DecoratedFallbackProjection } = await createDecoratedClasses();
     class ExplicitProjection {
-      assignCreate(command: Message<"spine.core.Command">): void {
+      assignCreate(command: CreateProject): void {
         void command;
       }
 
-      applyCreated(event: Message<"spine.core.Event">): void {
+      applyCreated(event: ProjectCreated): void {
         void event;
       }
     }
 
     const decorated = materializeDecoratedEntityHandlers(
       DecoratedFallbackProjection,
-      ProjectionStateSchema,
+      ProjectOverviewStateSchema,
     );
-    const explicit = EntityHandlers.define(ExplicitProjection, ProjectionStateSchema, (builder) => [
-      builder.assign(CommandSchema, "assignCreate"),
-      builder.apply(EventSchema, "applyCreated", { allowImport: true }),
-    ]);
+    const explicit = EntityHandlers.define(
+      ExplicitProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [
+        builder.assign(CreateProjectSchema, "assignCreate"),
+        builder.apply(ProjectCreatedSchema, "applyCreated", { allowImport: true }),
+      ],
+    );
 
     expect(
       decorated.handlers.map((handler) => ({

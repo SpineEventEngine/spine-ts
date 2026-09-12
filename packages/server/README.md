@@ -52,6 +52,35 @@ results and structural or imported thenable lookalikes are rejected during handl
 analysis. Rejection rolls back framework state and suppresses produced output; it
 cannot roll back an external HTTP request or other side effect.
 
+Declare each domain rejection a command handler may throw. This registers the
+rejection before the server starts, so a client can subscribe even when no
+server handler consumes that rejection:
+
+```ts
+import { Assign, Throws, type RejectionDeclaration } from "@spine-event-engine/server";
+
+interface CreateResource {
+  readonly name: string;
+}
+interface ResourceCreated {
+  readonly name: string;
+}
+declare const ResourceNameAlreadyUsed: RejectionDeclaration & {
+  create(input: { readonly name: string }): Error;
+};
+
+class ResourceAssignee {
+  @Assign
+  @Throws(ResourceNameAlreadyUsed)
+  createResource(command: CreateResource): ResourceCreated {
+    throw ResourceNameAlreadyUsed.create({ name: command.name });
+  }
+}
+```
+
+Place the primary handler decorator first for readability. Reversing the two
+decorators has the same behavior.
+
 Process Managers, but not Aggregates, have protected read-only `select()` during a handler:
 
 ```ts

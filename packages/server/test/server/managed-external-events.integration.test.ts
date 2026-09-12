@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
-import { SignalEnvelopes } from "@spine-event-engine/core";
+import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   AdminService,
   InboxService,
@@ -42,6 +42,7 @@ import {
   TaskIdSchema,
   TaskListIdSchema,
 } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_id_pb.js";
+import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import { DeliveryAssembly } from "@spine-event-engine/delivery-server/testing";
 import { SignalMetadata } from "../../src/index.js";
 import { afterEach, expect, it } from "vitest";
@@ -69,6 +70,9 @@ it("resolves its managed-host access seam outside the published package", async 
   const source = await readFile(childPath, "utf8");
 
   expect(source).toContain('from "../../test-fixtures/internal.mjs"');
+  expect(source).toContain(
+    'from "../../test-fixtures/dist/generated/entity-metadata/project_states_pb.js"',
+  );
 });
 
 it("starts concurrent managed fixtures on independent Coordinator ports", async () => {
@@ -160,7 +164,7 @@ function externalStateTopic() {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t0210-external-state" }),
     target: create(TargetSchema, {
-      type: "type.googleapis.com/ProjectionState",
+      type: TypeUrls.derive(ProjectOverviewStateSchema),
       criterion: { case: "includeAll", value: true },
     }),
     context: metadata.actorContext({ actor: create(UserIdSchema, { value: "t0210" }) }),
@@ -170,7 +174,6 @@ function externalStateTopic() {
 function createTaskCommand(taskId: string) {
   const actorContext = metadata.actorContext({ actor: create(UserIdSchema, { value: "t0210" }) });
   return SignalEnvelopes.command({
-    id: metadata.commandId(taskId),
     context: metadata.commandContext({ actorContext }),
     schema: CreateTaskSchema,
     message: create(CreateTaskSchema, {

@@ -238,6 +238,13 @@ describe("package metadata", () => {
       name: "@spine-event-engine/server-blackbox-tests",
       private: true,
     });
+    for (const fixturePackage of [
+      "packages/core/test-fixtures/package.json",
+      "packages/server/test-fixtures/package.json",
+      "packages/testing/test-fixtures/package.json",
+    ]) {
+      expect(readJson(fixturePackage).private).toBe(true);
+    }
     for (const workspacePackage of readWorkspacePackages(repoRoot).filter((workspacePackage) =>
       workspacePackage.path.startsWith("examples/"),
     )) {
@@ -263,6 +270,7 @@ describe("package metadata", () => {
       "packages/client-react",
       "packages/client-web",
       "packages/core",
+      "packages/core/test-fixtures",
       "packages/delivery-client",
       "packages/delivery-server",
       "packages/deployment",
@@ -272,10 +280,12 @@ describe("package metadata", () => {
       "packages/proto-tools",
       "packages/server",
       "packages/server-blackbox-tests",
+      "packages/server/test-fixtures",
       "packages/storage",
       "packages/storage-datastore",
       "packages/storage-rdbms",
       "packages/testing",
+      "packages/testing/test-fixtures",
       "packages/transport",
     ]);
     expect(

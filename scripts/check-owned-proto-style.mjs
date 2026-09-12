@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -60,6 +61,10 @@ function isDeclaration(line) {
   );
 }
 
+function opensDeclarationBlock(line) {
+  return /^\s*(?:message|enum|service|oneof)\s+[A-Za-z_]\w*\s*\{\s*(?:\/\/.*)?$/u.test(line);
+}
+
 export function ownedProtoStyleFailures(source, path = "authored.proto") {
   const failures = [];
   const code = codeWithoutCommentsOrStrings(source);
@@ -76,7 +81,12 @@ export function ownedProtoStyleFailures(source, path = "authored.proto") {
       commentStart -= 1;
     }
     if (commentStart === lineIndex) continue;
-    if (commentStart > 0 && (lines[commentStart - 1] ?? "").trim().length !== 0) {
+    const precedingLine = lines[commentStart - 1] ?? "";
+    if (
+      commentStart > 0 &&
+      precedingLine.trim().length !== 0 &&
+      !opensDeclarationBlock(precedingLine)
+    ) {
       failures.push(`${path}:${commentStart + 1}: declaration documentation needs a blank line`);
     }
     const comments = lines.slice(commentStart, lineIndex).map((line) => line.trim());
@@ -88,12 +98,71 @@ export function ownedProtoStyleFailures(source, path = "authored.proto") {
   return failures;
 }
 
+/**
+ * Checks mechanically observable source roles; domain meaning remains reviewer judgment.
+ */
+export function protoRoleFailures(source, path) {
+  const state = /(?:^|[_/])states\.proto$/u.test(path);
+  const signal = /(?:^|[_/])(commands|events)\.proto$/u.test(path);
+  const entity = /\(entity\)\.kind\s*=/u.test(source);
+  if (state && !entity) return [`${path}: state source must declare an (entity).kind option`];
+  if (signal && entity) return [`${path}: command/event source must not declare an entity state`];
+  return [];
+}
+
+export function fixtureProtoNameFailures(path) {
+  if (!/^packages\/[^/]+\/test-fixtures\/proto\//u.test(path)) return [];
+  return /(?:commands|events|states|identifiers|rejections|types)\.proto$/u.test(basename(path))
+    ? []
+    : [`${path}: test-fixture Proto filename needs a role suffix`];
+}
+
 export function checkOwnedProtoStyle(root = repositoryRoot) {
   const manifestPath = resolve(root, "packages/proto/proto/spine-sources.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  return (manifest.ownedSources ?? []).flatMap(({ localPath }) =>
-    ownedProtoStyleFailures(readFileSync(resolve(root, localPath), "utf8"), localPath),
-  );
+  const frozen = new Set((manifest.sources ?? []).map(({ localPath }) => localPath));
+  const tracked = gitLines(root, ["ls-files", "*.proto"]);
+  const untracked = gitLines(root, ["ls-files", "--others", "--exclude-standard", "--", "*.proto"]);
+  const changed = changedProtoPaths(root);
+  return [...new Set([...tracked, ...untracked])]
+    .filter(
+      (path) =>
+        !frozen.has(path) &&
+        !path.includes("/.generated-") &&
+        (path.startsWith("packages/proto/proto/") || changed.has(path)),
+    )
+    .filter((path) => existsSync(resolve(root, path)))
+    .flatMap((localPath) => {
+      const source = readFileSync(resolve(root, localPath), "utf8");
+      return [
+        ...ownedProtoStyleFailures(source, localPath),
+        ...protoRoleFailures(source, localPath),
+        ...fixtureProtoNameFailures(localPath),
+      ];
+    });
+}
+
+function changedProtoPaths(root) {
+  const base = gitLines(root, ["merge-base", "origin/master", "HEAD"])[0];
+  if (base === undefined) throw new Error("Unable to classify changed Proto sources.");
+  const paths = new Set();
+  for (const args of [
+    ["diff", "--name-only", `${base}...HEAD`, "--", "*.proto"],
+    ["diff", "--name-only", "--", "*.proto"],
+    ["diff", "--name-only", "--cached", "--", "*.proto"],
+    ["ls-files", "--others", "--exclude-standard", "--", "*.proto"],
+  ]) {
+    for (const path of gitLines(root, args)) paths.add(path);
+  }
+  return paths;
+}
+
+function gitLines(root, args) {
+  const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+  if (result.error !== undefined || result.signal !== null || result.status !== 0) {
+    throw new Error(`Unable to classify Proto sources with git ${args.join(" ")}.`);
+  }
+  return result.stdout.split("\n").filter(Boolean);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

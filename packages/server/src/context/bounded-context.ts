@@ -1179,6 +1179,51 @@ export type GeneratedRepositoryOptions<
 >;
 
 /**
+ * Tracks resources that may require cleanup after context assembly fails.
+ */
+interface ContextBuildResources {
+  registry?: StandSubscriptionRegistry;
+  commandBus?: CommandBus;
+  eventStore?: EventStore;
+  systemEventStore?: EventStore;
+  eventBus?: EventBus;
+  systemEventBus?: EventBus;
+  publisher?: SignalPublisher;
+  stand?: Stand;
+  systemStand?: Stand;
+  runtime?: SubscriptionRuntime;
+}
+
+interface ContextBuildBuses {
+  readonly commandBus: CommandBus;
+  readonly eventStore: EventStore | undefined;
+  readonly systemEventStore: EventStore | undefined;
+  readonly eventBus: EventBus;
+  readonly systemEventBus: EventBus;
+  readonly publisher: SignalPublisher;
+  readonly systemStand: Stand;
+  readonly systemSpec: ContextSpecSnapshot;
+}
+
+interface ContextSystemBuses {
+  readonly eventStore: EventStore | undefined;
+  readonly eventBus: EventBus;
+  readonly stand: Stand;
+  readonly spec: ContextSpecSnapshot;
+}
+
+interface ContextBuildDispatchers {
+  readonly domain: readonly EventDispatcher[];
+  readonly system: readonly EventDispatcher[];
+}
+
+interface ContextBuildRuntime {
+  readonly stand: Stand;
+  readonly registry: StandSubscriptionRegistry;
+  readonly runtime: SubscriptionRuntime;
+}
+
+/**
  * Assembles a {@link BoundedContext} from repositories and dispatchers.
  */
 export class BoundedContextBuilder {
@@ -1515,146 +1560,221 @@ export class BoundedContextBuilder {
     storageFactory: StorageFactory,
     standalone: readonly GeneratedStandaloneHandlerGroup[] = [],
   ): BoundedContext {
-    let registry = this.#subscriptionRegistry;
+    const resources: ContextBuildResources =
+      this.#subscriptionRegistry === undefined ? {} : { registry: this.#subscriptionRegistry };
     this.#subscriptionRegistry = undefined;
-
     const registeredRepositories = [...repositories];
-    let commandBus: CommandBus | undefined;
-    let eventStore: EventStore | undefined;
-    let systemEventStore: EventStore | undefined;
-    let eventBus: EventBus | undefined;
-    let systemEventBus: EventBus | undefined;
-    let publisher: SignalPublisher | undefined;
-    let stand: Stand | undefined;
-    let systemStand: Stand | undefined;
-    let runtime: SubscriptionRuntime | undefined;
     try {
-      ContextParts.preflightRepositories(registeredRepositories);
-      const eventDispatchers = [
-        ...ContextParts.repositoryEventDispatchers(registeredRepositories),
-        ...this.#eventDispatchers,
-      ];
-      const repositorySystemEventDispatchers =
-        ContextParts.repositorySystemEventDispatchers(registeredRepositories);
-      const domainEventDispatchers = ContextParts.domainEventDispatchers(eventDispatchers);
-      const systemEventDispatchers = [
-        ...ContextParts.systemEventDispatchers(eventDispatchers),
-        ...repositorySystemEventDispatchers,
-      ];
-      commandBus = new CommandBus([
-        ...this.#commandDispatchers,
-        ...ContextParts.repositoryCommandDispatchers(registeredRepositories),
-      ]);
-      const systemSpec = ContextParts.createSystemSpec(
-        this.#specSnapshot,
-        this.#persistSystemEvents,
-      );
-      systemEventStore = systemSpec.storesEvents
-        ? new EventStore(ContextParts.createStorageMode(systemSpec), storageFactory)
-        : undefined;
-      systemEventBus = eventBusAccess.createSystemBus(systemEventStore);
-      for (const dispatcher of systemEventDispatchers) systemEventBus.register(dispatcher);
-      systemStand = new Stand({
-        context: ContextParts.createStorageMode(systemSpec),
-        storageFactory,
-      });
-      eventStore = this.createEventStore(storageFactory);
-      eventBus = new EventBus(eventStore);
-      publisher = new SignalPublisher(
-        commandBus,
-        eventBus,
-        systemEventBus,
-        this.#specSnapshot.name.value,
-      );
-      ContextParts.assertUniqueCommandReceptors(standalone);
-      const standaloneRuntime =
-        standalone.length === 0
-          ? undefined
-          : new StandaloneHandlerRuntime(
-              ContextParts.matchStandaloneHandlers(
-                standalone,
-                this.#standaloneInstances(),
-                publisher,
-              ),
-            );
-      const standaloneCommand = standaloneRuntime?.commandDispatcher();
-      const standaloneEvent = standaloneRuntime?.eventDispatcher();
-      const standaloneState = standaloneRuntime?.stateDispatcher();
-      if (standaloneCommand !== undefined) commandBus.register(standaloneCommand);
-      if (standaloneEvent !== undefined) eventBus.register(standaloneEvent);
-      if (standaloneState !== undefined) systemEventBus.register(standaloneState);
-      for (const dispatcher of domainEventDispatchers) eventBus.register(dispatcher);
-      eventBusAccess.registerSchemas(
-        eventBus,
-        ContextParts.repositoryProducedEventSchemas(registeredRepositories),
-      );
-      stand = new Stand({
-        context: ContextParts.createStorageMode(this.#specSnapshot),
-        storageFactory,
-      });
-      registry ??= new StorageSubscriptionRegistry(
+      return this.#assembleContext(registeredRepositories, storageFactory, standalone, resources);
+    } catch (error) {
+      return this.#failBuild(resources, error);
+    }
+  }
+
+  #assembleContext(
+    repositories: readonly RepositoryView[],
+    storageFactory: StorageFactory,
+    standalone: readonly GeneratedStandaloneHandlerGroup[],
+    resources: ContextBuildResources,
+  ): BoundedContext {
+    ContextParts.preflightRepositories(repositories);
+    const dispatchers = this.#buildDispatchers(repositories);
+    const buses = this.#buildBuses(repositories, storageFactory, dispatchers, resources);
+    const standaloneEvent = this.#installStandalone(standalone, buses);
+    for (const dispatcher of dispatchers.domain) buses.eventBus.register(dispatcher);
+    eventBusAccess.registerSchemas(buses.eventBus, [
+      ...ContextParts.repositoryProducedEventSchemas(repositories),
+      ...ContextParts.standaloneProducedEventSchemas(standalone),
+    ]);
+    const running = this.#buildRuntime(storageFactory, buses, resources);
+    const context = this.#createContext(repositories, storageFactory, buses, running);
+    ContextParts.attachIntegration(
+      context,
+      buses.eventBus,
+      buses.systemSpec,
+      ContextParts.externalEventSchemas([
+        ...dispatchers.domain,
+        ...(standaloneEvent === undefined ? [] : [standaloneEvent]),
+      ]),
+    );
+    return context;
+  }
+
+  #buildDispatchers(repositories: readonly RepositoryView[]): ContextBuildDispatchers {
+    const event = [
+      ...ContextParts.repositoryEventDispatchers(repositories),
+      ...this.#eventDispatchers,
+    ];
+    return {
+      domain: ContextParts.domainEventDispatchers(event),
+      system: [
+        ...ContextParts.systemEventDispatchers(event),
+        ...ContextParts.repositorySystemEventDispatchers(repositories),
+      ],
+    };
+  }
+
+  #buildBuses(
+    repositories: readonly RepositoryView[],
+    storageFactory: StorageFactory,
+    dispatchers: ContextBuildDispatchers,
+    resources: ContextBuildResources,
+  ): ContextBuildBuses {
+    const commandBus = new CommandBus([
+      ...this.#commandDispatchers,
+      ...ContextParts.repositoryCommandDispatchers(repositories),
+    ]);
+    resources.commandBus = commandBus;
+    const system = this.#buildSystemBuses(storageFactory, dispatchers.system, resources);
+    const eventStore = this.createEventStore(storageFactory);
+    resources.eventStore = eventStore;
+    const eventBus = new EventBus(eventStore);
+    resources.eventBus = eventBus;
+    const publisher = new SignalPublisher(
+      commandBus,
+      eventBus,
+      system.eventBus,
+      this.#specSnapshot.name.value,
+    );
+    resources.publisher = publisher;
+    return {
+      commandBus,
+      eventStore,
+      systemEventStore: system.eventStore,
+      eventBus,
+      systemEventBus: system.eventBus,
+      publisher,
+      systemStand: system.stand,
+      systemSpec: system.spec,
+    };
+  }
+
+  #buildSystemBuses(
+    storageFactory: StorageFactory,
+    dispatchers: readonly EventDispatcher[],
+    resources: ContextBuildResources,
+  ): ContextSystemBuses {
+    const systemSpec = ContextParts.createSystemSpec(this.#specSnapshot, this.#persistSystemEvents);
+    const systemEventStore = systemSpec.storesEvents
+      ? new EventStore(ContextParts.createStorageMode(systemSpec), storageFactory)
+      : undefined;
+    if (systemEventStore !== undefined) resources.systemEventStore = systemEventStore;
+    const systemEventBus = eventBusAccess.createSystemBus(systemEventStore);
+    resources.systemEventBus = systemEventBus;
+    for (const dispatcher of dispatchers) systemEventBus.register(dispatcher);
+    const systemStand = new Stand({
+      context: ContextParts.createStorageMode(systemSpec),
+      storageFactory,
+    });
+    resources.systemStand = systemStand;
+    return {
+      eventStore: systemEventStore,
+      eventBus: systemEventBus,
+      stand: systemStand,
+      spec: systemSpec,
+    };
+  }
+
+  #installStandalone(
+    standalone: readonly GeneratedStandaloneHandlerGroup[],
+    buses: ContextBuildBuses,
+  ): EventDispatcher | undefined {
+    ContextParts.assertUniqueCommandReceptors(standalone);
+    const runtime =
+      standalone.length === 0
+        ? undefined
+        : new StandaloneHandlerRuntime(
+            ContextParts.matchStandaloneHandlers(
+              standalone,
+              this.#standaloneInstances(),
+              buses.publisher,
+            ),
+          );
+    const command = runtime?.commandDispatcher();
+    const event = runtime?.eventDispatcher();
+    const state = runtime?.stateDispatcher();
+    if (command !== undefined) buses.commandBus.register(command);
+    if (event !== undefined) buses.eventBus.register(event);
+    if (state !== undefined) buses.systemEventBus.register(state);
+    return event;
+  }
+
+  #buildRuntime(
+    storageFactory: StorageFactory,
+    buses: ContextBuildBuses,
+    resources: ContextBuildResources,
+  ): ContextBuildRuntime {
+    const stand = new Stand({
+      context: ContextParts.createStorageMode(this.#specSnapshot),
+      storageFactory,
+    });
+    resources.stand = stand;
+    const registry =
+      resources.registry ??
+      new StorageSubscriptionRegistry(
         ContextParts.createSubscriptionStorageContext(this.#specSnapshot),
         storageFactory,
       );
-      runtime = new SubscriptionRuntime(stand, systemStand, eventBus, systemEventBus, registry);
-      const context = ContextParts.createBoundedContext(
-        this.#specSnapshot,
-        commandBus,
-        eventBus,
-        systemEventBus,
-        publisher,
-        stand,
-        systemStand,
-        runtime,
-        systemSpec,
-        storageFactory,
-        registeredRepositories,
-        this.#deliveryStrategy,
-      );
-      ContextParts.attachIntegration(
-        context,
-        eventBus,
-        systemSpec,
-        ContextParts.externalEventSchemas([
-          ...domainEventDispatchers,
-          ...(standaloneEvent === undefined ? [] : [standaloneEvent]),
-        ]),
-      );
-      return context;
-    } catch (error) {
-      const cleanupErrors: unknown[] = [];
-      ContextParts.attemptCleanup(() => runtime?.abortClose(), cleanupErrors);
-      ContextParts.attemptCleanup(() => publisher?.abortAssembly(), cleanupErrors);
-      if (runtime === undefined) {
-        ContextParts.attemptCleanup(
-          () => void registry?.close().catch(() => undefined),
-          cleanupErrors,
-        );
-      }
-      ContextParts.attemptCleanup(() => void stand?.close().catch(() => undefined), cleanupErrors);
+    resources.registry = registry;
+    const runtime = new SubscriptionRuntime(
+      stand,
+      buses.systemStand,
+      buses.eventBus,
+      buses.systemEventBus,
+      registry,
+    );
+    resources.runtime = runtime;
+    return { stand, registry, runtime };
+  }
+
+  #createContext(
+    repositories: readonly RepositoryView[],
+    storageFactory: StorageFactory,
+    buses: ContextBuildBuses,
+    running: ContextBuildRuntime,
+  ): BoundedContext {
+    return ContextParts.createBoundedContext(
+      this.#specSnapshot,
+      buses.commandBus,
+      buses.eventBus,
+      buses.systemEventBus,
+      buses.publisher,
+      running.stand,
+      buses.systemStand,
+      running.runtime,
+      buses.systemSpec,
+      storageFactory,
+      repositories,
+      this.#deliveryStrategy,
+    );
+  }
+
+  #failBuild(resources: ContextBuildResources, error: unknown): never {
+    const cleanupErrors: unknown[] = [];
+    ContextParts.attemptCleanup(() => resources.runtime?.abortClose(), cleanupErrors);
+    ContextParts.attemptCleanup(() => resources.publisher?.abortAssembly(), cleanupErrors);
+    if (resources.runtime === undefined) {
       ContextParts.attemptCleanup(
-        () => void systemStand?.close().catch(() => undefined),
+        () => void resources.registry?.close().catch(() => undefined),
         cleanupErrors,
       );
-      ContextParts.attemptCleanup(() => {
-        if (commandBus !== undefined) commandBusAccess.abortClose(commandBus);
-      }, cleanupErrors);
-      ContextParts.attemptCleanup(() => {
-        if (systemEventBus !== undefined) eventBusAccess.abortClose(systemEventBus);
-        else if (systemEventStore !== undefined) systemEventStore.close();
-      }, cleanupErrors);
-      ContextParts.attemptCleanup(() => {
-        if (eventBus !== undefined) eventBusAccess.abortClose(eventBus);
-        else if (eventStore !== undefined) eventStore.close();
-      }, cleanupErrors);
-      if (cleanupErrors.length > 0) {
-        throw new AggregateError(
-          [error, ...cleanupErrors],
-          "Bounded Context build failed during cleanup.",
-        );
-      }
-      throw error;
     }
+    ContextParts.attemptCleanup(
+      () => void resources.stand?.close().catch(() => undefined),
+      cleanupErrors,
+    );
+    ContextParts.attemptCleanup(
+      () => void resources.systemStand?.close().catch(() => undefined),
+      cleanupErrors,
+    );
+    ContextParts.cleanupBuildBuses(resources, cleanupErrors);
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(
+        [error, ...cleanupErrors],
+        "Bounded Context build failed during cleanup.",
+      );
+    }
+    throw error;
   }
 
   async #loadGeneratedArtifacts(entityTypes: readonly RepositoryEntityType[]): Promise<{
@@ -1837,7 +1957,7 @@ const ContextParts = Object.freeze({
       for (const handler of receiver.handlers) {
         if (handler.kind !== "command-assignment" && handler.kind !== "command-substitution")
           continue;
-        const typeName = TypeUrls.derive(handler.signalSchema);
+        const typeName = TypeUrls.derive(handler.input.schema);
         const prior = receptorByType.get(typeName);
         if (prior !== undefined)
           throw new Error(
@@ -1891,6 +2011,20 @@ const ContextParts = Object.freeze({
     } catch (error) {
       errors.push(error);
     }
+  },
+  cleanupBuildBuses(resources: ContextBuildResources, errors: unknown[]): void {
+    ContextParts.attemptCleanup(() => {
+      if (resources.commandBus !== undefined) commandBusAccess.abortClose(resources.commandBus);
+    }, errors);
+    ContextParts.attemptCleanup(() => {
+      if (resources.systemEventBus !== undefined)
+        eventBusAccess.abortClose(resources.systemEventBus);
+      else resources.systemEventStore?.close();
+    }, errors);
+    ContextParts.attemptCleanup(() => {
+      if (resources.eventBus !== undefined) eventBusAccess.abortClose(resources.eventBus);
+      else resources.eventStore?.close();
+    }, errors);
   },
   flattenErrors(errors: readonly unknown[]): unknown[] {
     return errors.flatMap((error) =>
@@ -2393,10 +2527,30 @@ const ContextParts = Object.freeze({
     generated: GeneratedEntityHandlerGroup,
   ): readonly DescriptorMessageSchema[] {
     return ContextParts.uniqueSchemas(
-      generated.handlers.flatMap((handler) =>
-        handler.kind === "command-assignment" || handler.kind === "event-reaction"
-          ? handler.emittedSchemas
-          : [],
+      generated.handlers.flatMap((handler) => [
+        ...(handler.kind === "command-assignment" || handler.kind === "event-reaction"
+          ? handler.outcomes.returned
+          : []),
+        ...(handler.kind === "command-assignment" || handler.kind === "command-substitution"
+          ? handler.outcomes.thrown
+          : []),
+      ]),
+    );
+  },
+
+  standaloneProducedEventSchemas(
+    receivers: readonly GeneratedStandaloneHandlerGroup[],
+  ): readonly DescriptorMessageSchema[] {
+    return ContextParts.uniqueSchemas(
+      receivers.flatMap((receiver) =>
+        receiver.handlers.flatMap((handler) => [
+          ...(handler.kind === "command-assignment" || handler.kind === "event-reaction"
+            ? handler.outcomes.returned
+            : []),
+          ...(handler.kind === "command-assignment" || handler.kind === "command-substitution"
+            ? handler.outcomes.thrown
+            : []),
+        ]),
       ),
     );
   },

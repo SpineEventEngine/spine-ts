@@ -17,21 +17,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import {
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
-  StringValueSchema,
-} from "@bufbuild/protobuf/wkt";
-import { AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
+  EventSchema,
   UserIdSchema,
   VersionSchema,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
@@ -52,15 +46,15 @@ import type { ShardIndex } from "../../src/delivery/shard-index.js";
 import type { EnvironmentGenerationWorker } from "../../src/server/environment-attachment.js";
 import type { EnvironmentDeliveryRuntime } from "../../src/server/environment-delivery-worker.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import { StartServerSchema } from "../../test-fixtures/generated/server-lifecycle/commands_pb.js";
+import {
+  type ServerStarted,
+  ServerStartedSchema,
+} from "../../test-fixtures/generated/server-lifecycle/events_pb.js";
+import { ServerStatusSchema } from "../../test-fixtures/generated/server-lifecycle/states_pb.js";
 
-type LifecycleState = Message<"ProjectionState"> & { readonly id: string };
-
-const lifecycleFile = fixtureFile(serverEntityMetadataTestFixtures.main.descriptorSetBase64);
-const LifecycleStateSchema = messageDesc(lifecycleFile, 0) as GenMessage<LifecycleState>;
-
-class LifecycleProjection extends Projection<string, typeof LifecycleStateSchema, number> {
-  onEvent(event: LifecycleState): void {
+class ServerStatusProjection extends Projection<string, typeof ServerStatusSchema, number> {
+  onServerStarted(event: ServerStarted): void {
     void event;
   }
 }
@@ -97,15 +91,14 @@ export async function lifecycleFixture(
   const registry = generatedRegistry([
     {
       receiverKind: "entity",
-      receiverType: LifecycleProjection,
-      stateSchema: LifecycleStateSchema,
+      receiverType: ServerStatusProjection,
+      stateSchema: ServerStatusSchema,
       handlers: [
         {
           kind: "event-subscription" as const,
-          methodName: "onEvent",
-          origin: "domestic" as const,
-          signalSchema: StringValueSchema,
-          emittedSchemas: [],
+          methodName: "onServerStarted",
+          input: { schema: ServerStartedSchema, origin: "domestic" as const },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1 as const,
         },
       ],
@@ -114,16 +107,16 @@ export async function lifecycleFixture(
   const createBuilder = (name: string) =>
     BoundedContext.singleTenant(name)
       .withGeneratedRegistryRoot(registry.root)
-      .add(LifecycleProjection);
+      .add(ServerStatusProjection);
   const createContext = (name: string) => createBuilder(name).buildAsync();
   const createMixedContext = (name: string) =>
     BoundedContext.singleTenant(name)
       .addCommandDispatcher({
-        messageSchemas: () => [LifecycleStateSchema],
+        messageSchemas: () => [StartServerSchema],
         dispatch: () => Promise.resolve(),
       })
       .addEventDispatcher({
-        messageSchemas: () => [StringValueSchema],
+        messageSchemas: () => [ServerStartedSchema],
         dispatch: () => Promise.resolve(),
       })
       .build();
@@ -134,7 +127,7 @@ export async function lifecycleFixture(
   ) =>
     BoundedContext.singleTenant(name)
       .addEventDispatcher({
-        messageSchemas: () => [StringValueSchema],
+        messageSchemas: () => [ServerStartedSchema],
         dispatch: (event) => {
           const id = event.id?.value ?? "missing";
           observed.push(id);
@@ -143,14 +136,13 @@ export async function lifecycleFixture(
       })
       .build();
   const createEvent = (id: string) =>
-    SignalEnvelopes.event({
+    create(EventSchema, {
       id: create(EventIdSchema, { value: id }),
       context: create(EventContextSchema, {
         producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: id })),
         version: create(VersionSchema, { number: 1 }),
       }),
-      schema: StringValueSchema,
-      message: create(StringValueSchema, { value: id }),
+      message: AnyMessages.pack(ServerStartedSchema, create(ServerStartedSchema, { id, name: id })),
     });
   const context = await createContext("Lifecycle");
 
@@ -419,20 +411,6 @@ function rejectedEvidence(shard: ShardIndex, obligation: DeliveryRunObligation, 
   });
 }
 
-function fixtureFile(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-  if (descriptor === undefined) {
-    throw new Error("Lifecycle fixture descriptor set is empty.");
-  }
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-}
-
 function generatedRegistry(
   receivers: readonly {
     readonly receiverKind: "entity";
@@ -441,9 +419,14 @@ function generatedRegistry(
     readonly handlers: readonly {
       readonly kind: "event-subscription";
       readonly methodName: string;
-      readonly origin: "domestic" | "external";
-      readonly signalSchema: GenMessage<Message>;
-      readonly emittedSchemas: readonly GenMessage<Message>[];
+      readonly input: {
+        readonly schema: GenMessage<Message>;
+        readonly origin: "domestic" | "external";
+      };
+      readonly outcomes: {
+        readonly returned: readonly GenMessage<Message>[];
+        readonly thrown: readonly GenMessage<Message>[];
+      };
       readonly parameterCount: 1;
     }[];
   }[],

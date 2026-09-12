@@ -12,5 +12,9 @@
  * the License.
  */
 syntax = "proto3";
+
 package spine.server.testing.handlerregistry;
-message ReviewRejected { string id = 1; }
+
+message ReviewRejected {
+  string id = 1;
+}

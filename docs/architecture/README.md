@@ -251,18 +251,24 @@ before binary decoding and returns `undefined` on decode failure, keeping type
 URL comparison and malformed payload handling inside the core module interface.
 Callers should not parse or concatenate type URL strings directly.
 
-`SignalEnvelopes.command()` and `SignalEnvelopes.event()` construct generated `spine.core.Command` and
-`spine.core.Event` messages from caller-supplied generated IDs, generated
-contexts, schemas, and already-built domain messages. They validate the enclosed
-domain message through the core validation facade by default, then pack it as
-Spine-aware `Any`. Supplied IDs and contexts are cloned before embedding so
-later caller-side mutation does not mutate returned envelopes.
+`SignalEnvelopes.command()` and `SignalEnvelopes.event()` construct generated
+`spine.core.Command` and `spine.core.Event` messages from generated contexts,
+schemas, and already-built domain messages. Each call assigns a fresh ID from a
+secure UUID generator. The helpers validate the enclosed domain message through
+the core validation facade by default, then pack it as Spine-aware `Any`.
+Supplied contexts are cloned before embedding so later caller-side mutation does
+not mutate returned envelopes.
 
-The helpers deliberately define no runtime policy. They do not generate UUIDs,
-timestamps, actor or tenant context, event producer IDs, entity versions,
-origins, command system properties, storage records, acknowledgements, delivery
-state, bus dispatch, handler registration, or transport metadata. Those
-responsibilities belong to the server/runtime layers that run the workflow.
+The UUID guarantee applies to IDs created by these helpers. Existing Command and
+Event envelopes are decoded, transported, stored, and retransmitted without
+UUID-format validation of their retained IDs.
+
+Apart from creating the signal ID, the helpers deliberately define no runtime
+policy. They do not generate timestamps, actor or tenant context, event producer
+IDs, entity versions, origins, command system properties, storage records,
+acknowledgements, delivery state, bus dispatch, handler registration, or
+transport metadata. Those responsibilities belong to the server/runtime layers
+that run the workflow.
 
 ## Server Entity Metadata
 
@@ -688,8 +694,8 @@ The same local runtime boundary provides a narrow generated-signal metadata
 policy through `SignalMetadata`. Repository-produced commands/events
 share one policy for command/event IDs, timestamps, actor/tenant command
 context, event origin chains, primitive producer IDs, and validated int32
-version metadata. Tests inject `SignalIds` and `Clock` instead of mutating
-process-global time or ID state. This seam is still metadata-only: end-user
+version metadata. IDs are generated through Node secure UUIDs; tests use fixed
+source envelopes and `Clock` rather than mutating process-global state. This seam is still metadata-only: end-user
 handlers continue to accept generated domain messages instead of framework
 `Event` envelopes, `@Apply` remains absent, manual transaction controls are
 not introduced, and the seam does not discover handlers, load generated
@@ -782,9 +788,12 @@ replays that exact row. Process-manager replay validates the row label, pending
 `TO_DELIVER` status, tenant context, payload/schema, target type URL, and routed
 target ID before handler code.
 
-Inbox duplicate admission is limited by its 30-second deduplication window.
-That window is not replay retention: accepted rows remain subject to their
-Inbox delivery lifecycle and can be replayed after the duplicate window ends.
+Inbox delivery reads bounded raw pages and removes pending duplicates by signal
+ID plus typed Inbox target. Duplicate evidence comes from delivered rows in the
+current page and a process-local cache of the 1,000 most recent deliveries. The
+30-second deduplication window controls how long delivered rows are retained;
+it is not replay retention. A different target or a newly created signal with a
+different ID is not suppressed because its payload happens to be equal.
 Bounded contexts create internal system-pairing metadata and a tenant index.
 Single-tenant indexes are constant and reject tenant recording. Multitenant
 indexes are catalog views: MySQL enumerates configured tenant/database entries,

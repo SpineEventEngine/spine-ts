@@ -13,17 +13,117 @@
  */
 
 import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { create } from "@bufbuild/protobuf";
-import { ShardIndex } from "@spine-event-engine/server";
+import { DeliveryBuilder, ShardIndex } from "@spine-event-engine/server";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
 import { DeliveryClient, DeliveryOutcomeUnknownError, RemoteWorkRegistry } from "../src/index.js";
+import { RemoteInbox } from "../src/remote/adapters.js";
 import { domainMessage } from "./shared-fixtures.js";
 
 describe("in-memory delivery core response loss", () => {
+  it("removes a retained duplicate through shared delivery policy and the remote adapter", async () => {
+    const core = InMemoryDelivery.create();
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+    );
+    const inbox = new RemoteInbox(client);
+    const retained = {
+      ...domainMessage("retained"),
+      keepUntil: new Date(Date.now() + 60_000),
+    };
+    const duplicate = {
+      ...domainMessage("duplicate"),
+      signalId: retained.signalId,
+      keepUntil: retained.keepUntil,
+    };
+
+    await client.writeOne(retained);
+    await expect(inbox.markDelivered(retained)).resolves.toMatchObject({ status: "DELIVERED" });
+    await client.writeOne(duplicate);
+    const shard = ShardIndex.single();
+    const session = { kind: "EXCLUSIVE" as const, shard };
+    const onMessage = vi.fn();
+    const delivery = new DeliveryBuilder()
+      .withContext({ name: "RemoteRetainedDuplicate", multitenant: false })
+      .withStorageFactory({} as never)
+      .withInbox(inbox)
+      .withWorkRegistry({
+        sessionKind: "EXCLUSIVE",
+        pickUp: () => Promise.resolve(session),
+        validateOwnership: () => Promise.resolve(session),
+        release: () => Promise.resolve(true),
+      })
+      .build();
+
+    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
+    expect(onMessage).not.toHaveBeenCalled();
+    await expect(client.findOne(duplicate.id)).resolves.toBeUndefined();
+  });
+
+  it("delivers after cleaning an expired retained identity through the remote adapter", async () => {
+    const core = InMemoryDelivery.create();
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+    );
+    const inbox = new RemoteInbox(client);
+    const expired = {
+      ...domainMessage("expired"),
+      keepUntil: new Date(Date.now() - 60_000),
+    };
+    const pending = { ...domainMessage("pending"), signalId: expired.signalId };
+    await client.writeOne(expired);
+    await expect(inbox.markDelivered(expired)).resolves.toMatchObject({ status: "DELIVERED" });
+    await client.writeOne(pending);
+    expect((await client.findOne(expired.id))?.keepUntil?.getTime()).toBeLessThan(Date.now());
+    const shard = ShardIndex.single();
+    const session = { kind: "EXCLUSIVE" as const, shard };
+    const onMessage = vi.fn();
+    const delivery = new DeliveryBuilder()
+      .withContext({ name: "RemoteExpiredRetained", multitenant: false })
+      .withStorageFactory({} as never)
+      .withInbox(inbox)
+      .withWorkRegistry({
+        sessionKind: "EXCLUSIVE",
+        pickUp: () => Promise.resolve(session),
+        validateOwnership: () => Promise.resolve(session),
+        release: () => Promise.resolve(true),
+      })
+      .build();
+
+    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
+    expect(onMessage).toHaveBeenCalledWith(expect.objectContaining({ id: pending.id }));
+    await expect(client.findOne(expired.id)).resolves.toBeUndefined();
+  });
+
+  it("recognizes a delivered acknowledgement committed before a lost response", async () => {
+    const core = InMemoryDelivery.create();
+    const normal = DeliveryClient.usingTransport(
+      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+    );
+    const pending = domainMessage("lost-delivered");
+    await normal.writeOne(pending);
+    const lost = new RemoteInbox(
+      DeliveryClient.usingTransport(
+        createRouterTransport((router) => {
+          router.service(InboxService, {
+            ...core.inbox,
+            writeOne: async (request, context) => {
+              await core.inbox.writeOne(request, context);
+              throw new ConnectError("lost", Code.Unavailable);
+            },
+          });
+        }),
+      ),
+    );
+
+    await expect(lost.markDelivered(pending)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    await expect(lost.markDelivered(pending)).resolves.toMatchObject({ status: "DELIVERED" });
+  });
+
   it("makes a committed write reconcilable after its response is lost", async () => {
     const core = InMemoryDelivery.create();
     const transport = createRouterTransport((router) => {

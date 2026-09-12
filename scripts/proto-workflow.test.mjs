@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
+import { Buffer } from "node:buffer";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -18,8 +19,10 @@ import { describe, expect, it } from "vitest";
 import {
   cleanupStagedTargets,
   atomicGeneratedTargets,
+  authoredProtoFormatCommands,
   generatedTargets,
   modelAtomicTargets,
+  main,
   generateTargets,
   normalizeGeneratedTypeScriptTree,
   prepareGeneratedOutput,
@@ -563,7 +566,291 @@ function packageRootFor(entry) {
   return directory;
 }
 
+function formatFixture({ frozen = [] } = {}) {
+  const root = mkdtempSync(join(tmpdir(), "spine-proto-format-"));
+  mkdirSync(join(root, "packages/proto/proto"), { recursive: true });
+  writeFileSync(
+    join(root, "packages/proto/proto/spine-sources.json"),
+    `${JSON.stringify({ sources: frozen.map((localPath) => ({ localPath })) })}\n`,
+  );
+  for (const path of [
+    "packages/proto/proto/spine/task.proto",
+    "examples/todo/proto/todo.proto",
+    "packages/server/test-fixtures/proto/a.proto",
+    "packages/server/test-fixtures/proto/b.proto",
+    "packages/server/test-fixtures/proto/c.proto",
+    "examples/message-board/model/proto/model.proto",
+  ]) {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), 'syntax = "proto3";\n');
+  }
+  return { root };
+}
+
+function gitResponses(paths, calls = []) {
+  return (args) => {
+    calls.push(args);
+    if (args[0] === "merge-base") return { status: 0, stdout: Buffer.from("base\n") };
+    return { status: 0, stdout: Buffer.from(paths.join("\0")) };
+  };
+}
+
 describe("proto-workflow", () => {
+  it("groups all changed workspace Proto paths into one command", () => {
+    const fixture = formatFixture();
+    try {
+      const commands = authoredProtoFormatCommands(
+        fixture.root,
+        gitResponses(["packages/proto/proto/spine/task.proto", "examples/todo/proto/todo.proto"]),
+      );
+
+      expect(commands).toEqual([
+        {
+          label: "buf format workspace",
+          args: [
+            "format",
+            "--diff",
+            "--exit-code",
+            "--path",
+            "examples/todo/proto/todo.proto",
+            "--path",
+            "packages/proto/proto/spine/task.proto",
+          ],
+        },
+      ]);
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("groups each affected external Proto root into one command", () => {
+    const fixture = formatFixture();
+    try {
+      const commands = authoredProtoFormatCommands(
+        fixture.root,
+        gitResponses([
+          "packages/server/test-fixtures/proto/a.proto",
+          "packages/server/test-fixtures/proto/b.proto",
+          "examples/message-board/model/proto/model.proto",
+        ]),
+      );
+
+      expect(commands).toEqual([
+        {
+          label: "buf format examples/message-board/model/proto",
+          args: [
+            "format",
+            "examples/message-board/model/proto",
+            "--diff",
+            "--exit-code",
+            "--path",
+            "examples/message-board/model/proto/model.proto",
+          ],
+        },
+        {
+          label: "buf format packages/server/test-fixtures/proto",
+          args: [
+            "format",
+            "packages/server/test-fixtures/proto",
+            "--diff",
+            "--exit-code",
+            "--path",
+            "packages/server/test-fixtures/proto/a.proto",
+            "--path",
+            "packages/server/test-fixtures/proto/b.proto",
+          ],
+        },
+      ]);
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("limits an external root command to changed files", () => {
+    const fixture = formatFixture();
+    try {
+      writeFileSync(
+        join(fixture.root, "packages/server/test-fixtures/proto/unchanged.proto"),
+        "message Unchanged {\nstring value=1;\n}\n",
+      );
+      const [command] = authoredProtoFormatCommands(
+        fixture.root,
+        gitResponses(["packages/server/test-fixtures/proto/a.proto"]),
+      );
+
+      expect(command.args).toContain("packages/server/test-fixtures/proto/a.proto");
+      expect(command.args).not.toContain("packages/server/test-fixtures/proto/unchanged.proto");
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not start a format process for each changed Proto file", () => {
+    const fixture = formatFixture();
+    try {
+      const commands = authoredProtoFormatCommands(
+        fixture.root,
+        gitResponses([
+          "packages/server/test-fixtures/proto/a.proto",
+          "packages/server/test-fixtures/proto/b.proto",
+          "packages/server/test-fixtures/proto/c.proto",
+        ]),
+      );
+
+      expect(commands).toHaveLength(1);
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("skips formatting when no authored Proto files changed", () => {
+    const fixture = formatFixture();
+    try {
+      expect(authoredProtoFormatCommands(fixture.root, gitResponses([]))).toEqual([]);
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("excludes frozen, deleted, and generated Proto files", () => {
+    const fixture = formatFixture({ frozen: ["packages/proto/proto/frozen.proto"] });
+    try {
+      writeFileSync(
+        join(fixture.root, "packages/proto/proto/frozen.proto"),
+        'syntax = "proto3";\n',
+      );
+      mkdirSync(join(fixture.root, "packages/proto/proto/.generated"), { recursive: true });
+      writeFileSync(
+        join(fixture.root, "packages/proto/proto/.generated/output.proto"),
+        'syntax = "proto3";\n',
+      );
+      expect(
+        authoredProtoFormatCommands(
+          fixture.root,
+          gitResponses([
+            "packages/proto/proto/frozen.proto",
+            "packages/proto/proto/deleted.proto",
+            "packages/proto/proto/.generated/output.proto",
+          ]),
+        ),
+      ).toEqual([]);
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed for an existing changed Proto file outside recognized roots", () => {
+    const fixture = formatFixture();
+    try {
+      mkdirSync(join(fixture.root, "unknown/proto"), { recursive: true });
+      writeFileSync(join(fixture.root, "unknown/proto/input.proto"), 'syntax = "proto3";\n');
+      expect(() =>
+        authoredProtoFormatCommands(fixture.root, gitResponses(["unknown/proto/input.proto"])),
+      ).toThrow("outside a recognized Buf root");
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("parses NUL-delimited non-ASCII and newline-containing Git paths", () => {
+    const fixture = formatFixture();
+    const nonAscii = "packages/server/test-fixtures/proto/café.proto";
+    const newline = "packages/server/test-fixtures/proto/line\nbreak.proto";
+    const calls = [];
+    try {
+      for (const path of [nonAscii, newline]) {
+        writeFileSync(join(fixture.root, path), 'syntax = "proto3";\n');
+      }
+      const [command] = authoredProtoFormatCommands(
+        fixture.root,
+        gitResponses([nonAscii, newline], calls),
+      );
+
+      expect(command.args).toEqual(expect.arrayContaining(["--path", nonAscii, newline]));
+      expect(calls.filter(([command]) => command !== "merge-base")).toEqual(
+        expect.arrayContaining([
+          expect.arrayContaining(["--name-only", "-z"]),
+          expect.arrayContaining(["ls-files", "-z"]),
+        ]),
+      );
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a newline-containing unknown Git path", () => {
+    const fixture = formatFixture();
+    const path = "unknown/proto/line\nbreak.proto";
+    try {
+      mkdirSync(dirname(join(fixture.root, path)), { recursive: true });
+      writeFileSync(join(fixture.root, path), 'syntax = "proto3";\n');
+      expect(() => authoredProtoFormatCommands(fixture.root, gitResponses([path]))).toThrow(
+        "outside a recognized Buf root",
+      );
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed when Git cannot classify changed Proto files", () => {
+    const fixture = formatFixture();
+    try {
+      expect(() => authoredProtoFormatCommands(fixture.root, () => ({ status: 1 }))).toThrow(
+        "Unable to classify authored Proto sources.",
+      );
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+  it("runs injected format groups in order and stops at the first failure", () => {
+    const calls = [];
+    const run = (label, executable, args) => {
+      calls.push({ label, executable, args });
+      return label === "buf format external" ? 1 : 0;
+    };
+    const formatCommands = () => [
+      { label: "buf format workspace", args: ["format", "--diff", "--exit-code"] },
+      { label: "buf format external", args: ["format", "fixture", "--diff", "--exit-code"] },
+      { label: "buf format later", args: ["format", "later", "--diff", "--exit-code"] },
+    ];
+
+    expect(main(["lint"], run, { formatCommands })).toBe(1);
+    expect(calls.map(({ label }) => label)).toEqual([
+      "proto source verification",
+      "authored framework Proto style",
+      "authored example Proto quality",
+      "rejection source naming",
+      "frozen descriptor compatibility",
+      "buf format workspace",
+      "buf format external",
+    ]);
+    expect(calls.map(({ label }) => label)).not.toContain("buf lint");
+    expect(calls.map(({ label }) => label)).not.toContain("buf format later");
+  });
+
+  it("skips injected empty format groups and continues to lint or generate", () => {
+    const lintCalls = [];
+    const runLint = (label, executable, args) => {
+      lintCalls.push({ label, executable, args });
+      return 0;
+    };
+    const generated = [];
+
+    expect(main(["lint"], runLint, { formatCommands: () => [] })).toBe(0);
+    expect(lintCalls.map(({ label }) => label)).toContain("buf lint");
+    expect(lintCalls.some(({ label }) => label.startsWith("buf format"))).toBe(false);
+    expect(
+      main(["generate"], runLint, {
+        formatCommands: () => [],
+        generate: () => {
+          generated.push("generate");
+          return 0;
+        },
+      }),
+    ).toBe(0);
+    expect(generated).toEqual(["generate"]);
+  });
+
   it("loads handler-registry descriptor dependencies from the application boundary", () => {
     const script = fileURLToPath(new URL("./generate-handler-registry.mjs", import.meta.url));
     const repoRoot = dirname(dirname(script));
@@ -769,6 +1056,9 @@ describe("proto-workflow", () => {
     ]);
     expect(modelAtomicTargets.map((target) => target.displayPath)).toEqual([
       "packages/server-blackbox-tests/generated",
+      "packages/server/test-fixtures/generated",
+      "packages/core/test-fixtures/generated",
+      "packages/testing/test-fixtures/generated",
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",
@@ -777,6 +1067,9 @@ describe("proto-workflow", () => {
     expect(atomicGeneratedTargets.map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
       "packages/server-blackbox-tests/generated",
+      "packages/server/test-fixtures/generated",
+      "packages/core/test-fixtures/generated",
+      "packages/testing/test-fixtures/generated",
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",
@@ -803,6 +1096,46 @@ describe("proto-workflow", () => {
     expect(
       existsSync("packages/server-blackbox-tests/test-fixtures/entity-metadata-fixtures.ts"),
     ).toBe(false);
+  });
+
+  it("generates server metadata fixtures from readable Proto sources", () => {
+    expect(
+      modelAtomicTargets.find((target) => target.packagePath === "packages/server/test-fixtures"),
+    ).toMatchObject({
+      displayPath: "packages/server/test-fixtures/generated",
+      moduleName: "ServerTestFixtures",
+    });
+    expect(
+      existsSync("packages/server/test-fixtures/proto/entity-metadata/project_states.proto"),
+    ).toBe(true);
+    expect(
+      existsSync("packages/server/test-fixtures/proto/entity-metadata/project_commands.proto"),
+    ).toBe(true);
+    expect(
+      existsSync("packages/server/test-fixtures/generated/entity-metadata/project_states_pb.ts"),
+    ).toBe(true);
+    expect(
+      existsSync("packages/server/test-fixtures/generated/entity-metadata/project_commands_pb.ts"),
+    ).toBe(true);
+  });
+
+  it("generates core and testing fixtures from package-local Proto sources", () => {
+    expect(
+      modelAtomicTargets.find((target) => target.packagePath === "packages/core/test-fixtures"),
+    ).toMatchObject({
+      displayPath: "packages/core/test-fixtures/generated",
+      moduleName: "CoreTestFixtures",
+    });
+    expect(
+      modelAtomicTargets.find((target) => target.packagePath === "packages/testing/test-fixtures"),
+    ).toMatchObject({
+      displayPath: "packages/testing/test-fixtures/generated",
+      moduleName: "TestingTestFixtures",
+    });
+    expect(existsSync("packages/core/test-fixtures/proto/project_states.proto")).toBe(true);
+    expect(existsSync("packages/testing/test-fixtures/proto/project_commands.proto")).toBe(true);
+    expect(existsSync("packages/core/test-fixtures/generated/project_commands_pb.ts")).toBe(true);
+    expect(existsSync("packages/testing/test-fixtures/generated/project_states_pb.ts")).toBe(true);
   });
 
   it("stages the MessageBoard handler registry with its model output", () => {

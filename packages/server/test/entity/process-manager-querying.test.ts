@@ -12,27 +12,17 @@
  * the License.
  */
 
-import {
-  clone,
-  create,
-  fromBinary,
-  toBinary,
-  type Message,
-  type MessageShape,
-} from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { EntityColumn, EntityQuery, SignalEnvelopes } from "@spine-event-engine/core";
+import { create, type MessageShape } from "@bufbuild/protobuf";
+import { AnyMessages, EntityColumn, EntityQuery } from "@spine-event-engine/core";
 import { GeneratedEntityColumns } from "@spine-event-engine/core/codegen";
 import {
   ActorContextSchema,
+  CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
   TenantIdSchema,
   UserIdSchema,
   ZoneIdSchema,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
@@ -48,97 +38,35 @@ import {
 import { processManagerQueryAccess } from "../../src/entity/entity.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { QueryReader } from "../../src/services/query-reader.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
-
-type ProjectionState = Message<"ProjectionState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type ProjectionEvent = Message<"ProjectionEvent"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type ProcessManagerState = Message<"ProcessManagerState"> & {
-  id: string;
-  queue: string;
-};
-
-type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
-  id: string;
-  name: string;
-};
-
-function fixtureFile(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-  if (descriptor === undefined) throw new Error("Process Manager query fixture is empty.");
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-}
-
-const entityFixture = fixtureFile(serverEntityMetadataTestFixtures.main.descriptorSetBase64);
-const ProjectionStateSchema = messageDesc(entityFixture, 0) as GenMessage<ProjectionState>;
-
-const eventFixture = (() => {
-  const descriptor = clone(FileDescriptorProtoSchema, entityFixture.proto);
-  const event = descriptor.messageType[0];
-  if (event === undefined) throw new Error("Projection Event fixture is missing.");
-  descriptor.name = "process_manager_query_events.proto";
-  descriptor.messageType = [event];
-  event.name = "ProjectionEvent";
-  if (event.options !== undefined) {
-    event.options.$unknown = event.options.$unknown?.filter((field) => field.no !== 73_903);
-  }
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-})();
-const ProjectionEventSchema = messageDesc(eventFixture, 0) as GenMessage<ProjectionEvent>;
-
-const processManagerFixture = fixtureFile(
-  serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
-);
-const ProcessManagerStateSchema = messageDesc(
-  processManagerFixture,
-  0,
-) as GenMessage<ProcessManagerState>;
-
-const commandFixture = fileDesc(
-  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
-    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
-    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
-    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
-    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
-  [file_spine_options],
-);
-const ValidatedTaskCommandSchema = messageDesc(
-  commandFixture,
-  1,
-) as GenMessage<ValidatedTaskCommand>;
+import {
+  type ProjectOverviewState,
+  ProjectOverviewStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import { ProcessManagerStateSchema } from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
+import {
+  type ProjectCreated as ProjectionEvent,
+  ProjectCreatedSchema as ProjectionEventSchema,
+} from "../../test-fixtures/generated/repository-routing/project_events_pb.js";
+import {
+  type CreateReviewProject,
+  CreateReviewProjectSchema,
+} from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
 
 const projectionColumns = EntityColumn.register(
-  ProjectionStateSchema,
-  GeneratedEntityColumns.define(ProjectionStateSchema, {
-    name: { field: ProjectionStateSchema.field.name, comparison: "ordering" },
-    priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" },
+  ProjectOverviewStateSchema,
+  GeneratedEntityColumns.define(ProjectOverviewStateSchema, {
+    name: { field: ProjectOverviewStateSchema.field.name, comparison: "ordering" },
+    priority: { field: ProjectOverviewStateSchema.field.priority, comparison: "ordering" },
   }),
 );
 const selectedProjectionColumns: Pick<typeof projectionColumns, "priority"> = projectionColumns;
 
-class QueryProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+class QueryProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
   subscribe(event: ProjectionEvent): void {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ProjectionStateSchema, {
+        create(ProjectOverviewStateSchema, {
           id: event.id,
           name: event.name,
           priority: event.priority,
@@ -149,7 +77,7 @@ class QueryProjection extends Projection<string, typeof ProjectionStateSchema, n
 }
 
 class QueryProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {
-  static results: readonly ProjectionState[] = [];
+  static results: readonly ProjectOverviewState[] = [];
   static predicate: unknown;
   static failure: unknown;
 
@@ -160,10 +88,10 @@ class QueryProcessManager extends ProcessManager<string, typeof ProcessManagerSt
   }
 
   query() {
-    return this.select(ProjectionStateSchema, projectionColumns);
+    return this.select(ProjectOverviewStateSchema, projectionColumns);
   }
 
-  async assign(command: ValidatedTaskCommand): Promise<ProjectionEvent> {
+  async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
     const query = this.query();
     try {
       if (QueryProcessManager.predicate !== undefined) {
@@ -197,7 +125,7 @@ abstract class QueryTypeFixture extends ProcessManager<
   number
 > {
   protected verifySelectedColumn(): void {
-    const query = this.select(ProjectionStateSchema, selectedProjectionColumns);
+    const query = this.select(ProjectOverviewStateSchema, selectedProjectionColumns);
     query.orderBy(selectedProjectionColumns.priority);
     // @ts-expect-error A column omitted from the selected collection cannot be ordered.
     query.orderBy(projectionColumns.name);
@@ -208,8 +136,8 @@ void QueryTypeFixture;
 function projectionRepository(): Repository<typeof QueryProjection> {
   return new Repository({
     entityType: QueryProjection,
-    schema: ProjectionStateSchema,
-    handlers: EntityHandlers.define(QueryProjection, ProjectionStateSchema, (builder) => [
+    schema: ProjectOverviewStateSchema,
+    handlers: EntityHandlers.define(QueryProjection, ProjectOverviewStateSchema, (builder) => [
       builder.subscribe(ProjectionEventSchema, "subscribe"),
     ]),
   });
@@ -222,14 +150,14 @@ function processManagerRepository(): Repository<typeof QueryProcessManager> {
     handlers: HandlerMetadataValues.defineArity(
       QueryProcessManager,
       ProcessManagerStateSchema,
-      (builder) => [builder.assign(ValidatedTaskCommandSchema, "assign")],
+      (builder) => [builder.assign(CreateReviewProjectSchema, "assign")],
       [
         {
           kind: "command-assignment",
           methodName: "assign",
           parameterCount: 1,
           origin: "domestic",
-          emittedSchemas: [ProjectionEventSchema],
+          outcomes: { returned: [ProjectionEventSchema], thrown: [] },
         },
       ],
     ),
@@ -237,9 +165,11 @@ function processManagerRepository(): Repository<typeof QueryProcessManager> {
   });
 }
 
-function queryCommand(id: string, name: string, tenant?: string) {
-  return SignalEnvelopes.command({
-    id: create(CommandIdSchema, { uuid: `query-${id}-${name}` }),
+function queryCommand(id: string, name: string, tenant?: string, suffix?: string) {
+  return create(CommandSchema, {
+    id: create(CommandIdSchema, {
+      uuid: `query-${id}-${name}${suffix === undefined ? "" : `-${suffix}`}`,
+    }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
         actor: create(UserIdSchema, { value: "query-user" }),
@@ -252,8 +182,10 @@ function queryCommand(id: string, name: string, tenant?: string) {
             }),
       }),
     }),
-    schema: ValidatedTaskCommandSchema,
-    message: create(ValidatedTaskCommandSchema, { id, name }),
+    message: AnyMessages.pack(
+      CreateReviewProjectSchema,
+      create(CreateReviewProjectSchema, { id, name }),
+    ),
   });
 }
 
@@ -294,7 +226,7 @@ describe("Process Manager querying", () => {
     expect(query).not.toHaveProperty("tenant");
     expectTypeOf(query).not.toHaveProperty("update");
     expectTypeOf(query).not.toHaveProperty("tenant");
-    expectTypeOf<Aggregate<string, typeof ProjectionStateSchema, number>>().not.toHaveProperty(
+    expectTypeOf<Aggregate<string, typeof ProjectOverviewStateSchema, number>>().not.toHaveProperty(
       "select",
     );
     expect(() => query.limit(1_001)).toThrow("Process Manager query limit may be at most 1000.");
@@ -315,7 +247,7 @@ describe("Process Manager querying", () => {
     });
     const states = Object.freeze(
       Array.from({ length: 1_001 }, (_, index) =>
-        create(ProjectionStateSchema, {
+        create(ProjectOverviewStateSchema, {
           id: `state-${String(index)}`,
           name: "waiting",
           priority: index,
@@ -328,7 +260,7 @@ describe("Process Manager querying", () => {
         _plan: import("@spine-event-engine/core/spi/entity-query-plan").EntityQueryPlan,
         schema: Schema,
       ): Promise<readonly MessageShape<Schema>[]> => {
-        if (schema.typeName !== ProjectionStateSchema.typeName) {
+        if (schema.typeName !== ProjectOverviewStateSchema.typeName) {
           return Promise.reject(new Error("Expected a Projection query."));
         }
         return Promise.resolve(states as unknown as readonly MessageShape<Schema>[]);
@@ -353,26 +285,26 @@ describe("Process Manager querying", () => {
       await context
         .stand()
         .update(
-          ProjectionStateSchema,
-          create(ProjectionStateSchema, { id: "shared", name: "A", priority: 1 }),
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "shared", name: "A", priority: 1 }),
           { tenantId: tenantA },
         );
       await context
         .stand()
         .update(
-          ProjectionStateSchema,
-          create(ProjectionStateSchema, { id: "shared", name: "B", priority: 2 }),
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "shared", name: "B", priority: 2 }),
           { tenantId: tenantB },
         );
 
       await context.commandBus().post(queryCommand("shared", "A", "tenant-a"));
       expect(QueryProcessManager.results).toEqual([
-        create(ProjectionStateSchema, { id: "shared", name: "A", priority: 1 }),
+        create(ProjectOverviewStateSchema, { id: "shared", name: "A", priority: 1 }),
       ]);
 
       await context.commandBus().post(queryCommand("shared", "B", "tenant-b"));
       expect(QueryProcessManager.results).toEqual([
-        create(ProjectionStateSchema, { id: "shared", name: "B", priority: 2 }),
+        create(ProjectOverviewStateSchema, { id: "shared", name: "B", priority: 2 }),
       ]);
     } finally {
       await context.close();
@@ -470,25 +402,25 @@ describe("Process Manager querying", () => {
       await context
         .stand()
         .update(
-          ProjectionStateSchema,
-          create(ProjectionStateSchema, { id: "live", name: "live", priority: 1 }),
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "live", name: "live", priority: 1 }),
         );
       await context
         .stand()
         .update(
-          ProjectionStateSchema,
-          create(ProjectionStateSchema, { id: "archived", name: "archived", priority: 2 }),
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "archived", name: "archived", priority: 2 }),
           { lifecycle: { archived: true, deleted: false } },
         );
       await context
         .stand()
         .update(
-          ProjectionStateSchema,
-          create(ProjectionStateSchema, { id: "deleted", name: "deleted", priority: 3 }),
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "deleted", name: "deleted", priority: 3 }),
           { lifecycle: { archived: false, deleted: true } },
         );
 
-      await context.commandBus().post(queryCommand("manager", "all"));
+      await context.commandBus().post(queryCommand("manager", "all", undefined, "second"));
       expect(QueryProcessManager.results.map((state) => state.name).sort()).toEqual([
         "archived",
         "live",
@@ -499,7 +431,7 @@ describe("Process Manager querying", () => {
 
       await context.commandBus().post(queryCommand("manager", "all"));
       expect(QueryProcessManager.results.find((state) => state.id === "live")).toEqual(
-        create(ProjectionStateSchema, { id: "live", name: "live", priority: 1 }),
+        create(ProjectOverviewStateSchema, { id: "live", name: "live", priority: 1 }),
       );
     } finally {
       await context.close();

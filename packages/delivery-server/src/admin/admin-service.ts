@@ -53,10 +53,10 @@ export interface AdminPublisherHandle {
   publish(shard: ShardIndex): void;
 
   /**
-   * Records an Inbox message-count transition.
+   * Records a pending Inbox message-count transition.
    *
    * @param shard Identifies the changed shard.
-   * @param delta Supplies the inserted or removed count.
+   * @param delta Supplies the pending count change from insertion, removal, or status transition.
    */
   recordMessageTransition(shard: ShardIndex, delta: 1 | -1): void;
 

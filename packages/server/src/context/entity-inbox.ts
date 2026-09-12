@@ -27,6 +27,7 @@ import {
   type DeliveryEndpoint,
   DeliveryReadiness,
   InboxHandoff,
+  type LocalInboxDrainOptions,
   type OnDeliveryReady,
 } from "./local-inbox-handoff.js";
 
@@ -327,36 +328,63 @@ export class LocalEntityInbox implements EntityInbox {
     expectedShard?: ShardIndex,
   ): Promise<void> {
     let followUp: (() => Promise<void>) | undefined;
-    await InboxHandoff.drain({
+    await InboxHandoff.drain(
+      this.#drainOptions(message, delivery, deliveryTenantId, expectedShard, (value) => {
+        followUp = value;
+      }),
+    );
+    if (followUp !== undefined) {
+      const nextFollowUp = followUp;
+      this.#chainFollowUp(message, deliveryTenantId, nextFollowUp);
+    }
+  }
+
+  #drainOptions(
+    message: InboxMessage,
+    delivery: Delivery,
+    deliveryTenantId: TenantId | undefined,
+    expectedShard: ShardIndex | undefined,
+    onSetFollowUp: (followUp: (() => Promise<void>) | undefined) => void,
+  ): LocalInboxDrainOptions {
+    return {
       delivery,
       received: message,
       node: this.#contextName,
-      onReplay: async (nextMessage) => {
-        followUp = await this.#replay(
-          nextMessage,
-          deliveryTenantId,
-          false,
-          expectedShard ?? this.#expectedShard(nextMessage),
-        );
-      },
-      acceptMessage: (nextMessage) =>
-        InboxHandoff.sameMessageId(nextMessage.id, message.id) ||
-        ((nextMessage.label === "HANDLE_COMMAND" || nextMessage.label === "REACT_UPON_EVENT") &&
-          this.#targets
-            .get(nextMessage.inboxId.targetTypeUrl)
-            ?.labels.includes(nextMessage.label) === true),
-      onAcknowledged: (nextMessage) => {
-        this.#recordAcknowledgement(nextMessage);
+      onReplay: (next) =>
+        this.#replayAndFollowUp(next, deliveryTenantId, expectedShard, onSetFollowUp),
+      acceptMessage: (next) => this.#acceptsDrainedMessage(next, message),
+      onResolved: (next) => {
+        this.#recordAcknowledgement(next);
       },
       replayFailureMessage: "Entity Inbox replay failed.",
       skippedMessage: "Entity Inbox delivery was skipped before the target row was delivered.",
       unfinishedMessage:
         "Entity Inbox delivery did not reach the target row before the local drain finished.",
-    });
-    if (followUp !== undefined) {
-      const nextFollowUp = followUp;
-      this.#chainFollowUp(message, deliveryTenantId, nextFollowUp);
-    }
+    };
+  }
+
+  async #replayAndFollowUp(
+    message: InboxMessage,
+    deliveryTenantId: TenantId | undefined,
+    expectedShard: ShardIndex | undefined,
+    onSetFollowUp: (followUp: (() => Promise<void>) | undefined) => void,
+  ): Promise<void> {
+    onSetFollowUp(
+      await this.#replay(
+        message,
+        deliveryTenantId,
+        false,
+        expectedShard ?? this.#expectedShard(message),
+      ),
+    );
+  }
+
+  #acceptsDrainedMessage(next: InboxMessage, received: InboxMessage): boolean {
+    return (
+      InboxHandoff.sameMessageId(next.id, received.id) ||
+      ((next.label === "HANDLE_COMMAND" || next.label === "REACT_UPON_EVENT") &&
+        this.#targets.get(next.inboxId.targetTypeUrl)?.labels.includes(next.label) === true)
+    );
   }
 
   #claimRows(inputs: readonly RoutedEntityInput[], deliveryTenantId?: TenantId): BatchRow[] {

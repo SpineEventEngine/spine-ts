@@ -52,13 +52,22 @@ local session and permits a new pickup. Do not release a stale session.
 
 `RemoteInbox` and `RemoteWorkRegistry` satisfy the server delivery-builder
 ports. `RemoteInbox` rereads the exact pending remote row before acknowledgement
-and calls the authoritative removal operation directly. It creates no local
-attempt history, receipt, fingerprint, or quarantine record. Shard ownership excludes concurrent
-delivery and delivered rows are the deduplication fact. Handler effects and the
-delivered transition are not transactional: a lost acknowledgement can
-redeliver after restart, so downstream handling must be idempotent. This
+and upserts that exact row as `DELIVERED`. An exact retained `DELIVERED` row is
+an idempotent acknowledgement after a lost response. Expired-row cleanup first
+checks the remote snapshot and then sends a separate removal request; it is
+best effort, not an atomic compare-and-delete guarantee. It creates no local attempt history,
+receipt, fingerprint, or quarantine record. Shard ownership excludes concurrent
+delivery and delivered rows are the deduplication fact. This
 package does not add authentication, authorization, durability, exactly-once
 effects, or a production topology.
+
+Each delivery read requests one bounded logical shard page. Because the remote
+cursor includes its anchor row, filling that logical page may require multiple
+bounded raw-page RPCs. The server delivery policy compares pending rows with
+delivered rows in the logical page and its bounded recent-delivery cache, then
+removes exact duplicates without treating them as delivered acknowledgements.
+Remote duplicate removal compares the current snapshot before sending the
+existing best-effort removal request.
 
 ## Remote delivery in an environment
 
@@ -87,3 +96,7 @@ Environment shutdown closes the client's HTTP/2 session. Concurrent/repeated
 close calls share work; a failed phase is the only phase retried. This adds no
 health route, provider selector, worker, or
 delivery-server mode.
+
+Retained rows suppress the same signal ID at the same typed Inbox target until
+`keep_until`. Remote pagination follows the JVM timestamp-only cursor and rejects a
+non-progressing full page; it does not provide arbitrary-depth indexed lookup.

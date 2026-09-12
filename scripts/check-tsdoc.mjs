@@ -30,6 +30,7 @@ const callableVerbs = new Set([
   "validates",
   "writes",
   "accepts",
+  "admits",
   "acquires",
   "asserts",
   "attaches",
@@ -353,7 +354,17 @@ function trackedSourceFiles(root) {
     maxBuffer: 64 * 1024 * 1024,
   });
   if (result.status !== 0) throw new Error(`git ls-files failed: ${result.stderr}`);
-  return result.stdout.split("\0").filter(isHandwrittenSource);
+  const deleted = spawnSync("git", ["ls-files", "--deleted", "-z"], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (deleted.status !== 0) throw new Error(`git ls-files --deleted failed: ${deleted.stderr}`);
+  const deletedFiles = new Set(deleted.stdout.split("\0"));
+  return result.stdout
+    .split("\0")
+    .filter((file) => !deletedFiles.has(file))
+    .filter(isHandwrittenSource);
 }
 
 function isHandwrittenSource(file) {

@@ -12,18 +12,9 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import {
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
-  TimestampSchema,
-  type Timestamp,
-} from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { file_spine_options } from "@spine-event-engine/proto";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import * as serverRoot from "../../src/index.js";
 import {
@@ -42,12 +33,6 @@ import { entityHistoryAccess } from "../../src/entity/entity.js";
 
 // @ts-expect-error EntityStorageInput is an internal repository/runtime seam, not a root storage export.
 import type { EntityStorageInput } from "@spine-event-engine/storage";
-
-type ProjectionState = Message<"ProjectionState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
 
 interface RevisionMetadata {
   readonly revision: number;
@@ -94,32 +79,15 @@ function verifyHistoryDeclarationAbsence(projection: TestProjection): void {
   void (null as unknown as EntityStorageInput);
 }
 
-function createFixtureFileDescriptor(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
+import {
+  type ProjectOverviewState,
+  ProjectOverviewStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
-  if (descriptor === undefined) {
-    throw new Error("Server entity fixture descriptor set is empty.");
-  }
-
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
-const ProjectionStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectionState>;
-
-function createProjectionState(overrides: Partial<ProjectionState> = {}): ProjectionState {
-  return create(ProjectionStateSchema, {
+function createProjectOverviewState(
+  overrides: Partial<ProjectOverviewState> = {},
+): ProjectOverviewState {
+  return create(ProjectOverviewStateSchema, {
     id: "task-1",
     name: "Draft",
     priority: 1,
@@ -127,8 +95,8 @@ function createProjectionState(overrides: Partial<ProjectionState> = {}): Projec
   });
 }
 
-class TestEntity extends Entity<string, typeof ProjectionStateSchema, RevisionMetadata> {
-  applyState(state: ProjectionState): void {
+class TestEntity extends Entity<string, typeof ProjectOverviewStateSchema, RevisionMetadata> {
+  applyState(state: ProjectOverviewState): void {
     this.replaceState(state);
   }
 
@@ -143,7 +111,7 @@ class TestEntity extends Entity<string, typeof ProjectionStateSchema, RevisionMe
 
 class NestedVersionEntity extends Entity<
   string,
-  typeof ProjectionStateSchema,
+  typeof ProjectOverviewStateSchema,
   NestedRevisionMetadata
 > {
   applyVersion(version: NestedRevisionMetadata): void {
@@ -153,14 +121,14 @@ class NestedVersionEntity extends Entity<
 
 class TestTransactionalEntity extends TransactionalEntity<
   string,
-  typeof ProjectionStateSchema,
+  typeof ProjectOverviewStateSchema,
   RevisionMetadata
 > {
   start(): void {
     this.startTransaction();
   }
 
-  draft(): ProjectionState {
+  draft(): ProjectOverviewState {
     return this.currentDraft();
   }
 
@@ -172,14 +140,14 @@ class TestTransactionalEntity extends TransactionalEntity<
     return this.draftLifecycleFlags();
   }
 
-  renameDraft(name: string, priority = this.currentDraft().priority): ProjectionState {
+  renameDraft(name: string, priority = this.currentDraft().priority): ProjectOverviewState {
     return this.update((draft) => {
       draft.name = name;
       draft.priority = priority;
     });
   }
 
-  changeDraftId(id: string): ProjectionState {
+  changeDraftId(id: string): ProjectOverviewState {
     return this.update((draft) => {
       draft.id = id;
     });
@@ -236,18 +204,18 @@ class TestTransactionalEntity extends TransactionalEntity<
 class GetterCountingTransactionalEntity extends TestTransactionalEntity {
   stateReads = 0;
 
-  override get state(): ProjectionState {
+  override get state(): ProjectOverviewState {
     this.stateReads += 1;
     return super.state;
   }
 }
 
-class TestAggregate extends Aggregate<string, typeof ProjectionStateSchema, RevisionMetadata> {
+class TestAggregate extends Aggregate<string, typeof ProjectOverviewStateSchema, RevisionMetadata> {
   start(): void {
     this.startTransaction();
   }
 
-  renameDraft(name: string): ProjectionState {
+  renameDraft(name: string): ProjectOverviewState {
     return this.update((draft) => {
       draft.name = name;
     });
@@ -289,11 +257,15 @@ class TestAggregate extends Aggregate<string, typeof ProjectionStateSchema, Revi
   }
 }
 
-class TestProjection extends Projection<string, typeof ProjectionStateSchema, RevisionMetadata> {}
+class TestProjection extends Projection<
+  string,
+  typeof ProjectOverviewStateSchema,
+  RevisionMetadata
+> {}
 
 class TestProcessManager extends ProcessManager<
   string,
-  typeof ProjectionStateSchema,
+  typeof ProjectOverviewStateSchema,
   RevisionMetadata
 > {
   historyEventsForTest(depth: number) {
@@ -322,10 +294,10 @@ describe("entities", () => {
   });
 
   it("exposes identity, descriptor metadata, state snapshots, version, and active lifecycle defaults", () => {
-    const initialState = createProjectionState();
+    const initialState = createProjectOverviewState();
     const entity = new TestEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       state: initialState,
       version: { revision: 7, source: "server" },
     });
@@ -333,9 +305,9 @@ describe("entities", () => {
     initialState.name = "Caller-side mutation";
 
     expect(entity.id).toBe("task-1");
-    expect(entity.schema).toBe(ProjectionStateSchema);
-    expect(entity.metadata).toEqual(describeEntityMetadata(ProjectionStateSchema));
-    expect(entity.state).toEqual(createProjectionState());
+    expect(entity.schema).toBe(ProjectOverviewStateSchema);
+    expect(entity.metadata).toEqual(describeEntityMetadata(ProjectOverviewStateSchema));
+    expect(entity.state).toEqual(createProjectOverviewState());
     expect(entity.state).not.toBe(initialState);
     expect(entity.version).toEqual({ revision: 7, source: "server" });
     expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
@@ -344,15 +316,15 @@ describe("entities", () => {
     expect(entity.isDeleted).toBe(false);
     expect(entity.lifecycleFlagsChanged).toBe(false);
     expectTypeOf(entity.id).toEqualTypeOf<string>();
-    expectTypeOf(entity.state).toEqualTypeOf<ProjectionState>();
+    expectTypeOf(entity.state).toEqualTypeOf<ProjectOverviewState>();
     expectTypeOf(entity.version).toEqualTypeOf<RevisionMetadata>();
   });
 
   it("returns cloned Protobuf-ES state snapshots so callers cannot mutate stored state", () => {
     const entity = new TestEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
@@ -360,7 +332,7 @@ describe("entities", () => {
     returnedState.name = "Mutated by caller";
     returnedState.priority = 99;
 
-    expect(entity.state).toEqual(createProjectionState());
+    expect(entity.state).toEqual(createProjectOverviewState());
     expect(entity.state).not.toBe(returnedState);
   });
 
@@ -372,8 +344,8 @@ describe("entities", () => {
     const initialVersion = { revision: 1, source: "server" as const, labels: ["initial"] };
     const entity = new TestEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: initialVersion,
     });
 
@@ -447,8 +419,8 @@ describe("entities", () => {
       expect(() => {
         new TestEntity({
           id: "task-1",
-          schema: ProjectionStateSchema,
-          state: createProjectionState(),
+          schema: ProjectOverviewStateSchema,
+          state: createProjectOverviewState(),
           version: version as unknown as RevisionMetadata,
         });
       }).toThrow(/plain snapshot data/);
@@ -456,8 +428,8 @@ describe("entities", () => {
 
     const entity = new TestEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
     expect(() => {
@@ -486,8 +458,8 @@ describe("entities", () => {
     expect(() => {
       new TestEntity({
         id: "task-1",
-        schema: ProjectionStateSchema,
-        state: createProjectionState(),
+        schema: ProjectOverviewStateSchema,
+        state: createProjectOverviewState(),
         version: speciesVersion,
       });
     }).toThrow(/plain snapshot data/);
@@ -505,8 +477,8 @@ describe("entities", () => {
     expect(() => {
       new TestEntity({
         id: "task-1",
-        schema: ProjectionStateSchema,
-        state: createProjectionState(),
+        schema: ProjectOverviewStateSchema,
+        state: createProjectOverviewState(),
         version: { revision: 1, source: "server", labels: accessorLabels },
       });
     }).toThrow(/plain snapshot data/);
@@ -517,8 +489,8 @@ describe("entities", () => {
     expect(() => {
       new TestEntity({
         id: "task-1",
-        schema: ProjectionStateSchema,
-        state: createProjectionState(),
+        schema: ProjectOverviewStateSchema,
+        state: createProjectOverviewState(),
         version: { revision: 1, source: "server", labels: customPropertyLabels },
       });
     }).toThrow(/plain snapshot data/);
@@ -531,8 +503,8 @@ describe("entities", () => {
 
     const entity = new TestEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version,
     });
 
@@ -559,8 +531,8 @@ describe("entities", () => {
     expect(() => {
       new TestEntity({
         id: "task-1",
-        schema: ProjectionStateSchema,
-        state: createProjectionState(),
+        schema: ProjectOverviewStateSchema,
+        state: createProjectOverviewState(),
         version: rejectedVersion,
       });
     }).toThrow(/plain snapshot data/);
@@ -587,8 +559,8 @@ describe("entities", () => {
     expect(() => {
       new TestEntity({
         id: "task-1",
-        schema: ProjectionStateSchema,
-        state: createProjectionState(),
+        schema: ProjectOverviewStateSchema,
+        state: createProjectOverviewState(),
         version: proxiedVersion,
       });
     }).toThrow(/plain snapshot data/);
@@ -604,8 +576,8 @@ describe("entities", () => {
     expect(() => {
       new TestEntity({
         id: "task-1",
-        schema: ProjectionStateSchema,
-        state: createProjectionState(),
+        schema: ProjectOverviewStateSchema,
+        state: createProjectOverviewState(),
         version: deepVersion as RevisionMetadata,
       });
     }).toThrow(/plain snapshot data/);
@@ -614,13 +586,13 @@ describe("entities", () => {
   it("constrains entity version generics to plain metadata at compile time", () => {
     expectTypeOf<TestEntity["version"]>().toEqualTypeOf<RevisionMetadata>();
     expectTypeOf<
-      EntityOptions<string, typeof ProjectionStateSchema, SizedRevisionMetadata>["version"]
+      EntityOptions<string, typeof ProjectOverviewStateSchema, SizedRevisionMetadata>["version"]
     >().toEqualTypeOf<SizedRevisionMetadata>();
 
-    const dateVersionOptions: EntityOptions<string, typeof ProjectionStateSchema, Date> = {
+    const dateVersionOptions: EntityOptions<string, typeof ProjectOverviewStateSchema, Date> = {
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       // @ts-expect-error Date is non-plain metadata and must be rejected by EntityOptions.
       version: new Date("2026-06-29T00:00:00.000Z"),
     };
@@ -637,8 +609,8 @@ describe("entities", () => {
     };
     const entity = new NestedVersionEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: initialVersion,
     });
 
@@ -694,8 +666,8 @@ describe("entities", () => {
   it("tracks lifecycle flags and keeps lifecycle-change tracking sticky after protected changes", () => {
     const entity = new TestEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
       lifecycle: { archived: true },
     });
@@ -728,8 +700,8 @@ describe("entities", () => {
   it("keeps lifecycle-change tracking false for no-op protected lifecycle replacements", () => {
     const entity = new TestEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
       lifecycle: { deleted: true },
     });
@@ -745,15 +717,15 @@ describe("entities", () => {
   it("lets protected subclass code replace state and caller-owned version metadata without auto-increments", () => {
     const entity = new TestEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
-    entity.applyState(createProjectionState({ name: "Ready", priority: 2 }));
+    entity.applyState(createProjectOverviewState({ name: "Ready", priority: 2 }));
     entity.applyVersion({ revision: 99, source: "server" });
 
-    expect(entity.state).toEqual(createProjectionState({ name: "Ready", priority: 2 }));
+    expect(entity.state).toEqual(createProjectOverviewState({ name: "Ready", priority: 2 }));
     expect(entity.version).toEqual({ revision: 99, source: "server" });
     expect(entity.lifecycleFlagsChanged).toBe(false);
   });
@@ -762,8 +734,8 @@ describe("entities", () => {
     const replacementVersion = { revision: 2, source: "server" as const, labels: ["accepted"] };
     const entity = new TestEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
@@ -791,8 +763,8 @@ describe("entities", () => {
   it("requires one active transactional entity scope for draft helpers", () => {
     const entity = new TestTransactionalEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
@@ -814,22 +786,22 @@ describe("entities", () => {
   it("starts transactions from the public state snapshot boundary", () => {
     const entity = new GetterCountingTransactionalEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
     entity.start();
 
     expect(entity.stateReads).toBe(1);
-    expect(entity.draft()).toEqual(createProjectionState());
+    expect(entity.draft()).toEqual(createProjectOverviewState());
   });
 
   it("exposes protected tryUpdate with atomic validation failures", () => {
     const entity = new TestTransactionalEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
@@ -843,14 +815,14 @@ describe("entities", () => {
 
     expect(Object.isFrozen(violations)).toBe(true);
     expect(violations).not.toEqual([]);
-    expect(entity.draft()).toEqual(createProjectionState({ name: "Validated" }));
+    expect(entity.draft()).toEqual(createProjectOverviewState({ name: "Validated" }));
   });
 
   it("commits accepted draft state, version metadata, and lifecycle flags back to the entity", () => {
     const entity = new TestTransactionalEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
@@ -860,7 +832,7 @@ describe("entities", () => {
     entity.reviseDraft(2);
     entity.archiveDraftForTest();
 
-    expect(entity.state).toEqual(createProjectionState());
+    expect(entity.state).toEqual(createProjectOverviewState());
     expect(entity.version).toEqual({ revision: 1, source: "server" });
     expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
     expect(entity.changed).toBe(false);
@@ -869,7 +841,7 @@ describe("entities", () => {
 
     expect(result.status).toBe("accepted");
     expect(entity.hasActiveTransaction()).toBe(false);
-    expect(entity.state).toEqual(createProjectionState({ name: "Ready", priority: 2 }));
+    expect(entity.state).toEqual(createProjectOverviewState({ name: "Ready", priority: 2 }));
     expect(entity.version).toEqual({ revision: 2, source: "server" });
     expect(entity.lifecycle).toEqual({ archived: true, deleted: false });
     expect(entity.lifecycleFlagsChanged).toBe(true);
@@ -879,8 +851,8 @@ describe("entities", () => {
   it("keeps rejected commits active and does not apply state, version, or lifecycle", () => {
     const entity = new TestTransactionalEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
@@ -893,7 +865,7 @@ describe("entities", () => {
 
     expect(rejected.status).toBe("rejected");
     expect(entity.hasActiveTransaction()).toBe(true);
-    expect(entity.state).toEqual(createProjectionState());
+    expect(entity.state).toEqual(createProjectOverviewState());
     expect(entity.version).toEqual({ revision: 1, source: "server" });
     expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
     expect(entity.changed).toBe(false);
@@ -907,7 +879,7 @@ describe("entities", () => {
 
     expect(accepted.status).toBe("accepted");
     expect(entity.hasActiveTransaction()).toBe(false);
-    expect(entity.state).toEqual(createProjectionState({ name: "Recovered", priority: 3 }));
+    expect(entity.state).toEqual(createProjectOverviewState({ name: "Recovered", priority: 3 }));
     expect(entity.version).toEqual({ revision: 3, source: "server" });
     expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
     expect(entity.changed).toBe(true);
@@ -916,8 +888,8 @@ describe("entities", () => {
   it("keeps rejected commit version results isolated from the active transaction", () => {
     const entity = new TestTransactionalEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
@@ -951,8 +923,8 @@ describe("entities", () => {
   it("rolls back active transactional entity drafts without applying them", () => {
     const entity = new TestTransactionalEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
@@ -965,7 +937,7 @@ describe("entities", () => {
 
     expect(result.status).toBe("rolled-back");
     expect(entity.hasActiveTransaction()).toBe(false);
-    expect(entity.state).toEqual(createProjectionState());
+    expect(entity.state).toEqual(createProjectOverviewState());
     expect(entity.version).toEqual({ revision: 1, source: "server" });
     expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
     expect(entity.changed).toBe(false);
@@ -975,8 +947,8 @@ describe("entities", () => {
   it("keeps public snapshots isolated while a transaction draft is active", () => {
     const entity = new TestTransactionalEntity({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
@@ -988,32 +960,32 @@ describe("entities", () => {
     };
     version.draft.revision = 99;
 
-    expect(entity.draft()).toEqual(createProjectionState());
+    expect(entity.draft()).toEqual(createProjectOverviewState());
     expect(entity.draftVersion()).toEqual({
       previous: { revision: 1, source: "server" },
       draft: { revision: 1, source: "server" },
     });
-    expect(entity.state).toEqual(createProjectionState());
+    expect(entity.state).toEqual(createProjectOverviewState());
     expect(entity.version).toEqual({ revision: 1, source: "server" });
   });
 
   it("marks aggregate, projection, and process manager families with stable identity", () => {
     const aggregate = new TestAggregate({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
     const projection = new TestProjection({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
     const processManager = new TestProcessManager({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
@@ -1027,13 +999,13 @@ describe("entities", () => {
     expectTypeOf(projection.entityFamily).toEqualTypeOf<"projection">();
     expectTypeOf(processManager.entityFamily).toEqualTypeOf<"process-manager">();
     expectTypeOf<TestAggregate>().toExtend<
-      TransactionalEntity<string, typeof ProjectionStateSchema, RevisionMetadata>
+      TransactionalEntity<string, typeof ProjectOverviewStateSchema, RevisionMetadata>
     >();
     expectTypeOf<TestProjection>().toExtend<
-      TransactionalEntity<string, typeof ProjectionStateSchema, RevisionMetadata>
+      TransactionalEntity<string, typeof ProjectOverviewStateSchema, RevisionMetadata>
     >();
     expectTypeOf<TestProcessManager>().toExtend<
-      TransactionalEntity<string, typeof ProjectionStateSchema, RevisionMetadata>
+      TransactionalEntity<string, typeof ProjectOverviewStateSchema, RevisionMetadata>
     >();
     expectTypeOf<TestAggregate["entityFamily"]>().toExtend<EntityFamily>();
   });
@@ -1041,20 +1013,20 @@ describe("entities", () => {
   it("keeps family marker accessors stable under runtime reassignment attempts", () => {
     const aggregate = new TestAggregate({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
     const projection = new TestProjection({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
     const processManager = new TestProcessManager({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
@@ -1078,8 +1050,8 @@ describe("entities", () => {
   it("installs locked own family markers that ignore prototype descriptor tampering", () => {
     const aggregate = new TestAggregate({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
     const originalAggregatePrototypeDescriptor = Object.getOwnPropertyDescriptor(
@@ -1102,8 +1074,8 @@ describe("entities", () => {
 
       const laterAggregate = new TestAggregate({
         id: "task-2",
-        schema: ProjectionStateSchema,
-        state: createProjectionState(),
+        schema: ProjectOverviewStateSchema,
+        state: createProjectOverviewState(),
         version: { revision: 1, source: "server" },
       });
 
@@ -1125,8 +1097,8 @@ describe("entities", () => {
   it("preserves transactional entity behavior through family marker classes", () => {
     const aggregate = new TestAggregate({
       id: "task-1",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
@@ -1135,14 +1107,14 @@ describe("entities", () => {
     returnedDraft.name = "Caller-side draft mutation";
     aggregate.reviseDraft(2);
 
-    expect(aggregate.state).toEqual(createProjectionState());
+    expect(aggregate.state).toEqual(createProjectOverviewState());
     expect(aggregate.version).toEqual({ revision: 1, source: "server" });
     expect(aggregate.changed).toBe(false);
 
     const result = aggregate.commitForTest();
 
     expect(result.status).toBe("accepted");
-    expect(aggregate.state).toEqual(createProjectionState({ name: "Ready" }));
+    expect(aggregate.state).toEqual(createProjectOverviewState({ name: "Ready" }));
     expect(aggregate.version).toEqual({ revision: 2, source: "server" });
     expect(aggregate.changed).toBe(true);
   });
@@ -1168,10 +1140,10 @@ describe("entities", () => {
 
   it("keeps the per-family history declarations protected and readonly", () => {
     expectTypeOf<ReturnType<TestAggregate["stateAtForTest"]>>().toEqualTypeOf<
-      Promise<Readonly<ProjectionState> | undefined>
+      Promise<Readonly<ProjectOverviewState> | undefined>
     >();
     expectTypeOf<ReturnType<TestAggregate["historyStatesForTest"]>>().toEqualTypeOf<
-      Promise<readonly Readonly<ProjectionState>[]>
+      Promise<readonly Readonly<ProjectOverviewState>[]>
     >();
     expectTypeOf<ReturnType<TestAggregate["historyEventsForTest"]>>().toEqualTypeOf<
       Promise<readonly Readonly<import("@spine-event-engine/proto").Event>[]>
@@ -1209,14 +1181,14 @@ describe("entities", () => {
   it("rejects protected history reads outside repository execution", () => {
     const aggregate = new TestAggregate({
       id: "task-history-unbound",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
     const processManager = new TestProcessManager({
       id: "pm-history-unbound",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
 
@@ -1237,8 +1209,8 @@ describe("entities", () => {
   it("rejects invalid protected history depths before repository access", () => {
     const aggregate = new TestAggregate({
       id: "task-history-depth",
-      schema: ProjectionStateSchema,
-      state: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
       version: { revision: 1, source: "server" },
     });
     entityHistoryAccess.bind(aggregate, {

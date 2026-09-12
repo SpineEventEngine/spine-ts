@@ -1,6 +1,15 @@
 [
   {
     "rule": "standalone-function",
+    "file": "packages/server/src/handler/handler-decorators.ts",
+    "kind": "function-declaration",
+    "identity": "Throws()#1",
+    "name": "Throws",
+    "disposition": "necessity",
+    "reason": "TypeScript decorator boundary: Throws is the public method decorator used directly in application class declarations."
+  },
+  {
+    "rule": "standalone-function",
     "file": "packages/server/src/server/managed-server-application.ts",
     "kind": "function-declaration",
     "identity": "canonicalLoopbackEndpoint()#1",

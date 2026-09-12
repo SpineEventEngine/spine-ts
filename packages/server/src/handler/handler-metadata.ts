@@ -14,7 +14,7 @@
 
 import type { EntityMetadata, DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import { describeEntityMetadata, isEntitySchema } from "../entity/entity-metadata.js";
-import { ProcessManager } from "../entity/entity.js";
+import { ProcessManager, Projection } from "../entity/entity.js";
 
 /**
  * Entity class value accepted by explicit handler metadata registration.
@@ -74,7 +74,10 @@ export type HandlerMethodName<Instance extends object> = Extract<
  * Error code for explicit handler metadata registration failures.
  */
 export type HandlerMetadataErrorCode =
-  "UNKNOWN_HANDLER_METHOD" | "INVALID_PARAMETER_COUNT" | "UNSUPPORTED_COMMAND_HANDLER";
+  | "UNKNOWN_HANDLER_METHOD"
+  | "INVALID_PARAMETER_COUNT"
+  | "UNSUPPORTED_COMMAND_HANDLER"
+  | "UNSUPPORTED_ASSIGN_HANDLER";
 
 /**
  * Error thrown when explicit handler metadata cannot be defined.
@@ -838,9 +841,9 @@ export interface HandlerArity {
   readonly origin?: HandlerOrigin;
 
   /**
-   * Generated Protobuf-ES schemas emitted by the handler return type.
+   * Generated schemas that the handler may return or throw.
    */
-  readonly emittedSchemas?: readonly DescriptorMessageSchema[];
+  readonly outcomes?: HandlerOutcomeSchemas;
 
   /**
    * Optional generated Event field filter.
@@ -853,7 +856,7 @@ export interface HandlerArity {
  */
 class EntityHandlersOwner {
   readonly #authentic = new WeakSet<EntityHandlersMetadata>();
-  readonly #emittedSchemas = new WeakMap<HandlerMetadata, readonly DescriptorMessageSchema[]>();
+  readonly #outcomes = new WeakMap<HandlerMetadata, HandlerOutcomeSchemas>();
 
   /**
    * Creates handler metadata without invoking entity methods.
@@ -891,21 +894,32 @@ class EntityHandlersOwner {
    * @returns Frozen emitted schemas.
    * @internal
    */
-  emittedSchemas(handler: HandlerMetadata): readonly DescriptorMessageSchema[] {
-    return Object.freeze([...(this.#emittedSchemas.get(handler) ?? [])]);
+  returnedSchemas(handler: HandlerMetadata): readonly DescriptorMessageSchema[] {
+    return Object.freeze([...(this.#outcomes.get(handler)?.returned ?? [])]);
   }
 
   /**
-   * Copies generated emitted-schema metadata between cloned handlers.
+   * Returns generated rejection schemas declared by a handler.
+   *
+   * @param handler Handler metadata to inspect.
+   * @returns Frozen generated rejection schemas.
+   * @internal
+   */
+  thrownSchemas(handler: HandlerMetadata): readonly DescriptorMessageSchema[] {
+    return Object.freeze([...(this.#outcomes.get(handler)?.thrown ?? [])]);
+  }
+
+  /**
+   * Copies generated normal-return and thrown-rejection metadata between cloned handlers.
    *
    * @param source Source handler metadata.
    * @param target Cloned target handler metadata.
    * @internal
    */
-  copyEmittedSchemas(source: HandlerMetadata, target: HandlerMetadata): void {
-    const schemas = this.#emittedSchemas.get(source);
-    if (schemas !== undefined) {
-      this.#emittedSchemas.set(target, Object.freeze([...schemas]));
+  copyOutcomes(source: HandlerMetadata, target: HandlerMetadata): void {
+    const outcomes = this.#outcomes.get(source);
+    if (outcomes !== undefined) {
+      this.#outcomes.set(target, EntityHandlersOwner.freezeOutcomes(outcomes));
     }
   }
 
@@ -1035,8 +1049,8 @@ class EntityHandlersOwner {
       origin: generated?.origin ?? "domestic",
       ...(generated?.where === undefined ? {} : { where: Object.freeze({ ...generated.where }) }),
     });
-    if (generated?.emittedSchemas !== undefined) {
-      this.#emittedSchemas.set(handler as HandlerMetadata, generated.emittedSchemas);
+    if (generated?.outcomes !== undefined) {
+      this.#outcomes.set(handler as HandlerMetadata, generated.outcomes);
     }
     built.add(handler as HandlerMetadata);
     return handler;
@@ -1050,9 +1064,9 @@ class EntityHandlersOwner {
         Object.freeze({
           parameterCount: this.#parameterCount(arity.parameterCount),
           origin: arity.origin ?? "domestic",
-          ...(arity.emittedSchemas === undefined
+          ...(arity.outcomes === undefined
             ? {}
-            : { emittedSchemas: Object.freeze([...arity.emittedSchemas]) }),
+            : { outcomes: EntityHandlersOwner.freezeOutcomes(arity.outcomes) }),
           ...(arity.where === undefined ? {} : { where: Object.freeze({ ...arity.where }) }),
         }),
       );
@@ -1070,11 +1084,27 @@ class EntityHandlersOwner {
     );
   }
 
+  static freezeOutcomes(outcomes: HandlerOutcomeSchemas): HandlerOutcomeSchemas {
+    return Object.freeze({
+      returned: Object.freeze([...outcomes.returned]),
+      thrown: Object.freeze([...outcomes.thrown]),
+    });
+  }
+
   #arityKey(kind: HandlerKind, methodName: string): string {
     return `${kind}\u0000${methodName}`;
   }
 
   #validateCommandHandlers(entityType: EntityClass, handlers: readonly HandlerMetadata[]): void {
+    if (
+      entityType.prototype instanceof Projection &&
+      handlers.some((handler) => handler.kind === "command-assignment")
+    ) {
+      throw new HandlerMetadataError(
+        "UNSUPPORTED_ASSIGN_HANDLER",
+        "Projection entities cannot use @Assign handlers.",
+      );
+    }
     if (
       handlers.some(
         (handler) => handler.kind === "command-substitution" || handler.kind === "command-reaction",
@@ -1179,6 +1209,11 @@ export const EntityHandlers: Readonly<EntityHandlerDefinitions> = Object.freeze(
 interface HandlerGeneratedData {
   readonly parameterCount: HandlerParameterCount;
   readonly origin: HandlerOrigin;
-  readonly emittedSchemas?: readonly DescriptorMessageSchema[];
+  readonly outcomes?: HandlerOutcomeSchemas;
   readonly where?: WhereOptions;
+}
+
+interface HandlerOutcomeSchemas {
+  readonly returned: readonly DescriptorMessageSchema[];
+  readonly thrown: readonly DescriptorMessageSchema[];
 }

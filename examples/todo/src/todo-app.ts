@@ -24,6 +24,7 @@ import {
   EventRouting,
   Projection,
   Subscribe,
+  Throws,
   type DeliveryStrategy,
 } from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
@@ -172,6 +173,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
    * @returns The event that records the task completion.
    */
   @Assign
+  @Throws(TaskAlreadyDone)
   completeTask(command: CompleteTask): TaskCompleted {
     void command;
     const id = clone(TaskIdSchema, this.id);
@@ -202,6 +204,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
    * @returns The event that records the task reopening.
    */
   @Assign
+  @Throws(TaskNotDone)
   reopenTask(command: ReopenTask): TaskReopened {
     void command;
     const id = clone(TaskIdSchema, this.id);
@@ -232,6 +235,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
    * @returns The event that records the assignment.
    */
   @Assign
+  @Throws(TaskAlreadyDone, TaskAlreadyAssigned)
   assignTask(command: AssignTask): TaskAssignedEvent {
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(this.state.taskListId);
@@ -253,6 +257,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
    * @returns The event that records the reassignment.
    */
   @Assign
+  @Throws(TaskAlreadyDone, TaskNotAssigned, TaskAlreadyAssigned)
   reassignTask(command: ReassignTask): TaskReassignedEvent {
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(this.state.taskListId);
@@ -276,6 +281,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
    * @returns The event that records the unassignment.
    */
   @Assign
+  @Throws(TaskAlreadyDone, TaskNotAssigned)
   unassignTask(command: UnassignTask): TaskUnassignedEvent {
     void command;
     const id = clone(TaskIdSchema, this.id);

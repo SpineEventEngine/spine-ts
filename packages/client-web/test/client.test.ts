@@ -194,10 +194,7 @@ describe("Client", () => {
 
   it("fails both streams and cleans up on count or byte overflow", async () => {
     for (const subscriptions of [{ updateBufferCapacity: 1 }, { updateBufferByteCapacity: 1 }]) {
-      const client = Client.usingTransport(
-        { transport: updateTransport(), createRequestId: () => "overflow" },
-        { subscriptions },
-      );
+      const client = Client.usingTransport({ transport: updateTransport() }, { subscriptions });
       const subscription = await client
         .asGuest()
         .createSubscription(create(TopicSchema), eventSubscription);
@@ -240,7 +237,6 @@ describe("Client", () => {
           2,
           () => new Promise<void>((resolve) => (releaseSecond = resolve)),
         ),
-        createRequestId: () => "immutable",
       },
       {
         zoneId: "UTC",
@@ -266,7 +262,7 @@ describe("Client", () => {
 
   it("retries unexpected wire EOF once before emitting one terminal failure", async () => {
     const client = Client.usingTransport(
-      { transport: updateTransport(2), createRequestId: () => "drain" },
+      { transport: updateTransport(2) },
       {
         subscriptions: {
           updateBufferCapacity: 10,
@@ -323,7 +319,6 @@ describe("Client", () => {
             return active < 2 ? emptyUpdates() : neverEndingUpdates();
           },
         ),
-        createRequestId: () => "retry-subscribe",
       },
       {
         subscriptions: {
@@ -382,7 +377,6 @@ describe("Client", () => {
           undefined,
           () => neverEndingUpdates(),
         ),
-        createRequestId: () => "initial-subscribe-retry",
       },
       {
         subscriptions: {
@@ -471,7 +465,6 @@ describe("Client", () => {
             })();
           },
         ),
-        createRequestId: () => "entity-recovery",
       },
       {
         subscriptions: {
@@ -621,7 +614,6 @@ describe("Client", () => {
             },
             () => emptyUpdates(),
           ),
-          createRequestId: () => `terminal-${testCase.name}`,
         },
         {
           subscriptions: {
@@ -691,7 +683,6 @@ describe("Client", () => {
             return activations === 1 ? emptyUpdates() : neverEndingUpdates();
           },
         ),
-        createRequestId: () => "read-retry",
       },
       {
         subscriptions: {
@@ -782,7 +773,6 @@ describe("Client", () => {
               };
             },
           ),
-          createRequestId: () => `pending-read-${operation}`,
           close: () => sourceCloses++,
         },
         {
@@ -870,7 +860,6 @@ describe("Client", () => {
               })();
             },
           ),
-          createRequestId: () => "resync-overflow",
         },
         {
           subscriptions: {
@@ -928,7 +917,6 @@ describe("Client", () => {
                 })()
               : neverEndingUpdates(),
         ),
-        createRequestId: () => "initial-activate-retry",
       },
       {
         subscriptions: {
@@ -983,7 +971,6 @@ describe("Client", () => {
             return active === 3 ? neverEndingUpdates() : emptyUpdates();
           },
         ),
-        createRequestId: () => "retry-activate",
       },
       {
         subscriptions: {
@@ -1025,7 +1012,6 @@ describe("Client", () => {
           undefined,
           () => emptyUpdates(),
         ),
-        createRequestId: () => "retry-exhaustion",
       },
       {
         subscriptions: {
@@ -1072,7 +1058,6 @@ describe("Client", () => {
           undefined,
           () => emptyUpdates(),
         ),
-        createRequestId: () => "retry-elapsed",
       },
       {
         subscriptions: {
@@ -1126,7 +1111,6 @@ describe("Client", () => {
           undefined,
           () => emptyUpdates(),
         ),
-        createRequestId: () => "retry-wait-cancel",
       },
       {
         subscriptions: {
@@ -1188,7 +1172,6 @@ describe("Client", () => {
           undefined,
           () => emptyUpdates(),
         ),
-        createRequestId: () => "retry-wait-close",
         close: () => sourceCloses++,
       },
       {
@@ -1238,7 +1221,6 @@ describe("Client", () => {
           if (method.name === "Subscribe") throw new Error("initial retry failure");
           return create(ResponseSchema);
         }),
-        createRequestId: () => "initial-wait-cancel",
       },
       {
         subscriptions: {
@@ -1288,7 +1270,6 @@ describe("Client", () => {
           }
           return create(ResponseSchema);
         }),
-        createRequestId: () => "abort-ignoring-wait",
       },
       {
         subscriptions: {
@@ -1337,7 +1318,6 @@ describe("Client", () => {
           }
           return create(ResponseSchema);
         }),
-        createRequestId: () => "never-settling-wait",
       },
       {
         subscriptions: {
@@ -1413,7 +1393,6 @@ describe("Client", () => {
             });
           })(),
       ),
-      createRequestId: () => "binary",
     });
     const subscription = await client
       .asGuest()
@@ -1435,7 +1414,7 @@ describe("Client", () => {
 
   it("fails both streams deterministically when lifecycle capacity overflows", async () => {
     const client = Client.usingTransport(
-      { transport: updateTransport(), createRequestId: () => "lifecycle" },
+      { transport: updateTransport() },
       { subscriptions: { lifecycleBufferCapacity: 1 } },
     );
     const subscription = await client
@@ -1545,107 +1524,37 @@ describe("Client", () => {
     expect(browserFactories.grpcWeb).not.toHaveBeenCalled();
   });
 
-  it("generates a UUID v4 with getRandomValues when randomUUID is unavailable", async () => {
-    const originalCrypto = globalThis.crypto;
-    const random = new Uint8Array(16).fill(0);
-    vi.stubGlobal("crypto", {
-      getRandomValues: (bytes: Uint8Array) => {
-        bytes.set(random);
-        return bytes;
-      },
-    });
-    let id: string | undefined;
-    browserFactories.grpcWeb.mockReturnValue(
-      unaryTransport((method, input) => {
-        if (method.name === "Post") {
-          id = (input as { id?: { uuid?: string } }).id?.uuid;
-          return create(AckSchema, {
-            messageId: AnyMessages.pack(
-              CommandIdSchema,
-              create(CommandIdSchema, { uuid: requireValue(id, "request ID") }),
-            ),
-            status: create(StatusSchema, { status: { case: "ok", value: {} } }),
-          });
-        }
-        return create(QueryResponseSchema);
-      }),
-    );
-    const client = Client.forGrpcWeb("https://gateway.example");
-    await client.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" }));
-    expect(id).toBe("00000000-0000-4000-8000-000000000000");
-    await client.close();
-    vi.stubGlobal("crypto", originalCrypto);
-  });
-
-  it("uses randomUUID before getRandomValues for browser request IDs", async () => {
-    const originalCrypto = globalThis.crypto;
-    const randomUUID = vi.fn(() => "6f75b67a-5f23-4b64-8a35-6ce5f8f97cf5");
-    const getRandomValues = vi.fn();
-    vi.stubGlobal("crypto", { randomUUID, getRandomValues });
-    let id: string | undefined;
-    browserFactories.connect.mockReturnValue(
-      unaryTransport((method, input) => {
-        if (method.name === "Post") {
-          id = (input as { id?: { uuid?: string } }).id?.uuid;
-          return create(AckSchema, {
-            messageId: AnyMessages.pack(
-              CommandIdSchema,
-              create(CommandIdSchema, { uuid: requireValue(id, "request ID") }),
-            ),
-            status: create(StatusSchema, { status: { case: "ok", value: {} } }),
-          });
-        }
-        return create(QueryResponseSchema);
-      }),
-    );
-    const client = Client.forConnect("https://gateway.example");
-    await client.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" }));
-    expect(id).toBe("6f75b67a-5f23-4b64-8a35-6ce5f8f97cf5");
-    expect(randomUUID).toHaveBeenCalledOnce();
-    expect(getRandomValues).not.toHaveBeenCalled();
-    await client.close();
-    vi.stubGlobal("crypto", originalCrypto);
-  });
-
-  it("fails before invoking the selected transport when secure browser randomness is unavailable", async () => {
-    const originalCrypto = globalThis.crypto;
-    vi.stubGlobal("crypto", undefined);
-    const post = vi.fn();
-    browserFactories.grpcWeb.mockReturnValue(
-      unaryTransport((method) => {
-        if (method.name === "Post") post();
-        return create(QueryResponseSchema);
-      }),
-    );
-    const client = Client.forGrpcWeb("https://gateway.example");
-    await expect(
-      client.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" })),
-    ).rejects.toThrow("secure random");
-    expect(post).not.toHaveBeenCalled();
-    await client.close();
-    vi.stubGlobal("crypto", originalCrypto);
-  });
-
-  it("uses injected transport and request IDs for post and send", async () => {
+  it("uses an injected transport for post and send", async () => {
     const calls: string[] = [];
     const client = Client.usingTransport({
-      transport: unaryTransport((method) => {
+      transport: unaryTransport((method, input) => {
         calls.push(method.name);
+        if (method.name === "Post") {
+          const command = input as { readonly id?: { readonly uuid?: string } };
+          return create(AckSchema, {
+            messageId: AnyMessages.pack(
+              CommandIdSchema,
+              create(CommandIdSchema, { uuid: requireValue(command.id?.uuid, "command ID") }),
+            ),
+            status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+          });
+        }
         return create(QueryResponseSchema, {
           response: create(ResponseSchema, {
             status: create(StatusSchema),
           }),
         });
       }),
-      createRequestId: () => "",
     });
 
     await expect(
       client.asGuest().post(ActorContextSchema, create(ActorContextSchema)),
-    ).rejects.toThrow("request ID is missing");
+    ).resolves.toEqual({
+      kind: "ok",
+    });
     await client.onBehalfOf("alice").send(create(QuerySchema));
 
-    expect(calls).toEqual(["Read"]);
+    expect(calls).toEqual(["Post", "Read"]);
     await client.close();
   });
 
@@ -1661,7 +1570,6 @@ describe("Client", () => {
           });
         return create(ResponseSchema);
       }),
-      createRequestId: () => "request-2",
     });
 
     const subscription = await client
@@ -1689,7 +1597,6 @@ describe("Client", () => {
           return create(QueryResponseSchema);
         },
       ),
-      createRequestId: () => "request-3",
     });
     const scope = client.asGuest();
     const read = scope.send(create(QuerySchema));
@@ -1718,7 +1625,6 @@ describe("Client", () => {
           });
         return create(ResponseSchema);
       }),
-      createRequestId: () => "request-4",
     });
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await expect(subscription.activate()).rejects.toThrow("subscription ID");
@@ -1741,7 +1647,6 @@ describe("Client", () => {
           if (method.name === "Cancel") cancels++;
           return create(ResponseSchema);
         }),
-        createRequestId: () => "request-done",
       },
       {
         subscriptions: {
@@ -1780,7 +1685,6 @@ describe("Client", () => {
           undefined,
           () => emptyUpdates(),
         ),
-        createRequestId: () => "event-reconnect",
       },
       {
         subscriptions: {
@@ -1840,7 +1744,6 @@ describe("Client", () => {
             })();
           },
         ),
-        createRequestId: () => "retry-episode",
       },
       {
         subscriptions: {
@@ -1896,7 +1799,6 @@ describe("Client", () => {
             })();
           },
         ),
-        createRequestId: () => "stable-then-failing",
       },
       {
         subscriptions: {
@@ -1950,7 +1852,6 @@ describe("Client", () => {
           undefined,
           () => emptyUpdates(),
         ),
-        createRequestId: () => "reauthenticate",
       },
       {
         onReauthenticateBeforeReconnect: reauthenticate,
@@ -1994,7 +1895,6 @@ describe("Client", () => {
           undefined,
           () => emptyUpdates(),
         ),
-        createRequestId: () => "cancel-reauthentication",
       },
       {
         onReauthenticateBeforeReconnect: (signal) => {
@@ -2052,7 +1952,6 @@ describe("Client", () => {
           undefined,
           () => emptyUpdates(),
         ),
-        createRequestId: () => "late-success-reauthentication",
       },
       {
         onReauthenticateBeforeReconnect: (signal) => {
@@ -2113,7 +2012,6 @@ describe("Client", () => {
           undefined,
           () => emptyUpdates(),
         ),
-        createRequestId: () => "deadline-after-reauthentication",
       },
       {
         onReauthenticateBeforeReconnect: () => {
@@ -2157,7 +2055,6 @@ describe("Client", () => {
           undefined,
           () => emptyUpdates(),
         ),
-        createRequestId: () => "timeout-reauthentication",
       },
       {
         onReauthenticateBeforeReconnect: (signal) => {
@@ -2207,7 +2104,6 @@ describe("Client", () => {
           }),
         }),
       ),
-      createRequestId: () => "non-error-stream",
     });
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     const updates = subscription.updates[Symbol.asyncIterator]();
@@ -2251,7 +2147,6 @@ describe("Client", () => {
           });
         return create(ResponseSchema);
       }),
-      createRequestId: () => "request-stall",
     });
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await subscription.activate();
@@ -2275,7 +2170,6 @@ describe("Client", () => {
         if (method.name === "Cancel") return never<Message>();
         return create(ResponseSchema);
       }),
-      createRequestId: () => "request-non-cooperative",
     });
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await subscription.activate();
@@ -2304,7 +2198,6 @@ describe("Client", () => {
         if (method.name === "Cancel") throw new Error("cancel failed");
         return create(ResponseSchema);
       }),
-      createRequestId: () => "request-cleanup-failure",
       close: () => closed++,
     });
     const first = await client.asGuest().createSubscription(topic, eventSubscription);
@@ -2332,7 +2225,6 @@ describe("Client", () => {
         }
         return create(ResponseSchema);
       }),
-      createRequestId: () => "request-invalid-cleanup",
       close: () => closed++,
     });
     const subscription = await client
@@ -2368,7 +2260,6 @@ describe("Client", () => {
         if (method.name === "Cancel") cancels++;
         return create(ResponseSchema);
       }),
-      createRequestId: () => "request-5",
     });
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     const pendingUpdate = subscription.updates[Symbol.asyncIterator]().next();
@@ -2403,7 +2294,6 @@ describe("Client", () => {
       transport: unaryTransport((method) =>
         method.name === "Subscribe" ? never<Message>() : create(ResponseSchema),
       ),
-      createRequestId: () => "subscribe-never-settles",
       close: () => closed++,
     });
     const subscription = await client
@@ -2426,7 +2316,6 @@ describe("Client", () => {
         }
         return create(ResponseSchema);
       }),
-      createRequestId: () => "synchronous-cancel",
     });
     const subscription = await client
       .asGuest()
@@ -2458,7 +2347,6 @@ describe("Client", () => {
         if (method.name === "Cancel") cancels++;
         return create(ResponseSchema);
       }),
-      createRequestId: () => "late-wire",
     });
     const subscription = await client
       .asGuest()
@@ -2506,7 +2394,6 @@ describe("Client", () => {
         undefined,
         () => updates,
       ),
-      createRequestId: () => "stream-never-settles",
       close: () => closed++,
     });
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
@@ -2537,7 +2424,6 @@ describe("Client", () => {
               })
             : create(ResponseSchema),
         ),
-        createRequestId: () => "closed-terminal",
       },
       { subscriptions: { lifecycleBufferCapacity: 1 } },
     );
@@ -2571,7 +2457,6 @@ describe("Client", () => {
           topic: input as Topic,
         });
       }),
-      createRequestId: () => "abort",
     });
     const creationAbort = new AbortController();
     creationAbort.abort(new Error("creation stopped"));
@@ -2607,7 +2492,6 @@ describe("Client", () => {
         if (method.name === "Cancel") throw new Error("cancel failed");
         return create(ResponseSchema);
       }),
-      createRequestId: () => "aggregate",
       close: () => {
         throw new Error("source close failed");
       },
@@ -2631,7 +2515,6 @@ describe("Client", () => {
           if (method.name === "Cancel") cancels++;
           return create(ResponseSchema);
         }),
-        createRequestId: () => "subscribe-reject",
       },
       {
         subscriptions: {
@@ -2651,7 +2534,6 @@ describe("Client", () => {
   it("emits one connecting transition for concurrent activation calls", async () => {
     const client = Client.usingTransport({
       transport: updateTransport(0),
-      createRequestId: () => "one",
     });
     const subscription = await client
       .asGuest()
@@ -2667,7 +2549,6 @@ describe("Client", () => {
   it("rejects a concurrent pending next without stranding the first call", async () => {
     const client = Client.usingTransport({
       transport: updateTransport(2, () => never<undefined>()),
-      createRequestId: () => "pending",
     });
     const subscription = await client
       .asGuest()
@@ -2700,7 +2581,6 @@ describe("Client", () => {
           }),
         }),
       ),
-      createRequestId: () => "request-6",
     });
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await subscription.activate();
@@ -2722,7 +2602,6 @@ describe("Client", () => {
         if (method.name === "Cancel") throw new Error("cancel failed");
         return create(ResponseSchema);
       }),
-      createRequestId: () => "request-7",
       close: () => closed++,
     });
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
@@ -2751,7 +2630,6 @@ describe("Client", () => {
           status: statuses[index++],
         });
       }),
-      createRequestId: () => "post-1",
     });
 
     expect(
@@ -2788,7 +2666,6 @@ describe("Client", () => {
           }),
         });
       }),
-      createRequestId: () => "invalid-post",
     });
 
     await expect(client.asGuest().post(UserIdSchema, create(UserIdSchema))).resolves.toMatchObject({
@@ -2817,7 +2694,6 @@ describe("Client", () => {
           status: create(StatusSchema, { status: { case: "ok", value: {} } }),
         });
       }),
-      createRequestId: () => "post-2",
     });
     const scope = client.asGuest();
     await expect(
@@ -2841,7 +2717,6 @@ describe("Client", () => {
           ),
         });
       }),
-      createRequestId: () => "post-no-status",
     });
     await expect(
       client.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" })),
@@ -2881,7 +2756,6 @@ describe("Client", () => {
           if (method.name === "Read") received = input as typeof received;
           return create(QueryResponseSchema);
         }),
-        createRequestId: () => "context-1",
       },
       { tenant, zoneId },
     );
@@ -2899,7 +2773,6 @@ describe("Client", () => {
           if (method.name === "Read") received = input as typeof received;
           return create(QueryResponseSchema);
         }),
-        createRequestId: () => "context-2",
       },
       { tenant: "tenant-string", zoneId: "Europe/Lisbon" },
     );
@@ -2919,7 +2792,6 @@ describe("Client", () => {
         }
         return create(QueryResponseSchema);
       }),
-      createRequestId: () => "send-1",
     });
     let builds = 0;
     await client.asGuest().send({ build: () => (builds++, query) });
@@ -2965,7 +2837,6 @@ describe("Client", () => {
             });
           })(),
       ),
-      createRequestId: () => "subscription-1",
     });
     const first = await client.asGuest().createSubscription(requested, eventSubscription);
     expect(() => first.updates[Symbol.asyncIterator]()).not.toThrow();
@@ -3010,7 +2881,6 @@ describe("Client", () => {
           }),
         }),
       ),
-      createRequestId: () => "subscription-deliver",
     });
     const subscription = await client
       .asGuest()
@@ -3069,7 +2939,6 @@ describe("Client", () => {
             });
           })(),
       ),
-      createRequestId: () => "fan-in-loss",
     });
     const subscription = await client
       .asGuest()
@@ -3097,7 +2966,6 @@ describe("Client", () => {
           topic: input as Topic,
         });
       }),
-      createRequestId: () => "subscription-abort",
     });
     const subscription = await client
       .asGuest()
@@ -3134,7 +3002,6 @@ describe("Client", () => {
         undefined,
         undefined,
       ),
-      createRequestId: () => "activation-abort",
     });
     const subscription = await client
       .asGuest()
@@ -3187,10 +3054,9 @@ function unaryTransport(
   };
 }
 
-function source(): { transport: Transport; createRequestId(): string } {
+function source(): { transport: Transport } {
   return {
     transport: unaryTransport(() => create(QueryResponseSchema)),
-    createRequestId: () => "source",
   };
 }
 

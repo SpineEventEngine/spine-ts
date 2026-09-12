@@ -81,10 +81,10 @@ const allowedFlatPackageSourceFiles = new Set([
 ]);
 const gitOutputMaxBuffer = 64 * 1024 * 1024;
 
-export function checkCleanupRules(repoRoot) {
+export function checkCleanupRules(repoRoot, runGitCommand = runGit) {
   const root = resolve(repoRoot);
   const resolvedRoot = realpathSync(root);
-  const files = trackedFiles(root);
+  const files = trackedFiles(root, runGitCommand);
   const packages = packageDirs(root);
   const code = confinedTrackedFiles(
     root,
@@ -100,15 +100,332 @@ export function checkCleanupRules(repoRoot) {
   );
 
   return [
-    ...checkGeneratedLayout(root, files, packages),
+    ...checkGeneratedLayout(root, files, packages, runGitCommand),
     ...checkPackageTests(files),
     ...checkFlatSourceGrowth(files),
     ...code.failures,
     ...examples.failures,
     ...checkLineLength(root, code.files),
+    ...checkFixtureSchemaConsumers(root, files),
+    ...checkCallableLength(
+      root,
+      [...packageSourceFiles(code.files), ...examples.files],
+      runGitCommand,
+    ),
     ...checkTypeScriptStructure(root, [...packageSourceFiles(code.files), ...examples.files]),
     ...checkExampleSourceGuardrails(root, examples.files),
   ];
+}
+
+function checkFixtureSchemaConsumers(repoRoot, files) {
+  const details = [];
+  for (const file of files) {
+    if (!isFixtureSchemaConsumerFile(file)) continue;
+    const source = readFileSync(join(repoRoot, file), "utf8");
+    const syntax = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+    if (hasEmbeddedDescriptorPayloadContract(syntax))
+      details.push(`${file}: embedded generated descriptor payload contract`);
+    if (hasPositionalGeneratedSchemaReconstruction(syntax))
+      details.push(`${file}: positional generated schema reconstruction`);
+  }
+  return details.length === 0
+    ? []
+    : [{ title: "fixture consumers must use named generated schemas", details }];
+}
+
+function isFixtureSchemaConsumerFile(file) {
+  return /^packages\/[^/]+\/(?:src|test|test-fixtures)\/.+\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/u.test(
+    file,
+  );
+}
+
+function hasEmbeddedDescriptorPayloadContract(source) {
+  let found = false;
+  const visit = (node) => {
+    if (ts.isPropertyAssignment(node) && propertyNameText(node.name) === "descriptorSetBase64") {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+}
+
+function propertyNameText(name) {
+  return ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : undefined;
+}
+
+function hasPositionalGeneratedSchemaReconstruction(source) {
+  const generatedFiles = new Set();
+  const generatedSchemas = new Set();
+  const generatedNamespaces = new Set();
+  const descriptorFactories = new Set();
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier))
+      continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (
+      statement.moduleSpecifier.text === "@bufbuild/protobuf/codegenv2" &&
+      ts.isNamedImports(bindings)
+    ) {
+      for (const binding of bindings.elements) {
+        if (
+          ["messageDesc", "enumDesc", "serviceDesc"].includes(
+            binding.propertyName?.text ?? binding.name.text,
+          )
+        ) {
+          descriptorFactories.add(binding.name.text);
+        }
+      }
+    }
+    if (!isGeneratedDescriptorModule(statement.moduleSpecifier.text)) continue;
+    if (bindings === undefined) continue;
+    if (ts.isNamespaceImport(bindings)) {
+      generatedNamespaces.add(bindings.name.text);
+      continue;
+    }
+    for (const binding of bindings.elements) {
+      generatedSchemas.add(binding.name.text);
+      if (binding.propertyName?.text.startsWith("file_") || binding.name.text.startsWith("file_"))
+        generatedFiles.add(binding.name.text);
+    }
+  }
+  const collectAliases = (node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isObjectBindingPattern(node.name) &&
+      node.initializer !== undefined &&
+      isGeneratedSchema(node.initializer, generatedSchemas, generatedNamespaces)
+    ) {
+      for (const binding of node.name.elements) {
+        const property = binding.propertyName?.getText() ?? binding.name.getText();
+        if (property === "file" && ts.isIdentifier(binding.name))
+          generatedFiles.add(binding.name.text);
+      }
+    }
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer !== undefined &&
+      isGeneratedFileDescriptor(
+        node.initializer,
+        generatedFiles,
+        generatedSchemas,
+        generatedNamespaces,
+      )
+    ) {
+      generatedFiles.add(node.name.text);
+    }
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer !== undefined &&
+      ts.isIdentifier(node.initializer) &&
+      descriptorFactories.has(node.initializer.text)
+    ) {
+      descriptorFactories.add(node.name.text);
+    }
+    ts.forEachChild(node, collectAliases);
+  };
+  collectAliases(source);
+  let found = false;
+  const visit = (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      isPositionalDescriptorFactory(node.expression, descriptorFactories) &&
+      !isShadowedFactory(node, source)
+    ) {
+      const [file, index] = node.arguments;
+      if (
+        isGeneratedFileDescriptor(file, generatedFiles, generatedSchemas, generatedNamespaces) &&
+        ts.isNumericLiteral(index)
+      ) {
+        found = true;
+        return;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+}
+
+function isGeneratedDescriptorModule(moduleName) {
+  return moduleName.includes("generated") || /_pb(?:\.|$)/u.test(moduleName);
+}
+
+function isPositionalDescriptorFactory(expression, factories) {
+  return ts.isIdentifier(expression) && factories.has(expression.text);
+}
+
+function isShadowedFactory(node, source) {
+  if (!ts.isIdentifier(node.expression)) return false;
+  const name = node.expression.text;
+  for (
+    let current = node.parent;
+    current !== undefined && current !== source;
+    current = current.parent
+  ) {
+    if (
+      ts.isBlock(current) &&
+      current.statements.some((statement) => declaresName(statement, name))
+    )
+      return true;
+    if (
+      (ts.isFunctionDeclaration(current) ||
+        ts.isFunctionExpression(current) ||
+        ts.isArrowFunction(current)) &&
+      current.parameters.some((parameter) => bindingHasName(parameter.name, name))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function declaresName(statement, name) {
+  return (
+    ts.isVariableStatement(statement) &&
+    statement.declarationList.declarations.some((declaration) =>
+      bindingHasName(declaration.name, name),
+    )
+  );
+}
+
+function bindingHasName(binding, name) {
+  if (ts.isIdentifier(binding)) return binding.text === name;
+  return binding.elements.some((element) => bindingHasName(element.name, name));
+}
+
+function isGeneratedSchema(expression, generatedSchemas, generatedNamespaces) {
+  return (
+    (ts.isIdentifier(expression) && generatedSchemas.has(expression.text)) ||
+    (ts.isPropertyAccessExpression(expression) &&
+      ts.isIdentifier(expression.expression) &&
+      generatedNamespaces.has(expression.expression.text) &&
+      expression.name.text.endsWith("Schema"))
+  );
+}
+
+function isGeneratedFileDescriptor(
+  expression,
+  generatedFiles,
+  generatedSchemas,
+  generatedNamespaces,
+) {
+  if (ts.isIdentifier(expression)) return generatedFiles.has(expression.text);
+  if (
+    ts.isPropertyAccessExpression(expression) &&
+    ts.isIdentifier(expression.expression) &&
+    generatedSchemas.has(expression.expression.text) &&
+    expression.name.text === "file"
+  ) {
+    return true;
+  }
+  return (
+    ts.isPropertyAccessExpression(expression) &&
+    ts.isIdentifier(expression.expression) &&
+    generatedNamespaces.has(expression.expression.text) &&
+    expression.name.text.startsWith("file_")
+  );
+}
+
+function checkCallableLength(repoRoot, files, runGitCommand) {
+  const changed = changedLines(repoRoot, runGitCommand);
+  const details = [];
+  for (const file of files) {
+    const lines = changed.get(file);
+    if (lines === undefined) continue;
+    const source = ts.createSourceFile(
+      file,
+      readFileSync(join(repoRoot, file), "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+      scriptKindForFile(file),
+    );
+    const visit = (node) => {
+      if (isCallable(node)) {
+        const start = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+        const end = source.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
+        if (end - start + 1 > 35 && [...lines].some((line) => line >= start && line <= end))
+          details.push(`${file}:${start}-${end} ${callableName(node)}`);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return details.length === 0
+    ? []
+    : [{ title: "modified production/example callables exceed 35 physical lines", details }];
+}
+
+function isCallable(node) {
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isConstructorDeclaration(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isFunctionExpression(node)
+  );
+}
+
+function callableName(node) {
+  if (
+    (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
+    ts.isVariableDeclaration(node.parent)
+  ) {
+    return node.parent.name.getText();
+  }
+  return ts.isConstructorDeclaration(node)
+    ? "constructor"
+    : (node.name?.getText() ?? "anonymous callable");
+}
+
+function changedLines(repoRoot, runGitCommand) {
+  const changed = new Map();
+  const mergeBase = runGitCommand(repoRoot, ["merge-base", "origin/master", "HEAD"]);
+  const ranges =
+    mergeBase.status === 0
+      ? [`${mergeBase.stdout.trim()}...HEAD`, undefined, "--cached"]
+      : ["HEAD"];
+  for (const range of ranges) {
+    const args = ["diff", "--unified=0", "--no-renames"];
+    if (range !== undefined) args.push(range);
+    const result = runGitCommand(repoRoot, args);
+    if (result.status !== 0) throw new Error("Unable to classify changed source with git diff.");
+    let file;
+    for (const line of result.stdout.split("\n")) {
+      if (line.startsWith("+++ b/")) file = line.slice(6);
+      const match = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/u.exec(line);
+      if (file !== undefined && match !== null) {
+        const start = Number(match[1]);
+        const count = Number(match[2] ?? "1");
+        if (count > 0) {
+          const lines = changed.get(file) ?? new Set();
+          for (let index = 0; index < count; index += 1) lines.add(start + index);
+          changed.set(file, lines);
+        }
+      }
+    }
+  }
+  const untracked = runGitCommand(repoRoot, ["ls-files", "--others", "--exclude-standard"]);
+  if (untracked.status !== 0) throw new Error("Unable to classify untracked source.");
+  for (const file of untracked.stdout.split("\n").filter(Boolean)) {
+    const path = join(repoRoot, file);
+    if (existsSync(path))
+      changed.set(
+        file,
+        new Set(
+          readFileSync(path, "utf8")
+            .split(/\r?\n/u)
+            .map((_, index) => index + 1),
+        ),
+      );
+  }
+  return changed;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -177,8 +494,8 @@ function runGit(repoRoot, args) {
   return result;
 }
 
-function trackedFiles(repoRoot) {
-  const result = runGit(repoRoot, ["ls-files", "-z"]);
+function trackedFiles(repoRoot, runGitCommand) {
+  const result = runGitCommand(repoRoot, ["ls-files", "-z"]);
 
   if (result.status !== 0) {
     throw new Error(
@@ -186,7 +503,9 @@ function trackedFiles(repoRoot) {
     );
   }
 
-  return result.stdout
+  const untracked = runGitCommand(repoRoot, ["ls-files", "--others", "--exclude-standard", "-z"]);
+  if (untracked.status !== 0) throw new Error("git ls-files --others failed.");
+  return `${result.stdout}${untracked.stdout}`
     .split("\0")
     .filter(
       (file) =>
@@ -209,7 +528,7 @@ function packageDirs(repoRoot) {
     .filter((packageDir) => existsSync(join(repoRoot, packageDir, "package.json")));
 }
 
-function checkGeneratedLayout(repoRoot, files, packages) {
+function checkGeneratedLayout(repoRoot, files, packages, runGitCommand) {
   const failures = [];
   const srcGeneratedFiles = files.filter((file) => /^packages\/[^/]+\/src\/generated\//.test(file));
   const generatedTrackedFiles = files.filter(
@@ -234,7 +553,7 @@ function checkGeneratedLayout(repoRoot, files, packages) {
 
   const notIgnored = packages.filter((packageDir) => {
     const sentinel = `${packageDir}/generated/.cleanup-enforcement-check`;
-    const result = runGit(repoRoot, ["check-ignore", "--quiet", "--", sentinel]);
+    const result = runGitCommand(repoRoot, ["check-ignore", "--quiet", "--", sentinel]);
 
     return result.status !== 0;
   });

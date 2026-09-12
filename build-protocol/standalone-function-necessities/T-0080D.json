@@ -147,6 +147,15 @@
     "rule": "standalone-function",
     "file": "packages/core/src/index.ts",
     "kind": "function-declaration",
+    "identity": "freshSignalId()#1",
+    "name": "freshSignalId",
+    "disposition": "necessity",
+    "reason": "TypeScript signal-envelope boundary: freshSignalId centralizes secure UUID generation shared by Command and Event envelope factories without exposing caller-selected IDs."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
     "identity": "unpackIdentifier()#1",
     "name": "unpackIdentifier",
     "disposition": "necessity",

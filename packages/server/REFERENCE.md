@@ -325,10 +325,9 @@ const registry: GeneratedHandlerRegistry = {
         {
           kind: "command-substitution",
           methodName: "approve",
-          signalSchema: ApproveProjectSchema,
-          emittedSchemas: [ScheduleProjectSchema],
+          input: { schema: ApproveProjectSchema, origin: "domestic" },
+          outcomes: { returned: [ScheduleProjectSchema], thrown: [] },
           parameterCount: 2,
-          origin: "domestic",
         },
       ],
     },
@@ -344,7 +343,6 @@ const repository = new Repository({
 const context = BoundedContext.singleTenant("Projects").add(repository).build();
 await context.commandBus().post(
   SignalEnvelopes.command({
-    id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
     context: create(CommandContextSchema),
     schema: ApproveProjectSchema,
     message: create(ApproveProjectSchema, { project, status: "approved" }),
@@ -455,7 +453,13 @@ record-storage handle, while the context closes the registry.
 
 `Entity` is the state base class. `Aggregate`, `Projection`, and
 `ProcessManager` identify the three entity families. Handler decorators are
-`@Assign`, `@Command`, `@React`, `@Subscribe`, and `@Apply`. In a transactional
+`@Assign`, `@Command`, `@React`, `@Subscribe`, and `@Apply`. A command-accepting
+handler uses `@Throws(GeneratedRejection)` to declare its possible domain
+rejections. Write the primary handler decorator first and `@Throws` immediately
+below it; declaration order does not affect behavior. Generated metadata records
+normal and rejection outcomes before context assembly, so clients may subscribe
+to a declared rejection even when no server handler consumes it. Throwing an
+undeclared generated rejection is a technical handler failure. In a transactional
 handler, `update(mutator)` changes the active draft and returns the draft;
 `tryUpdate(mutator)` validates a scratch draft and returns violations without
 applying an invalid change. Entity lifecycle and version changes are committed
@@ -469,10 +473,13 @@ command-validation failure, which `SpineServices` maps to
 `COMMAND_VALIDATION_ERROR` with a packed `spine.validation.ValidationError`.
 Entity transition validation failures map to
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with the same detail type.
+Framework-created runtime command and event metadata uses fresh Node secure
+UUIDs; fixed IDs belong only to existing source envelopes retained through the
+normal origin chain.
 
 An application handler throws a generated core `RejectionThrowable` for a
-domain rejection. The repository rolls back state, version, lifecycle, and
-output; it schedules the typed rejection event independently. Command service
+domain rejection declared with `@Throws`. The repository rolls back state,
+version, lifecycle, and output; it schedules the typed rejection event independently. Command service
 acknowledgement remains an accepted `Ack`. Rejection-event posting can be
 unobserved by inactive, full, or closed subscriptions and a posting failure is
 an internal diagnostic, not a retry guarantee.
@@ -662,9 +669,12 @@ storage.
 retention setting. A delivered row is cleanup-eligible when that deadline is
 absent or elapsed. Under current shard ownership, environment delivery performs
 one bounded cleanup page, plus at most one continuation after a full protected
-page makes no removal. Each removal atomically verifies ownership and the exact
-delivered snapshot. Pending, retryable, non-delivered, and still-protected rows
-remain. There is no additional retention configuration, timer, or scheduler.
+page makes no removal. Direct local storage atomically verifies ownership and
+the exact delivered snapshot during removal. A remote adapter may instead read
+and compare the snapshot before sending a separate best-effort removal request;
+that sequence is not an atomic compare-and-delete guarantee. Pending, retryable,
+non-delivered, and still-protected rows remain. There is no additional retention
+configuration, timer, or scheduler.
 
 `BoundedContextBuilder.withDeliveryStrategy(strategy)` snapshots a validated
 immutable strategy for its Entity Inbox; the default is one shard. For example,
@@ -694,12 +704,14 @@ before source client/storage. `DeliverySource` is not configured on
 durable supervisor state, topology failover, exactly-once effects, or automatic
 retry of unknown remote mutations.
 
-Each drain operation is bounded to one page. That bound limits a single
-operation, not the total pending work: an active lease owner can take another
-page while its policy retains the shard. The 30-second Inbox deduplication
-window controls duplicate admission only; it is not a replay-retention period.
-Persisted accepted rows follow their delivery lifecycle and may be replayed
-according to that lifecycle after the deduplication window has elapsed.
+Each Inbox read is bounded to one page. That bound does not limit the total
+pending work: an active drain can advance to another page while it retains the
+shard. Delivery compares pending rows with delivered rows in the current page
+and a process-local cache of the 1,000 most recent deliveries, then removes
+duplicates. The 30-second Inbox deduplication window controls how long delivered
+rows remain available as duplicate evidence; it is not a replay-retention
+period. Persisted accepted rows follow their delivery lifecycle and may be
+replayed according to that lifecycle after the deduplication window has elapsed.
 
 `DeliveryMonitor` is an instantiable, customizable policy seam exposing
 asynchronous continuation, start/completion, failed-reception, pickup-failure,
@@ -733,6 +745,15 @@ is used by the environment supervisor for remote snapshots and
 shard-update hints; when absent, the existing local source remains the fallback.
 Applications configure and close only the delivery facility through the
 environment: attachment supervisors and their source reads belong to that facility.
+
+## Signal identity and Aggregate semantics
+
+Projection handlers cannot use `@Assign`; explicit metadata rejects that unsupported
+handler shape. Framework-created child Commands and Events receive fresh IDs. Existing
+Command or Event envelopes retain their IDs through transport and storage, including
+when returned or passed as envelopes. Aggregate domain Events use the loaded pre-dispatch
+version, while persisted Aggregate state advances to the next version. History caching accepts descending retained
+versions with gaps, while continuing to reject equal or newer continuations.
 
 # Dynamic unary discovery
 

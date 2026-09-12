@@ -21,12 +21,7 @@ import {
   SignalEnvelopes,
   TypeUrls,
 } from "@spine-event-engine/core";
-import {
-  CommandContextSchema,
-  CommandIdSchema,
-  type CommandContext,
-  type Event,
-} from "@spine-event-engine/proto";
+import { CommandContextSchema, type CommandContext, type Event } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
   type QueryResponse,
@@ -162,26 +157,26 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
         {
           kind: "command-assignment",
           methodName: "create",
-          signalSchema: CreateProjectSchema,
-          emittedSchemas: [ProjectCreatedSchema],
+          input: { schema: CreateProjectSchema, origin: "domestic" },
+          outcomes: { returned: [ProjectCreatedSchema], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
         {
           kind: "event-reaction",
           methodName: "react",
-          signalSchema: ProjectCreatedSchema,
-          emittedSchemas: [ProjectScheduledSchema],
+          input: { schema: ProjectCreatedSchema, origin: "domestic" },
+          outcomes: { returned: [ProjectScheduledSchema], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
         {
           kind: "command-assignment",
           methodName: "schedule",
-          signalSchema: ScheduleProjectSchema,
-          emittedSchemas: [ProjectScheduledSchema],
+          input: { schema: ScheduleProjectSchema, origin: "domestic" },
+          outcomes: {
+            returned: [ProjectScheduledSchema],
+            thrown: [ProjectSchedulingRejectedSchema],
+          },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     },
@@ -193,10 +188,9 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
         {
           kind: "event-reaction",
           methodName: "react",
-          signalSchema: ProjectCreatedSchema,
-          emittedSchemas: [],
+          input: { schema: ProjectCreatedSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     },
@@ -208,10 +202,9 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
         {
           kind: "event-reaction",
           methodName: "react",
-          signalSchema: ProjectCreatedSchema,
-          emittedSchemas: [],
+          input: { schema: ProjectCreatedSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     },
@@ -223,18 +216,16 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
         {
           kind: "command-reaction",
           methodName: "command",
-          signalSchema: ProjectCreatedSchema,
-          emittedSchemas: [ScheduleProjectSchema],
+          input: { schema: ProjectCreatedSchema, origin: "domestic" },
+          outcomes: { returned: [ScheduleProjectSchema], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
         {
           kind: "command-substitution",
           methodName: "approve",
-          signalSchema: ApproveProjectSchema,
-          emittedSchemas: [ScheduleProjectSchema],
+          input: { schema: ApproveProjectSchema, origin: "domestic" },
+          outcomes: { returned: [ScheduleProjectSchema], thrown: [] },
           parameterCount: 2,
-          origin: "domestic",
         },
       ],
     },
@@ -246,10 +237,9 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
         {
           kind: "event-subscription",
           methodName: "subscribe",
-          signalSchema: ProjectCreatedSchema,
-          emittedSchemas: [],
+          input: { schema: ProjectCreatedSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     },
@@ -261,10 +251,9 @@ const generatedHandlerRegistry: GeneratedHandlerRegistry = {
         {
           kind: "event-subscription",
           methodName: "subscribe",
-          signalSchema: ProjectCreatedSchema,
-          emittedSchemas: [],
+          input: { schema: ProjectCreatedSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     },
@@ -474,7 +463,6 @@ async function awaitProjectWorkflowStates(
 async function createProject(boundedContext: BoundedContext, id: ProjectId): Promise<void> {
   await boundedContext.commandBus().post(
     SignalEnvelopes.command({
-      id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
       context: create(CommandContextSchema),
       schema: CreateProjectSchema,
       message: create(CreateProjectSchema, { project: id, name: "roadmap" }),
@@ -484,7 +472,6 @@ async function createProject(boundedContext: BoundedContext, id: ProjectId): Pro
 async function approveProject(boundedContext: BoundedContext, id: ProjectId): Promise<void> {
   await boundedContext.commandBus().post(
     SignalEnvelopes.command({
-      id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
       context: create(CommandContextSchema),
       schema: ApproveProjectSchema,
       message: create(ApproveProjectSchema, { project: id, status: "approved" }),
