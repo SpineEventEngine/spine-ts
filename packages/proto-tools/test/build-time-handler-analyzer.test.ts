@@ -78,6 +78,32 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
+  it("records a rejection companion below a generated package namespace", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/nested-declared-rejection.ts",
+        `
+          import { Aggregate, Assign, Throws } from "@spine-event-engine/server";
+          import { TaskAlreadyDone } from "../generated/spine/examples/todo/rejections.js";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { type CreateTask } from "../generated/commands_pb.js";
+          import { type TaskCreated } from "../generated/events_pb.js";
+
+          export class NestedDeclaredRejection extends Aggregate<string, typeof TaskSchema, bigint> {
+            @Assign
+            @Throws(TaskAlreadyDone)
+            handle(command: CreateTask): TaskCreated { throw new Error(String(command)); }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers[0]?.outcomes.thrown).toEqual([
+      schema("../generated/spine/examples/todo/rejections_pb.js", "TaskAlreadyDoneSchema"),
+    ]);
+  });
+
   it("rejects misplaced, empty, duplicate, and non-rejection Throws declarations", () => {
     const result = analyzeBuildHandlers(
       programWithSource(
@@ -1642,6 +1668,10 @@ function programWithSource(fileName: string, source: string): ts.Program {
       "TaskCompleted",
       "TaskCreated",
       "TaskRenamed",
+    ),
+    "generated/spine/examples/todo/rejections_pb.ts": generatedModule(
+      "spine/examples/todo/rejections.proto",
+      "TaskAlreadyDone",
     ),
     "generated/spine/examples/todo/tasks_pb.ts": generatedModule(
       "spine/examples/todo/tasks.proto",

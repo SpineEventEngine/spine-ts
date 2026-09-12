@@ -225,6 +225,7 @@ describe("@spine-event-engine/server", () => {
         "TransactionalEntityScopeError",
         "React",
         "Subscribe",
+        "Throws",
         "Where",
         "acceptSignalIntake",
         "EntityHandlers",

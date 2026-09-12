@@ -2213,7 +2213,14 @@ const HandlerSources = Object.freeze({
     state: MutableImportState,
   ): void {
     const schemaModule = HandlerSources.rejectionSchemaModule(moduleSpecifier);
-    const exported = HandlerSources.generatedModuleExports(source, schemaModule, program);
+    const companion = HandlerSources.generatedModuleSource(source, moduleSpecifier, program);
+    const companionSchemaModule =
+      companion === undefined ? undefined : HandlerSources.rejectionSchemaImport(companion);
+    const exported = HandlerSources.generatedModuleExports(
+      companion ?? source,
+      companionSchemaModule ?? schemaModule,
+      program,
+    );
     if (exported === undefined) return;
     if (ts.isNamespaceImport(bindings)) {
       state.rejectionNamespaces.set(bindings.name.text, {
@@ -2232,6 +2239,25 @@ const HandlerSources = Object.freeze({
         exportName: schemaName,
       });
     }
+  },
+
+  rejectionSchemaImport(source: ts.SourceFile): string | undefined {
+    for (const statement of source.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
+        continue;
+      }
+      const bindings = statement.importClause?.namedBindings;
+      if (
+        bindings !== undefined &&
+        !ts.isNamespaceImport(bindings) &&
+        bindings.elements.some((element) =>
+          (element.propertyName?.text ?? element.name.text).endsWith("Schema"),
+        )
+      ) {
+        return statement.moduleSpecifier.text;
+      }
+    }
+    return undefined;
   },
 
   recordServerImport(bindings: ts.NamedImportBindings, state: MutableImportState): void {
@@ -2303,7 +2329,7 @@ const HandlerSources = Object.freeze({
   },
 
   isRejectionCompanion(moduleSpecifier: string): boolean {
-    return /(^|\/)generated\/(?:.+_)?rejections(\.js)?$/u.test(moduleSpecifier);
+    return /(^|\/)generated\/(?:.+\/)?(?:[^/]+_)?rejections(\.js)?$/u.test(moduleSpecifier);
   },
 
   rejectionSchemaModule(moduleSpecifier: string): string {

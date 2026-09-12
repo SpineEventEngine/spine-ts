@@ -2085,3 +2085,37 @@ compiled snippet checks passed; API expectations include all 246 server root
 exports; TSDoc enforcement, cleanup enforcement, Prettier, and `git diff
 --check` passed. A new correction commit and push are required before the final
 release profile and exact-SHA CI gate.
+
+### Full-suite integration corrections — 2026-09-12
+
+The first complete release profile exposed five stale expectations rather than
+five runtime failures. The server root-export inventory omitted the new
+`Throws` export. External-origin tests still read the retired top-level
+`origin` field instead of `input.origin`. The Message Board example threw
+`MessageAlreadyPosted` without declaring it, so the corrected runtime properly
+treated it as an undeclared rejection and did not publish it.
+
+The tests now use the nested generated record, the export inventory includes
+`Throws`, and `BoardMessageAggregate.postMessage()` declares
+`MessageAlreadyPosted` in the canonical `@Assign` then `@Throws` order. This
+also exposed a generator path defect: rejection companion discovery accepted a
+root `generated/rejections.js` and prefixed files such as
+`generated/task_rejections.js`, but not the standard package-qualified
+`generated/<proto package>/rejections.js` path used by Message Board. The
+analyzer now accepts that standard path and validates the companion against the
+schema module it actually imports. A focused analyzer test preserves this
+case.
+
+Focused evidence after correction:
+
+- generated build and TypeScript checking passed;
+- 81 affected tests passed across analyzer, origin metadata, server exports,
+  and Message Board registry behavior;
+- cleanup/method-size, TSDoc, ESLint, formatting, Proto freshness, and diff
+  checks passed.
+
+The broad bounded test invocation passed 4,713 tests and timed out four
+unrelated tooling tests while Vitest ran files concurrently. The exact three
+files containing those four tests then passed 194/194 with one worker. No
+assertion failed, and no Vitest worker remained afterward. The final serialized
+release profile remains required after this checkpoint is pushed.

@@ -379,10 +379,6 @@ export interface GeneratedHandlerRecordInput {
    * Public method arity: `handler(signal)` or `handler(signal, context)`.
    */
   readonly parameterCount: GeneratedHandlerParameterCount;
-
-  /**
-   * Required origin inferred from the receptor's first parameter.
-   */
 }
 
 /**

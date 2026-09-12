@@ -72,26 +72,22 @@ describe("Wave 13 external receptor origin", () => {
     const server = await import("../../src/index.js");
     expect(server).not.toHaveProperty("External");
     const result = BuildHandlerAnalyzer.analyze(programWithSource(externalCommandSource));
-    const records = result.receivers[0]?.handlers as
-      readonly { readonly methodName: string; readonly origin?: string }[] | undefined;
+    const records = result.receivers[0]?.handlers;
 
     expect(result.diagnostics.map(({ code }) => code)).toContain("EXTERNAL_COMMAND_RECEIVER");
-    expect(records).toContainEqual(
-      expect.objectContaining({ methodName: "onEvent", origin: "external" }),
-    );
+    expect(records?.map(recordOrigin)).toContainEqual(["onEvent", "external"]);
     expect(records).not.toContainEqual(expect.objectContaining({ methodName: "assign" }));
   });
   it("RED-19 emits first-parameter External<T> origin metadata and rejects untrusted shapes", () => {
     const result = BuildHandlerAnalyzer.analyze(programWithSource(externalOriginSource));
-    const records = result.receivers[0]?.handlers as
-      readonly { readonly methodName: string; readonly origin?: string }[] | undefined;
+    const records = result.receivers[0]?.handlers;
 
-    expect(records).toEqual(
+    expect(records?.map(recordOrigin)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ methodName: "externalEvent", origin: "external" }),
-        expect.objectContaining({ methodName: "domesticEvent", origin: "domestic" }),
-        expect.objectContaining({ methodName: "externalReaction", origin: "external" }),
-        expect.objectContaining({ methodName: "externalRejection", origin: "external" }),
+        ["externalEvent", "external"],
+        ["domesticEvent", "domestic"],
+        ["externalReaction", "external"],
+        ["externalRejection", "external"],
       ]),
     );
     expect(result.diagnostics.map(({ code }) => code)).toEqual([
@@ -112,11 +108,20 @@ describe("Wave 13 external receptor origin", () => {
   it("rejects a same-spelled External from a resolved counterfeit module", () => {
     const result = BuildHandlerAnalyzer.analyze(programWithSource(externalOriginSource, true));
     expect(result.diagnostics.map(({ code }) => code)).toContain("INVALID_SIGNAL_TYPE");
-    expect(result.receivers.flatMap((receiver) => receiver.handlers)).not.toContainEqual(
-      expect.objectContaining({ origin: "external" }),
-    );
+    expect(
+      result.receivers
+        .flatMap((receiver) => receiver.handlers)
+        .some((record) => record.input.origin === "external"),
+    ).toBe(false);
   });
 });
+
+function recordOrigin(record: {
+  readonly methodName: string;
+  readonly input: { readonly origin: string };
+}): readonly [string, string] {
+  return [record.methodName, record.input.origin];
+}
 
 function event(externalOrigin: boolean) {
   const value = `origin-${String(externalOrigin)}`;
@@ -242,13 +247,13 @@ const publicOriginContract = `
     Equal<IsRequired<GeneratedHandlerRegistry, "receivers">, true>
   >;
   type GeneratedOriginIsExact = Assert<
-    Equal<GeneratedHandlerRecordInput["origin"], "domestic" | "external">
+    Equal<GeneratedHandlerRecordInput["input"]["origin"], "domestic" | "external">
   >;
   type CanonicalOriginIsExact = Assert<
     Equal<BaseHandlerMetadata["origin"], "domestic" | "external">
   >;
   type GeneratedOriginIsRequired = Assert<
-    Equal<IsRequired<GeneratedHandlerRecordInput, "origin">, true>
+    Equal<IsRequired<GeneratedHandlerRecordInput["input"], "origin">, true>
   >;
   type CanonicalOriginIsRequired = Assert<
     Equal<IsRequired<BaseHandlerMetadata, "origin">, true>
@@ -262,7 +267,7 @@ const publicOriginContract = `
     externalEventSchemas: (): readonly MessageSchema[] => [],
     dispatch: async (_event: Event): Promise<void> => undefined,
   };
-  const generatedOrigin: GeneratedHandlerRecordInput["origin"] = "external";
+  const generatedOrigin: GeneratedHandlerRecordInput["input"]["origin"] = "external";
   const canonicalOrigin: BaseHandlerMetadata["origin"] = "domestic";
   void transparentForward;
   void transparentBackward;
