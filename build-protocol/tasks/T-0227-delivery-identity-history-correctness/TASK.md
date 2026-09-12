@@ -1,6 +1,6 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: Implementation and independent review complete; final branch CI tracked externally
+Status: Reopened for declared rejection subscription support
 Start: `2026-09-10 16:26 WEST`
 Initial closure: `2026-09-10 20:06 WEST`
 Final closure: `2026-09-11 02:19 WEST`
@@ -1896,3 +1896,90 @@ SHA is tracked externally so that recording the CI result cannot create another
 untested record-only commit. Completion in chat requires that exact SHA to be
 present on `origin/fix-delivery-identity-history-correctness`, a clean local
 working tree, and a successful GitHub Actions run for the same SHA.
+
+## Declared Rejection Subscription Extension — 2026-09-12
+
+The human reopened this task because a rejection thrown by an `@Assign` handler
+is not a supported remote subscription target unless some server-side handler
+also consumes that rejection. Current implementation evidence confirms the
+problem. Generated handler records describe the accepted message and normal
+returns, but not declared thrown rejections. Repository assembly therefore
+cannot register those rejection types before `SpineServices` snapshots the
+built contexts' subscription routes. Registering the schema only after the
+handler throws is too late and makes public subscription support depend on past
+runtime activity.
+
+Current Spine JVM `origin/master` is binding. It reads command receptors'
+declared Java `throws` types, includes rejection classes in repository outgoing
+events, and exposes them to `SubscriptionService` at startup. TypeScript has no
+language-level checked `throws` clause, so the accepted TypeScript declaration
+is an order-independent `@Throws(...)` method decorator using generated
+rejection companions. Authored code, tests, and documentation must always show
+the primary decorator first and the declaration immediately below it:
+
+```typescript
+@Assign
+@Throws(ResourceNameAlreadyUsed)
+onRequestResourceCreation(command: RequestResourceCreation): ResourceCreationRequested {
+  throw ResourceNameAlreadyUsed.create({});
+}
+```
+
+The reverse decorator order remains valid and must generate identical metadata.
+Generated rejection companions expose their canonical schema while preserving
+the existing `.create(...)` call.
+
+The old generated-record terms `signalSchema` and `emittedSchemas` are replaced,
+not supplemented. One input and one outcome model describe method semantics:
+
+```typescript
+{
+  input: { schema: RequestResourceCreationSchema, origin: "domestic" },
+  outcomes: {
+    returned: [ResourceCreationRequestedSchema],
+    thrown: [ResourceNameAlreadyUsedSchema]
+  }
+}
+```
+
+Normal returned messages and thrown rejections remain disjoint because they
+have different transaction behavior, but no schema is copied into overlapping
+lists. Generated registries are unversioned build artifacts and must be
+regenerated directly; no compatibility adapter for the old record shape is
+required during snapshot development. Public Command/Event wire envelopes,
+stored rejection events, and client redaction do not change.
+
+Behavior-focused acceptance criteria:
+
+1. A client can subscribe to a declared rejection before posting any Command,
+   even when no server-side handler consumes that rejection.
+2. The thrown typed rejection reaches that active subscription through the
+   existing Event update contract.
+3. `@Assign` then `@Throws(...)` is the canonical authored order; reversing the
+   two is accepted and produces the same record.
+4. Only valid generated rejection declarations are accepted, duplicate and
+   misplaced declarations fail clearly, and an actual undeclared rejection is
+   a technical handler failure rather than a dynamically discovered public
+   contract.
+5. The rejection is exposed only by the bounded context containing the command
+   receptor. Normal returns, rollback behavior, redaction, and existing
+   server-side rejection consumers remain valid.
+6. No new RPC, storage format, outbox, retry controller, or runtime-history-
+   dependent route refresh is introduced.
+
+This is a high-risk public/generated-contract extension. The accepted design
+was compared by three independent read-only architecture functions, each
+explicitly dispatched with `gpt-5.6-sol` / `high`, no inherited turns, and no
+child dispatch. The selected nested input/outcomes model optimizes ordinary
+authoring and keeps analyzer, registry, metadata, repository, and subscription
+rules behind one in-process seam.
+
+Implementation assignment: the existing implementer role, explicitly
+`gpt-5.6-terra` / `medium`, no inherited turns, and no child dispatch. It is the
+single production-code writer for rejection generation, decorators, build-time
+analysis, generated registry ingestion, handler outcome metadata, repository
+registration/runtime enforcement, focused domain-correct fixtures, and narrow
+documentation. It must use RED/GREEN cycles, show the accepted decorator order
+in authored specimens, preserve order independence, and return without
+committing or pushing. The orchestrator will verify, commit, and push before a
+fresh no-memory independent review.
