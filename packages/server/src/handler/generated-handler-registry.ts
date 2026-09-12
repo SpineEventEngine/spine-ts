@@ -368,7 +368,7 @@ export interface GeneratedHandlerRecordInput {
   };
 
   /**
-   * Generated Protobuf-ES schemas emitted by the handler return type.
+   * Generated Protobuf-ES schemas returned normally or declared as thrown rejections.
    */
   readonly outcomes: {
     readonly returned: readonly DescriptorMessageSchema[];

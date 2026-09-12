@@ -57,13 +57,24 @@ rejection before the server starts, so a client can subscribe even when no
 server handler consumes that rejection:
 
 ```ts
-import { Assign, Throws } from "@spine-event-engine/server";
-import { ResourceNameAlreadyUsed } from "./generated/resource_rejections.js";
+import { Assign, Throws, type RejectionDeclaration } from "@spine-event-engine/server";
 
-@Assign
-@Throws(ResourceNameAlreadyUsed)
-createResource(command: CreateResource): ResourceCreated {
-  // ...
+interface CreateResource {
+  readonly name: string;
+}
+interface ResourceCreated {
+  readonly name: string;
+}
+declare const ResourceNameAlreadyUsed: RejectionDeclaration & {
+  create(input: { readonly name: string }): Error;
+};
+
+class ResourceAssignee {
+  @Assign
+  @Throws(ResourceNameAlreadyUsed)
+  createResource(command: CreateResource): ResourceCreated {
+    throw ResourceNameAlreadyUsed.create({ name: command.name });
+  }
 }
 ```
 

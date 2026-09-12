@@ -681,12 +681,13 @@ declared with normal class method syntax. `EntityHandlers.define()` remains
 public for framework tests, generated-registry ingestion, and legacy
 non-decorator migration tooling; ordinary application code should use bare
 decorators plus generated registry assembly instead. Decorator adapter exports
-include `@Assign`, `@Command`, `@Subscribe`, `@React`, legacy/framework-only
+include `@Assign`, `@Command`, `@Subscribe`, `@React`, `@Throws`, legacy/framework-only
 `@Apply`, framework-only `materializeDecoratedEntityHandlers()`,
-`HandlerMethodDecorator`, and `HandlerMethodValue`. Bare `@Assign`, `@Command`,
-`@Subscribe`, and `@React` are the only public decorator signatures and the
-ordinary application syntax. Generated handler registries perform ordinary schema
-inference. Schema-bearing handler metadata is internal/tooling input for
+`HandlerMethodDecorator`, `HandlerMethodValue`, and `RejectionDeclaration`.
+Bare `@Assign`, `@Command`, `@Subscribe`, and `@React` are the primary public
+handler decorators. A command-accepting handler uses `@Throws` below its primary
+decorator to declare generated domain rejections. Generated handler registries
+perform ordinary schema inference. Schema-bearing handler metadata is internal/tooling input for
 generated registry assembly and framework materialization; it is not a
 public decorator form. `@Apply` and `materializeDecoratedEntityHandlers()`
 remain framework-only compatibility paths; new application code must not use
@@ -710,9 +711,10 @@ Generated handler registries are the intended ordinary bridge from bare
 decorators to canonical metadata. Their unversioned `receivers` collection
 contains Entity records with entity type and state schema plus standalone
 receiver records matched to registered instances by exact constructor. Each
-record carries handler kind, method name, first-parameter signal schema,
-explicit one- or two-argument arity, and emitted schemas inferred from explicit
-return types. Build-time analysis derives and
+record carries handler kind, method name, an `input` record with the
+first-parameter schema and origin, explicit one- or two-argument arity, and an
+`outcomes` record separating normal returns from declared thrown rejections.
+Build-time analysis derives and
 validates command, event, and distinct rejection roles from generated
 descriptors before writing those registry records. A rejection role requires a
 top-level message declared in a source file ending `rejections.proto`.
@@ -798,10 +800,15 @@ const registry: GeneratedHandlerRegistry = {
         {
           kind: "command-substitution",
           methodName: "approve",
-          signalSchema: ApproveProjectSchema,
-          emittedSchemas: [ScheduleProjectSchema],
+          input: {
+            schema: ApproveProjectSchema,
+            origin: "domestic",
+          },
+          outcomes: {
+            returned: [ScheduleProjectSchema],
+            thrown: [],
+          },
           parameterCount: 2,
-          origin: "domestic",
         },
       ],
     },
@@ -824,8 +831,9 @@ await context.commandBus().post(
 );
 ```
 
-Its generated registry record declares `ApproveProjectSchema` as input and
-`ScheduleProjectSchema` as emitted output. Application builds emit that record
+Its generated registry record declares `ApproveProjectSchema` under `input` and
+`ScheduleProjectSchema` as a normal returned outcome. Declared rejection
+schemas, when present, appear separately under `outcomes.thrown`. Application builds emit that record
 to `generated/handler/generated-handler-registry.js`; those applications use
 `buildAsync()` with their compiled package root before Command Bus posting.
 The public `@spine-event-engine/server/spi/handler-registry` subpath is the

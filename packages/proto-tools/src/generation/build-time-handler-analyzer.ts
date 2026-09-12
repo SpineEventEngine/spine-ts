@@ -160,7 +160,7 @@ export interface BuildHandlerRecord {
   readonly input: BuildHandlerInput;
 
   /**
-   * Generated schemas emitted by the handler return type.
+   * Generated schemas returned normally or declared as thrown rejections.
    */
   readonly outcomes: BuildHandlerOutcomes;
 

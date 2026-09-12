@@ -24,8 +24,12 @@ interface DeclaredRejectionChecks {
   ): void;
 }
 
-/** Checks actual domain rejections against generated handler declarations. */
+/**
+ * Checks actual domain rejections against generated handler declarations.
+ */
 export const DeclaredRejections: Readonly<DeclaredRejectionChecks> = Object.freeze({
+  // prettier-ignore
+
   /**
    * Requires the thrown rejection type to appear in the handler declaration.
    *

@@ -2050,3 +2050,38 @@ repository rules and this extension specification, inspect both behavior and
 standards, distinguish branch defects from baseline debt, and report only
 precise actionable findings. Runtime self-introspection is not exposed; the
 explicit immutable dispatch fields are the available profile evidence.
+
+### Fresh review and CI correction — 2026-09-12
+
+The independent reviewer completed under the explicitly dispatched existing
+style/maintainability reviewer role, `gpt-5.6-terra` / `high`, without inherited
+conversation turns. Runtime self-introspection was unavailable. It reported one
+P1 and one P2, both confirmed:
+
+- the public API guide still showed the retired flat generated-registry record,
+  which current ingestion rejects;
+- three outcome comments described return schemas only and omitted declared
+  thrown rejections.
+
+The correction updates the public snippet and prose to `input` plus disjoint
+`outcomes.returned` and `outcomes.thrown`, documents the public `Throws` and
+`RejectionDeclaration` exports, adds both names to deterministic API
+expectations, and corrects all three outcome descriptions. The generated
+subscription behavior, decorator-order handling, rejection enforcement, and
+context scoping otherwise received no findings.
+
+GitHub Actions run `34703646326` for implementation commit `f1dbad9ec` failed
+in `pnpm verify:release`. The failure was reproduced locally. The release
+profile first makes the new source file visible to tracked-source enforcement;
+its compact one-line object documentation and adjacent member documentation
+violated the repository TSDoc layout. Earlier local TSDoc evidence was invalid
+for that file because it was untracked at the time. The correction uses the
+canonical multi-line block and the repository's Prettier-stable separator. The
+same release-order diagnostic also exposed an invalid free-standing decorator
+example in the new server README; it is now a self-contained class example.
+
+Post-correction deterministic evidence: documentation API, audience, and
+compiled snippet checks passed; API expectations include all 246 server root
+exports; TSDoc enforcement, cleanup enforcement, Prettier, and `git diff
+--check` passed. A new correction commit and push are required before the final
+release profile and exact-SHA CI gate.

@@ -910,7 +910,7 @@ class EntityHandlersOwner {
   }
 
   /**
-   * Copies generated emitted-schema metadata between cloned handlers.
+   * Copies generated normal-return and thrown-rejection metadata between cloned handlers.
    *
    * @param source Source handler metadata.
    * @param target Cloned target handler metadata.
