@@ -1,6 +1,6 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: Complete; local verification, independent review, and CI passed
+Status: Reopened for a fresh independent no-memory review
 Start: `2026-09-10 16:26 WEST`
 Initial closure: `2026-09-10 20:06 WEST`
 Final closure: `2026-09-11 02:19 WEST`
@@ -1771,3 +1771,29 @@ push.
   `node scripts/release-cli.mjs prepare --check`, and the final job step passed.
 - Local `HEAD` and the remote branch matched, and the working tree was clean
   after verification.
+
+## Fresh Independent Review — 2026-09-12
+
+- The human reopened the completed branch for one fresh independent review of
+  the complete branch diff and required every confirmed finding to be fixed,
+  pushed, and verified by green CI for the exact final SHA.
+- Fixed review range: `6d64848e0cb998ddfa4374c7c8a67197a9204048...2da5fe3119caaed72872cb661dd160f8f410e9d6`.
+- The lightweight pre-review lint checked current status text, historical versus
+  active Sigstore claims, prohibited outbox and `AdmitOne` concepts, accidental
+  public helper exports, and overclaims in changed public documentation. The
+  Sigstore patch references are historical and explicitly superseded by the
+  later correction section; no patch file or active patch configuration exists.
+- Reviewer assignment: one orchestrator-dispatched independent senior code
+  review function, explicit `gpt-5.6-terra` / `high`, with no inherited turns
+  and no child dispatch. The reviewer receives the fixed Git range, this task
+  record and its Human Requirements Ledger, `BUILD_PROTOCOL.md`,
+  `CODE_QUALITY.md`, current tests and documentation, and must inspect both
+  requirement/spec alignment and code quality. It is read-only and must report
+  precise P0–P3 findings, distinguish branch-introduced defects from unchanged
+  baseline debt, and reject speculative features that conflict with the human
+  requirements.
+- Applicable review workflow skills are `requesting-code-review`, `review`, and
+  `receiving-code-review`. Their fixed-range, fresh-context, two-axis, and
+  evidence-before-fixing rules apply. The human requested one independent
+  reviewer, so the standards and specification axes are combined in that one
+  fresh review rather than dispatched to two reviewers.
