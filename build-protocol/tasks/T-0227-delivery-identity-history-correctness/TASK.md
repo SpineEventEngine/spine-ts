@@ -1823,3 +1823,28 @@ documentation clean; TypeScript/API clean; security clean;
 performance/reliability blocked by the P1; Human Requirements Ledger blocked by
 the same P1. The task remains open until the P1 is fixed, affected review is
 rechecked, release verification passes, and exact-final-SHA CI is green.
+
+The implementation writer completed under the explicitly dispatched existing
+implementer / `gpt-5.6-terra` / `medium` profile. Additional runtime
+self-inspection was unavailable; the explicit dispatch fields are the accepted
+metadata. Direct and remote regressions both failed before the production edit
+because the new pending message was not dispatched: 2 failures and 46 passes.
+After the smallest correction, both files passed with 48 tests. The correction
+includes a delivered row in page-level duplicate evidence only when it has a
+`keepUntil` later than the evaluation time. It does not change the recent
+1,000-identity cache, public API, wire format, storage contract, or cleanup
+sequence.
+
+Orchestrator verification repeated both focused regression files with one
+worker: 48/48 passed. Focused ESLint, `pnpm lint:cleanup`, focused Prettier, and
+`git diff --check` also passed. The correction changes only
+`packages/server/src/delivery/delivery.ts`, its direct delivery-worker test, and
+the remote in-memory-core response-loss test.
+
+Affected resolution review assignment: one fresh independent senior review
+function, explicit `gpt-5.6-terra` / `high`, no inherited turns, no memory use,
+and no child dispatch. It is read-only and limited to verifying that the P1 is
+fully corrected in both paths without a retention-boundary regression,
+overengineering, or conflict with the Human Requirements Ledger. The other
+clean lanes are not reopened because the correction does not affect their
+reviewed surfaces.

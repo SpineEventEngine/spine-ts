@@ -64,6 +64,41 @@ describe("in-memory delivery core response loss", () => {
     await expect(client.findOne(duplicate.id)).resolves.toBeUndefined();
   });
 
+  it("delivers after cleaning an expired retained identity through the remote adapter", async () => {
+    const core = InMemoryDelivery.create();
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+    );
+    const inbox = new RemoteInbox(client);
+    const expired = {
+      ...domainMessage("expired"),
+      keepUntil: new Date(Date.now() - 60_000),
+    };
+    const pending = { ...domainMessage("pending"), signalId: expired.signalId };
+    await client.writeOne(expired);
+    await expect(inbox.markDelivered(expired)).resolves.toMatchObject({ status: "DELIVERED" });
+    await client.writeOne(pending);
+    expect((await client.findOne(expired.id))?.keepUntil?.getTime()).toBeLessThan(Date.now());
+    const shard = ShardIndex.single();
+    const session = { kind: "EXCLUSIVE" as const, shard };
+    const onMessage = vi.fn();
+    const delivery = new DeliveryBuilder()
+      .withContext({ name: "RemoteExpiredRetained", multitenant: false })
+      .withStorageFactory({} as never)
+      .withInbox(inbox)
+      .withWorkRegistry({
+        sessionKind: "EXCLUSIVE",
+        pickUp: () => Promise.resolve(session),
+        validateOwnership: () => Promise.resolve(session),
+        release: () => Promise.resolve(true),
+      })
+      .build();
+
+    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
+    expect(onMessage).toHaveBeenCalledWith(expect.objectContaining({ id: pending.id }));
+    await expect(client.findOne(expired.id)).resolves.toBeUndefined();
+  });
+
   it("recognizes a delivered acknowledgement committed before a lost response", async () => {
     const core = InMemoryDelivery.create();
     const normal = DeliveryClient.usingTransport(

@@ -69,6 +69,40 @@ describe("Delivery direct worker", () => {
     expect(reads).toEqual([undefined, undefined]);
   });
 
+  it("delivers after an expired retained identity is cleaned from a new wrapper", async () => {
+    const shard = ShardIndex.single();
+    const expired = {
+      ...message("expired", "target", shard),
+      keepUntil: new Date(Date.now() - 60_000),
+      status: "DELIVERED" as const,
+    };
+    const pending = { ...message("pending", "target", shard), signalId: expired.signalId };
+    const rows = [expired, pending];
+    const dispatched: string[] = [];
+    const removed: string[] = [];
+    const delivery = createDelivery({
+      rows,
+      mark: async (row) => {
+        remove(rows, row);
+        return { ...row, status: "DELIVERED" as const };
+      },
+      remove: async (row) => {
+        removed.push(row.id.value);
+        remove(rows, row);
+        return true;
+      },
+    });
+
+    await delivery.drain(shard, {
+      onMessage: (row) => {
+        dispatched.push(row.id.value);
+      },
+    });
+
+    expect(dispatched).toEqual([pending.id.value]);
+    expect(removed).toEqual([expired.id.value]);
+  });
+
   it("delivers the same signal to different typed targets", async () => {
     const shard = ShardIndex.single();
     const firstTarget = message("same-signal", "first", shard);

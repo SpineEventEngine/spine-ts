@@ -793,7 +793,12 @@ class DeliveryPageDeduplication {
   ) {
     this.#identities = new Set(
       messages
-        .filter((message) => message.status === "DELIVERED")
+        .filter(
+          (message) =>
+            message.status === "DELIVERED" &&
+            message.keepUntil !== undefined &&
+            message.keepUntil.getTime() > Date.now(),
+        )
         .map((message) => RecentDeliveries.key(message)),
     );
   }
