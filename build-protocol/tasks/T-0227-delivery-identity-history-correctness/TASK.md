@@ -1797,3 +1797,29 @@ push.
   evidence-before-fixing rules apply. The human requested one independent
   reviewer, so the standards and specification axes are combined in that one
   fresh review rather than dispatched to two reviewers.
+
+The reviewer completed under the explicitly dispatched `gpt-5.6-terra` /
+`high` profile. The surface did not expose additional runtime self-inspection;
+the explicit dispatch fields are the available metadata. It reported one P1
+and no other findings. The P1 is confirmed from current code: page-level
+deduplication treats every `DELIVERED` row as active evidence, but cleanup
+removes rows whose `keepUntil` is at or before the current time. An expired
+retained row can therefore cause a newer pending row with the same signal ID
+and typed target to be deleted before endpoint dispatch. The shared drain makes
+both direct and remote delivery paths vulnerable.
+
+The correction uses `test-driven-development`. One bounded implementation
+writer receives the accepted batch: existing implementer role, explicit
+`gpt-5.6-terra` / `medium`, no inherited turns, and no child dispatch. It may
+change only `packages/server/src/delivery/delivery.ts`, focused direct and
+remote delivery regression tests, and strictly necessary nearby test helpers.
+It must first demonstrate RED for both paths, then filter page-level duplicate
+evidence to delivered rows whose retention has not expired, without changing
+the JVM-equivalent recent cache, adding a clock API, or changing wire/storage
+contracts. Focused GREEN evidence is required before returning.
+
+Fresh review dispositions before correction: style/maintainability clean;
+documentation clean; TypeScript/API clean; security clean;
+performance/reliability blocked by the P1; Human Requirements Ledger blocked by
+the same P1. The task remains open until the P1 is fixed, affected review is
+rechecked, release verification passes, and exact-final-SHA CI is green.
