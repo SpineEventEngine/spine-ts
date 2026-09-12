@@ -83,10 +83,9 @@ class Subscriber extends AbstractEventSubscriber {}
 const substitution = (methodName = "substitute") => ({
   kind: "command-substitution" as const,
   methodName,
-  signalSchema: StartReviewSchema,
-  emittedSchemas: [ScheduleReviewSchema],
+  input: { schema: StartReviewSchema, origin: "domestic" as const },
+  outcomes: { returned: [ScheduleReviewSchema], thrown: [] },
   parameterCount: 1 as const,
-  origin: "domestic" as const,
 });
 
 const roleMatrix = [
@@ -97,13 +96,13 @@ const roleMatrix = [
 ] as const;
 
 function domainHandler(kind: GeneratedHandlerRecordInput["kind"]): GeneratedHandlerRecordInput {
-  const signalSchema =
+  const schema =
     kind === "command-assignment" || kind === "command-substitution"
       ? StartReviewSchema
       : kind === "state-subscription"
         ? ReviewStateSchema
         : ReviewStartedSchema;
-  const emittedSchemas =
+  const returned =
     kind === "command-assignment" || kind === "event-reaction"
       ? [ReviewStartedSchema]
       : kind === "command-substitution" || kind === "command-reaction"
@@ -112,10 +111,9 @@ function domainHandler(kind: GeneratedHandlerRecordInput["kind"]): GeneratedHand
   return {
     kind,
     methodName: "handle",
-    signalSchema,
-    emittedSchemas,
+    input: { schema, origin: "domestic" },
+    outcomes: { returned, thrown: [] },
     parameterCount: 1,
-    origin: "domestic",
   };
 }
 
@@ -146,7 +144,7 @@ describe("generated handler registry ingestion", () => {
             handlers: [
               {
                 ...substitution(),
-                signalSchema: { typeName: "example.Start" },
+                input: { ...substitution().input, schema: { typeName: "example.Start" } },
               },
             ],
           },
@@ -168,7 +166,10 @@ describe("generated handler registry ingestion", () => {
             handlers: [
               {
                 ...substitution(),
-                signalSchema: { typeName: "example.Start", file: { name: "commands" } },
+                input: {
+                  ...substitution().input,
+                  schema: { typeName: "example.Start", file: { name: "commands" } },
+                },
               },
             ],
           },
@@ -219,7 +220,9 @@ describe("generated handler registry ingestion", () => {
             receiverKind: "entity" as const,
             receiverType: Manager,
             stateSchema: StateSchema,
-            handlers: [{ ...substitution(), signalSchema: CommandSchema }],
+            handlers: [
+              { ...substitution(), input: { ...substitution().input, schema: CommandSchema } },
+            ],
           },
         ],
       }),
@@ -236,7 +239,7 @@ describe("generated handler registry ingestion", () => {
         {
           receiverKind: "standalone",
           receiverType: Commander,
-          handlers: [{ ...substitution(), signalSchema: null }],
+          handlers: [{ ...substitution(), input: { ...substitution().input, schema: null } }],
         },
       ],
     },
@@ -279,70 +282,117 @@ describe("generated handler registry ingestion", () => {
 
     const assignment = domainHandler("command-assignment");
     expect(standalone(Assignee, assignment)).not.toThrow();
-    expect(standalone(Assignee, { ...assignment, signalSchema: ReviewStartedSchema })).toThrow(
-      HandlerRegistryIngestionError,
-    );
-    expect(standalone(Assignee, { ...assignment, emittedSchemas: [ScheduleReviewSchema] })).toThrow(
-      HandlerRegistryIngestionError,
-    );
-    expect(standalone(Assignee, { ...assignment, emittedSchemas: [] })).toThrow(
-      HandlerRegistryIngestionError,
-    );
+    expect(
+      standalone(Assignee, {
+        ...assignment,
+        input: { ...assignment.input, schema: ReviewStartedSchema },
+      }),
+    ).toThrow(HandlerRegistryIngestionError);
+    expect(
+      standalone(Assignee, {
+        ...assignment,
+        outcomes: { ...assignment.outcomes, returned: [ScheduleReviewSchema] },
+      }),
+    ).toThrow(HandlerRegistryIngestionError);
+    expect(
+      standalone(Assignee, { ...assignment, outcomes: { ...assignment.outcomes, returned: [] } }),
+    ).toThrow(HandlerRegistryIngestionError);
 
     const substitution = domainHandler("command-substitution");
     expect(standalone(Commander, substitution)).not.toThrow();
-    expect(standalone(Commander, { ...substitution, signalSchema: ReviewStartedSchema })).toThrow(
-      HandlerRegistryIngestionError,
-    );
     expect(
-      standalone(Commander, { ...substitution, emittedSchemas: [ReviewStartedSchema] }),
+      standalone(Commander, {
+        ...substitution,
+        input: { ...substitution.input, schema: ReviewStartedSchema },
+      }),
+    ).toThrow(HandlerRegistryIngestionError);
+    expect(
+      standalone(Commander, {
+        ...substitution,
+        outcomes: { ...substitution.outcomes, returned: [ReviewStartedSchema] },
+      }),
     ).toThrow(HandlerRegistryIngestionError);
 
     const reaction = domainHandler("command-reaction");
     expect(standalone(Commander, reaction)).not.toThrow();
-    expect(standalone(Commander, { ...reaction, signalSchema: StartReviewSchema })).toThrow(
-      HandlerRegistryIngestionError,
-    );
     expect(
-      standalone(Commander, { ...reaction, signalSchema: ReviewRejectedSchema }),
+      standalone(Commander, {
+        ...reaction,
+        input: { ...reaction.input, schema: StartReviewSchema },
+      }),
+    ).toThrow(HandlerRegistryIngestionError);
+    expect(
+      standalone(Commander, {
+        ...reaction,
+        input: { ...reaction.input, schema: ReviewRejectedSchema },
+      }),
     ).not.toThrow();
-    expect(standalone(Commander, { ...reaction, emittedSchemas: [] })).toThrow(
-      HandlerRegistryIngestionError,
-    );
+    expect(
+      standalone(Commander, { ...reaction, outcomes: { ...reaction.outcomes, returned: [] } }),
+    ).toThrow(HandlerRegistryIngestionError);
 
     const eventReaction = domainHandler("event-reaction");
     expect(standalone(Reactor, eventReaction)).not.toThrow();
-    expect(standalone(Reactor, { ...eventReaction, signalSchema: StartReviewSchema })).toThrow(
-      HandlerRegistryIngestionError,
-    );
     expect(
-      standalone(Reactor, { ...eventReaction, signalSchema: ReviewRejectedSchema }),
+      standalone(Reactor, {
+        ...eventReaction,
+        input: { ...eventReaction.input, schema: StartReviewSchema },
+      }),
+    ).toThrow(HandlerRegistryIngestionError);
+    expect(
+      standalone(Reactor, {
+        ...eventReaction,
+        input: { ...eventReaction.input, schema: ReviewRejectedSchema },
+      }),
     ).not.toThrow();
-    expect(standalone(Reactor, { ...eventReaction, emittedSchemas: [] })).not.toThrow();
     expect(
-      standalone(Reactor, { ...eventReaction, emittedSchemas: [ScheduleReviewSchema] }),
+      standalone(Reactor, {
+        ...eventReaction,
+        outcomes: { ...eventReaction.outcomes, returned: [] },
+      }),
+    ).not.toThrow();
+    expect(
+      standalone(Reactor, {
+        ...eventReaction,
+        outcomes: { ...eventReaction.outcomes, returned: [ScheduleReviewSchema] },
+      }),
     ).toThrow(HandlerRegistryIngestionError);
 
     const eventSubscription = domainHandler("event-subscription");
     expect(standalone(Subscriber, eventSubscription)).not.toThrow();
     expect(
-      standalone(Subscriber, { ...eventSubscription, signalSchema: ReviewStateSchema }),
+      standalone(Subscriber, {
+        ...eventSubscription,
+        input: { ...eventSubscription.input, schema: ReviewStateSchema },
+      }),
     ).toThrow(HandlerRegistryIngestionError);
     expect(
-      standalone(Subscriber, { ...eventSubscription, emittedSchemas: [ReviewStartedSchema] }),
+      standalone(Subscriber, {
+        ...eventSubscription,
+        outcomes: { ...eventSubscription.outcomes, returned: [ReviewStartedSchema] },
+      }),
     ).toThrow(HandlerRegistryIngestionError);
     const stateSubscription = domainHandler("state-subscription");
     expect(standalone(Subscriber, stateSubscription)).not.toThrow();
     expect(
-      standalone(Subscriber, { ...stateSubscription, signalSchema: ReviewStartedSchema }),
+      standalone(Subscriber, {
+        ...stateSubscription,
+        input: { ...stateSubscription.input, schema: ReviewStartedSchema },
+      }),
     ).toThrow(HandlerRegistryIngestionError);
-    expect(standalone(Subscriber, { ...stateSubscription, origin: "external" })).toThrow(
-      HandlerRegistryIngestionError,
-    );
     expect(
       standalone(Subscriber, {
         ...stateSubscription,
-        where: { eventField: "id", equals: "review-1" },
+        input: { ...stateSubscription.input, origin: "external" },
+      }),
+    ).toThrow(HandlerRegistryIngestionError);
+    expect(
+      standalone(Subscriber, {
+        ...stateSubscription,
+        input: {
+          ...stateSubscription.input,
+          where: { eventField: "id", equals: "review-1" },
+        },
       }),
     ).toThrow(HandlerRegistryIngestionError);
   });
@@ -385,7 +435,12 @@ describe("generated handler registry ingestion", () => {
           {
             receiverKind: "standalone" as const,
             receiverType: Commander,
-            handlers: [{ ...substitution("replace"), emittedSchemas: [StateSchema] }],
+            handlers: [
+              {
+                ...substitution("replace"),
+                outcomes: { ...substitution("replace").outcomes, returned: [StateSchema] },
+              },
+            ],
           },
         ],
       }),
@@ -407,7 +462,7 @@ describe("generated handler registry ingestion", () => {
               {
                 ...substitution("assign"),
                 kind: "command-assignment",
-                emittedSchemas: [StateSchema],
+                outcomes: { ...substitution().outcomes, returned: [StateSchema] },
               },
             ],
           },

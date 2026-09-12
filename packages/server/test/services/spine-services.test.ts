@@ -104,8 +104,10 @@ import {
   Server,
   SpineServices,
   EntityHandlers,
+  HandlerRegistryIngestor,
   InMemorySubscriptionRegistry,
   type CommandDispatcher,
+  type EntityHandlersMetadata,
   type EventDispatcher,
   type RunningServer,
 } from "../../src/index.js";
@@ -1641,6 +1643,46 @@ describe("SpineServices", () => {
       }),
     );
     expect(event?.context?.rejection?.command).toEqual(command);
+  });
+
+  it("subscribes to a declared rejection without a server-side rejection consumer", async () => {
+    const context = BoundedContext.singleTenant("DeclaredRejections")
+      .add(createRejectingRepository())
+      .build();
+    expect(context.eventBus().acceptedEventTypes()).toContain(
+      TypeUrls.derive(TaskAlreadyDoneSchema),
+    );
+    const subscriptions = registeredSubscriptionHandlers(context);
+    const commands = registeredCommandHandlers(context);
+    const subscription = await subscriptions.subscribe(
+      createEventTopic(undefined, TaskAlreadyDoneSchema),
+    );
+    const iterator = subscriptions.activate(subscription)[Symbol.asyncIterator]();
+    const next = withTimeout(iterator.next(), "declared rejection subscription update");
+
+    await delay(25);
+    const acknowledgement = await commands.post(
+      createAggregateCommand("command-declared-rejection", "task-declared-rejection"),
+    );
+    const delivered = await next;
+    const update = delivered.value as SubscriptionUpdate | undefined;
+
+    expect(acknowledgement.status?.status.case).toBe("ok");
+    expect(update?.update.case).toBe("eventUpdates");
+    if (update?.update.case !== "eventUpdates") {
+      throw new Error("Expected a declared rejection event update.");
+    }
+    const event = update.update.value.event[0];
+    if (event?.message === undefined) throw new Error("Expected a rejection Event payload.");
+    expect(AnyMessages.unpack(event.message, TaskAlreadyDoneSchema)).toEqual(
+      create(TaskAlreadyDoneSchema, {
+        id: create(GeneratedTaskIdSchema, { value: "task-declared-rejection" }),
+      }),
+    );
+    expect(event.context?.rejection?.command).toBeUndefined();
+    expect(event.context?.rejection?.stacktrace).toBe("");
+    await iterator.return?.();
+    await context.close();
   });
 
   it("returns stable Ack errors with details for invalid command payloads", async () => {
@@ -4261,9 +4303,25 @@ function createProjectionRepositoryWithHandlers(): Repository<typeof TaskProject
 }
 
 function createRejectingRepository(): Repository<typeof RejectingTaskAggregate> {
-  const handlers = EntityHandlers.define(RejectingTaskAggregate, ProjectStateSchema, (builder) => [
-    builder.assign(CreateReviewProjectSchema, "assignTask"),
-  ]);
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: RejectingTaskAggregate,
+        stateSchema: ProjectStateSchema,
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "assignTask",
+            input: { schema: CreateReviewProjectSchema, origin: "domestic" },
+            outcomes: { returned: [TaskCreatedSchema], thrown: [TaskAlreadyDoneSchema] },
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<RejectingTaskAggregate, typeof ProjectStateSchema> | undefined;
+  if (handlers === undefined) throw new Error("Expected rejecting Aggregate handlers.");
 
   return new Repository({
     entityType: RejectingTaskAggregate,

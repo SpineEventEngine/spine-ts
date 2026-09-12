@@ -14,12 +14,13 @@
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
-import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
+import { AnyMessages, RejectionThrowable, TypeUrls } from "@spine-event-engine/core";
+import { CommandSchema, EventSchema, type Event } from "@spine-event-engine/proto";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, it } from "vitest";
 
 import {
+  AbstractAssignee,
   AbstractCommander,
   AbstractEventReactor,
   AbstractEventSubscriber,
@@ -70,6 +71,12 @@ class UndeclaredOutputReceiver extends AbstractEventReactor {
 class EmptyCommandReceiver extends AbstractCommander {
   substitute(): undefined {
     return undefined;
+  }
+}
+
+class RejectingAssignee extends AbstractAssignee {
+  assign(): ReviewTaskAssigned {
+    throw RejectionThrowable.create(ReviewRejectedSchema, { id: "rejected" });
   }
 }
 
@@ -143,10 +150,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-subscription" as const,
           methodName: "selected",
-          signalSchema: ReviewTaskAssignedSchema,
-          emittedSchemas: [],
+          input: { schema: ReviewTaskAssignedSchema, origin },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1 as const,
-          origin,
         },
       ],
     });
@@ -197,7 +203,7 @@ describe("StandaloneHandlerRuntime", () => {
     const reaction = (
       receiverType: GeneratedStandaloneHandlerGroup["receiverType"],
       methodName: string,
-      emittedSchemas: readonly GenMessage<Message>[],
+      returnedSchemas: readonly GenMessage<Message>[],
     ) => ({
       receiverKind: "standalone" as const,
       receiverType,
@@ -210,10 +216,9 @@ describe("StandaloneHandlerRuntime", () => {
                 ? ("event-reaction" as const)
                 : ("command-reaction" as const),
           methodName,
-          signalSchema: ReviewRejectedSchema,
-          emittedSchemas,
+          input: { schema: ReviewRejectedSchema, origin: "domestic" as const },
+          outcomes: { returned: returnedSchemas, thrown: [] },
           parameterCount: 1 as const,
-          origin: "domestic" as const,
         },
       ],
     });
@@ -256,19 +261,20 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-subscription",
           methodName: "selected",
-          signalSchema: ReviewTaskAssignedSchema,
-          emittedSchemas: [],
+          input: {
+            schema: ReviewTaskAssignedSchema,
+            origin: "domestic",
+            where: { eventField: "name", equals: "selected" },
+          },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
-          where: { eventField: "name", equals: "selected" },
         },
         {
           kind: "event-subscription",
           methodName: "fallback",
-          signalSchema: ReviewTaskAssignedSchema,
-          emittedSchemas: [],
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -300,11 +306,13 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-subscription",
           methodName: "selected",
-          signalSchema: ReviewTaskAssignedSchema,
-          emittedSchemas: [],
+          input: {
+            schema: ReviewTaskAssignedSchema,
+            origin: "external",
+            where: { eventField: "name", equals: "external" },
+          },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "external",
-          where: { eventField: "name", equals: "external" },
         },
       ],
     };
@@ -336,10 +344,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "state-subscription",
           methodName: "subscribe",
-          signalSchema: ProjectStateSchema,
-          emittedSchemas: [],
+          input: { schema: ProjectStateSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -370,10 +377,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-reaction",
           methodName: "react",
-          signalSchema: ReviewTaskAssignedSchema,
-          emittedSchemas: [ReviewTaskAssignedSchema],
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -392,6 +398,34 @@ describe("StandaloneHandlerRuntime", () => {
     ).rejects.toThrow('Standalone handler "react" returned an undeclared signal.');
   });
 
+  it("publishes a declared rejection thrown by a standalone command assignee", async () => {
+    const published: Event[] = [];
+    const dispatcher = rejectingAssigneeDispatcher([ReviewRejectedSchema], (event) => {
+      published.push(event);
+      return Promise.resolve();
+    });
+
+    await dispatcher.dispatch(reviewAssignmentCommand("declared-rejection"));
+
+    expect(published).toHaveLength(1);
+    const [event] = published;
+    if (event?.message === undefined) throw new Error("Expected a published rejection Event.");
+    expect(AnyMessages.unpack(event.message, ReviewRejectedSchema)).toEqual(
+      create(ReviewRejectedSchema, { id: "rejected" }),
+    );
+    expect(event.context?.rejection?.command?.id?.uuid).toBe("declared-rejection");
+  });
+
+  it("rejects an undeclared rejection thrown by a standalone command assignee", async () => {
+    const dispatcher = rejectingAssigneeDispatcher([], () => Promise.resolve());
+
+    await expect(
+      dispatcher.dispatch(reviewAssignmentCommand("undeclared-rejection")),
+    ).rejects.toThrow(
+      `Handler "assign" threw undeclared rejection "${ReviewRejectedSchema.typeName}".`,
+    );
+  });
+
   it("rejects missing standalone methods and an empty runtime binding list", () => {
     expect(() => new StandaloneHandlerRuntime([])).toThrow(
       "Standalone handler runtime requires a SignalPublisher.",
@@ -407,10 +441,9 @@ describe("StandaloneHandlerRuntime", () => {
                 {
                   kind: "event-subscription",
                   methodName: "missing",
-                  signalSchema: ReviewTaskAssignedSchema,
-                  emittedSchemas: [],
+                  input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+                  outcomes: { returned: [], thrown: [] },
                   parameterCount: 1,
-                  origin: "domestic",
                 },
               ],
             },
@@ -429,10 +462,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "command-substitution",
           methodName: "substitute",
-          signalSchema: AssignReviewTaskSchema,
-          emittedSchemas: [AssignReviewTaskSchema],
+          input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+          outcomes: { returned: [AssignReviewTaskSchema], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -443,10 +475,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-subscription",
           methodName: "subscribe",
-          signalSchema: ReviewTaskAssignedSchema,
-          emittedSchemas: [],
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -475,10 +506,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "command-substitution",
           methodName: "substitute",
-          signalSchema: AssignReviewTaskSchema,
-          emittedSchemas: [AssignReviewTaskSchema],
+          input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+          outcomes: { returned: [AssignReviewTaskSchema], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -507,10 +537,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-subscription",
           methodName: "subscribe",
-          signalSchema: ReviewTaskAssignedSchema,
-          emittedSchemas: [],
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 2,
-          origin: "domestic",
         },
       ],
     };
@@ -521,10 +550,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "command-substitution",
           methodName: "substitute",
-          signalSchema: AssignReviewTaskSchema,
-          emittedSchemas: [AssignReviewTaskSchema],
+          input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+          outcomes: { returned: [AssignReviewTaskSchema], thrown: [] },
           parameterCount: 2,
-          origin: "domestic",
         },
       ],
     };
@@ -585,10 +613,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-reaction",
           methodName: "react",
-          signalSchema: ReviewTaskAssignedSchema,
-          emittedSchemas: [ReviewTaskAssignedSchema],
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -616,10 +643,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-reaction",
           methodName: "react",
-          signalSchema: ReviewTaskAssignedSchema,
-          emittedSchemas: [ReviewTaskAssignedSchema],
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -647,6 +673,41 @@ describe("StandaloneHandlerRuntime", () => {
     expect(published).toHaveLength(1);
   });
 });
+
+function rejectingAssigneeDispatcher(
+  thrown: readonly GenMessage<Message>[],
+  publishRejectionEvent: (event: Event) => Promise<void>,
+) {
+  const group: GeneratedStandaloneHandlerGroup = {
+    receiverKind: "standalone",
+    receiverType: RejectingAssignee,
+    handlers: [
+      {
+        kind: "command-assignment",
+        methodName: "assign",
+        input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+        outcomes: { returned: [ReviewTaskAssignedSchema], thrown },
+        parameterCount: 1,
+      },
+    ],
+  };
+  const dispatcher = new StandaloneHandlerRuntime([
+    {
+      group,
+      instance: new RejectingAssignee(),
+      publisher: { publishRejectionEvent } as never,
+    },
+  ]).commandDispatcher();
+  if (dispatcher === undefined) throw new Error("Expected standalone Command dispatcher.");
+  return dispatcher;
+}
+
+function reviewAssignmentCommand(uuid: string) {
+  return create(CommandSchema, {
+    id: { uuid },
+    message: AnyMessages.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema)),
+  });
+}
 
 function stateChanged(schema: GenMessage<Message>, state: Message) {
   return create(EventSchema, {

@@ -18,7 +18,9 @@ import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node
 
 import type {
   BuildHandlerAnalysis,
+  BuildHandlerRecord,
   BuildReceiverHandlers,
+  BuildWhereOptions,
   SchemaReference,
 } from "./build-time-handler-analyzer.js";
 
@@ -202,69 +204,23 @@ const RegistrySource = Object.freeze({
     return new Set([registryTypeName, ...refs.localNames]);
   },
   buildRefs(receivers: readonly BuildReceiverHandlers[], outputFile: string): RenderRefs {
-    const entityRefs = new Map<string, string>();
-    const schemaRefs = new Map<string, string>();
-    const entityRaw = new Map<string, ImportRef>();
-    const schemaRaw = new Map<string, ImportRef>();
     const used = new Set<string>();
+    const entityRefs = new Map<string, string>();
     const entityImports: ImportRef[] = [];
-
+    const schemaRaw = new Map<string, ImportRef>();
+    const entityRaw = new Map<string, ImportRef>();
     for (const receiver of receivers) {
-      const moduleSpecifier = RegistrySource.entityModule(outputFile, receiver.sourceFile);
-      const key = RegistrySource.entityKey(moduleSpecifier, receiver.className);
-      const existing = entityRaw.get(key);
-      const ref =
-        existing ??
-        RegistrySource.bindRef(
-          {
-            importedName: receiver.className,
-            localName: "",
-            moduleSpecifier,
-            ...(receiver.defaultExport === true ? { defaultExport: true } : {}),
-          },
-          used,
-        );
-
-      if (existing === undefined) {
-        entityRaw.set(key, ref);
-        entityImports.push(ref);
-      }
-
-      entityRefs.set(
-        RegistrySource.entityKey(ref.moduleSpecifier, ref.importedName),
-        ref.localName,
+      RegistrySource.addReceiverRef(
+        receiver,
+        outputFile,
+        entityRaw,
+        entityRefs,
+        entityImports,
+        used,
       );
-      if (receiver.receiverKind === "entity") {
-        RegistrySource.addSchemaRef(
-          schemaRaw,
-          outputFile,
-          receiver.sourceFile,
-          receiver.stateSchema,
-        );
-      }
-
-      for (const handler of receiver.handlers) {
-        RegistrySource.addSchemaRef(
-          schemaRaw,
-          outputFile,
-          receiver.sourceFile,
-          handler.signalSchema,
-        );
-        handler.emittedSchemas.forEach((schema) => {
-          RegistrySource.addSchemaRef(schemaRaw, outputFile, receiver.sourceFile, schema);
-        });
-      }
+      RegistrySource.addReceiverSchemas(receiver, outputFile, schemaRaw);
     }
-
-    const schemaImports = [...schemaRaw.values()].sort(RegistrySource.compareRef).map((ref) => {
-      const bound = RegistrySource.bindRef(ref, used);
-      schemaRefs.set(
-        RegistrySource.entityKey(bound.moduleSpecifier, bound.importedName),
-        bound.localName,
-      );
-      return bound;
-    });
-
+    const { schemaImports, schemaRefs } = RegistrySource.bindSchemaRefs(schemaRaw, used);
     return {
       entityNames: entityRefs,
       schemaNames: schemaRefs,
@@ -274,6 +230,61 @@ const RegistrySource = Object.freeze({
       ],
       localNames: used,
     };
+  },
+  addReceiverRef(
+    receiver: BuildReceiverHandlers,
+    outputFile: string,
+    raw: Map<string, ImportRef>,
+    names: Map<string, string>,
+    imports: ImportRef[],
+    used: Set<string>,
+  ): void {
+    const moduleSpecifier = RegistrySource.entityModule(outputFile, receiver.sourceFile);
+    const key = RegistrySource.entityKey(moduleSpecifier, receiver.className);
+    const existing = raw.get(key);
+    const ref =
+      existing ??
+      RegistrySource.bindRef(
+        {
+          importedName: receiver.className,
+          localName: "",
+          moduleSpecifier,
+          ...(receiver.defaultExport === true ? { defaultExport: true } : {}),
+        },
+        used,
+      );
+    if (existing === undefined) {
+      raw.set(key, ref);
+      imports.push(ref);
+    }
+    names.set(RegistrySource.entityKey(ref.moduleSpecifier, ref.importedName), ref.localName);
+  },
+  addReceiverSchemas(
+    receiver: BuildReceiverHandlers,
+    outputFile: string,
+    schemas: Map<string, ImportRef>,
+  ): void {
+    const add = (schema: SchemaReference) => {
+      RegistrySource.addSchemaRef(schemas, outputFile, receiver.sourceFile, schema);
+    };
+    if (receiver.receiverKind === "entity") add(receiver.stateSchema);
+    for (const handler of receiver.handlers) {
+      add(handler.input.schema);
+      handler.outcomes.returned.forEach(add);
+      handler.outcomes.thrown.forEach(add);
+    }
+  },
+  bindSchemaRefs(raw: Map<string, ImportRef>, used: Set<string>) {
+    const schemaRefs = new Map<string, string>();
+    const schemaImports = [...raw.values()].sort(RegistrySource.compareRef).map((ref) => {
+      const bound = RegistrySource.bindRef(ref, used);
+      schemaRefs.set(
+        RegistrySource.entityKey(bound.moduleSpecifier, bound.importedName),
+        bound.localName,
+      );
+      return bound;
+    });
+    return { schemaImports, schemaRefs };
   },
   renderRegistry(
     receivers: readonly BuildReceiverHandlers[],
@@ -309,39 +320,48 @@ const RegistrySource = Object.freeze({
       "      handlers: [",
     ];
 
-    receiver.handlers.forEach((handler) => {
-      const emitted = handler.emittedSchemas
-        .map((schema) => RegistrySource.schemaName(refs, outputFile, receiver.sourceFile, schema))
-        .join(", ");
-      const signalSchema = RegistrySource.schemaName(
-        refs,
-        outputFile,
-        receiver.sourceFile,
-        handler.signalSchema,
-      );
-
-      lines.push(
-        "        {",
-        `          kind: ${RegistrySource.stringLiteral(handler.kind)},`,
-        `          methodName: ${RegistrySource.stringLiteral(handler.methodName)},`,
-        `          signalSchema: ${signalSchema},`,
-        `          emittedSchemas: [${emitted}],`,
-        `          parameterCount: ${String(handler.parameterCount)},`,
-        `          origin: ${RegistrySource.stringLiteral(handler.origin)},`,
-        ...(handler.where === undefined
-          ? []
-          : [
-              "          where: {",
-              `            eventField: ${RegistrySource.stringLiteral(handler.where.eventField)},`,
-              `            equals: ${RegistrySource.stringLiteral(handler.where.equals)},`,
-              "          },",
-            ]),
-        "        },",
-      );
-    });
+    for (const handler of receiver.handlers) {
+      lines.push(...RegistrySource.renderHandler(handler, receiver.sourceFile, outputFile, refs));
+    }
     lines.push("      ],", "    },");
-
     return lines;
+  },
+  renderHandler(
+    handler: BuildHandlerRecord,
+    sourceFile: string,
+    outputFile: string,
+    refs: RenderRefs,
+  ): readonly string[] {
+    const schemaName = (schema: SchemaReference) =>
+      RegistrySource.schemaName(refs, outputFile, sourceFile, schema);
+    const returned = handler.outcomes.returned.map(schemaName).join(", ");
+    const thrown = handler.outcomes.thrown.map(schemaName).join(", ");
+    return [
+      "        {",
+      `          kind: ${RegistrySource.stringLiteral(handler.kind)},`,
+      `          methodName: ${RegistrySource.stringLiteral(handler.methodName)},`,
+      "          input: {",
+      `            schema: ${schemaName(handler.input.schema)},`,
+      `            origin: ${RegistrySource.stringLiteral(handler.input.origin)},`,
+      ...RegistrySource.renderWhere(handler.input.where),
+      "          },",
+      "          outcomes: {",
+      `            returned: [${returned}],`,
+      `            thrown: [${thrown}],`,
+      "          },",
+      `          parameterCount: ${String(handler.parameterCount)},`,
+      "        },",
+    ];
+  },
+  renderWhere(where: BuildWhereOptions | undefined): readonly string[] {
+    return where === undefined
+      ? []
+      : [
+          "            where: {",
+          `              eventField: ${RegistrySource.stringLiteral(where.eventField)},`,
+          `              equals: ${RegistrySource.stringLiteral(where.equals)},`,
+          "            },",
+        ];
   },
   addSchemaRef(
     schemaImports: Map<string, ImportRef>,

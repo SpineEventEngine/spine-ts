@@ -13,12 +13,13 @@
  */
 
 import { clone, create } from "@bufbuild/protobuf";
-import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
+import { AnyMessages, RejectionThrowable, type MessageSchema } from "@spine-event-engine/core";
 import {
   CommandContextSchema,
   CommandSchema,
   EventContextSchema,
   EventSchema,
+  RejectionEventContextSchema,
   type CommandContext,
   type EventContext,
   type Command,
@@ -33,6 +34,7 @@ import type {
   GeneratedHandlerRecordInput,
   GeneratedStandaloneHandlerGroup,
 } from "../handler/generated-handler-registry.js";
+import { DeclaredRejections } from "../handler/declared-rejections.js";
 import {
   EventHandlerFilters,
   type EventHandlerFilterPlan,
@@ -102,7 +104,7 @@ export class StandaloneHandlerRuntime {
       externalEventSchemas: () =>
         Object.freeze(
           StandaloneHandlerRuntime.schemas(
-            bindings.filter(({ handler }) => handler.origin === "external"),
+            bindings.filter(({ handler }) => handler.input.origin === "external"),
           ),
         ),
       dispatch: async (event) => this.#dispatchEvent(event, bindings),
@@ -110,10 +112,10 @@ export class StandaloneHandlerRuntime {
     return EventDispatcherOriginSchemas.define(
       dispatcher,
       StandaloneHandlerRuntime.schemas(
-        bindings.filter(({ handler }) => handler.origin === "domestic"),
+        bindings.filter(({ handler }) => handler.input.origin === "domestic"),
       ),
       StandaloneHandlerRuntime.schemas(
-        bindings.filter(({ handler }) => handler.origin === "external"),
+        bindings.filter(({ handler }) => handler.input.origin === "external"),
       ),
     );
   }
@@ -135,7 +137,7 @@ export class StandaloneHandlerRuntime {
             : AnyMessages.unpack(event.message, EntityLog.EntityStateChangedSchema);
         if (changed?.newState === undefined) return;
         for (const binding of bindings) {
-          const state = AnyMessages.unpack(changed.newState, binding.handler.signalSchema);
+          const state = AnyMessages.unpack(changed.newState, binding.handler.input.schema);
           if (state !== undefined) {
             const output = await binding.invoke(
               state,
@@ -152,12 +154,21 @@ export class StandaloneHandlerRuntime {
     if (command.message === undefined)
       throw new Error("Standalone command handler requires a message.");
     for (const binding of bindings) {
-      const message = AnyMessages.unpack(command.message, binding.handler.signalSchema);
+      const message = AnyMessages.unpack(command.message, binding.handler.input.schema);
       if (message === undefined) continue;
-      const output = await binding.invoke(
-        message,
-        StandaloneHandlerRuntime.commandContext(command),
-      );
+      let output: unknown;
+      try {
+        output = await binding.invoke(message, StandaloneHandlerRuntime.commandContext(command));
+      } catch (error) {
+        if (!RejectionThrowable.is(error)) throw error;
+        DeclaredRejections.require(
+          binding.handler.methodName,
+          binding.handler.outcomes.thrown,
+          error,
+        );
+        await this.#publishRejection(command, error);
+        continue;
+      }
       await this.#publish(binding, output, command);
     }
   }
@@ -170,12 +181,12 @@ export class StandaloneHandlerRuntime {
       const binding = bindings.find(
         (candidate) =>
           StandaloneHandlerRuntime.eventFilterKey(
-            candidate.handler.signalSchema.typeName,
+            candidate.handler.input.schema.typeName,
             origin,
           ) === key,
       );
       if (binding === undefined) continue;
-      const message = AnyMessages.unpack(event.message, binding.handler.signalSchema);
+      const message = AnyMessages.unpack(event.message, binding.handler.input.schema);
       if (message === undefined) continue;
       for (const selected of filter.select(message)) {
         const output = await selected.invoke(message, StandaloneHandlerRuntime.eventContext(event));
@@ -212,7 +223,7 @@ export class StandaloneHandlerRuntime {
   }
 
   #publishValue(binding: Binding, value: unknown, source: Command | Event): void {
-    const schema = binding.handler.emittedSchemas.find(
+    const schema = binding.handler.outcomes.returned.find(
       (candidate) => (value as { $typeName?: string }).$typeName === candidate.typeName,
     );
     if (schema === undefined)
@@ -251,6 +262,23 @@ export class StandaloneHandlerRuntime {
         id: metadata.id,
         context: metadata.context,
         message: AnyMessages.pack(schema, value as never),
+      }),
+    );
+  }
+
+  async #publishRejection(command: Command, rejection: RejectionThrowable): Promise<void> {
+    const metadata = this.#metadata.eventFromCommand(command, {});
+    await this.#publisher.publishRejectionEvent(
+      create(EventSchema, {
+        id: metadata.id,
+        message: AnyMessages.pack(rejection.schema, rejection.messageThrown()),
+        context: create(EventContextSchema, {
+          ...metadata.context,
+          rejection: create(RejectionEventContextSchema, {
+            command: clone(CommandSchema, command),
+            stacktrace: rejection.stack ?? "",
+          }),
+        }),
       }),
     );
   }
@@ -302,7 +330,7 @@ export class StandaloneHandlerRuntime {
   static schemas(bindings: readonly Binding[]): readonly MessageSchema[] {
     return [
       ...new Map(
-        bindings.map(({ handler }) => [handler.signalSchema.typeName, handler.signalSchema]),
+        bindings.map(({ handler }) => [handler.input.schema.typeName, handler.input.schema]),
       ).values(),
     ];
   }
@@ -323,7 +351,7 @@ export class StandaloneHandlerRuntime {
         handler.kind === "event-subscription",
     );
     const grouped = Map.groupBy(eventBindings, ({ handler }) =>
-      StandaloneHandlerRuntime.eventFilterKey(handler.signalSchema.typeName, handler.origin),
+      StandaloneHandlerRuntime.eventFilterKey(handler.input.schema.typeName, handler.input.origin),
     );
     return new Map(
       [...grouped].map(([typeName, candidates]) => [
@@ -331,8 +359,8 @@ export class StandaloneHandlerRuntime {
         EventHandlerFilters.compile(
           candidates.map(({ handler, ...binding }) => ({
             value: Object.freeze({ handler, ...binding }),
-            schema: handler.signalSchema,
-            ...(handler.where === undefined ? {} : { where: handler.where }),
+            schema: handler.input.schema,
+            ...(handler.input.where === undefined ? {} : { where: handler.input.where }),
           })),
         ),
       ]),

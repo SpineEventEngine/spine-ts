@@ -40,6 +40,7 @@ import {
   HandlerMetadataRegistryError,
   React,
   Subscribe,
+  Throws,
   Where,
   EntityHandlers,
   materializeDecoratedEntityHandlers,
@@ -61,6 +62,16 @@ it("creates a public Where method decorator", () => {
   const decorator = Where({ eventField: "board", equals: '{"value":"announcements"}' });
 
   expect(decorator).toBeTypeOf("function");
+});
+
+it("rejects an empty declared rejection list", () => {
+  expect(() => Throws()).toThrow("@Throws requires at least one generated rejection declaration.");
+});
+
+it("rejects a declaration without a generated message schema", () => {
+  expect(() => Throws({ schema: {} } as never)).toThrow(
+    "@Throws accepts only generated rejection declarations.",
+  );
 });
 
 interface DecoratedClassFactoryInput {

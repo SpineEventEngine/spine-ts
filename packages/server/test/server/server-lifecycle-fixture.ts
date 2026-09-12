@@ -97,9 +97,8 @@ export async function lifecycleFixture(
         {
           kind: "event-subscription" as const,
           methodName: "onServerStarted",
-          origin: "domestic" as const,
-          signalSchema: ServerStartedSchema,
-          emittedSchemas: [],
+          input: { schema: ServerStartedSchema, origin: "domestic" as const },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1 as const,
         },
       ],
@@ -420,9 +419,14 @@ function generatedRegistry(
     readonly handlers: readonly {
       readonly kind: "event-subscription";
       readonly methodName: string;
-      readonly origin: "domestic" | "external";
-      readonly signalSchema: GenMessage<Message>;
-      readonly emittedSchemas: readonly GenMessage<Message>[];
+      readonly input: {
+        readonly schema: GenMessage<Message>;
+        readonly origin: "domestic" | "external";
+      };
+      readonly outcomes: {
+        readonly returned: readonly GenMessage<Message>[];
+        readonly thrown: readonly GenMessage<Message>[];
+      };
       readonly parameterCount: 1;
     }[];
   }[],

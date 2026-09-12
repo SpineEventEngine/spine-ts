@@ -238,7 +238,7 @@ class ReadinessMetadataOwner {
       descriptor: this.#cloneSchema(handler.descriptor, clonedSchemas),
     }) as unknown as Handler;
     clonedHandlers.set(handler, clone);
-    HandlerMetadataValues.copyEmittedSchemas(handler, clone);
+    HandlerMetadataValues.copyOutcomes(handler, clone);
     return clone;
   }
 

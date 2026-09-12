@@ -841,9 +841,9 @@ export interface HandlerArity {
   readonly origin?: HandlerOrigin;
 
   /**
-   * Generated Protobuf-ES schemas emitted by the handler return type.
+   * Generated schemas that the handler may return or throw.
    */
-  readonly emittedSchemas?: readonly DescriptorMessageSchema[];
+  readonly outcomes?: HandlerOutcomeSchemas;
 
   /**
    * Optional generated Event field filter.
@@ -856,7 +856,7 @@ export interface HandlerArity {
  */
 class EntityHandlersOwner {
   readonly #authentic = new WeakSet<EntityHandlersMetadata>();
-  readonly #emittedSchemas = new WeakMap<HandlerMetadata, readonly DescriptorMessageSchema[]>();
+  readonly #outcomes = new WeakMap<HandlerMetadata, HandlerOutcomeSchemas>();
 
   /**
    * Creates handler metadata without invoking entity methods.
@@ -894,8 +894,19 @@ class EntityHandlersOwner {
    * @returns Frozen emitted schemas.
    * @internal
    */
-  emittedSchemas(handler: HandlerMetadata): readonly DescriptorMessageSchema[] {
-    return Object.freeze([...(this.#emittedSchemas.get(handler) ?? [])]);
+  returnedSchemas(handler: HandlerMetadata): readonly DescriptorMessageSchema[] {
+    return Object.freeze([...(this.#outcomes.get(handler)?.returned ?? [])]);
+  }
+
+  /**
+   * Returns generated rejection schemas declared by a handler.
+   *
+   * @param handler Handler metadata to inspect.
+   * @returns Frozen generated rejection schemas.
+   * @internal
+   */
+  thrownSchemas(handler: HandlerMetadata): readonly DescriptorMessageSchema[] {
+    return Object.freeze([...(this.#outcomes.get(handler)?.thrown ?? [])]);
   }
 
   /**
@@ -905,10 +916,10 @@ class EntityHandlersOwner {
    * @param target Cloned target handler metadata.
    * @internal
    */
-  copyEmittedSchemas(source: HandlerMetadata, target: HandlerMetadata): void {
-    const schemas = this.#emittedSchemas.get(source);
-    if (schemas !== undefined) {
-      this.#emittedSchemas.set(target, Object.freeze([...schemas]));
+  copyOutcomes(source: HandlerMetadata, target: HandlerMetadata): void {
+    const outcomes = this.#outcomes.get(source);
+    if (outcomes !== undefined) {
+      this.#outcomes.set(target, EntityHandlersOwner.freezeOutcomes(outcomes));
     }
   }
 
@@ -1038,8 +1049,8 @@ class EntityHandlersOwner {
       origin: generated?.origin ?? "domestic",
       ...(generated?.where === undefined ? {} : { where: Object.freeze({ ...generated.where }) }),
     });
-    if (generated?.emittedSchemas !== undefined) {
-      this.#emittedSchemas.set(handler as HandlerMetadata, generated.emittedSchemas);
+    if (generated?.outcomes !== undefined) {
+      this.#outcomes.set(handler as HandlerMetadata, generated.outcomes);
     }
     built.add(handler as HandlerMetadata);
     return handler;
@@ -1053,9 +1064,9 @@ class EntityHandlersOwner {
         Object.freeze({
           parameterCount: this.#parameterCount(arity.parameterCount),
           origin: arity.origin ?? "domestic",
-          ...(arity.emittedSchemas === undefined
+          ...(arity.outcomes === undefined
             ? {}
-            : { emittedSchemas: Object.freeze([...arity.emittedSchemas]) }),
+            : { outcomes: EntityHandlersOwner.freezeOutcomes(arity.outcomes) }),
           ...(arity.where === undefined ? {} : { where: Object.freeze({ ...arity.where }) }),
         }),
       );
@@ -1071,6 +1082,13 @@ class EntityHandlersOwner {
       "INVALID_PARAMETER_COUNT",
       `Handler metadata declares unsupported parameter count ${String(value)}.`,
     );
+  }
+
+  static freezeOutcomes(outcomes: HandlerOutcomeSchemas): HandlerOutcomeSchemas {
+    return Object.freeze({
+      returned: Object.freeze([...outcomes.returned]),
+      thrown: Object.freeze([...outcomes.thrown]),
+    });
   }
 
   #arityKey(kind: HandlerKind, methodName: string): string {
@@ -1191,6 +1209,11 @@ export const EntityHandlers: Readonly<EntityHandlerDefinitions> = Object.freeze(
 interface HandlerGeneratedData {
   readonly parameterCount: HandlerParameterCount;
   readonly origin: HandlerOrigin;
-  readonly emittedSchemas?: readonly DescriptorMessageSchema[];
+  readonly outcomes?: HandlerOutcomeSchemas;
   readonly where?: WhereOptions;
+}
+
+interface HandlerOutcomeSchemas {
+  readonly returned: readonly DescriptorMessageSchema[];
+  readonly thrown: readonly DescriptorMessageSchema[];
 }

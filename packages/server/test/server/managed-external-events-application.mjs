@@ -175,10 +175,9 @@ async function generatedRegistryRoot() {
           {
             kind: "event-subscription",
             methodName: "onExternalTaskCreated",
-            signalSchema: TaskCreatedSchema,
-            emittedSchemas: [],
+            input: { schema: TaskCreatedSchema, origin: "external" },
+            outcomes: { returned: [], thrown: [] },
             parameterCount: 1,
-            origin: "external",
           },
         ],
       },

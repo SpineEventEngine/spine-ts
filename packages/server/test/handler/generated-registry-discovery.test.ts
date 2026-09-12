@@ -243,10 +243,9 @@ describe("generated registry discovery", () => {
             {
               kind: "command-assignment",
               methodName: "assignCreate",
-              signalSchema: StartReviewSchema,
-              emittedSchemas: [ReviewStartedSchema],
+              input: { schema: StartReviewSchema, origin: "domestic" },
+              outcomes: { returned: [ReviewStartedSchema], thrown: [] },
               parameterCount: 1,
-              origin: "domestic",
             },
           ],
         },

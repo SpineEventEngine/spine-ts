@@ -132,6 +132,7 @@ describe("EventBus", () => {
 
     eventBusAccess.registerSchemas(bus, [ReviewTaskAssignedSchema]);
 
+    expect(eventBusAccess.eventSchemas(bus)).toEqual([ReviewTaskAssignedSchema]);
     await expect(bus.post(createReviewTaskAssigned("event-schema-only"))).resolves.toBeUndefined();
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-schema-only" } }]);
   });

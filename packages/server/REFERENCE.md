@@ -325,10 +325,9 @@ const registry: GeneratedHandlerRegistry = {
         {
           kind: "command-substitution",
           methodName: "approve",
-          signalSchema: ApproveProjectSchema,
-          emittedSchemas: [ScheduleProjectSchema],
+          input: { schema: ApproveProjectSchema, origin: "domestic" },
+          outcomes: { returned: [ScheduleProjectSchema], thrown: [] },
           parameterCount: 2,
-          origin: "domestic",
         },
       ],
     },
@@ -454,7 +453,13 @@ record-storage handle, while the context closes the registry.
 
 `Entity` is the state base class. `Aggregate`, `Projection`, and
 `ProcessManager` identify the three entity families. Handler decorators are
-`@Assign`, `@Command`, `@React`, `@Subscribe`, and `@Apply`. In a transactional
+`@Assign`, `@Command`, `@React`, `@Subscribe`, and `@Apply`. A command-accepting
+handler uses `@Throws(GeneratedRejection)` to declare its possible domain
+rejections. Write the primary handler decorator first and `@Throws` immediately
+below it; declaration order does not affect behavior. Generated metadata records
+normal and rejection outcomes before context assembly, so clients may subscribe
+to a declared rejection even when no server handler consumes it. Throwing an
+undeclared generated rejection is a technical handler failure. In a transactional
 handler, `update(mutator)` changes the active draft and returns the draft;
 `tryUpdate(mutator)` validates a scratch draft and returns violations without
 applying an invalid change. Entity lifecycle and version changes are committed
@@ -473,8 +478,8 @@ UUIDs; fixed IDs belong only to existing source envelopes retained through the
 normal origin chain.
 
 An application handler throws a generated core `RejectionThrowable` for a
-domain rejection. The repository rolls back state, version, lifecycle, and
-output; it schedules the typed rejection event independently. Command service
+domain rejection declared with `@Throws`. The repository rolls back state,
+version, lifecycle, and output; it schedules the typed rejection event independently. Command service
 acknowledgement remains an accepted `Ack`. Rejection-event posting can be
 unobserved by inactive, full, or closed subscriptions and a posting failure is
 an internal diagnostic, not a retry guarantee.

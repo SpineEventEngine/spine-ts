@@ -139,9 +139,11 @@ import {
   type EventReactionHandlerMetadata,
   type StateSubscriptionHandlerMetadata,
   type HandlerParameterCount,
+  type HandlerMetadata,
   type RegisteredHandlerMetadata,
   type WhereOptions,
 } from "../handler/handler-metadata.js";
+import { DeclaredRejections } from "../handler/declared-rejections.js";
 import { standAccess, type Stand } from "../stand/stand.js";
 import { TransitionValidationError } from "./command-errors.js";
 import { MessageIds, PrimitiveIds } from "./primitive-id.js";
@@ -1254,6 +1256,58 @@ interface RepositoryRouting<Id = unknown> {
   routeStateUpdate(event: Event): RepositoryStateUpdateRoute<Id> | undefined;
 }
 
+interface RoutingSchemas {
+  readonly command: readonly MessageSchema[];
+  readonly event: readonly MessageSchema[];
+  readonly domesticEvent: readonly MessageSchema[];
+  readonly externalEvent: readonly MessageSchema[];
+  readonly state: readonly DescriptorMessageSchema[];
+  readonly producedEvent: readonly MessageSchema[];
+  readonly producedCommand: readonly MessageSchema[];
+}
+
+interface RoutingReadiness {
+  readonly command: CommandRegistrationReadinessLookup | undefined;
+  readonly event: EventRegistrationReadinessLookup | undefined;
+}
+
+interface RoutingFilters {
+  readonly commandReactions: ReadonlyMap<
+    string,
+    EventHandlerFilterPlan<RegisteredHandlerMetadata<CommandReactionHandlerMetadata>>
+  >;
+  readonly eventReactors: ReadonlyMap<
+    string,
+    EventHandlerFilterPlan<RegisteredHandlerMetadata<EventReactionHandlerMetadata>>
+  >;
+  readonly eventSubscribers: ReadonlyMap<
+    string,
+    EventHandlerFilterPlan<RepositoryEventSubscribers[number]>
+  >;
+  readonly commandReactionMap: ReadonlyMap<
+    string,
+    readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[]
+  >;
+}
+
+interface RoutingMaps<Id> {
+  readonly command: ReadonlyMap<MessageSchema, CommandRoute<Id>>;
+  readonly event: ReadonlyMap<MessageSchema, EventRoute<Id>>;
+  readonly state: ReadonlyMap<DescriptorMessageSchema, StateUpdateRoute<Id>>;
+}
+
+interface RoutingInput<Id> {
+  readonly entityType: RepositoryEntityType;
+  readonly entityFamily: EntityFamily;
+  readonly metadata: EntityMetadata;
+  readonly handlersOption: RepositoryHandlersOption;
+  readonly producedEvents: readonly MessageSchema[];
+  readonly commandRouting: RoutingDeclarationSnapshot<CommandRoute<Id>>;
+  readonly eventRouting: RoutingDeclarationSnapshot<EventRoute<Id>>;
+  readonly stateUpdateRouting: RoutingDeclarationSnapshot<StateUpdateRoute<Id>>;
+  readonly stringifiers: StringifierRegistry;
+}
+
 interface RepositoryRuntime {
   readonly context: StorageMode;
   readonly storageFactory: StorageFactory;
@@ -1288,6 +1342,24 @@ interface LoadedAggregate {
   readonly events: EntityEventHistoryPort<unknown>;
   readonly version: bigint;
   readonly storageInput: EntityStorageInput<unknown, Message>;
+}
+
+interface AggregateSnapshot {
+  readonly state: unknown;
+  readonly version: bigint;
+  readonly archived: boolean;
+  readonly deleted: boolean;
+}
+
+interface AggregateConstructorOptions {
+  id: unknown;
+  schema: DescriptorMessageSchema;
+  state: unknown;
+  version: unknown;
+  lifecycle?: {
+    readonly archived: boolean;
+    readonly deleted: boolean;
+  };
 }
 
 interface LoadedRepositoryEntity {
@@ -1475,38 +1547,11 @@ class AggregateExecutionSupport {
     };
   }
 
-  #instantiateAggregate(
-    entityId: unknown,
-    current:
-      | {
-          readonly state: unknown;
-          readonly version: bigint;
-          readonly archived: boolean;
-          readonly deleted: boolean;
-        }
-      | undefined,
-  ): object {
-    const entityType = this.#repository.entityType as unknown as new (options: {
-      readonly id: unknown;
-      readonly schema: DescriptorMessageSchema;
-      readonly state: unknown;
-      readonly version: unknown;
-      readonly lifecycle?: {
-        readonly archived: boolean;
-        readonly deleted: boolean;
-      };
-    }) => object;
-
-    const options: {
-      id: unknown;
-      schema: DescriptorMessageSchema;
-      state: unknown;
-      version: unknown;
-      lifecycle?: {
-        readonly archived: boolean;
-        readonly deleted: boolean;
-      };
-    } = {
+  #instantiateAggregate(entityId: unknown, current: AggregateSnapshot | undefined): object {
+    const entityType = this.#repository.entityType as unknown as new (
+      options: AggregateConstructorOptions,
+    ) => object;
+    const options: AggregateConstructorOptions = {
       id: entityId,
       schema: this.#repository.stateSchema,
       state: current?.state ?? this.#defaultState(entityId),
@@ -1602,6 +1647,7 @@ class AggregateCommandExecution {
       if (!RejectionThrowable.is(error)) {
         throw error;
       }
+      RepositorySignals.requireDeclaredRejection(intake.assignee.handler, error);
       return RepositorySignals.postRejectionEvent(
         this.#runtime,
         this.#repository,
@@ -2557,12 +2603,7 @@ class ProcessManagerCommandExecution {
       this.#command,
     );
     const loaded = await this.#support.load(intake.route.entityId, tenantOptions);
-    HandlerDispatchPublisher.command(
-      this.#runtime,
-      this.#repository,
-      this.#command,
-      intake.route.entityId,
-    );
+    this.#publishDispatch(intake.route.entityId);
     try {
       const produced = await this.#invoke(
         loaded.entity,
@@ -2573,6 +2614,7 @@ class ProcessManagerCommandExecution {
       return await this.#commitAndPublish(loaded, tenantOptions, intake, produced);
     } catch (error) {
       if (!RejectionThrowable.is(error)) throw error;
+      RepositorySignals.requireDeclaredRejection(intake.assignee.handler, error);
       return RepositorySignals.postRejectionEvent(
         this.#runtime,
         this.#repository,
@@ -2581,6 +2623,10 @@ class ProcessManagerCommandExecution {
         error,
       );
     }
+  }
+
+  #publishDispatch(entityId: unknown): void {
+    HandlerDispatchPublisher.command(this.#runtime, this.#repository, this.#command, entityId);
   }
 
   #readIntake(replayedRoute?: RepositoryCommandRoute):
@@ -2611,19 +2657,8 @@ class ProcessManagerCommandExecution {
     },
     producedSignals: readonly unknown[],
   ): Promise<EntityInboxFollowUp | undefined> {
-    const commands =
-      intake.assignee.handler.kind === "command-substitution"
-        ? this.#bindProducedCommands(producedSignals)
-        : Object.freeze([]);
-    if (intake.assignee.handler.kind === "command-substitution" && commands.length === 0) {
-      throw new Error(
-        "Repository Process Manager command substitutions must return at least one command.",
-      );
-    }
-    const events =
-      intake.assignee.handler.kind === "command-assignment"
-        ? this.#bindProducedEvents(producedSignals, intake.route.entityId)
-        : Object.freeze([]);
+    const commands = this.#commandOutputs(intake.assignee, producedSignals);
+    const events = this.#eventOutputs(intake.assignee, producedSignals, intake.route.entityId);
     const committed = await this.#support.commit(
       loaded,
       tenantOptions,
@@ -2638,6 +2673,30 @@ class ProcessManagerCommandExecution {
       : async () => {
           await this.#postCommands(commands, this.#command);
         };
+  }
+
+  #commandOutputs(
+    assignee: RepositoryCommandAssignee,
+    produced: readonly unknown[],
+  ): readonly Command[] {
+    if (assignee.handler.kind !== "command-substitution") return Object.freeze([]);
+    const commands = this.#bindProducedCommands(produced);
+    if (commands.length === 0) {
+      throw new Error(
+        "Repository Process Manager command substitutions must return at least one command.",
+      );
+    }
+    return commands;
+  }
+
+  #eventOutputs(
+    assignee: RepositoryCommandAssignee,
+    produced: readonly unknown[],
+    entityId: unknown,
+  ): readonly Event[] {
+    return assignee.handler.kind === "command-assignment"
+      ? this.#bindProducedEvents(produced, entityId)
+      : Object.freeze([]);
   }
 
   #publishChangedState(
@@ -2919,28 +2978,34 @@ class ProcessManagerEventExecution {
       diagnostics,
     );
     if (!committed) return;
-    if (RepositoryEntities.repositoryChanged(loaded.entity)) {
-      EntityStateChangePublisher.event(
-        this.#runtime,
-        this.#repository,
-        this.#event,
-        entityId,
-        loaded.current === undefined
-          ? undefined
-          : EntityRecords.unpack(this.#repository.stateSchema, loaded.current).state,
-        loaded.current === undefined
-          ? undefined
-          : {
-              archived: loaded.current.lifecycleFlags?.archived ?? false,
-              deleted: loaded.current.lifecycleFlags?.deleted ?? false,
-            },
-        RepositoryEntities.repositoryState(loaded.entity) as Message,
-        RepositoryEntities.repositoryLifecycle(loaded.entity),
-        RepositoryStand.processManagerVersion(loaded.entity),
-      );
-    }
+    this.#publishChangedState(loaded, entityId);
     this.#postEvents(events);
     await this.#postCommands(this.#bindProducedCommands(produced.commands));
+  }
+
+  #publishChangedState(
+    loaded: Awaited<ReturnType<ProcessManagerExecutionSupport["load"]>>,
+    entityId: unknown,
+  ): void {
+    if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
+    EntityStateChangePublisher.event(
+      this.#runtime,
+      this.#repository,
+      this.#event,
+      entityId,
+      loaded.current === undefined
+        ? undefined
+        : EntityRecords.unpack(this.#repository.stateSchema, loaded.current).state,
+      loaded.current === undefined
+        ? undefined
+        : {
+            archived: loaded.current.lifecycleFlags?.archived ?? false,
+            deleted: loaded.current.lifecycleFlags?.deleted ?? false,
+          },
+      RepositoryEntities.repositoryState(loaded.entity) as Message,
+      RepositoryEntities.repositoryLifecycle(loaded.entity),
+      RepositoryStand.processManagerVersion(loaded.entity),
+    );
   }
 
   #validateSourceEventIdForFollowUps(intake: {
@@ -3461,6 +3526,14 @@ Object.freeze(RepositoryEntities);
  * Internal repository signals operations.
  */
 const RepositorySignals = {
+  requireDeclaredRejection(handler: HandlerMetadata, rejection: RejectionThrowable): void {
+    DeclaredRejections.require(
+      handler.methodName,
+      HandlerMetadataValues.thrownSchemas(handler),
+      rejection,
+    );
+  },
+
   readEventVersion(event: Event): bigint {
     const number = event.context?.version?.number;
 
@@ -3497,7 +3570,6 @@ const RepositorySignals = {
     entityId: unknown,
     rejection: RejectionThrowable,
   ): EntityInboxFollowUp {
-    runtime.registerEventSchema(rejection.schema);
     const metadata = runtime.signalMetadata.eventFromCommand(command, {});
     const event = create(EventSchema, {
       id: metadata.id,
@@ -4265,7 +4337,15 @@ const RepositoryHandlers = {
       | CommandReactionHandlerMetadata
       | EventReactionHandlerMetadata,
   ): readonly DescriptorMessageSchema[] {
-    return HandlerMetadataValues.emittedSchemas(handler);
+    return HandlerMetadataValues.returnedSchemas(handler);
+  },
+
+  handlerThrownSchemas(
+    handler:
+      | CommandAssignmentHandlerMetadata
+      | import("../handler/handler-metadata.js").CommandSubstitutionHandlerMetadata,
+  ): readonly DescriptorMessageSchema[] {
+    return HandlerMetadataValues.thrownSchemas(handler);
   },
 
   isHandlersArray(value: RepositoryHandlersOption): value is readonly EntityHandlersMetadata[] {
@@ -4340,171 +4420,314 @@ const RepositoryRoutes = {
     >,
     stringifiers: StringifierRegistry,
   ): RepositoryRouting<RepositoryEntityId<EntityType>> {
-    const handlers = RepositoryHandlers.normalizeHandlers(handlersOption);
-    RepositoryHandlers.validateHandlers(entityType, metadata, handlers);
-    const commandReadiness =
-      handlers.length === 0 ? undefined : CommandRegistrationReadiness.fromEntityHandlers(handlers);
-    const eventReadiness =
-      handlers.length === 0 ? undefined : EventRegistrationReadiness.fromEntityHandlers(handlers);
-    const commandSchemas = RepositoryHandlers.uniqueSchemas(
+    return RepositoryRoutes.prepareRouting({
+      entityType,
+      entityFamily,
+      metadata,
+      handlersOption,
+      producedEvents,
+      commandRouting,
+      eventRouting,
+      stateUpdateRouting,
+      stringifiers,
+    });
+  },
+
+  prepareRouting<Id>(input: RoutingInput<Id>): RepositoryRouting<Id> {
+    const handlers = RepositoryHandlers.normalizeHandlers(input.handlersOption);
+    RepositoryHandlers.validateHandlers(input.entityType, input.metadata, handlers);
+    const readiness = RepositoryRoutes.readiness(handlers);
+    const schemas = RepositoryRoutes.routingSchemas(handlers, input.producedEvents);
+    RepositoryRoutes.validateStateSchemas(input.entityFamily, input.metadata, schemas.state);
+    const stateSubscriptions = RepositoryRoutes.stateSubscriptions(handlers);
+    const filters = RepositoryRoutes.routingFilters(
+      handlers,
+      schemas.event,
+      readiness.event,
+      input.stringifiers,
+    );
+    const routes = RepositoryRoutes.routingMaps(
+      schemas,
+      input.commandRouting,
+      input.eventRouting,
+      input.stateUpdateRouting,
+      input.metadata.idField,
+    );
+    return RepositoryRoutes.freezeRouting(
+      schemas,
+      readiness,
+      stateSubscriptions,
+      filters,
+      routes,
+      input.metadata.idField,
+    );
+  },
+
+  readiness(handlers: readonly EntityHandlersMetadata[]): RoutingReadiness {
+    return handlers.length === 0
+      ? { command: undefined, event: undefined }
+      : {
+          command: CommandRegistrationReadiness.fromEntityHandlers(handlers),
+          event: EventRegistrationReadiness.fromEntityHandlers(handlers),
+        };
+  },
+
+  routingSchemas(
+    handlers: readonly EntityHandlersMetadata[],
+    producedEvents: readonly MessageSchema[],
+  ): RoutingSchemas {
+    const accepted = RepositoryRoutes.acceptedSchemas(handlers);
+    const origins = RepositoryRoutes.originSchemas(handlers);
+    const produced = RepositoryRoutes.producedSchemas(handlers, producedEvents);
+    return { ...accepted, ...origins, ...produced };
+  },
+
+  acceptedSchemas(handlers: readonly EntityHandlersMetadata[]) {
+    const command = RepositoryHandlers.uniqueSchemas(
       handlers.flatMap((handler) => [
         ...handler.commandAssignments.map((assignment) => assignment.schema),
         ...handler.commandSubstitutions.map((substitution) => substitution.schema),
       ]),
     );
-    const eventSchemas = RepositoryHandlers.uniqueSchemas(
+    const event = RepositoryHandlers.uniqueSchemas(
       handlers.flatMap((handler) => [
         ...handler.commandReactions.map((reaction) => reaction.schema),
         ...handler.eventSubscriptions.map((subscription) => subscription.schema),
         ...handler.eventReactions.map((reaction) => reaction.schema),
-        // Applications remain valid routing metadata. Aggregate persistence does
-        // not invoke them to reconstruct or mutate state.
         ...handler.eventApplications.map((application) => application.schema),
       ]),
     );
-    const externalEventSchemas = RepositoryHandlers.uniqueSchemas(
-      handlers.flatMap((handler) =>
-        handler.handlers
-          .filter(
-            (candidate) =>
-              candidate.origin === "external" &&
-              (candidate.kind === "event-subscription" ||
-                candidate.kind === "event-reaction" ||
-                candidate.kind === "command-reaction"),
-          )
-          .map((candidate) => candidate.schema),
-      ),
-    );
-    const domesticEventSchemas = RepositoryHandlers.uniqueSchemas(
-      handlers.flatMap((handler) =>
-        handler.handlers
-          .filter(
-            (candidate) =>
-              candidate.origin === "domestic" &&
-              (candidate.kind === "event-subscription" ||
-                candidate.kind === "event-reaction" ||
-                candidate.kind === "command-reaction"),
-          )
-          .map((candidate) => candidate.schema),
-      ),
-    );
-    const stateSchemas = RepositoryHandlers.uniqueSchemas(
+    const state = RepositoryHandlers.uniqueSchemas(
       handlers.flatMap((handler) =>
         handler.stateSubscriptions.map((subscription) => subscription.schema),
       ),
     ) as readonly DescriptorMessageSchema[];
-    if (entityFamily !== "projection" && stateSchemas.length > 0) {
+    return { command, event, state };
+  },
+
+  originSchemas(handlers: readonly EntityHandlersMetadata[]) {
+    const schemas = (origin: "domestic" | "external") =>
+      RepositoryHandlers.uniqueSchemas(
+        handlers.flatMap((handler) =>
+          handler.handlers
+            .filter(
+              (candidate) =>
+                candidate.origin === origin &&
+                (candidate.kind === "event-subscription" ||
+                  candidate.kind === "event-reaction" ||
+                  candidate.kind === "command-reaction"),
+            )
+            .map((candidate) => candidate.schema),
+        ),
+      );
+    return { domesticEvent: schemas("domestic"), externalEvent: schemas("external") };
+  },
+
+  producedSchemas(
+    handlers: readonly EntityHandlersMetadata[],
+    explicitEvents: readonly MessageSchema[],
+  ) {
+    const producedEvent = RepositoryHandlers.uniqueSchemas([
+      ...explicitEvents,
+      ...handlers.flatMap((handler) => [
+        ...handler.commandAssignments.flatMap((value) =>
+          RepositoryHandlers.handlerEmittedSchemas(value),
+        ),
+        ...handler.commandAssignments.flatMap((value) =>
+          RepositoryHandlers.handlerThrownSchemas(value),
+        ),
+        ...handler.commandSubstitutions.flatMap((value) =>
+          RepositoryHandlers.handlerThrownSchemas(value),
+        ),
+        ...handler.eventReactions.flatMap((value) =>
+          RepositoryHandlers.handlerEmittedSchemas(value),
+        ),
+      ]),
+    ]);
+    const producedCommand = RepositoryHandlers.uniqueSchemas(
+      handlers.flatMap((handler) => [
+        ...handler.commandSubstitutions.flatMap((value) =>
+          RepositoryHandlers.handlerEmittedSchemas(value),
+        ),
+        ...handler.commandReactions.flatMap((value) =>
+          RepositoryHandlers.handlerEmittedSchemas(value),
+        ),
+      ]),
+    );
+    return { producedEvent, producedCommand };
+  },
+
+  validateStateSchemas(
+    entityFamily: EntityFamily,
+    metadata: EntityMetadata,
+    schemas: readonly DescriptorMessageSchema[],
+  ): void {
+    if (entityFamily !== "projection" && schemas.length > 0) {
       throw new Error("Entity state subscriptions are supported only by Projection repositories.");
     }
-    if (stateSchemas.some((schema) => schema.typeName === metadata.schema.typeName)) {
+    if (schemas.some((schema) => schema.typeName === metadata.schema.typeName)) {
       throw new Error(
         "A Projection cannot subscribe to updates of its repository state because each " +
           "resulting update would be routed back to the same repository.",
       );
     }
-    const stateSubscriptions = RepositoryRoutes.stateSubscriptions(handlers);
-    const producedEventSchemas = RepositoryHandlers.uniqueSchemas([
-      ...producedEvents,
-      ...handlers.flatMap((handler) => [
-        ...handler.commandAssignments.flatMap((assignment) =>
-          RepositoryHandlers.handlerEmittedSchemas(assignment),
-        ),
-        ...handler.eventReactions.flatMap((reaction) =>
-          RepositoryHandlers.handlerEmittedSchemas(reaction),
-        ),
-      ]),
-    ]);
-    const producedCommandSchemas = RepositoryHandlers.uniqueSchemas(
-      handlers.flatMap((handler) => [
-        ...handler.commandSubstitutions.flatMap((substitution) =>
-          RepositoryHandlers.handlerEmittedSchemas(substitution),
-        ),
-        ...handler.commandReactions.flatMap((reaction) =>
-          RepositoryHandlers.handlerEmittedSchemas(reaction),
-        ),
-      ]),
-    );
-    const commandReactions = RepositoryHandlers.createCommandReactionMap(handlers);
-    const eventSubscribers = RepositoryHandlers.readinessMap(
-      eventSchemas,
-      (typeName) => eventReadiness?.findEventSubscribers(typeName) ?? [],
-    );
-    const eventReactors = RepositoryHandlers.readinessMap(
-      eventSchemas,
-      (typeName) => eventReadiness?.findEventReactors(typeName) ?? [],
-    );
-    const commandReactionFilters = RepositoryHandlers.createEventFilterPlans(
-      commandReactions,
-      stringifiers,
-    );
-    const eventSubscriberFilters = RepositoryHandlers.createEventFilterPlans(
-      eventSubscribers,
-      stringifiers,
-    );
-    const eventReactorFilters = RepositoryHandlers.createEventFilterPlans(
-      eventReactors,
-      stringifiers,
-    );
-    const commandRoutes = RepositoryRoutes.resolveCommandRoutes(commandSchemas, commandRouting);
-    const eventRoutes = RepositoryRoutes.resolveEventRoutes(eventSchemas, eventRouting);
-    const stateRoutes = RepositoryRoutes.resolveStateRoutes(
-      stateSchemas,
-      stateUpdateRouting,
-      metadata.idField,
-    );
+  },
 
-    return Object.freeze({
-      commandSchemas,
+  routingFilters(
+    handlers: readonly EntityHandlersMetadata[],
+    eventSchemas: readonly MessageSchema[],
+    readiness: EventRegistrationReadinessLookup | undefined,
+    stringifiers: StringifierRegistry,
+  ): RoutingFilters {
+    const commandReactionMap = RepositoryHandlers.createCommandReactionMap(handlers);
+    const subscribers = RepositoryHandlers.readinessMap(
       eventSchemas,
-      domesticEventSchemas,
-      externalEventSchemas,
-      producedEventSchemas,
-      producedCommandSchemas,
-      commandReadiness,
-      eventReadiness,
-      stateSchemas,
+      (typeName) => readiness?.findEventSubscribers(typeName) ?? [],
+    );
+    const reactors = RepositoryHandlers.readinessMap(
+      eventSchemas,
+      (typeName) => readiness?.findEventReactors(typeName) ?? [],
+    );
+    return {
+      commandReactionMap,
+      commandReactions: RepositoryHandlers.createEventFilterPlans(commandReactionMap, stringifiers),
+      eventSubscribers: RepositoryHandlers.createEventFilterPlans(subscribers, stringifiers),
+      eventReactors: RepositoryHandlers.createEventFilterPlans(reactors, stringifiers),
+    };
+  },
+
+  routingMaps<Id>(
+    schemas: RoutingSchemas,
+    command: RoutingDeclarationSnapshot<CommandRoute<Id>>,
+    event: RoutingDeclarationSnapshot<EventRoute<Id>>,
+    state: RoutingDeclarationSnapshot<StateUpdateRoute<Id>>,
+    idField: DescriptorFieldMetadata,
+  ): RoutingMaps<Id> {
+    return {
+      command: RepositoryRoutes.resolveCommandRoutes(schemas.command, command),
+      event: RepositoryRoutes.resolveEventRoutes(schemas.event, event),
+      state: RepositoryRoutes.resolveStateRoutes(schemas.state, state, idField),
+    };
+  },
+
+  freezeRouting<Id>(
+    schemas: RoutingSchemas,
+    readiness: RoutingReadiness,
+    stateSubscriptions: ReadonlyMap<string, RepositoryStateSubscribers>,
+    filters: RoutingFilters,
+    routes: RoutingMaps<Id>,
+    idField: DescriptorFieldMetadata,
+  ): RepositoryRouting<Id> {
+    return Object.freeze({
+      commandSchemas: schemas.command,
+      eventSchemas: schemas.event,
+      domesticEventSchemas: schemas.domesticEvent,
+      externalEventSchemas: schemas.externalEvent,
+      producedEventSchemas: schemas.producedEvent,
+      producedCommandSchemas: schemas.producedCommand,
+      commandReadiness: readiness.command,
+      eventReadiness: readiness.event,
+      stateSchemas: schemas.state,
       stateSubscriptions,
-      commandReactions: (eventFullTypeName: string, message: unknown, external: boolean) =>
-        RepositoryHandlers.forOrigin(
-          commandReactionFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
-          external,
-        ),
-      eventReactors: (eventFullTypeName: string, message: unknown, external: boolean) =>
-        RepositoryHandlers.forOrigin(
-          eventReactorFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
-          external,
-        ),
-      eventSubscribers: (eventFullTypeName: string, message: unknown, external: boolean) =>
-        RepositoryHandlers.forOrigin(
-          eventSubscriberFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
-          external,
-        ),
-      routeCommand: (command: Command) =>
-        RepositoryRoutes.routeCommand<RepositoryEntityId<EntityType>>(
-          command,
-          commandReadiness,
-          commandSchemas,
-          metadata.idField,
-          commandRoutes,
-        ),
-      routeEvent: (event: Event) =>
-        RepositoryRoutes.routeEvent<RepositoryEntityId<EntityType>>(
-          event,
-          eventReadiness,
-          commandReactions,
-          eventSchemas,
-          metadata.idField,
-          eventRoutes,
-        ),
-      routeStateUpdate: (event: Event) =>
-        RepositoryRoutes.routeStateUpdate<RepositoryEntityId<EntityType>>(
-          event,
-          stateSchemas,
-          stateSubscriptions,
-          metadata.idField,
-          stateRoutes,
-        ),
+      ...RepositoryRoutes.handlerSelectors(filters),
+      ...RepositoryRoutes.routeSelectors(
+        schemas,
+        readiness,
+        stateSubscriptions,
+        filters,
+        routes,
+        idField,
+      ),
     });
+  },
+
+  handlerSelectors(
+    filters: RoutingFilters,
+  ): Pick<RepositoryRouting, "commandReactions" | "eventReactors" | "eventSubscribers"> {
+    return {
+      commandReactions: (typeName, message, external) =>
+        RepositoryRoutes.selectHandlers(filters.commandReactions, typeName, message, external),
+      eventReactors: (typeName, message, external) =>
+        RepositoryRoutes.selectHandlers(filters.eventReactors, typeName, message, external),
+      eventSubscribers: (typeName, message, external) =>
+        RepositoryRoutes.selectHandlers(filters.eventSubscribers, typeName, message, external),
+    };
+  },
+
+  selectHandlers<Value extends { readonly handler: { readonly origin: "domestic" | "external" } }>(
+    filters: ReadonlyMap<string, EventHandlerFilterPlan<Value>>,
+    typeName: string,
+    message: unknown,
+    external: boolean,
+  ): readonly Value[] {
+    return RepositoryHandlers.forOrigin(
+      filters.get(typeName)?.select(message) ?? Object.freeze([]),
+      external,
+    );
+  },
+
+  routeSelectors<Id>(
+    schemas: RoutingSchemas,
+    readiness: RoutingReadiness,
+    stateSubscriptions: ReadonlyMap<string, RepositoryStateSubscribers>,
+    filters: RoutingFilters,
+    routes: RoutingMaps<Id>,
+    idField: DescriptorFieldMetadata,
+  ): Pick<RepositoryRouting<Id>, "routeCommand" | "routeEvent" | "routeStateUpdate"> {
+    return {
+      routeCommand: RepositoryRoutes.commandSelector(schemas, readiness, routes, idField),
+      routeEvent: RepositoryRoutes.eventSelector(schemas, readiness, filters, routes, idField),
+      routeStateUpdate: RepositoryRoutes.stateSelector(
+        schemas,
+        stateSubscriptions,
+        routes,
+        idField,
+      ),
+    };
+  },
+
+  commandSelector<Id>(
+    schemas: RoutingSchemas,
+    readiness: RoutingReadiness,
+    routes: RoutingMaps<Id>,
+    idField: DescriptorFieldMetadata,
+  ): (command: Command) => RepositoryCommandRoute<Id> {
+    return (command) =>
+      RepositoryRoutes.routeCommand(
+        command,
+        readiness.command,
+        schemas.command,
+        idField,
+        routes.command,
+      );
+  },
+
+  eventSelector<Id>(
+    schemas: RoutingSchemas,
+    readiness: RoutingReadiness,
+    filters: RoutingFilters,
+    routes: RoutingMaps<Id>,
+    idField: DescriptorFieldMetadata,
+  ): (event: Event) => RepositoryEventRoute<Id> {
+    return (event) =>
+      RepositoryRoutes.routeEvent(
+        event,
+        readiness.event,
+        filters.commandReactionMap,
+        schemas.event,
+        idField,
+        routes.event,
+      );
+  },
+
+  stateSelector<Id>(
+    schemas: RoutingSchemas,
+    subscriptions: ReadonlyMap<string, RepositoryStateSubscribers>,
+    routes: RoutingMaps<Id>,
+    idField: DescriptorFieldMetadata,
+  ): (event: Event) => RepositoryStateUpdateRoute<Id> | undefined {
+    return (event) =>
+      RepositoryRoutes.routeStateUpdate(event, schemas.state, subscriptions, idField, routes.state);
   },
 
   routeCommand<Id>(
@@ -5395,6 +5618,62 @@ const DispatchGuards = {
     if (entityId === undefined) return dispatch();
     const key = DispatchGuards.canonicalEntityIdKey(repository, entityId);
     const journalEventId = DispatchGuards.guardedJournalEventId(eventId, key);
+    const { guard, guards } = DispatchGuards.guardLane(repository, key);
+    DispatchGuards.touchGuardLane(guards, key);
+    guard.active += 1;
+    return DispatchGuards.scheduleDispatch(
+      repository,
+      runtime,
+      event,
+      entityId,
+      eventId,
+      journalEventId,
+      depth,
+      guard,
+      guards,
+      dispatch,
+    );
+  },
+
+  scheduleDispatch(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    event: Event,
+    entityId: unknown,
+    eventId: string,
+    journalEventId: string,
+    depth: number,
+    guard: DispatchGuard,
+    guards: RepositoryDispatchGuards,
+    dispatch: () => Promise<void>,
+  ): Promise<void> {
+    const next = guard.chain.then(() =>
+      DispatchGuards.dispatchOnce(
+        repository,
+        runtime,
+        event,
+        entityId,
+        eventId,
+        journalEventId,
+        depth,
+        guard,
+        dispatch,
+      ),
+    );
+    // spine-log-boundary: server.repository_dispatch_guard
+    guard.chain = next
+      .catch(() => undefined)
+      .finally(() => {
+        guard.active -= 1;
+        DispatchGuards.trimGuardLanes(guards, depth);
+      });
+    return next;
+  },
+
+  guardLane(
+    repository: RepositoryView,
+    key: string,
+  ): { guard: DispatchGuard; guards: RepositoryDispatchGuards } {
     let guards = repositoryDispatchGuards.get(repository);
     if (guards === undefined) {
       guards = { lanes: new Map(), order: [] };
@@ -5405,40 +5684,40 @@ const DispatchGuards = {
       guard = { completed: new Set(), order: [], chain: Promise.resolve(), active: 0 };
       guards.lanes.set(key, guard);
     }
-    DispatchGuards.touchGuardLane(guards, key);
-    const activeGuard = guard;
-    activeGuard.active += 1;
-    const previous = activeGuard.chain;
-    const next = previous.then(async () => {
-      if (activeGuard.completed.has(eventId)) return;
-      const storage = RepositoryStorage.openEntityStorage(
-        runtime.storageFactory,
-        RepositoryStorage.entityStorageInput(
-          repository,
-          RepositoryTenants.storageContextForEvent(runtime.context, event),
-        ),
-      );
-      let persisted: readonly Event[];
-      try {
-        persisted = await storage.events.backward(entityId, depth);
-      } finally {
-        storage.close();
-      }
-      if (persisted.some((candidate) => candidate.id?.value === journalEventId)) {
-        DispatchGuards.rememberGuardCompletion(activeGuard, eventId, depth);
-        return;
-      }
-      await dispatch();
-      DispatchGuards.rememberGuardCompletion(activeGuard, eventId, depth);
-    });
-    // spine-log-boundary: server.repository_dispatch_guard
-    activeGuard.chain = next
-      .catch(() => undefined)
-      .finally(() => {
-        activeGuard.active -= 1;
-        DispatchGuards.trimGuardLanes(guards, depth);
-      });
-    return next;
+    return { guard, guards };
+  },
+
+  async dispatchOnce(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    event: Event,
+    entityId: unknown,
+    eventId: string,
+    journalEventId: string,
+    depth: number,
+    guard: DispatchGuard,
+    dispatch: () => Promise<void>,
+  ): Promise<void> {
+    if (guard.completed.has(eventId)) return;
+    const storage = RepositoryStorage.openEntityStorage(
+      runtime.storageFactory,
+      RepositoryStorage.entityStorageInput(
+        repository,
+        RepositoryTenants.storageContextForEvent(runtime.context, event),
+      ),
+    );
+    let persisted: readonly Event[];
+    try {
+      persisted = await storage.events.backward(entityId, depth);
+    } finally {
+      storage.close();
+    }
+    if (persisted.some((candidate) => candidate.id?.value === journalEventId)) {
+      DispatchGuards.rememberGuardCompletion(guard, eventId, depth);
+      return;
+    }
+    await dispatch();
+    DispatchGuards.rememberGuardCompletion(guard, eventId, depth);
   },
 
   rememberGuardCompletion(guard: DispatchGuard, eventId: string, depth: number): void {
@@ -6165,75 +6444,90 @@ const RepositoryDispatch = {
     const acceptedEventRoutes = new WeakMap<Event, RepositoryEventRoute>();
     const acceptedStateRoutes = new WeakMap<Event, RepositoryStateUpdateRoute | null>();
     return Object.freeze({
-      command:
-        routing.commandSchemas.length === 0
-          ? undefined
-          : Object.freeze({
-              messageSchemas: () => routing.commandSchemas,
-              dispatch: (command: Command): Promise<void> =>
-                RepositoryDispatch.dispatchRepositoryCommand(repository, routing, command),
-            }),
-      event: (() => {
-        if (routing.eventSchemas.length === 0) return undefined;
-        const dispatcher = Object.freeze({
-          messageSchemas: () => routing.eventSchemas,
-          externalEventSchemas: () => routing.externalEventSchemas,
-          accept: (event: Event): Promise<void> => {
-            acceptedEventRoutes.set(event, repository.routeEvent(event));
-            return Promise.resolve();
-          },
-          dispatch: (event: Event): Promise<void> => {
-            const acceptedRoute = acceptedEventRoutes.get(event);
-            acceptedEventRoutes.delete(event);
-            return RepositoryDispatch.dispatchRepositoryEvent(
-              repository,
-              routing,
-              event,
-              acceptedRoute,
-            );
-          },
-        });
-        return EventDispatcherOriginSchemas.define(
-          dispatcher,
-          routing.domesticEventSchemas,
-          routing.externalEventSchemas,
-        );
-      })(),
-      systemEvent: (() => {
-        if (routing.stateSchemas.length === 0) return undefined;
-        const hasDomestic = [...routing.stateSubscriptions.values()].some((values) =>
-          values.some((value) => value.handler.origin === "domestic"),
-        );
-        const hasExternal = [...routing.stateSubscriptions.values()].some((values) =>
-          values.some((value) => value.handler.origin === "external"),
-        );
-        const schema = EntityLog.EntityStateChangedSchema;
-        const dispatcher = Object.freeze({
-          messageSchemas: () => Object.freeze([EntityLog.EntityStateChangedSchema]),
-          externalEventSchemas: () => (hasExternal ? Object.freeze([schema]) : Object.freeze([])),
-          accept: (event: Event): Promise<void> => {
-            acceptedStateRoutes.set(event, routing.routeStateUpdate(event) ?? null);
-            return Promise.resolve();
-          },
-          dispatch: (event: Event): Promise<void> => {
-            const route = acceptedStateRoutes.get(event);
-            acceptedStateRoutes.delete(event);
-            if (route === null) return Promise.resolve();
-            return RepositoryDispatch.dispatchRepositoryStateUpdate(
-              repository,
-              routing,
-              event,
-              route,
-            );
-          },
-        });
-        return EventDispatcherOriginSchemas.define(
-          dispatcher,
-          hasDomestic ? [schema] : [],
-          hasExternal ? [schema] : [],
-        );
-      })(),
+      command: RepositoryDispatch.commandDispatcher(repository, routing),
+      event: RepositoryDispatch.eventDispatcher(repository, routing, acceptedEventRoutes),
+      systemEvent: RepositoryDispatch.stateDispatcher(repository, routing, acceptedStateRoutes),
     });
+  },
+
+  commandDispatcher(
+    repository: RepositoryView & { routeCommand(command: Command): RepositoryCommandRoute },
+    routing: RepositoryRouting,
+  ): CommandDispatcher | undefined {
+    return routing.commandSchemas.length === 0
+      ? undefined
+      : Object.freeze({
+          messageSchemas: () => routing.commandSchemas,
+          dispatch: (command: Command): Promise<void> =>
+            RepositoryDispatch.dispatchRepositoryCommand(repository, routing, command),
+        });
+  },
+
+  eventDispatcher(
+    repository: RepositoryView & { routeEvent(event: Event): RepositoryEventRoute },
+    routing: RepositoryRouting,
+    accepted: WeakMap<Event, RepositoryEventRoute>,
+  ): EventDispatcher | undefined {
+    if (routing.eventSchemas.length === 0) return undefined;
+    const dispatcher = Object.freeze({
+      messageSchemas: () => routing.eventSchemas,
+      externalEventSchemas: () => routing.externalEventSchemas,
+      accept: (event: Event): Promise<void> => {
+        accepted.set(event, repository.routeEvent(event));
+        return Promise.resolve();
+      },
+      dispatch: (event: Event): Promise<void> => {
+        const route = accepted.get(event);
+        accepted.delete(event);
+        return RepositoryDispatch.dispatchRepositoryEvent(repository, routing, event, route);
+      },
+    });
+    return EventDispatcherOriginSchemas.define(
+      dispatcher,
+      routing.domesticEventSchemas,
+      routing.externalEventSchemas,
+    );
+  },
+
+  stateDispatcher(
+    repository: RepositoryView,
+    routing: RepositoryRouting,
+    accepted: WeakMap<Event, RepositoryStateUpdateRoute | null>,
+  ): EventDispatcher | undefined {
+    if (routing.stateSchemas.length === 0) return undefined;
+    const hasOrigin = (origin: "domestic" | "external") =>
+      [...routing.stateSubscriptions.values()].some((values) =>
+        values.some((value) => value.handler.origin === origin),
+      );
+    const schema = EntityLog.EntityStateChangedSchema;
+    const dispatcher = Object.freeze({
+      messageSchemas: () => Object.freeze([schema]),
+      externalEventSchemas: () => (hasOrigin("external") ? [schema] : []),
+      accept: (event: Event): Promise<void> => {
+        accepted.set(event, routing.routeStateUpdate(event) ?? null);
+        return Promise.resolve();
+      },
+      dispatch: (event: Event): Promise<void> =>
+        RepositoryDispatch.dispatchAcceptedState(repository, routing, event, accepted),
+    });
+    return EventDispatcherOriginSchemas.define(
+      dispatcher,
+      hasOrigin("domestic") ? [schema] : [],
+      hasOrigin("external") ? [schema] : [],
+    );
+  },
+
+  dispatchAcceptedState(
+    repository: RepositoryView,
+    routing: RepositoryRouting,
+    event: Event,
+    accepted: WeakMap<Event, RepositoryStateUpdateRoute | null>,
+  ): Promise<void> {
+    const route = accepted.get(event);
+    accepted.delete(event);
+    return route === null
+      ? Promise.resolve()
+      : RepositoryDispatch.dispatchRepositoryStateUpdate(repository, routing, event, route);
   },
 
   createEntityInboxTarget(

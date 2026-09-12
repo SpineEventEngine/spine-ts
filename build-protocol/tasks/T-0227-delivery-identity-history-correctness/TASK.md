@@ -1983,3 +1983,70 @@ documentation. It must use RED/GREEN cycles, show the accepted decorator order
 in authored specimens, preserve order independence, and return without
 committing or pushing. The orchestrator will verify, commit, and push before a
 fresh no-memory independent review.
+
+### Initial implementation evidence — 2026-09-12
+
+The assigned implementer, configured as the existing implementer role with
+`gpt-5.6-terra` / `medium` reasoning (runtime introspection unavailable), began
+with focused behavior tests. The first RED run established that rejection
+companions did not expose their canonical schemas and that `Throws` was absent.
+The companion now includes its canonical `.schema` while retaining `.create(...)`.
+The public `Throws(...)` entrypoint rejects empty and structurally invalid
+declaration lists. Focused GREEN evidence is recorded in the implementation
+handoff; the coordinated analyzer, generated-registry, repository, and
+subscription migration remains required before this high-risk extension can be
+accepted.
+
+The generated handler-record replacement subsequently entered its direct
+migration phase. Analyzer and writer records now use `input` and `outcomes`;
+server registry ingestion, standalone execution, bounded-context outgoing
+schema assembly, and repository rejection handling consume the nested shape.
+Focused writer evidence passed 28/28 tests and focused registry-ingestion
+evidence passed 20/20 tests with one Vitest worker. The remaining work is
+generated `@Throws` declaration resolution and the client subscription
+regression; this record does not mark the extension accepted.
+
+### Converged implementation checkpoint — 2026-09-12
+
+The implementation now covers the complete declared-rejection path. The
+generator resolves generated rejection companions into `outcomes.thrown` for
+command-accepting `@Assign` and `@Command` handlers, regardless of decorator
+order. Registry ingestion validates the nested record, its schema roles, and
+the allowed handler kinds. Repository and standalone execution reject an
+actually thrown but undeclared rejection. Context assembly advertises declared
+rejection schemas at startup, before any command is posted and without requiring
+a server-side rejection consumer.
+
+The public subscription regression activates a client subscription first,
+posts a command whose Aggregate assignee throws a declared rejection, and
+receives the typed, redacted rejection update without any server handler for
+that rejection. Direct standalone tests additionally prove that a declared
+rejection is published and the same rejection without a declaration is treated
+as a technical handler error.
+
+The implementation refactor satisfies the repository's 35-line limit for every
+modified production callable. Context assembly, generated-registry validation,
+registry rendering, analyzer declaration handling, repository routing, and
+dispatch guarding are split into focused internal helpers. The public `Throws`
+function has the same exact TypeScript decorator-boundary necessity disposition
+as the existing public handler decorators; no method-size or semantic-name
+exception was added.
+
+Mechanical evidence at this checkpoint:
+
+- generated and tooling TypeScript builds passed;
+- 630 focused tests passed across Proto analysis/generation, registry ingestion,
+  bounded-context assembly, repository routing, standalone runtime, Event Bus,
+  and Spine services;
+- full ESLint and cleanup enforcement passed;
+- TSDoc enforcement, Prettier, generated Proto freshness, authored Proto style,
+  rejection source naming, and `git diff --check` passed.
+
+Fresh independent review assignment: existing style/maintainability reviewer
+role, explicitly dispatched as `gpt-5.6-terra` / `high`, with no inherited
+conversation turns and no child dispatch. Its fixed review range begins at
+`b01f82976` and ends at the pushed implementation checkpoint. It must read the
+repository rules and this extension specification, inspect both behavior and
+standards, distinguish branch defects from baseline debt, and report only
+precise actionable findings. Runtime self-introspection is not exposed; the
+explicit immutable dispatch fields are the available profile evidence.

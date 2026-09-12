@@ -157,7 +157,7 @@ function processManagerRepository(): Repository<typeof QueryProcessManager> {
           methodName: "assign",
           parameterCount: 1,
           origin: "domestic",
-          emittedSchemas: [ProjectionEventSchema],
+          outcomes: { returned: [ProjectionEventSchema], thrown: [] },
         },
       ],
     ),

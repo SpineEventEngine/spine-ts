@@ -10283,6 +10283,13 @@ function createExecutingProjectionRepository(
   });
 }
 
+function handlerOutcomes(
+  returned: readonly GenMessage<Message>[],
+  thrown: readonly GenMessage<Message>[] = [],
+) {
+  return { returned, thrown };
+}
+
 function createFilteredProjectionRepository(): Repository<typeof FilteredTaskProjection> {
   const handlers = HandlerMetadataValues.defineArity(
     FilteredTaskProjection,
@@ -10329,7 +10336,7 @@ function createFilteredAggregateRepository(): Repository<typeof FilteredEventAgg
         methodName: "reactAnnouncements",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectRegisteredSchema],
+        outcomes: handlerOutcomes([ProjectRegisteredSchema]),
         where: { eventField: "name", equals: "announcements" },
       },
       {
@@ -10337,7 +10344,7 @@ function createFilteredAggregateRepository(): Repository<typeof FilteredEventAgg
         methodName: "reactFallback",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectRegisteredSchema],
+        outcomes: handlerOutcomes([ProjectRegisteredSchema]),
       },
     ],
   );
@@ -10378,7 +10385,7 @@ function createFilteredProcessManagerRepository(): Repository<typeof FilteredPro
         methodName: "commandAnnouncements",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [CreateProjectSchema],
+        outcomes: handlerOutcomes([CreateProjectSchema]),
         where: { eventField: "name", equals: "announcements" },
       },
       {
@@ -10386,7 +10393,7 @@ function createFilteredProcessManagerRepository(): Repository<typeof FilteredPro
         methodName: "commandFallback",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [CreateProjectSchema],
+        outcomes: handlerOutcomes([CreateProjectSchema]),
       },
     ],
   );
@@ -10491,7 +10498,7 @@ function createProjectMilestoneProcessManagerRepository(
             methodName: "assignAndProduce",
             parameterCount: 1,
             origin: "domestic",
-            emittedSchemas: [ProjectMilestoneAddedSchema],
+            outcomes: handlerOutcomes([ProjectMilestoneAddedSchema]),
           },
           {
             kind: "event-reaction",
@@ -10582,10 +10589,9 @@ function createGeneratedTwoArgProjectionRepository(
           {
             kind: "event-subscription",
             methodName: "subscribeTask",
-            signalSchema: ProjectCreatedSchema,
-            emittedSchemas: [],
+            input: { schema: ProjectCreatedSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
             parameterCount: 2,
-            origin: "domestic",
           },
         ],
       },
@@ -10613,18 +10619,16 @@ function createRejectionObservingRepository(
           {
             kind: "event-subscription",
             methodName: "mutate",
-            signalSchema: TaskAlreadyDoneSchema,
-            emittedSchemas: [],
+            input: { schema: TaskAlreadyDoneSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
             parameterCount: 2,
-            origin: "domestic",
           },
           {
             kind: "event-subscription",
             methodName: "observe",
-            signalSchema: TaskAlreadyDoneSchema,
-            emittedSchemas: [],
+            input: { schema: TaskAlreadyDoneSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
             parameterCount: 2,
-            origin: "domestic",
           },
         ],
       },
@@ -10652,18 +10656,16 @@ function createContextMutatingGeneratedProjectionRepository(): Repository<
           {
             kind: "event-subscription",
             methodName: "mutateContext",
-            signalSchema: ProjectCreatedSchema,
-            emittedSchemas: [],
+            input: { schema: ProjectCreatedSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
             parameterCount: 2,
-            origin: "domestic",
           },
           {
             kind: "event-subscription",
             methodName: "observeContext",
-            signalSchema: ProjectCreatedSchema,
-            emittedSchemas: [],
+            input: { schema: ProjectCreatedSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
             parameterCount: 2,
-            origin: "domestic",
           },
         ],
       },
@@ -10861,10 +10863,18 @@ function createReactingProjectionRepository(): Repository<typeof ReactingTaskPro
 }
 
 function createExecutingRepository(): Repository<typeof ExecutingProjectAggregate> {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     ExecutingProjectAggregate,
     ProjectStateSchema,
     (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema], [TaskAlreadyDoneSchema]),
+      },
+    ],
   );
 
   return new Repository({
@@ -10876,9 +10886,19 @@ function createExecutingRepository(): Repository<typeof ExecutingProjectAggregat
 }
 
 function createManagedRepository(): Repository<typeof ManagedProjectAggregate> {
-  const handlers = EntityHandlers.define(ManagedProjectAggregate, ProjectStateSchema, (builder) => [
-    builder.assign(CreateProjectSchema, "createProject"),
-  ]);
+  const handlers = HandlerMetadataValues.defineArity(
+    ManagedProjectAggregate,
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema], [TaskAlreadyDoneSchema]),
+      },
+    ],
+  );
 
   return new Repository({
     entityType: ManagedProjectAggregate,
@@ -10889,9 +10909,19 @@ function createManagedRepository(): Repository<typeof ManagedProjectAggregate> {
 }
 
 function createProjectIdRejectingRepository(): Repository<typeof ProjectIdRejectingAggregate> {
-  const handlers = EntityHandlers.define(ProjectIdRejectingAggregate, TaskSchema, (builder) => [
-    builder.assign(CreateTaskSchema, "createProject"),
-  ]);
+  const handlers = HandlerMetadataValues.defineArity(
+    ProjectIdRejectingAggregate,
+    TaskSchema,
+    (builder) => [builder.assign(CreateTaskSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([], [TaskAlreadyDoneSchema]),
+      },
+    ],
+  );
 
   return new Repository({
     entityType: ProjectIdRejectingAggregate,
@@ -10912,10 +10942,9 @@ function createGeneratedTwoArgAggregateRepository(): Repository<typeof Generated
           {
             kind: "command-assignment",
             methodName: "createProject",
-            signalSchema: CreateProjectSchema,
-            emittedSchemas: [ProjectCreatedSchema],
+            input: { schema: CreateProjectSchema, origin: "domestic" },
+            outcomes: handlerOutcomes([ProjectCreatedSchema], [TaskAlreadyDoneSchema]),
             parameterCount: 2,
-            origin: "domestic",
           },
         ],
       },
@@ -10943,10 +10972,9 @@ function createGeneratedReactorRepository(
           {
             kind: "event-reaction",
             methodName: "reactProjection",
-            signalSchema: ProjectCreatedSchema,
-            emittedSchemas: [ProjectRegisteredSchema],
+            input: { schema: ProjectCreatedSchema, origin: "domestic" },
+            outcomes: { returned: [ProjectRegisteredSchema], thrown: [] },
             parameterCount: 2,
-            origin: "domestic",
           },
         ],
       },
@@ -10975,7 +11003,7 @@ function createGuardedAggregateRepository(
         methodName: "reactProjection",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectCreatedSchema],
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
       },
     ],
   );
@@ -11000,7 +11028,7 @@ function createProducingGuardedAggregateRepository(): Repository<typeof Producin
         methodName: "reactProjection",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectRegisteredSchema],
+        outcomes: handlerOutcomes([ProjectRegisteredSchema]),
       },
     ],
   );
@@ -11039,10 +11067,9 @@ function createGeneratedCommandingRepository(): Repository<
           {
             kind: "command-reaction",
             methodName: "commandProjection",
-            signalSchema: ProjectCreatedSchema,
-            emittedSchemas: [CreateFollowUpProjectSchema],
+            input: { schema: ProjectCreatedSchema, origin: "domestic" },
+            outcomes: { returned: [CreateFollowUpProjectSchema], thrown: [] },
             parameterCount: 2,
-            origin: "domestic",
           },
         ],
       },
@@ -11145,7 +11172,7 @@ function createValidatingProcessManagerRepository(): Repository<typeof Validatin
         methodName: "createProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectCreatedSchema],
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
       },
     ],
   );
@@ -11289,7 +11316,7 @@ function createProcessManagerAssignRepository(
         methodName: "createProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectCreatedSchema],
+        outcomes: handlerOutcomes([ProjectCreatedSchema], [TaskAlreadyDoneSchema]),
       },
     ],
   );
@@ -11362,7 +11389,7 @@ function createProcessManagerCommandAndReactRepository(): Repository<typeof Rout
         methodName: "createProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectCreatedSchema],
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
       },
       {
         kind: "event-reaction",
@@ -11393,7 +11420,7 @@ function createDiagnosticOnlyProcessManagerRepository(): Repository<
         methodName: "createProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectCreatedSchema],
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
       },
     ],
   );
@@ -11521,7 +11548,7 @@ function createProcessManagerEventRepository(): Repository<typeof RoutingProcess
         methodName: "commandProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [CreateProjectSchema],
+        outcomes: handlerOutcomes([CreateProjectSchema]),
       },
     ],
   );
@@ -11544,7 +11571,7 @@ function createProcessManagerEventProducingRepository(): Repository<typeof Routi
         methodName: "reactTaskWithEvent",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectRegisteredSchema],
+        outcomes: handlerOutcomes([ProjectRegisteredSchema]),
       },
     ],
   );
@@ -11567,7 +11594,7 @@ function createProcessManagerCommandOnlyRepository(): Repository<typeof RoutingP
         methodName: "commandProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [CreateProjectSchema],
+        outcomes: handlerOutcomes([CreateProjectSchema]),
       },
     ],
   );
@@ -11592,7 +11619,7 @@ function createCommandSubstitutingProcessManagerRepository(): Repository<
         methodName: "substitute",
         parameterCount: 2,
         origin: "domestic",
-        emittedSchemas: [CreateFollowUpProjectSchema],
+        outcomes: handlerOutcomes([CreateFollowUpProjectSchema]),
       },
     ],
   );
@@ -11621,7 +11648,7 @@ function createGuardedProcessManagerCommandOnlyRepository(): Repository<
         methodName: "commandProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [CreateProjectSchema],
+        outcomes: handlerOutcomes([CreateProjectSchema]),
       },
     ],
   );
@@ -11649,14 +11676,14 @@ function createProcessManagerMixedEventRepository(): Repository<typeof RoutingPr
         methodName: "reactTaskWithEvent",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [ProjectRegisteredSchema],
+        outcomes: handlerOutcomes([ProjectRegisteredSchema]),
       },
       {
         kind: "command-reaction",
         methodName: "commandProject",
         parameterCount: 1,
         origin: "domestic",
-        emittedSchemas: [CreateProjectSchema],
+        outcomes: handlerOutcomes([CreateProjectSchema]),
       },
     ],
   );

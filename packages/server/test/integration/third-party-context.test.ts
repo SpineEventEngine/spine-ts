@@ -84,10 +84,9 @@ function generatedStateRegistryRoot(): {
           {
             kind: "state-subscription",
             methodName: "onExternalState",
-            signalSchema: SubscribedStateSchema,
-            emittedSchemas: [],
+            input: { schema: SubscribedStateSchema, origin: "external" },
+            outcomes: { returned: [], thrown: [] },
             parameterCount: 1,
-            origin: "external",
           },
         ],
       },
@@ -300,7 +299,10 @@ describe("Wave 13 ThirdPartyContext", () => {
         ...stateRegistry.registry,
         receivers: stateRegistry.registry.receivers.map((receiver) => ({
           ...receiver,
-          handlers: receiver.handlers.map((handler) => ({ ...handler, origin: "foreign" })),
+          handlers: receiver.handlers.map((handler) => ({
+            ...handler,
+            input: { ...handler.input, origin: "foreign" },
+          })),
         })),
       }),
     ).toThrow(/origin/u);
@@ -312,7 +314,7 @@ describe("Wave 13 ThirdPartyContext", () => {
           handlers: receiver.handlers.map((handler) => withoutOrigin(handler)),
         })),
       }),
-    ).toThrow(/invalid record shape/u);
+    ).toThrow(/invalid signal origin/u);
     expect(() =>
       ingestor.ingest({
         ...stateRegistry.registry,
@@ -321,7 +323,7 @@ describe("Wave 13 ThirdPartyContext", () => {
           handlers: receiver.handlers.map((handler) => ({
             ...handler,
             kind: "command-assignment",
-            origin: "external",
+            input: { ...handler.input, origin: "external" },
           })),
         })),
       }),
@@ -419,12 +421,10 @@ describe("Wave 13 ThirdPartyContext", () => {
   });
 });
 
-function withoutOrigin(
-  handler: GeneratedHandlerRecordInput,
-): Omit<GeneratedHandlerRecordInput, "origin"> {
-  const { origin, ...withoutOrigin } = handler;
+function withoutOrigin(handler: GeneratedHandlerRecordInput): unknown {
+  const { origin, ...withoutOrigin } = handler.input;
   void origin;
-  return withoutOrigin;
+  return { ...handler, input: withoutOrigin };
 }
 
 function requiredProducerId(event: Event): Uint8Array {

@@ -535,10 +535,9 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AssignReviewTaskSchema,
-            emittedSchemas: [ReviewTaskAssignedSchema],
+            input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+            outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
             parameterCount: 1,
-            origin: "domestic",
           },
         ],
       },
@@ -549,10 +548,9 @@ describe("BoundedContext assembly", () => {
           {
             kind: "state-subscription",
             methodName: "onProjection",
-            signalSchema: ProcessManagerStateSchema,
-            emittedSchemas: [],
+            input: { schema: ProcessManagerStateSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
             parameterCount: 1,
-            origin: "domestic",
           },
         ],
       },
@@ -617,10 +615,9 @@ describe("BoundedContext assembly", () => {
           {
             kind: "state-subscription",
             methodName: "onProjection",
-            signalSchema: ProcessManagerStateSchema,
-            emittedSchemas: [],
+            input: { schema: ProcessManagerStateSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
             parameterCount: 1,
-            origin: "domestic",
           },
         ],
       },
@@ -1000,10 +997,9 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AssignReviewTaskSchema,
-            emittedSchemas: [ReviewTaskAssignedSchema],
+            input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+            outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
             parameterCount: 1,
-            origin: "domestic",
           },
         ],
       },
@@ -1033,10 +1029,9 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AssignReviewTaskSchema,
-            emittedSchemas: [ReviewTaskAssignedSchema],
+            input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+            outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
             parameterCount: 1,
-            origin: "domestic",
           },
         ],
       },
@@ -1648,10 +1643,9 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignProjection",
-            signalSchema: AssignReviewTaskSchema,
-            emittedSchemas: [ReviewTaskAssignedSchema],
+            input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+            outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
             parameterCount: 1,
-            origin: "domestic",
           },
         ],
       },
@@ -1662,10 +1656,9 @@ describe("BoundedContext assembly", () => {
           {
             kind: "state-subscription",
             methodName: "onProjection",
-            signalSchema: ProjectStateSchema,
-            emittedSchemas: [],
+            input: { schema: ProjectStateSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
             parameterCount: 1,
-            origin: "domestic",
           },
         ],
       },
@@ -1699,10 +1692,9 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AssignReviewTaskSchema,
-            emittedSchemas: [ReviewTaskAssignedSchema],
+            input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+            outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
             parameterCount: 1,
-            origin: "domestic",
           },
         ],
       },
@@ -1756,7 +1748,7 @@ describe("BoundedContext assembly", () => {
     expect(message.typeUrl).toBe(TypeUrls.derive(ReviewTaskAssignedSchema));
   });
 
-  it("keeps producer-only event schemas off external routes while admitting follow-ups", async () => {
+  it("advertises producer-only event schemas without creating external routes", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const registryRoot = createGeneratedRegistryRoot([
       {
@@ -1766,10 +1758,9 @@ describe("BoundedContext assembly", () => {
           {
             kind: "command-assignment",
             methodName: "assignTask",
-            signalSchema: AssignReviewTaskSchema,
-            emittedSchemas: [ReviewTaskAssignedSchema],
+            input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+            outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
             parameterCount: 1,
-            origin: "domestic",
           },
         ],
       },
@@ -1781,7 +1772,9 @@ describe("BoundedContext assembly", () => {
       .buildAsync();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
 
-    expect(context.eventBus().acceptedEventTypes()).toEqual([]);
+    expect(context.eventBus().acceptedEventTypes()).toEqual([
+      TypeUrls.derive(ReviewTaskAssignedSchema),
+    ]);
 
     await context.commandBus().post(
       SignalEnvelopes.command({
@@ -2892,10 +2885,15 @@ function createGeneratedRegistryFixture(
         | "state-subscription"
         | "event-reaction";
       readonly methodName: string;
-      readonly signalSchema: GenMessage<Message>;
-      readonly emittedSchemas: readonly GenMessage<Message>[];
+      readonly input: {
+        readonly schema: GenMessage<Message>;
+        readonly origin: "domestic" | "external";
+      };
+      readonly outcomes: {
+        readonly returned: readonly GenMessage<Message>[];
+        readonly thrown: readonly GenMessage<Message>[];
+      };
       readonly parameterCount: 1 | 2;
-      readonly origin: "domestic" | "external";
     }[];
   }[],
 ): { readonly root: URL; readonly registryPath: string } {
@@ -2954,8 +2952,8 @@ function standaloneReceiver(
     | "event-subscription"
     | "state-subscription",
   methodName: string,
-  signalSchema: GenMessage<Message>,
-  emittedSchemas: readonly GenMessage<Message>[],
+  inputSchema: GenMessage<Message>,
+  returnedSchemas: readonly GenMessage<Message>[],
   parameterCount: 1 | 2 = 1,
 ) {
   return Object.freeze({
@@ -2965,10 +2963,9 @@ function standaloneReceiver(
       Object.freeze({
         kind,
         methodName,
-        signalSchema,
-        emittedSchemas,
+        input: { schema: inputSchema, origin: "domestic" as const },
+        outcomes: { returned: returnedSchemas, thrown: [] },
         parameterCount,
-        origin: "domestic" as const,
       }),
     ]),
   });
@@ -3009,10 +3006,9 @@ function processManagerRegistry(
       {
         kind: "command-assignment" as const,
         methodName: "assignTask",
-        signalSchema: AssignReviewTaskSchema,
-        emittedSchemas: [ReviewTaskAssignedSchema],
+        input: { schema: AssignReviewTaskSchema, origin: "domestic" as const },
+        outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
         parameterCount: 1 as const,
-        origin: "domestic" as const,
       },
     ],
   };
@@ -3026,10 +3022,9 @@ function aggregateReplayRegistry(entityType: typeof ReplayTaskAggregate) {
       {
         kind: "command-assignment" as const,
         methodName: "assignTask",
-        signalSchema: AssignReviewTaskSchema,
-        emittedSchemas: [ReviewStartedSchema],
+        input: { schema: AssignReviewTaskSchema, origin: "domestic" as const },
+        outcomes: { returned: [ReviewStartedSchema], thrown: [] },
         parameterCount: 1 as const,
-        origin: "domestic" as const,
       },
     ],
   };
@@ -3043,18 +3038,16 @@ function replayProcessManagerRegistry(entityType: typeof ReplayTaskProcessManage
       {
         kind: "command-assignment" as const,
         methodName: "assignTask",
-        signalSchema: ScheduleReviewTaskSchema,
-        emittedSchemas: [ReviewStartedSchema],
+        input: { schema: ScheduleReviewTaskSchema, origin: "domestic" as const },
+        outcomes: { returned: [ReviewStartedSchema], thrown: [] },
         parameterCount: 1 as const,
-        origin: "domestic" as const,
       },
       {
         kind: "event-reaction" as const,
         methodName: "reactToProjection",
-        signalSchema: ReviewTaskAssignedSchema,
-        emittedSchemas: [ReviewStartedSchema],
+        input: { schema: ReviewTaskAssignedSchema, origin: "domestic" as const },
+        outcomes: { returned: [ReviewStartedSchema], thrown: [] },
         parameterCount: 1 as const,
-        origin: "domestic" as const,
       },
     ],
   };

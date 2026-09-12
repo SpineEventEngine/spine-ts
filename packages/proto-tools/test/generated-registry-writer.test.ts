@@ -48,10 +48,15 @@ describe("generated registry writer", () => {
               {
                 kind: "command-substitution",
                 methodName: "replace",
-                signalSchema: schema("../generated/commands_pb.js", "CreateTaskSchema"),
-                emittedSchemas: [schema("../generated/commands_pb.js", "RenameTaskSchema")],
+                input: {
+                  schema: schema("../generated/commands_pb.js", "CreateTaskSchema"),
+                  origin: "domestic",
+                },
+                outcomes: {
+                  returned: [schema("../generated/commands_pb.js", "RenameTaskSchema")],
+                  thrown: [],
+                },
                 parameterCount: 1,
-                origin: "domestic",
               },
             ],
           },
@@ -163,18 +168,28 @@ describe("generated registry writer", () => {
         "        {",
         '          kind: "command-assignment",',
         '          methodName: "createTask",',
-        "          signalSchema: CreateTaskSchema,",
-        "          emittedSchemas: [TaskCreatedSchema],",
+        "          input: {",
+        "            schema: CreateTaskSchema,",
+        '            origin: "domestic",',
+        "          },",
+        "          outcomes: {",
+        "            returned: [TaskCreatedSchema],",
+        "            thrown: [],",
+        "          },",
         "          parameterCount: 1,",
-        '          origin: "domestic",',
         "        },",
         "        {",
         '          kind: "command-reaction",',
         '          methodName: "renameTask",',
-        "          signalSchema: TaskCreatedSchema,",
-        "          emittedSchemas: [RenameTaskSchema],",
+        "          input: {",
+        "            schema: TaskCreatedSchema,",
+        '            origin: "domestic",',
+        "          },",
+        "          outcomes: {",
+        "            returned: [RenameTaskSchema],",
+        "            thrown: [],",
+        "          },",
         "          parameterCount: 2,",
-        '          origin: "domestic",',
         "        },",
         "      ],",
         "    },",
@@ -186,18 +201,28 @@ describe("generated registry writer", () => {
         "        {",
         '          kind: "event-subscription",',
         '          methodName: "onTaskCreated",',
-        "          signalSchema: TaskCreatedSchema,",
-        "          emittedSchemas: [],",
+        "          input: {",
+        "            schema: TaskCreatedSchema,",
+        '            origin: "domestic",',
+        "          },",
+        "          outcomes: {",
+        "            returned: [],",
+        "            thrown: [],",
+        "          },",
         "          parameterCount: 1,",
-        '          origin: "domestic",',
         "        },",
         "        {",
         '          kind: "event-reaction",',
         '          methodName: "onTaskRenamed",',
-        "          signalSchema: TaskRenamedSchema,",
-        "          emittedSchemas: [TaskCompletedSchema, TaskCreatedSchema],",
+        "          input: {",
+        "            schema: TaskRenamedSchema,",
+        '            origin: "domestic",',
+        "          },",
+        "          outcomes: {",
+        "            returned: [TaskCompletedSchema, TaskCreatedSchema],",
+        "            thrown: [],",
+        "          },",
         "          parameterCount: 2,",
-        '          origin: "domestic",',
         "        },",
         "      ],",
         "    },",
@@ -225,26 +250,29 @@ describe("generated registry writer", () => {
               {
                 kind: "event-subscription",
                 methodName: "observe",
-                signalSchema: rejectionSchema,
-                emittedSchemas: [],
+                input: { schema: rejectionSchema, origin: "domestic" },
+                outcomes: { returned: [], thrown: [] },
                 parameterCount: 2,
-                origin: "domestic",
               },
               {
                 kind: "event-reaction",
                 methodName: "react",
-                signalSchema: rejectionSchema,
-                emittedSchemas: [schema("../generated/task_events_pb.js", "TaskCreatedSchema")],
+                input: { schema: rejectionSchema, origin: "domestic" },
+                outcomes: {
+                  returned: [schema("../generated/task_events_pb.js", "TaskCreatedSchema")],
+                  thrown: [],
+                },
                 parameterCount: 1,
-                origin: "domestic",
               },
               {
                 kind: "command-reaction",
                 methodName: "compensate",
-                signalSchema: rejectionSchema,
-                emittedSchemas: [schema("../generated/task_commands_pb.js", "RenameTaskSchema")],
+                input: { schema: rejectionSchema, origin: "domestic" },
+                outcomes: {
+                  returned: [schema("../generated/task_commands_pb.js", "RenameTaskSchema")],
+                  thrown: [],
+                },
                 parameterCount: 1,
-                origin: "domestic",
               },
             ],
           },
@@ -253,7 +281,7 @@ describe("generated registry writer", () => {
       { outputFile },
     );
 
-    expect(source.match(/signalSchema: TaskAlreadyDoneSchema,/g)).toHaveLength(3);
+    expect(source.match(/schema: TaskAlreadyDoneSchema,/g)).toHaveLength(3);
     expect(source).toContain('kind: "event-subscription"');
     expect(source).toContain('kind: "event-reaction"');
     expect(source).toContain('kind: "command-reaction"');
@@ -275,11 +303,13 @@ describe("generated registry writer", () => {
               {
                 kind: "event-subscription",
                 methodName: "onTaskCreated",
-                signalSchema: schema("../generated/event_pb.js", "TaskCreatedSchema"),
-                emittedSchemas: [],
+                input: {
+                  schema: schema("../generated/event_pb.js", "TaskCreatedSchema"),
+                  origin: "domestic",
+                  where: { eventField: "board", equals: '{"value":"announcements"}' },
+                },
+                outcomes: { returned: [], thrown: [] },
                 parameterCount: 1,
-                origin: "domestic",
-                where: { eventField: "board", equals: '{"value":"announcements"}' },
               },
             ],
           },
@@ -290,10 +320,10 @@ describe("generated registry writer", () => {
 
     expect(source).toContain(
       [
-        "          where: {",
-        '            eventField: "board",',
-        String.raw`            equals: "{\"value\":\"announcements\"}",`,
-        "          },",
+        "            where: {",
+        '              eventField: "board",',
+        String.raw`              equals: "{\"value\":\"announcements\"}",`,
+        "            },",
       ].join("\n"),
     );
   });
@@ -314,10 +344,15 @@ describe("generated registry writer", () => {
               {
                 kind: "command-assignment",
                 methodName: 'create\u2028"task"\nnext',
-                signalSchema: schema("../generated/command_pb.js", "CreateTaskSchema"),
-                emittedSchemas: [schema("../generated/event_pb.js", "TaskCreatedSchema")],
+                input: {
+                  schema: schema("../generated/command_pb.js", "CreateTaskSchema"),
+                  origin: "domestic",
+                },
+                outcomes: {
+                  returned: [schema("../generated/event_pb.js", "TaskCreatedSchema")],
+                  thrown: [],
+                },
                 parameterCount: 1,
-                origin: "domestic",
               },
             ],
           },
@@ -391,10 +426,15 @@ describe("generated registry writer", () => {
               {
                 kind: "command-assignment",
                 methodName: "createAlpha",
-                signalSchema: schema("../../generated/alpha_commands_pb.js", "CreateTaskSchema"),
-                emittedSchemas: [schema("../../generated/alpha_events_pb.js", "TaskCreatedSchema")],
+                input: {
+                  schema: schema("../../generated/alpha_commands_pb.js", "CreateTaskSchema"),
+                  origin: "domestic",
+                },
+                outcomes: {
+                  returned: [schema("../../generated/alpha_events_pb.js", "TaskCreatedSchema")],
+                  thrown: [],
+                },
                 parameterCount: 1,
-                origin: "domestic",
               },
             ],
           },
@@ -407,10 +447,15 @@ describe("generated registry writer", () => {
               {
                 kind: "command-assignment",
                 methodName: "createBeta",
-                signalSchema: schema("../../generated/beta_commands_pb.js", "CreateTaskSchema"),
-                emittedSchemas: [schema("../../generated/beta_events_pb.js", "TaskCreatedSchema")],
+                input: {
+                  schema: schema("../../generated/beta_commands_pb.js", "CreateTaskSchema"),
+                  origin: "domestic",
+                },
+                outcomes: {
+                  returned: [schema("../../generated/beta_events_pb.js", "TaskCreatedSchema")],
+                  thrown: [],
+                },
                 parameterCount: 1,
-                origin: "domestic",
               },
             ],
           },
@@ -443,10 +488,15 @@ describe("generated registry writer", () => {
         {
           kind: "command-assignment" as const,
           methodName: "createTask",
-          signalSchema: schema("../generated/command_pb.js", "CreateTaskSchema"),
-          emittedSchemas: [schema("../generated/event_pb.js", "TaskCreatedSchema")],
+          input: {
+            schema: schema("../generated/command_pb.js", "CreateTaskSchema"),
+            origin: "domestic" as const,
+          },
+          outcomes: {
+            returned: [schema("../generated/event_pb.js", "TaskCreatedSchema")],
+            thrown: [],
+          },
           parameterCount: 1 as const,
-          origin: "domestic" as const,
         },
       ],
     };
@@ -890,10 +940,15 @@ describe("generated registry writer", () => {
               {
                 kind: "command-assignment",
                 methodName: "createTask",
-                signalSchema: schema("@acme/generated/command_pb.js", "CreateTaskSchema"),
-                emittedSchemas: [schema("@acme/generated/event_pb.js", "TaskCreatedSchema")],
+                input: {
+                  schema: schema("@acme/generated/command_pb.js", "CreateTaskSchema"),
+                  origin: "domestic",
+                },
+                outcomes: {
+                  returned: [schema("@acme/generated/event_pb.js", "TaskCreatedSchema")],
+                  thrown: [],
+                },
                 parameterCount: 1,
-                origin: "domestic",
               },
             ],
           },
@@ -926,28 +981,38 @@ function analysis(repoRoot: string): BuildHandlerAnalysis {
           {
             kind: "command-assignment",
             methodName: "createTask",
-            signalSchema: schema(
-              "../generated/spine/examples/todo/task_commands_pb.js",
-              "CreateTaskSchema",
-            ),
-            emittedSchemas: [
-              schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
-            ],
+            input: {
+              schema: schema(
+                "../generated/spine/examples/todo/task_commands_pb.js",
+                "CreateTaskSchema",
+              ),
+              origin: "domestic",
+            },
+            outcomes: {
+              returned: [
+                schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
+              ],
+              thrown: [],
+            },
             parameterCount: 1,
-            origin: "domestic",
           },
           {
             kind: "command-reaction",
             methodName: "renameTask",
-            signalSchema: schema(
-              "../generated/spine/examples/todo/task_events_pb.js",
-              "TaskCreatedSchema",
-            ),
-            emittedSchemas: [
-              schema("../generated/spine/examples/todo/task_commands_pb.js", "RenameTaskSchema"),
-            ],
+            input: {
+              schema: schema(
+                "../generated/spine/examples/todo/task_events_pb.js",
+                "TaskCreatedSchema",
+              ),
+              origin: "domestic",
+            },
+            outcomes: {
+              returned: [
+                schema("../generated/spine/examples/todo/task_commands_pb.js", "RenameTaskSchema"),
+              ],
+              thrown: [],
+            },
             parameterCount: 2,
-            origin: "domestic",
           },
         ],
       },
@@ -960,27 +1025,34 @@ function analysis(repoRoot: string): BuildHandlerAnalysis {
           {
             kind: "event-subscription",
             methodName: "onTaskCreated",
-            signalSchema: schema(
-              "../generated/spine/examples/todo/task_events_pb.js",
-              "TaskCreatedSchema",
-            ),
-            emittedSchemas: [],
+            input: {
+              schema: schema(
+                "../generated/spine/examples/todo/task_events_pb.js",
+                "TaskCreatedSchema",
+              ),
+              origin: "domestic",
+            },
+            outcomes: { returned: [], thrown: [] },
             parameterCount: 1,
-            origin: "domestic",
           },
           {
             kind: "event-reaction",
             methodName: "onTaskRenamed",
-            signalSchema: schema(
-              "../generated/spine/examples/todo/task_events_pb.js",
-              "TaskRenamedSchema",
-            ),
-            emittedSchemas: [
-              schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCompletedSchema"),
-              schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
-            ],
+            input: {
+              schema: schema(
+                "../generated/spine/examples/todo/task_events_pb.js",
+                "TaskRenamedSchema",
+              ),
+              origin: "domestic",
+            },
+            outcomes: {
+              returned: [
+                schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCompletedSchema"),
+                schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
+              ],
+              thrown: [],
+            },
             parameterCount: 2,
-            origin: "domestic",
           },
         ],
       },
@@ -998,10 +1070,12 @@ function entity(className: string, sourceFile: string) {
       {
         kind: "command-assignment" as const,
         methodName: "createTask",
-        signalSchema: schema("../generated/command_pb.js", "CreateTaskSchema"),
-        emittedSchemas: [],
+        input: {
+          schema: schema("../generated/command_pb.js", "CreateTaskSchema"),
+          origin: "domestic" as const,
+        },
+        outcomes: { returned: [], thrown: [] },
         parameterCount: 1 as const,
-        origin: "domestic" as const,
       },
     ],
   };
@@ -1052,9 +1126,8 @@ function createCompileFixture(): string {
       "    readonly handlers: readonly {",
       "      readonly kind: GeneratedHandlerKind;",
       "      readonly methodName: string;",
-      "      readonly signalSchema: object;",
-      "      readonly emittedSchemas: readonly object[];",
-      '      readonly origin: "domestic" | "external";',
+      '      readonly input: { readonly schema: object; readonly origin: "domestic" | "external" };',
+      "      readonly outcomes: { readonly returned: readonly object[]; readonly thrown: readonly object[] };",
       "      readonly parameterCount: 1 | 2;",
       "    }[];",
       "  }[];",

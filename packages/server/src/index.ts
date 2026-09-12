@@ -270,7 +270,9 @@ export {
   type HandlerMethodValue,
   React,
   Subscribe,
+  Throws,
   Where,
+  type RejectionDeclaration,
   type WhereOptions,
   materializeDecoratedEntityHandlers,
 } from "./handler/handler-decorators.js";
