@@ -1865,3 +1865,17 @@ TypeScript/API clean; performance/reliability clean after correction; security
 clean; Human Requirements Ledger compliant. The reviewer repeated the two
 focused files with 48/48 tests passing and `git diff --check` passing. The task
 may proceed to the complete cheap preflight and one release verification run.
+
+The complete cheap preflight passed after one verification-selection
+correction. The first source-scoped coverage selection used only the two new
+regression files and covered 81.54% of branches in the much larger
+`delivery.ts`; no test failed. The corrected complete preflight expanded to the
+existing server delivery suite plus the remote regression. Proto generation and
+integrity, generated build, tooling typecheck, full ESLint, callable/cleanup and
+TSDoc enforcement, copyright, formatting, TypeDoc/API, documentation audience
+and snippets, Buf lint, generated-output currency, logging containment,
+production dependencies, release readiness, and `git diff --check` all passed.
+The expanded coverage run passed 279/279 tests across 17 files with
+`delivery.ts` at 96.88% statements, 91.66% branches, 97.22% functions, and
+98.41% lines. The branch is ready for its single post-convergence
+`verify:release` run.
