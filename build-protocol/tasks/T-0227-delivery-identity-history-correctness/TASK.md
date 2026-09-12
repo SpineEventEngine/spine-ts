@@ -2119,3 +2119,13 @@ unrelated tooling tests while Vitest ran files concurrently. The exact three
 files containing those four tests then passed 194/194 with one worker. No
 assertion failed, and no Vitest worker remained afterward. The final serialized
 release profile remains required after this checkpoint is pushed.
+
+### Final local verification — 2026-09-12
+
+Commit `282bb1856` passed the complete serialized `pnpm verify:release`
+profile. All deterministic gates passed, all 289 test files and 4,717 tests
+passed, and aggregate coverage remained above the repository thresholds at
+93.26% statements, 90.06% branches, 92.92% functions, and 94.41% lines. The
+separate `node scripts/release-cli.mjs prepare --check` run also packed every
+workspace package and installed the release into a clean consumer without
+registry mutation. Exact-SHA GitHub Actions success remains the final gate.
