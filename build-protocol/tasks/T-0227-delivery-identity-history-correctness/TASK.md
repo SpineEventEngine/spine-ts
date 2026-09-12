@@ -1,6 +1,6 @@
 # T-0227: Delivery, Identity, and History Correctness
 
-Status: Reopened for a fresh independent no-memory review
+Status: Implementation and independent review complete; final branch CI tracked externally
 Start: `2026-09-10 16:26 WEST`
 Initial closure: `2026-09-10 20:06 WEST`
 Final closure: `2026-09-11 02:19 WEST`
@@ -1879,3 +1879,20 @@ The expanded coverage run passed 279/279 tests across 17 files with
 `delivery.ts` at 96.88% statements, 91.66% branches, 97.22% functions, and
 98.41% lines. The branch is ready for its single post-convergence
 `verify:release` run.
+
+The single post-convergence `pnpm verify:release` run passed. It completed 289
+test files and 4,708 tests with no failures. Overall coverage was 93.25%
+statements, 90.07% branches, 92.88% functions, and 94.41% lines; the corrected
+`delivery.ts` branch coverage was 94.64%.
+
+The separate `node scripts/release-cli.mjs prepare --check` gate also passed.
+It packed all 18 public packages at `2.0.0-snapshot.11` and installed them
+together into a temporary consumer project. This was a preparation check only:
+it did not publish packages and did not add a publication batch controller or
+per-package timeout.
+
+The final task-record commit is the last planned branch change. CI for its exact
+SHA is tracked externally so that recording the CI result cannot create another
+untested record-only commit. Completion in chat requires that exact SHA to be
+present on `origin/fix-delivery-identity-history-correctness`, a clean local
+working tree, and a successful GitHub Actions run for the same SHA.
