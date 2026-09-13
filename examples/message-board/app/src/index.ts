@@ -26,6 +26,7 @@ import {
   Projection,
   Server,
   Subscribe,
+  Throws,
   Where,
   type DeliveryStrategy,
   type RunningServer,
@@ -75,6 +76,7 @@ export class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMess
    * @returns The event that creates the corresponding Projection row.
    */
   @Assign
+  @Throws(MessageAlreadyPosted)
   postMessage(command: PostMessage): MessagePosted {
     // The handler generator accepts synchronous `@Assign` methods only. The
     // aggregate's visible state is the only application-level existence fact.

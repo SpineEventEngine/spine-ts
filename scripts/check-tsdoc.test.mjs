@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -107,6 +107,16 @@ describe("check-tsdoc", () => {
 
   it("accepts documented exported declarations and public members", () => {
     const result = runChecker(createFixture());
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("TSDoc enforcement checks passed.");
+  });
+
+  it("ignores tracked source files deleted from the working tree", () => {
+    const repoRoot = createFixture();
+    rmSync(join(repoRoot, "packages/demo/src/index.ts"));
+
+    const result = runChecker(repoRoot);
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("TSDoc enforcement checks passed.");
@@ -603,6 +613,26 @@ describe("check-tsdoc", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("callable-summary");
     expect(result.stderr).toContain("void-returns");
+  });
+
+  it("accepts Admits as a third-person callable summary", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/**",
+        " * Admits an item by name.",
+        " * @param name The item name.",
+        " * @returns The admitted item name.",
+        " */",
+        "export function admitItem(name: string): string { return name; }",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    expect(runChecker(repoRoot).status).toBe(0);
   });
 
   it("rejects adjacent declaration TSDoc blocks", () => {

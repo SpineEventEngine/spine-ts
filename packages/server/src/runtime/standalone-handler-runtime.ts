@@ -13,12 +13,13 @@
  */
 
 import { clone, create } from "@bufbuild/protobuf";
-import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
+import { AnyMessages, RejectionThrowable, type MessageSchema } from "@spine-event-engine/core";
 import {
   CommandContextSchema,
   CommandSchema,
   EventContextSchema,
   EventSchema,
+  RejectionEventContextSchema,
   type CommandContext,
   type EventContext,
   type Command,
@@ -33,6 +34,7 @@ import type {
   GeneratedHandlerRecordInput,
   GeneratedStandaloneHandlerGroup,
 } from "../handler/generated-handler-registry.js";
+import { DeclaredRejections } from "../handler/declared-rejections.js";
 import {
   EventHandlerFilters,
   type EventHandlerFilterPlan,
@@ -102,7 +104,7 @@ export class StandaloneHandlerRuntime {
       externalEventSchemas: () =>
         Object.freeze(
           StandaloneHandlerRuntime.schemas(
-            bindings.filter(({ handler }) => handler.origin === "external"),
+            bindings.filter(({ handler }) => handler.input.origin === "external"),
           ),
         ),
       dispatch: async (event) => this.#dispatchEvent(event, bindings),
@@ -110,10 +112,10 @@ export class StandaloneHandlerRuntime {
     return EventDispatcherOriginSchemas.define(
       dispatcher,
       StandaloneHandlerRuntime.schemas(
-        bindings.filter(({ handler }) => handler.origin === "domestic"),
+        bindings.filter(({ handler }) => handler.input.origin === "domestic"),
       ),
       StandaloneHandlerRuntime.schemas(
-        bindings.filter(({ handler }) => handler.origin === "external"),
+        bindings.filter(({ handler }) => handler.input.origin === "external"),
       ),
     );
   }
@@ -135,7 +137,7 @@ export class StandaloneHandlerRuntime {
             : AnyMessages.unpack(event.message, EntityLog.EntityStateChangedSchema);
         if (changed?.newState === undefined) return;
         for (const binding of bindings) {
-          const state = AnyMessages.unpack(changed.newState, binding.handler.signalSchema);
+          const state = AnyMessages.unpack(changed.newState, binding.handler.input.schema);
           if (state !== undefined) {
             const output = await binding.invoke(
               state,
@@ -152,12 +154,21 @@ export class StandaloneHandlerRuntime {
     if (command.message === undefined)
       throw new Error("Standalone command handler requires a message.");
     for (const binding of bindings) {
-      const message = AnyMessages.unpack(command.message, binding.handler.signalSchema);
+      const message = AnyMessages.unpack(command.message, binding.handler.input.schema);
       if (message === undefined) continue;
-      const output = await binding.invoke(
-        message,
-        StandaloneHandlerRuntime.commandContext(command),
-      );
+      let output: unknown;
+      try {
+        output = await binding.invoke(message, StandaloneHandlerRuntime.commandContext(command));
+      } catch (error) {
+        if (!RejectionThrowable.is(error)) throw error;
+        DeclaredRejections.require(
+          binding.handler.methodName,
+          binding.handler.outcomes.thrown,
+          error,
+        );
+        await this.#publishRejection(command, error);
+        continue;
+      }
       await this.#publish(binding, output, command);
     }
   }
@@ -170,12 +181,12 @@ export class StandaloneHandlerRuntime {
       const binding = bindings.find(
         (candidate) =>
           StandaloneHandlerRuntime.eventFilterKey(
-            candidate.handler.signalSchema.typeName,
+            candidate.handler.input.schema.typeName,
             origin,
           ) === key,
       );
       if (binding === undefined) continue;
-      const message = AnyMessages.unpack(event.message, binding.handler.signalSchema);
+      const message = AnyMessages.unpack(event.message, binding.handler.input.schema);
       if (message === undefined) continue;
       for (const selected of filter.select(message)) {
         const output = await selected.invoke(message, StandaloneHandlerRuntime.eventContext(event));
@@ -185,63 +196,101 @@ export class StandaloneHandlerRuntime {
   }
 
   #publish(binding: Binding, output: unknown, source: Command | Event): Promise<void> {
-    const values =
-      output === undefined || output === null ? [] : Array.isArray(output) ? output : [output];
-    const required =
-      binding.handler.kind === "command-assignment" ||
-      binding.handler.kind === "command-substitution";
-    if (required && values.length === 0)
+    const values = StandaloneHandlerRuntime.#outputValues(output);
+    if (!this.#canPublish(binding, values)) return Promise.resolve();
+    for (const value of values) this.#publishValue(binding, value, source);
+    return Promise.resolve();
+  }
+
+  #canPublish(binding: Binding, values: readonly unknown[]): boolean {
+    const subscriber =
+      binding.handler.kind === "event-subscription" ||
+      binding.handler.kind === "state-subscription";
+    if (subscriber && values.length !== 0)
+      throw new Error(
+        `Standalone subscriber "${binding.handler.methodName}" must not return signals.`,
+      );
+    if (
+      !subscriber &&
+      (binding.handler.kind === "command-assignment" ||
+        binding.handler.kind === "command-substitution") &&
+      values.length === 0
+    )
       throw new Error(
         `Standalone ${binding.handler.kind} "${binding.handler.methodName}" must return a signal.`,
       );
-    if (
-      binding.handler.kind === "event-subscription" ||
-      binding.handler.kind === "state-subscription"
-    ) {
-      if (values.length !== 0)
-        throw new Error(
-          `Standalone subscriber "${binding.handler.methodName}" must not return signals.`,
-        );
-      return Promise.resolve();
-    }
-    for (const [index, value] of values.entries()) {
-      const schema = binding.handler.emittedSchemas.find(
-        (candidate) => (value as { $typeName?: string }).$typeName === candidate.typeName,
+    return !subscriber;
+  }
+
+  #publishValue(binding: Binding, value: unknown, source: Command | Event): void {
+    const schema = binding.handler.outcomes.returned.find(
+      (candidate) => (value as { $typeName?: string }).$typeName === candidate.typeName,
+    );
+    if (schema === undefined)
+      throw new Error(
+        `Standalone handler "${binding.handler.methodName}" returned an undeclared signal.`,
       );
-      if (schema === undefined)
-        throw new Error(
-          `Standalone handler "${binding.handler.methodName}" returned an undeclared signal.`,
-        );
-      if (
-        binding.handler.kind === "command-substitution" ||
-        binding.handler.kind === "command-reaction"
-      ) {
-        const metadata =
-          "uuid" in (source.id ?? {})
-            ? this.#metadata.commandFromCommand(source as Command, index + 1)
-            : this.#metadata.commandFromEvent(source as Event, index + 1);
-        void this.#publisher.publishCommand(
-          create(CommandSchema, {
-            id: metadata.id,
-            context: metadata.context,
-            message: AnyMessages.pack(schema, value as never),
+    if (
+      binding.handler.kind === "command-substitution" ||
+      binding.handler.kind === "command-reaction"
+    ) {
+      this.#publishCommand(schema, value, source);
+    } else this.#publishEvent(schema, value, source);
+  }
+
+  #publishCommand(schema: MessageSchema, value: unknown, source: Command | Event): void {
+    const metadata =
+      "uuid" in (source.id ?? {})
+        ? this.#metadata.commandFromCommand(source as Command)
+        : this.#metadata.commandFromEvent(source as Event);
+    void this.#publisher.publishCommand(
+      create(CommandSchema, {
+        id: metadata.id,
+        context: metadata.context,
+        message: AnyMessages.pack(schema, value as never),
+      }),
+    );
+  }
+
+  #publishEvent(schema: MessageSchema, value: unknown, source: Command | Event): void {
+    const metadata =
+      "uuid" in (source.id ?? {})
+        ? this.#metadata.eventFromCommand(source as Command, {})
+        : this.#metadata.eventFromEvent(source as Event, {});
+    void this.#publisher.publishEvent(
+      create(EventSchema, {
+        id: metadata.id,
+        context: metadata.context,
+        message: AnyMessages.pack(schema, value as never),
+      }),
+    );
+  }
+
+  async #publishRejection(command: Command, rejection: RejectionThrowable): Promise<void> {
+    const metadata = this.#metadata.eventFromCommand(command, {});
+    await this.#publisher.publishRejectionEvent(
+      create(EventSchema, {
+        id: metadata.id,
+        message: AnyMessages.pack(rejection.schema, rejection.messageThrown()),
+        context: create(EventContextSchema, {
+          ...metadata.context,
+          rejection: create(RejectionEventContextSchema, {
+            command: clone(CommandSchema, command),
+            stacktrace: rejection.stack ?? "",
           }),
-        );
-      } else {
-        const metadata =
-          "uuid" in (source.id ?? {})
-            ? this.#metadata.eventFromCommand(source as Command, index + 1, {})
-            : this.#metadata.eventFromEvent(source as Event, index + 1, {});
-        void this.#publisher.publishEvent(
-          create(EventSchema, {
-            id: metadata.id,
-            context: metadata.context,
-            message: AnyMessages.pack(schema, value as never),
-          }),
-        );
-      }
-    }
-    return Promise.resolve();
+        }),
+      }),
+    );
+  }
+
+  /**
+   * Normalizes optional handler output into a list of values.
+   *
+   * @param output A handler result that may be absent, singular, or an array.
+   * @returns An empty list for nullish output; otherwise the array or a single-item list.
+   */
+  static #outputValues(output: unknown): readonly unknown[] {
+    return output === undefined || output === null ? [] : Array.isArray(output) ? output : [output];
   }
 
   /**
@@ -281,7 +330,7 @@ export class StandaloneHandlerRuntime {
   static schemas(bindings: readonly Binding[]): readonly MessageSchema[] {
     return [
       ...new Map(
-        bindings.map(({ handler }) => [handler.signalSchema.typeName, handler.signalSchema]),
+        bindings.map(({ handler }) => [handler.input.schema.typeName, handler.input.schema]),
       ).values(),
     ];
   }
@@ -302,7 +351,7 @@ export class StandaloneHandlerRuntime {
         handler.kind === "event-subscription",
     );
     const grouped = Map.groupBy(eventBindings, ({ handler }) =>
-      StandaloneHandlerRuntime.eventFilterKey(handler.signalSchema.typeName, handler.origin),
+      StandaloneHandlerRuntime.eventFilterKey(handler.input.schema.typeName, handler.input.origin),
     );
     return new Map(
       [...grouped].map(([typeName, candidates]) => [
@@ -310,8 +359,8 @@ export class StandaloneHandlerRuntime {
         EventHandlerFilters.compile(
           candidates.map(({ handler, ...binding }) => ({
             value: Object.freeze({ handler, ...binding }),
-            schema: handler.signalSchema,
-            ...(handler.where === undefined ? {} : { where: handler.where }),
+            schema: handler.input.schema,
+            ...(handler.input.where === undefined ? {} : { where: handler.input.where }),
           })),
         ),
       ]),

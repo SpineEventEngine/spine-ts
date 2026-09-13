@@ -317,10 +317,10 @@ function taskListTopic() {
     context: metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) }),
   });
 }
-function createTaskCommand(commandId = "t0209-create", taskId = "t0209-task") {
+function createTaskCommand(_commandId = "t0209-create", taskId = "t0209-task") {
+  void _commandId;
   const actorContext = metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) });
   return SignalEnvelopes.command({
-    id: metadata.commandId(commandId),
     context: metadata.commandContext({ actorContext }),
     schema: CreateTaskSchema,
     message: create(CreateTaskSchema, {

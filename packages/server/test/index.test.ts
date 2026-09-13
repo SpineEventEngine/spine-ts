@@ -12,17 +12,10 @@
  * the License.
  */
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import type { Message } from "@bufbuild/protobuf";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { CommandSchema, file_spine_options } from "@spine-event-engine/proto";
-import {
-  serverEntityMetadataFixtureGeneration,
-  serverEntityMetadataTestFixtures,
-} from "../test-fixtures/entity-metadata-fixtures.js";
+import { CommandSchema } from "@spine-event-engine/proto";
 
 import * as serverRoot from "../src/index.js";
 import {
@@ -95,18 +88,34 @@ import {
   type SignalIntakeFailureCode,
   type SignalIntakeResult,
   type SignalKind,
-  SignalIds,
   SignalMetadata,
   type SignalMetadataOptions,
   SingleProcessServerRuntime,
   SystemClock,
 } from "../src/index.js";
-
-type ProjectionState = Message<"ProjectionState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
+import {
+  type CreateProject,
+  CreateProjectSchema,
+} from "../test-fixtures/generated/entity-metadata/project_commands_pb.js";
+import { EmptyStateSchema } from "../test-fixtures/generated/entity-metadata/empty_pb.js";
+import { InvalidColumnStateSchema } from "../test-fixtures/generated/entity-metadata/invalid-column_pb.js";
+import { InvalidTagStateSchema } from "../test-fixtures/generated/entity-metadata/invalid-tag_pb.js";
+import {
+  type ProjectCreated,
+  ProjectCreatedSchema,
+} from "../test-fixtures/generated/entity-metadata/project_events_pb.js";
+import {
+  file_entity_metadata_project_states,
+  ProjectOverviewStateSchema,
+  ProjectSearchStateSchema,
+  ProjectStateSchema,
+} from "../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import { UnknownKindStateSchema } from "../test-fixtures/generated/entity-metadata/unknown-kind_pb.js";
+import {
+  FullVisibilityStateSchema,
+  HiddenStateSchema,
+  ProcessManagerStateSchema,
+} from "../test-fixtures/generated/entity-metadata/visibility_pb.js";
 
 interface ExportedRevisionMetadata {
   readonly revision: number;
@@ -119,59 +128,6 @@ interface ExportedSizedMetadata {
   readonly size: number;
 }
 
-type AggregateState = Message<"AggregateState"> & {
-  id: string;
-  name: string;
-  archived: boolean;
-};
-
-type GenericState = Message<"GenericState"> & {
-  id: string;
-  searchable: boolean;
-};
-
-type EmptyState = Message<"EmptyState">;
-type UnknownKindState = Message<"UnknownKindState"> & { id: string };
-type InvalidColumnState = Message<"InvalidColumnState"> & {
-  id: string;
-  tags: string[];
-};
-type InvalidTagState = Message<"InvalidTagState"> & { id: string };
-type ProcessManagerState = Message<"ProcessManagerState"> & { id: string; queue: string };
-type FullVisibilityState = Message<"FullVisibilityState"> & { id: string };
-type HiddenState = Message<"HiddenState"> & { id: string };
-
-function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Server entity metadata fixture descriptor set is empty.");
-  }
-
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    imports,
-  );
-}
-
-// Descriptor fixtures are generated from checked-in test-only .proto sources.
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
-const ProjectionStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectionState>;
-const AggregateStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  1,
-) as GenMessage<AggregateState>;
-const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
-
 it("exports nominal standalone handler base classes", () => {
   class Assignee extends AbstractAssignee {}
   class Commander extends AbstractCommander {}
@@ -183,57 +139,15 @@ it("exports nominal standalone handler base classes", () => {
   expect(new Subscriber()).toBeInstanceOf(AbstractEventSubscriber);
 });
 
-class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignCommand(command: Message<"spine.core.Command">): void {
+class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+  assignCommand(command: CreateProject): void {
     void command;
   }
 
-  onAggregateChanged(event: AggregateState): void {
+  onAggregateChanged(event: ProjectCreated): void {
     void event;
   }
 }
-
-const fileEntityEmptyFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.empty.descriptorSetBase64,
-);
-const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
-
-const fileEntityUnknownKindFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.unknownKind.descriptorSetBase64,
-);
-const UnknownKindStateSchema = messageDesc(
-  fileEntityUnknownKindFixture,
-  0,
-) as GenMessage<UnknownKindState>;
-
-const fileEntityInvalidColumnFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.invalidColumn.descriptorSetBase64,
-);
-const InvalidColumnStateSchema = messageDesc(
-  fileEntityInvalidColumnFixture,
-  0,
-) as GenMessage<InvalidColumnState>;
-
-const fileEntityInvalidTagFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.invalidTag.descriptorSetBase64,
-);
-const InvalidTagStateSchema = messageDesc(
-  fileEntityInvalidTagFixture,
-  0,
-) as GenMessage<InvalidTagState>;
-
-const fileEntityVisibilityFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
-);
-const ProcessManagerStateSchema = messageDesc(
-  fileEntityVisibilityFixture,
-  0,
-) as GenMessage<ProcessManagerState>;
-const FullVisibilityStateSchema = messageDesc(
-  fileEntityVisibilityFixture,
-  1,
-) as GenMessage<FullVisibilityState>;
-const HiddenStateSchema = messageDesc(fileEntityVisibilityFixture, 2) as GenMessage<HiddenState>;
 
 describe("@spine-event-engine/server", () => {
   it("exports the descriptor-derived entity and handler metadata surface", () => {
@@ -296,7 +210,6 @@ describe("@spine-event-engine/server", () => {
         "ShardIndex",
         "ShardSession",
         "ShardedWorkRegistry",
-        "SignalIds",
         "SignalMetadata",
         "SingleProcessServerRuntime",
         "SpecScanner",
@@ -312,6 +225,7 @@ describe("@spine-event-engine/server", () => {
         "TransactionalEntityScopeError",
         "React",
         "Subscribe",
+        "Throws",
         "Where",
         "acceptSignalIntake",
         "EntityHandlers",
@@ -375,7 +289,6 @@ describe("@spine-event-engine/server", () => {
     expect(new StandStateTypeError("Unknown", "read")).toBeInstanceOf(StandStateTypeError);
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
     expect(new SignalMetadata()).toBeInstanceOf(SignalMetadata);
-    expect(new SignalIds()).toBeInstanceOf(SignalIds);
     expect(new FixedClock(new Date(0))).toBeInstanceOf(FixedClock);
     expect(new SystemClock()).toBeInstanceOf(SystemClock);
     expect(new GeneratedRegistryDiscovery()).toBeInstanceOf(GeneratedRegistryDiscovery);
@@ -412,9 +325,13 @@ describe("@spine-event-engine/server", () => {
       "RUNTIME_NOT_ACCEPTING" | "MALFORMED_ENVELOPE" | "UNSUPPORTED_SIGNAL_KIND"
     >();
     expectTypeOf<SignalMetadataOptions>().toExtend<{
-      readonly ids?: SignalIds;
       readonly clock?: SystemClock | FixedClock | undefined;
     }>();
+    const rejectsIdSource = () => {
+      // @ts-expect-error Public metadata options do not accept injected ID sources.
+      new SignalMetadata({ ids: () => "fixed" });
+    };
+    void rejectsIdSource;
     expectTypeOf<EventContextInput["producerId"]>().toEqualTypeOf<PrimitiveId | undefined>();
     expectTypeOf(acceptSignalIntake("command")).toExtend<SignalIntakeResult>();
     expectTypeOf(failSignalIntake("event", "MALFORMED_ENVELOPE")).toExtend<SignalIntakeResult>();
@@ -518,15 +435,15 @@ describe("@spine-event-engine/server", () => {
 
     const repository = new Repository({
       entityType: PublicRuntimeSmokeAggregate,
-      schema: AggregateStateSchema,
+      schema: ProjectStateSchema,
     });
     const context = BoundedContext.singleTenant("PublicRuntimeSmoke").add(repository).build();
     const handlers = EntityHandlers.define(
       PublicRuntimeSmokeAggregate,
-      AggregateStateSchema,
+      ProjectStateSchema,
       (builder) => [
-        builder.assign(CommandSchema, "assignCommand"),
-        builder.apply(AggregateStateSchema, "onAggregateChanged", { allowImport: true }),
+        builder.assign(CreateProjectSchema, "assignCommand"),
+        builder.apply(ProjectCreatedSchema, "onAggregateChanged", { allowImport: true }),
       ],
     );
     const registry = new HandlerMetadataRegistry([handlers]);
@@ -537,8 +454,8 @@ describe("@spine-event-engine/server", () => {
     expect(typeof context.eventBus().post).toBe("function");
     expect("register" in context.commandBus()).toBe(false);
     expect("register" in context.eventBus()).toBe(false);
-    expect(commandReadiness.commandTypeNames()).toEqual([CommandSchema.typeName]);
-    expect(eventReadiness.eventTypeNames()).toEqual([AggregateStateSchema.typeName]);
+    expect(commandReadiness.commandTypeNames()).toEqual([CreateProjectSchema.typeName]);
+    expect(eventReadiness.eventTypeNames()).toEqual([ProjectCreatedSchema.typeName]);
     for (const member of ["ImportBus", "GrpcServer"]) {
       expect(Object.hasOwn(serverRoot, member)).toBe(false);
     }
@@ -564,10 +481,10 @@ describe("@spine-event-engine/server", () => {
   });
 
   it("extracts entity kind, default visibility, routing hints, columns, and set-once fields", () => {
-    const metadata = describeEntityMetadata(ProjectionStateSchema);
+    const metadata = describeEntityMetadata(ProjectOverviewStateSchema);
 
-    expect(metadata.fullTypeName).toBe("ProjectionState");
-    expect(metadata.fileName).toBe("entity-metadata/main.proto");
+    expect(metadata.fullTypeName).toBe(ProjectOverviewStateSchema.typeName);
+    expect(metadata.fileName).toBe("entity-metadata/project_states.proto");
     expect(metadata.kind).toBe("projection");
     expect(metadata.declaredVisibility).toBe("default");
     expect(metadata.visibility).toBe("full");
@@ -582,7 +499,7 @@ describe("@spine-event-engine/server", () => {
   });
 
   it("keeps explicit aggregate visibility and descriptor ordering deterministic", () => {
-    const metadata = describeEntityMetadata(AggregateStateSchema);
+    const metadata = describeEntityMetadata(ProjectStateSchema);
 
     expect(metadata.kind).toBe("aggregate");
     expect(metadata.declaredVisibility).toBe("query");
@@ -603,22 +520,17 @@ describe("@spine-event-engine/server", () => {
   });
 
   it("ignores column declarations on entity kinds that are not column-eligible", () => {
-    expect(describeEntityMetadata(AggregateStateSchema).columns).toEqual([]);
-    expect(describeEntityMetadata(GenericStateSchema).columns).toEqual([]);
+    expect(describeEntityMetadata(ProjectStateSchema).columns).toEqual([]);
+    expect(describeEntityMetadata(ProjectSearchStateSchema).columns).toEqual([]);
   });
 
-  it("documents the checked-in fixture regeneration path", () => {
-    expect(serverEntityMetadataFixtureGeneration.command).toBe(
-      "node scripts/generate-server-test-fixtures.mjs",
-    );
-    expect(serverEntityMetadataFixtureGeneration.protoRoot).toBe(
-      "packages/server/test-fixtures/proto/entity-metadata",
-    );
+  it("uses generated schemas from checked-in fixture Proto sources", () => {
+    expect(file_entity_metadata_project_states.name).toBe("entity-metadata/project_states");
   });
 
   it("distinguishes entity schemas from non-entity schemas", () => {
-    expect(isEntitySchema(ProjectionStateSchema)).toBe(true);
-    expect(isEntitySchema(GenericStateSchema)).toBe(true);
+    expect(isEntitySchema(ProjectOverviewStateSchema)).toBe(true);
+    expect(isEntitySchema(ProjectSearchStateSchema)).toBe(true);
     expect(isEntitySchema(CommandSchema)).toBe(false);
   });
 

@@ -1,0 +1,20 @@
+{
+  "formatVersion": 2,
+  "generationId": "92a834c4-2218-45b3-80e6-879d378e40d6",
+  "packageName": "@spine-event-engine/testing-test-fixtures",
+  "packageVersion": "2.0.0-snapshot.11",
+  "protoFiles": [
+    "project_commands.proto",
+    "project_events.proto",
+    "project_states.proto"
+  ],
+  "generatedExports": {
+    "project_commands.proto": "generated/project_commands_pb.js",
+    "project_events.proto": "generated/project_events_pb.js",
+    "project_states.proto": "generated/project_states_pb.js"
+  },
+  "dependencies": [
+    "@spine-event-engine/proto"
+  ],
+  "moduleExport": "testingTestFixturesProtoModule"
+}

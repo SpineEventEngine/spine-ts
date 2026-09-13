@@ -13,10 +13,7 @@
  */
 
 import { create, type Message } from "@bufbuild/protobuf";
-import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -26,7 +23,6 @@ import {
   type Event,
   UserIdSchema,
   VersionSchema,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import {
   EventStore,
@@ -38,7 +34,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus, type EventDispatcher } from "../../src/index.js";
 import type { ILogLayer } from "loglayer";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import {
+  ReviewFollowUpScheduledSchema,
+  ReviewStartedSchema,
+  ReviewTaskAssignedSchema,
+} from "../../test-fixtures/generated/handler-registry/events_pb.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { tenant } from "../tenant-fixture.js";
 
@@ -59,64 +59,6 @@ vi.mock("@spine-event-engine/core", async (importOriginal) => {
   };
 });
 
-type ProjectionState = Message<"ProjectionState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type AggregateState = Message<"AggregateState"> & {
-  id: string;
-  name: string;
-  archived: boolean;
-};
-
-type ValidatedTaskEvent = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
-  id: string;
-  name: string;
-};
-
-function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Event bus fixture descriptor set is empty.");
-  }
-
-  return fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    imports,
-  );
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
-const ProjectionStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectionState>;
-const AggregateStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  1,
-) as GenMessage<AggregateState>;
-const fileValidationRefusalFixture = fileDesc(
-  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
-    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
-    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
-    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
-    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
-  [file_spine_options],
-);
-const ValidatedTaskEventSchema = messageDesc(
-  fileValidationRefusalFixture,
-  1,
-) as GenMessage<ValidatedTaskEvent>;
-
 describe("EventBus", () => {
   afterEach(() => {
     validationChecks.mockReset();
@@ -129,7 +71,7 @@ describe("EventBus", () => {
     );
     const observed: string[] = [];
     const bus = new EventBus(store, [
-      createEventDispatcher([ProjectionStateSchema], async (event) => {
+      createEventDispatcher([ReviewTaskAssignedSchema], async (event) => {
         const stored = await store.read();
 
         observed.push(`stored:${stored[0]?.id?.value ?? "missing"}`);
@@ -137,7 +79,7 @@ describe("EventBus", () => {
       }),
     ]);
 
-    await bus.post(createProjectionEvent("event-1"));
+    await bus.post(createReviewTaskAssigned("event-1"));
 
     expect(observed).toEqual(["stored:event-1", "dispatch:event-1"]);
   });
@@ -148,18 +90,18 @@ describe("EventBus", () => {
       new InMemoryStorageFactory(),
     );
     const observed: string[] = [];
-    const first = createEventDispatcher([ProjectionStateSchema], (event) => {
+    const first = createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
       observed.push(`first:${event.id?.value ?? "missing"}`);
     });
-    const second = createEventDispatcher([ProjectionStateSchema], (event) => {
+    const second = createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
       observed.push(`second:${event.id?.value ?? "missing"}`);
     });
-    const other = createEventDispatcher([AggregateStateSchema], (event) => {
+    const other = createEventDispatcher([ReviewStartedSchema], (event) => {
       observed.push(`other:${event.id?.value ?? "missing"}`);
     });
     const bus = new EventBus(store, [first, second, other]);
 
-    const completion = bus.post(createProjectionEvent("event-2"));
+    const completion = bus.post(createReviewTaskAssigned("event-2"));
 
     observed.push("after-post");
     expect(observed).toEqual(["after-post"]);
@@ -175,7 +117,7 @@ describe("EventBus", () => {
       new InMemoryStorageFactory(),
     );
     const bus = new EventBus(store);
-    const event = createProjectionEvent("event-3");
+    const event = createReviewTaskAssigned("event-3");
 
     await expect(bus.post(event)).rejects.toThrow(/No event schema registered/);
     await expect(store.read()).resolves.toEqual([]);
@@ -188,20 +130,21 @@ describe("EventBus", () => {
     );
     const bus = new EventBus(store);
 
-    eventBusAccess.registerSchemas(bus, [ProjectionStateSchema]);
+    eventBusAccess.registerSchemas(bus, [ReviewTaskAssignedSchema]);
 
-    await expect(bus.post(createProjectionEvent("event-schema-only"))).resolves.toBeUndefined();
+    expect(eventBusAccess.eventSchemas(bus)).toEqual([ReviewTaskAssignedSchema]);
+    await expect(bus.post(createReviewTaskAssigned("event-schema-only"))).resolves.toBeUndefined();
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-schema-only" } }]);
   });
 
   it("unregisters only target origin routes while preserving admission and unrelated dispatchers", async () => {
     const bus = eventBusAccess.createForgettingBus();
-    const target = createEventDispatcher([ProjectionStateSchema, AggregateStateSchema], () =>
+    const target = createEventDispatcher([ReviewTaskAssignedSchema, ReviewStartedSchema], () =>
       Promise.resolve(),
     );
-    target.externalEventSchemas = () => [ProjectionStateSchema];
-    const unrelated = createEventDispatcher([ProjectionStateSchema], () => Promise.resolve());
-    unrelated.externalEventSchemas = () => [ProjectionStateSchema];
+    target.externalEventSchemas = () => [ReviewTaskAssignedSchema];
+    const unrelated = createEventDispatcher([ReviewTaskAssignedSchema], () => Promise.resolve());
+    unrelated.externalEventSchemas = () => [ReviewTaskAssignedSchema];
     const seen: string[] = [];
     target.dispatch = () => {
       seen.push("target");
@@ -213,26 +156,25 @@ describe("EventBus", () => {
     };
     bus.register(target);
     bus.register(unrelated);
-    eventBusAccess.registerSchemas(bus, [AggregateStateSchema]);
+    eventBusAccess.registerSchemas(bus, [ReviewStartedSchema]);
     eventBusAccess.unregister(bus, target);
     eventBusAccess.unregister(bus, target);
-    const external = createProjectionEvent("external-route");
+    const external = createReviewTaskAssigned("external-route");
     external.context = create(EventContextSchema, { external: true });
     await bus.post(external);
     await bus.post(
       SignalEnvelopes.event({
-        id: create(EventIdSchema, { value: "domestic-route" }),
         context: create(EventContextSchema),
-        schema: AggregateStateSchema,
-        message: create(AggregateStateSchema, { id: "domestic-route", name: "route" }),
+        schema: ReviewStartedSchema,
+        message: create(ReviewStartedSchema, { id: "domestic-route" }),
       }),
     );
     expect(seen).toEqual(["unrelated"]);
-    expect(eventBusAccess.schema(bus, TypeUrls.derive(ProjectionStateSchema))).toBe(
-      ProjectionStateSchema,
+    expect(eventBusAccess.schema(bus, TypeUrls.derive(ReviewTaskAssignedSchema))).toBe(
+      ReviewTaskAssignedSchema,
     );
-    expect(eventBusAccess.schema(bus, TypeUrls.derive(AggregateStateSchema))).toBe(
-      AggregateStateSchema,
+    expect(eventBusAccess.schema(bus, TypeUrls.derive(ReviewStartedSchema))).toBe(
+      ReviewStartedSchema,
     );
   });
 
@@ -257,8 +199,10 @@ describe("EventBus", () => {
       eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
     }).not.toThrow();
     expect(() => {
-      eventBusAccess.registerSchemas(bus, [ProjectionStateSchema]);
-    }).toThrow('System EventBus rejects domain event schema "type.ProjectionState".');
+      eventBusAccess.registerSchemas(bus, [ReviewTaskAssignedSchema]);
+    }).toThrow(
+      'System EventBus rejects domain event schema "type.spine.server.testing.handlerregistry.ReviewTaskAssigned".',
+    );
   });
 
   it("rejects untyped construction without an EventStore", () => {
@@ -273,7 +217,7 @@ describe("EventBus", () => {
     });
     const bus = eventBusAccess.createForgettingBus([
       {
-        messageSchemas: () => [ValidatedTaskEventSchema],
+        messageSchemas: () => [ReviewFollowUpScheduledSchema],
         accept: () => {
           observed.push("accept");
           return Promise.resolve();
@@ -284,7 +228,7 @@ describe("EventBus", () => {
         },
       },
     ]);
-    eventBusAccess.subscribe(bus, TypeUrls.derive(ValidatedTaskEventSchema), {
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ReviewFollowUpScheduledSchema), {
       onEvent: (event) => {
         observed.push(`subscriber:${event.id?.value ?? "missing"}`);
       },
@@ -306,11 +250,11 @@ describe("EventBus", () => {
       observed.push("validate");
     });
     const bus = eventBusAccess.createForgettingBus([
-      createEventDispatcher([ValidatedTaskEventSchema], () => {
+      createEventDispatcher([ReviewFollowUpScheduledSchema], () => {
         observed.push("dispatch");
       }),
     ]);
-    eventBusAccess.subscribe(bus, TypeUrls.derive(ValidatedTaskEventSchema), {
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ReviewFollowUpScheduledSchema), {
       onEvent: () => {
         observed.push("subscriber");
       },
@@ -332,7 +276,7 @@ describe("EventBus", () => {
     });
     const bus = eventBusAccess.createForgettingBus([
       {
-        messageSchemas: () => [ValidatedTaskEventSchema],
+        messageSchemas: () => [ReviewFollowUpScheduledSchema],
         accept: () => {
           observed.push("accept");
           return Promise.reject(new Error("admission failed"));
@@ -343,7 +287,7 @@ describe("EventBus", () => {
         },
       },
     ]);
-    eventBusAccess.subscribe(bus, TypeUrls.derive(ValidatedTaskEventSchema), {
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ReviewFollowUpScheduledSchema), {
       onEvent: () => {
         observed.push("subscriber");
       },
@@ -380,7 +324,7 @@ describe("EventBus", () => {
       { name: "Tasks", multitenant: false },
       new InMemoryStorageFactory(),
     );
-    const event = createProjectionEvent("event-blank-message");
+    const event = createReviewTaskAssigned("event-blank-message");
     const bus = new EventBus(store);
 
     if (event.message !== undefined) {
@@ -399,12 +343,12 @@ describe("EventBus", () => {
       },
     } as unknown as EventStore;
     const bus = new EventBus(store, [
-      createEventDispatcher([ProjectionStateSchema], (event) => {
+      createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
         observed.push(`dispatch:${event.id?.value ?? "missing"}`);
       }),
     ]);
 
-    await expect(bus.post(createProjectionEvent("event-4"))).rejects.toThrow("append failed");
+    await expect(bus.post(createReviewTaskAssigned("event-4"))).rejects.toThrow("append failed");
 
     expect(observed).toEqual([]);
   });
@@ -412,7 +356,7 @@ describe("EventBus", () => {
   it("uses one event-envelope tenant snapshot for acceptance and append", async () => {
     const factory = new InMemoryStorageFactory();
     const store = new EventStore({ name: "Tasks", multitenant: true }, factory);
-    const event = createProjectionEvent("event-tenant-captured");
+    const event = createReviewTaskAssigned("event-tenant-captured");
     if (event.context === undefined) throw new Error("Expected generated event context.");
     event.context.origin = {
       case: "importContext",
@@ -420,7 +364,7 @@ describe("EventBus", () => {
     };
     const bus = new EventBus(store, [
       {
-        messageSchemas: () => [ProjectionStateSchema],
+        messageSchemas: () => [ReviewTaskAssignedSchema],
         accept: () => {
           if (event.context === undefined) throw new Error("Expected generated event context.");
           event.context.origin = {
@@ -456,13 +400,13 @@ describe("EventBus", () => {
     );
     const bus = new EventBus(store, [
       {
-        messageSchemas: () => [ProjectionStateSchema],
+        messageSchemas: () => [ReviewTaskAssignedSchema],
         accept: () => Promise.reject(new Error("event rejected")),
         dispatch: () => Promise.resolve(),
       },
     ]);
 
-    await expect(bus.post(createProjectionEvent("event-rejected"))).rejects.toThrow(
+    await expect(bus.post(createReviewTaskAssigned("event-rejected"))).rejects.toThrow(
       "event rejected",
     );
     await expect(store.read()).resolves.toEqual([]);
@@ -476,7 +420,7 @@ describe("EventBus", () => {
     const observed: string[] = [];
     const bus = new EventBus(store, [
       {
-        messageSchemas: () => [ProjectionStateSchema],
+        messageSchemas: () => [ReviewTaskAssignedSchema],
         accept: () => {
           observed.push("accept");
           return Promise.resolve();
@@ -484,7 +428,7 @@ describe("EventBus", () => {
         dispatch: () => Promise.resolve(),
       },
     ]);
-    const event = createProjectionEvent("event-blank-id");
+    const event = createReviewTaskAssigned("event-blank-id");
     event.id = create(EventIdSchema);
 
     await expect(bus.post(event)).rejects.toThrow(/non-empty event\.id\.value/);
@@ -502,7 +446,7 @@ describe("EventBus", () => {
     let acceptedSnapshot: Event | undefined;
     const bus = new EventBus(store, [
       {
-        messageSchemas: () => [ProjectionStateSchema],
+        messageSchemas: () => [ReviewTaskAssignedSchema],
         accept: (event) => {
           acceptedSnapshot = event;
           observed.push(`accept:${event.id?.value ?? "missing"}`);
@@ -516,7 +460,7 @@ describe("EventBus", () => {
       },
     ]);
 
-    await bus.post(createProjectionEvent("event-accepted"));
+    await bus.post(createReviewTaskAssigned("event-accepted"));
 
     expect(observed).toEqual(["accept:event-accepted", "dispatch:event-accepted"]);
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-accepted" } }]);
@@ -530,7 +474,7 @@ describe("EventBus", () => {
     const observed: string[] = [];
     const bus = new EventBus(store, [
       {
-        messageSchemas: () => [ValidatedTaskEventSchema],
+        messageSchemas: () => [ReviewFollowUpScheduledSchema],
         accept: () => {
           observed.push("accept");
           return Promise.resolve();
@@ -541,7 +485,7 @@ describe("EventBus", () => {
         },
       },
     ]);
-    const typeUrl = TypeUrls.derive(ValidatedTaskEventSchema);
+    const typeUrl = TypeUrls.derive(ReviewFollowUpScheduledSchema);
     eventBusAccess.subscribe(bus, typeUrl, {
       onEvent: () => {
         observed.push("subscriber");
@@ -598,7 +542,7 @@ describe("EventBus", () => {
     });
     const bus = new EventBus(store, [
       {
-        messageSchemas: () => [ValidatedTaskEventSchema],
+        messageSchemas: () => [ReviewFollowUpScheduledSchema],
         accept: () => {
           observed.push("accept");
           return Promise.resolve();
@@ -667,7 +611,7 @@ describe("EventBus", () => {
     const observed: string[] = [];
     const bus = new EventBus(store, [
       {
-        messageSchemas: () => [ValidatedTaskEventSchema],
+        messageSchemas: () => [ReviewFollowUpScheduledSchema],
         accept: () => {
           observed.push("accept");
           return Promise.resolve();
@@ -699,7 +643,7 @@ describe("EventBus", () => {
         if (attempts === 1) {
           throw new Error("schema read failed");
         }
-        return [ProjectionStateSchema];
+        return [ReviewTaskAssignedSchema];
       },
       dispatch: (event) => {
         observed.push(`dispatch:${event.id?.value ?? "missing"}`);
@@ -711,7 +655,7 @@ describe("EventBus", () => {
     expect(() => bus.register(dispatcher)).toThrow("schema read failed");
     expect(bus.register(dispatcher)).toBe(dispatcher);
 
-    await bus.post(createProjectionEvent("event-5"));
+    await bus.post(createReviewTaskAssigned("event-5"));
 
     expect(observed).toEqual(["dispatch:event-5"]);
   });
@@ -723,12 +667,12 @@ describe("EventBus", () => {
     );
     const observed: string[] = [];
     const bus = new EventBus(store, [
-      createEventDispatcher([ProjectionStateSchema, ProjectionStateSchema], (event) => {
+      createEventDispatcher([ReviewTaskAssignedSchema, ReviewTaskAssignedSchema], (event) => {
         observed.push(`dispatch:${event.id?.value ?? "missing"}`);
       }),
     ]);
 
-    await bus.post(createProjectionEvent("event-deduplicated"));
+    await bus.post(createReviewTaskAssigned("event-deduplicated"));
 
     expect(observed).toEqual(["dispatch:event-deduplicated"]);
   });
@@ -747,7 +691,7 @@ describe("EventBus", () => {
           reentered = true;
           bus.register(dispatcher);
         }
-        return [ProjectionStateSchema];
+        return [ReviewTaskAssignedSchema];
       },
       dispatch: (event) => {
         observed.push(`dispatch:${event.id?.value ?? "missing"}`);
@@ -756,7 +700,7 @@ describe("EventBus", () => {
     };
 
     bus.register(dispatcher);
-    await bus.post(createProjectionEvent("event-6"));
+    await bus.post(createReviewTaskAssigned("event-6"));
 
     expect(observed).toEqual(["dispatch:event-6"]);
   });
@@ -768,11 +712,11 @@ describe("EventBus", () => {
     );
     const observed: string[] = [];
     const bus = new EventBus(store, [
-      createEventDispatcher([ProjectionStateSchema], (event) => {
+      createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
         observed.push(`dispatch:${event.id?.value ?? "missing"}`);
       }),
     ]);
-    const event = createProjectionEvent("event-stored-dispatch");
+    const event = createReviewTaskAssigned("event-stored-dispatch");
 
     await store.append(event);
     await eventBusAccess.postStored(bus, event);
@@ -788,23 +732,23 @@ describe("EventBus", () => {
     );
     const observed: string[] = [];
     const bus = new EventBus(store, [
-      createEventDispatcher([ProjectionStateSchema], (event) => {
+      createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
         observed.push(`dispatch:${event.id?.value ?? "missing"}`);
       }),
     ]);
-    const subscription = eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+    const subscription = eventBusAccess.subscribe(bus, TypeUrls.derive(ReviewTaskAssignedSchema), {
       onEvent: (event) => {
         observed.push(`event:${event.id?.value ?? "missing"}`);
       },
     });
 
-    await bus.post(createProjectionEvent("event-subscribed"));
+    await bus.post(createReviewTaskAssigned("event-subscribed"));
 
     expect(subscription.closed).toBe(false);
     expect(observed).toEqual(["dispatch:event-subscribed", "event:event-subscribed"]);
 
     subscription.unsubscribe();
-    await bus.post(createProjectionEvent("event-after-unsubscribe"));
+    await bus.post(createReviewTaskAssigned("event-after-unsubscribe"));
 
     expect(subscription.closed).toBe(true);
     expect(observed).toEqual([
@@ -821,11 +765,11 @@ describe("EventBus", () => {
     );
     const observed: string[] = [];
     const bus = new EventBus(store, [
-      createEventDispatcher([ProjectionStateSchema], (event) => {
+      createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
         observed.push(`dispatch:${event.id?.value ?? "missing"}`);
       }),
     ]);
-    const typeUrl = TypeUrls.derive(ProjectionStateSchema);
+    const typeUrl = TypeUrls.derive(ReviewTaskAssignedSchema);
     const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
     const logger = {
       withMetadata: (facts: Record<string, unknown>) => ({
@@ -853,7 +797,7 @@ describe("EventBus", () => {
       },
     });
 
-    await expect(bus.post(createProjectionEvent("event-snapshot"))).resolves.toBeUndefined();
+    await expect(bus.post(createReviewTaskAssigned("event-snapshot"))).resolves.toBeUndefined();
 
     expect(observed).toEqual([
       "dispatch:event-snapshot",
@@ -864,7 +808,7 @@ describe("EventBus", () => {
       {
         message: "Event subscriber failed.",
         facts: {
-          eventType: "type.googleapis.com/ProjectionState",
+          eventType: "type.googleapis.com/spine.server.testing.handlerregistry.ReviewTaskAssigned",
           operation: "event.subscriber",
           reasonCode: "subscriber_failed",
         },
@@ -875,15 +819,15 @@ describe("EventBus", () => {
   it("contains subscriber failure without a logger and rejects foreign logger installation", async () => {
     const bus = new EventBus(
       new EventStore({ name: "Tasks", multitenant: false }, new InMemoryStorageFactory()),
-      [createEventDispatcher([ProjectionStateSchema], () => undefined)],
+      [createEventDispatcher([ReviewTaskAssignedSchema], () => undefined)],
     );
-    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ReviewTaskAssignedSchema), {
       onEvent() {
         throw new Error("contained without logging");
       },
     });
 
-    await expect(bus.post(createProjectionEvent("event-no-logger"))).resolves.toBeUndefined();
+    await expect(bus.post(createReviewTaskAssigned("event-no-logger"))).resolves.toBeUndefined();
     expect(() => {
       eventBusAccess.installLogger({} as EventBus, {} as ILogLayer);
     }).toThrow("EventBus logger requires an EventBus instance.");
@@ -892,7 +836,7 @@ describe("EventBus", () => {
   it("contains asynchronous subscriber rejection without delaying later subscribers", async () => {
     const bus = new EventBus(
       new EventStore({ name: "Tasks", multitenant: false }, new InMemoryStorageFactory()),
-      [createEventDispatcher([ProjectionStateSchema], () => undefined)],
+      [createEventDispatcher([ReviewTaskAssignedSchema], () => undefined)],
     );
     const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
     eventBusAccess.installLogger(bus, {
@@ -901,20 +845,20 @@ describe("EventBus", () => {
       }),
     } as unknown as ILogLayer);
     const later = vi.fn();
-    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ReviewTaskAssignedSchema), {
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       onEvent: () => Promise.reject(new Error("async subscriber failure")),
     });
-    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), { onEvent: later });
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ReviewTaskAssignedSchema), { onEvent: later });
 
-    await bus.post(createProjectionEvent("event-async"));
+    await bus.post(createReviewTaskAssigned("event-async"));
     expect(later).toHaveBeenCalledTimes(1);
     await delay(0);
     expect(errors).toEqual([
       {
         message: "Event subscriber failed.",
         facts: {
-          eventType: TypeUrls.derive(ProjectionStateSchema),
+          eventType: TypeUrls.derive(ReviewTaskAssignedSchema),
           operation: "event.subscriber",
           reasonCode: "subscriber_failed",
         },
@@ -925,14 +869,14 @@ describe("EventBus", () => {
   it("reports deferred subscriber rejection after the bus closes", async () => {
     const bus = new EventBus(
       new EventStore({ name: "Tasks", multitenant: false }, new InMemoryStorageFactory()),
-      [createEventDispatcher([ProjectionStateSchema], () => undefined)],
+      [createEventDispatcher([ReviewTaskAssignedSchema], () => undefined)],
     );
     const errors: string[] = [];
     eventBusAccess.installLogger(bus, {
       withMetadata: () => ({ error: (message: string) => errors.push(message) }),
     } as unknown as ILogLayer);
     let reject!: (reason: unknown) => void;
-    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ReviewTaskAssignedSchema), {
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       onEvent: () =>
         new Promise<void>((_resolve, rejected) => {
@@ -940,7 +884,7 @@ describe("EventBus", () => {
         }),
     });
 
-    await bus.post(createProjectionEvent("event-deferred"));
+    await bus.post(createReviewTaskAssigned("event-deferred"));
     await bus.close();
     reject(new Error("late failure"));
     await delay(0);
@@ -954,11 +898,11 @@ describe("EventBus", () => {
     );
     const observed: string[] = [];
     const bus = new EventBus(store, [
-      createEventDispatcher([ProjectionStateSchema], (event) => {
+      createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
         observed.push(`dispatch:${event.id?.value ?? "missing"}`);
       }),
     ]);
-    const subscription = eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+    const subscription = eventBusAccess.subscribe(bus, TypeUrls.derive(ReviewTaskAssignedSchema), {
       onEvent: (event) => {
         observed.push(`event:${event.id?.value ?? "missing"}`);
       },
@@ -980,7 +924,7 @@ describe("EventBus", () => {
     const closing = bus.close();
 
     expect(() =>
-      eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+      eventBusAccess.subscribe(bus, TypeUrls.derive(ReviewTaskAssignedSchema), {
         onEvent: () => undefined,
       }),
     ).toThrow(/closed/i);
@@ -988,7 +932,7 @@ describe("EventBus", () => {
     await closing;
 
     expect(() =>
-      eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+      eventBusAccess.subscribe(bus, TypeUrls.derive(ReviewTaskAssignedSchema), {
         onEvent: () => undefined,
       }),
     ).toThrow(/closed/i);
@@ -998,7 +942,7 @@ describe("EventBus", () => {
     const notBus = {} as EventBus;
 
     expect(() =>
-      eventBusAccess.subscribe(notBus, TypeUrls.derive(ProjectionStateSchema), {
+      eventBusAccess.subscribe(notBus, TypeUrls.derive(ReviewTaskAssignedSchema), {
         onEvent: () => undefined,
       }),
     ).toThrow("Event subscription requires an EventBus instance.");
@@ -1006,7 +950,7 @@ describe("EventBus", () => {
       "Event schema listing requires an EventBus instance.",
     );
     expect(() => {
-      eventBusAccess.registerSchemas(notBus, [ProjectionStateSchema]);
+      eventBusAccess.registerSchemas(notBus, [ReviewTaskAssignedSchema]);
     }).toThrow("Event schema registration requires an EventBus instance.");
   });
 
@@ -1031,7 +975,7 @@ describe("EventBus", () => {
     const observed: string[] = [];
     const bus = new EventBus(store, [
       {
-        messageSchemas: () => [ProjectionStateSchema],
+        messageSchemas: () => [ReviewTaskAssignedSchema],
         accept: (event) => {
           observed.push(`accept:${event.id?.value ?? "missing"}`);
           return Promise.resolve();
@@ -1042,7 +986,7 @@ describe("EventBus", () => {
         },
       },
     ]);
-    const event = createProjectionEvent("event-stored-accepted");
+    const event = createReviewTaskAssigned("event-stored-accepted");
 
     await store.append(event);
     await eventBusAccess.postStored(bus, event);
@@ -1059,7 +1003,7 @@ describe("EventBus", () => {
     const observed: string[] = [];
     const bus = new EventBus(store, [
       {
-        messageSchemas: () => [ProjectionStateSchema],
+        messageSchemas: () => [ReviewTaskAssignedSchema],
         accept: (event) => {
           observed.push(`accept:${event.id?.value ?? "missing"}`);
           return Promise.reject(new Error("stored accept failed"));
@@ -1070,7 +1014,7 @@ describe("EventBus", () => {
         },
       },
     ]);
-    const event = createProjectionEvent("event-stored-accept-failure");
+    const event = createReviewTaskAssigned("event-stored-accept-failure");
 
     await store.append(event);
     await expect(eventBusAccess.postStored(bus, event)).rejects.toThrow("stored accept failed");
@@ -1109,15 +1053,15 @@ describe("EventBus", () => {
       releaseDispatcher = resolve;
     });
     const context: { bus?: EventBus; resolveDispatchStarted?: () => void } = {};
-    const dispatcher = createEventDispatcher([ProjectionStateSchema], async (event) => {
+    const dispatcher = createEventDispatcher([ReviewTaskAssignedSchema], async (event) => {
       observed.push(`dispatch:${event.id?.value ?? "missing"}`);
       context.resolveDispatchStarted?.();
       await dispatcherCanFinish;
       if (event.id?.value === "event-close-source" && context.bus !== undefined) {
-        await store.append(createProjectionEvent("event-close-follow-up"));
+        await store.append(createReviewTaskAssigned("event-close-follow-up"));
         void eventBusAccess.postStoredFollowUp(
           context.bus,
-          createProjectionEvent("event-close-follow-up"),
+          createReviewTaskAssigned("event-close-follow-up"),
         );
       }
     });
@@ -1127,7 +1071,7 @@ describe("EventBus", () => {
       context.resolveDispatchStarted = resolve;
     });
 
-    const post = bus.post(createProjectionEvent("event-close-source"));
+    const post = bus.post(createReviewTaskAssigned("event-close-source"));
     await activeDispatchStarted;
 
     const close = bus.close().then(() => "closed");
@@ -1148,7 +1092,7 @@ describe("EventBus", () => {
     );
     const observed: string[] = [];
     const bus = new EventBus(store, [
-      createEventDispatcher([ProjectionStateSchema], async (event) => {
+      createEventDispatcher([ReviewTaskAssignedSchema], async (event) => {
         const stored = await store.read();
         observed.push(`dispatch:${event.id?.value ?? "missing"}`);
         observed.push(`stored:${stored.map((entry) => entry.id?.value ?? "missing").join(",")}`);
@@ -1156,7 +1100,7 @@ describe("EventBus", () => {
     ]);
 
     await eventBusAccess.runExclusive(bus, () => {
-      void eventBusAccess.postFollowUp(bus, createProjectionEvent("event-follow-up-fresh"));
+      void eventBusAccess.postFollowUp(bus, createReviewTaskAssigned("event-follow-up-fresh"));
       observed.push("after-schedule");
     });
 
@@ -1179,7 +1123,7 @@ describe("EventBus", () => {
     await bus.close();
 
     await expect(
-      eventBusAccess.postFollowUp(bus, createProjectionEvent("event-follow-up-after-close")),
+      eventBusAccess.postFollowUp(bus, createReviewTaskAssigned("event-follow-up-after-close")),
     ).rejects.toThrow(/closed/);
   });
 
@@ -1193,18 +1137,21 @@ describe("EventBus", () => {
     await bus.close();
     await bus.close();
 
-    await expect(bus.post(createProjectionEvent("event-after-close"))).rejects.toThrow(/closed/);
+    await expect(bus.post(createReviewTaskAssigned("event-after-close"))).rejects.toThrow(/closed/);
     await expect(
-      eventBusAccess.postStored(bus, createProjectionEvent("event-stored-after-close")),
+      eventBusAccess.postStored(bus, createReviewTaskAssigned("event-stored-after-close")),
     ).rejects.toThrow(/closed/);
     await expect(
-      eventBusAccess.postStoredFollowUp(bus, createProjectionEvent("event-follow-up-after-close")),
+      eventBusAccess.postStoredFollowUp(
+        bus,
+        createReviewTaskAssigned("event-follow-up-after-close"),
+      ),
     ).rejects.toThrow(/closed/);
   });
 
   it("rejects stored-event dispatch for non-event-bus values", () => {
     expect(() =>
-      eventBusAccess.postStored({} as EventBus, createProjectionEvent("event-wrong-bus")),
+      eventBusAccess.postStored({} as EventBus, createReviewTaskAssigned("event-wrong-bus")),
     ).toThrow(/EventBus instance/);
   });
 
@@ -1218,10 +1165,10 @@ describe("EventBus", () => {
     const bus = {} as EventBus;
 
     expect(() =>
-      eventBusAccess.postFollowUp(bus, createProjectionEvent("event-follow-up-post")),
+      eventBusAccess.postFollowUp(bus, createReviewTaskAssigned("event-follow-up-post")),
     ).toThrow(/EventBus instance/);
     expect(() =>
-      eventBusAccess.postStoredFollowUp(bus, createProjectionEvent("event-follow-up")),
+      eventBusAccess.postStoredFollowUp(bus, createReviewTaskAssigned("event-follow-up")),
     ).toThrow(/EventBus instance/);
     expect(() => {
       eventBusAccess.beginClose(bus);
@@ -1238,9 +1185,9 @@ describe("EventBus", () => {
     );
     const observed: string[] = [];
     const context: { bus?: EventBus } = {};
-    const dispatcher = createEventDispatcher([ProjectionStateSchema], async (event) => {
+    const dispatcher = createEventDispatcher([ReviewTaskAssignedSchema], async (event) => {
       observed.push(`outer:${event.id?.value ?? "missing"}`);
-      await expect(context.bus?.post(createProjectionEvent("event-nested"))).rejects.toThrow(
+      await expect(context.bus?.post(createReviewTaskAssigned("event-nested"))).rejects.toThrow(
         "Cannot enqueue runtime work from an active runtime work item.",
       );
       observed.push("after-rejection");
@@ -1248,7 +1195,7 @@ describe("EventBus", () => {
     const bus = new EventBus(store, [dispatcher]);
     context.bus = bus;
 
-    await bus.post(createProjectionEvent("event-7"));
+    await bus.post(createReviewTaskAssigned("event-7"));
 
     expect(observed).toEqual(["outer:event-7", "after-rejection"]);
   });
@@ -1256,7 +1203,7 @@ describe("EventBus", () => {
 
 function createEventDispatcher(
   schemas: readonly GenMessage<Message>[],
-  onDispatch: (event: ReturnType<typeof createProjectionEvent>) => void | Promise<void>,
+  onDispatch: (event: ReturnType<typeof createReviewTaskAssigned>) => void | Promise<void>,
 ): EventDispatcher {
   return {
     messageSchemas: () => schemas,
@@ -1264,32 +1211,32 @@ function createEventDispatcher(
   };
 }
 
-function createProjectionEvent(id: string) {
-  return SignalEnvelopes.event({
+function createReviewTaskAssigned(id: string) {
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
       version: create(VersionSchema, { number: 1 }),
     }),
-    schema: ProjectionStateSchema,
-    message: create(ProjectionStateSchema, {
-      id: "task-1",
-      name: "Task",
-      priority: 1,
-    }),
+    message: AnyMessages.pack(
+      ReviewTaskAssignedSchema,
+      create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
+    ),
   });
 }
 
 function createValidatedEvent(id: string, name: string) {
-  return SignalEnvelopes.event({
+  return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
       version: create(VersionSchema, { number: 1 }),
     }),
-    schema: ValidatedTaskEventSchema,
-    message: create(ValidatedTaskEventSchema, { id: "task-1", name }),
-    validate: false,
+    message: AnyMessages.pack(
+      ReviewFollowUpScheduledSchema,
+      create(ReviewFollowUpScheduledSchema, { id: "task-1", name }),
+      { validate: false },
+    ),
   });
 }
 

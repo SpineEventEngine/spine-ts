@@ -198,7 +198,6 @@ export {
   type CommandContextInput,
   FixedClock,
   type EventContextInput,
-  SignalIds,
   SignalMetadata,
   type SignalMetadataOptions,
   SystemClock,
@@ -271,7 +270,9 @@ export {
   type HandlerMethodValue,
   React,
   Subscribe,
+  Throws,
   Where,
+  type RejectionDeclaration,
   type WhereOptions,
   materializeDecoratedEntityHandlers,
 } from "./handler/handler-decorators.js";

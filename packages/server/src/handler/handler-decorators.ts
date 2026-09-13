@@ -75,7 +75,56 @@ export type HandlerMethodValue<
   Return = unknown,
 > = (this: This, ...parameters: Parameters) => Return;
 
+/**
+ * Generated companion declaration for a rejection that a command receptor may throw.
+ */
+export interface RejectionDeclaration {
+  // prettier-ignore
+
+  /**
+   * Generated Protobuf schema of the declared rejection.
+   */
+  readonly schema: DescriptorMessageSchema;
+}
+
 const handlerDecoratorMetadataKey = Symbol("@spine-event-engine/server.handlerDecorators");
+
+/**
+ * Records the generated domain rejections a command-accepting handler may throw.
+ *
+ * @param declarations Generated rejection companions.
+ * @returns A method decorator that records the declared rejection schemas.
+ */
+export function Throws(...declarations: readonly RejectionDeclaration[]): HandlerMethodDecorator {
+  if (declarations.length === 0) {
+    throw new TypeError("@Throws requires at least one generated rejection declaration.");
+  }
+  const schemas = declarations.map((declaration) => {
+    const value: unknown = declaration;
+    const schema =
+      value !== null && typeof value === "object"
+        ? (value as { readonly schema?: unknown }).schema
+        : undefined;
+    if (
+      schema === null ||
+      typeof schema !== "object" ||
+      typeof (schema as { readonly typeName?: unknown }).typeName !== "string"
+    ) {
+      throw new TypeError("@Throws accepts only generated rejection declarations.");
+    }
+    return schema as DescriptorMessageSchema;
+  });
+  const typeNames = schemas.map((schema) => schema.typeName);
+  if (new Set(typeNames).size !== typeNames.length) {
+    throw new TypeError("@Throws cannot declare the same rejection more than once.");
+  }
+  return <This extends object, Parameters extends readonly unknown[], Return>(
+    _value: HandlerMethodValue<This, Parameters, Return>,
+    context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
+  ): void => {
+    DecoratorMetadata.methodName(context);
+  };
+}
 
 /**
  * Creates a command-assignee declaration.

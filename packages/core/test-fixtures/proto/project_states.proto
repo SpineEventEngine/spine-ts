@@ -1,0 +1,96 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine_ts.client.test;
+
+import "google/protobuf/timestamp.proto";
+import "spine/options.proto";
+
+enum ProjectStatus {
+  FIXTURE_STATUS_UNSPECIFIED = 0;
+  OPEN = 1;
+  CLOSED = 2;
+}
+
+message ProjectLead {
+  string value = 1;
+}
+
+message ProjectOverviewState {
+  option (entity).kind = PROJECTION;
+
+  string id = 1;
+  string title = 2 [(column) = true];
+  int32 priority = 3 [(column) = true];
+  ProjectStatus status = 4 [(column) = true];
+  google.protobuf.Timestamp due_at = 5 [(column) = true];
+  ProjectLead owner = 6 [(column) = true];
+  bytes fingerprint = 7 [(column) = true];
+  bool active = 8 [(column) = true];
+  int64 sequence = 9 [(column) = true];
+  string note = 10;
+}
+
+message ProjectOverviewWithTagsState {
+  option (entity).kind = PROJECTION;
+
+  string id = 1;
+  repeated string tags = 2 [(column) = true];
+}
+
+message ProjectOverviewWithLabelCatalogState {
+  option (entity).kind = PROJECTION;
+
+  string id = 1;
+  map<string, string> labels = 2 [(column) = true];
+}
+
+message ProjectOverviewWithDisplayLabelState {
+  option (entity).kind = PROJECTION;
+
+  string id = 1;
+
+  oneof choice {
+    string label = 2 [(column) = true];
+  }
+}
+
+message ProjectState {
+  option (entity).kind = AGGREGATE;
+
+  string id = 1;
+  string title = 2 [(column) = true];
+}
+
+message ProjectWorkflowState {
+  option (entity).kind = PROCESS_MANAGER;
+
+  string id = 1;
+  string title = 2 [(column) = true];
+}
+
+message ProjectOverviewWithMetricsState {
+  option (entity).kind = PROJECTION;
+
+  string id = 1;
+  double double_value = 2 [(column) = true];
+  float float_value = 3 [(column) = true];
+  uint64 uint64_value = 4 [(column) = true];
+  fixed64 fixed64_value = 5 [(column) = true];
+  uint32 uint32_value = 6 [(column) = true];
+  fixed32 fixed32_value = 7 [(column) = true];
+  sfixed64 sfixed64_value = 8 [(column) = true];
+  sint64 sint64_value = 9 [(column) = true];
+}

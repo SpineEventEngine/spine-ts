@@ -35,6 +35,7 @@ import {
 } from "../../src/index.js";
 import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
 import { InboxRecords } from "../../src/delivery/inbox-records.js";
+import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("DeliveryMonitor delivery", () => {
@@ -81,6 +82,7 @@ describe("DeliveryMonitor delivery", () => {
           acknowledgements += 1;
           return value;
         },
+        removeDuplicate: async () => true,
       })
       .withWorkRegistry(registry(shard))
       .build()
@@ -140,6 +142,44 @@ describe("DeliveryMonitor delivery", () => {
         .withWorkRegistry(workRegistry)
         .build(),
     ).not.toThrow();
+  });
+
+  it("keeps Inbox and shard storage on the original tenant after public context mutation", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const original = {
+      name: "TenantIsolation",
+      multitenant: true as const,
+      tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
+    };
+    const delivery = new CoreDelivery({
+      context: {
+        ...original,
+        tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
+      },
+      storageFactory,
+    });
+    if (delivery.context.multitenant && delivery.context.tenantId.kind.case === "value")
+      delivery.context.tenantId.kind.value = "tenant-b";
+    const written = await delivery.inbox.receive(
+      createMessage("tenant-message", "tenant-signal", 1n),
+    );
+    const originalInbox = new InboxStorage({ context: original, storageFactory });
+
+    await expect(originalInbox.readMessage(written.message.id)).resolves.toMatchObject({
+      signalId: "tenant-signal",
+    });
+    const current = await delivery.shards.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, { nodeId: { value: "tenant" }, value: "worker" }),
+    );
+    expect(current).toBeDefined();
+    const originalShards = new ShardedWorkRegistry({ context: original, storageFactory });
+    await expect(
+      originalShards.pickUp(
+        ShardIndex.single(),
+        create(WorkerIdSchema, { nodeId: { value: "tenant" }, value: "replacement" }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it("rejects conflicting direct worker and node identities", () => {
@@ -256,6 +296,7 @@ describe("DeliveryMonitor delivery", () => {
       read: async () => [],
       readMessage: async () => undefined,
       markDelivered: async () => undefined,
+      removeDuplicate: async () => true,
     };
     const skipped = await build()
       .withInbox(inbox)
@@ -302,6 +343,7 @@ describe("DeliveryMonitor delivery", () => {
           read: async () => (reads++ === 0 ? [message("pending", "target", shard)] : []),
           readMessage: async () => undefined,
           markDelivered: async (value) => value,
+          removeDuplicate: async () => true,
         })
         .withWorkRegistry(registry(shard))
         .build()
@@ -324,6 +366,7 @@ describe("DeliveryMonitor delivery", () => {
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
         markDelivered: async (value) => (acknowledgements++ === 0 ? undefined : value),
+        removeDuplicate: async () => true,
       })
       .withWorkRegistry(registry(shard))
       .build()
@@ -346,6 +389,7 @@ describe("DeliveryMonitor delivery", () => {
         read: async () => [pending],
         readMessage: async () => undefined,
         markDelivered: async (value) => value,
+        removeDuplicate: async () => true,
       },
       workRegistry: registry(shard),
     });
@@ -421,6 +465,7 @@ describe("DeliveryMonitor delivery", () => {
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
         markDelivered: async (value) => value,
+        removeDuplicate: async () => true,
       },
       workRegistry: {
         sessionKind: "EXCLUSIVE",
@@ -457,6 +502,7 @@ describe("DeliveryMonitor delivery", () => {
           if (value.signalId === "first") throw new Error("acknowledgement failed");
           return value;
         },
+        removeDuplicate: async () => true,
       })
       .withWorkRegistry(registry(shard))
       .build()
@@ -487,6 +533,7 @@ describe("DeliveryMonitor delivery", () => {
         markDelivered: async () => {
           throw new Error("mark failed");
         },
+        removeDuplicate: async () => true,
       })
       .withWorkRegistry(registry(shard))
       .build()
@@ -512,6 +559,7 @@ describe("DeliveryMonitor delivery", () => {
         markDelivered: async () => {
           throw new Error("must not acknowledge");
         },
+        removeDuplicate: async () => true,
       })
       .withWorkRegistry({ ...registry(shard), validateOwnership: async () => undefined })
       .build()
@@ -535,6 +583,7 @@ describe("DeliveryMonitor delivery", () => {
           read: async () => [],
           readMessage: async () => undefined,
           markDelivered: async () => undefined,
+          removeDuplicate: async () => true,
         })
         .withWorkRegistry(registry(shard))
         .build(),

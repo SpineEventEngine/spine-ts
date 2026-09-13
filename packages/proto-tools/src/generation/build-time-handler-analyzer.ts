@@ -157,27 +157,56 @@ export interface BuildHandlerRecord {
   /**
    * Generated schema accepted by the first handler parameter.
    */
-  readonly signalSchema: SchemaReference;
+  readonly input: BuildHandlerInput;
 
   /**
-   * Generated schemas emitted by the handler return type.
+   * Generated schemas returned normally or declared as thrown rejections.
    */
-  readonly emittedSchemas: readonly SchemaReference[];
+  readonly outcomes: BuildHandlerOutcomes;
 
   /**
    * Public method arity: `handler(signal)` or `handler(signal, context)`.
    */
   readonly parameterCount: GeneratedHandlerParameterCount;
+}
+
+/**
+ * Input metadata for one generated handler.
+ */
+export interface BuildHandlerInput {
+  // prettier-ignore
 
   /**
-   * Origin declared on the first receptor parameter.
+   * Generated schema accepted by the handler.
+   */
+  readonly schema: SchemaReference;
+
+  /**
+   * Origin required for an Event input.
    */
   readonly origin: "domestic" | "external";
 
   /**
-   * Optional statically declared Event field filter.
+   * Optional generated Event field filter.
    */
   readonly where?: BuildWhereOptions;
+}
+
+/**
+ * Normal and declared rejection outcomes for one generated handler.
+ */
+export interface BuildHandlerOutcomes {
+  // prettier-ignore
+
+  /**
+   * Generated schemas returned normally by the handler.
+   */
+  readonly returned: readonly SchemaReference[];
+
+  /**
+   * Generated rejection schemas that the handler may throw.
+   */
+  readonly thrown: readonly SchemaReference[];
 }
 
 /**
@@ -197,6 +226,16 @@ export interface BuildWhereOptions {
   readonly equals: string;
 }
 
+interface AnalyzedMethodInput {
+  readonly node: ts.MethodDeclaration;
+  readonly handler: HandlerDecoratorUse;
+  readonly whereUses: readonly DecoratorUse[];
+  readonly throwsUses: readonly DecoratorUse[];
+  readonly className: string;
+  readonly scope: AnalyzerScope;
+  readonly method: string | undefined;
+}
+
 /**
  * Stable diagnostic codes emitted by build-time handler analysis.
  */
@@ -212,6 +251,7 @@ export type BuildHandlerDiagnosticCode =
   | "INVALID_EXTERNAL_ORIGIN"
   | "EXTERNAL_COMMAND_RECEIVER"
   | "INVALID_SUBSCRIBE_RETURN"
+  | "INVALID_THROWS"
   | "INVALID_WHERE"
   | "MISSING_EMITTED_SCHEMAS"
   | "MISSING_ENTITY_STATE_SCHEMA"
@@ -220,6 +260,7 @@ export type BuildHandlerDiagnosticCode =
   | "NON_EXPORTED_RECEIVER_CLASS"
   | "SCHEMA_BEARING_DECORATOR"
   | "TYPESCRIPT_SYNTAX_ERROR"
+  | "UNSUPPORTED_ASSIGN_HANDLER"
   | "UNSUPPORTED_COMMAND_HANDLER"
   | "UNSUPPORTED_RETURN_TYPE";
 
@@ -334,9 +375,23 @@ interface AnalyzerScope {
   readonly diagnostics: BuildHandlerDiagnostic[];
 }
 
+type ReceiverLineage =
+  | {
+      readonly receiverKind: "entity";
+      readonly base: string;
+      readonly stateSchema: SchemaReference | undefined;
+    }
+  | {
+      readonly receiverKind: "standalone";
+      readonly base: string;
+      readonly stateSchema: undefined;
+    };
+
 interface ImportState {
   readonly generatedNamespaces: ReadonlyMap<string, GeneratedNamespace>;
   readonly generatedSymbols: ReadonlyMap<string, GeneratedSymbol>;
+  readonly rejectionNamespaces: ReadonlyMap<string, RejectionNamespace>;
+  readonly rejectionSymbols: ReadonlyMap<string, SchemaReference>;
   readonly localTypeAliases: ReadonlyMap<string, ts.TypeNode>;
   readonly serverNamespaces: ReadonlySet<string>;
   readonly serverSymbols: ReadonlyMap<string, string>;
@@ -348,6 +403,8 @@ interface ImportState {
 interface MutableImportState {
   readonly generatedNamespaces: Map<string, GeneratedNamespace>;
   readonly generatedSymbols: Map<string, GeneratedSymbol>;
+  readonly rejectionNamespaces: Map<string, RejectionNamespace>;
+  readonly rejectionSymbols: Map<string, SchemaReference>;
   readonly localTypeAliases: Map<string, ts.TypeNode>;
   readonly serverNamespaces: Set<string>;
   readonly serverSymbols: Map<string, string>;
@@ -357,6 +414,11 @@ interface MutableImportState {
 }
 
 interface GeneratedNamespace {
+  readonly exports: GeneratedExports;
+  readonly moduleSpecifier: string;
+}
+
+interface RejectionNamespace {
   readonly exports: GeneratedExports;
   readonly moduleSpecifier: string;
 }
@@ -401,7 +463,7 @@ interface TypeWalk {
 }
 
 type HandlerDecorator = "Assign" | "Command" | "React" | "Subscribe";
-type ServerDecorator = HandlerDecorator | "Apply" | "Where";
+type ServerDecorator = HandlerDecorator | "Apply" | "Where" | "Throws";
 type SignalKind = "command" | "event" | "rejection" | "state";
 
 interface DecoratorUse {
@@ -467,36 +529,45 @@ const HandlerSources = Object.freeze({
       );
       return undefined;
     }
-
     const lineage = HandlerSources.receiverLineage(node, scope);
-    const entityBase = lineage?.base;
-    const stateSchema = lineage?.stateSchema;
-    const handlers: BuildHandlerRecord[] = [];
-
-    for (const member of node.members) {
-      if (!ts.isMethodDeclaration(member)) {
-        continue;
-      }
-
-      const handler = HandlerSources.analyzeMethod(
-        member,
-        className,
-        entityBase,
-        stateSchema,
-        lineage?.receiverKind,
-        scope,
-      );
-      if (handler !== undefined) {
-        handlers.push(handler);
-      }
-    }
-
+    const handlers = HandlerSources.analyzeMethods(node, className, lineage, scope);
     if (lineage === undefined || handlers.length === 0) {
       return undefined;
     }
+    return HandlerSources.receiverRecord(node, className, lineage, handlers, scope.source.fileName);
+  },
 
+  analyzeMethods(
+    node: ts.ClassDeclaration,
+    className: string,
+    lineage: ReceiverLineage | undefined,
+    scope: AnalyzerScope,
+  ): readonly BuildHandlerRecord[] {
+    const handlers: BuildHandlerRecord[] = [];
+    for (const member of node.members) {
+      if (!ts.isMethodDeclaration(member)) continue;
+      const handler = HandlerSources.analyzeMethod(
+        member,
+        className,
+        lineage?.base,
+        lineage?.stateSchema,
+        lineage?.receiverKind,
+        scope,
+      );
+      if (handler !== undefined) handlers.push(handler);
+    }
+    return handlers;
+  },
+
+  receiverRecord(
+    node: ts.ClassDeclaration,
+    className: string,
+    lineage: ReceiverLineage,
+    handlers: readonly BuildHandlerRecord[],
+    sourceFile: string,
+  ): BuildReceiverHandlers | undefined {
     return lineage.receiverKind === "entity"
-      ? stateSchema === undefined
+      ? lineage.stateSchema === undefined
         ? undefined
         : {
             receiverKind: "entity",
@@ -504,8 +575,8 @@ const HandlerSources = Object.freeze({
             ...(HandlerTypes.hasModifier(node, ts.SyntaxKind.DefaultKeyword)
               ? { defaultExport: true }
               : {}),
-            sourceFile: scope.source.fileName,
-            stateSchema,
+            sourceFile,
+            stateSchema: lineage.stateSchema,
             handlers,
           }
       : {
@@ -514,7 +585,7 @@ const HandlerSources = Object.freeze({
           ...(HandlerTypes.hasModifier(node, ts.SyntaxKind.DefaultKeyword)
             ? { defaultExport: true }
             : {}),
-          sourceFile: scope.source.fileName,
+          sourceFile,
           handlers,
         };
   },
@@ -531,118 +602,403 @@ const HandlerSources = Object.freeze({
     const apply = decorators.find((decorator) => decorator.name === "Apply");
     const handler = decorators.find(HandlerSources.isHandlerUse);
     const whereUses = decorators.filter((decorator) => decorator.name === "Where");
+    const throwsUses = decorators.filter((decorator) => decorator.name === "Throws");
+    const method = HandlerTypes.methodName(node);
+    const use = {
+      node,
+      apply,
+      handler,
+      whereUses,
+      throwsUses,
+      className,
+      entityBase,
+      stateSchema,
+      receiverKind,
+      scope,
+      method,
+    };
+    if (!HandlerSources.validMethodUse(use)) return undefined;
+    return HandlerSources.analyzeValidMethod(use);
+  },
 
-    if (apply !== undefined) {
-      HandlerTypes.pushDiagnostic(
+  analyzeValidMethod(input: AnalyzedMethodInput): BuildHandlerRecord | undefined {
+    const { className, handler, method, node, scope } = input;
+    const parameters = node.parameters;
+    const origin = HandlerSources.externalOrigin(parameters, scope, className, method);
+    if (origin === undefined) return undefined;
+    const schemas = HandlerSources.methodSchemaUses(node, handler, origin.type, scope);
+    if (schemas === undefined || method === undefined) return undefined;
+    const { signal, returnedSchemas } = schemas;
+    if (!HandlerSources.validContextParameter(parameters, signal.kind, scope, className, method))
+      return undefined;
+    const declarations = HandlerSources.methodDeclarations(input, signal.kind, method);
+    if (declarations === undefined) return undefined;
+    return HandlerSources.buildHandlerRecord(
+      node,
+      handler,
+      signal,
+      method,
+      returnedSchemas,
+      declarations.thrown,
+      origin.value,
+      declarations.where,
+    );
+  },
+
+  methodDeclarations(
+    input: AnalyzedMethodInput,
+    signalKind: SignalKind | undefined,
+    methodName: string,
+  ):
+    | { readonly where: BuildWhereOptions | undefined; readonly thrown: readonly SchemaReference[] }
+    | undefined {
+    const { className, handler, scope, throwsUses, whereUses } = input;
+    const where = HandlerSources.whereDeclaration(
+      whereUses,
+      handler,
+      signalKind,
+      scope,
+      className,
+      methodName,
+    );
+    if (whereUses.length > 0 && where === undefined) return undefined;
+    const thrown = HandlerSources.throwsDeclaration(
+      throwsUses,
+      handler,
+      signalKind,
+      scope,
+      className,
+      methodName,
+    );
+    return throwsUses.length > 0 && thrown === undefined
+      ? undefined
+      : { where, thrown: thrown ?? [] };
+  },
+
+  methodSchemaUses(
+    node: ts.MethodDeclaration,
+    handler: HandlerDecoratorUse,
+    signalType: ts.TypeNode,
+    scope: AnalyzerScope,
+  ):
+    | { readonly signal: SchemaUse; readonly returnedSchemas: readonly SchemaReference[] }
+    | undefined {
+    const signal = HandlerSources.schemaUseFromType(signalType, scope.imports);
+    const returned = HandlerSources.emittedSchemaUses(
+      node.type === undefined ? undefined : HandlerSources.unwrapOuterPromise(node.type, scope),
+      handler.name,
+      scope.imports,
+    );
+    return signal === undefined || returned === undefined
+      ? undefined
+      : { signal, returnedSchemas: returned.map((schema) => schema.reference) };
+  },
+
+  buildHandlerRecord(
+    node: ts.MethodDeclaration,
+    handler: HandlerDecoratorUse,
+    signal: SchemaUse,
+    method: string,
+    returnedSchemas: readonly SchemaReference[],
+    thrownSchemas: readonly SchemaReference[],
+    origin: "domestic" | "external",
+    where: BuildWhereOptions | undefined,
+  ): BuildHandlerRecord {
+    return {
+      kind: HandlerSources.handlerKind(handler.name, signal.kind),
+      methodName: method,
+      input: { schema: signal.reference, origin, ...(where === undefined ? {} : { where }) },
+      outcomes: { returned: returnedSchemas, thrown: thrownSchemas },
+      parameterCount: node.parameters.length as GeneratedHandlerParameterCount,
+    };
+  },
+
+  validMethodUse(input: {
+    readonly node: ts.MethodDeclaration;
+    readonly apply: DecoratorUse | undefined;
+    readonly handler: HandlerDecoratorUse | undefined;
+    readonly whereUses: readonly DecoratorUse[];
+    readonly throwsUses: readonly DecoratorUse[];
+    readonly className: string;
+    readonly entityBase: string | undefined;
+    readonly stateSchema: SchemaReference | undefined;
+    readonly receiverKind: "entity" | "standalone" | undefined;
+    readonly scope: AnalyzerScope;
+    readonly method: string | undefined;
+  }): input is typeof input & { readonly handler: HandlerDecoratorUse } {
+    HandlerSources.reportUnsupportedApply(input);
+    if (input.handler === undefined) return HandlerSources.reportMissingHandler(input);
+    const { className, handler, method, node, scope } = input;
+    if (!HandlerSources.validHandlerKind({ ...input, handler })) return false;
+    if (!HandlerSources.validBareHandlerDecorator(handler, scope, className, method)) return false;
+    return !HandlerSources.validateHandlerNode(
+      node,
+      handler.name,
+      input.receiverKind === "entity" ? input.stateSchema : undefined,
+      input.receiverKind !== "standalone",
+      scope,
+      className,
+      method,
+    );
+  },
+
+  throwsDeclaration(
+    uses: readonly DecoratorUse[],
+    handler: HandlerDecoratorUse,
+    signalKind: SignalKind | undefined,
+    scope: AnalyzerScope,
+    className: string,
+    methodName: string,
+  ): readonly SchemaReference[] | undefined {
+    if (uses.length === 0) return [];
+    const expression = HandlerSources.throwsCall(
+      uses,
+      handler,
+      signalKind,
+      scope,
+      className,
+      methodName,
+    );
+    if (expression === undefined) return undefined;
+    return HandlerSources.thrownSchemas(expression, scope, className, methodName);
+  },
+
+  throwsCall(
+    uses: readonly DecoratorUse[],
+    handler: HandlerDecoratorUse,
+    signalKind: SignalKind | undefined,
+    scope: AnalyzerScope,
+    className: string,
+    methodName: string,
+  ): ts.CallExpression | undefined {
+    const use = uses[0];
+    const commandReceptor =
+      handler.name === "Assign" || (handler.name === "Command" && signalKind === "command");
+    if (uses.length !== 1 || !commandReceptor || use === undefined) {
+      HandlerSources.invalidThrows(
         scope,
-        "APPLY_DECORATOR",
-        apply.node,
-        "Generated registries do not support @Apply.",
+        use?.node ?? handler.node,
+        "@Throws is allowed once on a command-accepting @Assign or @Command handler.",
         className,
-        HandlerTypes.methodName(node),
+        methodName,
       );
-    }
-    if (handler === undefined) {
-      if (whereUses.length > 0) {
-        HandlerTypes.pushDiagnostic(
-          scope,
-          "INVALID_WHERE",
-          whereUses[0]?.node ?? node,
-          "@Where requires an Event-consuming @Subscribe, @React, or @Command handler.",
-          className,
-          HandlerTypes.methodName(node),
-        );
-      }
       return undefined;
     }
+    const expression = use.node.expression;
+    if (ts.isCallExpression(expression) && expression.arguments.length > 0) return expression;
+    HandlerSources.invalidThrows(
+      scope,
+      use.node,
+      "@Throws requires at least one generated rejection companion.",
+      className,
+      methodName,
+    );
+    return undefined;
+  },
 
-    const method = HandlerTypes.methodName(node);
-    if ((entityBase === "Aggregate" || entityBase === "Projection") && handler.name === "Command") {
+  thrownSchemas(
+    expression: ts.CallExpression,
+    scope: AnalyzerScope,
+    className: string,
+    methodName: string,
+  ): readonly SchemaReference[] | undefined {
+    const schemas = expression.arguments.map((argument) =>
+      HandlerSources.rejectionSchemaFromExpression(argument, scope.imports),
+    );
+    if (schemas.some((schema) => schema === undefined)) {
+      HandlerSources.invalidThrows(
+        scope,
+        expression,
+        "@Throws accepts only generated rejection companions.",
+        className,
+        methodName,
+      );
+      return undefined;
+    }
+    const resolved = schemas as readonly SchemaReference[];
+    const keys = resolved.map((schema) => `${schema.moduleSpecifier}\u0000${schema.exportName}`);
+    if (new Set(keys).size !== keys.length) {
+      HandlerSources.invalidThrows(
+        scope,
+        expression,
+        "@Throws cannot declare the same rejection more than once.",
+        className,
+        methodName,
+      );
+      return undefined;
+    }
+    return resolved;
+  },
+
+  invalidThrows(
+    scope: AnalyzerScope,
+    node: ts.Node,
+    message: string,
+    className: string,
+    methodName: string,
+  ): undefined {
+    HandlerTypes.pushDiagnostic(scope, "INVALID_THROWS", node, message, className, methodName);
+    return undefined;
+  },
+
+  rejectionSchemaFromExpression(
+    expression: ts.Expression,
+    imports: ImportState,
+  ): SchemaReference | undefined {
+    const unwrapped = HandlerSources.unwrapExpression(expression);
+    if (ts.isIdentifier(unwrapped)) return imports.rejectionSymbols.get(unwrapped.text);
+    if (!ts.isPropertyAccessExpression(unwrapped) || !ts.isIdentifier(unwrapped.expression)) {
+      return undefined;
+    }
+    const namespace = imports.rejectionNamespaces.get(unwrapped.expression.text);
+    const schemaName = `${unwrapped.name.text}Schema`;
+    return namespace?.exports.schemaRoles.get(schemaName) !== "rejection"
+      ? undefined
+      : { moduleSpecifier: namespace.moduleSpecifier, exportName: schemaName };
+  },
+
+  reportUnsupportedApply(input: {
+    readonly apply: DecoratorUse | undefined;
+    readonly scope: AnalyzerScope;
+    readonly className: string;
+    readonly method: string | undefined;
+  }): void {
+    if (input.apply === undefined) return;
+    HandlerTypes.pushDiagnostic(
+      input.scope,
+      "APPLY_DECORATOR",
+      input.apply.node,
+      "Generated registries do not support @Apply.",
+      input.className,
+      input.method,
+    );
+  },
+
+  reportMissingHandler(input: {
+    readonly whereUses: readonly DecoratorUse[];
+    readonly throwsUses: readonly DecoratorUse[];
+    readonly node: ts.MethodDeclaration;
+    readonly scope: AnalyzerScope;
+    readonly className: string;
+    readonly method: string | undefined;
+  }): false {
+    if (input.whereUses.length > 0)
       HandlerTypes.pushDiagnostic(
+        input.scope,
+        "INVALID_WHERE",
+        input.whereUses[0]?.node ?? input.node,
+        "@Where requires an Event-consuming @Subscribe, @React, or @Command handler.",
+        input.className,
+        input.method,
+      );
+    if (input.throwsUses.length > 0)
+      HandlerTypes.pushDiagnostic(
+        input.scope,
+        "INVALID_THROWS",
+        input.throwsUses[0]?.node ?? input.node,
+        "@Throws requires an @Assign handler.",
+        input.className,
+        input.method,
+      );
+    return false;
+  },
+
+  validBareHandlerDecorator(
+    handler: HandlerDecoratorUse,
+    scope: AnalyzerScope,
+    className: string,
+    method: string | undefined,
+  ): boolean {
+    if (!handler.hasArguments) return true;
+    HandlerTypes.pushDiagnostic(
+      scope,
+      "SCHEMA_BEARING_DECORATOR",
+      handler.node,
+      `@${handler.name}(...) is not supported in analyzed app source.`,
+      className,
+      method,
+    );
+    return false;
+  },
+
+  validHandlerKind(input: {
+    readonly handler: HandlerDecoratorUse;
+    readonly entityBase: string | undefined;
+    readonly receiverKind: "entity" | "standalone" | undefined;
+    readonly scope: AnalyzerScope;
+    readonly className: string;
+    readonly method: string | undefined;
+  }): boolean {
+    return (
+      HandlerSources.validEntityHandlerKind(input) &&
+      HandlerSources.validStandaloneHandlerKind(input)
+    );
+  },
+
+  validEntityHandlerKind(input: {
+    readonly handler: HandlerDecoratorUse;
+    readonly entityBase: string | undefined;
+    readonly scope: AnalyzerScope;
+    readonly className: string;
+    readonly method: string | undefined;
+  }): boolean {
+    const { className, entityBase, handler, method, scope } = input;
+    if (entityBase === "Projection" && handler.name === "Assign")
+      return HandlerSources.unsupported(
+        scope,
+        "UNSUPPORTED_ASSIGN_HANDLER",
+        handler.node,
+        "Projection handlers cannot use @Assign.",
+        className,
+        method,
+      );
+    return (
+      (entityBase !== "Aggregate" && entityBase !== "Projection") ||
+      handler.name !== "Command" ||
+      HandlerSources.unsupported(
         scope,
         "UNSUPPORTED_COMMAND_HANDLER",
         handler.node,
         "Only Process Managers support @Command handlers.",
         className,
         method,
-      );
-      return undefined;
-    }
-    if (
-      receiverKind === "standalone" &&
-      !HandlerSources.allowsStandaloneDecorator(entityBase, handler.name)
-    ) {
-      HandlerTypes.pushDiagnostic(
+      )
+    );
+  },
+
+  validStandaloneHandlerKind(input: {
+    readonly handler: HandlerDecoratorUse;
+    readonly entityBase: string | undefined;
+    readonly receiverKind: "entity" | "standalone" | undefined;
+    readonly scope: AnalyzerScope;
+    readonly className: string;
+    readonly method: string | undefined;
+  }): boolean {
+    const { className, entityBase, handler, method, receiverKind, scope } = input;
+    return (
+      receiverKind !== "standalone" ||
+      HandlerSources.allowsStandaloneDecorator(entityBase, handler.name) ||
+      HandlerSources.unsupported(
         scope,
         "UNSUPPORTED_COMMAND_HANDLER",
         handler.node,
         `@${handler.name} is not legal for standalone ${entityBase ?? "receiver"}.`,
         className,
         method,
-      );
-      return undefined;
-    }
-    const invalid = HandlerSources.validateHandlerNode(
-      node,
-      handler.name,
-      receiverKind === "entity" ? stateSchema : undefined,
-      receiverKind !== "standalone",
-      scope,
-      className,
-      method,
+      )
     );
-    if (handler.hasArguments) {
-      HandlerTypes.pushDiagnostic(
-        scope,
-        "SCHEMA_BEARING_DECORATOR",
-        handler.node,
-        `@${handler.name}(...) is not supported in analyzed app source.`,
-        className,
-        method,
-      );
-      return undefined;
-    }
-    if (invalid) {
-      return undefined;
-    }
+  },
 
-    const origin = HandlerSources.externalOrigin(node.parameters, scope, className, method);
-    if (origin === undefined) return undefined;
-    const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
-    const emittedSchemas = HandlerSources.emittedSchemaUses(
-      node.type === undefined ? undefined : HandlerSources.unwrapOuterPromise(node.type, scope),
-      handler.name,
-      scope.imports,
-    )?.map((schema) => schema.reference);
-    if (signal === undefined || emittedSchemas === undefined || method === undefined) {
-      return undefined;
-    }
-    if (
-      !HandlerSources.validContextParameter(node.parameters, signal.kind, scope, className, method)
-    ) {
-      return undefined;
-    }
-    const where = HandlerSources.whereDeclaration(
-      whereUses,
-      handler,
-      signal.kind,
-      scope,
-      className,
-      method,
-    );
-    if (whereUses.length > 0 && where === undefined) {
-      return undefined;
-    }
-
-    return {
-      kind: HandlerSources.handlerKind(handler.name, signal.kind),
-      methodName: method,
-      signalSchema: signal.reference,
-      emittedSchemas,
-      parameterCount: node.parameters.length as GeneratedHandlerParameterCount,
-      origin: origin.value,
-      ...(where === undefined ? {} : { where }),
-    };
+  unsupported(
+    scope: AnalyzerScope,
+    code: BuildHandlerDiagnosticCode,
+    node: ts.Node,
+    message: string,
+    className: string,
+    method: string | undefined,
+  ): false {
+    HandlerTypes.pushDiagnostic(scope, code, node, message, className, method);
+    return false;
   },
 
   whereDeclaration(
@@ -1769,6 +2125,8 @@ const HandlerSources = Object.freeze({
     const state: MutableImportState = {
       generatedNamespaces: new Map(),
       generatedSymbols: new Map(),
+      rejectionNamespaces: new Map(),
+      rejectionSymbols: new Map(),
       localTypeAliases: new Map(),
       serverNamespaces: new Set(),
       serverSymbols: new Map(),
@@ -1812,15 +2170,8 @@ const HandlerSources = Object.freeze({
     state: MutableImportState,
   ): void {
     const bindings = statement.importClause?.namedBindings;
-    if (bindings === undefined) {
-      return;
-    }
-    if (moduleSpecifier === "@spine-event-engine/server") {
-      HandlerSources.recordServerImport(bindings, state);
-    }
-    if (moduleSpecifier === "@spine-event-engine/proto") {
-      HandlerSources.recordProtoImport(bindings, state);
-    }
+    if (bindings === undefined) return;
+    HandlerSources.recordFrameworkImport(bindings, moduleSpecifier, state);
     if (HandlerSources.isGeneratedModule(moduleSpecifier)) {
       HandlerSources.recordGeneratedImport(
         bindings,
@@ -1831,6 +2182,82 @@ const HandlerSources = Object.freeze({
         state,
       );
     }
+    if (!HandlerSources.isRejectionCompanion(moduleSpecifier)) return;
+    HandlerSources.recordRejectionCompanionImport(
+      bindings,
+      moduleSpecifier,
+      source,
+      program,
+      state,
+    );
+  },
+
+  recordFrameworkImport(
+    bindings: ts.NamedImportBindings,
+    moduleSpecifier: string,
+    state: MutableImportState,
+  ): void {
+    if (moduleSpecifier === "@spine-event-engine/server") {
+      HandlerSources.recordServerImport(bindings, state);
+    }
+    if (moduleSpecifier === "@spine-event-engine/proto") {
+      HandlerSources.recordProtoImport(bindings, state);
+    }
+  },
+
+  recordRejectionCompanionImport(
+    bindings: ts.NamedImportBindings,
+    moduleSpecifier: string,
+    source: ts.SourceFile,
+    program: ts.Program,
+    state: MutableImportState,
+  ): void {
+    const schemaModule = HandlerSources.rejectionSchemaModule(moduleSpecifier);
+    const companion = HandlerSources.generatedModuleSource(source, moduleSpecifier, program);
+    const companionSchemaModule =
+      companion === undefined ? undefined : HandlerSources.rejectionSchemaImport(companion);
+    const exported = HandlerSources.generatedModuleExports(
+      companion ?? source,
+      companionSchemaModule ?? schemaModule,
+      program,
+    );
+    if (exported === undefined) return;
+    if (ts.isNamespaceImport(bindings)) {
+      state.rejectionNamespaces.set(bindings.name.text, {
+        exports: exported,
+        moduleSpecifier: schemaModule,
+      });
+      return;
+    }
+    for (const element of bindings.elements) {
+      if (element.isTypeOnly) continue;
+      const exportName = element.propertyName?.text ?? element.name.text;
+      const schemaName = `${exportName}Schema`;
+      if (exported.schemaRoles.get(schemaName) !== "rejection") continue;
+      state.rejectionSymbols.set(element.name.text, {
+        moduleSpecifier: schemaModule,
+        exportName: schemaName,
+      });
+    }
+  },
+
+  rejectionSchemaImport(source: ts.SourceFile): string | undefined {
+    for (const statement of source.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
+        continue;
+      }
+      const bindings = statement.importClause?.namedBindings;
+      if (
+        bindings !== undefined &&
+        !ts.isNamespaceImport(bindings) &&
+        bindings.elements.some((element) =>
+          (element.propertyName?.text ?? element.name.text).endsWith("Schema"),
+        )
+      ) {
+        return statement.moduleSpecifier.text;
+      }
+    }
+    return undefined;
   },
 
   recordServerImport(bindings: ts.NamedImportBindings, state: MutableImportState): void {
@@ -1899,6 +2326,16 @@ const HandlerSources = Object.freeze({
 
   isGeneratedModule(moduleSpecifier: string): boolean {
     return /(^|\/)generated\/.+_pb(\.js)?$/.test(moduleSpecifier);
+  },
+
+  isRejectionCompanion(moduleSpecifier: string): boolean {
+    return /(^|\/)generated\/(?:.+\/)?(?:[^/]+_)?rejections(\.js)?$/u.test(moduleSpecifier);
+  },
+
+  rejectionSchemaModule(moduleSpecifier: string): string {
+    return moduleSpecifier.endsWith(".js")
+      ? moduleSpecifier.replace(/\.js$/u, "_pb.js")
+      : `${moduleSpecifier}_pb`;
   },
 
   generatedModuleExports(
@@ -2314,7 +2751,8 @@ const HandlerTypes = Object.freeze({
       name === "React" ||
       name === "Subscribe" ||
       name === "Apply" ||
-      name === "Where"
+      name === "Where" ||
+      name === "Throws"
       ? name
       : undefined;
   },

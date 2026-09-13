@@ -1194,6 +1194,14 @@ class AdmissionInbox implements DeliveryInbox {
   ): Promise<InboxMessage | undefined> {
     return this.#delegate.markDelivered(message, options);
   }
+
+  removeDuplicate(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<boolean> {
+    return this.#delegate.removeDuplicate(message, session, options);
+  }
 }
 
 interface AdmissionPause {
@@ -1320,6 +1328,10 @@ class RunnerInbox implements DeliveryInbox {
 
   readMessage(): Promise<undefined> {
     return Promise.resolve(undefined);
+  }
+
+  removeDuplicate(): Promise<boolean> {
+    return Promise.resolve(true);
   }
 
   markDelivered(): Promise<undefined> {

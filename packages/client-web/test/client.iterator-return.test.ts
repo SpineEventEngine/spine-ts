@@ -58,7 +58,6 @@ describe("Client iterator disposal", () => {
     };
     const client = Client.usingTransport({
       transport: {} as Transport,
-      createRequestId: () => "iterator-return",
       close: () => closed++,
     });
     const subscription = await client
@@ -89,7 +88,6 @@ describe("Client iterator disposal", () => {
     };
     const client = Client.usingTransport({
       transport: {} as Transport,
-      createRequestId: () => "ordered",
     });
     const subscription = await client
       .asGuest()
@@ -113,7 +111,7 @@ describe("Client iterator disposal", () => {
       { next: () => new Promise<IteratorResult<unknown>>(() => undefined), return: secondReturn },
     ];
     const client = Client.usingTransport(
-      { transport: {} as Transport, createRequestId: () => "retry-return" },
+      { transport: {} as Transport },
       {
         subscriptions: {
           retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
@@ -162,7 +160,7 @@ describe("Client iterator disposal", () => {
       .mockResolvedValueOnce({ response: { status: { status: { case: "error" } } } });
     const target = create(TargetSchema, { type: "type.example/Entity" });
     const client = Client.usingTransport(
-      { transport: {} as Transport, createRequestId: () => "entity-return" },
+      { transport: {} as Transport },
       {
         subscriptions: {
           retryPolicy: { maxAttempts: 2, maxElapsedMs: 1_000, delayMs: () => 1 },

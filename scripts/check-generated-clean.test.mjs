@@ -224,6 +224,9 @@ describe("check-generated-clean", () => {
     expect(generatedTargetsForCheck().map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
       "packages/server-blackbox-tests/generated",
+      "packages/server/test-fixtures/generated",
+      "packages/core/test-fixtures/generated",
+      "packages/testing/test-fixtures/generated",
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",

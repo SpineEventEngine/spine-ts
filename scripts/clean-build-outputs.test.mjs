@@ -16,6 +16,16 @@ describe("cleanBuildOutputs", () => {
     expect(buildOutputPaths).toEqual(referencedOutputs);
   });
 
+  it("cleans private fixture package outputs required by plain Node consumers", () => {
+    expect(buildOutputPaths).toEqual(
+      expect.arrayContaining([
+        "packages/server/test-fixtures/dist",
+        "packages/core/test-fixtures/dist",
+        "packages/testing/test-fixtures/dist",
+      ]),
+    );
+  });
+
   it("removes the generated output of every root TypeScript project", () => {
     const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
     const removed = [];

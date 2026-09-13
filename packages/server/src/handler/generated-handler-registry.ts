@@ -33,6 +33,8 @@ import {
 } from "./handler-metadata.js";
 import { RejectionSources } from "./rejection-source.js";
 
+type StandaloneRole = "assignee" | "commander" | "reactor" | "subscriber";
+
 interface DescriptorCandidate {
   readonly file?: unknown;
   readonly fields?: unknown;
@@ -359,27 +361,24 @@ export interface GeneratedHandlerRecordInput {
   /**
    * Generated Protobuf-ES schema accepted by the handler method.
    */
-  readonly signalSchema: DescriptorMessageSchema;
+  readonly input: {
+    readonly schema: DescriptorMessageSchema;
+    readonly origin: HandlerOrigin;
+    readonly where?: WhereOptions;
+  };
 
   /**
-   * Generated Protobuf-ES schemas emitted by the handler return type.
+   * Generated Protobuf-ES schemas returned normally or declared as thrown rejections.
    */
-  readonly emittedSchemas: readonly DescriptorMessageSchema[];
+  readonly outcomes: {
+    readonly returned: readonly DescriptorMessageSchema[];
+    readonly thrown: readonly DescriptorMessageSchema[];
+  };
 
   /**
    * Public method arity: `handler(signal)` or `handler(signal, context)`.
    */
   readonly parameterCount: GeneratedHandlerParameterCount;
-
-  /**
-   * Required origin inferred from the receptor's first parameter.
-   */
-  readonly origin: HandlerOrigin;
-
-  /**
-   * Optional generated Event field equality filter.
-   */
-  readonly where?: WhereOptions;
 }
 
 /**
@@ -409,6 +408,15 @@ interface GeneratedRegistryOperations {
   validateReceiver(receiver: unknown): asserts receiver is GeneratedReceiver;
   validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void;
   validateStandalone(receiver: GeneratedStandaloneHandlerGroup): void;
+  standaloneRole(prototype: object): StandaloneRole | undefined;
+  validateStandaloneRole(handler: GeneratedHandlerRecordInput, role: StandaloneRole): void;
+  validateStandaloneOutput(handler: GeneratedHandlerRecordInput, role: StandaloneRole): void;
+  validateStandaloneOrigin(handler: GeneratedHandlerRecordInput, role: StandaloneRole): void;
+  validateRecordShape(handler: GeneratedHandlerRecordInput): void;
+  validateOrigin(handler: GeneratedHandlerRecordInput): void;
+  validateParameterCount(handler: GeneratedHandlerRecordInput): void;
+  validateOutcomeSchemas(handler: GeneratedHandlerRecordInput): void;
+  validateSubscriptionShape(handler: GeneratedHandlerRecordInput): void;
   validateSchema(schema: DescriptorMessageSchema, label: string): void;
   validateEmits(handler: GeneratedHandlerRecordInput): void;
   validateCommandRoles(handler: GeneratedHandlerRecordInput): void;
@@ -508,12 +516,15 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       entity.handlers.map((handler) => ({
         kind: handler.kind,
         methodName: handler.methodName,
-        ...(handler.kind === "event-subscription" || handler.kind === "state-subscription"
-          ? {}
-          : { emittedSchemas: Object.freeze([...handler.emittedSchemas]) }),
+        outcomes: Object.freeze({
+          returned: Object.freeze([...handler.outcomes.returned]),
+          thrown: Object.freeze([...handler.outcomes.thrown]),
+        }),
         parameterCount: handler.parameterCount,
-        origin: handler.origin,
-        ...(handler.where === undefined ? {} : { where: Object.freeze({ ...handler.where }) }),
+        origin: handler.input.origin,
+        ...(handler.input.where === undefined
+          ? {}
+          : { where: Object.freeze({ ...handler.input.where }) }),
       })),
     );
   },
@@ -533,17 +544,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   validateStandalone(receiver: GeneratedStandaloneHandlerGroup): void {
-    const prototype = receiver.receiverType.prototype;
-    const role =
-      prototype instanceof AbstractAssignee
-        ? "assignee"
-        : prototype instanceof AbstractCommander
-          ? "commander"
-          : prototype instanceof AbstractEventReactor
-            ? "reactor"
-            : prototype instanceof AbstractEventSubscriber
-              ? "subscriber"
-              : undefined;
+    const role = GeneratedRegistry.standaloneRole(receiver.receiverType.prototype);
     if (role === undefined) {
       throw new HandlerRegistryIngestionError(
         "UNSUPPORTED_HANDLER_KIND",
@@ -552,41 +553,63 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
     for (const handler of receiver.handlers) {
       GeneratedRegistry.validateHandler(handler);
-      const valid =
-        (role === "assignee" && handler.kind === "command-assignment") ||
-        (role === "commander" &&
-          (handler.kind === "command-substitution" || handler.kind === "command-reaction")) ||
-        (role === "reactor" && handler.kind === "event-reaction") ||
-        (role === "subscriber" &&
-          (handler.kind === "event-subscription" || handler.kind === "state-subscription"));
-      if (!valid) {
-        throw new HandlerRegistryIngestionError(
-          "UNSUPPORTED_HANDLER_KIND",
-          `Generated handler "${handler.methodName}" is not legal for standalone ${role}.`,
-        );
-      }
-      if (role === "assignee" || role === "reactor") {
-        if (
-          handler.emittedSchemas.some(
-            (schema) => !GeneratedRegistry.isLegacyEventSchema(schema) || isEntitySchema(schema),
-          )
-        ) {
-          throw new HandlerRegistryIngestionError(
-            "INVALID_SCHEMA",
-            `Standalone ${role} "${handler.methodName}" must produce Events.`,
-          );
-        }
-      }
-      if (
-        role === "subscriber" &&
-        handler.origin === "external" &&
-        handler.kind === "state-subscription"
-      ) {
-        throw new HandlerRegistryIngestionError(
-          "INVALID_SIGNAL_ORIGIN",
-          `Standalone state subscriber "${handler.methodName}" cannot accept External state.`,
-        );
-      }
+      GeneratedRegistry.validateStandaloneRole(handler, role);
+    }
+  },
+
+  standaloneRole(prototype: object): StandaloneRole | undefined {
+    return prototype instanceof AbstractAssignee
+      ? "assignee"
+      : prototype instanceof AbstractCommander
+        ? "commander"
+        : prototype instanceof AbstractEventReactor
+          ? "reactor"
+          : prototype instanceof AbstractEventSubscriber
+            ? "subscriber"
+            : undefined;
+  },
+
+  validateStandaloneRole(handler: GeneratedHandlerRecordInput, role: StandaloneRole): void {
+    const valid =
+      (role === "assignee" && handler.kind === "command-assignment") ||
+      (role === "commander" &&
+        (handler.kind === "command-substitution" || handler.kind === "command-reaction")) ||
+      (role === "reactor" && handler.kind === "event-reaction") ||
+      (role === "subscriber" &&
+        (handler.kind === "event-subscription" || handler.kind === "state-subscription"));
+    if (!valid) {
+      throw new HandlerRegistryIngestionError(
+        "UNSUPPORTED_HANDLER_KIND",
+        `Generated handler "${handler.methodName}" is not legal for standalone ${role}.`,
+      );
+    }
+    GeneratedRegistry.validateStandaloneOutput(handler, role);
+    GeneratedRegistry.validateStandaloneOrigin(handler, role);
+  },
+
+  validateStandaloneOutput(handler: GeneratedHandlerRecordInput, role: StandaloneRole): void {
+    if (role !== "assignee" && role !== "reactor") return;
+    const invalid = handler.outcomes.returned.some(
+      (schema) => !GeneratedRegistry.isLegacyEventSchema(schema) || isEntitySchema(schema),
+    );
+    if (invalid) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        `Standalone ${role} "${handler.methodName}" must produce Events.`,
+      );
+    }
+  },
+
+  validateStandaloneOrigin(handler: GeneratedHandlerRecordInput, role: StandaloneRole): void {
+    if (
+      role === "subscriber" &&
+      handler.input.origin === "external" &&
+      handler.kind === "state-subscription"
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SIGNAL_ORIGIN",
+        `Standalone state subscriber "${handler.methodName}" cannot accept External state.`,
+      );
     }
   },
 
@@ -594,37 +617,20 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     builder: GeneratedHandlerRegistrationBuilder<Instance>,
     handler: GeneratedHandlerRecordInput,
   ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>> {
+    const methodName = handler.methodName as HandlerMethodName<Instance>;
     switch (handler.kind) {
       case "command-assignment":
-        return builder.assign(
-          handler.signalSchema,
-          handler.methodName as HandlerMethodName<Instance>,
-        );
+        return builder.assign(handler.input.schema, methodName);
       case "command-substitution":
-        return builder.substitute(
-          handler.signalSchema,
-          handler.methodName as HandlerMethodName<Instance>,
-        );
+        return builder.substitute(handler.input.schema, methodName);
       case "command-reaction":
-        return builder.command(
-          handler.signalSchema,
-          handler.methodName as HandlerMethodName<Instance>,
-        );
+        return builder.command(handler.input.schema, methodName);
       case "event-subscription":
-        return builder.subscribe(
-          handler.signalSchema,
-          handler.methodName as HandlerMethodName<Instance>,
-        );
+        return builder.subscribe(handler.input.schema, methodName);
       case "state-subscription":
-        return builder.subscribe(
-          handler.signalSchema,
-          handler.methodName as HandlerMethodName<Instance>,
-        );
+        return builder.subscribe(handler.input.schema, methodName);
       case "event-reaction":
-        return builder.react(
-          handler.signalSchema,
-          handler.methodName as HandlerMethodName<Instance>,
-        );
+        return builder.react(handler.input.schema, methodName);
       default:
         throw new HandlerRegistryIngestionError(
           "UNSUPPORTED_HANDLER_KIND",
@@ -634,6 +640,22 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   validateHandler(handler: GeneratedHandlerRecordInput): void {
+    GeneratedRegistry.validateRecordShape(handler);
+    if (!GeneratedRegistry.isKind(handler.kind)) {
+      throw new HandlerRegistryIngestionError(
+        "UNSUPPORTED_HANDLER_KIND",
+        `Generated handler kind "${String(handler.kind)}" is not supported.`,
+      );
+    }
+    GeneratedRegistry.validateOrigin(handler);
+    GeneratedRegistry.validateParameterCount(handler);
+    GeneratedRegistry.validateOutcomeSchemas(handler);
+    GeneratedRegistry.validateCommandRoles(handler);
+    GeneratedRegistry.validateWhere(handler);
+    GeneratedRegistry.validateSubscriptionShape(handler);
+  },
+
+  validateRecordShape(handler: GeneratedHandlerRecordInput): void {
     const untrustedHandler: unknown = handler;
     if (untrustedHandler === null || typeof untrustedHandler !== "object") {
       throw new HandlerRegistryIngestionError(
@@ -645,23 +667,24 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     if (
       typeof value.kind !== "string" ||
       typeof value.methodName !== "string" ||
-      !Array.isArray(value.emittedSchemas) ||
-      typeof value.parameterCount !== "number" ||
-      typeof value.origin !== "string"
+      value.input === null ||
+      typeof value.input !== "object" ||
+      value.outcomes === null ||
+      typeof value.outcomes !== "object" ||
+      !Array.isArray((value.outcomes as { readonly returned?: unknown }).returned) ||
+      !Array.isArray((value.outcomes as { readonly thrown?: unknown }).thrown) ||
+      typeof value.parameterCount !== "number"
     ) {
       throw new HandlerRegistryIngestionError(
         "INVALID_SCHEMA",
-        "Generated handler has an invalid record shape.",
+        `Generated handler "${typeof value.methodName === "string" ? value.methodName : "unknown"}" ` +
+          "has an invalid record shape.",
       );
     }
-    if (!GeneratedRegistry.isKind(handler.kind)) {
-      throw new HandlerRegistryIngestionError(
-        "UNSUPPORTED_HANDLER_KIND",
-        `Generated handler kind "${String(handler.kind)}" is not supported.`,
-      );
-    }
+  },
 
-    const origin: unknown = handler.origin;
+  validateOrigin(handler: GeneratedHandlerRecordInput): void {
+    const origin: unknown = handler.input.origin;
     if (origin !== "domestic" && origin !== "external") {
       throw new HandlerRegistryIngestionError(
         "INVALID_SIGNAL_ORIGIN",
@@ -669,7 +692,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       );
     }
     if (
-      handler.origin === "external" &&
+      handler.input.origin === "external" &&
       (handler.kind === "command-assignment" || handler.kind === "command-substitution")
     ) {
       throw new HandlerRegistryIngestionError(
@@ -677,9 +700,10 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
         `Generated command receiver "${handler.methodName}" cannot accept external commands.`,
       );
     }
+  },
 
+  validateParameterCount(handler: GeneratedHandlerRecordInput): void {
     const parameterCount: number = handler.parameterCount;
-
     if (parameterCount !== 1 && parameterCount !== 2) {
       throw new HandlerRegistryIngestionError(
         "INVALID_PARAMETER_COUNT",
@@ -687,29 +711,53 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
           `${String(parameterCount)}.`,
       );
     }
+  },
 
+  validateOutcomeSchemas(handler: GeneratedHandlerRecordInput): void {
     GeneratedRegistry.validateSchema(
-      handler.signalSchema,
+      handler.input.schema,
       `signal schema for generated handler "${handler.methodName}"`,
     );
-    handler.emittedSchemas.forEach((schema, index) => {
+    handler.outcomes.returned.forEach((schema, index) => {
       GeneratedRegistry.validateSchema(
         schema,
         `emitted schema ${String(index)} for generated handler "${handler.methodName}"`,
       );
     });
-    GeneratedRegistry.validateCommandRoles(handler);
-    GeneratedRegistry.validateWhere(handler);
+    handler.outcomes.thrown.forEach((schema, index) => {
+      GeneratedRegistry.validateSchema(
+        schema,
+        `thrown schema ${String(index)} for generated handler "${handler.methodName}"`,
+      );
+      if (!RejectionSources.matches(schema.file.proto.name)) {
+        throw new HandlerRegistryIngestionError(
+          "INVALID_SCHEMA",
+          `Generated handler "${handler.methodName}" must declare rejection schemas in outcomes.thrown.`,
+        );
+      }
+    });
+    if (
+      handler.outcomes.thrown.length > 0 &&
+      handler.kind !== "command-assignment" &&
+      handler.kind !== "command-substitution"
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "UNSUPPORTED_HANDLER_KIND",
+        `Generated handler "${handler.methodName}" may declare thrown rejections only for command-accepting receptors.`,
+      );
+    }
+  },
 
+  validateSubscriptionShape(handler: GeneratedHandlerRecordInput): void {
     if (handler.kind === "event-subscription" || handler.kind === "state-subscription") {
       GeneratedRegistry.validateSubscription(handler);
-      if (handler.kind === "state-subscription" && !isEntitySchema(handler.signalSchema)) {
+      if (handler.kind === "state-subscription" && !isEntitySchema(handler.input.schema)) {
         throw new HandlerRegistryIngestionError(
           "INVALID_SCHEMA",
           `Generated state subscription handler "${handler.methodName}" must declare an entity state schema.`,
         );
       }
-      if (handler.kind === "event-subscription" && isEntitySchema(handler.signalSchema)) {
+      if (handler.kind === "event-subscription" && isEntitySchema(handler.input.schema)) {
         throw new HandlerRegistryIngestionError(
           "INVALID_SCHEMA",
           `Generated event subscription handler "${handler.methodName}" must not declare an entity state schema.`,
@@ -717,7 +765,6 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       }
       return;
     }
-
     if (
       handler.kind === "command-assignment" ||
       handler.kind === "command-substitution" ||
@@ -737,7 +784,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   validateEmits(handler: GeneratedHandlerRecordInput): void {
-    if (handler.emittedSchemas.length > 0) {
+    if (handler.outcomes.returned.length > 0) {
       return;
     }
 
@@ -750,7 +797,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   validateCommandRoles(handler: GeneratedHandlerRecordInput): void {
     if (
       (handler.kind === "command-assignment" || handler.kind === "command-substitution") &&
-      !GeneratedRegistry.isCommandSchema(handler.signalSchema)
+      !GeneratedRegistry.isCommandSchema(handler.input.schema)
     ) {
       throw new HandlerRegistryIngestionError(
         "INVALID_SCHEMA",
@@ -759,7 +806,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
     if (
       (handler.kind === "command-reaction" || handler.kind === "event-reaction") &&
-      !GeneratedRegistry.isLegacyEventSchema(handler.signalSchema)
+      !GeneratedRegistry.isLegacyEventSchema(handler.input.schema)
     ) {
       throw new HandlerRegistryIngestionError(
         "INVALID_SCHEMA",
@@ -767,7 +814,8 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       );
     }
     if (handler.kind !== "command-substitution" && handler.kind !== "command-reaction") return;
-    if (handler.emittedSchemas.every((schema) => GeneratedRegistry.isCommandSchema(schema))) return;
+    if (handler.outcomes.returned.every((schema) => GeneratedRegistry.isCommandSchema(schema)))
+      return;
     throw new HandlerRegistryIngestionError(
       "INVALID_SCHEMA",
       `Generated @Command handler "${handler.methodName}" must declare Command outputs.`,
@@ -775,7 +823,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   validateSubscription(handler: GeneratedHandlerRecordInput): void {
-    if (handler.emittedSchemas.length === 0) {
+    if (handler.outcomes.returned.length === 0) {
       return;
     }
 
@@ -786,7 +834,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   validateWhere(handler: GeneratedHandlerRecordInput): void {
-    const where = handler.where as unknown;
+    const where = handler.input.where as unknown;
     if (where === undefined) return;
     if (
       typeof where !== "object" ||
@@ -808,7 +856,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       typeof filter.eventField !== "string" ||
       filter.eventField.trim().length === 0 ||
       typeof filter.equals !== "string" ||
-      !GeneratedRegistry.isLegacyEventSchema(handler.signalSchema) ||
+      !GeneratedRegistry.isLegacyEventSchema(handler.input.schema) ||
       (handler.kind !== "event-subscription" &&
         handler.kind !== "event-reaction" &&
         handler.kind !== "command-reaction")

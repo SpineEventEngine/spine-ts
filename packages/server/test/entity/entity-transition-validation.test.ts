@@ -12,150 +12,32 @@
  * the License.
  */
 
-import {
-  clone,
-  create,
-  fromBinary,
-  setExtension,
-  toBinary,
-  type Message,
-} from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import {
-  FieldOptionsSchema,
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
-} from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
-import { file_spine_options } from "@spine-event-engine/proto";
-import { required } from "@spine-event-engine/proto/generated/spine/options_pb.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import {
+  ProjectCatalogStateSchema,
+  type ProjectOverviewState,
+  ProjectOverviewStateSchema,
+  type ProjectProfile,
+  ProjectProfileSchema,
+  ProjectProfileStateSchema,
+  ProjectDraftStateSchema,
+  type ProjectRecordState,
+  ProjectRecordStateSchema,
+  ProjectSearchStateSchema,
+  DraftProjectStateSchema,
+  PublishedProjectStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
 import * as serverRoot from "../../src/index.js";
 import { validateEntityStateTransition } from "../../src/index.js";
 
-type ProjectionState = Message<"ProjectionState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type GenericState = Message<"GenericState"> & {
-  id: string;
-  searchable: string;
-};
-
-type SetOnceDetails = Message<"SetOnceDetails"> & {
-  value: string;
-  child?: SetOnceDetails;
-};
-
-type RichSetOnceState = Message<"RichSetOnceState"> & {
-  id: string;
-  fingerprint: Uint8Array;
-  tags: string[];
-  details?: SetOnceDetails;
-  mutableNote: string;
-};
-
-type SingularSetOnceState = Message<"SingularSetOnceState"> & {
-  id: string;
-  fingerprint: Uint8Array;
-  details?: SetOnceDetails;
-  mutableNote: string;
-};
-
-type MapSetOnceState = Message<"MapSetOnceState"> & {
-  id: string;
-  labels: Record<string, string>;
-  mutableNote: string;
-};
-
-type OptionalSetOnceState = Message<"OptionalSetOnceState"> & {
-  id: string;
-  explicitId?: string;
-  mutableNote: string;
-};
-
-interface SingularSetOnceStateOverrides {
+interface ProjectRecordStateOverrides {
   readonly id?: string;
   readonly fingerprint?: Uint8Array;
-  readonly details?: { readonly value?: string; readonly child?: SetOnceDetails };
+  readonly details?: { readonly value?: string; readonly child?: ProjectProfile | undefined };
   readonly mutableNote?: string;
 }
-
-function createFixtureFileDescriptor(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Server entity transition validation fixture descriptor set is empty.");
-  }
-
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-}
-
-function projectionStateWithRequired(value: boolean) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-  );
-  const source = descriptorSet.file[0];
-  if (source === undefined) throw new Error("Entity metadata fixture descriptor is missing.");
-  const descriptor = clone(FileDescriptorProtoSchema, source);
-  const state = descriptor.messageType[0];
-  const id = state?.field[0];
-  if (state === undefined || id === undefined) {
-    throw new Error("Projection state ID fixture is missing.");
-  }
-  descriptor.name = value ? "explicit_required_state.proto" : "explicit_optional_state.proto";
-  state.name = value ? "ExplicitRequiredState" : "ExplicitOptionalState";
-  id.options ??= create(FieldOptionsSchema);
-  setExtension(id.options, required, value);
-  descriptor.messageType = [state];
-  const file = fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
-    [file_spine_options],
-  );
-  return messageDesc(file, 0) as GenMessage<ProjectionState>;
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
-const ProjectionStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectionState>;
-const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
-const SetOnceDetailsSchema = messageDesc(
-  fileEntityMetadataFixture,
-  3,
-) as GenMessage<SetOnceDetails>;
-const RichSetOnceStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  4,
-) as GenMessage<RichSetOnceState>;
-const MapSetOnceStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  5,
-) as GenMessage<MapSetOnceState>;
-const SingularSetOnceStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  6,
-) as GenMessage<SingularSetOnceState>;
-const OptionalSetOnceStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  7,
-) as GenMessage<OptionalSetOnceState>;
-const ExplicitRequiredStateSchema = projectionStateWithRequired(true);
-const ExplicitOptionalStateSchema = projectionStateWithRequired(false);
 
 describe("entity state transition validation", () => {
   it("exports the public high-level entity state transition validator", () => {
@@ -163,7 +45,7 @@ describe("entity state transition validation", () => {
   });
 
   it("allows creation transitions to initialize set-once fields", () => {
-    const next = create(ProjectionStateSchema, {
+    const next = create(ProjectOverviewStateSchema, {
       id: "task-1",
       name: "Draft",
       priority: 1,
@@ -171,7 +53,7 @@ describe("entity state transition validation", () => {
 
     expect(
       validateEntityStateTransition({
-        schema: ProjectionStateSchema,
+        schema: ProjectOverviewStateSchema,
         previous: undefined,
         next,
       }),
@@ -186,9 +68,9 @@ describe("entity state transition validation", () => {
 
   it("rejects creation with an empty implicit Entity ID", () => {
     const result = validateEntityStateTransition({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       previous: undefined,
-      next: create(ProjectionStateSchema, { name: "Draft", priority: 1 }),
+      next: create(ProjectOverviewStateSchema, { name: "Draft", priority: 1 }),
     });
 
     expect(result.valid).toBe(false);
@@ -199,14 +81,14 @@ describe("entity state transition validation", () => {
 
   it("keeps explicit required true authoritative and explicit false disabling", () => {
     const requiredResult = validateEntityStateTransition({
-      schema: ExplicitRequiredStateSchema,
+      schema: PublishedProjectStateSchema,
       previous: undefined,
-      next: create(ExplicitRequiredStateSchema),
+      next: create(PublishedProjectStateSchema),
     });
     const optionalResult = validateEntityStateTransition({
-      schema: ExplicitOptionalStateSchema,
+      schema: DraftProjectStateSchema,
       previous: undefined,
-      next: create(ExplicitOptionalStateSchema),
+      next: create(DraftProjectStateSchema),
     });
 
     expect(requiredResult.valid).toBe(false);
@@ -217,9 +99,9 @@ describe("entity state transition validation", () => {
   });
 
   it("caches descriptor-derived transition rules per schema", () => {
-    const firstSchema = countSchemaFieldsReads(ProjectionStateSchema);
-    const secondSchema = countSchemaFieldsReads(ProjectionStateSchema);
-    const next = create(ProjectionStateSchema, {
+    const firstSchema = countSchemaFieldsReads(ProjectOverviewStateSchema);
+    const secondSchema = countSchemaFieldsReads(ProjectOverviewStateSchema);
+    const next = create(ProjectOverviewStateSchema, {
       id: "task-1",
       name: "Draft",
       priority: 1,
@@ -270,12 +152,12 @@ describe("entity state transition validation", () => {
   });
 
   it("allows existing-state transitions when set-once values are unchanged", () => {
-    const previous = create(ProjectionStateSchema, {
+    const previous = create(ProjectOverviewStateSchema, {
       id: "task-1",
       name: "Draft",
       priority: 1,
     });
-    const next = create(ProjectionStateSchema, {
+    const next = create(ProjectOverviewStateSchema, {
       id: "task-1",
       name: "Ready",
       priority: 2,
@@ -283,7 +165,7 @@ describe("entity state transition validation", () => {
 
     expect(
       validateEntityStateTransition({
-        schema: ProjectionStateSchema,
+        schema: ProjectOverviewStateSchema,
         previous,
         next,
       }).valid,
@@ -291,19 +173,19 @@ describe("entity state transition validation", () => {
   });
 
   it("rejects existing-state transitions when a set-once field changes without leaking values", () => {
-    const previous = create(ProjectionStateSchema, {
+    const previous = create(ProjectOverviewStateSchema, {
       id: "private-previous-id",
       name: "Draft",
       priority: 1,
     });
-    const next = create(ProjectionStateSchema, {
+    const next = create(ProjectOverviewStateSchema, {
       id: "private-next-id",
       name: "Draft",
       priority: 1,
     });
 
     const result = validateEntityStateTransition({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       previous,
       next,
     });
@@ -315,7 +197,7 @@ describe("entity state transition validation", () => {
 
     const [violation] = result.violations;
 
-    expect(violation.typeName).toBe("ProjectionState");
+    expect(violation.typeName).toBe(ProjectOverviewStateSchema.typeName);
     expect(violation.fieldPath?.fieldName).toEqual(["id"]);
     expect(violation.fieldValue).toBeUndefined();
     expect(result.error.$typeName).toBe("spine.validation.ValidationError");
@@ -325,18 +207,18 @@ describe("entity state transition validation", () => {
   });
 
   it("rejects default-to-non-default existing-state changes for set-once fields", () => {
-    const previous = create(ProjectionStateSchema, {
+    const previous = create(ProjectOverviewStateSchema, {
       name: "Draft",
       priority: 1,
     });
-    const next = create(ProjectionStateSchema, {
+    const next = create(ProjectOverviewStateSchema, {
       id: "task-1",
       name: "Draft",
       priority: 1,
     });
 
     const result = validateEntityStateTransition({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       previous,
       next,
     });
@@ -345,18 +227,18 @@ describe("entity state transition validation", () => {
   });
 
   it("passes when an entity schema has no set-once fields", () => {
-    const previous = create(GenericStateSchema, {
+    const previous = create(ProjectSearchStateSchema, {
       id: "generic-1",
       searchable: "before",
     });
-    const next = create(GenericStateSchema, {
+    const next = create(ProjectSearchStateSchema, {
       id: "generic-2",
       searchable: "after",
     });
 
     expect(
       validateEntityStateTransition({
-        schema: GenericStateSchema,
+        schema: ProjectSearchStateSchema,
         previous,
         next,
       }).valid,
@@ -364,14 +246,14 @@ describe("entity state transition validation", () => {
   });
 
   it("rejects descriptor-valid repeated set-once fields as unsupported even when unchanged", () => {
-    const previous = create(RichSetOnceStateSchema, {
+    const previous = create(ProjectProfileStateSchema, {
       id: "rich-1",
       fingerprint: new Uint8Array([1, 2]),
       tags: ["private-repeated-tag"],
       details: { value: "same" },
       mutableNote: "secret-previous-repeated",
     });
-    const next = create(RichSetOnceStateSchema, {
+    const next = create(ProjectProfileStateSchema, {
       id: "rich-1",
       fingerprint: new Uint8Array([1, 2]),
       tags: ["private-repeated-tag"],
@@ -380,7 +262,7 @@ describe("entity state transition validation", () => {
     });
 
     const result = validateEntityStateTransition({
-      schema: RichSetOnceStateSchema,
+      schema: ProjectProfileStateSchema,
       previous,
       next,
     });
@@ -398,7 +280,7 @@ describe("entity state transition validation", () => {
   });
 
   it("rejects creation transitions with repeated set-once fields as unsupported", () => {
-    const next = create(RichSetOnceStateSchema, {
+    const next = create(ProjectProfileStateSchema, {
       id: "rich-1",
       fingerprint: new Uint8Array([1, 2]),
       tags: ["private-creation-repeated-tag"],
@@ -407,7 +289,7 @@ describe("entity state transition validation", () => {
     });
 
     const result = validateEntityStateTransition({
-      schema: RichSetOnceStateSchema,
+      schema: ProjectProfileStateSchema,
       previous: undefined,
       next,
     });
@@ -420,13 +302,13 @@ describe("entity state transition validation", () => {
   });
 
   it("compares descriptor-valid bytes and singular nested messages by content", () => {
-    const previous = create(SingularSetOnceStateSchema, {
+    const previous = create(ProjectRecordStateSchema, {
       id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
       details: { value: "same" },
       mutableNote: "before",
     });
-    const next = create(SingularSetOnceStateSchema, {
+    const next = create(ProjectRecordStateSchema, {
       id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
       details: { value: "same" },
@@ -435,7 +317,7 @@ describe("entity state transition validation", () => {
 
     expect(
       validateEntityStateTransition({
-        schema: SingularSetOnceStateSchema,
+        schema: ProjectRecordStateSchema,
         previous,
         next,
       }).valid,
@@ -443,9 +325,9 @@ describe("entity state transition validation", () => {
 
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: SingularSetOnceStateSchema,
+        schema: ProjectRecordStateSchema,
         previous,
-        next: create(SingularSetOnceStateSchema, {
+        next: create(ProjectRecordStateSchema, {
           id: "singular-1",
           fingerprint: new Uint8Array([1, 3]),
           details: { value: "same" },
@@ -456,9 +338,9 @@ describe("entity state transition validation", () => {
     );
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: SingularSetOnceStateSchema,
+        schema: ProjectRecordStateSchema,
         previous,
-        next: create(SingularSetOnceStateSchema, {
+        next: create(ProjectRecordStateSchema, {
           id: "singular-1",
           fingerprint: new Uint8Array([1, 2]),
           details: { value: "changed" },
@@ -469,9 +351,9 @@ describe("entity state transition validation", () => {
     );
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: SingularSetOnceStateSchema,
+        schema: ProjectRecordStateSchema,
         previous,
-        next: create(SingularSetOnceStateSchema, {
+        next: create(ProjectRecordStateSchema, {
           id: "singular-1",
           fingerprint: new Uint8Array([1, 2]),
           details: { value: "same", child: { value: "now-present" } },
@@ -483,12 +365,12 @@ describe("entity state transition validation", () => {
   });
 
   it("allows descriptor-valid singular message set-once fields absent from both states", () => {
-    const previous = create(SingularSetOnceStateSchema, {
+    const previous = create(ProjectRecordStateSchema, {
       id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
       mutableNote: "before",
     });
-    const next = create(SingularSetOnceStateSchema, {
+    const next = create(ProjectRecordStateSchema, {
       id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
       mutableNote: "after",
@@ -496,7 +378,7 @@ describe("entity state transition validation", () => {
 
     expect(
       validateEntityStateTransition({
-        schema: SingularSetOnceStateSchema,
+        schema: ProjectRecordStateSchema,
         previous,
         next,
       }).valid,
@@ -504,12 +386,12 @@ describe("entity state transition validation", () => {
   });
 
   it("rejects descriptor-valid singular message set-once fields moving absent to present", () => {
-    const previous = create(SingularSetOnceStateSchema, {
+    const previous = create(ProjectRecordStateSchema, {
       id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
       mutableNote: "before",
     });
-    const next = create(SingularSetOnceStateSchema, {
+    const next = create(ProjectRecordStateSchema, {
       id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
       details: { value: "now-present" },
@@ -518,7 +400,7 @@ describe("entity state transition validation", () => {
 
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: SingularSetOnceStateSchema,
+        schema: ProjectRecordStateSchema,
         previous,
         next,
       }),
@@ -527,13 +409,13 @@ describe("entity state transition validation", () => {
   });
 
   it("rejects descriptor-valid singular message set-once fields moving present to absent", () => {
-    const previous = create(SingularSetOnceStateSchema, {
+    const previous = create(ProjectRecordStateSchema, {
       id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
       details: { value: "was-present" },
       mutableNote: "before",
     });
-    const next = create(SingularSetOnceStateSchema, {
+    const next = create(ProjectRecordStateSchema, {
       id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
       mutableNote: "after",
@@ -541,7 +423,7 @@ describe("entity state transition validation", () => {
 
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: SingularSetOnceStateSchema,
+        schema: ProjectRecordStateSchema,
         previous,
         next,
       }),
@@ -550,12 +432,12 @@ describe("entity state transition validation", () => {
   });
 
   it("uses canonical protobuf values instead of proxy-forged top-level descriptors", () => {
-    const previous = create(ProjectionStateSchema, {
+    const previous = create(ProjectOverviewStateSchema, {
       id: "private-previous-proxy-id",
       name: "Draft",
       priority: 1,
     });
-    const changedNext = create(ProjectionStateSchema, {
+    const changedNext = create(ProjectOverviewStateSchema, {
       id: "private-next-proxy-id",
       name: "Draft",
       priority: 1,
@@ -576,7 +458,7 @@ describe("entity state transition validation", () => {
     });
 
     const result = validateEntityStateTransition({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       previous,
       next,
     });
@@ -586,12 +468,12 @@ describe("entity state transition validation", () => {
   });
 
   it("preserves a field-specific violation when top-level proxy reflection throws", () => {
-    const previous = create(ProjectionStateSchema, {
+    const previous = create(ProjectOverviewStateSchema, {
       id: "private-previous-throwing-proxy-id",
       name: "Draft",
       priority: 1,
     });
-    const changedNext = create(ProjectionStateSchema, {
+    const changedNext = create(ProjectOverviewStateSchema, {
       id: "private-next-throwing-proxy-id",
       name: "Draft",
       priority: 1,
@@ -603,7 +485,7 @@ describe("entity state transition validation", () => {
     });
 
     const result = validateEntityStateTransition({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       previous,
       next,
     });
@@ -621,12 +503,12 @@ describe("entity state transition validation", () => {
   });
 
   it("uses canonical protobuf values instead of proxy-forged nested descriptors", () => {
-    const previous = createSingularSetOnceState({
+    const previous = createProjectRecordState({
       details: { value: "private-previous-details" },
       mutableNote: "secret-previous-nested-proxy",
     });
-    const changedDetails = create(SetOnceDetailsSchema, { value: "private-next-details" });
-    const next = createSingularSetOnceState({
+    const changedDetails = create(ProjectProfileSchema, { value: "private-next-details" });
+    const next = createProjectRecordState({
       details: new Proxy(changedDetails, {
         getOwnPropertyDescriptor(target, property) {
           if (property === "value") {
@@ -645,7 +527,7 @@ describe("entity state transition validation", () => {
     });
 
     const result = validateEntityStateTransition({
-      schema: SingularSetOnceStateSchema,
+      schema: ProjectRecordStateSchema,
       previous,
       next,
     });
@@ -661,12 +543,12 @@ describe("entity state transition validation", () => {
   });
 
   it("fails closed when nested message canonicalization cannot read protobuf values", () => {
-    const previous = createSingularSetOnceState({
+    const previous = createProjectRecordState({
       details: { value: "private-previous-throwing-details" },
       mutableNote: "secret-previous-throwing-nested",
     });
     const throwingDetails = new Proxy(
-      create(SetOnceDetailsSchema, { value: "private-next-throwing-details" }),
+      create(ProjectProfileSchema, { value: "private-next-throwing-details" }),
       {
         get(target, property, receiver): unknown {
           if (property === "value") {
@@ -678,9 +560,9 @@ describe("entity state transition validation", () => {
       },
     );
     const result = validateEntityStateTransition({
-      schema: SingularSetOnceStateSchema,
+      schema: ProjectRecordStateSchema,
       previous,
-      next: createSingularSetOnceState({
+      next: createProjectRecordState({
         details: throwingDetails,
         mutableNote: "secret-next-throwing-nested",
       }),
@@ -702,13 +584,13 @@ describe("entity state transition validation", () => {
 
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: SingularSetOnceStateSchema,
-        previous: forgeSingularSetOnceState({
-          details: sameCustomObject as unknown as SetOnceDetails,
+        schema: ProjectRecordStateSchema,
+        previous: forgeProjectRecordState({
+          details: sameCustomObject as unknown as ProjectProfile,
           mutableNote: "secret-previous-same-details",
         }),
-        next: forgeSingularSetOnceState({
-          details: sameCustomObject as unknown as SetOnceDetails,
+        next: forgeProjectRecordState({
+          details: sameCustomObject as unknown as ProjectProfile,
           mutableNote: "secret-next-same-details",
         }),
       }),
@@ -717,7 +599,7 @@ describe("entity state transition validation", () => {
   });
 
   it("fails closed for forged set-once bytes collections", () => {
-    const previousWithOverriddenMethod = createSingularSetOnceState({
+    const previousWithOverriddenMethod = createProjectRecordState({
       fingerprint: new Uint8Array([1, 2]),
       mutableNote: "secret-previous-bytes-method",
     });
@@ -725,13 +607,13 @@ describe("entity state transition validation", () => {
       enumerable: true,
       value: () => true,
     });
-    const changedBytes = createSingularSetOnceState({
+    const changedBytes = createProjectRecordState({
       fingerprint: new Uint8Array([1, 3]),
       mutableNote: "secret-next-bytes-method",
     });
 
     const overriddenMethodResult = validateEntityStateTransition({
-      schema: SingularSetOnceStateSchema,
+      schema: ProjectRecordStateSchema,
       previous: previousWithOverriddenMethod,
       next: changedBytes,
     });
@@ -743,7 +625,7 @@ describe("entity state transition validation", () => {
       "secret-next-bytes-method",
     );
 
-    const previous = createSingularSetOnceState({
+    const previous = createProjectRecordState({
       fingerprint: new Uint8Array([4, 5]),
       mutableNote: "secret-previous-bytes-proxy",
     });
@@ -756,13 +638,13 @@ describe("entity state transition validation", () => {
         return Reflect.get(target, property, receiver) as unknown;
       },
     });
-    const nextWithProxy = createSingularSetOnceState({
+    const nextWithProxy = createProjectRecordState({
       fingerprint: proxiedBytes,
       mutableNote: "secret-next-bytes-proxy",
     });
 
     const proxyResult = validateEntityStateTransition({
-      schema: SingularSetOnceStateSchema,
+      schema: ProjectRecordStateSchema,
       previous,
       next: nextWithProxy,
     });
@@ -773,9 +655,9 @@ describe("entity state transition validation", () => {
     class SubclassedBytes extends Uint8Array {}
     const changedPrototypeBytes = new SubclassedBytes([1, 2]);
     const changedPrototypeResult = validateEntityStateTransition({
-      schema: SingularSetOnceStateSchema,
-      previous: createSingularSetOnceState({ mutableNote: "secret-previous-bytes-prototype" }),
-      next: createSingularSetOnceState({
+      schema: ProjectRecordStateSchema,
+      previous: createProjectRecordState({ mutableNote: "secret-previous-bytes-prototype" }),
+      next: createProjectRecordState({
         fingerprint: changedPrototypeBytes,
         mutableNote: "secret-next-bytes-prototype",
       }),
@@ -794,9 +676,9 @@ describe("entity state transition validation", () => {
       value: "private-symbol-byte",
     });
     const symbolKeyResult = validateEntityStateTransition({
-      schema: SingularSetOnceStateSchema,
-      previous: createSingularSetOnceState({ mutableNote: "secret-previous-bytes-symbol" }),
-      next: createSingularSetOnceState({
+      schema: ProjectRecordStateSchema,
+      previous: createProjectRecordState({ mutableNote: "secret-previous-bytes-symbol" }),
+      next: createProjectRecordState({
         fingerprint: symbolKeyBytes,
         mutableNote: "secret-next-bytes-symbol",
       }),
@@ -812,7 +694,7 @@ describe("entity state transition validation", () => {
   });
 
   it("preserves a field-specific violation when set-once bytes shape checks throw", () => {
-    const previous = createSingularSetOnceState({
+    const previous = createProjectRecordState({
       fingerprint: new Uint8Array([1, 2]),
       mutableNote: "secret-previous-throwing-bytes-shape",
     });
@@ -821,13 +703,13 @@ describe("entity state transition validation", () => {
         throw new Error("bytes prototype trap");
       },
     });
-    const next = forgeSingularSetOnceState({
+    const next = forgeProjectRecordState({
       fingerprint: throwingBytesShape,
       mutableNote: "secret-next-throwing-bytes-shape",
     });
 
     const result = validateEntityStateTransition({
-      schema: SingularSetOnceStateSchema,
+      schema: ProjectRecordStateSchema,
       previous,
       next,
     });
@@ -845,22 +727,22 @@ describe("entity state transition validation", () => {
   });
 
   it("preserves a field-specific violation when set-once message shape checks throw", () => {
-    const previous = createSingularSetOnceState({
+    const previous = createProjectRecordState({
       details: { value: "same" },
       mutableNote: "secret-previous-throwing-message-shape",
     });
-    const throwingMessageShape = new Proxy(create(SetOnceDetailsSchema, { value: "same" }), {
+    const throwingMessageShape = new Proxy(create(ProjectProfileSchema, { value: "same" }), {
       getPrototypeOf() {
         throw new Error("message prototype trap");
       },
     });
-    const next = forgeSingularSetOnceState({
+    const next = forgeProjectRecordState({
       details: throwingMessageShape,
       mutableNote: "secret-next-throwing-message-shape",
     });
 
     const result = validateEntityStateTransition({
-      schema: SingularSetOnceStateSchema,
+      schema: ProjectRecordStateSchema,
       previous,
       next,
     });
@@ -878,20 +760,20 @@ describe("entity state transition validation", () => {
   });
 
   it("fails closed when forged set-once fields are inherited or accessor-backed", () => {
-    const previous = create(ProjectionStateSchema, {
+    const previous = create(ProjectOverviewStateSchema, {
       id: "stable-id",
       name: "Draft",
       priority: 1,
     });
-    const inheritedNext = Object.create({ id: "stable-id" }) as ProjectionState;
-    const accessorNext = Object.defineProperty({} as ProjectionState, "id", {
+    const inheritedNext = Object.create({ id: "stable-id" }) as ProjectOverviewState;
+    const accessorNext = Object.defineProperty({} as ProjectOverviewState, "id", {
       enumerable: true,
       get: () => "stable-id",
     });
 
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: ProjectionStateSchema,
+        schema: ProjectOverviewStateSchema,
         previous,
         next: inheritedNext,
       }),
@@ -899,7 +781,7 @@ describe("entity state transition validation", () => {
     );
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: ProjectionStateSchema,
+        schema: ProjectOverviewStateSchema,
         previous,
         next: accessorNext,
       }),
@@ -934,19 +816,19 @@ describe("entity state transition validation", () => {
   });
 
   it("fails closed for cyclic and too-deep descriptor-backed nested set-once messages", () => {
-    const previousCycle = { value: "same" } as SetOnceDetails;
-    const nextCycle = { value: "same" } as SetOnceDetails;
+    const previousCycle = { value: "same" } as ProjectProfile;
+    const nextCycle = { value: "same" } as ProjectProfile;
     previousCycle.child = previousCycle;
     nextCycle.child = nextCycle;
 
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: SingularSetOnceStateSchema,
-        previous: forgeSingularSetOnceState({
+        schema: ProjectRecordStateSchema,
+        previous: forgeProjectRecordState({
           details: previousCycle,
           mutableNote: "secret-previous-details-cycle",
         }),
-        next: forgeSingularSetOnceState({
+        next: forgeProjectRecordState({
           details: nextCycle,
           mutableNote: "secret-next-details-cycle",
         }),
@@ -956,12 +838,12 @@ describe("entity state transition validation", () => {
 
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: SingularSetOnceStateSchema,
-        previous: createSingularSetOnceState({
+        schema: ProjectRecordStateSchema,
+        previous: createProjectRecordState({
           details: createDeepDetails(80),
           mutableNote: "secret-previous-details-depth",
         }),
-        next: createSingularSetOnceState({
+        next: createProjectRecordState({
           details: createDeepDetails(80),
           mutableNote: "secret-next-details-depth",
         }),
@@ -971,19 +853,19 @@ describe("entity state transition validation", () => {
   });
 
   it("rejects map-valued set-once fields as unsupported even when unchanged", () => {
-    const previous = create(MapSetOnceStateSchema, {
+    const previous = create(ProjectCatalogStateSchema, {
       id: "map-1",
       labels: { alpha: "private-map-value" },
       mutableNote: "secret-previous-map",
     });
-    const next = create(MapSetOnceStateSchema, {
+    const next = create(ProjectCatalogStateSchema, {
       id: "map-1",
       labels: { alpha: "private-map-value" },
       mutableNote: "secret-next-map",
     });
 
     const result = validateEntityStateTransition({
-      schema: MapSetOnceStateSchema,
+      schema: ProjectCatalogStateSchema,
       previous,
       next,
     });
@@ -995,45 +877,38 @@ describe("entity state transition validation", () => {
     expectNoValueLeak(result, "private-map-value", "secret-previous-map", "secret-next-map");
   });
 
-  it("rejects explicit optional set-once fields as unsupported even when unchanged", () => {
-    const previous = create(OptionalSetOnceStateSchema, {
+  it("allows unchanged oneof set-once fields", () => {
+    const previous = create(ProjectDraftStateSchema, {
       id: "optional-1",
-      explicitId: "private-explicit-optional",
+      identifier: { case: "explicitId", value: "private-explicit-optional" },
       mutableNote: "secret-previous-optional",
     });
-    const next = create(OptionalSetOnceStateSchema, {
+    const next = create(ProjectDraftStateSchema, {
       id: "optional-1",
-      explicitId: "private-explicit-optional",
+      identifier: { case: "explicitId", value: "private-explicit-optional" },
       mutableNote: "secret-next-optional",
     });
 
     const result = validateEntityStateTransition({
-      schema: OptionalSetOnceStateSchema,
+      schema: ProjectDraftStateSchema,
       previous,
       next,
     });
 
-    expectSetOnceViolation(result, "explicit_id");
-    expect(result.error?.constraintViolation[0]?.message?.withPlaceholders).toBe(
-      "Explicit optional set-once fields are not supported by entity state transition validation.",
-    );
-    expectNoValueLeak(
-      result,
-      "private-explicit-optional",
-      "secret-previous-optional",
-      "secret-next-optional",
-    );
+    expect(result.valid).toBe(true);
+    expect(result.violations).toEqual([]);
+    expect(result.error).toBeUndefined();
   });
 
   it("rejects creation transitions with map-valued set-once fields as unsupported", () => {
-    const next = create(MapSetOnceStateSchema, {
+    const next = create(ProjectCatalogStateSchema, {
       id: "map-1",
       labels: { alpha: "private-creation-map-value" },
       mutableNote: "secret-creation-map",
     });
 
     const result = validateEntityStateTransition({
-      schema: MapSetOnceStateSchema,
+      schema: ProjectCatalogStateSchema,
       previous: undefined,
       next,
     });
@@ -1048,13 +923,13 @@ describe("entity state transition validation", () => {
 
 function validateForgedSetOnceId(previousId: unknown, nextId: unknown) {
   return validateEntityStateTransition({
-    schema: ProjectionStateSchema,
-    previous: { id: previousId } as ProjectionState,
-    next: { id: nextId } as ProjectionState,
+    schema: ProjectOverviewStateSchema,
+    previous: { id: previousId } as ProjectOverviewState,
+    next: { id: nextId } as ProjectOverviewState,
   });
 }
 
-function countSchemaFieldsReads<Schema extends typeof ProjectionStateSchema>(schema: Schema) {
+function countSchemaFieldsReads<Schema extends typeof ProjectOverviewStateSchema>(schema: Schema) {
   let fieldsReadCount = 0;
 
   return {
@@ -1071,10 +946,8 @@ function countSchemaFieldsReads<Schema extends typeof ProjectionStateSchema>(sch
   };
 }
 
-function createSingularSetOnceState(
-  overrides: SingularSetOnceStateOverrides = {},
-): SingularSetOnceState {
-  return create(SingularSetOnceStateSchema, {
+function createProjectRecordState(overrides: ProjectRecordStateOverrides = {}): ProjectRecordState {
+  return create(ProjectRecordStateSchema, {
     id: "singular-1",
     fingerprint: new Uint8Array([1, 2]),
     details: { value: "same" },
@@ -1083,17 +956,15 @@ function createSingularSetOnceState(
   });
 }
 
-function forgeSingularSetOnceState(
-  overrides: SingularSetOnceStateOverrides = {},
-): SingularSetOnceState {
+function forgeProjectRecordState(overrides: ProjectRecordStateOverrides = {}): ProjectRecordState {
   return {
-    $typeName: "SingularSetOnceState",
+    $typeName: "entity_metadata.ProjectRecordState",
     id: "singular-1",
     fingerprint: new Uint8Array([1, 2]),
-    details: create(SetOnceDetailsSchema, { value: "same" }),
+    details: create(ProjectProfileSchema, { value: "same" }),
     mutableNote: "mutable",
     ...overrides,
-  } as SingularSetOnceState;
+  } as ProjectRecordState;
 }
 
 function expectSetOnceViolation(
@@ -1132,11 +1003,11 @@ function createDeepObject(depth: number): Record<string, unknown> {
   return value;
 }
 
-function createDeepDetails(depth: number): SetOnceDetails {
-  let value = create(SetOnceDetailsSchema, { value: "same" });
+function createDeepDetails(depth: number): ProjectProfile {
+  let value = create(ProjectProfileSchema, { value: "same" });
 
   for (let index = 0; index < depth; index += 1) {
-    value = create(SetOnceDetailsSchema, {
+    value = create(ProjectProfileSchema, {
       value: "same",
       child: value,
     });

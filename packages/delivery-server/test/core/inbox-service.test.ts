@@ -42,7 +42,12 @@ describe("in-memory Inbox", () => {
   it("upserts duplicate identities and returns detached strict ordered pages", async () => {
     const core = InMemoryDelivery.create();
     await core.inbox.writeOne(create(WriteMessageSchema, { message: message("a", 1, 2) }), context);
-    await core.inbox.writeOne(create(WriteMessageSchema, { message: message("a", 2, 3) }), context);
+    await core.inbox.writeOne(
+      create(WriteMessageSchema, {
+        message: { ...message("a", 2, 3), status: InboxMessageStatus.DELIVERED },
+      }),
+      context,
+    );
     await core.inbox.writeOne(create(WriteMessageSchema, { message: message("b", 2, 1) }), context);
 
     const page = await core.inbox.findManyInShard(
@@ -54,6 +59,7 @@ describe("in-memory Inbox", () => {
       context,
     );
     expect((page.message ?? []).map((value) => value.id?.uuid)).toEqual(["b", "a"]);
+    expect(page.message?.[1]?.status).toBe(InboxMessageStatus.DELIVERED);
     const first = page.message?.[0];
     if (first?.id?.index !== undefined) first.id.index.index = 9;
     const again = await core.inbox.findManyInShard(

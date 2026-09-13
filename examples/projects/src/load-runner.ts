@@ -248,7 +248,7 @@ class ProjectManagementUserLoad {
 
   private createCommand() {
     return create(CommandSchema, {
-      id: metadata.commandId(`load-command-${this.id}`),
+      id: metadata.commandId(),
       message: AnyMessages.pack(
         CreateProjectSchema,
         create(CreateProjectSchema, { id: this.id, name: `Load project ${String(this.index)}` }),

@@ -12,8 +12,11 @@
  * the License.
  */
 syntax = "proto3";
+
 package spine.server.testing.handlerregistry;
+
 import "spine/options.proto";
+
 message ReviewState {
   option (entity).kind = PROCESS_MANAGER;
   string id = 1;

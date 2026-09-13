@@ -112,6 +112,22 @@ export class Inbox {
   }
 
   /**
+   * Removes one exact pending duplicate while its shard session remains current.
+   *
+   * @param message Supplies the pending duplicate snapshot.
+   * @param session Supplies the session that holds the message shard.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns Whether storage atomically removed the exact pending snapshot.
+   */
+  removeDuplicate(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<boolean> {
+    return this.storage.removeDuplicate(message, session, options);
+  }
+
+  /**
    * Removes one delivered message only when direct provider cleanup can prove
    * current ownership and the exact durable snapshot in one atomic operation.
    *

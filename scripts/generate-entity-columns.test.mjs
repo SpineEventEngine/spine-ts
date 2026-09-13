@@ -3,11 +3,11 @@ import { describe, expect, it } from "vitest";
 import { EntityColumnGenerator } from "../packages/client-node/codegen/generate-entity-columns.mjs";
 import { column, entity } from "../packages/proto/src/index.ts";
 import {
-  AggregateStateSchema,
-  ProjectionStateSchema,
+  ProjectStateSchema,
+  ProjectOverviewStateSchema,
   projectionFieldWithRawColumnOption,
   projectionSchemaWithRawEntityOption,
-  ProcessManagerStateSchema,
+  ProjectWorkflowStateSchema,
 } from "../packages/core/test-fixtures/entity-column-fixtures.ts";
 
 const columnOption = {
@@ -22,27 +22,27 @@ const scalarString = 9;
 
 describe("Entity column companion generator", () => {
   it("selects top-level Aggregate, Projection, and Process Manager messages with annotated fields", () => {
-    const nested = { ...ProjectionStateSchema, parent: ProjectionStateSchema };
+    const nested = { ...ProjectOverviewStateSchema, parent: ProjectOverviewStateSchema };
 
     expect(
       EntityColumnGenerator.entities(
         {
           messages: [
-            ProjectionStateSchema,
-            AggregateStateSchema,
-            ProcessManagerStateSchema,
+            ProjectOverviewStateSchema,
+            ProjectStateSchema,
+            ProjectWorkflowStateSchema,
             nested,
           ],
         },
         spineOptions,
       ),
-    ).toEqual([ProjectionStateSchema, AggregateStateSchema, ProcessManagerStateSchema]);
-    expect(EntityColumnGenerator.isColumn(ProjectionStateSchema.field.title, spineOptions)).toBe(
-      true,
-    );
-    expect(EntityColumnGenerator.isColumn(ProjectionStateSchema.field.note, spineOptions)).toBe(
-      false,
-    );
+    ).toEqual([ProjectOverviewStateSchema, ProjectStateSchema, ProjectWorkflowStateSchema]);
+    expect(
+      EntityColumnGenerator.isColumn(ProjectOverviewStateSchema.field.title, spineOptions),
+    ).toBe(true);
+    expect(
+      EntityColumnGenerator.isColumn(ProjectOverviewStateSchema.field.note, spineOptions),
+    ).toBe(false);
   });
 
   it("resolves Spine option descriptors from the plugin request", () => {
@@ -145,7 +145,7 @@ describe("Entity column companion generator", () => {
             name: "spine/examples/todo/task_list.proto",
             dependency: ["spine/options.proto"],
           },
-          messages: [AggregateStateSchema, ProjectionStateSchema, ProcessManagerStateSchema],
+          messages: [ProjectStateSchema, ProjectOverviewStateSchema, ProjectWorkflowStateSchema],
         },
       ],
       generateFile(name) {
@@ -160,9 +160,9 @@ describe("Entity column companion generator", () => {
       name: "GeneratedEntityColumns",
     });
     const source = output.printed.flat().join("");
-    expect(source).toContain("ProjectionStateColumnDefinition");
-    expect(source).toContain("AggregateStateColumnDefinition");
-    expect(source).toContain("ProcessManagerStateColumnDefinition");
+    expect(source).toContain("ProjectOverviewStateColumnDefinition");
+    expect(source).toContain("ProjectStateColumnDefinition");
+    expect(source).toContain("ProjectWorkflowStateColumnDefinition");
     expect(source).toContain("GeneratedEntityColumns.define");
     expect(source).toContain('"title"');
     expect(source).not.toContain('"note"');

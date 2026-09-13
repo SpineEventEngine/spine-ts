@@ -80,6 +80,8 @@ the generated handler registry for decorated application classes. Its emitted
 source imports the Server handler-registry contract as a type from
 `@spine-event-engine/server/spi/handler-registry`; the CLI itself has no Server
 runtime dependency. Run both after the related model or handler changes.
+The handler analyzer records `@Throws(...)` declarations as rejection outcomes;
+the generated rejection companion supplies the schema used by that metadata.
 
 The public CLI is `spine-proto`. Programmatic config and manifest readers are
 for build tooling that needs the same validated package contracts; application

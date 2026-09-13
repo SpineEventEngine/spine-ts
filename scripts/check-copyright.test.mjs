@@ -365,7 +365,21 @@ describe("copyright checker", () => {
 
   it("preserves hostile legal Git paths from NUL-delimited output", () => {
     const hostile = ["tab\tname.ts", "line\nbreak.ts", 'quote".tsx', "日本語.proto"];
-    expect(gitFiles(() => ({ status: 0, stdout: `${hostile.join("\0")}\0` }))).toEqual(hostile);
+    expect(
+      gitFiles((args) => ({
+        status: 0,
+        stdout: args.includes("--deleted") ? "" : `${hostile.join("\0")}\0`,
+      })),
+    ).toEqual(hostile);
+  });
+
+  it("excludes tracked files deleted from the working tree", () => {
+    expect(
+      gitFiles((args) => ({
+        status: 0,
+        stdout: args.includes("--deleted") ? "deleted.ts\0" : "kept.ts\0deleted.ts\0",
+      })),
+    ).toEqual(["kept.ts"]);
   });
 
   it("parses mixed ordinary and renamed NUL name-status records", () => {

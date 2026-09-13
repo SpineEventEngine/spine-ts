@@ -12,13 +12,17 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { file_spine_options } from "@spine-event-engine/proto";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import {
+  ProjectOverviewStateSchema,
+  ProjectProfileSchema,
+  ProjectProfileStateSchema,
+  ProjectRecordStateSchema,
+  type ProjectOverviewState,
+  type ProjectProfileState,
+  type ProjectRecordState,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
 import * as serverRoot from "../../src/index.js";
 import {
@@ -29,70 +33,10 @@ import {
   type EntityTransactionVersionMetadata,
 } from "../../src/index.js";
 
-type ProjectionState = Message<"ProjectionState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-type SetOnceDetails = Message<"SetOnceDetails"> & {
-  value: string;
-  child?: SetOnceDetails;
-};
-
-type RichSetOnceState = Message<"RichSetOnceState"> & {
-  id: string;
-  fingerprint: Uint8Array;
-  tags: string[];
-  details?: SetOnceDetails;
-  mutableNote: string;
-};
-
-type SingularSetOnceState = Message<"SingularSetOnceState"> & {
-  id: string;
-  fingerprint: Uint8Array;
-  details?: SetOnceDetails;
-  mutableNote: string;
-};
-
-function createFixtureFileDescriptor(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-
-  if (descriptor === undefined) {
-    throw new Error("Server entity transaction fixture descriptor set is empty.");
-  }
-
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-}
-
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
-const ProjectionStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  0,
-) as GenMessage<ProjectionState>;
-const SetOnceDetailsSchema = messageDesc(
-  fileEntityMetadataFixture,
-  3,
-) as GenMessage<SetOnceDetails>;
-const RichSetOnceStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  4,
-) as GenMessage<RichSetOnceState>;
-const SingularSetOnceStateSchema = messageDesc(
-  fileEntityMetadataFixture,
-  6,
-) as GenMessage<SingularSetOnceState>;
-
-function createProjectionState(overrides: Partial<ProjectionState> = {}): ProjectionState {
-  return create(ProjectionStateSchema, {
+function createProjectOverviewState(
+  overrides: Partial<ProjectOverviewState> = {},
+): ProjectOverviewState {
+  return create(ProjectOverviewStateSchema, {
     id: "task-1",
     name: "Draft",
     priority: 1,
@@ -100,27 +44,27 @@ function createProjectionState(overrides: Partial<ProjectionState> = {}): Projec
   });
 }
 
-function createRichState(overrides: Partial<RichSetOnceState> = {}): RichSetOnceState {
-  return create(RichSetOnceStateSchema, {
+function createRichState(overrides: Partial<ProjectProfileState> = {}): ProjectProfileState {
+  return create(ProjectProfileStateSchema, {
     id: "task-1",
     fingerprint: new Uint8Array([1, 2]),
     tags: ["alpha"],
-    details: create(SetOnceDetailsSchema, {
+    details: create(ProjectProfileSchema, {
       value: "stable",
-      child: create(SetOnceDetailsSchema, { value: "nested" }),
+      child: create(ProjectProfileSchema, { value: "nested" }),
     }),
     mutableNote: "Draft",
     ...overrides,
   });
 }
 
-function createSingularState(overrides: Partial<SingularSetOnceState> = {}): SingularSetOnceState {
-  return create(SingularSetOnceStateSchema, {
+function createSingularState(overrides: Partial<ProjectRecordState> = {}): ProjectRecordState {
+  return create(ProjectRecordStateSchema, {
     id: "task-1",
     fingerprint: new Uint8Array([1, 2]),
-    details: create(SetOnceDetailsSchema, {
+    details: create(ProjectProfileSchema, {
       value: "stable",
-      child: create(SetOnceDetailsSchema, { value: "nested" }),
+      child: create(ProjectProfileSchema, { value: "nested" }),
     }),
     mutableNote: "Draft",
     ...overrides,
@@ -134,9 +78,9 @@ describe("entity transactions", () => {
   });
 
   it("starts active with previous state, draft next state, version, and lifecycle defaults", () => {
-    const previous = createProjectionState();
+    const previous = createProjectOverviewState();
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       previous,
       version: { previous: 7, draft: 8 },
     });
@@ -151,9 +95,9 @@ describe("entity transactions", () => {
   });
 
   it("mutates the live draft and returns its resulting snapshot without mutating previous state", () => {
-    const previous = createProjectionState();
+    const previous = createProjectOverviewState();
     const transaction = new EntityTransaction({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       previous,
       version: { previous: 1, draft: 1 },
     });
@@ -163,32 +107,32 @@ describe("entity transactions", () => {
       draft.priority = 2;
     });
 
-    expect(returnedDraft).toEqual(createProjectionState({ name: "Ready", priority: 2 }));
+    expect(returnedDraft).toEqual(createProjectOverviewState({ name: "Ready", priority: 2 }));
     expect(transaction.currentDraft).toEqual(returnedDraft);
     expect(transaction.currentDraft).not.toBe(returnedDraft);
     expect(transaction.previous).toEqual(previous);
-    expect(previous).toEqual(createProjectionState());
+    expect(previous).toEqual(createProjectOverviewState());
   });
 
   it("ignores a mutator return value and keeps only live draft mutations", () => {
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
 
     transaction.update((draft) => {
       draft.name = "Live mutation";
-      return createProjectionState({ name: "Ignored replacement", priority: 9 });
+      return createProjectOverviewState({ name: "Ignored replacement", priority: 9 });
     });
 
-    expect(transaction.currentDraft).toEqual(createProjectionState({ name: "Live mutation" }));
+    expect(transaction.currentDraft).toEqual(createProjectOverviewState({ name: "Live mutation" }));
   });
 
   it("applies a valid tryUpdate candidate and returns an immutable empty violation list", () => {
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
 
@@ -200,14 +144,14 @@ describe("entity transactions", () => {
     expect(violations).toEqual([]);
     expect(Object.isFrozen(violations)).toBe(true);
     expect(transaction.currentDraft).toEqual(
-      createProjectionState({ name: "Validated", priority: 2 }),
+      createProjectOverviewState({ name: "Validated", priority: 2 }),
     );
   });
 
   it("keeps the live draft untouched when tryUpdate finds a transition violation", () => {
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     const before = transaction.currentDraft;
@@ -223,8 +167,8 @@ describe("entity transactions", () => {
 
   it("returns deeply immutable cloned violations", () => {
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     const violations = transaction.tryUpdate((draft) => {
@@ -251,12 +195,12 @@ describe("entity transactions", () => {
 
   it("rejects async mutators and isolates their later mutations", async () => {
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     const before = transaction.currentDraft;
-    const asyncMutator = async (draft: ProjectionState) => {
+    const asyncMutator = async (draft: ProjectOverviewState) => {
       await Promise.resolve();
       draft.id = "task-2";
     };
@@ -270,12 +214,12 @@ describe("entity transactions", () => {
 
   it("detaches a live draft when update discovers an async mutator", async () => {
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     const before = transaction.currentDraft;
-    const asyncMutator = async (draft: ProjectionState) => {
+    const asyncMutator = async (draft: ProjectOverviewState) => {
       draft.name = "Synchronous async prefix";
       await Promise.resolve();
       draft.id = "task-2";
@@ -290,11 +234,11 @@ describe("entity transactions", () => {
 
   it("keeps nested and repeated scratch state independent on invalid, thrown, and valid paths", () => {
     const transaction = createEntityTransaction({
-      schema: RichSetOnceStateSchema,
+      schema: ProjectProfileStateSchema,
       previous: createRichState(),
       version: { previous: 1, draft: 2 },
     });
-    let retained: RichSetOnceState | undefined;
+    let retained: ProjectProfileState | undefined;
 
     expect(
       transaction.tryUpdate((draft) => {
@@ -319,11 +263,11 @@ describe("entity transactions", () => {
     expect(transaction.currentDraft).toEqual(createRichState());
 
     const validTransaction = createEntityTransaction({
-      schema: SingularSetOnceStateSchema,
+      schema: ProjectRecordStateSchema,
       previous: createSingularState(),
       version: { previous: 1, draft: 2 },
     });
-    let retainedValid: SingularSetOnceState | undefined;
+    let retainedValid: ProjectRecordState | undefined;
     expect(
       validTransaction.tryUpdate((draft) => {
         retainedValid = draft;
@@ -338,8 +282,8 @@ describe("entity transactions", () => {
 
   it("propagates unrelated tryUpdate errors without changing the live draft", () => {
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     const before = transaction.currentDraft;
@@ -356,8 +300,8 @@ describe("entity transactions", () => {
 
   it("composes successful tryUpdates while discarding failed candidates", () => {
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
 
@@ -377,13 +321,15 @@ describe("entity transactions", () => {
       }),
     ).toEqual([]);
 
-    expect(transaction.currentDraft).toEqual(createProjectionState({ name: "First", priority: 3 }));
+    expect(transaction.currentDraft).toEqual(
+      createProjectOverviewState({ name: "First", priority: 3 }),
+    );
   });
 
   it("archives and unarchives only draft lifecycle metadata reflected in results", () => {
-    const previous = createProjectionState();
+    const previous = createProjectOverviewState();
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       previous,
       version: { previous: 1, draft: 2 },
     });
@@ -399,7 +345,7 @@ describe("entity transactions", () => {
     expect(accepted.lifecycle).toEqual({ archived: true, deleted: false });
 
     const rollbackTransaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       previous,
       version: { previous: 1, draft: 2 },
       lifecycle: { archived: true },
@@ -413,9 +359,9 @@ describe("entity transactions", () => {
   });
 
   it("marks deleted and restores only draft lifecycle metadata reflected in results", () => {
-    const previous = createProjectionState();
+    const previous = createProjectOverviewState();
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       previous,
       version: { previous: 1, draft: 2 },
     });
@@ -431,7 +377,7 @@ describe("entity transactions", () => {
     expect(accepted.lifecycle).toEqual({ archived: false, deleted: true });
 
     const rollbackTransaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       previous,
       version: { previous: 1, draft: 2 },
       lifecycle: { deleted: true },
@@ -446,16 +392,16 @@ describe("entity transactions", () => {
 
   it("requires active non-archived non-deleted draft state for active-only mutation", () => {
     const active = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
 
     active.requireActive();
 
     const archived = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     archived.archive();
@@ -471,8 +417,8 @@ describe("entity transactions", () => {
     );
 
     const deleted = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     deleted.markDeleted();
@@ -485,8 +431,8 @@ describe("entity transactions", () => {
     }).toThrow("Cannot mutate active entity state while the draft is deleted.");
 
     const committed = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     committed.commit();
@@ -499,8 +445,8 @@ describe("entity transactions", () => {
     }).toThrow(/status "committed"/);
 
     const rolledBack = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     rolledBack.rollback();
@@ -515,25 +461,25 @@ describe("entity transactions", () => {
 
   it("guards tryUpdate before invoking its callback", () => {
     const archived = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
       lifecycle: { archived: true },
     });
     const deleted = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
       lifecycle: { deleted: true },
     });
     const committed = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     const rolledBack = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     committed.commit();
@@ -552,8 +498,8 @@ describe("entity transactions", () => {
 
   it("requires active transaction status for lifecycle helper mutation", () => {
     const committed = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     committed.commit();
@@ -564,8 +510,8 @@ describe("entity transactions", () => {
     expect(() => committed.restore()).toThrow(/committed/);
 
     const rolledBack = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     rolledBack.rollback();
@@ -582,8 +528,8 @@ describe("entity transactions", () => {
       source: "server";
     }
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: {
         previous: { revision: 1, source: "server" },
         draft: { revision: 1, source: "server" },
@@ -610,8 +556,8 @@ describe("entity transactions", () => {
 
   it("returns updated explicit draft version metadata in rejected commit and rollback results", () => {
     const rejected = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState({ id: "task-1" }),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState({ id: "task-1" }),
       version: { previous: 1, draft: 1 },
     });
     rejected.updateVersionMetadata(2);
@@ -626,8 +572,8 @@ describe("entity transactions", () => {
     expect(rejected.status).toBe("active");
 
     const rolledBack = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 3, draft: 3 },
     });
     rolledBack.updateVersionMetadata(4);
@@ -636,9 +582,9 @@ describe("entity transactions", () => {
   });
 
   it("returns an accepted commit result when transition validation passes", () => {
-    const previous = createProjectionState();
+    const previous = createProjectOverviewState();
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       previous,
       version: { previous: 1, draft: 2 },
     });
@@ -651,7 +597,7 @@ describe("entity transactions", () => {
 
     expect(result.status).toBe("accepted");
     expect(result.previous).toEqual(previous);
-    expect(result.next).toEqual(createProjectionState({ name: "Ready", priority: 2 }));
+    expect(result.next).toEqual(createProjectOverviewState({ name: "Ready", priority: 2 }));
     expect(result.version).toEqual({ previous: 1, committed: 2 });
     expect(result.lifecycle).toEqual({ archived: false, deleted: false });
     expect(transaction.status).toBe("committed");
@@ -667,8 +613,8 @@ describe("entity transactions", () => {
       draft: { revision: 2, source: "server" },
     };
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version,
     });
 
@@ -683,8 +629,8 @@ describe("entity transactions", () => {
 
   it("returns a rejected commit result with validator violations when set-once state changes", () => {
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState({ id: "task-1" }),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState({ id: "task-1" }),
       version: { previous: 1, draft: 2 },
     });
     transaction.update((draft) => {
@@ -694,8 +640,8 @@ describe("entity transactions", () => {
     const result = transaction.commit();
 
     expect(result.status).toBe("rejected");
-    expect(result.previous).toEqual(createProjectionState({ id: "task-1" }));
-    expect(result.next).toEqual(createProjectionState({ id: "task-2" }));
+    expect(result.previous).toEqual(createProjectOverviewState({ id: "task-1" }));
+    expect(result.next).toEqual(createProjectOverviewState({ id: "task-2" }));
     expect(result.version).toEqual({ previous: 1, draft: 2 });
     expect(result.lifecycle).toEqual({ archived: false, deleted: false });
     expect(result.validation.valid).toBe(false);
@@ -707,9 +653,9 @@ describe("entity transactions", () => {
   });
 
   it("rolls back by releasing the transaction with previous and draft evidence", () => {
-    const previous = createProjectionState();
+    const previous = createProjectOverviewState();
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       previous,
       version: { previous: 3, draft: 4 },
     });
@@ -722,7 +668,7 @@ describe("entity transactions", () => {
 
     expect(result.status).toBe("rolled-back");
     expect(result.previous).toEqual(previous);
-    expect(result.draft).toEqual(createProjectionState({ name: "Rolled back" }));
+    expect(result.draft).toEqual(createProjectOverviewState({ name: "Rolled back" }));
     expect(result.version).toEqual({ previous: 3, draft: 4 });
     expect(result.lifecycle).toEqual({ archived: true, deleted: false });
     expect(transaction.status).toBe("rolled-back");
@@ -730,8 +676,8 @@ describe("entity transactions", () => {
 
   it("rejects rollback after an accepted commit", () => {
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     transaction.commit();
@@ -742,8 +688,8 @@ describe("entity transactions", () => {
 
   it("rejects rollback after rollback", () => {
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     transaction.rollback();
@@ -754,8 +700,8 @@ describe("entity transactions", () => {
 
   it("allows rollback after a rejected commit", () => {
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState({ id: "task-1" }),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState({ id: "task-1" }),
       version: { previous: 1, draft: 2 },
     });
     transaction.update((draft) => {
@@ -766,14 +712,14 @@ describe("entity transactions", () => {
     const rolledBack = transaction.rollback();
 
     expect(rejected.status).toBe("rejected");
-    expect(rolledBack.draft).toEqual(createProjectionState({ id: "task-2" }));
+    expect(rolledBack.draft).toEqual(createProjectOverviewState({ id: "task-2" }));
     expect(transaction.status).toBe("rolled-back");
   });
 
   it("keeps status and current draft unchanged when update throws", () => {
     const transaction = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     const before = transaction.currentDraft;
@@ -789,8 +735,8 @@ describe("entity transactions", () => {
 
   it("rejects updates and commits after commit or rollback", () => {
     const committed = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     committed.commit();
@@ -799,8 +745,8 @@ describe("entity transactions", () => {
     expect(() => committed.commit()).toThrow(/committed/);
 
     const rolledBack = createEntityTransaction({
-      schema: ProjectionStateSchema,
-      previous: createProjectionState(),
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
       version: { previous: 1, draft: 2 },
     });
     rolledBack.rollback();

@@ -35,7 +35,10 @@ export function vitestArgs(choice) {
     "vitest",
     "run",
     ...(choice.coverage
-      ? ["--coverage", ...choice.sources.map((source) => `--coverage.include=${source}`)]
+      ? [
+          "--coverage",
+          ...[...new Set(choice.sources)].map((source) => `--coverage.include=${source}`),
+        ]
       : []),
     ...choice.paths,
   ];
@@ -77,6 +80,40 @@ export function taskGateCommands(classification) {
 }
 
 /**
+ * Selects tests that a non-record task cannot opt out of with caller arguments.
+ */
+export function requiredTaskTests(classification, paths = []) {
+  if (!classification.proto && !classification.typeDoc) return [];
+  const packages = new Set();
+  for (const path of paths) {
+    const match = /^packages\/([^/]+)\//u.exec(path);
+    if (match === null) return ["run", "--passWithNoTests"];
+    packages.add(`packages/${match[1]}/test`);
+  }
+  return packages.size > 0 ? ["run", ...packages] : ["run", "--passWithNoTests"];
+}
+
+/* Plans mandatory changed-scope tests and any caller tests those suites do not cover. */
+export function plannedTaskTests(classification, paths, choice) {
+  const mandatory = requiredTaskTests(classification, paths);
+  const requested = choice.noTests ? [] : [...new Set(choice.paths)];
+  const uncovered = requested.filter((path) => !coveredByMandatoryTest(path, mandatory));
+  if (choice.coverage && mandatory.length > 0)
+    return [vitestArgs({ ...choice, paths: [...mandatory.slice(1), ...uncovered] })];
+  return [
+    ...(mandatory.length === 0 ? [] : [vitestArgs({ ...choice, paths: mandatory.slice(1) })]),
+    ...(uncovered.length === 0 ? [] : [vitestArgs({ ...choice, paths: uncovered })]),
+  ];
+}
+
+function coveredByMandatoryTest(path, mandatory) {
+  return (
+    mandatory.includes("--passWithNoTests") ||
+    mandatory.slice(1).some((scope) => path === scope || path.startsWith(`${scope}/`))
+  );
+}
+
+/**
  * Lists changed paths from the branch, worktree, index, and untracked files.
  *
  * @param runGit Runs a Git command and returns its status and standard output.
@@ -113,11 +150,15 @@ function run(command, args) {
 function main() {
   const choice = parseTaskVerificationArgs(process.argv.slice(2));
   const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-  for (const command of taskGateCommands(classifyTaskChanges(changedPaths()))) {
+  const paths = changedPaths();
+  const classification = classifyTaskChanges(paths);
+  if (choice.noTests && requiredTaskTests(classification, paths).length > 0) {
+    throw new Error("verify:task --no-tests is available only for an all-Markdown change set.");
+  }
+  for (const command of taskGateCommands(classification)) {
     run(pnpm, command === "eslint" ? ["exec", "eslint", "."] : [command]);
   }
-  if (choice.noTests) return;
-  run(pnpm, vitestArgs(choice));
+  for (const test of plannedTaskTests(classification, paths, choice)) run(pnpm, test);
 }
 
 if (import.meta.url === new URL(process.argv[1], "file:").href) {

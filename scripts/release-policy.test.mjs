@@ -1,3 +1,7 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,6 +12,16 @@ import {
 } from "./release-policy.mjs";
 
 describe("release policy", () => {
+  it("uses unmodified upstream Sigstore for trusted publishing", () => {
+    const root = new URL("..", import.meta.url).pathname;
+    const workspace = parse(readFileSync(resolve(root, "pnpm-workspace.yaml"), "utf8"));
+    const lockfile = parse(readFileSync(resolve(root, "pnpm-lock.yaml"), "utf8"));
+
+    expect(workspace.patchedDependencies).toBeUndefined();
+    expect(lockfile.patchedDependencies).toBeUndefined();
+    expect(existsSync(resolve(root, "patches/sigstore@4.1.1.patch"))).toBe(false);
+  });
+
   it("maps exact snapshot and stable versions to their only supported channels", () => {
     expect(classifyReleaseVersion("2.0.0-snapshot.4")).toEqual({
       tag: "snapshot",
@@ -95,6 +109,6 @@ describe("release policy", () => {
     expect(() => validateReleasePolicy(wrongConfig)).toThrow("invalid publishConfig");
     const wrongPin = globalThis.structuredClone(entries);
     wrongPin[1].manifest.dependencies = { "@spine-event-engine/core": "1.0.0" };
-    expect(() => validateReleasePolicy(wrongPin)).toThrow("must use 2.0.0-snapshot.10");
+    expect(() => validateReleasePolicy(wrongPin)).toThrow("must use 2.0.0-snapshot.11");
   });
 });

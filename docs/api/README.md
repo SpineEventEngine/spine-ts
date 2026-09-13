@@ -302,12 +302,17 @@ lost acknowledgement can redeliver after restart and downstream handling must
 be idempotent. `DeliveryMonitor` is the explicit failure-policy seam: by
 default it marks a failed reception delivered and continues independent targets;
 an application can instead choose the immediate repeat action.
+Normal local and remote delivery reads every status in a bounded page. It
+removes a pending duplicate when its signal ID and typed Inbox target match a
+delivered row in that page or one of the 1,000 most recent deliveries remembered
+by the process. A different target or a new signal ID remains independently
+deliverable, even when the domain payload is equal.
 
-Each delivery drain is bounded to one page, not to a total backlog: an active
-lease owner can take later pages while its policy retains the shard. The
-30-second Inbox deduplication window controls duplicate admission only. It is
-not a replay-retention period; accepted rows follow their Inbox lifecycle and
-may be replayed after the duplicate window has elapsed.
+Each Inbox read is bounded to one page, not to a total backlog: an active drain
+can advance through later pages while it retains the shard. The 30-second Inbox
+deduplication window controls how long delivered rows remain available as
+duplicate evidence. It is not a replay-retention period; accepted rows follow
+their Inbox lifecycle and may be replayed after the duplicate window has elapsed.
 The framework persists no attempts, quarantine, receipts, markers, timers, backoff,
 dead-letter storage, or scheduler policy.
 Process-manager
@@ -676,12 +681,13 @@ declared with normal class method syntax. `EntityHandlers.define()` remains
 public for framework tests, generated-registry ingestion, and legacy
 non-decorator migration tooling; ordinary application code should use bare
 decorators plus generated registry assembly instead. Decorator adapter exports
-include `@Assign`, `@Command`, `@Subscribe`, `@React`, legacy/framework-only
+include `@Assign`, `@Command`, `@Subscribe`, `@React`, `@Throws`, legacy/framework-only
 `@Apply`, framework-only `materializeDecoratedEntityHandlers()`,
-`HandlerMethodDecorator`, and `HandlerMethodValue`. Bare `@Assign`, `@Command`,
-`@Subscribe`, and `@React` are the only public decorator signatures and the
-ordinary application syntax. Generated handler registries perform ordinary schema
-inference. Schema-bearing handler metadata is internal/tooling input for
+`HandlerMethodDecorator`, `HandlerMethodValue`, and `RejectionDeclaration`.
+Bare `@Assign`, `@Command`, `@Subscribe`, and `@React` are the primary public
+handler decorators. A command-accepting handler uses `@Throws` below its primary
+decorator to declare generated domain rejections. Generated handler registries
+perform ordinary schema inference. Schema-bearing handler metadata is internal/tooling input for
 generated registry assembly and framework materialization; it is not a
 public decorator form. `@Apply` and `materializeDecoratedEntityHandlers()`
 remain framework-only compatibility paths; new application code must not use
@@ -705,9 +711,10 @@ Generated handler registries are the intended ordinary bridge from bare
 decorators to canonical metadata. Their unversioned `receivers` collection
 contains Entity records with entity type and state schema plus standalone
 receiver records matched to registered instances by exact constructor. Each
-record carries handler kind, method name, first-parameter signal schema,
-explicit one- or two-argument arity, and emitted schemas inferred from explicit
-return types. Build-time analysis derives and
+record carries handler kind, method name, an `input` record with the
+first-parameter schema and origin, explicit one- or two-argument arity, and an
+`outcomes` record separating normal returns from declared thrown rejections.
+Build-time analysis derives and
 validates command, event, and distinct rejection roles from generated
 descriptors before writing those registry records. A rejection role requires a
 top-level message declared in a source file ending `rejections.proto`.
@@ -793,10 +800,15 @@ const registry: GeneratedHandlerRegistry = {
         {
           kind: "command-substitution",
           methodName: "approve",
-          signalSchema: ApproveProjectSchema,
-          emittedSchemas: [ScheduleProjectSchema],
+          input: {
+            schema: ApproveProjectSchema,
+            origin: "domestic",
+          },
+          outcomes: {
+            returned: [ScheduleProjectSchema],
+            thrown: [],
+          },
           parameterCount: 2,
-          origin: "domestic",
         },
       ],
     },
@@ -812,7 +824,6 @@ const repository = new Repository({
 const context = BoundedContext.singleTenant("Projects").add(repository).build();
 await context.commandBus().post(
   SignalEnvelopes.command({
-    id: create(CommandIdSchema, { uuid: crypto.randomUUID() }),
     context: create(CommandContextSchema),
     schema: ApproveProjectSchema,
     message: create(ApproveProjectSchema, { project, status: "approved" }),
@@ -820,8 +831,9 @@ await context.commandBus().post(
 );
 ```
 
-Its generated registry record declares `ApproveProjectSchema` as input and
-`ScheduleProjectSchema` as emitted output. Application builds emit that record
+Its generated registry record declares `ApproveProjectSchema` under `input` and
+`ScheduleProjectSchema` as a normal returned outcome. Declared rejection
+schemas, when present, appear separately under `outcomes.thrown`. Application builds emit that record
 to `generated/handler/generated-handler-registry.js`; those applications use
 `buildAsync()` with their compiled package root before Command Bus posting.
 The public `@spine-event-engine/server/spi/handler-registry` subpath is the
@@ -928,17 +940,20 @@ surface is a server-runtime kernel only; it is not a process-wide singleton,
 process supervisor, generic job framework, command/event/import bus, durable
 storage or inbox, read-side stand, repository dispatcher, integration broker,
 broad gRPC server lifecycle, or worker-process runtime.
-Runtime metadata exports include `SignalMetadata`, `SignalIds`, `Clock`,
+Runtime metadata exports include `SignalMetadata`, `Clock`,
 `SystemClock`, `FixedClock`, `SignalMetadataOptions`, `ActorContextInput`,
 `CommandContextInput`, and `EventContextInput`. `SignalMetadata` creates
 generated command IDs, event IDs, timestamps, actor/tenant command context,
 source-command/source-event origin chains, primitive (`string | number |
 boolean`) producer IDs, and validated int32 `Version` metadata through one
-small shared policy surface. Deterministic tests inject `Clock` and
-`SignalIds` instances instead of mutating process-wide globals. This seam is
+small shared policy surface. Generated IDs use Node secure UUIDs; deterministic
+tests inject `Clock` and use fixed source envelopes. This seam is
 local runtime metadata only; it does not discover handlers, load generated
 registries, materialize application handlers, manage transport, storage, tracing,
 or end-user envelope APIs.
+Existing Command and Event envelopes retain their supplied IDs without UUID-format
+validation; the UUID guarantee applies to newly generated IDs, not to decoding,
+transport, or retransmission of an existing envelope.
 It does not broaden end-user APIs into framework `Command`/`Event` envelopes,
 does not reintroduce `@Apply`, and does not expose manual transaction-control
 APIs.

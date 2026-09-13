@@ -27,25 +27,25 @@ import { describe, expect, it } from "vitest";
 import { EntityColumn, EntityQuery } from "../../src/index.js";
 import { GeneratedEntityColumns } from "../../src/codegen/index.js";
 import {
-  FixtureStatus,
-  ProjectionStateSchema,
-  ScalarProjectionStateSchema,
+  ProjectStatus,
+  ProjectOverviewStateSchema,
+  ProjectOverviewWithMetricsStateSchema,
 } from "../../test-fixtures/entity-column-fixtures.js";
 
 const columns = EntityColumn.register(
-  ProjectionStateSchema,
-  GeneratedEntityColumns.define(ProjectionStateSchema, {
-    title: { field: ProjectionStateSchema.field.title, comparison: "ordering" as const },
-    priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" as const },
-    status: { field: ProjectionStateSchema.field.status, comparison: "equality" as const },
-    dueAt: { field: ProjectionStateSchema.field.dueAt, comparison: "ordering" as const },
-    owner: { field: ProjectionStateSchema.field.owner, comparison: "equality" as const },
+  ProjectOverviewStateSchema,
+  GeneratedEntityColumns.define(ProjectOverviewStateSchema, {
+    title: { field: ProjectOverviewStateSchema.field.title, comparison: "ordering" as const },
+    priority: { field: ProjectOverviewStateSchema.field.priority, comparison: "ordering" as const },
+    status: { field: ProjectOverviewStateSchema.field.status, comparison: "equality" as const },
+    dueAt: { field: ProjectOverviewStateSchema.field.dueAt, comparison: "ordering" as const },
+    owner: { field: ProjectOverviewStateSchema.field.owner, comparison: "equality" as const },
     fingerprint: {
-      field: ProjectionStateSchema.field.fingerprint,
+      field: ProjectOverviewStateSchema.field.fingerprint,
       comparison: "equality" as const,
     },
-    active: { field: ProjectionStateSchema.field.active, comparison: "equality" as const },
-    sequence: { field: ProjectionStateSchema.field.sequence, comparison: "ordering" as const },
+    active: { field: ProjectOverviewStateSchema.field.active, comparison: "equality" as const },
+    sequence: { field: ProjectOverviewStateSchema.field.sequence, comparison: "ordering" as const },
   }),
 );
 const context = create(ActorContextSchema, {
@@ -53,38 +53,38 @@ const context = create(ActorContextSchema, {
 });
 const { eq, gt } = EntityQuery;
 const scalarColumns = EntityColumn.register(
-  ScalarProjectionStateSchema,
-  GeneratedEntityColumns.define(ScalarProjectionStateSchema, {
+  ProjectOverviewWithMetricsStateSchema,
+  GeneratedEntityColumns.define(ProjectOverviewWithMetricsStateSchema, {
     doubleValue: {
-      field: ScalarProjectionStateSchema.field.doubleValue,
+      field: ProjectOverviewWithMetricsStateSchema.field.doubleValue,
       comparison: "ordering" as const,
     },
     floatValue: {
-      field: ScalarProjectionStateSchema.field.floatValue,
+      field: ProjectOverviewWithMetricsStateSchema.field.floatValue,
       comparison: "ordering" as const,
     },
     uint64Value: {
-      field: ScalarProjectionStateSchema.field.uint64Value,
+      field: ProjectOverviewWithMetricsStateSchema.field.uint64Value,
       comparison: "ordering" as const,
     },
     fixed64Value: {
-      field: ScalarProjectionStateSchema.field.fixed64Value,
+      field: ProjectOverviewWithMetricsStateSchema.field.fixed64Value,
       comparison: "ordering" as const,
     },
     uint32Value: {
-      field: ScalarProjectionStateSchema.field.uint32Value,
+      field: ProjectOverviewWithMetricsStateSchema.field.uint32Value,
       comparison: "ordering" as const,
     },
     fixed32Value: {
-      field: ScalarProjectionStateSchema.field.fixed32Value,
+      field: ProjectOverviewWithMetricsStateSchema.field.fixed32Value,
       comparison: "ordering" as const,
     },
     sfixed64Value: {
-      field: ScalarProjectionStateSchema.field.sfixed64Value,
+      field: ProjectOverviewWithMetricsStateSchema.field.sfixed64Value,
       comparison: "ordering" as const,
     },
     sint64Value: {
-      field: ScalarProjectionStateSchema.field.sint64Value,
+      field: ProjectOverviewWithMetricsStateSchema.field.sint64Value,
       comparison: "ordering" as const,
     },
   }),
@@ -93,7 +93,7 @@ const selectedColumns: Pick<typeof columns, "priority" | "status"> = columns;
 
 describe("EntityQuery", () => {
   it("compiles the shared DSL to a storage-neutral execution plan", () => {
-    const plan = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
+    const plan = EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
       .byId("task-1")
       .where(EntityQuery.eq(columns.title, "Awaiting"))
       .mask("title")
@@ -116,13 +116,13 @@ describe("EntityQuery", () => {
   });
 
   it("compiles IDs, nested predicates, masks, repeated ordering, and a limit", () => {
-    const query = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
+    const query = EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
       .byId("task-1", "task-2")
       .where(
         EntityQuery.all(
           EntityQuery.ge(columns.priority, 2),
           EntityQuery.either(
-            EntityQuery.eq(columns.status, FixtureStatus.OPEN),
+            EntityQuery.eq(columns.status, ProjectStatus.OPEN),
             EntityQuery.lt(columns.title, "Z"),
           ),
         ),
@@ -137,7 +137,7 @@ describe("EntityQuery", () => {
     const filters = roundTripped.target?.criterion;
 
     expect(roundTripped.target?.type).toBe(
-      "type.googleapis.com/spine_ts.client.test.ProjectionState",
+      "type.googleapis.com/spine_ts.client.test.ProjectOverviewState",
     );
     expect(filters?.case).toBe("filters");
     if (filters?.case !== "filters") throw new Error("Expected query filters.");
@@ -176,7 +176,7 @@ describe("EntityQuery", () => {
 
   it("compile-covers the documented ID and complete comparison-helper surface", () => {
     const documented = EntityQuery.select({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       columns,
       context,
     })
@@ -197,50 +197,50 @@ describe("EntityQuery", () => {
 
   it("rejects invalid runtime limits and authored masks before wire compilation", () => {
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).limit(1).build(),
+      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context }).limit(1).build(),
     ).toThrow("Entity query limit requires ordering.");
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
+      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
         .mask("missing" as "title")
         .buildPlan(),
     ).toThrow('Entity query mask path "missing" is not a state field.');
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).limit(0),
+      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context }).limit(0),
     ).toThrow("positive integer");
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).limit(1.5),
+      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context }).limit(1.5),
     ).toThrow("positive integer");
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(),
+      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context }).byId(),
     ).toThrow("must not be empty");
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(
+      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context }).byId(
         undefined as never,
       ),
     ).toThrow("must not be empty");
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(
+      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context }).byId(
         ...Array.from({ length: 1_001 }, (_, index) => `task-${String(index)}`),
       ),
     ).toThrow("at most 1000");
   });
 
   it("types ID filters from the selected Entity state", () => {
-    const query = EntityQuery.select({ schema: ProjectionStateSchema, columns, context });
+    const query = EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context });
     query.byId("task-1");
-    // @ts-expect-error A number is not the selected ProjectionState string identifier.
+    // @ts-expect-error A number is not the selected ProjectOverviewState string identifier.
     query.byId(1);
-    // @ts-expect-error A generated message is not the selected ProjectionState string identifier.
+    // @ts-expect-error A generated message is not the selected ProjectOverviewState string identifier.
     query.byId(create(TimestampSchema));
   });
 
   it("packs descriptor and system column value families", () => {
-    const query = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
+    const query = EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
       .where(
         EntityQuery.all(
           EntityQuery.eq(columns.active, false),
           EntityQuery.eq(columns.fingerprint, new Uint8Array([1, 2])),
-          EntityQuery.eq(columns.status, FixtureStatus.CLOSED),
+          EntityQuery.eq(columns.status, ProjectStatus.CLOSED),
           EntityQuery.eq(columns.sequence, 4n),
           EntityQuery.gt(columns.dueAt, create(TimestampSchema, { seconds: 2n })),
           EntityQuery.eq(columns.version, create(VersionSchema, { number: 3 })),
@@ -259,21 +259,21 @@ describe("EntityQuery", () => {
 
   it("emits minimal include-all, ID-only, predicate-only, and order-only shapes", () => {
     const includeAll = EntityQuery.select({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       columns,
       context,
     }).build();
-    const idOnly = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
+    const idOnly = EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
       .byId("task-1")
       .build();
     const predicateOnly = EntityQuery.select({
-      schema: ProjectionStateSchema,
+      schema: ProjectOverviewStateSchema,
       columns,
       context,
     })
       .where(EntityQuery.eq(columns.title, "A"))
       .build();
-    const orderOnly = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
+    const orderOnly = EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
       .orderBy(columns.title)
       .build();
 
@@ -288,7 +288,7 @@ describe("EntityQuery", () => {
 
   it("packs every frozen numeric scalar family", () => {
     const query = EntityQuery.select({
-      schema: ScalarProjectionStateSchema,
+      schema: ProjectOverviewWithMetricsStateSchema,
       columns: scalarColumns,
       context,
     })
@@ -324,7 +324,7 @@ describe("EntityQuery", () => {
     const cyclic: { kind: "all"; predicates: unknown[] } = { kind: "all", predicates: [] };
     cyclic.predicates.push(cyclic);
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
+      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
         .where(cyclic as never)
         .buildPlan(),
     ).toThrow("must not contain cycles");
@@ -334,21 +334,21 @@ describe("EntityQuery", () => {
       deep = { kind: "all", predicates: [deep] };
     }
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
+      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
         .where(deep as never)
         .buildPlan(),
     ).toThrow("maximum depth 64");
 
     const wide = { kind: "all", predicates: new Array(10_001).fill(leaf) };
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
+      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
         .where(wide as never)
         .buildPlan(),
     ).toThrow("maximum node count 10000");
   });
 
   it("rejects more than 10000 distinct top-level predicates before build", () => {
-    const builder = EntityQuery.select({ schema: ProjectionStateSchema, columns, context });
+    const builder = EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context });
     for (let index = 0; index < 10_000; index += 1) {
       builder.where(eq(columns.title, `Task ${String(index)}`));
     }
@@ -368,7 +368,7 @@ describe("EntityQuery", () => {
 
     for (const [predicate, expected] of malformed) {
       expect(() =>
-        EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
+        EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
           .where(predicate as never)
           .build(),
       ).toThrow(expected);
@@ -377,9 +377,9 @@ describe("EntityQuery", () => {
 
   it("rejects an ID filter when the target descriptor has no ID field", () => {
     const schemaWithoutFields = {
-      ...ProjectionStateSchema,
+      ...ProjectOverviewStateSchema,
       fields: [],
-    } as unknown as typeof ProjectionStateSchema;
+    } as unknown as typeof ProjectOverviewStateSchema;
 
     expect(() =>
       EntityQuery.select({ schema: schemaWithoutFields, columns: columns as never, context })
@@ -393,20 +393,22 @@ describe("EntityQuery", () => {
     expect(() => eq(columns.active, "true" as never)).toThrow("wrong type");
     expect(() => eq(columns.fingerprint, "bytes" as never)).toThrow("wrong type");
     expect(() => eq(columns.dueAt, { $typeName: "wrong.Type" } as never)).toThrow("wrong type");
-    expect(() => gt(columns.status as never, FixtureStatus.OPEN as never)).toThrow(
+    expect(() => gt(columns.status as never, ProjectStatus.OPEN as never)).toThrow(
       "does not support",
     );
 
     const valid = eq(columns.title, "A");
     const forged = { ...valid, operator: "unknown" } as never;
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).where(forged).build(),
+      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
+        .where(forged)
+        .build(),
     ).toThrow("not recognized");
 
     const { title: omitted, ...withoutTitle } = columns;
     void omitted;
     expect(() =>
-      EntityQuery.select({ schema: ProjectionStateSchema, columns: withoutTitle, context })
+      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns: withoutTitle, context })
         .where(valid as never)
         .build(),
     ).toThrow("does not belong");
@@ -415,18 +417,18 @@ describe("EntityQuery", () => {
   it("keeps deferred targets and invalid value/operator pairs out of the public type surface", () => {
     const compileAssertions = (): void => {
       // @ts-expect-error enum columns do not support ordering.
-      gt(columns.status, FixtureStatus.OPEN);
+      gt(columns.status, ProjectStatus.OPEN);
       // @ts-expect-error numeric columns reject string values.
       eq(columns.priority, "high");
       // @ts-expect-error masks accept only state field names.
-      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).mask("missing");
-      const builder = EntityQuery.select({ schema: ProjectionStateSchema, columns, context });
+      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context }).mask("missing");
+      const builder = EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context });
       // @ts-expect-error equality-only enum columns cannot be used for ordering.
       builder.orderBy(columns.status);
       // @ts-expect-error predicates from a different Projection cannot enter this builder.
       builder.where(eq(scalarColumns.doubleValue, 1));
       const selectedBuilder = EntityQuery.select({
-        schema: ProjectionStateSchema,
+        schema: ProjectOverviewStateSchema,
         columns: selectedColumns,
         context,
       });

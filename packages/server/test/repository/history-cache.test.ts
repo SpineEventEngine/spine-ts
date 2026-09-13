@@ -62,7 +62,7 @@ describe("repository state-history cache", () => {
         );
       },
       (value) => value.version,
-      { requireContiguousVersions: true },
+      { requireDescendingVersions: true },
     );
 
     await expect(cache.read(2)).resolves.toHaveLength(2);
@@ -78,7 +78,7 @@ describe("repository state-history cache", () => {
         return Promise.resolve([record(5n)]);
       },
       (value) => value.version,
-      { requireContiguousVersions: true },
+      { requireDescendingVersions: true },
     );
 
     await expect(cache.read(2)).resolves.toHaveLength(1);
@@ -86,18 +86,60 @@ describe("repository state-history cache", () => {
     expect(calls).toBe(1);
   });
 
-  it("clears cached records on a discontinuous continuation", async () => {
+  it("continues ordered history across a legitimate version gap", async () => {
+    const calls: (bigint | undefined)[] = [];
+    const cache = RepositoryHistory.createCache(
+      (_depth, startingFromVersion) => {
+        calls.push(startingFromVersion);
+        return Promise.resolve(
+          startingFromVersion === undefined ? [record(5n), record(4n)] : [record(2n)],
+        );
+      },
+      (value) => value.version,
+      { requireDescendingVersions: true },
+    );
+
+    await cache.read(2);
+    await expect(cache.read(3)).resolves.toEqual([record(5n), record(4n), record(2n)]);
+    expect(calls).toEqual([undefined, 4n]);
+  });
+
+  it("clears cached records when a continuation is not strictly older", async () => {
     const cache = RepositoryHistory.createCache(
       (_depth, startingFromVersion) =>
         Promise.resolve(
-          startingFromVersion === undefined ? [record(5n), record(4n)] : [record(2n)],
+          startingFromVersion === undefined ? [record(5n), record(4n)] : [record(4n)],
         ),
       (value) => value.version,
-      { requireContiguousVersions: true },
+      { requireDescendingVersions: true },
     );
 
     await cache.read(2);
     await expect(cache.read(3)).resolves.toEqual([]);
+  });
+
+  it("rejects a duplicate or ascending version inside an initial page", async () => {
+    const cache = RepositoryHistory.createCache(
+      () => Promise.resolve([record(5n), record(5n), record(4n)]),
+      (value) => value.version,
+      { requireDescendingVersions: true },
+    );
+
+    await expect(cache.read(3)).resolves.toEqual([]);
+  });
+
+  it("rejects a duplicate or ascending version inside a continuation page", async () => {
+    const cache = RepositoryHistory.createCache(
+      (_depth, startingFromVersion) =>
+        Promise.resolve(
+          startingFromVersion === undefined ? [record(5n), record(4n)] : [record(6n), record(6n)],
+        ),
+      (value) => value.version,
+      { requireDescendingVersions: true },
+    );
+
+    await cache.read(2);
+    await expect(cache.read(4)).resolves.toEqual([]);
   });
 
   it("does not let a stale deferred read repopulate an invalidated cache", async () => {
@@ -108,7 +150,7 @@ describe("repository state-history cache", () => {
           resolve = complete;
         }),
       (value) => value.version,
-      { requireContiguousVersions: true },
+      { requireDescendingVersions: true },
     );
 
     const reading = cache.read(1);
@@ -188,6 +230,23 @@ describe("repository state-history cache", () => {
     await expect(cache.read(2)).resolves.toEqual([record(5n), record(4n)]);
     await expect(cache.read(3)).resolves.toEqual([record(6n), record(5n), record(4n)]);
     expect(calls).toEqual([undefined, 4n, undefined]);
+  });
+
+  it("rejects an unordered refreshed page after a newer continuation", async () => {
+    let calls = 0;
+    const cache = RepositoryHistory.createCache(
+      (_depth, startingFromVersion) => {
+        calls += 1;
+        if (calls === 1) return Promise.resolve([record(5n), record(4n)]);
+        if (startingFromVersion !== undefined) return Promise.resolve([record(6n)]);
+        return Promise.resolve([record(7n), record(7n), record(6n)]);
+      },
+      (value) => value.version,
+      { requireDescendingVersions: true },
+    );
+
+    await expect(cache.read(2)).resolves.toEqual([record(5n), record(4n)]);
+    await expect(cache.read(3)).resolves.toEqual([]);
   });
 
   it("does not retain a refreshed page invalidated while it is loading", async () => {

@@ -252,9 +252,40 @@ work, never from weakening correctness or review requirements.
     examples, documentation, and bounded packages use `verify:task` unless a
     concrete risk requires escalation. `pnpm verify` is the release profile.
 
+Caller-selected paths add focused coverage but cannot suppress checks or tests
+required by the complete branch, staged, local, and untracked change set.
+Unknown classifications fail closed. Run cheap deterministic checks before one
+aggregated relevant review wave; after convergence, run the selected release
+profile once. The final-SHA CI requirement is stated under Enforced verification
+boundary.
+
 These rules are execution gates. A task log must record the selected profile
 and why it is sufficient. Review scope or verification may expand when evidence
 reveals cross-package impact, but must not expand merely from habit.
+
+### Enforced verification boundary
+
+`CODE_QUALITY.md` remains the authoritative quality standard. Its objective
+rules are enforced by deterministic checkers; domain correctness, fixture
+meaning, and maintainability trade-offs remain explicit reviewer judgment.
+Checks classify the complete committed, staged, local, and untracked change
+scope and fail closed when that classification is unavailable or unknown.
+
+The cleanup checker counts every new or modified production/example callable,
+including functions, methods, constructors, accessors, function expressions,
+and named arrow functions, by physical source lines. It excludes generated,
+frozen, and unchanged baseline code. The authored Proto checker covers framework,
+examples, and package test fixtures, runs Buf formatting/lint gates, and checks
+commands/events/states source-role separation without claiming to prove domain
+semantics. Ordinary fixture consumers use named generated schemas; encoded
+descriptor payloads and positional descriptor selection are rejected, except
+tests whose direct subject is descriptor construction or decoding. TSDoc has
+mechanical layout/coverage checks and reviewer assessment of public meaning.
+
+Before review, run cheap deterministic checks over the diff. Collect all
+relevant specialist findings in one aggregated wave before corrections. After
+convergence, run release verification once. The branch is ready only after
+required CI is green for the exact final commit SHA.
 
 `verify:task` first classifies the committed branch diff and local/staged diff.
 It may skip Proto generation/lint/cleanliness and TypeDoc API checks only when

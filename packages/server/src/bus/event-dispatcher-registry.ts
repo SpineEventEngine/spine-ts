@@ -132,12 +132,12 @@ export class EventDispatcherRegistry {
   }
 
   /**
-   * Lists event schemas represented by registered dispatchers.
+   * Lists every registered event schema, including produced-only schemas.
    *
-   * @returns the registered schemas.
+   * @returns The registered schemas.
    */
   schemas(): readonly MessageSchema[] {
-    return Object.freeze([...this.#dispatcherSchemasByTypeUrl.values()]);
+    return Object.freeze([...this.#schemasByTypeUrl.values()]);
   }
   static #snapshot(dispatcher: EventDispatcher): DispatcherOriginSnapshot {
     const all = EventDispatcherRegistry.#schemaRegistrations(dispatcher.messageSchemas());

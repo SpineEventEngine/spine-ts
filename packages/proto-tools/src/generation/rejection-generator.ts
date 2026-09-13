@@ -21,6 +21,7 @@ import { resolve } from "node:path";
  */
 export const RejectionGenerator: Readonly<{
   generateCompanions(schema: Schema): void;
+  generateFile(schema: Schema, file: Schema["files"][number]): void;
   tsDoc(comment: string | undefined): string;
 }> = Object.freeze({
   generateCompanions(schema: Schema): void {
@@ -29,32 +30,40 @@ export const RejectionGenerator: Readonly<{
       const usesRejectionName =
         sourceName === "rejections.proto" || sourceName?.endsWith("_rejections.proto") === true;
       if (!usesRejectionName || file.proto.name.startsWith("spine/delivery/")) continue;
-      const messages = file.messages.filter((message) => message.parent === undefined);
-      if (messages.length === 0) continue;
-      const output = schema.generateFile(`${file.name}.ts`);
-      const throwable = output.import("RejectionThrowable", "@spine-event-engine/core");
-      const messageInit = output.import("MessageInitShape", "@bufbuild/protobuf", true);
-      output.preamble(file);
-      for (const message of messages) {
-        const messageSchema = output.importSchema(message);
-        output.print(
-          RejectionGenerator.tsDoc(getComments(message).leading),
-          output.export("const", message.name),
-          ": { readonly create: (input: ",
-          messageInit,
-          "<typeof ",
-          messageSchema,
-          ">) => ",
-          throwable,
-          "<typeof ",
-          messageSchema,
-          "> } = {\n  create(input) {\n    return ",
-          throwable,
-          ".create(",
-          messageSchema,
-          ", input);\n  },\n};\n",
-        );
-      }
+      RejectionGenerator.generateFile(schema, file);
+    }
+  },
+
+  generateFile(schema: Schema, file: Schema["files"][number]): void {
+    const messages = file.messages.filter((message) => message.parent === undefined);
+    if (messages.length === 0) return;
+    const output = schema.generateFile(`${file.name}.ts`);
+    const throwable = output.import("RejectionThrowable", "@spine-event-engine/core");
+    const messageInit = output.import("MessageInitShape", "@bufbuild/protobuf", true);
+    output.preamble(file);
+    for (const message of messages) {
+      const messageSchema = output.importSchema(message);
+      output.print(
+        RejectionGenerator.tsDoc(getComments(message).leading),
+        output.export("const", message.name),
+        ": { readonly schema: typeof ",
+        messageSchema,
+        "; readonly create: (input: ",
+        messageInit,
+        "<typeof ",
+        messageSchema,
+        ">) => ",
+        throwable,
+        "<typeof ",
+        messageSchema,
+        "> } = {\n  schema: ",
+        messageSchema,
+        ",\n  create(input) {\n    return ",
+        throwable,
+        ".create(",
+        messageSchema,
+        ", input);\n  },\n};\n",
+      );
     }
   },
 

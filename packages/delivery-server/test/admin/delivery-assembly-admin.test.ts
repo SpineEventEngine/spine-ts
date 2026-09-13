@@ -13,6 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 
@@ -22,6 +23,7 @@ import {
   RemoveMessageSchema,
   ShardStatus,
   WriteMessageSchema,
+  WriteMessagesSchema,
   type ShardInfoList,
 } from "@spine-event-engine/proto/delivery-server";
 import {
@@ -99,6 +101,45 @@ describe("delivery assembly Admin projection", () => {
       },
     });
     await iterator.return?.();
+  });
+
+  it("removes retained delivered upserts from the pending Admin count", async () => {
+    const assembly = DeliveryAssembly.create();
+    const only = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+    const pending = message("retained", only);
+    await assembly.inbox.writeOne(create(WriteMessageSchema, { message: pending }), context);
+    await assembly.inbox.writeOne(
+      create(WriteMessageSchema, {
+        message: {
+          ...pending,
+          status: InboxMessageStatus.DELIVERED,
+          keepUntil: create(TimestampSchema, { seconds: 4_102_444_800n, nanos: 0 }),
+        },
+      }),
+      context,
+    );
+    expect(assembly.admin.getShardInfo(create(EmptySchema), context)).toMatchObject({ shards: [] });
+  });
+
+  it("coalesces repeated writeMany identities to their final pending status", async () => {
+    const assembly = DeliveryAssembly.create();
+    const only = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+    const pending = message("batch-retained", only);
+    await assembly.inbox.writeMany(
+      create(WriteMessagesSchema, {
+        shard: only,
+        message: [
+          pending,
+          {
+            ...pending,
+            status: InboxMessageStatus.DELIVERED,
+            keepUntil: create(TimestampSchema, { seconds: 4_102_444_800n, nanos: 0 }),
+          },
+        ],
+      }),
+      context,
+    );
+    expect(assembly.admin.getShardInfo(create(EmptySchema), context)).toMatchObject({ shards: [] });
   });
 });
 

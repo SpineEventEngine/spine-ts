@@ -35,6 +35,113 @@ function entityReceivers(analysis: ReturnType<typeof BuildHandlerAnalyzer.analyz
 }
 
 describe("build-time handler analyzer", () => {
+  it("records declared rejections with either decorator order", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/declared-rejections.ts",
+        `
+          import { Aggregate, Assign, Throws } from "@spine-event-engine/server";
+          import { TaskAlreadyDone } from "../generated/rejections.js";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { type CreateTask } from "../generated/commands_pb.js";
+          import { type TaskCreated } from "../generated/events_pb.js";
+
+          export class DeclaredRejections extends Aggregate<string, typeof TaskSchema, bigint> {
+            @Assign
+            @Throws(TaskAlreadyDone)
+            canonical(command: CreateTask): TaskCreated { throw new Error(String(command)); }
+
+            @Throws(TaskAlreadyDone)
+            @Assign
+            reversed(command: CreateTask): TaskCreated { throw new Error(String(command)); }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers).toEqual([
+      expect.objectContaining({
+        methodName: "canonical",
+        outcomes: {
+          returned: [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+          thrown: [schema("../generated/rejections_pb.js", "TaskAlreadyDoneSchema")],
+        },
+      }),
+      expect.objectContaining({
+        methodName: "reversed",
+        outcomes: {
+          returned: [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+          thrown: [schema("../generated/rejections_pb.js", "TaskAlreadyDoneSchema")],
+        },
+      }),
+    ]);
+  });
+
+  it("records a rejection companion below a generated package namespace", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/nested-declared-rejection.ts",
+        `
+          import { Aggregate, Assign, Throws } from "@spine-event-engine/server";
+          import { TaskAlreadyDone } from "../generated/spine/examples/todo/rejections.js";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { type CreateTask } from "../generated/commands_pb.js";
+          import { type TaskCreated } from "../generated/events_pb.js";
+
+          export class NestedDeclaredRejection extends Aggregate<string, typeof TaskSchema, bigint> {
+            @Assign
+            @Throws(TaskAlreadyDone)
+            handle(command: CreateTask): TaskCreated { throw new Error(String(command)); }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers[0]?.outcomes.thrown).toEqual([
+      schema("../generated/spine/examples/todo/rejections_pb.js", "TaskAlreadyDoneSchema"),
+    ]);
+  });
+
+  it("rejects misplaced, empty, duplicate, and non-rejection Throws declarations", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/invalid-declared-rejections.ts",
+        `
+          import { Aggregate, Assign, Subscribe, Throws } from "@spine-event-engine/server";
+          import { TaskAlreadyDone } from "../generated/rejections.js";
+          import { TaskCreated } from "../generated/events.js";
+          import { TaskSchema } from "../generated/task_pb.js";
+          import { type CreateTask } from "../generated/commands_pb.js";
+          import { type TaskCreated as TaskCreatedMessage } from "../generated/events_pb.js";
+
+          export class InvalidDeclarations extends Aggregate<string, typeof TaskSchema, bigint> {
+            @Subscribe @Throws(TaskAlreadyDone)
+            misplaced(event: TaskCreatedMessage): void { void event; }
+
+            @Assign @Throws()
+            empty(command: CreateTask): TaskCreatedMessage { throw new Error(String(command)); }
+
+            @Assign @Throws(TaskAlreadyDone, TaskAlreadyDone)
+            duplicate(command: CreateTask): TaskCreatedMessage { throw new Error(String(command)); }
+
+            @Assign @Throws(TaskCreated)
+            wrongRole(command: CreateTask): TaskCreatedMessage { throw new Error(String(command)); }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics.map(({ code }) => code)).toEqual([
+      "INVALID_THROWS",
+      "INVALID_THROWS",
+      "INVALID_THROWS",
+      "INVALID_THROWS",
+    ]);
+    expect(result.receivers).toEqual([]);
+  });
+
   it("requires canonical handler contexts that match the input signal role", () => {
     const result = analyzeBuildHandlers(
       programWithSource(
@@ -391,6 +498,33 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
+  it("rejects @Assign on a Projection while retaining valid subscriptions and assignments", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/projection-assign.ts",
+        handlerFixtureSource(
+          "Projection",
+          "TaskListSchema",
+          `
+            @Assign assign(command: CreateTask): TaskCreated { throw new Error(String(command)); }
+            @Subscribe observe(event: TaskCreated): void { void event; }
+          `,
+          `
+            import { type CreateTask } from "../generated/commands_pb.js";
+            import { type TaskCreated } from "../generated/events_pb.js";
+          `,
+        ),
+      ),
+    );
+
+    expect(entityReceivers(result)[0]?.handlers.map((handler) => handler.kind)).toEqual([
+      "event-subscription",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_ASSIGN_HANDLER",
+    ]);
+  });
+
   it("rejects @Command inherited through Aggregate and Projection domain bases", () => {
     const result = analyzeBuildHandlers(
       programWithSource(
@@ -482,55 +616,37 @@ describe("build-time handler analyzer", () => {
         sourceFile: "src/task.ts",
         stateSchema: schema("../generated/spine/examples/todo/tasks_pb.js", "TaskSchema"),
         handlers: [
-          {
-            kind: "event-subscription",
-            methodName: "observeCreated",
-            origin: "domestic",
-            signalSchema: schema(
-              "../generated/spine/examples/todo/task_events_pb.js",
-              "TaskCreatedSchema",
-            ),
-            emittedSchemas: [],
-            parameterCount: 1,
-          },
-          {
-            kind: "command-reaction",
-            methodName: "renameAgain",
-            origin: "domestic",
-            signalSchema: schema(
-              "../generated/spine/examples/todo/task_events_pb.js",
-              "TaskCreatedSchema",
-            ),
-            emittedSchemas: [
-              schema("../generated/spine/examples/todo/task_commands_pb.js", "RenameTaskSchema"),
-            ],
-            parameterCount: 2,
-          },
-          {
-            kind: "event-reaction",
-            methodName: "reactToCreated",
-            origin: "domestic",
-            signalSchema: schema(
-              "../generated/spine/examples/todo/task_events_pb.js",
-              "TaskCreatedSchema",
-            ),
-            emittedSchemas: [
+          handlerRecord(
+            "event-subscription",
+            "observeCreated",
+            schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
+            [],
+            1,
+          ),
+          handlerRecord(
+            "command-reaction",
+            "renameAgain",
+            schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
+            [schema("../generated/spine/examples/todo/task_commands_pb.js", "RenameTaskSchema")],
+            2,
+          ),
+          handlerRecord(
+            "event-reaction",
+            "reactToCreated",
+            schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
+            [
               schema("../generated/spine/examples/todo/task_events_pb.js", "TaskRenamedSchema"),
               schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCompletedSchema"),
             ],
-            parameterCount: 1,
-          },
-          {
-            kind: "event-subscription",
-            methodName: "onRenamed",
-            origin: "domestic",
-            signalSchema: schema(
-              "../generated/spine/examples/todo/task_events_pb.js",
-              "TaskRenamedSchema",
-            ),
-            emittedSchemas: [],
-            parameterCount: 1,
-          },
+            1,
+          ),
+          handlerRecord(
+            "event-subscription",
+            "onRenamed",
+            schema("../generated/spine/examples/todo/task_events_pb.js", "TaskRenamedSchema"),
+            [],
+            1,
+          ),
         ],
       },
     ]);
@@ -556,14 +672,15 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(entityReceivers(result)[0]?.handlers[0]).toEqual({
-      kind: "command-assignment",
-      methodName: "create",
-      origin: "domestic",
-      signalSchema: schema("../generated/domain_pb.js", "CreateTaskSchema"),
-      emittedSchemas: [schema("../generated/events_pb.js", "TaskCreatedSchema")],
-      parameterCount: 1,
-    });
+    expect(entityReceivers(result)[0]?.handlers[0]).toEqual(
+      handlerRecord(
+        "command-assignment",
+        "create",
+        schema("../generated/domain_pb.js", "CreateTaskSchema"),
+        [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+        1,
+      ),
+    );
   });
 
   it("classifies event schemas from descriptors when generated module paths are neutral", () => {
@@ -582,14 +699,15 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(entityReceivers(result)[0]?.handlers[0]).toEqual({
-      kind: "event-subscription",
-      methodName: "observe",
-      origin: "domestic",
-      signalSchema: schema("../generated/domain_pb.js", "TaskCreatedSchema"),
-      emittedSchemas: [],
-      parameterCount: 1,
-    });
+    expect(entityReceivers(result)[0]?.handlers[0]).toEqual(
+      handlerRecord(
+        "event-subscription",
+        "observe",
+        schema("../generated/domain_pb.js", "TaskCreatedSchema"),
+        [],
+        1,
+      ),
+    );
   });
 
   it("classifies a bare Subscribe parameter matching the entity schema as a state subscription", () => {
@@ -605,14 +723,13 @@ describe("build-time handler analyzer", () => {
 
     expect(result.diagnostics).toEqual([]);
     expect(entityReceivers(result)[0]?.handlers).toEqual([
-      {
-        kind: "state-subscription",
-        methodName: "observe",
-        origin: "domestic",
-        signalSchema: schema("../generated/task_pb.js", "TaskSchema"),
-        emittedSchemas: [],
-        parameterCount: 1,
-      },
+      handlerRecord(
+        "state-subscription",
+        "observe",
+        schema("../generated/task_pb.js", "TaskSchema"),
+        [],
+        1,
+      ),
     ]);
   });
 
@@ -636,14 +753,13 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(entityReceivers(result)[0]?.handlers).toEqual([
-      {
-        kind: "state-subscription",
-        methodName: "observeForeign",
-        origin: "domestic",
-        signalSchema: schema("../generated/foreign_pb.js", "ForeignStateSchema"),
-        emittedSchemas: [],
-        parameterCount: 1,
-      },
+      handlerRecord(
+        "state-subscription",
+        "observeForeign",
+        schema("../generated/foreign_pb.js", "ForeignStateSchema"),
+        [],
+        1,
+      ),
     ]);
     expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
       ["INVALID_SIGNAL_TYPE", "observeAudit"],
@@ -676,19 +792,20 @@ describe("build-time handler analyzer", () => {
 
     expect(result.diagnostics).toEqual([]);
     expect(entityReceivers(result)[0]?.handlers).toEqual(
-      roles.map(([, methodName, , kind, emittedSchemas, parameterCount]) => ({
-        kind,
-        methodName,
-        origin: "domestic",
-        signalSchema: schema("../generated/rejections_pb.js", "TaskAlreadyDoneSchema"),
-        emittedSchemas: emittedSchemas.map((exportName) =>
-          schema(
-            `../generated/${exportName === "RenameTaskSchema" ? "commands" : "events"}_pb.js`,
-            exportName,
+      roles.map(([, methodName, , kind, returnedSchemas, parameterCount]) =>
+        handlerRecord(
+          kind,
+          methodName,
+          schema("../generated/rejections_pb.js", "TaskAlreadyDoneSchema"),
+          returnedSchemas.map((exportName) =>
+            schema(
+              `../generated/${exportName === "RenameTaskSchema" ? "commands" : "events"}_pb.js`,
+              exportName,
+            ),
           ),
+          parameterCount,
         ),
-        parameterCount,
-      })),
+      ),
     );
   });
 
@@ -723,7 +840,10 @@ describe("build-time handler analyzer", () => {
 
     expect(result.diagnostics).toEqual([]);
     expect(
-      entityReceivers(result)[0]?.handlers.map(({ kind, where }) => ({ kind, where })),
+      entityReceivers(result)[0]?.handlers.map(({ kind, input }) => ({
+        kind,
+        where: input.where,
+      })),
     ).toEqual([
       {
         kind: "event-subscription",
@@ -871,7 +991,7 @@ describe("build-time handler analyzer", () => {
     expect(result.diagnostics).toEqual([]);
     expect(entityReceivers(result)[0]?.handlers[0]).toMatchObject({
       kind: "event-subscription",
-      where: { eventField: "board", equals: "announcements" },
+      input: { where: { eventField: "board", equals: "announcements" } },
     });
   });
 
@@ -1147,7 +1267,7 @@ describe("build-time handler analyzer", () => {
     );
 
     expect(result.diagnostics).toEqual([]);
-    expect(entityReceivers(result)[0]?.handlers[0]?.signalSchema).toEqual(
+    expect(entityReceivers(result)[0]?.handlers[0]?.input.schema).toEqual(
       schema("../generated/domain_pb.js", "CreateTaskSchema"),
     );
   });
@@ -1162,14 +1282,13 @@ describe("build-time handler analyzer", () => {
         sourceFile: "src/reaction.ts",
         stateSchema: schema("../generated/task_list_pb.js", "TaskListSchema"),
         handlers: [
-          {
-            kind: "event-reaction",
-            methodName: "observe",
-            origin: "domestic",
-            signalSchema: schema("../generated/events_pb.js", "TaskCreatedSchema"),
-            emittedSchemas: [],
-            parameterCount: 1,
-          },
+          handlerRecord(
+            "event-reaction",
+            "observe",
+            schema("../generated/events_pb.js", "TaskCreatedSchema"),
+            [],
+            1,
+          ),
         ],
       },
     ]);
@@ -1272,14 +1391,13 @@ describe("build-time handler analyzer", () => {
 
     expect(result.diagnostics).toEqual([]);
     expect(entityReceivers(result)[0]?.handlers).toEqual([
-      {
-        kind: "command-assignment",
-        methodName: 'create\u2028"task"\nnext',
-        origin: "domestic",
-        signalSchema: schema("../generated/commands_pb.js", "CreateTaskSchema"),
-        emittedSchemas: [schema("../generated/events_pb.js", "TaskCreatedSchema")],
-        parameterCount: 1,
-      },
+      handlerRecord(
+        "command-assignment",
+        'create\u2028"task"\nnext',
+        schema("../generated/commands_pb.js", "CreateTaskSchema"),
+        [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+        1,
+      ),
     ]);
   });
 
@@ -1430,33 +1548,30 @@ describe("build-time handler analyzer", () => {
         sourceFile: "src/oddball.ts",
         stateSchema: schema("../generated/task_pb.js", "TaskSchema"),
         handlers: [
-          {
-            kind: "command-assignment",
-            methodName: "create",
-            origin: "domestic",
-            signalSchema: schema("../generated/commands_pb", "CreateTaskSchema"),
-            emittedSchemas: [schema("../generated/events_pb", "TaskCreatedSchema")],
-            parameterCount: 1,
-          },
-          {
-            kind: "command-substitution",
-            methodName: "rename",
-            origin: "domestic",
-            signalSchema: schema("../generated/commands_pb", "CreateTaskSchema"),
-            emittedSchemas: [schema("../generated/commands_pb", "RenameTaskSchema")],
-            parameterCount: 1,
-          },
-          {
-            kind: "event-reaction",
-            methodName: "fanOut",
-            origin: "domestic",
-            signalSchema: schema("../generated/events_pb", "TaskCreatedSchema"),
-            emittedSchemas: [
+          handlerRecord(
+            "command-assignment",
+            "create",
+            schema("../generated/commands_pb", "CreateTaskSchema"),
+            [schema("../generated/events_pb", "TaskCreatedSchema")],
+            1,
+          ),
+          handlerRecord(
+            "command-substitution",
+            "rename",
+            schema("../generated/commands_pb", "CreateTaskSchema"),
+            [schema("../generated/commands_pb", "RenameTaskSchema")],
+            1,
+          ),
+          handlerRecord(
+            "event-reaction",
+            "fanOut",
+            schema("../generated/events_pb", "TaskCreatedSchema"),
+            [
               schema("../generated/events_pb", "TaskRenamedSchema"),
               schema("../generated/events_pb", "TaskCreatedSchema"),
             ],
-            parameterCount: 1,
-          },
+            1,
+          ),
         ],
       },
     ]);
@@ -1481,14 +1596,13 @@ describe("build-time handler analyzer", () => {
         sourceFile: "src/edge.ts",
         stateSchema: schema("../generated/task_pb.js", "TaskSchema"),
         handlers: [
-          {
-            kind: "command-assignment",
-            methodName: "parenthesized",
-            origin: "domestic",
-            signalSchema: schema("../generated/commands_pb.js", "CreateTaskSchema"),
-            emittedSchemas: [schema("../generated/events_pb.js", "TaskCreatedSchema")],
-            parameterCount: 1,
-          },
+          handlerRecord(
+            "command-assignment",
+            "parenthesized",
+            schema("../generated/commands_pb.js", "CreateTaskSchema"),
+            [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+            1,
+          ),
         ],
       },
     ]);
@@ -1555,6 +1669,10 @@ function programWithSource(fileName: string, source: string): ts.Program {
       "TaskCreated",
       "TaskRenamed",
     ),
+    "generated/spine/examples/todo/rejections_pb.ts": generatedModule(
+      "spine/examples/todo/rejections.proto",
+      "TaskAlreadyDone",
+    ),
     "generated/spine/examples/todo/tasks_pb.ts": generatedModule(
       "spine/examples/todo/tasks.proto",
       "Task",
@@ -1607,6 +1725,22 @@ function programWithSources(rootFileName: string, sources: Record<string, string
 
 function schema(moduleSpecifier: string, exportName: string) {
   return { moduleSpecifier, exportName };
+}
+
+function handlerRecord(
+  kind: string,
+  methodName: string,
+  inputSchema: ReturnType<typeof schema>,
+  returned: readonly ReturnType<typeof schema>[],
+  parameterCount: number,
+) {
+  return {
+    kind,
+    methodName,
+    input: { schema: inputSchema, origin: "domestic" },
+    outcomes: { returned, thrown: [] },
+    parameterCount,
+  };
 }
 
 const rejectionRoleImports = `

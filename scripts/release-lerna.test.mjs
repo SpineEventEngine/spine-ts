@@ -79,13 +79,20 @@ describe("Lerna workspace discovery", () => {
     });
     expect(result.status).toBe(0);
     const packages = JSON.parse(result.stdout);
-    expect(packages).toHaveLength(26);
-    expect(packages.filter((entry) => entry.private)).toHaveLength(8);
+    expect(packages).toHaveLength(29);
+    expect(packages.filter((entry) => entry.private)).toHaveLength(11);
     expect(
       packages.find((entry) => entry.name === "@spine-event-engine/server-blackbox-tests"),
     ).toMatchObject({
       private: true,
     });
+    for (const name of [
+      "@spine-event-engine/core-test-fixtures",
+      "@spine-event-engine/server-test-fixtures",
+      "@spine-event-engine/testing-test-fixtures",
+    ]) {
+      expect(packages.find((entry) => entry.name === name)).toMatchObject({ private: true });
+    }
     expect(
       packages
         .filter((entry) => !entry.private)

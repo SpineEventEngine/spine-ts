@@ -311,7 +311,7 @@ class DatastoreOrdersUserRun {
 
   private command() {
     return create(CommandSchema, {
-      id: metadata.commandId(`load-command-${this.id}`),
+      id: metadata.commandId(),
       context: metadata.commandContext({ actorContext: this.actorContext }),
       message: AnyMessages.pack(
         CreateOrderSchema,

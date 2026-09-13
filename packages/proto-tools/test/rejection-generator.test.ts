@@ -115,8 +115,44 @@ describe("generated rejection documentation", () => {
     RejectionGenerator.generateCompanions(schema);
 
     expect(printed).toEqual([
-      expect.stringContaining("export const TaskRejected: { readonly create"),
+      expect.stringContaining("export const TaskRejected: { readonly schema"),
     ]);
+  });
+
+  it("exposes the canonical rejection schema beside the throwable factory", () => {
+    const printed: string[] = [];
+    const messageProto = {};
+    const message = {
+      kind: "message",
+      name: "TaskRejected",
+      parent: undefined,
+      proto: messageProto,
+      file: { proto: { messageType: [messageProto] } },
+    };
+    const output = {
+      import: (name: string) => name,
+      preamble: () => undefined,
+      importSchema: () => "TaskRejectedSchema",
+      print: (...parts: readonly string[]) => printed.push(parts.join("")),
+      export: (_kind: string, name: string) => `export const ${name}`,
+    };
+    const schema = {
+      files: [
+        {
+          proto: { name: "tasks/rejections.proto" },
+          messages: [message],
+          name: "tasks/rejections",
+        },
+      ],
+      generateFile: () => output,
+    } as unknown as Schema;
+
+    RejectionGenerator.generateCompanions(schema);
+
+    expect(printed).toEqual([
+      expect.stringContaining("readonly schema: typeof TaskRejectedSchema"),
+    ]);
+    expect(printed).toEqual([expect.stringContaining("schema: TaskRejectedSchema")]);
   });
 
   it("emits companions for both approved rejection basenames", () => {

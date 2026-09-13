@@ -52,6 +52,30 @@ results and structural or imported thenable lookalikes are rejected during handl
 analysis. Rejection rolls back framework state and suppresses produced output; it
 cannot roll back an external HTTP request or other side effect.
 
+Declare each domain rejection a command handler may throw. This registers the
+rejection before the server starts, so a client can subscribe even when no
+server handler consumes that rejection:
+
+<!-- docs-snippet-path: examples/todo/src/index.ts -->
+
+```ts
+import { Assign, Throws } from "@spine-event-engine/server";
+import type { CompleteTask } from "../generated/spine/examples/todo/task_commands_pb.js";
+import type { TaskCompleted } from "../generated/spine/examples/todo/task_events_pb.js";
+import { TaskAlreadyDone } from "../generated/spine/examples/todo/task_rejections.js";
+
+class TaskAssignee {
+  @Assign
+  @Throws(TaskAlreadyDone)
+  completeTask(command: CompleteTask): TaskCompleted {
+    throw TaskAlreadyDone.create({ id: command.id });
+  }
+}
+```
+
+Place the primary handler decorator first for readability. Reversing the two
+decorators has the same behavior.
+
 Process Managers, but not Aggregates, have protected read-only `select()` during a handler:
 
 ```ts

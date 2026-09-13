@@ -12,16 +12,15 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
-import { CommandSchema, EventSchema, file_spine_options } from "@spine-event-engine/proto";
+import { AnyMessages, RejectionThrowable, TypeUrls } from "@spine-event-engine/core";
+import { CommandSchema, EventSchema, type Event } from "@spine-event-engine/proto";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, it } from "vitest";
 
 import {
+  AbstractAssignee,
   AbstractCommander,
   AbstractEventReactor,
   AbstractEventSubscriber,
@@ -29,68 +28,19 @@ import {
 import type { GeneratedStandaloneHandlerGroup } from "../../src/handler/generated-handler-registry.js";
 import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
 import { EventDispatcherRegistry } from "../../src/bus/event-dispatcher-registry.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
-
-type TaskEvent = Message<"TaskEvent"> & { id: string; name: string };
-type TaskCommand = Message<"TaskCommand"> & { id: string; name: string };
-type AggregateState = Message<"AggregateState"> & { id: string; name: string; archived: boolean };
-
-const descriptorSet = fromBinary(
-  FileDescriptorSetSchema,
-  Buffer.from(serverEntityMetadataTestFixtures.handlerRegistryEvents.descriptorSetBase64, "base64"),
-);
-const descriptor = descriptorSet.file[0];
-if (descriptor === undefined) throw new Error("Expected Event fixture descriptor.");
-const TaskEventSchema = messageDesc(
-  fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]),
-  1,
-) as GenMessage<TaskEvent>;
-const commandDescriptorSet = fromBinary(
-  FileDescriptorSetSchema,
-  Buffer.from(
-    serverEntityMetadataTestFixtures.handlerRegistryCommands.descriptorSetBase64,
-    "base64",
-  ),
-);
-const commandDescriptor = commandDescriptorSet.file[0];
-if (commandDescriptor === undefined) throw new Error("Expected Command fixture descriptor.");
-const TaskCommandSchema = messageDesc(
-  fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, commandDescriptor)).toString("base64"), [
-    file_spine_options,
-  ]),
-  2,
-) as GenMessage<TaskCommand>;
-const rejectionDescriptorSet = fromBinary(
-  FileDescriptorSetSchema,
-  Buffer.from(
-    serverEntityMetadataTestFixtures.handlerRegistryRejections.descriptorSetBase64,
-    "base64",
-  ),
-);
-const rejectionDescriptor = rejectionDescriptorSet.file[0];
-if (rejectionDescriptor === undefined) throw new Error("Expected rejection fixture descriptor.");
-type ReviewRejected = Message<"ReviewRejected"> & { id: string };
-const ReviewRejectedSchema = messageDesc(
-  fileDesc(
-    Buffer.from(toBinary(FileDescriptorProtoSchema, rejectionDescriptor)).toString("base64"),
-    [file_spine_options],
-  ),
-  0,
-) as GenMessage<ReviewRejected>;
-const stateDescriptorSet = fromBinary(
-  FileDescriptorSetSchema,
-  Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-);
-const stateDescriptor = stateDescriptorSet.file[0];
-if (stateDescriptor === undefined) throw new Error("Expected state fixture descriptor.");
-const AggregateStateSchema = messageDesc(
-  fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, stateDescriptor)).toString("base64"), [
-    file_spine_options,
-  ]),
-  1,
-) as GenMessage<AggregateState>;
+import {
+  ProjectStateSchema,
+  type ProjectState,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import {
+  AssignReviewTaskSchema,
+  type AssignReviewTask,
+} from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import {
+  ReviewTaskAssignedSchema,
+  type ReviewTaskAssigned,
+} from "../../test-fixtures/generated/handler-registry/events_pb.js";
+import { ReviewRejectedSchema } from "../../test-fixtures/generated/handler-registry/rejections_pb.js";
 
 class FilteredSubscriber extends AbstractEventSubscriber {
   readonly calls: string[] = [];
@@ -107,20 +57,26 @@ class FilteredSubscriber extends AbstractEventSubscriber {
 class StateSubscriber extends AbstractEventSubscriber {
   readonly states: string[] = [];
 
-  subscribe(state: AggregateState): void {
+  subscribe(state: ProjectState): void {
     this.states.push(state.id);
   }
 }
 
 class UndeclaredOutputReceiver extends AbstractEventReactor {
-  react(): AggregateState {
-    return create(AggregateStateSchema, { id: "unexpected", name: "Unexpected" });
+  react(): ProjectState {
+    return create(ProjectStateSchema, { id: "unexpected", name: "Unexpected" });
   }
 }
 
 class EmptyCommandReceiver extends AbstractCommander {
   substitute(): undefined {
     return undefined;
+  }
+}
+
+class RejectingAssignee extends AbstractAssignee {
+  assign(): ReviewTaskAssigned {
+    throw RejectionThrowable.create(ReviewRejectedSchema, { id: "rejected" });
   }
 }
 
@@ -133,7 +89,7 @@ class IncompleteEventSubscriber extends AbstractEventSubscriber {
 class ContextSubscriber extends AbstractEventSubscriber {
   context: unknown;
 
-  subscribe(_event: TaskEvent, context: unknown): void {
+  subscribe(_event: ReviewTaskAssigned, context: unknown): void {
     void _event;
     this.context = context;
   }
@@ -146,24 +102,24 @@ class EmptyReactor extends AbstractEventReactor {
 }
 
 class ProducingReactor extends AbstractEventReactor {
-  react(): readonly TaskEvent[] {
-    return [create(TaskEventSchema, { id: "produced", name: "Produced" })];
+  react(): readonly ReviewTaskAssigned[] {
+    return [create(ReviewTaskAssignedSchema, { id: "produced", name: "Produced" })];
   }
 }
 
 class RejectionCommander extends AbstractCommander {
   calls = 0;
-  react(): TaskCommand {
+  react(): AssignReviewTask {
     this.calls += 1;
-    return create(TaskCommandSchema, { id: "commander", name: "commander" });
+    return create(AssignReviewTaskSchema, { id: "commander", name: "commander" });
   }
 }
 
 class RejectionReactor extends AbstractEventReactor {
   calls = 0;
-  react(): TaskEvent {
+  react(): ReviewTaskAssigned {
     this.calls += 1;
-    return create(TaskEventSchema, { id: "reactor", name: "reactor" });
+    return create(ReviewTaskAssignedSchema, { id: "reactor", name: "reactor" });
   }
 }
 
@@ -177,9 +133,9 @@ class RejectionSubscriber extends AbstractEventSubscriber {
 class ContextCommander extends AbstractCommander {
   context: unknown;
 
-  substitute(_command: TaskCommand, context: unknown): TaskCommand {
+  substitute(_command: AssignReviewTask, context: unknown): AssignReviewTask {
     this.context = context;
-    return create(TaskCommandSchema, { id: "context-command", name: "context-command" });
+    return create(AssignReviewTaskSchema, { id: "context-command", name: "context-command" });
   }
 }
 
@@ -194,10 +150,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-subscription" as const,
           methodName: "selected",
-          signalSchema: TaskEventSchema,
-          emittedSchemas: [],
+          input: { schema: ReviewTaskAssignedSchema, origin },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1 as const,
-          origin,
         },
       ],
     });
@@ -209,20 +164,20 @@ describe("StandaloneHandlerRuntime", () => {
     const registry = new EventDispatcherRegistry();
     registry.register(dispatcher);
 
-    for (const handler of registry.find(TypeUrls.derive(TaskEventSchema), false)) {
+    for (const handler of registry.find(TypeUrls.derive(ReviewTaskAssignedSchema), false)) {
       await handler.dispatch(
         create(EventSchema, {
           id: { value: "domestic" },
-          message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+          message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
         }),
       );
     }
-    for (const handler of registry.find(TypeUrls.derive(TaskEventSchema), true)) {
+    for (const handler of registry.find(TypeUrls.derive(ReviewTaskAssignedSchema), true)) {
       await handler.dispatch(
         create(EventSchema, {
           id: { value: "external" },
           context: { external: true },
-          message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+          message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
         }),
       );
     }
@@ -248,7 +203,7 @@ describe("StandaloneHandlerRuntime", () => {
     const reaction = (
       receiverType: GeneratedStandaloneHandlerGroup["receiverType"],
       methodName: string,
-      emittedSchemas: readonly GenMessage<Message>[],
+      returnedSchemas: readonly GenMessage<Message>[],
     ) => ({
       receiverKind: "standalone" as const,
       receiverType,
@@ -261,21 +216,20 @@ describe("StandaloneHandlerRuntime", () => {
                 ? ("event-reaction" as const)
                 : ("command-reaction" as const),
           methodName,
-          signalSchema: ReviewRejectedSchema,
-          emittedSchemas,
+          input: { schema: ReviewRejectedSchema, origin: "domestic" as const },
+          outcomes: { returned: returnedSchemas, thrown: [] },
           parameterCount: 1 as const,
-          origin: "domestic" as const,
         },
       ],
     });
     const dispatcher = new StandaloneHandlerRuntime([
       {
-        group: reaction(RejectionCommander, "react", [TaskCommandSchema]),
+        group: reaction(RejectionCommander, "react", [AssignReviewTaskSchema]),
         instance: commander,
         publisher,
       },
       {
-        group: reaction(RejectionReactor, "react", [TaskEventSchema]),
+        group: reaction(RejectionReactor, "react", [ReviewTaskAssignedSchema]),
         instance: reactor,
         publisher,
       },
@@ -307,19 +261,20 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-subscription",
           methodName: "selected",
-          signalSchema: TaskEventSchema,
-          emittedSchemas: [],
+          input: {
+            schema: ReviewTaskAssignedSchema,
+            origin: "domestic",
+            where: { eventField: "name", equals: "selected" },
+          },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
-          where: { eventField: "name", equals: "selected" },
         },
         {
           kind: "event-subscription",
           methodName: "fallback",
-          signalSchema: TaskEventSchema,
-          emittedSchemas: [],
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -332,7 +287,10 @@ describe("StandaloneHandlerRuntime", () => {
     await dispatcher.dispatch(
       create(EventSchema, {
         id: { value: "event-1" },
-        message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema, { name: "selected" })),
+        message: AnyMessages.pack(
+          ReviewTaskAssignedSchema,
+          create(ReviewTaskAssignedSchema, { name: "selected" }),
+        ),
       }),
     );
 
@@ -348,11 +306,13 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-subscription",
           methodName: "selected",
-          signalSchema: TaskEventSchema,
-          emittedSchemas: [],
+          input: {
+            schema: ReviewTaskAssignedSchema,
+            origin: "external",
+            where: { eventField: "name", equals: "external" },
+          },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "external",
-          where: { eventField: "name", equals: "external" },
         },
       ],
     };
@@ -361,12 +321,15 @@ describe("StandaloneHandlerRuntime", () => {
     ]).eventDispatcher();
     if (dispatcher === undefined) throw new Error("Expected standalone Event dispatcher.");
 
-    expect(dispatcher.externalEventSchemas?.()).toEqual([TaskEventSchema]);
+    expect(dispatcher.externalEventSchemas?.()).toEqual([ReviewTaskAssignedSchema]);
     await dispatcher.dispatch(
       create(EventSchema, {
         id: { value: "external-event" },
         context: { external: true },
-        message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema, { name: "external" })),
+        message: AnyMessages.pack(
+          ReviewTaskAssignedSchema,
+          create(ReviewTaskAssignedSchema, { name: "external" }),
+        ),
       }),
     );
     expect(receiver.calls).toEqual(["selected"]);
@@ -381,10 +344,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "state-subscription",
           methodName: "subscribe",
-          signalSchema: AggregateStateSchema,
-          emittedSchemas: [],
+          input: { schema: ProjectStateSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -394,13 +356,13 @@ describe("StandaloneHandlerRuntime", () => {
     if (dispatcher === undefined) throw new Error("Expected standalone state dispatcher.");
 
     await dispatcher.dispatch(
-      stateChanged(
-        AggregateStateSchema,
-        create(AggregateStateSchema, { id: "matching", name: "A" }),
-      ),
+      stateChanged(ProjectStateSchema, create(ProjectStateSchema, { id: "matching", name: "A" })),
     );
     await dispatcher.dispatch(
-      stateChanged(TaskEventSchema, create(TaskEventSchema, { id: "mismatch", name: "B" })),
+      stateChanged(
+        ReviewTaskAssignedSchema,
+        create(ReviewTaskAssignedSchema, { id: "mismatch", name: "B" }),
+      ),
     );
 
     expect(receiver.states).toEqual(["matching"]);
@@ -415,10 +377,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-reaction",
           methodName: "react",
-          signalSchema: TaskEventSchema,
-          emittedSchemas: [TaskEventSchema],
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -431,10 +392,38 @@ describe("StandaloneHandlerRuntime", () => {
       dispatcher.dispatch(
         create(EventSchema, {
           id: { value: "undeclared-output" },
-          message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+          message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
         }),
       ),
     ).rejects.toThrow('Standalone handler "react" returned an undeclared signal.');
+  });
+
+  it("publishes a declared rejection thrown by a standalone command assignee", async () => {
+    const published: Event[] = [];
+    const dispatcher = rejectingAssigneeDispatcher([ReviewRejectedSchema], (event) => {
+      published.push(event);
+      return Promise.resolve();
+    });
+
+    await dispatcher.dispatch(reviewAssignmentCommand("declared-rejection"));
+
+    expect(published).toHaveLength(1);
+    const [event] = published;
+    if (event?.message === undefined) throw new Error("Expected a published rejection Event.");
+    expect(AnyMessages.unpack(event.message, ReviewRejectedSchema)).toEqual(
+      create(ReviewRejectedSchema, { id: "rejected" }),
+    );
+    expect(event.context?.rejection?.command?.id?.uuid).toBe("declared-rejection");
+  });
+
+  it("rejects an undeclared rejection thrown by a standalone command assignee", async () => {
+    const dispatcher = rejectingAssigneeDispatcher([], () => Promise.resolve());
+
+    await expect(
+      dispatcher.dispatch(reviewAssignmentCommand("undeclared-rejection")),
+    ).rejects.toThrow(
+      `Handler "assign" threw undeclared rejection "${ReviewRejectedSchema.typeName}".`,
+    );
   });
 
   it("rejects missing standalone methods and an empty runtime binding list", () => {
@@ -452,10 +441,9 @@ describe("StandaloneHandlerRuntime", () => {
                 {
                   kind: "event-subscription",
                   methodName: "missing",
-                  signalSchema: TaskEventSchema,
-                  emittedSchemas: [],
+                  input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+                  outcomes: { returned: [], thrown: [] },
                   parameterCount: 1,
-                  origin: "domestic",
                 },
               ],
             },
@@ -474,10 +462,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "command-substitution",
           methodName: "substitute",
-          signalSchema: TaskCommandSchema,
-          emittedSchemas: [TaskCommandSchema],
+          input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+          outcomes: { returned: [AssignReviewTaskSchema], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -488,10 +475,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-subscription",
           methodName: "subscribe",
-          signalSchema: TaskEventSchema,
-          emittedSchemas: [],
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -520,10 +506,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "command-substitution",
           methodName: "substitute",
-          signalSchema: TaskCommandSchema,
-          emittedSchemas: [TaskCommandSchema],
+          input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+          outcomes: { returned: [AssignReviewTaskSchema], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -536,7 +521,7 @@ describe("StandaloneHandlerRuntime", () => {
       dispatcher.dispatch(
         create(CommandSchema, {
           id: { uuid: "empty-output" },
-          message: AnyMessages.pack(TaskCommandSchema, create(TaskCommandSchema)),
+          message: AnyMessages.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema)),
         }),
       ),
     ).rejects.toThrow('Standalone command-substitution "substitute" must return a signal.');
@@ -552,10 +537,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-subscription",
           methodName: "subscribe",
-          signalSchema: TaskEventSchema,
-          emittedSchemas: [],
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
           parameterCount: 2,
-          origin: "domestic",
         },
       ],
     };
@@ -566,10 +550,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "command-substitution",
           methodName: "substitute",
-          signalSchema: TaskCommandSchema,
-          emittedSchemas: [TaskCommandSchema],
+          input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+          outcomes: { returned: [AssignReviewTaskSchema], thrown: [] },
           parameterCount: 2,
-          origin: "domestic",
         },
       ],
     };
@@ -584,14 +567,14 @@ describe("StandaloneHandlerRuntime", () => {
       throw new Error("Expected standalone dispatchers.");
     const event = create(EventSchema, {
       id: { value: "context" },
-      message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+      message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
     });
 
     await dispatcher.dispatch(event);
     await commandDispatcher.dispatch(
       create(CommandSchema, {
         id: { uuid: "context-command" },
-        message: AnyMessages.pack(TaskCommandSchema, create(TaskCommandSchema)),
+        message: AnyMessages.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema)),
       }),
     );
 
@@ -605,12 +588,12 @@ describe("StandaloneHandlerRuntime", () => {
     const contextualEvent = create(EventSchema, {
       id: { value: "contextual-event" },
       context: { external: false },
-      message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+      message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
     });
     const contextualCommand = create(CommandSchema, {
       id: { uuid: "contextual-command" },
       context: {},
-      message: AnyMessages.pack(TaskCommandSchema, create(TaskCommandSchema)),
+      message: AnyMessages.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema)),
     });
     await dispatcher.dispatch(contextualEvent);
     await commandDispatcher.dispatch(contextualCommand);
@@ -630,10 +613,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-reaction",
           methodName: "react",
-          signalSchema: TaskEventSchema,
-          emittedSchemas: [TaskEventSchema],
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -646,7 +628,7 @@ describe("StandaloneHandlerRuntime", () => {
       dispatcher.dispatch(
         create(EventSchema, {
           id: { value: "empty-reactor" },
-          message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+          message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
         }),
       ),
     ).resolves.toBeUndefined();
@@ -661,10 +643,9 @@ describe("StandaloneHandlerRuntime", () => {
         {
           kind: "event-reaction",
           methodName: "react",
-          signalSchema: TaskEventSchema,
-          emittedSchemas: [TaskEventSchema],
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
           parameterCount: 1,
-          origin: "domestic",
         },
       ],
     };
@@ -685,13 +666,48 @@ describe("StandaloneHandlerRuntime", () => {
     await dispatcher.dispatch(
       create(EventSchema, {
         id: { value: "source-event" },
-        message: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+        message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
       }),
     );
 
     expect(published).toHaveLength(1);
   });
 });
+
+function rejectingAssigneeDispatcher(
+  thrown: readonly GenMessage<Message>[],
+  publishRejectionEvent: (event: Event) => Promise<void>,
+) {
+  const group: GeneratedStandaloneHandlerGroup = {
+    receiverKind: "standalone",
+    receiverType: RejectingAssignee,
+    handlers: [
+      {
+        kind: "command-assignment",
+        methodName: "assign",
+        input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+        outcomes: { returned: [ReviewTaskAssignedSchema], thrown },
+        parameterCount: 1,
+      },
+    ],
+  };
+  const dispatcher = new StandaloneHandlerRuntime([
+    {
+      group,
+      instance: new RejectingAssignee(),
+      publisher: { publishRejectionEvent } as never,
+    },
+  ]).commandDispatcher();
+  if (dispatcher === undefined) throw new Error("Expected standalone Command dispatcher.");
+  return dispatcher;
+}
+
+function reviewAssignmentCommand(uuid: string) {
+  return create(CommandSchema, {
+    id: { uuid },
+    message: AnyMessages.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema)),
+  });
+}
 
 function stateChanged(schema: GenMessage<Message>, state: Message) {
   return create(EventSchema, {
@@ -700,14 +716,14 @@ function stateChanged(schema: GenMessage<Message>, state: Message) {
       EntityLog.EntityStateChangedSchema,
       create(EntityLog.EntityStateChangedSchema, {
         entity: {
-          id: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
+          id: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
           typeUrl: schema.typeName,
         },
         newState: AnyMessages.pack(schema, state as never),
         signalId: [
           {
-            id: AnyMessages.pack(TaskEventSchema, create(TaskEventSchema)),
-            typeUrl: TaskEventSchema.typeName,
+            id: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+            typeUrl: ReviewTaskAssignedSchema.typeName,
           },
         ],
       }),

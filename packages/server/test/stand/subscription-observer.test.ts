@@ -12,13 +12,9 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { create, type Message } from "@bufbuild/protobuf";
 import {
   AnySchema,
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
   BoolValueSchema,
   BytesValueSchema,
   DoubleValueSchema,
@@ -32,7 +28,6 @@ import {
   EventSchema,
   RejectionEventContextSchema,
   type EventContext,
-  file_spine_options,
 } from "@spine-event-engine/proto";
 import {
   CompositeFilterSchema,
@@ -49,28 +44,10 @@ import { describe, expect, it } from "vitest";
 import { eventBusAccess, EventBus } from "../../src/bus/event-bus.js";
 import { SubscriptionObservers } from "../../src/stand/subscription-observer.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
-
-type ProjectionState = Message<"ProjectionState"> & {
-  id: string;
-  name: string;
-  priority: number;
-};
-
-function fixtureFile(descriptorSetBase64: string) {
-  const descriptorSet = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(descriptorSetBase64, "base64"),
-  );
-  const descriptor = descriptorSet.file[0];
-  if (descriptor === undefined) throw new Error("Expected fixture descriptor.");
-  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-    file_spine_options,
-  ]);
-}
-
-const fixture = fixtureFile(serverEntityMetadataTestFixtures.main.descriptorSetBase64);
-const ProjectionStateSchema = messageDesc(fixture, 0) as GenMessage<ProjectionState>;
+import {
+  type ProjectOverviewState,
+  ProjectOverviewStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 let eventSequence = 0;
 
 describe("SubscriptionObservers", () => {
@@ -84,7 +61,7 @@ describe("SubscriptionObservers", () => {
   });
 
   it("does not attach incomplete, state, or event targets without a local EventBus", () => {
-    const state = { schema: ProjectionStateSchema, idField: "id" };
+    const state = { schema: ProjectOverviewStateSchema, idField: "id" };
     const missingTarget = observeSubscription(
       create(SubscriptionSchema),
       undefined,
@@ -98,13 +75,13 @@ describe("SubscriptionObservers", () => {
       () => undefined,
     );
     const stateTarget = observeSubscription(
-      subscriptionFor(ProjectionStateSchema),
+      subscriptionFor(ProjectOverviewStateSchema),
       undefined,
       () => state,
       () => undefined,
     );
     const eventTarget = observeSubscription(
-      subscriptionFor(ProjectionStateSchema),
+      subscriptionFor(ProjectOverviewStateSchema),
       undefined,
       () => undefined,
       () => undefined,
@@ -124,7 +101,7 @@ describe("SubscriptionObservers", () => {
     const subscription = create(SubscriptionSchema, {
       topic: {
         target: {
-          type: TypeUrls.derive(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectOverviewStateSchema),
           criterion: {
             case: "filters",
             value: {
@@ -155,8 +132,8 @@ describe("SubscriptionObservers", () => {
       subscription,
       bus,
       (typeUrl) =>
-        typeUrl === TypeUrls.derive(ProjectionStateSchema)
-          ? { schema: ProjectionStateSchema, idField: "id" }
+        typeUrl === TypeUrls.derive(ProjectOverviewStateSchema)
+          ? { schema: ProjectOverviewStateSchema, idField: "id" }
           : undefined,
       (update) => received.push(update),
     );
@@ -174,8 +151,8 @@ describe("SubscriptionObservers", () => {
       received[0]?.update.case === "entityUpdates" ? received[0].update.value.update[0] : undefined;
     expect(first?.kind.case).toBe("state");
     if (first?.kind.case === "state") {
-      expect(AnyMessages.unpack(first.kind.value, ProjectionStateSchema)).toEqual(
-        create(ProjectionStateSchema, { name: "Open" }),
+      expect(AnyMessages.unpack(first.kind.value, ProjectOverviewStateSchema)).toEqual(
+        create(ProjectOverviewStateSchema, { name: "Open" }),
       );
     }
     const second =
@@ -192,7 +169,7 @@ describe("SubscriptionObservers", () => {
       create(SubscriptionSchema, {
         topic: {
           target: {
-            type: TypeUrls.derive(ProjectionStateSchema),
+            type: TypeUrls.derive(ProjectOverviewStateSchema),
             criterion: {
               case: "filters",
               value: {
@@ -224,7 +201,7 @@ describe("SubscriptionObservers", () => {
         },
       }),
       bus,
-      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      () => ({ schema: ProjectOverviewStateSchema, idField: "id" }),
       (update) => received.push(update),
     );
 
@@ -236,7 +213,7 @@ describe("SubscriptionObservers", () => {
     const update =
       received[0]?.update.case === "entityUpdates" ? received[0].update.value.update[0] : undefined;
     if (update?.kind.case !== "state") throw new Error("Expected an entity state update.");
-    expect(AnyMessages.unpack(update.kind.value, ProjectionStateSchema)).toEqual(
+    expect(AnyMessages.unpack(update.kind.value, ProjectOverviewStateSchema)).toEqual(
       createState("task-either", "Priority match", 5),
     );
     observer?.unsubscribe();
@@ -267,7 +244,7 @@ describe("SubscriptionObservers", () => {
         create(SubscriptionSchema, {
           topic: {
             target: {
-              type: TypeUrls.derive(ProjectionStateSchema),
+              type: TypeUrls.derive(ProjectOverviewStateSchema),
               criterion: {
                 case: "filters",
                 value: {
@@ -283,7 +260,7 @@ describe("SubscriptionObservers", () => {
           },
         }),
         bus,
-        () => ({ schema: ProjectionStateSchema, idField: "id" }),
+        () => ({ schema: ProjectOverviewStateSchema, idField: "id" }),
         (update) => received.push(update),
       ),
     );
@@ -389,13 +366,13 @@ describe("SubscriptionObservers", () => {
         topic: {
           context: { tenantId: { kind: { case: "value", value: "tenant-a" } } },
           target: {
-            type: TypeUrls.derive(ProjectionStateSchema),
+            type: TypeUrls.derive(ProjectOverviewStateSchema),
             criterion: { case: "includeAll", value: true },
           },
         },
       }),
       bus,
-      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      () => ({ schema: ProjectOverviewStateSchema, idField: "id" }),
       (update) => received.push(update),
     );
 
@@ -440,9 +417,9 @@ describe("SubscriptionObservers", () => {
     const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const observer = observeSubscription(
-      subscriptionFor(ProjectionStateSchema),
+      subscriptionFor(ProjectOverviewStateSchema),
       bus,
-      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      () => ({ schema: ProjectOverviewStateSchema, idField: "id" }),
       (update) => received.push(update),
     );
 
@@ -454,14 +431,14 @@ describe("SubscriptionObservers", () => {
           create(EntityLog.EntityArchivedSchema, {
             entity: {
               id: packString("task-archived"),
-              typeUrl: TypeUrls.derive(ProjectionStateSchema),
+              typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
             },
             signalId: [
               { id: packString("archive-signal"), typeUrl: TypeUrls.derive(StringValueSchema) },
             ],
             version: { number: 1 },
             lastState: AnyMessages.pack(
-              ProjectionStateSchema,
+              ProjectOverviewStateSchema,
               createState("task-archived", "Archived", 1),
             ),
           }),
@@ -477,7 +454,7 @@ describe("SubscriptionObservers", () => {
           create(EntityLog.EntityDeletedSchema, {
             entity: {
               id: packString("task-deleted"),
-              typeUrl: TypeUrls.derive(ProjectionStateSchema),
+              typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
             },
             signalId: [
               { id: packString("delete-signal"), typeUrl: TypeUrls.derive(StringValueSchema) },
@@ -485,7 +462,7 @@ describe("SubscriptionObservers", () => {
             version: { number: 1 },
             deletion: { case: "markedAsDeleted", value: true },
             lastState: AnyMessages.pack(
-              ProjectionStateSchema,
+              ProjectOverviewStateSchema,
               createState("task-deleted", "Deleted", 1),
             ),
           }),
@@ -496,7 +473,7 @@ describe("SubscriptionObservers", () => {
 
     expect(received).toHaveLength(2);
     expect(received[0]?.subscription?.topic?.target?.type).toBe(
-      TypeUrls.derive(ProjectionStateSchema),
+      TypeUrls.derive(ProjectOverviewStateSchema),
     );
     expect(
       received.map(
@@ -512,9 +489,9 @@ describe("SubscriptionObservers", () => {
     const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const observer = observeSubscription(
-      subscriptionFor(ProjectionStateSchema),
+      subscriptionFor(ProjectOverviewStateSchema),
       bus,
-      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      () => ({ schema: ProjectOverviewStateSchema, idField: "id" }),
       (update) => received.push(update),
     );
     for (const [schema, id] of [
@@ -527,12 +504,12 @@ describe("SubscriptionObservers", () => {
           message: AnyMessages.pack(
             schema,
             create(schema, {
-              entity: { id: packString(id), typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+              entity: { id: packString(id), typeUrl: TypeUrls.derive(ProjectOverviewStateSchema) },
               signalId: [
                 { id: packString(`${id}-signal`), typeUrl: TypeUrls.derive(StringValueSchema) },
               ],
               version: { number: 2 },
-              state: AnyMessages.pack(ProjectionStateSchema, createState(id, id, 1)),
+              state: AnyMessages.pack(ProjectOverviewStateSchema, createState(id, id, 1)),
             }),
             { validate: false },
           ),
@@ -558,13 +535,13 @@ describe("SubscriptionObservers", () => {
         topic: {
           context: { tenantId: { kind: { case: "value", value: "tenant-a" } } },
           target: {
-            type: TypeUrls.derive(ProjectionStateSchema),
+            type: TypeUrls.derive(ProjectOverviewStateSchema),
             criterion: { case: "includeAll", value: true },
           },
         },
       }),
       bus,
-      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      () => ({ schema: ProjectOverviewStateSchema, idField: "id" }),
       (update) => received.push(update),
     );
     for (const tenant of ["tenant-b", "tenant-a"]) {
@@ -575,10 +552,16 @@ describe("SubscriptionObservers", () => {
           message: AnyMessages.pack(
             EntityLog.EntityArchivedSchema,
             create(EntityLog.EntityArchivedSchema, {
-              entity: { id: packString(tenant), typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+              entity: {
+                id: packString(tenant),
+                typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
+              },
               signalId: [{ id: packString(tenant), typeUrl: TypeUrls.derive(StringValueSchema) }],
               version: { number: 1 },
-              lastState: AnyMessages.pack(ProjectionStateSchema, createState(tenant, tenant, 1)),
+              lastState: AnyMessages.pack(
+                ProjectOverviewStateSchema,
+                createState(tenant, tenant, 1),
+              ),
             }),
             { validate: false },
           ),
@@ -597,9 +580,9 @@ describe("SubscriptionObservers", () => {
     const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const observer = observeSubscription(
-      filteredSubscription(ProjectionStateSchema, packString("other-id")),
+      filteredSubscription(ProjectOverviewStateSchema, packString("other-id")),
       bus,
-      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      () => ({ schema: ProjectOverviewStateSchema, idField: "id" }),
       (update) => received.push(update),
     );
     await bus.post(
@@ -610,12 +593,12 @@ describe("SubscriptionObservers", () => {
           create(EntityLog.EntityArchivedSchema, {
             entity: {
               id: packString("archived-id"),
-              typeUrl: TypeUrls.derive(ProjectionStateSchema),
+              typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
             },
             signalId: [{ id: packString("signal"), typeUrl: TypeUrls.derive(StringValueSchema) }],
             version: { number: 1 },
             lastState: AnyMessages.pack(
-              ProjectionStateSchema,
+              ProjectOverviewStateSchema,
               createState("archived-id", "Archived", 1),
             ),
           }),
@@ -632,9 +615,9 @@ describe("SubscriptionObservers", () => {
     const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const observer = observeSubscription(
-      filteredSubscription(ProjectionStateSchema, packString("match")),
+      filteredSubscription(ProjectOverviewStateSchema, packString("match")),
       bus,
-      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      () => ({ schema: ProjectOverviewStateSchema, idField: "id" }),
       (update) => received.push(update),
     );
     for (const [schema, id] of [
@@ -649,10 +632,10 @@ describe("SubscriptionObservers", () => {
           message: AnyMessages.pack(
             schema,
             create(schema, {
-              entity: { id: packString(id), typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+              entity: { id: packString(id), typeUrl: TypeUrls.derive(ProjectOverviewStateSchema) },
               signalId: [{ id: packString(id), typeUrl: TypeUrls.derive(StringValueSchema) }],
               version: { number: 1 },
-              state: AnyMessages.pack(ProjectionStateSchema, createState(id, id, 1)),
+              state: AnyMessages.pack(ProjectOverviewStateSchema, createState(id, id, 1)),
             }),
             { validate: false },
           ),
@@ -677,7 +660,7 @@ describe("SubscriptionObservers", () => {
         topic: {
           context: { tenantId: { kind: { case: "value", value: "tenant-a" } } },
           target: {
-            type: TypeUrls.derive(ProjectionStateSchema),
+            type: TypeUrls.derive(ProjectOverviewStateSchema),
             criterion: { case: "includeAll", value: true },
           },
         },
@@ -688,7 +671,7 @@ describe("SubscriptionObservers", () => {
     );
     const source = create(EventSchema, {
       id: { value: "rejected-event" },
-      message: AnyMessages.pack(ProjectionStateSchema, createState("task-1", "Event", 1), {
+      message: AnyMessages.pack(ProjectOverviewStateSchema, createState("task-1", "Event", 1), {
         validate: false,
       }),
       context: create(EventContextSchema, {
@@ -704,9 +687,13 @@ describe("SubscriptionObservers", () => {
     await bus.post(
       create(EventSchema, {
         id: { value: "wrong-tenant-event" },
-        message: AnyMessages.pack(ProjectionStateSchema, createState("task-1", "Wrong tenant", 1), {
-          validate: false,
-        }),
+        message: AnyMessages.pack(
+          ProjectOverviewStateSchema,
+          createState("task-1", "Wrong tenant", 1),
+          {
+            validate: false,
+          },
+        ),
         context: tenantContext("tenant-b"),
       }),
     );
@@ -736,7 +723,7 @@ describe("SubscriptionObservers", () => {
         topic: {
           context: { tenantId: domain },
           target: {
-            type: TypeUrls.derive(ProjectionStateSchema),
+            type: TypeUrls.derive(ProjectOverviewStateSchema),
             criterion: { case: "includeAll", value: true },
           },
         },
@@ -809,7 +796,7 @@ function createSystemBus(): EventBus {
 function createBus(schemas: readonly MessageSchema[] = []): EventBus {
   const storage = new InMemoryStorageFactory();
   const bus = new EventBus(new EventStore({ name: "Observer", multitenant: false }, storage));
-  eventBusAccess.registerSchemas(bus, [ProjectionStateSchema, ...schemas]);
+  eventBusAccess.registerSchemas(bus, [ProjectOverviewStateSchema, ...schemas]);
   return bus;
 }
 
@@ -838,8 +825,8 @@ function filteredSubscription(schema: MessageSchema, id: ReturnType<typeof AnyMe
   });
 }
 
-function createState(id: string, name: string, priority: number): ProjectionState {
-  return create(ProjectionStateSchema, { id, name, priority });
+function createState(id: string, name: string, priority: number): ProjectOverviewState {
+  return create(ProjectOverviewStateSchema, { id, name, priority });
 }
 
 function packString(value: string) {
@@ -870,7 +857,7 @@ async function postProjectionEvent(
   await bus.post(
     create(EventSchema, {
       id: { value: id },
-      message: AnyMessages.pack(ProjectionStateSchema, createState(id, "Event", 1), {
+      message: AnyMessages.pack(ProjectOverviewStateSchema, createState(id, "Event", 1), {
         validate: false,
       }),
       context,
@@ -907,8 +894,8 @@ async function postObservedStateChange(
 
 async function postStateChange(
   bus: EventBus,
-  state: ProjectionState,
-  previousState?: ProjectionState,
+  state: ProjectOverviewState,
+  previousState?: ProjectOverviewState,
   tenantId?: string,
 ): Promise<void> {
   await bus.post(
@@ -917,8 +904,11 @@ async function postStateChange(
       message: AnyMessages.pack(
         EntityLog.EntityStateChangedSchema,
         create(EntityLog.EntityStateChangedSchema, {
-          entity: { id: packString(state.id), typeUrl: TypeUrls.derive(ProjectionStateSchema) },
-          newState: AnyMessages.pack(ProjectionStateSchema, state, { validate: false }),
+          entity: {
+            id: packString(state.id),
+            typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
+          },
+          newState: AnyMessages.pack(ProjectOverviewStateSchema, state, { validate: false }),
           signalId: [
             {
               id: packString(`signal-${String(eventSequence)}`),
@@ -928,7 +918,7 @@ async function postStateChange(
           ...(previousState === undefined
             ? {}
             : {
-                oldState: AnyMessages.pack(ProjectionStateSchema, previousState, {
+                oldState: AnyMessages.pack(ProjectOverviewStateSchema, previousState, {
                   validate: false,
                 }),
               }),

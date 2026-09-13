@@ -20,7 +20,7 @@ import {
   StringValueSchema,
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -36,17 +36,18 @@ import {
 } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
-import { FixedClock, SignalIds, SignalMetadata } from "../../src/runtime/signal-metadata.js";
+import { FixedClock, SignalMetadata } from "../../src/runtime/signal-metadata.js";
+import { AssignReviewTaskSchema } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import { ReviewTaskAssignedSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 describe("SignalMetadata", () => {
-  it("creates deterministic ids, timestamps, and actor/tenant command contexts", () => {
+  it("creates fresh ids, timestamps, and actor/tenant command contexts", () => {
     const metadata = new SignalMetadata({
       clock: new FixedClock(new Date("2026-07-09T10:11:12.345Z")),
-      ids: new SignalIds(sequenceIds("command-1", "event-1")),
     });
 
-    expect(metadata.commandId()).toEqual(create(CommandIdSchema, { uuid: "command-1" }));
-    expect(metadata.eventId()).toEqual(create(EventIdSchema, { value: "event-1" }));
+    expect(metadata.commandId().uuid).toMatch(UUID_PATTERN);
+    expect(metadata.eventId().value).toMatch(UUID_PATTERN);
     expect(metadata.timestamp()).toEqual(timestampFor(new Date("2026-07-09T10:11:12.345Z")));
     expect(
       metadata.commandContext({
@@ -63,9 +64,20 @@ describe("SignalMetadata", () => {
     );
   });
 
+  it("generates distinct UUID identifiers for new commands and events by default", () => {
+    const metadata = new SignalMetadata();
+    const commandIds = [metadata.commandId().uuid, metadata.commandId().uuid];
+    const eventIds = [metadata.eventId().value, metadata.eventId().value];
+
+    for (const id of [...commandIds, ...eventIds]) expect(id).toMatch(UUID_PATTERN);
+    expect(new Set([...commandIds, ...eventIds]).size).toBe(4);
+  });
+
   it("creates follow-up event and command metadata from source signals", () => {
     const timestamp = new Date("2026-07-09T11:12:13.456Z");
-    const metadata = new SignalMetadata({ clock: new FixedClock(timestamp) });
+    const metadata = new SignalMetadata({
+      clock: new FixedClock(timestamp),
+    });
     const actorContext = create(ActorContextSchema, {
       actor: create(UserIdSchema, { value: "user-1" }),
       tenantId: createTenantId("tenant-1"),
@@ -73,26 +85,28 @@ describe("SignalMetadata", () => {
     const grandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-        typeUrl: TypeUrls.derive(UserIdSchema),
+        typeUrl: TypeUrls.derive(AssignReviewTaskSchema),
       }),
       actorContext,
     });
-    const command = SignalEnvelopes.command({
+    const command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "source-command" }),
       context: create(CommandContextSchema, {
         actorContext,
         origin: grandOrigin,
       }),
-      schema: UserIdSchema,
-      message: create(UserIdSchema, { value: "payload-user" }),
+      message: AnyMessages.pack(
+        AssignReviewTaskSchema,
+        create(AssignReviewTaskSchema, { id: "task-1", name: "Task" }),
+      ),
     });
 
-    const eventMetadata = metadata.eventFromCommand(command, 3, {
+    const eventMetadata = metadata.eventFromCommand(command, {
       producerId: "task-1",
       version: 7,
     });
 
-    expect(eventMetadata.id).toEqual(create(EventIdSchema, { value: "source-command-3" }));
+    expect(eventMetadata.id.value).toMatch(UUID_PATTERN);
     expect(eventMetadata.context.timestamp).toEqual(timestampFor(timestamp));
     expect(eventMetadata.context.producerId).toBeDefined();
     expect(
@@ -109,14 +123,14 @@ describe("SignalMetadata", () => {
             CommandIdSchema,
             create(CommandIdSchema, { uuid: "source-command" }),
           ),
-          typeUrl: TypeUrls.derive(UserIdSchema),
+          typeUrl: TypeUrls.derive(AssignReviewTaskSchema),
         }),
         actorContext,
         grandOrigin,
       }),
     });
 
-    const sourceEvent = SignalEnvelopes.event({
+    const sourceEvent = create(EventSchema, {
       id: create(EventIdSchema, { value: "source-event" }),
       context: create(EventContextSchema, {
         origin: {
@@ -124,23 +138,47 @@ describe("SignalMetadata", () => {
           value: actorContext,
         },
       }),
-      schema: UserIdSchema,
-      message: create(UserIdSchema, { value: "payload-user" }),
+      message: AnyMessages.pack(
+        ReviewTaskAssignedSchema,
+        create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
+      ),
     });
 
-    expect(metadata.commandFromEvent(sourceEvent, 2)).toEqual({
-      id: create(CommandIdSchema, { uuid: "source-event-2" }),
-      context: create(CommandContextSchema, {
+    const commandMetadata = metadata.commandFromEvent(sourceEvent);
+    expect(commandMetadata.id.uuid).toMatch(UUID_PATTERN);
+    expect(commandMetadata.context).toEqual(
+      create(CommandContextSchema, {
         actorContext,
         origin: create(OriginSchema, {
           message: create(MessageIdSchema, {
             id: AnyMessages.pack(EventIdSchema, create(EventIdSchema, { value: "source-event" })),
-            typeUrl: TypeUrls.derive(UserIdSchema),
+            typeUrl: TypeUrls.derive(ReviewTaskAssignedSchema),
           }),
           actorContext,
         }),
       }),
+    );
+  });
+
+  it("assigns fresh identifiers to framework-created signals without changing source envelopes", () => {
+    const metadata = new SignalMetadata();
+    const command = create(CommandSchema, {
+      id: create(CommandIdSchema, { uuid: "existing-command-id" }),
     });
+    const event = create(EventSchema, {
+      id: create(EventIdSchema, { value: "existing-event-id" }),
+    });
+
+    const ids = [
+      metadata.commandFromCommand(command).id.uuid,
+      metadata.commandFromEvent(event).id.uuid,
+      metadata.eventFromCommand(command, {}).id.value,
+      metadata.eventFromEvent(event, {}).id.value,
+    ];
+    for (const id of ids) expect(id).toMatch(UUID_PATTERN);
+    expect(new Set(ids).size).toBe(4);
+    expect(command.id).toEqual(create(CommandIdSchema, { uuid: "existing-command-id" }));
+    expect(event.id).toEqual(create(EventIdSchema, { value: "existing-event-id" }));
   });
 
   it("normalizes pre-epoch timestamps with floor-style seconds and nanos", () => {
@@ -178,7 +216,7 @@ describe("SignalMetadata", () => {
     const origin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-origin" })),
-        typeUrl: TypeUrls.derive(UserIdSchema),
+        typeUrl: TypeUrls.derive(AssignReviewTaskSchema),
       }),
     });
 
@@ -217,26 +255,11 @@ describe("SignalMetadata", () => {
     expect(metadata.producerId(undefined)).toBeUndefined();
   });
 
-  it("rejects direct or generated empty signal ids immediately", () => {
-    const metadata = new SignalMetadata();
-    const generatedEmpty = new SignalMetadata({
-      ids: new SignalIds(() => ""),
-    });
-    const generatedEmptyEvent = new SignalMetadata({
-      ids: new SignalIds(() => ""),
-    });
-
-    expect(() => metadata.commandId("")).toThrow(/command ID/i);
-    expect(() => metadata.eventId("")).toThrow(/event ID/i);
-    expect(() => generatedEmpty.commandId()).toThrow(/command ID/i);
-    expect(() => generatedEmptyEvent.eventId()).toThrow(/event ID/i);
-  });
-
   it("rejects missing or empty event ids before deriving causality", () => {
     const metadata = new SignalMetadata();
     const eventMessage = AnyMessages.pack(
-      UserIdSchema,
-      create(UserIdSchema, { value: "payload-user" }),
+      ReviewTaskAssignedSchema,
+      create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
     );
 
     expect(() =>
@@ -244,7 +267,6 @@ describe("SignalMetadata", () => {
         create(EventSchema, {
           message: eventMessage,
         }),
-        1,
       ),
     ).toThrow(/event ID/i);
     expect(() =>
@@ -253,7 +275,6 @@ describe("SignalMetadata", () => {
           id: create(EventIdSchema, { value: "" }),
           message: eventMessage,
         }),
-        1,
       ),
     ).toThrow(/event ID/i);
   });
@@ -261,8 +282,8 @@ describe("SignalMetadata", () => {
   it("rejects missing or empty command ids before deriving event metadata", () => {
     const metadata = new SignalMetadata();
     const commandMessage = AnyMessages.pack(
-      UserIdSchema,
-      create(UserIdSchema, { value: "payload-user" }),
+      AssignReviewTaskSchema,
+      create(AssignReviewTaskSchema, { id: "task-1", name: "Task" }),
     );
 
     expect(() =>
@@ -270,7 +291,6 @@ describe("SignalMetadata", () => {
         create(CommandSchema, {
           message: commandMessage,
         }),
-        1,
         {},
       ),
     ).toThrow(/command ID/i);
@@ -280,7 +300,6 @@ describe("SignalMetadata", () => {
           id: create(CommandIdSchema, { uuid: " " }),
           message: commandMessage,
         }),
-        1,
         {},
       ),
     ).toThrow(/command ID/i);
@@ -290,11 +309,14 @@ describe("SignalMetadata", () => {
     const metadata = new SignalMetadata();
     const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "   " }),
-      message: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "payload-user" })),
+      message: AnyMessages.pack(
+        ReviewTaskAssignedSchema,
+        create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
+      ),
     });
 
-    expect(() => metadata.commandFromEvent(event, 1)).toThrow(/event ID/i);
-    expect(() => metadata.eventFromEvent(event, 1, { version: 1 })).toThrow(/event ID/i);
+    expect(() => metadata.commandFromEvent(event)).toThrow(/event ID/i);
+    expect(() => metadata.eventFromEvent(event, { version: 1 })).toThrow(/event ID/i);
   });
 
   it("omits non-finite numeric producer ids from event metadata", () => {
@@ -311,10 +333,10 @@ describe("SignalMetadata", () => {
     const grandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
         id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "grand-command" })),
-        typeUrl: TypeUrls.derive(UserIdSchema),
+        typeUrl: TypeUrls.derive(AssignReviewTaskSchema),
       }),
     });
-    const event = SignalEnvelopes.event({
+    const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "past-event" }),
       context: create(EventContextSchema, {
         origin: {
@@ -322,15 +344,17 @@ describe("SignalMetadata", () => {
           value: grandOrigin,
         },
       }),
-      schema: UserIdSchema,
-      message: create(UserIdSchema, { value: "payload-user" }),
+      message: AnyMessages.pack(
+        ReviewTaskAssignedSchema,
+        create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
+      ),
     });
 
     expect(metadata.originFromEvent(event)).toEqual(
       create(OriginSchema, {
         message: create(MessageIdSchema, {
           id: AnyMessages.pack(EventIdSchema, create(EventIdSchema, { value: "past-event" })),
-          typeUrl: TypeUrls.derive(UserIdSchema),
+          typeUrl: TypeUrls.derive(ReviewTaskAssignedSchema),
         }),
         grandOrigin,
       }),
@@ -370,17 +394,7 @@ function createTenantId(value: string) {
   });
 }
 
-function sequenceIds(...ids: readonly string[]) {
-  let index = 0;
-  return () => {
-    const id = ids[index];
-    index += 1;
-    if (id === undefined) {
-      throw new Error("Expected another deterministic signal ID.");
-    }
-    return id;
-  };
-}
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function timestampFor(value: Date) {
   const milliseconds = value.getTime();

@@ -12,17 +12,13 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { TypeRegistry } from "@spine-event-engine/core";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
   type ActorContext,
@@ -32,7 +28,6 @@ import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
-  file_spine_options,
   TenantIdSchema,
   type UserId,
   UserIdSchema,
@@ -53,31 +48,20 @@ import { ServerEnvironment as DirectSourceServerEnvironment } from "../../src/se
 import { resetServerEnvironmentForTest as resetDirectSourceServerEnvironment } from "../../src/testing/index.js";
 import { RecordingTransportFactory } from "./wave13-red-support.js";
 import { expectWave13ContractToCompile } from "./wave13-compile-contract.js";
-import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import {
+  ProjectStateSchema,
+  ProjectOverviewStateSchema,
+  type ProjectState,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import type {
   GeneratedHandlerRecordInput,
   GeneratedHandlerRegistry,
 } from "../../src/handler/generated-handler-registry.js";
 
-type State = Message<"ProjectionState"> & { id: string; name: string; priority: number };
-function stateSchema(index = 0): GenMessage<State> {
-  const set = fromBinary(
-    FileDescriptorSetSchema,
-    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
-  );
-  const descriptor = set.file[0];
-  if (descriptor === undefined) throw new Error("State registry fixture descriptor is empty.");
-  return messageDesc(
-    fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
-      file_spine_options,
-    ]),
-    index,
-  );
-}
-const StateSchema = stateSchema();
-const SubscribedStateSchema = stateSchema(1);
+const StateSchema = ProjectOverviewStateSchema;
+const SubscribedStateSchema = ProjectStateSchema;
 class ExternalStateProjection extends Projection<string, typeof StateSchema, number> {
-  onExternalState(state: State): void {
+  onExternalState(state: ProjectState): void {
     void state;
   }
 }
@@ -100,10 +84,9 @@ function generatedStateRegistryRoot(): {
           {
             kind: "state-subscription",
             methodName: "onExternalState",
-            signalSchema: SubscribedStateSchema,
-            emittedSchemas: [],
+            input: { schema: SubscribedStateSchema, origin: "external" },
+            outcomes: { returned: [], thrown: [] },
             parameterCount: 1,
-            origin: "external",
           },
         ],
       },
@@ -316,7 +299,10 @@ describe("Wave 13 ThirdPartyContext", () => {
         ...stateRegistry.registry,
         receivers: stateRegistry.registry.receivers.map((receiver) => ({
           ...receiver,
-          handlers: receiver.handlers.map((handler) => ({ ...handler, origin: "foreign" })),
+          handlers: receiver.handlers.map((handler) => ({
+            ...handler,
+            input: { ...handler.input, origin: "foreign" },
+          })),
         })),
       }),
     ).toThrow(/origin/u);
@@ -328,7 +314,7 @@ describe("Wave 13 ThirdPartyContext", () => {
           handlers: receiver.handlers.map((handler) => withoutOrigin(handler)),
         })),
       }),
-    ).toThrow(/invalid record shape/u);
+    ).toThrow(/invalid signal origin/u);
     expect(() =>
       ingestor.ingest({
         ...stateRegistry.registry,
@@ -337,7 +323,7 @@ describe("Wave 13 ThirdPartyContext", () => {
           handlers: receiver.handlers.map((handler) => ({
             ...handler,
             kind: "command-assignment",
-            origin: "external",
+            input: { ...handler.input, origin: "external" },
           })),
         })),
       }),
@@ -435,12 +421,10 @@ describe("Wave 13 ThirdPartyContext", () => {
   });
 });
 
-function withoutOrigin(
-  handler: GeneratedHandlerRecordInput,
-): Omit<GeneratedHandlerRecordInput, "origin"> {
-  const { origin, ...withoutOrigin } = handler;
+function withoutOrigin(handler: GeneratedHandlerRecordInput): unknown {
+  const { origin, ...withoutOrigin } = handler.input;
   void origin;
-  return withoutOrigin;
+  return { ...handler, input: withoutOrigin };
 }
 
 function requiredProducerId(event: Event): Uint8Array {
