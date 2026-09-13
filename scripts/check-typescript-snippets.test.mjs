@@ -320,6 +320,20 @@ describe("TypeScript documentation snippets", () => {
     );
   });
 
+  it("uses a generated rejection companion in the server handler example", () => {
+    const source = readFileSync(resolve(root, "packages/server/README.md"), "utf8");
+    const rejectionSnippet = extractTypeScriptSnippets(source).find((snippet) =>
+      snippet[1].includes("@Throws(TaskAlreadyDone)"),
+    );
+
+    expect(source).toContain("<!-- docs-snippet-path: examples/todo/src/index.ts -->");
+    expect(rejectionSnippet?.[1]).toContain("../generated/spine/examples/todo/task_rejections.js");
+    expect(rejectionSnippet?.[1]).not.toContain("declare const TaskAlreadyDone");
+    expect(
+      documentationSnippetFile("packages/server/README.md", "examples/todo/src/index.ts"),
+    ).toBe(resolve(root, "examples/todo/src/index.ts"));
+  });
+
   it("uses a hidden HTML directive immediately before a TypeScript fence as its source context", () => {
     expect(checkTypeScriptSnippets(["scripts/fixtures/hidden-snippet-context.md"])).toEqual([]);
   });

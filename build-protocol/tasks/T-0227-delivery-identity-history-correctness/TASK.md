@@ -2129,3 +2129,55 @@ passed, and aggregate coverage remained above the repository thresholds at
 separate `node scripts/release-cli.mjs prepare --check` run also packed every
 workspace package and installed the release into a clean consumer without
 registry mutation. Exact-SHA GitHub Actions success remains the final gate.
+
+### Human-requested fresh independent review — 2026-09-13
+
+The human requested another independent review of the complete branch, with no
+conversation memory, followed by correction of every confirmed finding and a
+green exact-SHA CI result. This remains high-risk review work because the branch
+changes public handler metadata, delivery correctness, persistence behavior,
+generated tooling, and release infrastructure.
+
+Review range: `6d64848e0cb998ddfa4374c7c8a67197a9204048..f8e0033fd869fdf513a1352d096ef0d6ab518d1f`.
+The assignment uses the existing style/maintainability reviewer role as a
+read-only senior full-change reviewer, explicitly dispatched with
+`gpt-5.6-terra` and `high` reasoning, no inherited conversation turns, and no
+child dispatch. The reviewer must independently verify current requirements,
+Spine JVM parity, behavior, tests, public contracts, documentation, and project
+standards; prior review conclusions are evidence to challenge, not authority.
+The reviewer must read the Human-Imposed Requirements Ledger in this task and
+report precise P0–P3 findings with code references.
+
+The pre-review scan found a clean working tree, a clean range diff, the official
+`origin`, and no new active-document use of the retired flat handler-record
+fields. Historical progress paragraphs that say work “remains required” are
+dated checkpoint records and are not current status claims. The selected
+workflow skills are `requesting-code-review` and `receiving-code-review`, read
+from the session-provided user skill inventory; they require a no-history
+review prompt and technical verification of every returned suggestion before
+correction. Estimated effort is 1.5–3 active hours plus approximately 20–25
+minutes of hosted CI waiting, with the range determined by substantive review
+findings.
+
+The reviewer completed with the configured existing role and profile; runtime
+self-introspection was not exposed. It reported one P2 finding and no other
+actionable defect. The finding is confirmed: the server README declared a fake
+rejection companion whose `create()` method returned an ordinary `Error`.
+Although the structural declaration passed the snippet compiler, the example
+did not represent the generated API or a throwable the server recognizes as a
+domain rejection.
+
+The correction uses the generated Todo command, event, and rejection companion
+in their real source context, preserves the preferred `@Assign` then `@Throws`
+order, and adds a deterministic documentation regression that rejects a local
+stand-in for the generated companion. The existing strict snippet compiler
+checks that the complete example resolves and type-checks. The reviewer found
+no P0, P1, or P3 issue in the remaining delivery, identity, history, handler,
+release, test, Proto, API, or documentation changes.
+
+The final local `pnpm verify:release` completed successfully after the review
+correction. All deterministic gates passed, all 289 test files and 4,718 tests
+passed with one worker, and coverage remained above repository thresholds at
+93.26% statements, 90.06% branches, 92.92% functions, and 94.41% lines. The
+final correction commit must be pushed before exact-SHA GitHub Actions can be
+accepted.

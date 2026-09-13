@@ -56,24 +56,19 @@ Declare each domain rejection a command handler may throw. This registers the
 rejection before the server starts, so a client can subscribe even when no
 server handler consumes that rejection:
 
+<!-- docs-snippet-path: examples/todo/src/index.ts -->
+
 ```ts
-import { Assign, Throws, type RejectionDeclaration } from "@spine-event-engine/server";
+import { Assign, Throws } from "@spine-event-engine/server";
+import type { CompleteTask } from "../generated/spine/examples/todo/task_commands_pb.js";
+import type { TaskCompleted } from "../generated/spine/examples/todo/task_events_pb.js";
+import { TaskAlreadyDone } from "../generated/spine/examples/todo/task_rejections.js";
 
-interface CreateResource {
-  readonly name: string;
-}
-interface ResourceCreated {
-  readonly name: string;
-}
-declare const ResourceNameAlreadyUsed: RejectionDeclaration & {
-  create(input: { readonly name: string }): Error;
-};
-
-class ResourceAssignee {
+class TaskAssignee {
   @Assign
-  @Throws(ResourceNameAlreadyUsed)
-  createResource(command: CreateResource): ResourceCreated {
-    throw ResourceNameAlreadyUsed.create({ name: command.name });
+  @Throws(TaskAlreadyDone)
+  completeTask(command: CompleteTask): TaskCompleted {
+    throw TaskAlreadyDone.create({ id: command.id });
   }
 }
 ```
