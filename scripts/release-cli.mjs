@@ -112,8 +112,10 @@ export function createPublicationWorkspace({
   for (const name of selectedNames) {
     const { manifest, path } = byName.get(name);
     const directory = join(destination, "packages", path.split("/")[1]);
+    const publicationManifest = { ...manifest };
+    delete publicationManifest.devDependencies;
     mkdir(directory);
-    write(join(directory, "package.json"), JSON.stringify(manifest) + "\n");
+    write(join(directory, "package.json"), JSON.stringify(publicationManifest) + "\n");
     copy(join(path.slice(0, -"package.json".length), ".publish"), join(directory, ".publish"));
   }
 }

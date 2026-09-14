@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import { frameworkPackageNames } from "./package-artifacts.mjs";
 import { createPublicationWorkspace } from "./release-cli.mjs";
+import { expectedReleaseModel, readReleaseManifests } from "./release-policy.mjs";
 
 const root = new URL("..", import.meta.url).pathname;
 
@@ -111,10 +112,18 @@ describe("Lerna workspace discovery", () => {
     ].map(([directory, name]) => {
       const packageDirectory = join(source, "packages", directory);
       mkdirSync(join(packageDirectory, ".publish"), { recursive: true });
-      const manifest = { name, version: "1.0.0", publishConfig: { access: "public" } };
+      const manifest = {
+        name,
+        version: "1.0.0",
+        publishConfig: { access: "public" },
+        dependencies: { "@synthetic/runtime": "1.0.0" },
+        devDependencies: { "@synthetic/development": "1.0.0" },
+      };
+      const publishedManifest =
+        JSON.stringify({ ...manifest, description: "staged publication payload" }) + "\n";
       writeFileSync(join(packageDirectory, "package.json"), JSON.stringify(manifest));
-      writeFileSync(join(packageDirectory, ".publish", "package.json"), JSON.stringify(manifest));
-      return { path: "packages/" + directory + "/package.json", manifest };
+      writeFileSync(join(packageDirectory, ".publish", "package.json"), publishedManifest);
+      return { manifest, name, path: "packages/" + directory + "/package.json", publishedManifest };
     });
     try {
       createPublicationWorkspace({
@@ -132,6 +141,46 @@ describe("Lerna workspace discovery", () => {
       expect(result.status).toBe(0);
       expect(JSON.parse(result.stdout).map(({ name }) => name)).toEqual(["@synthetic/base"]);
       expect(result.stdout).not.toContain("@synthetic/unselected");
+      const outerManifest = JSON.parse(
+        readFileSync(join(destination, "packages", "base", "package.json"), "utf8"),
+      );
+      expect(outerManifest.dependencies).toEqual({ "@synthetic/runtime": "1.0.0" });
+      expect(outerManifest).not.toHaveProperty("devDependencies");
+      const sourceManifest = entries.find(({ name }) => name === "@synthetic/base");
+      expect(
+        readFileSync(join(destination, "packages", "base", ".publish", "package.json"), "utf8"),
+      ).toBe(sourceManifest.publishedManifest);
+      expect(JSON.parse(sourceManifest.publishedManifest)).toMatchObject({
+        description: "staged publication payload",
+        devDependencies: { "@synthetic/development": "1.0.0" },
+      });
+    } finally {
+      rmSync(fixture, { force: true, recursive: true });
+    }
+  });
+
+  it("orders the real public publication workspace without an ECYCLE diagnostic", () => {
+    const fixture = mkdtempSync(join(tmpdir(), "spine-lerna-publication-"));
+    const destination = join(fixture, "publication");
+    const entries = readReleaseManifests(root);
+    const selectedNames = expectedReleaseModel(entries).packages.map(({ name }) => name);
+    try {
+      createPublicationWorkspace({
+        destination,
+        entries,
+        selectedNames,
+        mkdir: (path) => mkdirSync(path, { recursive: true }),
+        write: writeFileSync,
+        copy: (_source, target) => mkdirSync(target, { recursive: true }),
+      });
+      const result = spawnSync(
+        join(root, "node_modules/.bin/lerna"),
+        ["list", "--toposort", "--all", "--json"],
+        { cwd: destination, encoding: "utf8" },
+      );
+      expect(result.status).toBe(0);
+      expect(result.stdout + result.stderr).not.toContain("ECYCLE");
+      expect(JSON.parse(result.stdout)).toHaveLength(18);
     } finally {
       rmSync(fixture, { force: true, recursive: true });
     }

@@ -555,13 +555,6 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
-    devDependencies:
-      '@spine-event-engine/core':
-        specifier: workspace:*
-        version: link:../core
-      '@spine-event-engine/server':
-        specifier: workspace:*
-        version: link:../server
 
   packages/proto-tools:
     dependencies:

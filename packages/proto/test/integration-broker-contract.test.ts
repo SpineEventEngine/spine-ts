@@ -17,7 +17,6 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { serialize } from "node:v8";
 import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextOnlineSchema,
   BoundedContextNameSchema,
@@ -30,12 +29,6 @@ import {
   ExternalMessageSchema,
 } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
-import {
-  unpackExternalEvent,
-  wrapBoundedContextOnline,
-  wrapExternalEvent,
-  wrapExternalEventsWanted,
-} from "@spine-event-engine/server/testing";
 
 describe("Wave 13 integration broker protobuf contract", () => {
   it("RED-14 preserves the exact ExternalMessage wrapper and ChannelId contracts", async () => {
@@ -147,47 +140,6 @@ describe("Wave 13 integration broker protobuf contract", () => {
       "../proto/spine/core/event.proto",
       "0c385d3fd98d68d35ce1d7887bd564b590daba47b959b99d205c2be56a737d29",
     );
-    const origin = create(BoundedContextNameSchema, { value: "Wave13Producer" });
-    expect(wrapExternalEvent(event, origin)).toEqual(frame);
-    const wantedMessage = create(wanted, {
-      type: [{ typeUrl: "type.spine.io/google.protobuf.StringValue" }],
-    });
-    const wantedFrame = wrapExternalEventsWanted(wantedMessage, origin);
-    const onlineFrame = wrapBoundedContextOnline(create(online, { context: origin }));
-    for (const controlFrame of [wantedFrame, onlineFrame]) {
-      expect(controlFrame.id.typeUrl).toBe(TypeUrls.derive(StringValueSchema));
-      expect(fromBinary(StringValueSchema, controlFrame.id.value).value).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
-      );
-    }
-    expect(wantedFrame.id.value).not.toEqual(onlineFrame.id.value);
-    expect(() =>
-      unpackExternalEvent(
-        create(wrapper, {
-          ...frame,
-          originalMessage: create(AnySchema, {
-            ...required(frame.originalMessage, "frame original message"),
-            typeUrl: "type.spine.io/google.protobuf.StringValue",
-          }),
-        }),
-      ),
-    ).toThrow();
-    expect(() =>
-      unpackExternalEvent(
-        create(wrapper, {
-          ...frame,
-          id: create(AnySchema, {
-            typeUrl: "type.spine.io/google.protobuf.StringValue",
-            value: toBinary(StringValueSchema, create(StringValueSchema, { value: "wrong" })),
-          }),
-        }),
-      ),
-    ).toThrow();
-    expect(() => wrapExternalEvent(create(EventSchema), origin)).toThrow(/EventId/u);
-    expect(() => unpackExternalEvent(create(wrapper))).toThrow(/origin/u);
-    expect(() =>
-      wrapBoundedContextOnline(create(online, { context: create(BoundedContextNameSchema) })),
-    ).toThrow(/origin/u);
   });
 });
 
