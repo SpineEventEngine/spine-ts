@@ -22,6 +22,7 @@ import {
   EventIdSchema,
   EventSchema,
   ExternalEventsWantedSchema,
+  type BoundedContextName,
   type Event,
 } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
@@ -46,9 +47,12 @@ describe("external integration messages", () => {
 
   it("rejects incomplete Events and controls without origins", () => {
     expect(() => wrapExternalEvent(create(EventSchema), origin())).toThrow(/EventId/u);
-    expect(() => wrapExternalEventsWanted(create(ExternalEventsWantedSchema), undefined)).toThrow(
-      /origin/u,
-    );
+    expect(() =>
+      wrapExternalEventsWanted(
+        create(ExternalEventsWantedSchema),
+        undefined as unknown as BoundedContextName,
+      ),
+    ).toThrow(/origin/u);
     expect(() => wrapBoundedContextOnline(create(BoundedContextOnlineSchema))).toThrow(/origin/u);
   });
 
@@ -61,8 +65,8 @@ describe("external integration messages", () => {
       unpackExternalEvent({
         ...frame,
         originalMessage: create(AnySchema, {
-          ...frame.originalMessage,
           typeUrl: TypeUrls.derive(StringValueSchema),
+          value: frame.originalMessage?.value ?? new Uint8Array(),
         }),
       }),
     ).toThrow(/does not contain an Event/u);
@@ -79,7 +83,7 @@ describe("external integration messages", () => {
       unpackExternalEvent({
         ...frame,
         id: create(AnySchema, {
-          ...frame.id,
+          typeUrl: frame.id.typeUrl,
           value: toBinary(EventIdSchema, create(EventIdSchema, { value: "other" })),
         }),
       }),

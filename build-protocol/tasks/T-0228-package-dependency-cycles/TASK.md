@@ -187,6 +187,14 @@ then the acceptance evidence.
   combined stdout/stderr output. Focused server, Proto, and Lerna tests passed;
   ESLint, Prettier, cleanup, TSDoc, and `git diff --check` passed. No
   publication command ran.
+- `2026-09-14`: The first full release gate stopped at strict TypeScript
+  compilation in the new server wrapper test. The test intentionally passed an
+  absent required origin and spread generated `Any` values, which violates
+  `exactOptionalPropertyTypes`; production code was unaffected. The invalid
+  origin now uses an explicit test-only cast and malformed `Any` values use
+  explicit `typeUrl` and `value` fields. `typecheck:build:generated` and the
+  tooling typecheck passed, as did focused server/Proto/Lerna tests, ESLint,
+  Prettier, cleanup, TSDoc, and `git diff --check`. No publication command ran.
 - `2026-09-14`: Completed review wave. Existing performance/reliability
   reviewer `/root/package_cycles_reliability_review`, explicitly dispatched as
   `gpt-5.6-terra` / high, returned CLEAN. Existing style/maintainability
