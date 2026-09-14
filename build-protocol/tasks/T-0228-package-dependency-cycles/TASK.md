@@ -1,7 +1,8 @@
 # T-0228: Package Dependency Cycles
 
-Status: In progress
+Status: Complete
 Start: `2026-09-14`
+Closure: `2026-09-14`
 Baseline commit: `65332b525ea38a965e6a5cf90e1a404720ebffc8`
 Branch: `fix-package-dependency-cycles`
 Worktree: current checkout at
@@ -225,3 +226,14 @@ then the acceptance evidence.
   correction changes shared packaging and release preparation behavior. Read
   the `verification-before-completion` skill before this gate; no completion
   claim will precede fresh full-command evidence.
+- `2026-09-14`: The first `verify:release` invocation stopped before building
+  because the workspace version change required a fresh `pnpm install`. After
+  the install, version-dependent generated Proto manifests and assertions were
+  aligned in separately pushed commit `641452403`.
+- `2026-09-14`: After strict-test correction commit `a46c6dcb4`, the complete
+  cheap preflight passed both typechecks, formatting, ESLint, cleanup, TSDoc,
+  Proto verification, and 84 focused tests. Fresh `pnpm verify:release` then
+  passed at exact SHA `a46c6dcb44952b60e85929cda662ef14bf8054b6`:
+  290 test files and 4,723 tests passed; branch coverage was 90.09%. The final
+  closure commit changes only this evidence record. Final branch CI remains the
+  remote acceptance proof for that record-only SHA.
