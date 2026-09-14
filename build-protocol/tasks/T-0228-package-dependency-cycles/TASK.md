@@ -208,3 +208,12 @@ then the acceptance evidence.
   wrapper contracts now live in the server package with an Event-domain
   fixture, the Proto test retains only compatibility concerns, and the Lerna
   assertion checks combined command output.
+- `2026-09-14`: Confirmed `2.0.0-snapshot.12` is absent from the NPM registry
+  for all 18 public packages. Commit `0a665fd2e` changes only the top-level
+  `version` in all 30 workspace manifests with the required exact commit
+  message. Commit `061bdf006` separately aligns internal dependency pins and
+  the lockfile. Both commits were pushed immediately to official `origin`.
+- `2026-09-14`: Selected the mandatory `verify:release` profile because the
+  correction changes shared packaging and release preparation behavior. Read
+  the `verification-before-completion` skill before this gate; no completion
+  claim will precede fresh full-command evidence.
