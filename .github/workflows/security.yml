@@ -19,4 +19,5 @@ jobs:
         with:
           node-version-file: .node-version
           package-manager-cache: false
-      - run: pnpm audit:release
+      # Built-in lockfile audits need no installed project dependencies.
+      - run: pnpm --config.verify-deps-before-run=false audit:release
