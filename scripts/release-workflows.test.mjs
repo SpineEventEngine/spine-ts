@@ -105,7 +105,7 @@ describe("release workflows", () => {
           uses: "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
           with: { "node-version-file": ".node-version", "package-manager-cache": false },
         },
-        { run: "pnpm audit:release" },
+        { run: "pnpm --config.verify-deps-before-run=false audit:release" },
       ],
     });
   });

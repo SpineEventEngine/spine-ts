@@ -237,3 +237,61 @@ then the acceptance evidence.
   290 test files and 4,723 tests passed; branch coverage was 90.09%. The final
   closure commit changes only this evidence record. Final branch CI remains the
   remote acceptance proof for that record-only SHA.
+
+## Scheduled Security Workflow Correction — 2026-09-15
+
+Status: Complete. The human approved this correction in the same branch.
+Classification: Standard; a bounded CI invocation correction, without changing
+the security audit policy or application behavior.
+Estimate: 0.2–0.4 hours active work for implementation, focused verification,
+review, and reporting, plus the full release verification gate.
+
+Root cause: the scheduled workflow runs `pnpm audit:release` without an install.
+The repository's `verifyDepsBeforeRun: error` setting rejects this package
+script before its built-in audit commands begin. At the failing run's exact
+commit, Node 24.18.0 and pnpm 11.9.0 reproduce exit 1 in a clean checkout.
+The scoped `--config.verify-deps-before-run=false` invocation reproduces exit 0
+with both audit scopes reporting no known vulnerabilities.
+
+Acceptance: retain the global dependency-state guard and both low-threshold
+audit scopes; disable only the irrelevant dependency-state check for this
+workflow invocation; update the exact workflow regression test; verify from a
+clean checkout; do not publish, create a PR, or change master.
+
+Dispatch: existing implementer role, explicit `gpt-5.6-terra` / `medium`,
+responsible only for `security.yml` and its regression test. Independent
+style/maintainability review will use explicit `gpt-5.6-terra` / `high` with no
+conversation history. Desktop supports both explicit profiles. Runtime
+self-introspection is not exposed; configured dispatch fields are the evidence.
+Other review concerns: API/TypeScript and domain correctness N/A because no
+public, serialized, or domain contracts change; documentation N/A beyond this
+task evidence; final security review not reopened because audit policy and
+credentials are unchanged. Verify that no audit failure is suppressed.
+
+Implementation evidence: the exact workflow test failed first (1 failed,
+6 passed), rejecting the old unqualified script invocation. After the one-line
+workflow correction and explanatory comment, all 7 workflow tests passed.
+The orchestrator independently ran workflow and package-metadata suites:
+21 tests passed. Tooling typecheck, focused ESLint, changed-file Prettier,
+and diff integrity passed. No runtime source changes require coverage or
+package-specific typechecks. A clean archive of HEAD with no `node_modules`,
+Node 24.18.0, pnpm 11.9.0, and `CI=true` ran the corrected command: both audit
+scopes reported no known vulnerabilities and exited 0. The global guard and
+the package script remain unchanged. The implementer dispatch explicitly
+matched its required Terra/medium profile.
+
+Independent no-history style/maintainability review returned CLEAN. The explicit
+Terra/high dispatch was confirmed. It verified pinned pnpm accepts the scoped
+override, the global setting remains `error`, the two audit commands remain
+fail-fast, and no credentials or failure suppression were added. Performance/
+lifecycle/persistence review is N/A: no such components change; invocation
+correctness and fail-fast behavior were checked by this bounded review.
+The full `verify:release` profile is required for the existing release-tooling
+branch. After preflight and review converged, it passed: 290 test files and
+4,723 tests; branch coverage 90.09%. All build, documentation, formatting,
+lint, Proto, production-dependency, and release-readiness gates passed.
+The test suite took 721 seconds with one worker. No publication was invoked.
+Only the workflow, its exact regression assertion, and this task record change.
+The existing version-only commit remains sufficient for the same branch.
+GitHub's scheduled proof requires this workflow to reach master through the
+human-managed merge; no scheduled run on master is claimed green here.
