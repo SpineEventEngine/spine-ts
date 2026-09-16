@@ -31,6 +31,12 @@ const frameworkJargon = [
 ].join("|");
 const baselineFailureCache = new Map();
 
+/**
+ * Checks tracked authored example Protos for provenance, documentation, naming, and debt violations.
+ *
+ * @param repoRoot Repository root containing examples and debt partitions.
+ * @returns Sorted diagnostic strings; throws when Git or required debt records cannot be read.
+ */
 export function checkExampleProtoQuality(repoRoot = defaultRepoRoot) {
   const root = resolve(repoRoot);
   const resolvedRoot = realpathSync(root);
@@ -186,7 +192,12 @@ function readDebt(root) {
 }
 
 /**
- * Validates exact partitioned debt independently of Git for focused fixtures.
+ * Validates migration-debt records, rejects broadened or duplicate entries, and distinguishes observed debt.
+ *
+ * @param records Partition-tagged debt records to validate.
+ * @param observed Diagnostic keys observed in the current scan.
+ * @param observesBaseline Callback that proves a record existed at the immutable baseline.
+ * @returns Validated records and diagnostics for stale or unrecorded debt.
  */
 export function validateProtoDebtEntries(records, observed, observesBaseline) {
   const entries = [];
@@ -286,6 +297,13 @@ function movedChatBaselinePath(file) {
     .replace(/^examples\/message-board\/users-model\//, "examples/users-model/");
 }
 
+/**
+ * Tests whether supplied Proto text reproduces one specific recorded debt diagnostic.
+ *
+ * @param entry Debt record whose diagnostic identity is expected.
+ * @param source Authored Proto text to scan.
+ * @returns Whether the scanner emits the record's diagnostic key.
+ */
 export function baselineObservesExampleProtoEntry(entry, source) {
   return scanProto(entry.file, source).some(
     (failure) => debtKeyFromFailure(failure) === debtKey(entry),
@@ -483,7 +501,11 @@ function scanProto(file, source) {
 }
 
 /**
- * Enforces the enduring authored-example package, path, prefix, prose, and spacing contract.
+ * Finds package, type-prefix, terminology, and layout violations in an authored example Proto.
+ *
+ * @param file Repository-relative Proto path that selects the expected example domain.
+ * @param source Proto text to inspect.
+ * @returns Contract diagnostics without reading the filesystem.
  */
 export function scanExampleProtoContract(file, source) {
   const failures = [];
@@ -641,6 +663,12 @@ function semanticComponents(name) {
     .filter(Boolean);
 }
 
+/**
+ * Transforms control and bidirectional characters into safe, deterministic diagnostic escapes.
+ *
+ * @param value Diagnostic text that may contain unsafe Unicode characters.
+ * @returns Text with unsafe code points rendered as Unicode escapes.
+ */
 export function escapeDiagnostic(value) {
   return [...value]
     .map((character) => {

@@ -221,6 +221,12 @@ function validateOwnedSource(source, repoRoot, protoRoot, seenLocalPaths, failur
   return { localPath, filePath, sha256 };
 }
 
+/**
+ * Validates the canonical Proto source manifest against confined regular files and recorded SHA-256 digests.
+ *
+ * @param options Optional repository and manifest paths for verification fixtures.
+ * @returns Zero when all source entries match their files, otherwise one after printing diagnostics.
+ */
 export function verifyProtoSources(options = {}) {
   const repoRoot = resolve(options.repoRoot ?? defaultRepoRoot);
   const manifestPath = resolve(

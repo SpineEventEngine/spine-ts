@@ -3,6 +3,13 @@ import { basename, isAbsolute } from "node:path";
 import { dependencyFirstOrder, frameworkPackageNames } from "./package-artifacts.mjs";
 import { classifyReleaseVersion } from "./release-policy.mjs";
 
+/**
+ * Creates the signed publication manifest from expected release packages.
+ *
+ * @param expected Validated release model that defines package order and version.
+ * @param packages Inspected tarball entries, including integrity and dependencies.
+ * @returns Versioned manifest with archive basenames in dependency-first order.
+ */
 export function createReleaseManifest({ expected, packages }) {
   const release = expected;
   const order = expected.packages.map(({ name }) => name);
@@ -25,6 +32,14 @@ export function createReleaseManifest({ expected, packages }) {
   };
 }
 
+/**
+ * Rejects release manifests that disagree with expected packages or checksums.
+ *
+ * @param manifest Release manifest read from the publication directory.
+ * @param expected Validated release model against which the manifest is compared.
+ * @param checksum Function that calculates a tarball's SHA-512 integrity string.
+ * @returns The validated manifest.
+ */
 export function validateReleaseManifest(manifest, expected, checksum) {
   if (manifest?.format !== 1 || !Array.isArray(manifest.packages))
     throw new Error("Invalid release manifest");

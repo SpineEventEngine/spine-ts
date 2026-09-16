@@ -22,7 +22,11 @@ function normalizedRelative(root, path) {
 }
 
 /**
- * Writes the generated Spine module and versioned manifest from canonical package inputs.
+ * Writes the Spine Proto module index and manifest from canonical metadata and generated files.
+ *
+ * @param repoRoot Repository root containing the canonical Proto package manifest.
+ * @param generatedRoot Directory whose generated Proto modules are indexed.
+ * @param manifestOutput File overwritten with the versioned generation manifest.
  */
 export function writeSpineProtoArtifacts(repoRoot, generatedRoot, manifestOutput) {
   const packageRoot = join(resolve(repoRoot), "packages/proto");

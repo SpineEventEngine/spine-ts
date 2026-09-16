@@ -70,6 +70,12 @@ function trackedLiveFiles(repoRoot) {
     .sort();
 }
 
+/**
+ * Finds tracked live files that still reference the retired package namespace.
+ *
+ * @param repoRoot Checkout whose tracked files are scanned.
+ * @returns Path, line, and text for each legacy namespace reference.
+ */
 export function collectLegacyNamespaceReferences(repoRoot = defaultRepoRoot) {
   const references = [];
 
@@ -142,6 +148,12 @@ function isJavaScriptTarget(target) {
   return /\.(?:c|m)?js$/u.test(target);
 }
 
+/**
+ * Collects JavaScript package export entries as import specifiers for smoke testing.
+ *
+ * @param repoRoot Checkout containing workspace package manifests.
+ * @returns Sorted package-directory and specifier pairs, including wildcard expansions.
+ */
 export function collectRuntimeExportSpecifiers(repoRoot = defaultRepoRoot) {
   const specifiers = [];
 
@@ -184,6 +196,12 @@ export function collectRuntimeExportSpecifiers(repoRoot = defaultRepoRoot) {
   );
 }
 
+/**
+ * Collects non-JavaScript package export entries as concrete asset targets.
+ *
+ * @param repoRoot Checkout containing workspace package manifests.
+ * @returns Sorted asset-export records, including resolved wildcard subpaths.
+ */
 export function collectAssetExportTargets(repoRoot = defaultRepoRoot) {
   const targets = [];
 
@@ -233,8 +251,8 @@ function trackedMarkdownFiles(repoRoot) {
 /**
  * Lists tracked Markdown written for framework readers instead of build history.
  *
- * @param repoRoot The repository root.
- * @returns Sorted repository-relative Markdown paths.
+ * @param repoRoot Checkout traversed for reader-facing Markdown.
+ * @returns Sorted Markdown paths excluding build records and configured historical documents.
  */
 export function collectUserFacingMarkdownFiles(repoRoot = defaultRepoRoot) {
   const paths = new Set();
@@ -264,8 +282,8 @@ export function collectUserFacingMarkdownFiles(repoRoot = defaultRepoRoot) {
 /**
  * Finds historical language and retired topology in reader-facing Markdown.
  *
- * @param repoRoot The repository root.
- * @returns Sorted, line-specific documentation problems.
+ * @param repoRoot Checkout whose reader-facing Markdown is inspected.
+ * @returns Sorted diagnostics for execution-history language and retired public topology.
  */
 export function collectUserFacingDocumentationProblems(repoRoot = defaultRepoRoot) {
   const problems = [];
@@ -372,6 +390,12 @@ function collectLineTargets(line) {
   return targets;
 }
 
+/**
+ * Collects relative file targets from tracked Markdown while ignoring fenced and inline code.
+ *
+ * @param repoRoot Checkout whose tracked Markdown files are parsed.
+ * @returns Sorted source-path and relative-target pairs for link validation.
+ */
 export function collectMarkdownRelativeLinks(repoRoot = defaultRepoRoot) {
   const links = [];
 
@@ -483,6 +507,13 @@ function validateLinks(repoRoot, links) {
   return failures;
 }
 
+/**
+ * Validates runtime exports, asset exports, documentation links, and retired public references.
+ *
+ * @param repoRoot Checkout whose packages and documentation are validated.
+ * @param importTimeoutMs Per-package-import timeout in milliseconds; must be finite and positive.
+ * @throws {Error} When the timeout is invalid or any readiness check fails.
+ */
 export function runReleaseReadiness(
   repoRoot = defaultRepoRoot,
   { importTimeoutMs = defaultImportTimeoutMs } = {},

@@ -6,6 +6,9 @@ const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 /**
  * Tests whether a Proto source uses an approved rejection basename.
+ *
+ * @param sourceName Proto path or basename to validate.
+ * @returns Whether its basename is `rejections.proto` or ends in `_rejections.proto`.
  */
 export function isRejectionSourceName(sourceName) {
   const name = basename(sourceName);
@@ -13,7 +16,10 @@ export function isRejectionSourceName(sourceName) {
 }
 
 /**
- * Reports tracked rejection-like Proto sources outside the approved convention.
+ * Lists rejection-named Proto files whose basenames violate the generated-code convention.
+ *
+ * @param sourceNames Proto paths to filter and validate.
+ * @returns Sorted human-readable naming violations.
  */
 export function checkRejectionSourceNames(sourceNames) {
   return sourceNames
@@ -23,6 +29,12 @@ export function checkRejectionSourceNames(sourceNames) {
     .map((sourceName) => `${sourceName} must use "rejections.proto" or "*_rejections.proto".`);
 }
 
+/**
+ * Lists repository-tracked Proto sources through Git.
+ *
+ * @param run Child-process launcher for `git ls-files`.
+ * @returns Tracked Proto paths; throws when Git enumeration fails.
+ */
 export function trackedProtoSources(run = spawnSync) {
   const result = run("git", ["ls-files", "-z", "--", "*.proto"], {
     cwd: repoRoot,
@@ -34,6 +46,12 @@ export function trackedProtoSources(run = spawnSync) {
   return result.stdout.split("\0").filter(Boolean);
 }
 
+/**
+ * Writes naming violations and returns the CLI exit code without terminating the process itself.
+ *
+ * @param sourceNames Proto paths to validate, defaulting to tracked sources.
+ * @returns Zero when every applicable filename is valid, otherwise one.
+ */
 export function main(sourceNames = trackedProtoSources()) {
   const failures = checkRejectionSourceNames(sourceNames);
   if (failures.length === 0) {

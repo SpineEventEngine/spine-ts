@@ -41,10 +41,10 @@ function keyFor(name, reference, nodes) {
 }
 
 /**
- * Parses a pnpm lockfile and returns production-reachable vulnerable resolutions.
+ * Finds known vulnerable resolutions reachable from production dependency roots in a pnpm lockfile.
  *
- * @param {string} lockfile pnpm lockfile source.
- * @returns {string[]} Deterministic production-policy violations.
+ * @param lockfile YAML text from the pnpm lockfile.
+ * @returns Sorted vulnerable production-resolution messages.
  */
 export function productionDependencyProblemsFromYaml(lockfile) {
   const parsed = parse(lockfile);

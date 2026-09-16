@@ -8,13 +8,19 @@ const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 /**
  * Returns production lockfile resolutions prohibited by the release policy.
  *
- * @param {string} lockfile pnpm lockfile source
- * @returns {string[]} deterministic policy violations
+ * @param lockfile Text of the workspace pnpm lockfile.
+ * @returns Release-policy violations for forbidden production dependency resolutions.
  */
 export function productionDependencyProblems(lockfile) {
   return productionDependencyProblemsFromYaml(lockfile);
 }
 
+/**
+ * Reads and checks production dependencies from a checkout lockfile.
+ *
+ * @param root Checkout containing the pnpm lockfile to inspect.
+ * @returns Lockfile policy violations; throws if the lockfile cannot be read.
+ */
 export function checkProductionDependencies(root = repositoryRoot) {
   return productionDependencyProblems(readFileSync(join(root, "pnpm-lock.yaml"), "utf8"));
 }

@@ -18,6 +18,9 @@ import { join, relative, resolve } from "node:path";
 import { generatedTypeScript } from "./generated-source-policy.mjs";
 import { prepareProtoToolsBootstrap, releaseProtoToolsBootstrap } from "./proto-workflow.mjs";
 
+/**
+ * Lists packages whose generated declaration files mirror source provenance comments.
+ */
 export const generatedDeclarationRoots = Object.freeze([
   "packages/proto",
   "examples/todo",
@@ -29,6 +32,12 @@ export const generatedDeclarationRoots = Object.freeze([
 const generatedDeclarationPattern =
   /(?:_pb|rejections|_columns|proto-module|generated-handler-registry|model-registry|interfaces\/.+)\.d\.ts$/u;
 
+/**
+ * Lists declaration files whose generated forms require provenance normalization within bounded traversal.
+ *
+ * @param root Directory tree to traverse within bounded depth and entry limits.
+ * @returns Matching declaration-file paths; throws when traversal exceeds its safety bounds.
+ */
 export function declarationFiles(root) {
   const pending = [[root, 0]];
   const files = [];
@@ -50,10 +59,22 @@ export function declarationFiles(root) {
   return files;
 }
 
+/**
+ * Reads Proto provenance paths from a generated source's standardized notice lines.
+ *
+ * @param source Generated TypeScript source containing an optional provenance banner.
+ * @returns Proto paths in the order recorded by the banner.
+ */
 export function declarationSources(source) {
   return [...source.matchAll(/^ \* Source Proto: (.+)$/gmu)].map((match) => match[1]);
 }
 
+/**
+ * Writes generated declaration files with the matching source file's Proto provenance notice.
+ *
+ * @param repoRoot Repository root used to resolve package paths.
+ * @param roots Package-relative roots whose built declarations are normalized in place.
+ */
 export function normalizeGeneratedDeclarations(
   repoRoot = process.cwd(),
   roots = generatedDeclarationRoots,

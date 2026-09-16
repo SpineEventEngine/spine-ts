@@ -12,9 +12,23 @@ const template = `/*
  * the License.
  */
 `;
+
+/**
+ * Builds the repository copyright header for a specified year.
+ *
+ * @param year Four-digit year inserted into the repository's canonical license comment.
+ * @returns Complete Apache-2.0 copyright comment including its trailing newline.
+ */
 export function copyrightHeader(year = new Date().getFullYear()) {
   return template.replace("{year}", String(year));
 }
+
+/**
+ * Checks source text for an exact canonical copyright header at its start.
+ *
+ * @param contents Source text beginning where a copyright header is expected.
+ * @returns Canonical header text when present, otherwise `undefined`.
+ */
 export function recognizedCopyrightHeader(contents) {
   const match =
     /^\/\*\n \* Copyright (\d{4}), CodeMatters\. All rights reserved\.\n[\s\S]*? \*\/\n/u.exec(
@@ -24,6 +38,13 @@ export function recognizedCopyrightHeader(contents) {
 }
 
 /* Preserves the approved header while enforcing one following empty line. */
+
+/**
+ * Normalizes the empty line that separates a header from source content.
+ *
+ * @param contents Source text, optionally beginning with a shebang and canonical header.
+ * @returns Source text with exactly one blank line after a recognized header; leaves other text unchanged.
+ */
 export function separateCopyrightHeader(contents) {
   const at = contents.startsWith("#!") ? contents.indexOf("\n") + 1 : 0;
   const before = contents.slice(0, at);

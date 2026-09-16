@@ -31,6 +31,10 @@ import {
 const protoRoot = fileURLToPath(new URL("../packages/proto/proto", import.meta.url));
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const bootstrappedRoots = new Map();
+
+/**
+ * Describes the workspace Proto output generated directly from the canonical Spine schema tree.
+ */
 export const generatedTargets = [
   {
     displayPath: "packages/proto/generated",
@@ -38,6 +42,10 @@ export const generatedTargets = [
     protoRoot,
   },
 ];
+
+/**
+ * Describes example and fixture Proto outputs that must be staged and published as atomic units.
+ */
 export const modelAtomicTargets = [
   {
     displayPath: "packages/server-blackbox-tests/generated",
@@ -86,11 +94,22 @@ export const modelAtomicTargets = [
     handlerGeneratedPath: "examples/message-board/app/generated",
   },
 ];
+
+/**
+ * Combines every generated directory that publication and cleanliness checks treat atomically.
+ */
 export const atomicGeneratedTargets = [
   ...generatedTargets,
   ...modelAtomicTargets,
   { displayPath: "examples/message-board/app/generated" },
 ];
+
+/**
+ * Verifies that composed registry text carries the required generated-source provenance banner.
+ *
+ * @param contents Composed Message Board registry text.
+ * @returns The unchanged registry text when its required banner is present.
+ */
 
 /* Applies the shared generated-source policy to the tracked Message Board registry. */
 export function withCopyrightHeader(contents) {
@@ -104,6 +123,8 @@ export function withCopyrightHeader(contents) {
 
 /**
  * Removes generated modules for the retired private Stand subscription contract.
+ *
+ * @param root Repository root containing retired generated module paths to remove.
  */
 export function removeRetiredStandSubscriptionOutputs(root = repoRoot) {
   for (const path of [
@@ -117,6 +138,15 @@ export function removeRetiredStandSubscriptionOutputs(root = repoRoot) {
   }
 }
 
+/**
+ * Executes Proto linting or generation after finding schema inputs and formatting changed authored files.
+ *
+ * @param argv Command-line arguments selecting `lint` or `generate`.
+ * @param run Command runner used for Buf and formatter invocations.
+ * @param formatCommandProvider Provider that identifies changed authored Proto formatting commands.
+ * @param generate Generation workflow invoked after a successful `generate` command selection.
+ * @returns Zero for a successful command, otherwise the first nonzero command status.
+ */
 export function main(
   argv = process.argv.slice(2),
   run = runCommand,
@@ -219,6 +249,13 @@ const externalProtoRoots = [
   "examples/message-board/model/proto",
 ];
 
+/**
+ * Builds Buf format commands only for changed non-generated, non-frozen authored Proto sources.
+ *
+ * @param root Repository root containing the source manifest and Git worktree.
+ * @param git Git invocation seam used to discover changed and untracked Proto paths.
+ * @returns Buf command descriptors grouped by their workspace or external schema root.
+ */
 export function authoredProtoFormatCommands(
   root = repoRoot,
   git = (args, options) => spawnSync("git", args, options),
@@ -334,6 +371,13 @@ function runCommandIn(label, executable, args, cwd) {
   return result.status ?? 1;
 }
 
+/**
+ * Builds and caches a temporary Proto Tools executable, loading its policy module for generation.
+ *
+ * @param root Repository root that supplies the bootstrap project and cache directory.
+ * @param run Command runner used to compile the bootstrap executable.
+ * @returns Path to a cached or newly compiled executable; throws after deleting a failed bootstrap.
+ */
 export function prepareProtoToolsBootstrap(root = repoRoot, run = runCommandIn) {
   const existing = bootstrappedRoots.get(root);
   if (existing !== undefined && existsSync(existing.executable)) {
@@ -376,6 +420,11 @@ export function prepareProtoToolsBootstrap(root = repoRoot, run = runCommandIn) 
   return executable;
 }
 
+/**
+ * Removes the cached bootstrap executable and clears its in-memory policy selection.
+ *
+ * @param root Repository root whose bootstrap cache entry should be removed.
+ */
 export function releaseProtoToolsBootstrap(root = repoRoot) {
   const bootstrap = bootstrappedRoots.get(root);
   if (bootstrap === undefined) return;
@@ -383,6 +432,14 @@ export function releaseProtoToolsBootstrap(root = repoRoot) {
   rmSync(bootstrap.outputRoot, { recursive: true, force: true });
 }
 
+/**
+ * Returns the compiled Proto Tools CLI or a temporary bootstrap CLI for a custom composition run.
+ *
+ * @param root Repository root containing compiled and bootstrap Proto Tools paths.
+ * @param customRunner Optional composition runner; its presence selects the compiled CLI.
+ * @param bootstrapRunner Command runner used if a bootstrap CLI must be compiled.
+ * @returns Executable path suitable for the selected composition mode.
+ */
 export function protoToolsExecutable(root, customRunner, bootstrapRunner = runCommandIn) {
   const compiled = join(root, "packages/proto-tools/dist/src/cli/spine-proto.js");
   const bootstrapSource = join(root, "packages/proto-tools/src/cli/spine-proto-bootstrap.ts");
@@ -463,6 +520,15 @@ function toTemplatePath(path) {
   return path.split(sep).join("/");
 }
 
+/**
+ * Writes a staged generation template with its output directory redirected to staged output.
+ *
+ * @param target Generation target whose template and output path are rewritten.
+ * @param stagedOutputRoot Staged directory substituted for the target's live output path.
+ * @param stageRoot Temporary directory receiving `buf.gen.yaml`.
+ * @param root Repository root containing the source template.
+ * @returns Path to the staged template; throws when the live output path is absent from it.
+ */
 export function writeStagedTemplate(target, stagedOutputRoot, stageRoot, root) {
   const sourceTemplatePath = join(root, target.templatePath);
   const stagedTemplatePath = join(stageRoot, "buf.gen.yaml");
@@ -505,6 +571,12 @@ function assertGeneratedPathSafe(root, generatedPath) {
   return true;
 }
 
+/**
+ * Creates live generated-output directories only after rejecting symlinked targets and ancestors.
+ *
+ * @param root Repository root containing live generated-output targets.
+ * @returns Zero after creating every safe directory, otherwise one without writing an unsafe target.
+ */
 export function prepareGeneratedOutput(root = repoRoot) {
   for (const target of generatedTargets) {
     if (!assertGeneratedPathSafe(root, target.displayPath)) {
@@ -889,6 +961,13 @@ function releaseWorkflowLock(lock) {
   }
 }
 
+/**
+ * Publishes validated staged outputs by atomically replacing live generated directories and auxiliary files.
+ *
+ * @param stagedTargets Generated directories ready to publish.
+ * @param root Repository root holding publication journals and live targets.
+ * @param options Publication seams and optional auxiliary files; recovery runs after any failure.
+ */
 export function publishGeneratedTargets(stagedTargets, root = repoRoot, options = {}) {
   const operations = { ...defaultPublicationOperations, ...options.operations };
   recoverPublication(root, operations);
@@ -990,6 +1069,12 @@ function createTargetStage(target, root = repoRoot) {
   }
 }
 
+/**
+ * Creates isolated staging directories, generates every target, and normalizes staged TypeScript provenance.
+ *
+ * @param options Generation runners, repository root, and artifact-writing seams.
+ * @returns Staged targets with status zero, or cleans partial staging and returns a nonzero status.
+ */
 export function stageGeneratedTargets(options = {}) {
   const root = options.repoRoot ?? repoRoot;
   const run =
@@ -1270,6 +1355,12 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
   }
 }
 
+/**
+ * Normalizes provenance headers across generated TypeScript files while bounding directory traversal.
+ *
+ * @param root Generated TypeScript tree rewritten in place.
+ * @param packageSources Fallback Proto provenance paths when a file has no explicit source marker.
+ */
 export function normalizeGeneratedTypeScriptTree(root, packageSources = []) {
   const pending = [[root, 0]];
   let entries = 0;
@@ -1326,10 +1417,22 @@ function createHandlerStage(displayPath, root) {
   };
 }
 
+/**
+ * Removes temporary stage directories after publication or a failed generation attempt.
+ *
+ * @param stagedTargets Targets whose enclosing temporary directories are deleted recursively.
+ */
 export function cleanupStagedTargets(stagedTargets) {
   removeStagedTargets(stagedTargets);
 }
 
+/**
+ * Composes the Message Board model registry in isolation and stages the resulting source file for publication.
+ *
+ * @param root Repository root containing the Message Board application and Proto Tools.
+ * @param options Composition and bootstrap seams; `retainBootstrap` delays bootstrap cleanup.
+ * @returns Staged registry paths, undefined when the application lacks composition metadata, or throws after cleanup.
+ */
 export function stageMessageBoardRegistry(root, options = {}) {
   const liveRoot = join(root, "examples/message-board/app");
   if (!existsSync(join(liveRoot, "spine-proto.json"))) return undefined;
@@ -1372,6 +1475,12 @@ export function stageMessageBoardRegistry(root, options = {}) {
   }
 }
 
+/**
+ * Acquires a workflow lock, then stages, publishes, recovers, and cleans up all Proto outputs.
+ *
+ * @param options Workflow seams for locking, bootstrap, generation, and publication.
+ * @returns Zero only after all outputs publish and clean up; otherwise a nonzero status with recovery attempted.
+ */
 export function generateTargets(options = {}) {
   const root = options.repoRoot ?? repoRoot;
   let lock;

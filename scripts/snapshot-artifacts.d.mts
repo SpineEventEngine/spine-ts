@@ -12,15 +12,50 @@
  * the License.
  */
 
+/**
+ * Describes one packed framework artifact prepared for snapshot publication.
+ */
 export interface SnapshotArtifact {
+  /**
+   * Public NPM package name.
+   */
   readonly name: string;
+
+  /**
+   * Absolute path to the packed tarball.
+   */
   readonly tarball: string;
+
+  /**
+   * Subresource Integrity value calculated for the tarball.
+   */
   readonly integrity: string;
+
+  /**
+   * Internal package names that must be available before this artifact is published.
+   */
   readonly dependencies: readonly string[];
 }
 
+/**
+ * Packs framework workspaces and records the artifacts required by snapshot publication.
+ *
+ * @param options Repository paths and command runner used during packing.
+ * @returns Validated framework artifacts derived from the packed tarballs.
+ */
 export function packFrameworkArtifacts(options: {
+  /**
+   * Repository root containing the framework workspaces.
+   */
   readonly root: string;
+
+  /**
+   * Directory that receives the packed tarballs.
+   */
   readonly destination: string;
+
+  /**
+   * Executes one package-manager command in the requested working directory.
+   */
   readonly run: (command: string, args: readonly string[], cwd: string) => void;
 }): readonly SnapshotArtifact[];

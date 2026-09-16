@@ -112,6 +112,176 @@ describe("check-tsdoc", () => {
     expect(result.stdout).toContain("TSDoc enforcement checks passed.");
   });
 
+  it("rejects undocumented script exports across supported source forms", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "scripts/publish.mjs",
+      ["export const publishAsync = async (packageName) => packageName;", ""].join("\n"),
+    );
+    writeSource(repoRoot, "scripts/version.js", 'export const version = "1.0.0";\n');
+    for (const extension of ["cjs", "cts", "jsx", "mts", "tsx"]) {
+      writeSource(repoRoot, `scripts/value.${extension}`, "export const value = 1;\n");
+    }
+    writeSource(
+      repoRoot,
+      "scripts/prepare.ts",
+      "export function prepare(packageName: string): string { return packageName; }\n",
+    );
+    writeSource(
+      repoRoot,
+      "scripts/contracts.d.mts",
+      [
+        "export interface PackageRecord { readonly name: string; }",
+        "export declare function readPackages(root: string): readonly PackageRecord[];",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const undocumented = runChecker(repoRoot);
+    expect(undocumented.status).toBe(1);
+    expect(undocumented.stderr).toContain(
+      "missing-doc: scripts/publish.mjs :: publishAsync(packageName)",
+    );
+    expect(undocumented.stderr).toContain("missing-doc: scripts/version.js :: version");
+    for (const extension of ["cjs", "cts", "jsx", "mts", "tsx"]) {
+      expect(undocumented.stderr).toContain(`missing-doc: scripts/value.${extension} :: value`);
+    }
+    expect(undocumented.stderr).toContain(
+      "missing-doc: scripts/prepare.ts :: prepare(packageName)",
+    );
+    expect(undocumented.stderr).toContain("missing-doc: scripts/contracts.d.mts :: PackageRecord");
+    expect(undocumented.stderr).toContain(
+      "missing-doc: scripts/contracts.d.mts :: readPackages(root)",
+    );
+
+    writeSource(
+      repoRoot,
+      "scripts/publish.mjs",
+      [
+        "/**",
+        " * Publishes the fixture package asynchronously.",
+        " * @param packageName The package selected for publication.",
+        " * @returns A promise for the selected package name.",
+        " */",
+        "export const publishAsync = async (packageName) => packageName;",
+        "",
+      ].join("\n"),
+    );
+    writeSource(
+      repoRoot,
+      "scripts/version.js",
+      [
+        "/**",
+        " * Identifies the fixture release.",
+        " */",
+        'export const version = "1.0.0";',
+        "",
+      ].join("\n"),
+    );
+    writeSource(
+      repoRoot,
+      "scripts/prepare.ts",
+      [
+        "/**",
+        " * Prepares one fixture package.",
+        " * @param packageName Package selected for preparation.",
+        " * @returns The prepared package name.",
+        " */",
+        "export function prepare(packageName: string): string { return packageName; }",
+        "",
+      ].join("\n"),
+    );
+    for (const extension of ["cjs", "cts", "jsx", "mts", "tsx"]) {
+      writeSource(
+        repoRoot,
+        `scripts/value.${extension}`,
+        ["/**", " * Provides the fixture value.", " */", "export const value = 1;", ""].join("\n"),
+      );
+    }
+    writeSource(
+      repoRoot,
+      "scripts/contracts.d.mts",
+      [
+        "/**",
+        " * Describes one package in the fixture registry.",
+        " */",
+        "export interface PackageRecord {",
+        "",
+        "  /**",
+        "   * Public package name.",
+        "   */",
+        "  readonly name: string;",
+        "}",
+        "",
+        "/**",
+        " * Reads fixture packages from a repository.",
+        " * @param root Repository root to inspect.",
+        " * @returns Packages declared by the fixture repository.",
+        " */",
+        "export declare function readPackages(root: string): readonly PackageRecord[];",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const documented = runChecker(repoRoot);
+    expect(documented.stderr).toBe("");
+    expect(documented.status).toBe(0);
+  });
+
+  it("requires a summary for exported JSDoc typedefs", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "scripts/options.mjs",
+      [
+        "/**",
+        " * @typedef {object} PublicationOptions",
+        " * @property {string} tag Registry tag used for publication.",
+        " */",
+        "",
+        "/**",
+        " * Provides default publication options.",
+        " */",
+        "export const defaultTag = 'latest';",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "missing-doc: scripts/options.mjs :: PublicationOptions:JSDocTypedefTag",
+    );
+
+    writeSource(
+      repoRoot,
+      "scripts/options.mjs",
+      [
+        "/**",
+        " * Describes publication options.",
+        " * @typedef {object} PublicationOptions",
+        " * @property {string} tag Registry tag used for publication.",
+        " */",
+        "",
+        "/**",
+        " * Provides default publication options.",
+        " */",
+        "export const defaultTag = 'latest';",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const documented = runChecker(repoRoot);
+    expect(documented.stderr).toBe("");
+    expect(documented.status).toBe(0);
+  });
+
   it("ignores tracked source files deleted from the working tree", () => {
     const repoRoot = createFixture();
     rmSync(join(repoRoot, "packages/demo/src/index.ts"));
@@ -182,12 +352,11 @@ describe("check-tsdoc", () => {
         "/**",
         " * Represents an item.",
         " */",
-        "export interface Item {",
+        "export interface Item {}",
         "/**",
-        " * Describes the item name.",
+        " * Represents another item.",
         " */",
-        "  readonly name: string;",
-        "}",
+        "export interface OtherItem {}",
         "",
       ].join("\n"),
     );
@@ -208,6 +377,51 @@ describe("check-tsdoc", () => {
     track(repoRoot);
     expect(runChecker(repoRoot).status).toBe(0);
   }, 15_000);
+
+  it("keeps the first-member blank-line exception limited to the opening brace", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/test/layout.test.ts",
+      [
+        "function readFixture() {",
+        "/**",
+        " * Describes a local value.",
+        " */",
+        "  const value = 1;",
+        "  return value;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("missing-tsdoc-blank-line");
+
+    writeSource(
+      repoRoot,
+      "packages/demo/test/layout.test.ts",
+      [
+        "interface Fixture {",
+        "  // This intervening content prevents the opening-brace exception.",
+        "  /**",
+        "   * Describes the fixture value.",
+        "   */",
+        "  readonly value: number;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const interveningComment = runChecker(repoRoot);
+
+    expect(interveningComment.status).toBe(1);
+    expect(interveningComment.stderr).toContain("missing-tsdoc-blank-line");
+  });
 
   it("does not let template interpolation hide later invalid TSDoc", () => {
     const repoRoot = createFixture();
@@ -517,7 +731,13 @@ describe("check-tsdoc", () => {
     expect(result.stderr).toContain("tsdoc-block-opener");
 
     writeSource(repoRoot, "packages/demo/test/layout.test.ts", "export const fixture = 1;\n");
-    writeSource(repoRoot, "scripts/layout.mjs", "export const fixture = 1;\n");
+    writeSource(
+      repoRoot,
+      "scripts/layout.mjs",
+      ["/**", " * Provides a layout fixture value.", " */", "export const fixture = 1;", ""].join(
+        "\n",
+      ),
+    );
     track(repoRoot);
     expect(runChecker(repoRoot).status).toBe(0);
   });

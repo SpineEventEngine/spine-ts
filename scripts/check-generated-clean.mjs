@@ -184,10 +184,23 @@ function compareGeneratedOutput(currentRoot, expectedRoot) {
   return { missing, unexpected, changed };
 }
 
+/**
+ * Tests byte-for-byte freshness of the Message Board registry against its staged rendering.
+ *
+ * @param target Live registry file.
+ * @param staged Newly composed registry file.
+ * @returns Whether both registry files have identical UTF-8 text; throws on unreadable files.
+ */
 export function messageBoardRegistryIsFresh(target, staged) {
   return readFileSync(target, "utf8") === readFileSync(staged, "utf8");
 }
 
+/**
+ * Converts an optional staged Message Board registry comparison into a check exit status.
+ *
+ * @param messageBoardRegistry Live and staged registry paths, if composition produced one.
+ * @returns Zero when absent or fresh, otherwise one.
+ */
 export function checkMessageBoardRegistryFresh(messageBoardRegistry) {
   return messageBoardRegistry === undefined ||
     messageBoardRegistryIsFresh(messageBoardRegistry.target, messageBoardRegistry.staged)
@@ -195,6 +208,12 @@ export function checkMessageBoardRegistryFresh(messageBoardRegistry) {
     : 1;
 }
 
+/**
+ * Returns all atomic generated targets or substitutes a caller-supplied expected Proto output root.
+ *
+ * @param expectedGeneratedRoot Optional staged root for checking the primary Proto target only.
+ * @returns Target descriptors whose live output should be compared.
+ */
 export function generatedTargetsForCheck(expectedGeneratedRoot) {
   return expectedGeneratedRoot === undefined
     ? atomicGeneratedTargets
@@ -218,6 +237,13 @@ function printGeneratedDiff(diff) {
   }
 }
 
+/**
+ * Compares selected generated outputs after staging them and removes staging before returning a status.
+ *
+ * @param args Command-line arguments controlling repository and expected-output selection.
+ * @param operations Optional staging and comparison seams for focused tests.
+ * @returns Zero for clean generated outputs, otherwise a nonzero check status.
+ */
 export function runGeneratedClean(args = process.argv.slice(2), operations = {}) {
   const { repoRoot, expectedGeneratedRoot, currentOutput } = parseArgs(args);
   if (expectedGeneratedRoot !== undefined && currentOutput) {

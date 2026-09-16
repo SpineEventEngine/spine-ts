@@ -64,7 +64,10 @@ const exactFrameworkPackages = [
 ].map((directory) => `@spine-event-engine/${directory}`);
 
 /**
- * Returns every accidentally-public package export key.
+ * Finds package export keys that expose an internal implementation path.
+ *
+ * @param root Repository root containing package manifests.
+ * @returns Export-policy violations for all packages.
  */
 export function packageExportInternalPathProblems(root) {
   return packageManifests(root).flatMap(({ manifest }) => {
@@ -105,7 +108,10 @@ function packageGraphProblems(manifests) {
 }
 
 /**
- * Returns package-surface and graph violations for the final Wave 14 boundary.
+ * Checks the exact public package graph and mandatory extension-point exports.
+ *
+ * @param root Repository root containing public package manifests.
+ * @returns Sorted public-surface and dependency-cycle violations.
  */
 export function finalPublicSurfaceProblems(root) {
   const manifests = packageManifests(root).filter(({ manifest }) => manifest.private !== true);
@@ -122,6 +128,9 @@ export function finalPublicSurfaceProblems(root) {
 /**
  * Returns runtime closure violations for the server's native root entry point.
  * `optionalDependencies` are intentionally excluded: the browser entry is a separate optional path.
+ *
+ * @param root Repository root containing package manifests.
+ * @returns Sorted forbidden runtime dependencies reachable from the server root.
  */
 export function nativeServerRootDependencyProblems(root) {
   const byName = new Map(packageManifests(root).map(({ manifest }) => [manifest.name, manifest]));
@@ -184,7 +193,12 @@ function packageRootFor(root, path) {
 }
 
 /**
- * Compares nested paths with an injected platform path implementation when needed in tests.
+ * Determines whether a child path is within a parent path using a supplied platform path API.
+ *
+ * @param parent Candidate ancestor path.
+ * @param child Candidate path to test.
+ * @param path Path operations, injectable to cover platform separators in tests.
+ * @returns Whether `child` equals or is nested beneath `parent`.
  */
 export function isNestedPath(parent, child, path = { relative, sep }) {
   const nested = path.relative(parent, child);
@@ -255,8 +269,11 @@ function relativeSpecifiers(path, text) {
 }
 
 /**
- * Reports tracked test and fixture imports that bypass a sibling package's public exports.
+ * Finds tracked test and fixture imports that reach implementation trees in sibling packages.
  * Real paths are compared so a symlink cannot disguise the crossing.
+ *
+ * @param root Repository root used to find tracked packages and resolve real paths.
+ * @returns Unique sorted cross-package implementation-tree violations.
  */
 export function siblingPackageTreeReachProblems(root) {
   const actualRoot = realpathSync(root);
