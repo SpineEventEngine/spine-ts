@@ -41,10 +41,23 @@ function isSupportedFormatPath(path) {
   return false;
 }
 
+/**
+ * Returns formatter-supported paths ordered for deterministic invocation.
+ *
+ * @param paths Repository-relative paths proposed for formatting.
+ * @returns Sorted subset accepted by the formatter policy.
+ */
 export function selectFormatFiles(paths) {
   return paths.filter(isSupportedFormatPath).sort();
 }
 
+/**
+ * Lists tracked formatter inputs that remain present in a checkout.
+ *
+ * @param root Checkout in which tracked paths are enumerated.
+ * @param status Filesystem status lookup used to exclude paths deleted from the checkout.
+ * @returns Existing Git-tracked paths; throws when the Git process cannot complete successfully.
+ */
 export function trackedFiles(root = repoRoot, status = lstatIfPresent) {
   const result = spawnSync("git", ["ls-files", "-z"], {
     cwd: root,

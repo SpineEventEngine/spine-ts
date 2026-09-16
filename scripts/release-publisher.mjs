@@ -1,5 +1,15 @@
+/**
+ * Identifies the public npm registry queried during publication.
+ */
 export const registryUrl = "https://registry.npmjs.org/";
 
+/**
+ * Compares stable and snapshot release versions by numeric components and snapshot sequence.
+ *
+ * @param left First supported release version.
+ * @param right Second supported release version.
+ * @returns A negative, zero, or positive value according to release ordering.
+ */
 export function compareReleaseVersions(left, right) {
   const parse = (value) => /^([0-9]+)\.([0-9]+)\.([0-9]+)(?:-snapshot\.([0-9]+))?$/u.exec(value);
   const leftParts = parse(left);
@@ -15,6 +25,14 @@ export function compareReleaseVersions(left, right) {
   return Number(leftParts[4]) - Number(rightParts[4]);
 }
 
+/**
+ * Creates an abortable client for public npm registry metadata.
+ *
+ * @param fetch Fetch implementation used to read public npm metadata.
+ * @param timeoutMs Maximum duration for each registry request.
+ * @param abort Factory that produces the request abort signal.
+ * @returns A registry reader that validates artifact integrity and dist-tag metadata.
+ */
 export function createPublicRegistry({
   fetch,
   timeoutMs = 10000,
@@ -60,6 +78,16 @@ export function createPublicRegistry({
   };
 }
 
+/**
+ * Waits for package metadata to expose its archive integrity and selected npm tag.
+ *
+ * @param registry Registry reader for artifact and dist-tag metadata.
+ * @param entry Prepared package entry expected to appear in the registry.
+ * @param tag npm dist-tag expected to reference the package version.
+ * @param sleep Delay callback used between unsuccessful polls.
+ * @param attempts Maximum metadata reads before reporting a timeout.
+ * @returns A promise that resolves only after both registry conditions match.
+ */
 export async function waitForRegistryVisibility({ registry, entry, tag, sleep, attempts = 6 }) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const artifact = await registry("artifact", entry);
@@ -70,6 +98,16 @@ export async function waitForRegistryVisibility({ registry, entry, tag, sleep, a
   throw new Error("Timed out waiting for registry visibility: " + entry.name + "@" + entry.version);
 }
 
+/**
+ * Publishes release archives and confirms their registry visibility.
+ *
+ * @param release Validated release model with dependency-ordered archive entries.
+ * @param checksum Callback that recalculates a local tarball integrity string.
+ * @param registry Registry reader for existing artifacts and dist-tags.
+ * @param publish Callback that uploads one archive with npm publication arguments.
+ * @param poll Callback that waits for a newly uploaded package to become visible.
+ * @returns Published and already-present package names after tag consistency checks.
+ */
 export async function publishRelease({ release, checksum, registry, publish, poll }) {
   if (typeof poll !== "function") throw new Error("A registry visibility poller is required");
   const otherTag = release.tag === "snapshot" ? "latest" : "snapshot";

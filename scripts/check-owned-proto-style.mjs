@@ -65,6 +65,13 @@ function opensDeclarationBlock(line) {
   return /^\s*(?:message|enum|service|oneof)\s+[A-Za-z_]\w*\s*\{\s*(?:\/\/.*)?$/u.test(line);
 }
 
+/**
+ * Checks one authored Proto source for mechanically enforceable declaration-style violations.
+ *
+ * @param source Proto text whose comments and strings are excluded from style matching.
+ * @param path Display path included in diagnostics.
+ * @returns Style diagnostic strings for malformed declaration formatting.
+ */
 export function ownedProtoStyleFailures(source, path = "authored.proto") {
   const failures = [];
   const code = codeWithoutCommentsOrStrings(source);
@@ -99,7 +106,11 @@ export function ownedProtoStyleFailures(source, path = "authored.proto") {
 }
 
 /**
- * Checks mechanically observable source roles; domain meaning remains reviewer judgment.
+ * Checks source-role patterns that conflict with the repository's authored Proto conventions.
+ *
+ * @param source Proto text to classify using observable syntax.
+ * @param path Display path included in diagnostics.
+ * @returns Source-role diagnostic strings; semantic domain suitability remains reviewer judgment.
  */
 export function protoRoleFailures(source, path) {
   const state = /(?:^|[_/])states\.proto$/u.test(path);
@@ -110,6 +121,12 @@ export function protoRoleFailures(source, path) {
   return [];
 }
 
+/**
+ * Rejects generic fixture basenames that conceal the Proto's domain purpose.
+ *
+ * @param path Repository-relative authored Proto path.
+ * @returns Naming diagnostics for disallowed fixture filenames.
+ */
 export function fixtureProtoNameFailures(path) {
   if (!/^packages\/[^/]+\/test-fixtures\/proto\//u.test(path)) return [];
   return /(?:commands|events|states|identifiers|rejections|types)\.proto$/u.test(basename(path))
@@ -117,6 +134,12 @@ export function fixtureProtoNameFailures(path) {
     : [`${path}: test-fixture Proto filename needs a role suffix`];
 }
 
+/**
+ * Checks changed authored Protos and prints style, role, and filename diagnostics to stderr.
+ *
+ * @param root Repository root from which Git paths and Proto files are resolved.
+ * @returns Zero when no diagnostics are found, otherwise one.
+ */
 export function checkOwnedProtoStyle(root = repositoryRoot) {
   const manifestPath = resolve(root, "packages/proto/proto/spine-sources.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));

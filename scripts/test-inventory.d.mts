@@ -12,6 +12,9 @@
  * the License.
  */
 
+/**
+ * Lists tests that require infrastructure unavailable to the default test task.
+ */
 export declare const infrastructureTestFiles: readonly [
   "packages/storage-datastore/test/datastore-cloud.test.ts",
   "packages/storage-datastore/test/datastore-emulator.test.ts",

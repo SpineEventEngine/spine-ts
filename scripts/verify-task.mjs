@@ -1,6 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { findPrimaryMergeBase } from "./git-primary-branch.mjs";
 
+/**
+ * Parses task-verification coverage and test-selection arguments.
+ *
+ * @param args CLI arguments after the script name, optionally including a pnpm separator.
+ * @returns Coverage mode plus focused test and source paths, or a no-tests selection.
+ * @throws {Error} When flags are incompatible or required paths are missing.
+ */
 export function parseTaskVerificationArgs(args) {
   const values = args[0] === "--" ? args.slice(1) : args;
   if (values.length === 1 && values[0] === "--no-tests") return { noTests: true };
@@ -29,6 +36,12 @@ export function parseTaskVerificationArgs(args) {
   return { coverage, paths, ...(coverage ? { sources } : {}) };
 }
 
+/**
+ * Builds the Vitest command arguments for a selected verification choice.
+ *
+ * @param choice Parsed test and coverage selection.
+ * @returns `pnpm exec vitest run` arguments with deduplicated coverage include paths when requested.
+ */
 export function vitestArgs(choice) {
   return [
     "exec",
@@ -45,10 +58,10 @@ export function vitestArgs(choice) {
 }
 
 /**
- * Classifies changed paths conservatively so shared or unknown changes retain every gate.
+ * Determines whether a diff is Markdown-only or requires shared runtime gates.
  *
- * @param paths Changed repository paths.
- * @returns Required Proto and API-documentation gates.
+ * @param paths Changed repository-relative paths.
+ * @returns Gate flags that skip Proto and API-doc work only for a nonempty Markdown-only diff.
  */
 export function classifyTaskChanges(paths) {
   const independentlySafe = paths.length > 0 && paths.every((path) => path.endsWith(".md"));
@@ -58,8 +71,8 @@ export function classifyTaskChanges(paths) {
 /**
  * Lists deterministic gates required for a task diff classification.
  *
- * @param classification Required Proto and API-documentation gates.
- * @returns Package scripts that must run for the classification.
+ * @param classification Diff classification that controls conditional gates.
+ * @returns Ordered pnpm script names required before focused tests.
  */
 export function taskGateCommands(classification) {
   return [
@@ -80,7 +93,11 @@ export function taskGateCommands(classification) {
 }
 
 /**
- * Selects tests that a non-record task cannot opt out of with caller arguments.
+ * Determines test scopes that remain mandatory for changes outside documentation records.
+ *
+ * @param classification Diff classification that determines whether tests are mandatory.
+ * @param paths Changed paths used to group package test directories.
+ * @returns Vitest scope arguments, or an empty array for an all-Markdown diff.
  */
 export function requiredTaskTests(classification, paths = []) {
   if (!classification.proto && !classification.typeDoc) return [];
@@ -94,6 +111,15 @@ export function requiredTaskTests(classification, paths = []) {
 }
 
 /* Plans mandatory changed-scope tests and any caller tests those suites do not cover. */
+
+/**
+ * Builds test commands from mandatory changed scopes and uncovered requested tests.
+ *
+ * @param classification Diff classification that determines mandatory tests.
+ * @param paths Changed repository-relative paths.
+ * @param choice Parsed caller-requested test selection.
+ * @returns One or two Vitest command argument arrays, preserving required tests and coverage.
+ */
 export function plannedTaskTests(classification, paths, choice) {
   const mandatory = requiredTaskTests(classification, paths);
   const requested = choice.noTests ? [] : [...new Set(choice.paths)];
@@ -116,8 +142,8 @@ function coveredByMandatoryTest(path, mandatory) {
 /**
  * Lists changed paths from the branch, worktree, index, and untracked files.
  *
- * @param runGit Runs a Git command and returns its status and standard output.
- * @returns Changed paths, or an empty list when Git cannot classify them.
+ * @param runGit Git runner used to compare the merge base, worktree, index, and untracked files.
+ * @returns Unique changed paths, or an empty array when a Git query cannot establish the diff.
  */
 export function changedPaths(runGit = git) {
   const baseRef = findPrimaryMergeBase(runGit);

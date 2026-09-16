@@ -118,6 +118,7 @@ const callableVerbs = new Set([
   "unpacks",
 ]);
 const semanticSourceExtension = /\.(?:cts|mts|ts|tsx)$/;
+const scriptSourceExtension = /\.(?:cjs|cts|js|jsx|mjs|mts|ts|tsx)$/;
 const handwrittenSourceExtension = /\.(?:cts|mts|ts|tsx|js|jsx|mjs|cjs)$/;
 const internalChronologyPattern =
   /\b(?:T-\d{4,}[A-Za-z]*|wave\s+\d+[A-Za-z]?|phase\s+\d+|slice\s+\d+|milestone\s+\w+)\b/iu;
@@ -146,6 +147,12 @@ const remediationPartitions = [
   "T-0080N",
 ];
 
+/**
+ * Checks tracked source declarations against the repository's TSDoc policy.
+ *
+ * @param repoRoot The repository checkout to inspect.
+ * @returns Sorted policy failures after applying the recorded legacy debt.
+ */
 export function checkTsdoc(repoRoot) {
   const root = realpathSync(resolve(repoRoot));
   return applyDebt(root, rejectDuplicateFailures(scanTsdoc(root))).sort(compareFailures);
@@ -189,7 +196,7 @@ function scanTsdoc(root) {
   const program = ts.createProgram(
     confined.map(({ sourcePath }) => sourcePath),
     {
-      allowJs: false,
+      allowJs: true,
       module: ts.ModuleKind.NodeNext,
       moduleResolution: ts.ModuleResolutionKind.NodeNext,
       noEmit: true,
@@ -377,11 +384,16 @@ function isHandwrittenSource(file) {
 function isSemanticSource(file) {
   return (
     isHandwrittenSource(file) &&
-    semanticSourceExtension.test(file) &&
-    !/\.(?:test|spec)\.(?:cts|mts|ts|tsx)$/.test(file) &&
-    !/(?:^|\/)(?:test|tests|__tests__)(?:\/|$)/.test(file) &&
-    (/^packages\/[^/]+\/src\//.test(file) || /^examples\/.+\/src\//.test(file))
+    ((semanticSourceExtension.test(file) &&
+      !/\.(?:test|spec)\.(?:cts|mts|ts|tsx)$/.test(file) &&
+      !/(?:^|\/)(?:test|tests|__tests__)(?:\/|$)/.test(file) &&
+      (/^packages\/[^/]+\/src\//.test(file) || /^examples\/.+\/src\//.test(file))) ||
+      (/^scripts\//.test(file) && scriptSourceExtension.test(file)))
   );
+}
+
+function isScriptSource(file) {
+  return /^scripts\//.test(file) && scriptSourceExtension.test(file);
 }
 
 function hasExcludedPathSegment(file) {
@@ -399,13 +411,13 @@ function isDebtEligibleFailure(failure) {
 function scanBlockLayout(source, file, failures) {
   if (/^(?:[ \t]*\r?\n)/u.test(source))
     failures.push({ rule: "blank-first-line", file, name: "source" });
-  for (const { start, block } of tsdocBlocks(source, file)) {
+  for (const { start, block, followsOpeningBrace } of tsdocBlocks(source, file)) {
     const lineStart = source.lastIndexOf("\n", start - 1) + 1;
     const lineEnd = source.indexOf("\n", start);
     const opener = source.slice(lineStart, lineEnd < 0 ? source.length : lineEnd).trim();
     const name = `block@${lineNumber(source, start)}`;
     if (opener !== "/**") failures.push({ rule: "tsdoc-block-opener", file, name });
-    if (start !== 0 && !hasBlankPrecedingLine(source, lineStart))
+    if (start !== 0 && !hasBlankPrecedingLine(source, lineStart) && !followsOpeningBrace)
       failures.push({ rule: "missing-tsdoc-blank-line", file, name });
     if (hasHyphenatedParam(block)) failures.push({ rule: "hyphenated-param", file, name });
     if (hasDoubledSummarySpacing(block))
@@ -427,20 +439,49 @@ function scanBlockLayout(source, file, failures) {
 function tsdocBlocks(source, file) {
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const blocks = new Map();
+  const firstMemberStarts = new Set();
   const visit = (node) => {
+    const starts = [];
     for (const documentation of ts.getJSDocCommentsAndTags(node)) {
       if (!ts.isJSDoc(documentation)) continue;
       const start = documentation.getStart(sourceFile, false);
+      starts.push(start);
       blocks.set(start, { start, block: source.slice(start, documentation.getEnd()) });
     }
     for (const range of ts.getLeadingCommentRanges(source, node.getFullStart()) ?? []) {
       const block = source.slice(range.pos, range.end);
-      if (block.startsWith("/**")) blocks.set(range.pos, { start: range.pos, block });
+      if (block.startsWith("/**")) {
+        starts.push(range.pos);
+        blocks.set(range.pos, { start: range.pos, block });
+      }
+    }
+    if (starts.length > 0) {
+      const firstStart = Math.min(...starts);
+      if (isFirstMemberAfterOpeningBrace(node, firstStart, sourceFile))
+        firstMemberStarts.add(firstStart);
     }
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
-  return [...blocks.values()].sort((left, right) => left.start - right.start);
+  return [...blocks.values()]
+    .map((entry) => ({ ...entry, followsOpeningBrace: firstMemberStarts.has(entry.start) }))
+    .sort((left, right) => left.start - right.start);
+}
+
+function isFirstMemberAfterOpeningBrace(node, documentationStart, sourceFile) {
+  const parent = node.parent;
+  if (parent === undefined) return false;
+  const first =
+    ("members" in parent && parent.members?.[0] === node) ||
+    ("properties" in parent && parent.properties?.[0] === node);
+  if (!first) return false;
+  const openingBrace = parent
+    .getChildren(sourceFile)
+    .find((child) => child.kind === ts.SyntaxKind.OpenBraceToken);
+  return (
+    openingBrace !== undefined &&
+    sourceFile.text.slice(openingBrace.end, documentationStart).trim().length === 0
+  );
 }
 
 function lineNumber(source, index) {
@@ -581,7 +622,7 @@ function visitSource(source, file, checker, failures) {
     inspectDeclaration(declaration, file, undefined, checker, failures, suffix);
     inspected.add(declaration);
   }
-  if (debtPartition(file) === "T-0080F")
+  if (/^packages\/server\//.test(file))
     inspectInternalObjectMembers(source, file, checker, failures, inspected);
 }
 
@@ -955,6 +996,10 @@ function variableStatementFor(node) {
 
 function inspectDocumentation(node, file, name, checker, failures, documentationNode = node) {
   const documentation = documentationFor(documentationNode);
+  if (isScriptSource(file) && documentation.summary === undefined) {
+    failures.push({ rule: "missing-doc", file, name });
+    return;
+  }
   if (documentation.adjacent) failures.push({ rule: "adjacent-tsdoc", file, name });
   if (documentation.inherited) {
     if (hasDocumentedInheritedMember(node, checker)) return;
@@ -1035,6 +1080,10 @@ function inspectCallable(node, file, name, checker, failures, documentationNode 
   if (name === undefined) return;
   const identity = `${name}(${node.parameters.map((parameter) => parameter.name.getText()).join(",")})`;
   const documentation = documentationFor(documentationNode);
+  if (isScriptSource(file) && documentation.summary === undefined) {
+    failures.push({ rule: "missing-doc", file, name: identity });
+    return;
+  }
   if (documentation.adjacent) failures.push({ rule: "adjacent-tsdoc", file, name: identity });
   if (documentation.inherited && hasDocumentedInheritedMember(node, checker)) return;
   if (documentation.inherited) failures.push({ rule: "invalid-inheritdoc", file, name: identity });
@@ -1093,8 +1142,10 @@ function documentationFor(node) {
   const comments = (ts.getLeadingCommentRanges(source.text, node.getFullStart()) ?? []).filter(
     (range) => source.text.startsWith("/**", range.pos),
   );
-  const jsdoc = ts.getJSDocCommentsAndTags(node).find(ts.isJSDoc);
-  const tags = ts.getJSDocTags(node).map((tag) => ({
+  const directJsdoc =
+    ts.isJSDocTypedefTag(node) && ts.isJSDoc(node.parent) ? node.parent : undefined;
+  const jsdoc = directJsdoc ?? ts.getJSDocCommentsAndTags(node).filter(ts.isJSDoc).at(-1);
+  const tags = (jsdoc?.tags ?? ts.getJSDocTags(node)).map((tag) => ({
     name: tag.tagName.text.toLowerCase(),
     parameterName:
       ts.isJSDocParameterTag(tag) && tag.name !== undefined ? tag.name.getText() : undefined,
@@ -1116,10 +1167,13 @@ function documentationFor(node) {
     tags,
     duplicateParameters,
     inherited,
-    adjacent: comments.some(
-      (comment, index) =>
-        index > 0 && source.text.slice(comments[index - 1].end, comment.pos).trim().length === 0,
-    ),
+    adjacent: comments
+      .filter((comment) => !/@typedef\b/u.test(source.text.slice(comment.pos, comment.end)))
+      .some(
+        (comment, index, declarationComments) =>
+          index > 0 &&
+          source.text.slice(declarationComments[index - 1].end, comment.pos).trim().length === 0,
+      ),
   };
 }
 

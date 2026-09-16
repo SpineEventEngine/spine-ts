@@ -4,6 +4,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+/**
+ * Lists repository-relative build directories removed before a clean build.
+ */
 export const buildOutputPaths = Object.freeze([
   "packages/proto-tools/dist",
   "packages/proto/dist",
@@ -42,6 +45,12 @@ const defaultFileSystem = Object.freeze({
   },
 });
 
+/**
+ * Removes configured build output directories from the repository checkout.
+ *
+ * @param fileSystem Filesystem adapter used to inspect and recursively remove configured directories.
+ * @throws {Error} When an output escapes the checkout, is absent as a non-directory, or is a symlink.
+ */
 export function cleanBuildOutputs(fileSystem = defaultFileSystem) {
   const root = realpathSync(defaultRepoRoot);
 

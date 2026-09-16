@@ -26,6 +26,9 @@ import { findPrimaryMergeBase } from "./git-primary-branch.mjs";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = "packages/proto/proto/spine-sources.json";
 
+/**
+ * Stores the copyright header required for tracked source files.
+ */
 export const COPYRIGHT_HEADER = copyrightHeader(2026);
 
 function expectedHeader(year) {
@@ -95,6 +98,16 @@ function contentChanged(path, contents, options) {
   return { changed: matches.length === 0 };
 }
 
+/**
+ * Finds copyright-header violations among supplied repository files.
+ *
+ * @param files Repository-relative paths to inspect.
+ * @param readFile Source reader for each inspected path.
+ * @param readManifest Reader for the Proto-source manifest, which identifies upstream files.
+ * @param year Copyright year required for changed eligible files.
+ * @param options Baseline and rename lookups used to decide whether a post-2026 file changed.
+ * @returns Sorted-path-order violations for missing, malformed, misplaced, or stale headers.
+ */
 export function checkCopyright({
   files,
   readFile,
@@ -161,6 +174,12 @@ export function checkCopyright({
   return problems;
 }
 
+/**
+ * Lists Git-tracked and untracked files eligible for copyright checks.
+ *
+ * @param runGit Git runner used to enumerate index, worktree, and untracked paths.
+ * @returns Non-deleted paths that Git would subject to copyright validation.
+ */
 export function gitFiles(runGit = git) {
   const result = runGit(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
   if (result.status !== 0) throw new Error("copyright enumeration failed: git ls-files");
@@ -200,6 +219,13 @@ function renameMap(runGit, base) {
 }
 
 /* Creates deterministic Git-backed current-year comparison operations. */
+
+/**
+ * Creates Git operations that distinguish changed files from the baseline.
+ *
+ * @param runGit Git runner used to find the primary merge base and inspect diffs.
+ * @returns Callbacks that read baseline content and identify rename or deletion candidates.
+ */
 export function gitComparison(runGit = git) {
   const base = findPrimaryMergeBase(runGit);
   if (base === undefined) throw new Error("copyright merge-base failed");
@@ -232,6 +258,9 @@ function git(args) {
   return spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" });
 }
 
+/**
+ * Executes the checker against the current checkout and throws one aggregated error for violations.
+ */
 export function main() {
   const comparison = gitComparison();
   const problems = checkCopyright({

@@ -25,7 +25,12 @@ import {
 const packageDirectories = frameworkPackageNames.map((name) => "packages/" + name.split("/")[1]);
 
 /**
- * Packs the public inventory once and derives publication entries from its archives.
+ * Builds every public package, packs it once, and inspects the resulting publication archives.
+ *
+ * @param root Repository root containing workspace packages and build tooling.
+ * @param destination Directory that receives the generated tarballs.
+ * @param run Command runner used for TypeScript builds and pnpm packing.
+ * @returns Validated package entries derived from the generated tarballs.
  */
 export function packFrameworkArtifacts({ root, destination, run }) {
   run("pnpm", ["--dir", "packages/proto-tools", "exec", "tsc", "-b"], root);
@@ -51,7 +56,12 @@ export function packFrameworkArtifacts({ root, destination, run }) {
 }
 
 /**
- * Validates one archive and returns the exact bytes and runtime dependency edges.
+ * Validates one extracted archive and records its integrity and internal runtime edges.
+ *
+ * @param root Repository root used to compare the packed manifest with its source manifest.
+ * @param tarball Path to the gzip archive being inspected.
+ * @param run Command runner used to extract the archive into a temporary directory.
+ * @returns Archive name, path, SHA-512 integrity, and sorted internal runtime dependencies.
  */
 export function inspectPackedArtifact({ root, tarball, run }) {
   const stage = mkdtempSync(join(tmpdir(), "spine-snapshot-artifact-"));
@@ -89,7 +99,13 @@ export function inspectPackedArtifact({ root, tarball, run }) {
 }
 
 /**
- * Proves the exact packed tarballs resolve in a fresh non-workspace consumer.
+ * Validates that all exact tarballs install, typecheck, and run in a fresh external consumer.
+ *
+ * @param root Repository root used when artifacts must first be packed.
+ * @param destination Directory in which the temporary external consumer is created.
+ * @param run Command runner used to install, typecheck, and execute the consumer.
+ * @param packages Optional prebuilt artifact entries to prove instead of packing again.
+ * @returns The supplied or newly packed artifact entries after consumer proof succeeds.
  */
 export function proveExactTarballConsumer({ root, destination, run, packages }) {
   const artifacts = packages ?? packFrameworkArtifacts({ root, destination, run });
@@ -185,8 +201,14 @@ export function proveExactTarballConsumer({ root, destination, run, packages }) 
 }
 
 /**
- * Proves the server root can be consumed without browser-auth or compiler packages.
+ * Validates that the native server tarball installs and runs without browser-auth or compiler dependencies.
  * The repository compiler is invoked by absolute path so it is not installed into the consumer.
+ *
+ * @param root Repository root used for packing and the repository TypeScript compiler.
+ * @param destination Directory in which the temporary native-server consumer is created.
+ * @param run Command runner used to install, typecheck, and execute the consumer.
+ * @param packages Optional prebuilt artifact entries to prove instead of packing again.
+ * @returns The supplied or newly packed artifact entries after native-server proof succeeds.
  */
 export function proveNativeServerTarballConsumer({ root, destination, run, packages }) {
   const artifacts = packages ?? packFrameworkArtifacts({ root, destination, run });
@@ -253,6 +275,8 @@ export function proveNativeServerTarballConsumer({ root, destination, run, packa
 /**
  * Rejects forbidden packages anywhere in the physical installed dependency closure,
  * including pnpm's `.pnpm` virtual store.
+ *
+ * @param consumer External consumer directory whose installed dependency tree is inspected.
  */
 export function assertNativeConsumerDependencyClosure(consumer) {
   const pending = [join(consumer, "node_modules")];
@@ -277,6 +301,11 @@ export function assertNativeConsumerDependencyClosure(consumer) {
       throw new Error("Native server consumer installed forbidden package: " + forbidden);
 }
 
+/**
+ * Rejects installed packages that resolve outside the external consumer directory.
+ *
+ * @param consumer External consumer directory whose node_modules tree is checked.
+ */
 export function assertConsumerIsolation(consumer) {
   const pending = [join(consumer, "node_modules")];
   const consumerRoot = realpathSync(consumer);
@@ -294,10 +323,23 @@ export function assertConsumerIsolation(consumer) {
   }
 }
 
+/**
+ * Determines whether a resolved path remains within a parent directory.
+ *
+ * @param parent Directory that bounds the permitted path.
+ * @param child Resolved path to test against the directory boundary.
+ * @returns Whether `child` is equal to or contained by `parent`.
+ */
 export function isContainedPath(parent, child) {
   return isContainedRelative(relative(parent, child));
 }
 
+/**
+ * Determines whether a relative path does not escape its base directory.
+ *
+ * @param path Relative path produced by a path comparison.
+ * @returns Whether the path is empty or descends within its base rather than escaping it.
+ */
 export function isContainedRelative(path) {
   return (
     path === "" ||

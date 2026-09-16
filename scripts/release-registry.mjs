@@ -1,14 +1,16 @@
 /**
+ * Represents public registry metadata for one published package.
+ *
  * Registry metadata needed to verify a release version and selected tag.
  *
  * @typedef {{ versions: Record<string, unknown>, "dist-tags": Record<string, string> }} RegistryRecord
  */
 
 /**
- * Validates one registry response for every package in a release model.
+ * Rejects malformed registry records, tag mismatches, and a release already published in full.
  *
- * @param {{ tag: string, version: string, packages: readonly { name: string }[] }} release expected release
- * @param {ReadonlyMap<string, RegistryRecord>} records registry responses
+ * @param release Release model whose package versions and selected tag are checked.
+ * @param records Registry packuments indexed by public package name.
  */
 export function assertRegistryReleaseState(release, records) {
   let published = 0;
@@ -37,11 +39,12 @@ export function assertRegistryReleaseState(release, records) {
 }
 
 /**
- * Reads one public-registry packument for each package without mutation.
+ * Reads public packuments with per-request timeouts and selects packages missing the release version.
  *
- * @param {{ tag: string, version: string, packages: readonly { name: string }[] }} release expected release
- * @param {(url: string) => Promise<Response>} fetchResponse fetch implementation
- * @param {{ timeoutMs?: number }} options registry read options
+ * @param release Release model whose package records are queried.
+ * @param fetchResponse Fetch implementation for public npm packuments.
+ * @param timeoutMs Maximum duration allowed for each registry request and JSON response.
+ * @returns Names whose release version is absent after validating all received records.
  */
 export async function selectUnpublishedPackageNames(
   release,
@@ -79,4 +82,7 @@ export async function selectUnpublishedPackageNames(
     .map(({ name }) => name);
 }
 
+/**
+ * Exposes the strict unpublished-package selector used by release CLI preflight.
+ */
 export const verifyRegistryReleaseState = selectUnpublishedPackageNames;

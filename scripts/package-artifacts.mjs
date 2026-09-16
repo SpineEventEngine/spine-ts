@@ -8,6 +8,9 @@ const dependencyGroups = [
   "peerDependencies",
 ];
 
+/**
+ * Lists the exact public npm package names released by this repository.
+ */
 export const frameworkPackageNames = [
   "@spine-event-engine/auth",
   "@spine-event-engine/client-node",
@@ -30,7 +33,10 @@ export const frameworkPackageNames = [
 ];
 
 /**
- * Returns deterministic errors for the public inventory in a checkout root.
+ * Checks the checkout's public and private package inventory and public manifest metadata.
+ *
+ * @param root Repository root containing the package manifests to inspect.
+ * @returns Sorted policy violations; an empty array means the inventory is valid.
  */
 export function validatePublicationInventory(root) {
   const rootManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
@@ -74,10 +80,10 @@ export function validatePublicationInventory(root) {
 }
 
 /**
- * Reports package manifest values that cannot be present in a packed npm artifact.
+ * Finds local and obsolete dependency specifiers that would make a packed artifact unreleasable.
  *
- * @param {Record<string, unknown>} manifest packed package manifest
- * @returns {string[]} sorted policy violations
+ * @param manifest Package manifest whose dependency groups are inspected.
+ * @returns Sorted dependency-specifier violations.
  */
 export function packedManifestProblems(manifest) {
   const problems = [];
@@ -100,6 +106,12 @@ export function packedManifestProblems(manifest) {
   return problems.sort((left, right) => left.localeCompare(right));
 }
 
+/**
+ * Validates public package identity, version, licensing, publication, and repository metadata.
+ *
+ * @param manifest Public package manifest to validate.
+ * @returns Sorted public-manifest policy violations.
+ */
 export function publicManifestProblems(manifest) {
   const name = typeof manifest.name === "string" ? manifest.name : "<unnamed package>";
   const problems = [];
@@ -133,6 +145,15 @@ export function publicManifestProblems(manifest) {
   return problems.sort((left, right) => left.localeCompare(right));
 }
 
+/**
+ * Finds disallowed, undeclared, or missing content and metadata targets in a packed package.
+ *
+ * @param manifest Manifest extracted from the package archive.
+ * @param entries Relative paths included in the archive.
+ * @param texts Text payloads extracted from relevant archive entries.
+ * @param sourceFiles Source manifest file patterns permitted in the archive.
+ * @returns Unique sorted archive-content policy violations.
+ */
 export function packedContentProblems(manifest, entries, texts, sourceFiles = []) {
   const name = typeof manifest.name === "string" ? manifest.name : "<unnamed package>";
   const files = new Set(entries);
@@ -169,6 +190,12 @@ export function packedContentProblems(manifest, entries, texts, sourceFiles = []
   return [...new Set(problems)].sort((left, right) => left.localeCompare(right));
 }
 
+/**
+ * Checks that internal runtime dependencies use the package's release version.
+ *
+ * @param manifest Package manifest whose runtime dependency groups are checked.
+ * @returns Sorted internal dependency-version violations.
+ */
 export function internalRuntimeDependencyProblems(manifest) {
   const name = typeof manifest.name === "string" ? manifest.name : "<unnamed package>";
   const problems = [];
@@ -199,10 +226,10 @@ function manifestTargets(manifest) {
 }
 
 /**
- * Produces a deterministic internal-runtime dependency-first package order.
+ * Builds a deterministic dependency-first order for the supplied internal package manifests.
  *
- * @param {readonly Record<string, unknown>[]} manifests package manifests
- * @returns {string[]} package names
+ * @param manifests Package manifests participating in the dependency graph.
+ * @returns Package names with each internal dependency before its consumers.
  */
 export function dependencyFirstOrder(manifests) {
   const byName = new Map(
@@ -239,11 +266,11 @@ export function dependencyFirstOrder(manifests) {
 }
 
 /**
- * Reports required package files missing from a packed tar archive entry list.
+ * Finds required publication files absent from a packed tarball.
  *
- * @param {Record<string, unknown>} manifest packed package manifest
- * @param {readonly string[]} entries tar entry paths
- * @returns {string[]} sorted policy violations
+ * @param manifest Package manifest used to identify violations.
+ * @param entries Tar entry paths, including their package directory prefix.
+ * @returns Sorted missing-file violations.
  */
 export function packedArchiveProblems(manifest, entries) {
   const name = typeof manifest.name === "string" ? manifest.name : "<unnamed package>";
@@ -258,12 +285,12 @@ export function packedArchiveProblems(manifest, entries) {
 }
 
 /**
- * Reports README links that cannot be followed from the packed package alone.
+ * Finds README links that escape or reference files absent from the packed artifact.
  *
- * @param {Record<string, unknown>} manifest packed package manifest
- * @param {readonly string[]} entries tar entry paths without the package prefix
- * @param {string} readme packed README source
- * @returns {string[]} sorted policy violations
+ * @param manifest Package manifest used to identify violations.
+ * @param entries Tar entry paths, including their package directory prefix.
+ * @param readme README text extracted from the packed artifact.
+ * @returns Unique sorted README-link violations.
  */
 export function packedReadmeLinkProblems(manifest, entries, readme) {
   const name = typeof manifest.name === "string" ? manifest.name : "<unnamed package>";

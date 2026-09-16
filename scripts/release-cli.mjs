@@ -21,6 +21,24 @@ const option = (argv, name) => {
   return argv[index + 1];
 };
 
+/**
+ * Packs, consumer-proves, and optionally stages release archives with interruption cleanup.
+ *
+ * @param root Repository root passed to package preparation callbacks.
+ * @param output Destination for a persistent release preparation.
+ * @param check Whether to use and remove a temporary verification directory.
+ * @param mkdtemp Callback that creates the temporary check directory.
+ * @param exists Callback that tests whether an output path already exists.
+ * @param mkdir Callback that creates a persistent output directory.
+ * @param remove Callback that recursively removes an abandoned preparation directory.
+ * @param pack Callback that creates and inspects package archives.
+ * @param prove Callback that installs the archives in an external consumer.
+ * @param registerSignal Callback that installs an interruption handler and returns its remover.
+ * @param exit Callback that terminates after signal-triggered cleanup.
+ * @param expected Validated release model to combine with prepared packages.
+ * @param stage Optional callback that extracts archives for publication tooling.
+ * @returns The release model with prepared packages after successful proof.
+ */
 export function prepareRelease({
   root,
   output,
@@ -74,6 +92,13 @@ export function prepareRelease({
   }
 }
 
+/**
+ * Writes each prepared tarball into its package-specific extracted publication directory.
+ *
+ * @param destination Release preparation directory that receives extracted package contents.
+ * @param packages Prepared package entries containing names and tarball paths.
+ * @param run Command runner used to extract each gzip archive.
+ */
 export function stageReleaseContents({ destination, packages, run }) {
   for (const { name, tarball } of packages) {
     const directory = join(destination, "packages", name.split("/")[1], ".publish");
@@ -82,6 +107,16 @@ export function stageReleaseContents({ destination, packages, run }) {
   }
 }
 
+/**
+ * Creates a minimal Lerna workspace containing a selected set of staged release packages.
+ *
+ * @param destination Empty directory where the publication workspace is created.
+ * @param entries Release manifest entries providing source paths and package manifests.
+ * @param selectedNames Unique public package names selected after registry preflight.
+ * @param copy Callback that copies staged package payloads into the workspace.
+ * @param mkdir Callback that creates workspace and package directories.
+ * @param write Callback that writes workspace and package manifests.
+ */
 export function createPublicationWorkspace({
   destination,
   entries,
@@ -112,12 +147,21 @@ export function createPublicationWorkspace({
   for (const name of selectedNames) {
     const { manifest, path } = byName.get(name);
     const directory = join(destination, "packages", path.split("/")[1]);
+    const publicationManifest = { ...manifest };
+    delete publicationManifest.devDependencies;
     mkdir(directory);
-    write(join(directory, "package.json"), JSON.stringify(manifest) + "\n");
+    write(join(directory, "package.json"), JSON.stringify(publicationManifest) + "\n");
     copy(join(path.slice(0, -"package.json".length), ".publish"), join(directory, ".publish"));
   }
 }
 
+/**
+ * Dispatches release preparation, tag display, registry preflight, or workspace creation commands.
+ *
+ * @param argv Command-line arguments, including the release subcommand.
+ * @param dependencies Injectable filesystem, registry, and release collaborators.
+ * @returns Subcommand result, or a promise for asynchronous registry operations.
+ */
 export async function main({ argv = process.argv, dependencies = {} } = {}) {
   const {
     createWorkspace = createPublicationWorkspace,

@@ -3,6 +3,9 @@ import { join } from "node:path";
 
 import { dependencyFirstOrder, frameworkPackageNames } from "./package-artifacts.mjs";
 
+/**
+ * Lists manifests that must agree before a framework release is published.
+ */
 export const releaseManifestPaths = [
   "package.json",
   "packages/auth/package.json",
@@ -32,16 +35,31 @@ export const releaseManifestPaths = [
   "examples/todo/package.json",
 ];
 
+/**
+ * Selects publishable package manifests from the complete release inventory.
+ */
 export const publicPackagePaths = releaseManifestPaths.filter((path) =>
   path.startsWith("packages/"),
 );
 
+/**
+ * Maps a supported semantic version to the npm tag used for publication.
+ *
+ * @param version Candidate root release version.
+ * @returns The version paired with either the `latest` or `snapshot` tag.
+ */
 export function classifyReleaseVersion(version) {
   if (/^\d+\.\d+\.\d+-snapshot\.\d+$/u.test(version)) return { tag: "snapshot", version };
   if (/^\d+\.\d+\.\d+$/u.test(version)) return { tag: "latest", version };
   throw new Error("Unsupported release version: " + version);
 }
 
+/**
+ * Reads every manifest that participates in release-policy validation.
+ *
+ * @param root Repository root from which release manifests are read.
+ * @returns Manifest entries in the fixed release-policy inventory order.
+ */
 export function readReleaseManifests(root) {
   return releaseManifestPaths.map((path) => ({
     path,
@@ -49,6 +67,12 @@ export function readReleaseManifests(root) {
   }));
 }
 
+/**
+ * Validates that release manifests share the required package policy.
+ *
+ * @param entries Manifest entries expected to match the fixed release inventory.
+ * @returns The validated release version and npm tag.
+ */
 export function validateReleasePolicy(entries) {
   if (entries.length !== releaseManifestPaths.length)
     throw new Error("Release manifests do not match the exact 26-path inventory");
@@ -97,12 +121,24 @@ export function validateReleasePolicy(entries) {
   return release;
 }
 
+/**
+ * Builds a public package order in which internal runtime dependencies precede consumers.
+ *
+ * @param entries Release manifest entries containing public package dependencies.
+ * @returns Public package names in deterministic dependency-first order.
+ */
 export function releaseDependencyOrder(entries) {
   return dependencyFirstOrder(
     entries.filter(({ path }) => path.startsWith("packages/")).map(({ manifest }) => manifest),
   );
 }
 
+/**
+ * Builds the dependency-ordered package model used by release preparation and publication.
+ *
+ * @param entries Manifest entries to validate and project into release packages.
+ * @returns Release tag, version, and dependency-ordered public package entries.
+ */
 export function expectedReleaseModel(entries) {
   const release = validateReleasePolicy(entries);
   const packages = entries

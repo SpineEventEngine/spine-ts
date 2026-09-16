@@ -81,6 +81,13 @@ const allowedFlatPackageSourceFiles = new Set([
 ]);
 const gitOutputMaxBuffer = 64 * 1024 * 1024;
 
+/**
+ * Checks changed repository sources against structural cleanup policies.
+ *
+ * @param repoRoot Checkout whose tracked files and package layout are inspected.
+ * @param runGitCommand Git runner used to enumerate files and read the migration baseline.
+ * @returns Policy failures; throws when required filesystem or baseline data is unavailable.
+ */
 export function checkCleanupRules(repoRoot, runGitCommand = runGit) {
   const root = resolve(repoRoot);
   const resolvedRoot = realpathSync(root);
@@ -2488,6 +2495,12 @@ function baselineContains(repoRoot, entry) {
   return baselineObservesStructureEntry(entry, source);
 }
 
+/**
+ * Maps a former Message Board application path to its Chat baseline location.
+ *
+ * @param file Current repository-relative path recorded in a structure-debt entry.
+ * @returns Corresponding path in the immutable baseline, or the original path when it was not moved.
+ */
 export function movedChatBaselinePath(file) {
   return file
     .replace(/^examples\/message-board\/app\//, "examples/chat/")
@@ -2498,6 +2511,13 @@ export function movedChatBaselinePath(file) {
     .replace(/^examples\/orders\//, "examples/datastore-orders/");
 }
 
+/**
+ * Tests whether source still produces a recorded structure-debt entry.
+ *
+ * @param entry Structure-debt failure to look for in baseline TypeScript source.
+ * @param source Baseline source text for the entry's mapped path.
+ * @returns Whether scanning the baseline produces an equivalent failure.
+ */
 export function baselineObservesStructureEntry(entry, source) {
   if (source.length === 0) return false;
   return scanTypeScriptStructure("", [entry.file], new Map([[entry.file, source]])).some(

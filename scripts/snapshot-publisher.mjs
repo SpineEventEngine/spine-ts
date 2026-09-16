@@ -1,4 +1,6 @@
 /**
+ * Defines dependencies used by snapshot publication.
+ *
  * @typedef {object} SnapshotPublicationOptions
  * @property {(command: string, args: string[], options?: object) => Promise<string>} runner
  * @property {readonly unknown[]} [packages]
@@ -10,10 +12,16 @@
  */
 
 /**
- * Runs the non-mutating publication preparation by default.
+ * Prepares snapshot artifacts and, when enabled, publishes missing archives in dependency order.
  *
- * @param {SnapshotPublicationOptions} options
- * @returns {Promise<object>}
+ * @param runner Command runner for npm authentication, metadata reads, and publication.
+ * @param packages Prepared package entries when no preparation callback is supplied.
+ * @param prepare Optional callback that runs all pre-publication gates.
+ * @param publish Whether to upload artifacts instead of returning the preparation report.
+ * @param waitForVisibility Callback that waits for published internal dependencies.
+ * @param cleanup Callback always awaited after preparation or publication finishes.
+ * @param integrityFor Callback that calculates or retrieves each prepared artifact integrity.
+ * @returns Preparation counts, artifacts, and package names published or skipped.
  */
 export async function runSnapshotPublication({
   runner,
@@ -127,6 +135,8 @@ function orderPackages(entries) {
 }
 
 /**
+ * Defines dependencies used while preparing snapshot publication.
+ *
  * @typedef {object} PreparationOptions
  * @property {(command: string, args: string[]) => Promise<unknown>} runner
  * @property {() => Promise<void>} checkRoot
@@ -140,8 +150,13 @@ function orderPackages(entries) {
  * Executes the non-registry preparation gates and returns the exact tarballs
  * that have been packed, validated, and proven in an external consumer.
  *
- * @param {PreparationOptions} options
- * @returns {Promise<readonly unknown[]>}
+ * @param runner Command runner for lockfile installation and release verification.
+ * @param checkRoot Callback that confirms the repository is the expected root.
+ * @param checkClean Callback that rejects a dirty checkout.
+ * @param checkInventory Callback that validates the public package inventory.
+ * @param packAndValidate Callback that packs and validates exact publication tarballs.
+ * @param verifyExternalConsumer Callback that installs the tarballs outside the workspace.
+ * @returns Packed artifact entries that passed all preparation gates.
  */
 export async function prepareSnapshotPublication({
   runner,
@@ -162,12 +177,16 @@ export async function prepareSnapshotPublication({
 }
 
 /**
+ * Defines process-signal registration operations.
+ *
  * @typedef {object} SignalSource
  * @property {(signal: string, handler: () => void) => void} on
  * @property {(signal: string, handler: () => void) => void} off
  */
 
 /**
+ * Defines cleanup handler dependencies for snapshot publication.
+ *
  * @typedef {object} CleanupHandlerOptions
  * @property {SignalSource} signals
  * @property {() => Promise<void>} cleanup
@@ -175,10 +194,12 @@ export async function prepareSnapshotPublication({
  */
 
 /**
- * Installs interruption cleanup without coupling the publisher to process.
+ * Registers SIGINT and SIGTERM handlers that clean temporary artifacts before exiting.
  *
- * @param {CleanupHandlerOptions} options
- * @returns {() => void}
+ * @param signals Signal subscription source, injectable instead of the global process.
+ * @param cleanup Asynchronous cleanup run before a signal-specific exit code.
+ * @param exit Exit callback invoked with 130 for SIGINT or 143 for SIGTERM.
+ * @returns A function that unregisters both installed signal handlers.
  */
 export function installCleanupHandlers({ signals, cleanup, exit }) {
   const handlers = new Map();
@@ -198,7 +219,14 @@ export function installCleanupHandlers({ signals, cleanup, exit }) {
 }
 
 /**
- * Polls npm's public registry, retrying only an explicit not-found response.
+ * Waits for npm to expose a package version, retrying only explicit not-found responses.
+ *
+ * @param runner Command runner for `npm view` queries.
+ * @param sleep Delay callback used between 404 responses.
+ * @param name Published package name to query.
+ * @param version Exact version that must become visible.
+ * @param attempts Maximum registry reads before timing out.
+ * @returns A promise that resolves once npm reports the exact version.
  */
 export async function waitForRegistryVisibility({ runner, sleep, name, version, attempts = 6 }) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
