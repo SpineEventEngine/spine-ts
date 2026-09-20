@@ -12,10 +12,10 @@ package. It provides the same Spine storage behavior as the current MySQL
 adapter, using PostgreSQL-native connections, SQL, transactions, schema
 inspection, and identifier rules. This planning task does not implement it.
 
-Provisional names used below are `@spine-event-engine/storage-postgres`,
-`PostgresStorageFactory`, `PostgresStorageOptions`, and
-`PostgresTenantStorageOptions`. The human will decide the final public spelling
-after review; the design does not depend on that spelling.
+Recommended names used below are `@spine-event-engine/storage-postgresql`,
+`PostgreSqlStorageFactory`, `PostgreSqlStorageFactoryOptions`, and
+`PostgreSqlTenantStorageOptions`. The human will decide the final public
+spelling after review; the design does not depend on that spelling.
 
 ## Classification and Requirements
 
@@ -70,16 +70,18 @@ case-sensitive without MySQL's binary collation. Message IDs and message-valued
 columns use the same reversible string form for writes and queries, while
 payloads remain Protobuf wire bytes. Table family/group rules remain the same,
 but PostgreSQL's 63-byte identifier limit and case folding must not silently
-collapse two logical families. TS continues rejecting float/double columns;
-adding PostgreSQL does not reopen that earlier compatibility decision.
+collapse two logical families. The latest JVM PostgreSQL mapping now includes
+`REAL` and `DOUBLE PRECISION`. PostgreSQL must support these types without
+broadening the existing MySQL adapter merely for symmetry.
 
 ### Current upstream baseline
 
 - `pg` `8.23.0` is the current registry release and supports Node 24. Recheck
   and exactly pin the selected release when implementation starts.
-- PostgreSQL 18 is the current stable major and is supported through 2030. Use
-  its current minor as the first live acceptance target. Do not claim older
-  major support without running the same acceptance there.
+- The latest JVM PostgreSQL acceptance uses PostgreSQL 16. Use PostgreSQL 16 as
+  the compatibility floor and run the live suite against both 16 and the
+  current stable major, PostgreSQL 18. The initial support claim is “PostgreSQL
+  16+”; no older major is claimed without evidence.
 
 ## Chosen Design
 
@@ -88,6 +90,9 @@ adding PostgreSQL does not reopen that earlier compatibility decision.
 Create an independent provider package. It depends directly on `pg` plus the
 same Spine/Protobuf packages as the MySQL adapter. It does not depend on the
 MySQL-oriented `storage-rdbms` package.
+
+Pin `pg` as a runtime dependency and its separately published `@types/pg`
+declarations as a development dependency. Do not add Testcontainers.
 
 Do not create `storage-sql`, expose a dialect interface, or move SQL concepts
 into `@spine-event-engine/storage`. Extract code to common storage only when both
@@ -106,13 +111,15 @@ compiler objects, catalog rows, or test helpers.
   fragments and driver parameters that bypass the explicit options model.
 - Mirror bounded MySQL options: pool maximum, connection timeout, and explicit
   TLS CA/certificate/key/server verification, privately translated to `pg`.
-- Accept an explicit schema name, default `public`, and fully qualify every
-  table. This prevents ambient `search_path` changes. The schema must exist;
-  Spine creates its tables, not databases or schemas.
+- Accept an explicit schema name. When absent, resolve `current_schema()` once
+  while building the pool target, validate the result, and then fully qualify
+  every table and metadata query. This prevents later ambient `search_path`
+  changes. The schema must exist; Spine creates tables, not databases/schemas.
 - Single-tenant mode uses one database/schema/pool. Multitenant mode maps each
-  complete `TenantId` to a distinct database-and-schema target selected before
-  any metadata, table, transaction, lock, or data operation. Reject duplicate
-  tenants and duplicate physical targets at construction.
+  complete `TenantId` to a distinct database and pool, with a resolved schema
+  inside that database. A schema must not replace the one-database-per-tenant
+  boundary. Select the pool before any metadata, table, transaction, lock, or
+  data operation; reject duplicate tenants and database targets at construction.
 - Construction proves every configured pool. Errors never expose URLs,
   credentials, SQL, or driver internals. Closing is idempotent, closes live
   handles, and drains pools under the existing lifecycle contract.
@@ -133,8 +140,8 @@ compiler objects, catalog rows, or test helpers.
   `deleted`, and `version` defaults `false`, `false`, and `0`.
 - Use `BYTEA` for payload/byte columns; `VARCHAR(512)` for text/message IDs;
   `TEXT` for ordinary text/message columns; `INT`, `BIGINT`, and `BOOLEAN` for
-  numeric/boolean values. Preserve epoch-nanosecond `Timestamp` and numeric
-  `Version` mappings.
+  integer/boolean values; and `REAL`/`DOUBLE PRECISION` for floating-point
+  columns. Preserve epoch-nanosecond `Timestamp` and numeric `Version` mappings.
 - Lazily create tables, then inspect `information_schema` and PostgreSQL catalogs.
   Reject missing/extra columns, wrong type/nullability/default, wrong primary
   key, and incompatible unique constraints. Never alter an existing table.
@@ -156,8 +163,27 @@ compiler objects, catalog rows, or test helpers.
   plan compiles to one contained SQL statement; no Node full-table fallback.
 - Preserve the 10,000 candidate default plus one overflow row.
   `RecordQuery.offset` remains; normalized plans still have no offset.
+- Emit `NULLS FIRST` for ascending order and `NULLS LAST` for descending order
+  to match the common evaluator. Compile a continuation containing null into
+  explicit null predicates; never compare a column to null with `<` or `>`.
+- PostgreSQL's configured text collation can order arbitrary Unicode differently
+  from JavaScript code-unit order. Do not invent a new collation policy. Prove
+  case-distinct IDs and null ordering, and document database-native text order.
 - Decode `BIGINT` without precision loss, accept `BYTEA` binary values, and use
   identical typed conversion for writes, filters, ordering, and continuations.
+- Do not mutate node-postgres global type parsers; conversions remain local to
+  this adapter so another package cannot change its behavior.
+
+### History and maintenance bounds
+
+The current MySQL history adapter contains an existing hazard: some backward,
+`stateAt`, trim, and truncate paths read a complete history table and finish the
+work in Node. Do not copy that implementation into PostgreSQL. PostgreSQL must
+query newest-first for the exact Entity, implement `stateAt` with SQL ordering
+and limit, and trim/truncate through bounded key-only SQL pages. If a shared
+history extraction would require changing MySQL, first create a separate,
+explicit MySQL correction slice; otherwise keep the bounded PostgreSQL logic
+local and leave unrelated MySQL correction outside this task.
 
 ### Transactions, locks, and retries
 
@@ -198,7 +224,8 @@ Exit: the package is recognized everywhere; tests fail only for missing runtime.
    failures, client release, and idempotent closure.
 2. Implement single/multitenant routing and duplicate-target rejection.
 3. Implement JVM-compatible name resolution/collision rules and 63-byte limit.
-4. Implement table specs, ID/column mappings, DDL, and catalog inspection.
+4. Implement table specs, including PostgreSQL float/double, ID/column mappings,
+   DDL, and catalog inspection without global parser changes.
 5. Add JVM golden, invalid configuration/name/schema, and lifecycle tests.
 
 Exit: an empty database can produce one strictly verified family table.
@@ -218,7 +245,8 @@ Exit: observable record/query behavior matches MySQL using PostgreSQL SQL.
 ### 4. Entity histories and atomic operations — 5–7 hours
 
 1. Port current Entity, state/event history, trim/truncate, immutable append,
-   and closure behavior.
+   and closure behavior, replacing complete-table Node history work with
+   bounded provider-side SQL.
 2. Implement one-client atomic Entity commit.
 3. Implement atomic Inbox cleanup under a current session.
 4. Test conflicts, rollback at every boundary, two factories, stale sessions,
@@ -226,11 +254,12 @@ Exit: observable record/query behavior matches MySQL using PostgreSQL SQL.
 
 Exit: server paths relying on provider atomicity work under PostgreSQL.
 
-### 5. Live PostgreSQL acceptance — 4–5 hours
+### 5. Live PostgreSQL acceptance — 4–6 hours
 
-1. Add explicit `SPINE_TS_POSTGRES_URL` preflight and `test:postgres`; never
+1. Add explicit `SPINE_TS_POSTGRESQL_URL` preflight and `test:postgresql`; never
    start Docker or fall back to another database.
-2. Run against disposable PostgreSQL 18, creating/dropping only unique tables.
+2. Run against disposable PostgreSQL 16 and 18 databases, creating/dropping
+   only unique tables.
 3. Prove DDL/catalog, case-sensitive IDs, all values, CRUD/queries, rollback,
    CAS races, Entity commit/history, two-database tenant isolation, pool close.
 4. Extend server Inbox provider acceptance and prove stale-session fencing
@@ -245,8 +274,10 @@ Exit: unit SQL evidence and a real PostgreSQL server agree.
    schema, tenancy, lifecycle, first write/read, tests, and operations.
 2. Update the user storage guide/API docs and remove the MySQL README's stale
    statement about where PostgreSQL will live.
-3. Update 18-to-19 package/release inventories, artifact/external-consumer
-   checks, TypeDoc exports, docs/test inventories, and release graph tests.
+3. Update 18-to-19 public-package inventories and 26-to-27 release-manifest
+   paths, plus artifact/external-consumer checks, TypeDoc exports, docs/test
+   inventories, build-output cleanup, package-boundary rules, release-readiness,
+   and release graph tests.
 4. At implementation time select the next unused common version. Commit only
    top-level versions as `Bump version -> <version>`; pins/lockfile are separate.
 5. Before merge, the human configures npm trusted publishing for the new package.
@@ -270,9 +301,9 @@ Exit: reviews converge, evidence is current, and every commit is on `origin`.
 
 ### Total
 
-- Active engineering time: **30–41 hours**.
-- Expected elapsed time with permitted parallel checks/reviews: **22–30 hours**,
-  assuming PostgreSQL 18 and remote access are available.
+- Active engineering time: **30–42 hours**.
+- Expected elapsed time with permitted parallel checks/reviews: **22–31 hours**,
+  assuming PostgreSQL 16/18 and remote access are available.
 
 The estimate includes histories, atomic commits, provider query execution, and
 fenced Inbox cleanup. Omitting them would create a misleading “supported”
@@ -285,18 +316,19 @@ Deterministic tests cover:
 - public exports, builder order, options snapshot, close behavior;
 - URL/database/schema/TLS/pool/tenant/target validation without secret leakage;
 - default/custom/reserved/case/63-byte names and collisions before access;
-- all supported ID/column mappings and rejected float/double/boundary values;
+- all supported ID/column mappings, including float/double and boundary values;
 - DDL inspection of columns, types, nullability, defaults, PKs, unique indexes;
 - CRUD, batch order/rollback, immutable collision, corrupt bytes, client release;
 - existing- and absent-row CAS races across clients;
-- every query/plan capability, null equality, empty IDs, invalid operands,
-  unknown columns, bind 999/1,000 edge, overflow, tie order, no full scan;
-- Entity history/maintenance, atomic commit/conflict/rollback/retry;
+- every query/plan capability, null equality/order/continuation, empty IDs,
+  invalid operands, unknown columns, bind 999/1,000 edge, overflow, tie order,
+  native Unicode collation evidence, and no full scan;
+- bounded SQL Entity history/maintenance, atomic commit/conflict/rollback/retry;
 - exact/current/stale/replaced/cancelled Inbox cleanup across two factories;
 - package inventory, dependency graph, TypeDoc/TSDoc/docs, packed manifest,
   external install, and no hidden workspace dependency.
 
-Live PostgreSQL 18 tests cover real connection/close, table/catalog behavior,
+Live PostgreSQL 16 and 18 tests cover connection/close, table/catalog behavior,
 case-distinct IDs, exact physical values, all query paths, simultaneous absent
 CAS and Entity races, injected rollback boundaries, stale Inbox cleanup, and
 two-database tenant isolation.
@@ -341,5 +373,6 @@ acceptance evidence.
 
 ## Questions Reserved Until Review
 
-Only material questions surviving independent review will be asked. Current
-candidates are exact public spelling and minimum PostgreSQL version claim.
+Only material questions surviving independent review will be asked. The current
+candidate is exact public spelling; the JVM/live-test evidence resolves the
+minimum supported version as PostgreSQL 16.
