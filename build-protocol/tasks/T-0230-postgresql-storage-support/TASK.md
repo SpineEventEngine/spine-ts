@@ -7,7 +7,7 @@ Branch: `add-postgresql-storage`
 
 ## Outcome
 
-Add PostgreSQL as a durable Spine TS storage provider in its own published npm
+Add PostgreSQL as a durable Spine TS storage provider in a separate published npm
 package. It provides the same Spine storage behavior as the current MySQL
 adapter, using PostgreSQL-native connections, SQL, transactions, schema
 inspection, and identifier rules. This planning task does not implement it.
@@ -101,9 +101,13 @@ PostgreSQL code local. Similar private code is safer than a misleading public
 abstraction.
 
 The package root exports only its factory, builder/options, stable provider
-errors, table specification needed by creation customization, and provider
-Entity handle type. It does not export `pg` pools/clients, SQL, lock keys,
-compiler objects, catalog rows, or test helpers.
+errors, provider Entity handle type, and the complete existing creation-
+customization shape: `PostgreSqlTableSpec`, `PostgreSqlCreateOperation`, and
+`PostgreSqlCreateOperationFactory`. The builder exposes
+`useOperationFactory(factory)`. Compile-only external-consumer tests prove a
+caller can implement that callback without importing provider internals. The
+root does not export `pg` pools/clients, lock keys, compiler objects, catalog
+rows, or test helpers.
 
 ### Configuration, tenancy, and lifecycle
 
@@ -125,14 +129,29 @@ compiler objects, catalog rows, or test helpers.
   handles, and drains pools under the existing lifecycle contract.
 - Every acquired client is released in `finally`; every started transaction is
   committed or rolled back before release.
+- Register every provider-created record, Entity, Entity-commit, and delivery-
+  cleanup handle in the factory's live-handle set. A handle unregisters when it
+  closes. Factory close rejects creation of every new handle, closes the
+  registered handles once, and begins one idempotent pool drain.
+- Closing during cleanup prevents a new cleanup operation but lets an already
+  acquired client reach commit or rollback before release; pool drain waits for
+  that release. Since common `close(): void` cannot report `pool.end()` failure,
+  contain and observe the internal drain rejection so it cannot become an
+  unhandled rejection. The operation still reports its result/error to its
+  caller.
 
 ### Names and physical schema
 
 - Preserve current grouped and ungrouped table-name derivation.
-- Freeze PostgreSQL/JVM rendering with golden cases before implementation:
-  mixed-case generated names, reserved words, explicit custom names, non-ASCII,
-  the 63-byte boundary, case-only differences, and differences after byte 63.
-  Reject unsafe/colliding names before access; never accept silent truncation.
+- Implement one canonical physical-name function that reproduces the physical
+  name created by the latest JVM renderer before registration, collision
+  checks, DDL, DML, or inspection. Ordinary JVM names are emitted unquoted and
+  therefore fold to lowercase in PostgreSQL; TS may quote only that already-
+  folded physical name. Names JVM must quote retain the exact physical spelling
+  established by JVM golden output. Golden cases cover mixed-case generated
+  names, reserved words, explicit custom names, non-ASCII, the 63-byte boundary,
+  case-only differences, and differences after byte 63. Reject unsafe/colliding
+  names before access and never accept silent truncation.
 - Validate schema separately. Interpolate only validated schema-derived
   identifiers and bind every application value.
 - Each family table contains exactly `ID`, `bytes`, and declared native columns;
@@ -142,16 +161,22 @@ compiler objects, catalog rows, or test helpers.
   `TEXT` for ordinary text/message columns; `INT`, `BIGINT`, and `BOOLEAN` for
   integer/boolean values; and `REAL`/`DOUBLE PRECISION` for floating-point
   columns. Preserve epoch-nanosecond `Timestamp` and numeric `Version` mappings.
-- Lazily create tables, then inspect `information_schema` and PostgreSQL catalogs.
-  Reject missing/extra columns, wrong type/nullability/default, wrong primary
-  key, and incompatible unique constraints. Never alter an existing table.
+- Lazily initialize each qualified table on one client inside a transaction and
+  a distinct-domain transaction advisory lock for that table. Create if missing,
+  inspect through `information_schema`/PostgreSQL catalogs, then commit only a
+  compatible table. Concurrent factories therefore serialize the same first
+  initialization. Roll back on DDL/inspection failure and always release the
+  client. The normal deadlock/serialization classifier may restart the whole
+  initialization once, but schema incompatibility is never retried. Reject
+  missing/extra columns, wrong type/nullability/default, wrong primary key, and
+  incompatible unique constraints. Never alter an existing table.
 - PostgreSQL tables are transactional; there is no MySQL engine fallback.
 
 ### Records and queries
 
 - Preserve CRUD, batches, payload CAS, immutable append, Entity history, and
   `RecordQuery` behavior.
-- Use `$1` parameters, double-quoted validated identifiers,
+- Use `$1` parameters, the canonical JVM-compatible identifier renderer,
   `IS NOT DISTINCT FROM`, PostgreSQL `OFFSET`, and
   `INSERT ... ON CONFLICT (ID) DO UPDATE`.
 - Immutable append uses `ON CONFLICT (ID) DO NOTHING`, followed by exact payload
@@ -185,6 +210,21 @@ history extraction would require changing MySQL, first create a separate,
 explicit MySQL correction slice; otherwise keep the bounded PostgreSQL logic
 local and leave unrelated MySQL correction outside this task.
 
+PostgreSQL uses a private fixed history page size of 128 rows, matching the
+accepted RDBMS maintenance contract. Reads use stable newest-first keyset order;
+maintenance selects only ordered keys. State append and trim share one per-
+Entity advisory-lock domain; event append and event truncate share the required
+history-family domain. Trim holds its session lock and client while committing
+independent pages, so an append cannot interleave between pages. Truncate freezes
+a stable provider high-water key and deletes ordered 128-key pages no later than
+that boundary, so concurrent newer appends are not swept into the run. Lock
+acquisition order is fixed across ordinary append, maintenance, and atomic
+Entity commit paths. A committed page remains durable; a failed page rolls back,
+and a retry recomputes the next page without duplicate or skipped deletion.
+Close lets the active page settle but starts no next page. No prior page's
+records or keys remain retained after progress. Lock/client cleanup runs exactly
+once, and a cleanup error does not hide an earlier operation error.
+
 ### Transactions, locks, and retries
 
 - `writeAll` uses one client/transaction and commits all rows or none.
@@ -210,7 +250,7 @@ independent reviews/checks run in parallel only after deterministic checks.
 ### 1. Contract and package skeleton — 2–3 hours
 
 1. Add RED compile/contract tests for factory/builder API, option snapshotting,
-   exports, errors, and closed lifecycle.
+   custom DDL callback, exports, errors, and closed lifecycle.
 2. Add package manifest/project/public root, exact driver, workspace reference,
    and lockfile entry.
 3. Add release, artifact, TypeDoc, docs, dependency, and package inventory
@@ -218,15 +258,17 @@ independent reviews/checks run in parallel only after deterministic checks.
 
 Exit: the package is recognized everywhere; tests fail only for missing runtime.
 
-### 2. Connection, tenancy, names, schema — 5–7 hours
+### 2. Connection, tenancy, names, schema — 6–8 hours
 
 1. Implement URL/options/TLS validation, pools, connection proof, sanitized
    failures, client release, and idempotent closure.
 2. Implement single/multitenant routing and duplicate-target rejection.
-3. Implement JVM-compatible name resolution/collision rules and 63-byte limit.
+3. Implement the single JVM-compatible canonical physical-name function,
+   collision rules, and 63-byte limit.
 4. Implement table specs, including PostgreSQL float/double, ID/column mappings,
-   DDL, and catalog inspection without global parser changes.
-5. Add JVM golden, invalid configuration/name/schema, and lifecycle tests.
+   concurrent advisory-fenced DDL/catalog inspection, and no global parsers.
+5. Add JVM golden, invalid configuration/name/schema, simultaneous two-factory
+   initialization, rollback/client release, and lifecycle tests.
 
 Exit: an empty database can produce one strictly verified family table.
 
@@ -242,15 +284,16 @@ Exit: an empty database can produce one strictly verified family table.
 
 Exit: observable record/query behavior matches MySQL using PostgreSQL SQL.
 
-### 4. Entity histories and atomic operations — 5–7 hours
+### 4. Entity histories and atomic operations — 6–8 hours
 
 1. Port current Entity, state/event history, trim/truncate, immutable append,
-   and closure behavior, replacing complete-table Node history work with
-   bounded provider-side SQL.
+   and closure behavior, replacing complete-table Node history work with stable
+   128-key pages and high-water provider-side SQL.
 2. Implement one-client atomic Entity commit.
 3. Implement atomic Inbox cleanup under a current session.
 4. Test conflicts, rollback at every boundary, two factories, stale sessions,
-   advisory-lock safety, exact retry, cancellation, and resource release.
+   advisory-lock safety, exact retry, cancellation, 128-key resume/high-water
+   maintenance, active-page close, cleanup-handle tracking, and resource release.
 
 Exit: server paths relying on provider atomicity work under PostgreSQL.
 
@@ -301,8 +344,8 @@ Exit: reviews converge, evidence is current, and every commit is on `origin`.
 
 ### Total
 
-- Active engineering time: **30–42 hours**.
-- Expected elapsed time with permitted parallel checks/reviews: **22–31 hours**,
+- Active engineering time: **32–44 hours**.
+- Expected elapsed time with permitted parallel checks/reviews: **24–32 hours**,
   assuming PostgreSQL 16/18 and remote access are available.
 
 The estimate includes histories, atomic commits, provider query execution, and
@@ -313,18 +356,21 @@ provider.
 
 Deterministic tests cover:
 
-- public exports, builder order, options snapshot, close behavior;
+- public exports, builder order, options snapshot, custom DDL consumer, close;
 - URL/database/schema/TLS/pool/tenant/target validation without secret leakage;
 - default/custom/reserved/case/63-byte names and collisions before access;
 - all supported ID/column mappings, including float/double and boundary values;
-- DDL inspection of columns, types, nullability, defaults, PKs, unique indexes;
+- DDL inspection of columns, types, nullability, defaults, PKs, unique indexes,
+  and simultaneous first initialization by independent factories;
 - CRUD, batch order/rollback, immutable collision, corrupt bytes, client release;
 - existing- and absent-row CAS races across clients;
 - every query/plan capability, null equality/order/continuation, empty IDs,
   invalid operands, unknown columns, bind 999/1,000 edge, overflow, tie order,
   native Unicode collation evidence, and no full scan;
 - bounded SQL Entity history/maintenance, atomic commit/conflict/rollback/retry;
-- exact/current/stale/replaced/cancelled Inbox cleanup across two factories;
+- exact/current/stale/replaced/cancelled Inbox cleanup across two factories,
+  tracked cleanup handles, post-factory-close rejection, in-flight cleanup
+  settlement, idempotent pool drain, and no unhandled drain rejection;
 - package inventory, dependency graph, TypeDoc/TSDoc/docs, packed manifest,
   external install, and no hidden workspace dependency.
 
@@ -370,6 +416,24 @@ two-database tenant isolation.
 Desktop supports explicit model/reasoning dispatch. Runtime self-introspection
 is unavailable; immutable configured roles and explicit call fields are the
 acceptance evidence.
+
+## Independent Review Disposition
+
+The no-memory performance/reliability reviewer reported no P0 finding and five
+actionable findings. All are accepted and corrected in this plan:
+
+| Finding                                                                       | Disposition                                                                                                                        |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| P1: unconditional quoting contradicted JVM's ordinary lowercase folding       | Replaced by one JVM-golden canonical physical-name function used before every collision check and SQL operation.                   |
+| P1: concurrent factories had no first-table initialization protocol           | Added a per-qualified-table transaction advisory lock around create-and-inspect, including rollback/release and two-factory tests. |
+| P1: creation customization omitted its callback/result public types           | Added PostgreSQL-named operation and factory types, builder method, and compile-only external-consumer tests.                      |
+| P1: delivery-cleanup handles were not explicitly tracked by factory lifecycle | Added registration/unregistration, post-close rejection, in-flight settlement, idempotent drain, and rejection-containment tests.  |
+| P2: bounded history maintenance lacked a concrete progress contract           | Fixed the private page at 128 keys and defined order, high-water, per-page commit/rollback, retry, close, and cleanup behavior.    |
+
+These corrections increase the implementation estimate by two active hours at
+the low end and preserve the one-writer sequence. The corrected persistence/
+reliability concern receives a focused re-review before this planning task is
+accepted.
 
 ## Questions Reserved Until Review
 
