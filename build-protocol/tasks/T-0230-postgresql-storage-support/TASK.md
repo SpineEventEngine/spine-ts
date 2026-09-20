@@ -1,6 +1,6 @@
 # T-0230: PostgreSQL Storage Support Plan
 
-Status: Draft awaiting independent review
+Status: Planned and independently reviewed
 Start: `2026-09-20`
 Baseline: `6fffcd6102b3eff94b0f77eb6db2fbf2e02ba172`
 Branch: `add-postgresql-storage`
@@ -428,8 +428,9 @@ acceptance evidence.
 
 ## Independent Review Disposition
 
-The no-memory performance/reliability reviewer reported no P0 finding and five
-actionable findings. All are accepted and corrected in this plan:
+The no-memory performance/reliability reviewer reported no P0 finding and six
+actionable findings across the initial and focused review passes. All are
+accepted and corrected in this plan:
 
 | Finding                                                                       | Disposition                                                                                                                        |
 | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -441,9 +442,8 @@ actionable findings. All are accepted and corrected in this plan:
 | P1: global state truncation was not coordinated with state append/commit      | Added shared append and exclusive truncation history-family locks, one lock order, and state/event two-factory race tests.         |
 
 These corrections increase the implementation estimate by two active hours at
-the low end and preserve the one-writer sequence. The corrected persistence/
-reliability concern receives a final focused re-review before this planning task
-is accepted.
+the low end and preserve the one-writer sequence. The final focused re-review
+confirmed the corrected plan is clean and introduced no new contradiction.
 
 ## Questions Reserved Until Review
 
