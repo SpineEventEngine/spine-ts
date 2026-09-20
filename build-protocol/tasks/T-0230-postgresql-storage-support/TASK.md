@@ -212,18 +212,25 @@ local and leave unrelated MySQL correction outside this task.
 
 PostgreSQL uses a private fixed history page size of 128 rows, matching the
 accepted RDBMS maintenance contract. Reads use stable newest-first keyset order;
-maintenance selects only ordered keys. State append and trim share one per-
-Entity advisory-lock domain; event append and event truncate share the required
-history-family domain. Trim holds its session lock and client while committing
-independent pages, so an append cannot interleave between pages. Truncate freezes
-a stable provider high-water key and deletes ordered 128-key pages no later than
-that boundary, so concurrent newer appends are not swept into the run. Lock
-acquisition order is fixed across ordinary append, maintenance, and atomic
-Entity commit paths. A committed page remains durable; a failed page rolls back,
-and a retry recomputes the next page without duplicate or skipped deletion.
-Close lets the active page settle but starts no next page. No prior page's
-records or keys remain retained after progress. Lock/client cleanup runs exactly
-once, and a cleanup error does not hide an earlier operation error.
+maintenance selects only ordered keys. Each history family has a shared/exclusive
+advisory-lock domain. A state or event append takes the matching transaction-
+scoped shared family lock; the atomic Entity-commit path does the same before it
+appends state history. Global state or event truncation holds the matching
+session-scoped exclusive family lock and one client across all pages. Therefore,
+an append cannot interleave with a multi-page truncation, while ordinary appends
+to different Entities remain concurrent. State append and trim additionally
+share one per-Entity advisory-lock domain. Trim holds that session lock and
+client while committing independent pages, so an append for that Entity cannot
+interleave between pages. The fixed lock order everywhere is family lock, then
+per-Entity lock, then row lock.
+
+Truncation freezes a stable provider high-water key only after it holds the
+exclusive family lock and deletes ordered 128-key pages no later than that
+boundary. A committed page remains durable; a failed page rolls back, and a
+retry recomputes the next page without duplicate or skipped deletion. Close lets
+the active page settle but starts no next page. No prior page's records or keys
+remain retained after progress. Lock/client cleanup runs exactly once, and a
+cleanup error does not hide an earlier operation error.
 
 ### Transactions, locks, and retries
 
@@ -368,6 +375,8 @@ Deterministic tests cover:
   invalid operands, unknown columns, bind 999/1,000 edge, overflow, tie order,
   native Unicode collation evidence, and no full scan;
 - bounded SQL Entity history/maintenance, atomic commit/conflict/rollback/retry;
+- two-factory state-truncate versus state-append/atomic-commit and event-
+  truncate versus event-append races, proving the family lock across pages;
 - exact/current/stale/replaced/cancelled Inbox cleanup across two factories,
   tracked cleanup handles, post-factory-close rejection, in-flight cleanup
   settlement, idempotent pool drain, and no unhandled drain rejection;
@@ -429,11 +438,12 @@ actionable findings. All are accepted and corrected in this plan:
 | P1: creation customization omitted its callback/result public types           | Added PostgreSQL-named operation and factory types, builder method, and compile-only external-consumer tests.                      |
 | P1: delivery-cleanup handles were not explicitly tracked by factory lifecycle | Added registration/unregistration, post-close rejection, in-flight settlement, idempotent drain, and rejection-containment tests.  |
 | P2: bounded history maintenance lacked a concrete progress contract           | Fixed the private page at 128 keys and defined order, high-water, per-page commit/rollback, retry, close, and cleanup behavior.    |
+| P1: global state truncation was not coordinated with state append/commit      | Added shared append and exclusive truncation history-family locks, one lock order, and state/event two-factory race tests.         |
 
 These corrections increase the implementation estimate by two active hours at
 the low end and preserve the one-writer sequence. The corrected persistence/
-reliability concern receives a focused re-review before this planning task is
-accepted.
+reliability concern receives a final focused re-review before this planning task
+is accepted.
 
 ## Questions Reserved Until Review
 
