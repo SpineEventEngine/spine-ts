@@ -1380,3 +1380,17 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   route every affected test through an explicit structural runtime-test helper,
   matching the server's real structural probe. Production visibility, runtime
   behavior, public declarations, and the private seam must remain unchanged.
+- GREEN: commit `e045cfcc2` routes all affected tests through one typed
+  structural helper. Tooling typecheck and the serial PostgreSQL suite
+  (`144/144`) pass; production code and declarations are unchanged.
+
+## Advisory Cleanup Control-Flow Correction
+
+- The restarted preflight passed the dependency-aware build, tooling typecheck,
+  and diff hygiene, then scoped ESLint rejected two throws from `finally` in
+  state/event truncation. A throw from `finally` can replace an earlier
+  operation failure and contradicts the required error-preservation behavior.
+- The same `gpt-5.6-terra` / `medium` implementer receives this narrow runtime
+  correction. Cleanup must run after captured operation work without throwing
+  from `finally`; cleanup-only failure still discards the client and rejects,
+  while an earlier operation error remains observable.
