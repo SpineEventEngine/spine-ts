@@ -275,3 +275,25 @@ PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
 - Task 2 remains unaccepted. The same implementation author receives one
   correction batch: repair only the TSDoc findings, run the affected gates and
   focused suite, remove generated output, commit, and push.
+
+## Slice 2 Acceptance
+
+- The same implementation author corrected only the documented findings in
+  `a331c5faf` and pushed it. No runtime behavior changed.
+- Fresh orchestrator evidence passes full TSDoc, the serial five-file suite
+  (25/25), package typecheck, cleanup enforcement, diff hygiene, clean-tree,
+  generated-output, and local/remote SHA checks. Task 2 is accepted.
+
+## Slice 3 Dispatch
+
+- Existing role/function: continuing `implementer`, with explicit configured
+  profile `gpt-5.6-terra` / `medium`; child spawning remains prohibited. The
+  task surface does not expose runtime self-introspection, so the immutable
+  configured role/profile is the available metadata.
+- Scope is the coherent PostgreSQL record/query runtime: typed conversion,
+  factory wiring and handle lifecycle, CRUD/batches/immutable writes, advisory-
+  fenced CAS with exact bounded retry, and complete provider SQL pushdown.
+- Strict focused RED/GREEN evidence is required. Driver doubles may isolate
+  external I/O, but tests exercise production factory/storage paths and cannot
+  add test-only APIs. Live PostgreSQL, histories, server atomic work, docs,
+  release integration, and Proto-manifest correction remain later slices.
