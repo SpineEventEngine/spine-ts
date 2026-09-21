@@ -284,6 +284,48 @@ describe("Postgres record storage", () => {
     expect(driver.calls).toEqual([]);
   });
 
+  it("accepts 999 normalized ID binds and reserves the final bind for the candidate bound", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+
+    await storage.queryPlan({
+      predicate: { kind: "ids", ids: Array.from({ length: 999 }, (_, index) => String(index)) },
+    });
+
+    const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).toContain("LIMIT $1000");
+    expect(query?.values).toHaveLength(1_000);
+    expect(query?.values?.at(-1)).toBe(10_001);
+  });
+
+  it("returns no records for an empty ID filter without acquiring a client", async () => {
+    const storage = await recordStorage();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+
+    await expect(storage.query({ ids: [] })).resolves.toEqual([]);
+
+    expect(driver.connect).not.toHaveBeenCalled();
+    expect(driver.calls).toEqual([]);
+  });
+
+  it("rejects an unknown normalized column before acquiring a client", async () => {
+    const storage = await recordStorage();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+
+    await expect(
+      storage.queryPlan({
+        predicate: { kind: "comparison", column: "missing", operator: "equal", value: "two" },
+      }),
+    ).rejects.toThrow("not declared");
+
+    expect(driver.connect).not.toHaveBeenCalled();
+    expect(driver.calls).toEqual([]);
+  });
+
   it.each([
     ["equal", "IS NOT DISTINCT FROM"],
     ["greaterThan", ">"],

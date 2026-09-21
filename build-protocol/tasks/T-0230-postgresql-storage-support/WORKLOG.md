@@ -415,6 +415,15 @@ DISTINCT FROM`; an ascending null continuation emits `IS NOT NULL` rather than
   sanitized provider operation error. The focused record suite passed `17 passed
 (17)`.
 
+## Task 3 Query Bind and Rejection Boundaries
+
+- Characterization: 999 normalized ID parameters compile successfully with the
+  candidate bound as `$1000`; 1,000 IDs continue to reject before acquisition.
+  An empty `RecordQuery.ids` returns an empty result without client acquisition.
+  An unknown normalized column rejects before initialization or acquisition.
+- GREEN evidence: the focused record suite passed `20 passed (20)`. These tests
+  exercise the factory-created runtime handle and driver boundary only.
+
 ## Task 3 Record Runtime Checkpoint
 
 - Existing role/function: continuing `implementer`, configured explicitly as
