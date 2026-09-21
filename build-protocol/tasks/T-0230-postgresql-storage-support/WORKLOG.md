@@ -890,6 +890,37 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
 - Common SPI, MySQL, server behavior, live-provider setup, documentation,
   release integration, Proto, and versions remain excluded.
 
+## Task 4 Verification Corrections
+
+- RED: the prior suite did not directly demonstrate two-factory coordination
+  for append versus global truncation, append versus state trim, or event-
+  history multi-page high-water truncation.
+- GREEN: a coordinated production-path driver now proves an append waits while
+  event truncation holds the exclusive family lock across a 128-key page and
+  its next page, then resumes after unlock; state append and trim preserve
+  family → Entity order without inter-page mutation; event truncation deletes
+  two ID-only 128-key pages under one stable high-water boundary without a
+  payload scan.
+- Existing runtime behavior passed these new tests, so no production source
+  changed. Focused history coverage passed `12/12`; the complete serial
+  PostgreSQL package suite passed `109/109`; package typecheck, scoped ESLint,
+  full TSDoc, cleanup/method-length, Prettier, and `git diff --check` passed.
+  Commit `8fdcf1114` is pushed, the checkout is clean, and local/remote SHAs
+  match.
+
+## Task 4 Affected-Concern Reverification Dispatch
+
+- Function: independent read-only reinspection of only the three corrected
+  Task 4 history concerns; this is not a new project role.
+- Expected profile: `gpt-5.6-luna` / `low`, passed explicitly in the dispatch;
+  child spawning and file changes are prohibited. Runtime self-introspection
+  may be unavailable, so the immutable explicit dispatch is the profile
+  evidence.
+- Reverification must rerun the focused history suite and inspect that the new
+  assertions exercise two real factory paths, production locks, ID-only pages,
+  stable high-water behavior, and blocked/resumed append ordering without a
+  false-positive test-double shortcut.
+
 ## Task 4 History Verification Correction
 
 - Existing role/function: continuing sole `implementer`, explicitly configured
