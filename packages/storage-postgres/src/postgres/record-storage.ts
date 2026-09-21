@@ -31,7 +31,11 @@ import {
 import type { PoolClient } from "pg";
 
 import { PostgresColumnMapping } from "./column-mapping.js";
-import { PostgresStorageDataError, PostgresStorageOperationError } from "./errors.js";
+import {
+  PostgresStorageDataError,
+  PostgresStorageOperationError,
+  PostgresTransactionErrors,
+} from "./errors.js";
 import { PostgresIdColumn } from "./id-column.js";
 import type { PostgresTableSpec } from "./storage-factory.js";
 import { PostgresTableInitializer } from "./table-initializer.js";
@@ -380,9 +384,17 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns A promise that resolves after the transaction commits.
    */
   protected async writeAllRecords(records: readonly Materialized<I, R>[]): Promise<void> {
-    await this.transaction(async (client) => {
-      for (const record of records) await this.writeOn(client, record.record);
-    });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await this.transaction(async (client) => {
+          for (const record of records) await this.writeOn(client, record.record);
+        });
+        return;
+      } catch (error) {
+        if (attempt === 0 && PostgresTransactionErrors.retryable(error)) continue;
+        throw operationError(error);
+      }
+    }
   }
 
   /**
@@ -752,14 +764,10 @@ function operator(value: string): string {
   );
 }
 function retryable(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    ["40P01", "40001"].includes((error as { code?: string }).code ?? "")
-  );
+  return PostgresTransactionErrors.retryable(error);
 }
 function operationError(error: unknown): PostgresStorageOperationError {
   return error instanceof PostgresStorageOperationError || error instanceof PostgresStorageDataError
     ? error
-    : new PostgresStorageOperationError("PostgreSQL record operation failed.", { cause: error });
+    : new PostgresStorageOperationError("PostgreSQL record operation failed.");
 }

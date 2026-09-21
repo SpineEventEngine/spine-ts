@@ -32,7 +32,7 @@ import {
 } from "@spine-event-engine/storage/provider";
 import type { PoolClient } from "pg";
 
-import { PostgresStorageOperationError } from "./errors.js";
+import { PostgresStorageOperationError, PostgresTransactionErrors } from "./errors.js";
 import {
   PostgresRecordStorage,
   type PostgresRecordExecutor,
@@ -54,7 +54,7 @@ class PostgresEntityCommitCoordinator {
         return result;
       } catch (error) {
         await client.query("ROLLBACK").catch(() => undefined);
-        if (attempt === 0 && PostgresCommitErrors.retryable(error)) continue;
+        if (attempt === 0 && PostgresTransactionErrors.retryable(error)) continue;
         throw PostgresCommitErrors.operation(error);
       } finally {
         client.release();
@@ -294,16 +294,9 @@ const PostgresCommitValues = Object.freeze({
 });
 
 const PostgresCommitErrors = Object.freeze({
-  retryable(error: unknown): boolean {
-    return (
-      typeof error === "object" &&
-      error !== null &&
-      ["40P01", "40001"].includes((error as { code?: string }).code ?? "")
-    );
-  },
   operation(error: unknown): PostgresStorageOperationError {
     return error instanceof PostgresStorageOperationError
       ? error
-      : new PostgresStorageOperationError("PostgreSQL Entity commit failed.", { cause: error });
+      : new PostgresStorageOperationError("PostgreSQL Entity commit failed.");
   },
 });

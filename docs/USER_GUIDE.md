@@ -128,6 +128,16 @@ provider column simply because it appears in a message.
 Continue with the [Proto model reference](../packages/proto/REFERENCE.md) for
 the complete generated-contract and source-provenance rules.
 
+## Durable storage providers
+
+Spine TS ships durable providers for [MySQL](../packages/storage-rdbms/README.md)
+and [PostgreSQL](../packages/storage-postgres/README.md). PostgreSQL tenants
+require one physical database per tenant; schemas do not provide that boundary.
+Text sorting follows the database-native collation and can differ from
+JavaScript ordering. Normalized queries have a 1,000-bind budget and a 10,000
+row default with one lookahead row; `RecordQuery` offsets remain a distinct
+provider-side pagination feature.
+
 ## 4. Implement behavior
 
 Put behavior in entity classes. An Aggregate accepts a command and returns a

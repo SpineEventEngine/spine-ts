@@ -15,6 +15,7 @@
 import { ScalarType, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { RecordColumn, RecordColumnType } from "@spine-event-engine/storage";
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
 import type { PostgresColumnSpec, PostgresTableSpec } from "./storage-factory.js";
 import { PostgresIdColumn } from "./id-column.js";
@@ -56,7 +57,13 @@ export const PostgresTableSpecs: PostgresTableSpecifications = Object.freeze({
           nullable: false,
         },
         { name: "bytes", postgresType: "BYTEA", nullable: false },
-        ...input.declaredColumns.map(PostgresColumnTypes.spec),
+        ...input.declaredColumns.map((column) =>
+          PostgresColumnTypes.spec(
+            column,
+            input.groupName === undefined &&
+              input.recordType.typeName === EntityRecordSchema.typeName,
+          ),
+        ),
       ],
       primaryKey: ["ID"],
     };
@@ -103,11 +110,16 @@ const PostgresColumnTypes = Object.freeze({
     }
   },
 
-  spec<R extends Message>(column: RecordColumn<R>): PostgresColumnSpec {
+  spec<R extends Message>(column: RecordColumn<R>, currentEntity: boolean): PostgresColumnSpec {
     return {
       name: column.name,
       postgresType: PostgresTableSpecs.postgresColumnType(column.type),
-      nullable: true,
+      nullable: !currentEntity || !["archived", "deleted", "version"].includes(column.name),
+      ...(currentEntity && ["archived", "deleted"].includes(column.name)
+        ? { defaultSql: "false" }
+        : currentEntity && column.name === "version"
+          ? { defaultSql: "0" }
+          : {}),
     };
   },
 });

@@ -378,7 +378,7 @@ export class PostgresStorageFactory extends StorageFactory {
    * @param input Supplies the Entity storage configuration.
    * @returns A factory-managed PostgreSQL Entity handle.
    */
-  createEntityStorage<I, S extends Message>(
+  private createEntityStorage<I, S extends Message>(
     input: import("@spine-event-engine/storage/provider").EntityStorageInput<I, S>,
   ): PostgresEntityStorage<I, S> {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
@@ -520,10 +520,14 @@ class Builder implements PostgresStorageFactoryBuilder {
     name: string,
   ): this;
   setTableName(...args: unknown[]): this {
-    this.#resolver.setRecordName(
-      (args[0] as GenMessage<Message>).typeName,
-      args[args.length - 1] as string,
-    );
+    if (args.length === 2)
+      this.#resolver.setRecordName((args[0] as GenMessage<Message>).typeName, args[1] as string);
+    else
+      this.#resolver.setGroupName(
+        (args[0] as GenMessage<Message>).typeName,
+        (args[1] as GenMessage<Message>).typeName,
+        args[2] as string,
+      );
     return this;
   }
 

@@ -121,6 +121,8 @@ const driver = vi.hoisted(() => {
     if (sql.startsWith('SELECT "ID", "bytes"')) return Promise.resolve({ rows: historyRecords });
     if (sql.startsWith('SELECT "created"'))
       return Promise.resolve({ rows: highWater === undefined ? [] : [highWater] });
+    if (sql.startsWith('SELECT "version", "created", "ID"'))
+      return Promise.resolve({ rows: [{ version: 1, created: 1n, ID: "retained-key" }] });
     if (sql.startsWith('SELECT "ID"')) {
       const keys = keyPages.shift() ?? ["retained-key"];
       return Promise.resolve({ rows: keys.map((ID) => ({ ID })) });
@@ -292,7 +294,7 @@ describe("PostgreSQL Entity history", () => {
       ),
     ).toBe(true);
     expect(
-      calls.some(({ sql }) => sql.includes('"version" < $2') && sql.includes("LIMIT $3")),
+      calls.some(({ sql }) => sql.includes('"version" <= $2') && sql.includes("LIMIT $3")),
     ).toBe(true);
   });
 
@@ -392,9 +394,7 @@ describe("PostgreSQL Entity history", () => {
 
     expect(
       driver.calls.filter(({ sql }) => sql.startsWith('SELECT "ID"')).map(({ sql }) => sql),
-    ).toEqual([
-      expect.stringContaining('ORDER BY "version" DESC, "created" DESC LIMIT $3 OFFSET $2'),
-    ]);
+    ).toEqual([expect.stringContaining('("version", "created", "ID") < ($2, $3, $4)')]);
     expect(
       driver.calls.some(({ sql }) => sql.startsWith("DELETE") && sql.includes('"ID" IN ($1)')),
     ).toBe(true);

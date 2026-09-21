@@ -218,7 +218,12 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
       await client.query("SELECT pg_advisory_lock_shared($1)", [family]);
       await client.query("SELECT pg_advisory_lock($1)", [entity]);
       try {
-        while (this.#open && (await this.trimPage(client, entityId, keepMostRecent))) {
+        const boundary = await this.trimBoundary(client, entityId, keepMostRecent);
+        while (
+          boundary !== undefined &&
+          this.#open &&
+          (await this.trimPage(client, entityId, boundary))
+        ) {
           // The next page starts only while this history remains open.
         }
       } finally {
@@ -253,7 +258,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   }
 
   private backwardSql(startingFromVersion: bigint | undefined): string {
-    const continuation = startingFromVersion === undefined ? "" : ' AND "version" < $2';
+    const continuation = startingFromVersion === undefined ? "" : ' AND "version" <= $2';
     const limit = startingFromVersion === undefined ? 2 : 3;
     return [
       `SELECT "bytes" FROM ${this.#executor.table()} WHERE "entity_id" = $1${continuation}`,
@@ -302,10 +307,18 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     if (!this.#open) throw new Error("Entity state history is closed.");
   }
 
-  private async trimPage(client: import("pg").PoolClient, id: I, keep: number): Promise<boolean> {
+  private async trimPage(
+    client: import("pg").PoolClient,
+    id: I,
+    boundary: HistoryKey,
+  ): Promise<boolean> {
     await client.query("BEGIN");
     try {
-      const keys = await this.keys(client, this.trimSql(), [this.entityValue(id), keep, 128]);
+      const keys = await this.keys(client, this.trimSql(), [
+        this.entityValue(id),
+        ...boundary,
+        128,
+      ]);
       await this.deleteKeys(client, keys);
       await client.query("COMMIT");
       return keys.length === 128;
@@ -353,8 +366,25 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   private trimSql(): string {
     return [
       `SELECT "ID" FROM ${this.#executor.table()} WHERE "entity_id" = $1`,
-      'ORDER BY "version" DESC, "created" DESC LIMIT $3 OFFSET $2',
+      'AND ("version", "created", "ID") < ($2, $3, $4)',
+      'ORDER BY "version" DESC, "created" DESC, "ID" DESC LIMIT $5',
     ].join(" ");
+  }
+
+  private async trimBoundary(
+    client: import("pg").PoolClient,
+    id: I,
+    keep: number,
+  ): Promise<HistoryKey | undefined> {
+    const result = await client.query<HistoryRow>(
+      [
+        `SELECT "version", "created", "ID" FROM ${this.#executor.table()} WHERE "entity_id" = $1`,
+        'ORDER BY "version" DESC, "created" DESC, "ID" DESC LIMIT $3 OFFSET $2',
+      ].join(" "),
+      [this.entityValue(id), keep, 1],
+    );
+    const key = result.rows[0];
+    return key === undefined ? undefined : [key.version, key.created, key.ID];
   }
 
   private truncateSql(): string {
@@ -438,7 +468,7 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
   }
 
   private backwardSql(version: bigint | undefined): string {
-    const continuation = version === undefined ? "" : ' AND "version" < $2';
+    const continuation = version === undefined ? "" : ' AND "version" <= $2';
     const limit = version === undefined ? 2 : 3;
     return [
       `SELECT "bytes" FROM ${this.#executor.table()} WHERE "entity_id" = $1${continuation}`,

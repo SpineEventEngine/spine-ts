@@ -1336,3 +1336,19 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   TSDoc, documentation/API/snippet checks, packaging/external-consumer proof,
   formatting, and diff hygiene. After correction, only substantively affected
   review concerns reopen before the final single `verify:release` run.
+
+## Final Correction Implementation
+
+- Continuing `implementer` dispatch: `gpt-5.6-terra` / `medium`; this surface
+  does not expose runtime-profile introspection. The accepted role/profile is
+  the immutable dispatch configuration.
+- RED: focused history/name tests failed for inclusive `<=` continuation,
+  stable trim keyset SQL, and Unicode identifier rendering. GREEN: the focused
+  builder/name/history suite passed 24 tests, TypeScript compilation passed,
+  and the hermetic PostgreSQL suite passed 140 tests in 10 files.
+- Implemented grouped builder registration, the renderer's Unicode/UTF-8 and
+  ASCII-folding behavior, private Entity seam, shared retry classifier,
+  inclusive history continuations, stable state trim boundary/keyset pages,
+  whole-batch retry, sanitized public operation wrappers, current Entity
+  defaults, and durable-provider/mapping documentation. Session advisory unlock
+  hardening and final deterministic gates remain in progress.

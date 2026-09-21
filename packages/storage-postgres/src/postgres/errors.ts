@@ -36,3 +36,15 @@ export class PostgresStorageDataError extends Error {}
  * Reports a PostgreSQL storage operation failure without driver details.
  */
 export class PostgresStorageOperationError extends Error {}
+
+/** Classifies the only PostgreSQL transaction errors that may be retried. */
+export const PostgresTransactionErrors: Readonly<{ retryable(error: unknown): boolean }> =
+  Object.freeze({
+    retryable(error: unknown): boolean {
+      return (
+        typeof error === "object" &&
+        error !== null &&
+        ["40P01", "40001"].includes((error as { code?: string }).code ?? "")
+      );
+    },
+  });

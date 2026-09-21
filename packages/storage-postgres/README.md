@@ -72,6 +72,12 @@ PostgreSQL `BYTEA`, parameterized `$1`-style values, and PostgreSQL's configured
 text collation. Collation ordering can differ from JavaScript ordering, so
 applications should choose and document their database collation deliberately.
 
+`google.protobuf.Timestamp` columns are epoch nanoseconds in `BIGINT`, and
+`spine.core.Version` columns are numeric `INT`. Generated names use the JVM
+physical-name renderer: ASCII unquoted spelling folds to lowercase, names are
+limited to 63 UTF-8 bytes, and case-folded or byte-limit collisions are rejected
+before the database is accessed.
+
 ## Live integration checks
 
 The live suite is opt-in and requires an already running PostgreSQL service.

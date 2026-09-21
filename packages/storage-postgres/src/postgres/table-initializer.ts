@@ -16,7 +16,7 @@ import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 
 import type { PostgresColumnSpec, PostgresTableSpec } from "./storage-factory.js";
-import { PostgresStorageSchemaError } from "./errors.js";
+import { PostgresStorageSchemaError, PostgresTransactionErrors } from "./errors.js";
 
 /**
  * Prepares one PostgreSQL record-family table.
@@ -50,7 +50,7 @@ export class PostgresTableInitializer {
   }
 
   private retry(error: unknown): Promise<void> {
-    if (!PostgresRetries.allowed(error)) throw error;
+    if (!PostgresTransactionErrors.retryable(error)) throw error;
     return this.attempt();
   }
 
@@ -209,14 +209,5 @@ const PostgresLocks = Object.freeze({
       .update(table)
       .digest()
       .readBigInt64BE();
-  },
-});
-const PostgresRetries = Object.freeze({
-  allowed(error: unknown): boolean {
-    return (
-      typeof error === "object" &&
-      error !== null &&
-      ["40P01", "40001"].includes((error as { code?: string }).code ?? "")
-    );
   },
 });

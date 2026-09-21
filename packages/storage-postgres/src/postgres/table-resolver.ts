@@ -29,6 +29,11 @@ export class PostgresTableResolver {
     this.set(`record:${recordType}`, name);
   }
 
+  /** Sets a grouped record-family table name. */
+  setGroupName(sourceType: string, recordType: string, name: string): void {
+    this.set(`group:${sourceType}\u0000${recordType}`, name);
+  }
+
   /**
    * Resolves one record-family physical name.
    *
@@ -50,7 +55,9 @@ export class PostgresTableResolver {
         : `${sourceType}\u0000${recordType ?? sourceType}\u0000${group}`;
     const readable =
       name ??
-      this.#names.get(`record:${sourceType}`) ??
+      (group === undefined
+        ? this.#names.get(`record:${sourceType}`)
+        : this.#names.get(`group:${sourceType}\u0000${recordType ?? sourceType}`)) ??
       PostgresNames.default(sourceType, group, recordType);
     const tableName = PostgresNames.physical(readable);
     const previous = this.#resolved.get(tableName);
@@ -79,9 +86,9 @@ const PostgresNames = Object.freeze({
   },
 
   physical(name: string): string {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name) || Buffer.byteLength(name) > 63) {
+    if (!/^[\p{L}_][\p{L}\p{N}_$]*$/u.test(name) || Buffer.byteLength(name) > 63) {
       throw new Error(`PostgreSQL table name is invalid: ${name}`);
     }
-    return name.toLowerCase();
+    return name.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
   },
 });

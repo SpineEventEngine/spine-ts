@@ -47,6 +47,12 @@ the common 1,000-bind plan budget and 10,000-row default with one
 overflow lookahead row. The database collation controls text ordering; the
 provider does not invent a JavaScript-compatible collation.
 
+`Timestamp` values are stored as epoch nanoseconds in `BIGINT`; `Version` is
+stored as numeric `INT`. The JVM-compatible physical-name renderer folds only
+unquoted ASCII spelling, accepts valid non-ASCII identifiers, enforces the
+63-byte PostgreSQL identifier boundary, and rejects collisions before DDL,
+DML, or catalog inspection.
+
 ## Lifecycle and errors
 
 `factory.close()` is idempotent, closes registered handles, prevents new handle

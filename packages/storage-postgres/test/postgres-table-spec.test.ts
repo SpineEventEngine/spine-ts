@@ -35,7 +35,7 @@ describe("PostgreSQL table foundation", () => {
     ).toEqual(["BYTEA", "TEXT", "INT", "BIGINT", "BOOLEAN", "REAL", "DOUBLE PRECISION"]);
   });
 
-  it("renders JVM-compatible lowercase names and rejects PostgreSQL collisions", () => {
+  it("renders JVM-compatible PostgreSQL identifiers without ASCII-only rejection", () => {
     const resolver = new PostgresTableResolver();
 
     expect(resolver.resolve("example.Task", undefined).tableName).toBe("example_task");
@@ -47,6 +47,8 @@ describe("PostgreSQL table foundation", () => {
     expect(() => {
       resolver.setRecordName("example.Long", "a".repeat(64));
     }).toThrow(/invalid/i);
+    resolver.setRecordName("example.Unicode", "éclair");
+    expect(resolver.resolve("example.Unicode", undefined).tableName).toBe("éclair");
   });
 
   it("resolves grouped defaults and explicit names while refusing reused physical tables", () => {

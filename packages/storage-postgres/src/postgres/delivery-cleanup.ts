@@ -21,7 +21,7 @@ import {
 import type { RecordSpec, StorageContext } from "@spine-event-engine/storage";
 import type { PoolClient } from "pg";
 
-import { PostgresStorageOperationError } from "./errors.js";
+import { PostgresStorageOperationError, PostgresTransactionErrors } from "./errors.js";
 import { PostgresRecordStorage, type PostgresRecordLifecycle } from "./record-storage.js";
 
 type OpenRecords = <I, R extends Message>(
@@ -104,7 +104,7 @@ export class PostgresDeliveryCleanupStorage implements DeliveryCleanupStorage {
       } catch (error) {
         await client.query("ROLLBACK").catch(() => undefined);
         if (error instanceof CleanupExpired) throw error;
-        if (attempt === 0 && PostgresCleanupErrors.retryable(error)) continue;
+        if (attempt === 0 && PostgresTransactionErrors.retryable(error)) continue;
         throw PostgresCleanupErrors.operation(error);
       } finally {
         client.release();
@@ -171,17 +171,10 @@ const PostgresCleanupValues = Object.freeze({
 });
 
 const PostgresCleanupErrors = Object.freeze({
-  retryable(error: unknown): boolean {
-    return (
-      typeof error === "object" &&
-      error !== null &&
-      ["40P01", "40001"].includes((error as { code?: string }).code ?? "")
-    );
-  },
   operation(error: unknown): PostgresStorageOperationError {
     return error instanceof PostgresStorageOperationError
       ? error
-      : new PostgresStorageOperationError("PostgreSQL delivery cleanup failed.", { cause: error });
+      : new PostgresStorageOperationError("PostgreSQL delivery cleanup failed.");
   },
 });
 
