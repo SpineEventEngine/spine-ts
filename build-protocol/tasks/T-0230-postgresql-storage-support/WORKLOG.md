@@ -1106,6 +1106,18 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   all eight manifests declare `2.0.0-snapshot.13`, and both generated-source
   checks pass. No Task 6 Proto-manifest finding remains.
 
+## Packaging Link Correction
+
+- Finding: release preflight at `7adaaa55f` identified that the PostgreSQL
+  README link in `packages/storage-rdbms/README.md` escaped the published
+  tarball through a sibling filesystem path.
+- Correction: replaced only that link with the stable public GitHub README URL
+  used by the storage guide; runtime and release logic are unchanged.
+- Evidence: focused release CLI, formatting, and diff checks are run for this
+  correction; 16/17 focused release CLI tests passed. The one staged-consumer
+  test was blocked when pnpm offline installation could not find
+  `@grpc/grpc-js@1.14.5` in the local store; no packaging assertion failed.
+
 ## Task 4 History Verification Correction
 
 - Existing role/function: continuing sole `implementer`, explicitly configured
