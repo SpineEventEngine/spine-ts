@@ -284,3 +284,19 @@ IF NOT EXISTS` statements and requires `"spine"."groupedtable"` and
   explicit `gpt-5.6-terra` / `high`, read-only and without prior review memory
   or child agents. The documentation corrections are deterministic replacements
   of the exact reviewed phrases and therefore do not reopen that lane.
+
+## Last-Correction Affected Re-review Disposition
+
+Both affected reviews completed before correction. The production correction
+is accepted: the exact 100-keyword QueryDSL resource matches independently,
+partial acquisition cleans only acquired locks, cleanup uncertainty discards
+the client without replacing the original sanitized operation failure, and the
+advancing trim cursor is unchanged and correct.
+
+Two test-only findings are accepted:
+
+1. Replace grouped DDL subset matching with an exact two-target assertion, so
+   extra or duplicate `CREATE TABLE IF NOT EXISTS` statements fail the test.
+2. Add a successful two-lock trim assertion that the exclusive Entity unlock
+   precedes the shared family unlock. Keep the partial-acquisition/discard test
+   as its distinct case.

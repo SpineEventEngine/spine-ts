@@ -1564,6 +1564,19 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   Reviews are read-only and cannot spawn children. The deterministic 18-to-19
   and “any durable adapter” wording corrections do not reopen documentation.
 
+## Last-Correction Test Hardening Dispatch
+
+- Both affected reviewers completed before correction. Production keyword,
+  naming, partial-lock cleanup/discard, error sanitization, and advancing-cursor
+  behavior are accepted. The only findings are test-strength gaps.
+- The grouped DDL regression must prove exactly the two expected targets rather
+  than use subset matching. A separate successful two-lock trim regression must
+  prove the Entity lock is released before the family lock; the partial second-
+  lock failure/discard regression remains separate.
+- The same existing `implementer` receives this test-only deterministic batch at
+  explicit `gpt-5.6-terra` / `medium`, without child agents. No production or
+  public-contract change is authorized.
+
 ## Last-Correction Implementation Evidence
 
 - Existing role/function: continuing `implementer`, explicitly configured as
