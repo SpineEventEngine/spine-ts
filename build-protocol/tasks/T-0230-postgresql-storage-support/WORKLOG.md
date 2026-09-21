@@ -593,3 +593,7 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   typecheck, scoped ESLint, cleanup enforcement, Prettier, and diff hygiene
   passed. Driver doubles cover provider SQL and resource behavior; live
   PostgreSQL concurrency remains outside this checkpoint.
+- Full checkpoint evidence: serial `packages/storage-postgres/test` passed
+  `8 files, 68 tests`; package `tsc --noEmit`, scoped ESLint, Prettier,
+  full `lint:tsdoc`, `lint:cleanup`, and `git diff --check` passed. No
+  generated output was retained.
