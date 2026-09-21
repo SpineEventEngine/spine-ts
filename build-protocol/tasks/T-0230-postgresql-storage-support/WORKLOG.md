@@ -768,3 +768,23 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   behavior, close/drain lifecycle, and production-path tests. Common SPI,
   MySQL, server behavior, live PostgreSQL, docs/release integration, and
   versions remain excluded.
+
+## Task 4C Registry RED
+
+- RED: the new real-factory cleanup-registry test failed as expected with
+  `StorageFactory does not provide atomic delivery cleanup storage.` The
+  PostgreSQL factory had not registered the existing provider cleanup seam.
+  The focused test is the starting contract for the remaining cleanup path.
+
+## Task 4C Registration And Fencing Green
+
+- GREEN: PostgreSQL now registers factory-tracked cleanup handles. A cleanup
+  call opens and prepares the two exact record families, uses a single
+  transaction client, locks the session row with the same advisory identity as
+  record compare-and-set, reads session and Inbox snapshots with `FOR UPDATE`,
+  and deletes only after exact/current checks.
+- GREEN: focused real-factory coverage passed `2/2`, including direct equality
+  between the cleanup session-lock parameter and ordinary session
+  compare-and-set. Package typecheck, scoped ESLint, full TSDoc, and cleanup
+  rules passed. Retry, every rollback boundary, cancellation, and close/drain
+  matrices remain active.

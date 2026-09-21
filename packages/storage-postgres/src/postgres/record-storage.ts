@@ -121,6 +121,14 @@ export interface PostgresRecordExecutor<I, R extends Message> {
   write(client: PoolClient, record: R): Promise<void>;
 
   /**
+   * Deletes one record on a caller-managed transaction client.
+   * @param client Provides the transaction client.
+   * @param id Identifies the stored record.
+   * @returns Whether PostgreSQL deleted the record.
+   */
+  delete(client: PoolClient, id: I): Promise<boolean>;
+
+  /**
    * Decodes records returned by one bounded PostgreSQL statement.
    * @param client Provides the transaction client.
    * @param sql Supplies bounded provider SQL.
@@ -150,6 +158,13 @@ export interface PostgresRecordExecutor<I, R extends Message> {
    * @returns A signed PostgreSQL advisory key.
    */
   lock(domain: string, ...identity: readonly string[]): bigint;
+
+  /**
+   * Returns the same record-mutation lock used by compare-and-set.
+   * @param id Identifies the guarded record.
+   * @returns A signed PostgreSQL advisory key.
+   */
+  lockRecord(id: I): bigint;
 }
 
 /**
@@ -228,10 +243,12 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       assertImmutable: (client, record) => this.assertImmutableOn(client, record),
       appendImmutable: (client, record) => this.appendImmutableOn(client, record),
       write: (client, record) => this.writeOn(client, record),
+      delete: (client, id) => this.deleteOn(client, id),
       query: (client, sql, values) => this.historyEntries(client, sql, values),
       column: (name, value) => this.historyColumn(name, value),
       table: () => this.qualified(),
       lock: (domain, ...identity) => this.historyKey(domain, identity),
+      lockRecord: (id) => this.casKey(id),
     };
   }
 
@@ -455,6 +472,10 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
 
   private async writeOn(client: PoolClient, record: R): Promise<void> {
     await client.query(this.upsertSql(), this.values(record));
+  }
+
+  private async deleteOn(client: PoolClient, id: I): Promise<boolean> {
+    return (await client.query(this.deleteSql(), [this.id(id)])).rowCount === 1;
   }
 
   private async appendImmutableOn(client: PoolClient, record: R): Promise<void> {
@@ -682,17 +703,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     return ` LIMIT ${bind.add(9_223_372_036_854_775_807n)} OFFSET ${bind.add(offset)}`;
   }
   private casKey(id: I): bigint {
-    return createHash("sha256")
-      .update("spine-postgres-cas\0")
-      .update(this.lifecycle.databaseName)
-      .update("\0")
-      .update(this.lifecycle.schema)
-      .update("\0")
-      .update(this.table.tableName)
-      .update("\0")
-      .update(String(this.id(id)))
-      .digest()
-      .readBigInt64BE();
+    return this.historyKey("record-mutation", [this.table.tableName, String(this.id(id))]);
   }
 }
 
