@@ -13,6 +13,7 @@
  */
 
 import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { TenantIdSchema } from "@spine-event-engine/proto";
 import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -75,6 +76,7 @@ const driver = vi.hoisted(() => {
 vi.mock("pg", () => ({ Pool: driver.Pool }));
 
 import { PostgresStorageFactory } from "../src/index.js";
+import { PostgresClientDisposal, PostgresTransactionErrors } from "../src/postgres/errors.js";
 
 describe("Postgres record storage", () => {
   beforeEach(() => {
@@ -120,6 +122,17 @@ describe("Postgres record storage", () => {
     driver.calls.length = 0;
   });
 
+  it("classifies only PostgreSQL retry codes and tracks discarded clients", () => {
+    const error = new Error("operation");
+
+    expect(PostgresTransactionErrors.retryable({ code: "40001" })).toBe(true);
+    expect(PostgresTransactionErrors.retryable({ code: "other" })).toBe(false);
+    expect(PostgresTransactionErrors.retryable(undefined)).toBe(false);
+    expect(PostgresClientDisposal.required(error)).toBe(false);
+    PostgresClientDisposal.mark(error);
+    expect(PostgresClientDisposal.required(error)).toBe(true);
+  });
+
   it("creates a factory record handle that writes with bound PostgreSQL values", async () => {
     const factory = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
@@ -160,6 +173,23 @@ describe("Postgres record storage", () => {
     ).toThrow(/closed/i);
   });
 
+  it("rejects a tenant-bound record request from a single-tenant factory", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+
+    expect(() =>
+      factory.createRecordStorage(
+        {
+          name: "tenant",
+          multitenant: true,
+          tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
+        },
+        recordSpec(),
+      ),
+    ).toThrow(/no configured database/i);
+  });
+
   it("writes a batch in source order inside one PostgreSQL transaction", async () => {
     const storage = await recordStorage();
 
@@ -175,6 +205,50 @@ describe("Postgres record storage", () => {
     expect(begin).toBeGreaterThan(-1);
     expect(commit).toBeGreaterThan(begin);
     expect(writes.map(({ values }) => values?.[0])).toEqual(["first", "second"]);
+  });
+
+  it.each(["40001", "40P01"] as const)(
+    "retries the complete writeAll transaction once on a fresh client for %s",
+    async (code) => {
+      const storage = await recordStorage();
+      await (storage as unknown as { prepare(): Promise<void> }).prepare();
+      vi.clearAllMocks();
+      driver.calls.length = 0;
+      let failed = false;
+      driver.query.mockImplementation((sql, values) => {
+        driver.recordCall(sql, values);
+        if (sql === "BEGIN" && !failed) {
+          failed = true;
+          return Promise.reject(Object.assign(new Error("retry"), { code }));
+        }
+        return Promise.resolve({ rowCount: 1, rows: [] });
+      });
+
+      await storage.writeAll([create(StringValueSchema, { value: "one" })]);
+
+      expect(driver.connect).toHaveBeenCalledTimes(2);
+      expect(driver.calls.map(({ sql }) => sql)).toEqual(
+        expect.arrayContaining(["ROLLBACK", "COMMIT"]),
+      );
+    },
+  );
+
+  it("stops writeAll after its one retry", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql === "BEGIN")
+        return Promise.reject(Object.assign(new Error("retry"), { code: "40001" }));
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(storage.writeAll([create(StringValueSchema, { value: "one" })])).rejects.toThrow(
+      /record operation failed/i,
+    );
+
+    expect(driver.connect).toHaveBeenCalledTimes(2);
   });
 
   it("sanitizes a record-driver failure and releases its operation client", async () => {

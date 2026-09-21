@@ -13,6 +13,8 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
 import {
   PostgresStorageConfigurationError,
@@ -36,6 +38,15 @@ describe("PostgresStorageFactory builder contract", () => {
   it("reports absent construction options with the public configuration error", async () => {
     await expect(PostgresStorageFactory.newBuilder().build()).rejects.toBeInstanceOf(
       PostgresStorageConfigurationError,
+    );
+  });
+
+  it("accepts both ungrouped and grouped physical table registrations", () => {
+    const builder = PostgresStorageFactory.newBuilder();
+
+    expect(builder.setTableName(StringValueSchema, "current_records")).toBe(builder);
+    expect(builder.setTableName(StringValueSchema, EntityRecordSchema, "state_records")).toBe(
+      builder,
     );
   });
 });

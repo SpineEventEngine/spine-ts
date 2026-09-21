@@ -1375,6 +1375,13 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   session cleanup, then select the original failure before any cleanup failure;
   focused history tests pass without `no-unsafe-finally` violations.
 
+## PostgreSQL Coverage Correction
+
+- Added observable current-Entity defaults, write-batch retry, builder routing,
+  and tenant-bound rejection coverage. Exact coverage GREEN: 151 tests;
+  statements `961/1019` (94.30%), branches `540/598` (90.30%), functions
+  `310/326` (95.09%), and lines `844/873` (96.67%).
+
 ## Private Entity-Seam Test Correction
 
 - Independent post-correction verification passed the dependency-aware

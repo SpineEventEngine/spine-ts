@@ -14,6 +14,7 @@
 
 import { ScalarType } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { ColumnTypes, RecordColumn } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
@@ -31,8 +32,9 @@ describe("PostgreSQL table foundation", () => {
         ColumnTypes.scalar(ScalarType.BOOL),
         ColumnTypes.scalar(ScalarType.FLOAT),
         ColumnTypes.scalar(ScalarType.DOUBLE),
+        ColumnTypes.message(StringValueSchema),
       ].map((type) => PostgresTableSpecs.postgresColumnType(type)),
-    ).toEqual(["BYTEA", "TEXT", "INT", "BIGINT", "BOOLEAN", "REAL", "DOUBLE PRECISION"]);
+    ).toEqual(["BYTEA", "TEXT", "INT", "BIGINT", "BOOLEAN", "REAL", "DOUBLE PRECISION", "TEXT"]);
   });
 
   it("renders JVM-compatible PostgreSQL identifiers without ASCII-only rejection", () => {
@@ -85,5 +87,35 @@ describe("PostgreSQL table foundation", () => {
       { name: "ratio", postgresType: "REAL", nullable: true },
     ]);
     expect(table.primaryKey).toEqual(["ID"]);
+  });
+
+  it("defaults ungrouped current Entity status columns without changing grouped history columns", () => {
+    const columns = [
+      new RecordColumn("archived", ColumnTypes.scalar(ScalarType.BOOL), () => false),
+      new RecordColumn("deleted", ColumnTypes.scalar(ScalarType.BOOL), () => false),
+      new RecordColumn("version", ColumnTypes.scalar(ScalarType.INT32), () => 0),
+    ];
+    const current = PostgresTableSpecs.resolvedPostgresTableSpec({
+      tableName: "current",
+      sourceType: StringValueSchema,
+      recordType: EntityRecordSchema,
+      idType: "string",
+      declaredColumns: columns,
+    });
+    const history = PostgresTableSpecs.resolvedPostgresTableSpec({
+      tableName: "history",
+      sourceType: StringValueSchema,
+      recordType: EntityRecordSchema,
+      idType: "string",
+      groupName: "states",
+      declaredColumns: columns,
+    });
+
+    expect(current.columns.slice(-3)).toEqual([
+      { name: "archived", postgresType: "BOOLEAN", nullable: false, defaultSql: "false" },
+      { name: "deleted", postgresType: "BOOLEAN", nullable: false, defaultSql: "false" },
+      { name: "version", postgresType: "INT", nullable: false, defaultSql: "0" },
+    ]);
+    expect(history.columns.slice(-3).every((column) => column.nullable)).toBe(true);
   });
 });
