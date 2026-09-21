@@ -297,3 +297,14 @@ PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
   external I/O, but tests exercise production factory/storage paths and cannot
   add test-only APIs. Live PostgreSQL, histories, server atomic work, docs,
   release integration, and Proto-manifest correction remain later slices.
+
+## Task 3 Column Conversion Checkpoint
+
+- RED: `pnpm exec vitest run packages/storage-postgres/test/postgres-column-mapping.test.ts --maxWorkers=1`
+  failed because the private `column-mapping.js` module did not exist.
+- GREEN: added private PostgreSQL column conversion that preserves native
+  bytes/float/double values, maps Timestamp to epoch nanoseconds and Version
+  to its numeric value, and uses local schema-bound message stringifiers.
+  It does not configure global `pg` type parsers.
+- Evidence: the same focused test passes 4/4 and package
+  `tsc --noEmit -p packages/storage-postgres/tsconfig.json` passes.
