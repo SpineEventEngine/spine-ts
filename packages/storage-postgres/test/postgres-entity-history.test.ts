@@ -142,9 +142,9 @@ const driver = vi.hoisted(() => {
       if (stateRows !== undefined) {
         const boundary = [values[1] as number, values[2] as bigint, values[3] as string] as const;
         const rows = orderedStates()
-          .filter((row) => compareState(row, boundary) <= 0)
+          .filter((row) => compareState(row, boundary) <= (sql.includes("<=") ? 0 : -1))
           .slice(0, values[4] as number);
-        return Promise.resolve({ rows: rows.map(({ ID }) => ({ ID })) });
+        return Promise.resolve({ rows });
       }
       const keys = keyPages.shift() ?? ["retained-key"];
       return Promise.resolve({ rows: keys.map((ID) => ({ ID })) });
@@ -499,11 +499,12 @@ describe("PostgreSQL Entity history", () => {
       expect(
         calls.filter(({ sql }) => sql.startsWith('SELECT "version", "created", "ID"')),
       ).toHaveLength(1);
-      expect(
-        calls
-          .filter(({ sql }) => sql.startsWith('SELECT "ID"'))
-          .every(({ sql }) => !sql.includes("OFFSET")),
-      ).toBe(true);
+      const pages = calls.filter(({ sql }) => sql.startsWith('SELECT "ID"'));
+      expect(pages.every(({ sql }) => !sql.includes("OFFSET"))).toBe(true);
+      if (count > 256) {
+        expect(pages[1]?.values?.slice(1, 4)).not.toEqual(pages[0]?.values?.slice(1, 4));
+        expect(pages[1]?.sql).toContain('("version", "created", "ID") < ($2, $3, $4)');
+      }
     } finally {
       driver.clearStateRows();
     }

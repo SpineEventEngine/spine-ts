@@ -218,12 +218,11 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
       await client.query("SELECT pg_advisory_lock($1)", [entity]);
       let operationFailure: unknown;
       try {
-        const boundary = await this.trimBoundary(client, entityId, keepMostRecent);
-        while (
-          boundary !== undefined &&
-          this.#open &&
-          (await this.trimPage(client, entityId, boundary))
-        ) {
+        let cursor = await this.trimBoundary(client, entityId, keepMostRecent);
+        let includeCursor = true;
+        while (cursor !== undefined && this.#open) {
+          cursor = await this.trimPage(client, entityId, cursor, includeCursor);
+          includeCursor = false;
           // The next page starts only while this history remains open.
         }
       } catch (error) {
@@ -339,18 +338,23 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   private async trimPage(
     client: import("pg").PoolClient,
     id: I,
-    boundary: HistoryKey,
-  ): Promise<boolean> {
+    cursor: HistoryKey,
+    includeCursor: boolean,
+  ): Promise<HistoryKey | undefined> {
     await client.query("BEGIN");
     try {
-      const keys = await this.keys(client, this.trimSql(), [
+      const rows = await client.query<HistoryRow>(this.trimSql(includeCursor), [
         this.entityValue(id),
-        ...boundary,
+        ...cursor,
         128,
       ]);
+      const keys = rows.rows.map(({ ID }) => ID);
       await this.deleteKeys(client, keys);
       await client.query("COMMIT");
-      return keys.length === 128;
+      const last = rows.rows.at(-1);
+      return keys.length === 128 && last !== undefined
+        ? [last.version, last.created, last.ID]
+        : undefined;
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
@@ -392,10 +396,10 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
       .then(() => undefined);
   }
 
-  private trimSql(): string {
+  private trimSql(includeCursor: boolean): string {
     return [
       `SELECT "ID" FROM ${this.#executor.table()} WHERE "entity_id" = $1`,
-      'AND ("version", "created", "ID") <= ($2, $3, $4)',
+      `AND ("version", "created", "ID") ${includeCursor ? "<=" : "<"} ($2, $3, $4)`,
       'ORDER BY "version" DESC, "created" DESC, "ID" DESC LIMIT $5',
     ].join(" ");
   }
