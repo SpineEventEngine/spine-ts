@@ -97,7 +97,7 @@ export interface PostgresRecordExecutor<I, R extends Message> {
   read(client: PoolClient, id: I, lock?: "for-update"): Promise<R | undefined>;
 
   /**
-   * Confirms that an immutable record is absent or byte-identical.
+   * Checks that an immutable record is absent or byte-identical.
    * @param client Provides the transaction client.
    * @param record Provides the immutable record to inspect.
    * @returns A promise that rejects for a conflicting payload.

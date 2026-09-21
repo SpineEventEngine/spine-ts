@@ -679,3 +679,40 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
 - Evidence: focused commit/history serial coverage passed `17/17`; the commit
   suite directly compares advisory key parameters from a state append and an
   atomic state commit and passed `9/9` after the assertion.
+
+## Task 4B Transaction Failure Characterization
+
+- GREEN: an injected Entity advisory-lock failure rolls back the started
+  transaction and releases the operation client. Focused commit coverage passed
+  `10/10` after deterministic driver-state reset before each test.
+
+## Task 4B Completion Handoff
+
+- Existing role/function: serialized replacement `implementer`, explicitly
+  configured `gpt-5.6-terra` / `medium`; child work is prohibited. Runtime
+  profile introspection is unavailable on this surface. The author preserves
+  the committed validation, current-conflict, and lock-identity slices and is
+  completing the remaining transaction-failure, immutable-replay, independent-
+  factory, and lifecycle evidence in the dedicated commit suite.
+
+## Task 4B Immutable, Failure, And Lifecycle Completion
+
+- RED: the commit suite initially covered only one advisory-lock error. It did
+  not establish that any later failure discarded writes already staged by the
+  transaction, that all optional record families were used, or that a factory
+  close let an already-started commit release its client.
+- GREEN: the same focused suite now uses a transaction-aware `pg` driver
+  double. It makes writes durable only at `COMMIT`, discards staged writes at
+  `ROLLBACK`, and can delay the locked-current query while factory drain is
+  pending. One table-driven test injects failures at both family locks, the
+  Entity lock, locked read, each immutable preflight and append, current write,
+  and commit. Each case proves rollback and zero durable writes.
+- GREEN: direct factory/record-executor coverage now proves successful state,
+  diagnostic, and delivery writes; byte-identical immutable delivery replay;
+  a divergent immutable delivery collision without a current-row update; two
+  independently constructed factories agreeing on current-row replay and
+  conflict; and active work releasing before the factory pool drain finishes.
+- Evidence: focused serial commit suite passed `15/15`; the complete serial
+  PostgreSQL package suite passed `83/83`; package `tsc --noEmit` and scoped
+  ESLint passed. Full TSDoc, cleanup, formatting, and diff-hygiene checks are
+  the final Task 4B pre-commit checks.

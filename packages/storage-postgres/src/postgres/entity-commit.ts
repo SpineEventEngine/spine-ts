@@ -27,7 +27,9 @@ import {
   type PostgresRecordLifecycle,
 } from "./record-storage.js";
 
-/** Acquires fresh clients for a complete Entity transaction and one safe retry. */
+/**
+ * Acquires fresh clients for a complete Entity transaction and one safe retry.
+ */
 class PostgresEntityCommitCoordinator {
   constructor(private readonly lifecycle: PostgresRecordLifecycle) {}
   async commit<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -40,8 +42,8 @@ class PostgresEntityCommitCoordinator {
         return result;
       } catch (error) {
         await client.query("ROLLBACK").catch(() => undefined);
-        if (attempt === 0 && retryable(error)) continue;
-        throw operationError(error);
+        if (attempt === 0 && PostgresCommitErrors.retryable(error)) continue;
+        throw PostgresCommitErrors.operation(error);
       } finally {
         client.release();
       }
@@ -55,7 +57,9 @@ type OpenRecords = <I, R extends Message>(
   group?: StorageGroup,
 ) => PostgresRecordStorage<I, R>;
 
-/** Opens and closes the exact record families participating in one commit. */
+/**
+ * Opens and closes the exact record families participating in one commit.
+ */
 class PostgresCommitRecords<I, S extends Message> {
   readonly current: PostgresRecordExecutor<I, EntityRecord>;
   readonly states: PostgresRecordExecutor<EntityStateKey, EntityRecord> | undefined;
@@ -109,10 +113,21 @@ class PostgresCommitRecords<I, S extends Message> {
   }
 }
 
-/** Represents a factory-tracked PostgreSQL Entity commit handle. */
+/**
+ * Represents a factory-tracked PostgreSQL Entity commit handle.
+ */
 export class PostgresEntityCommitStorage<I, S extends Message> implements EntityCommitStorage {
   #open = true;
   readonly #coordinator: PostgresEntityCommitCoordinator;
+
+  /**
+   * Creates a PostgreSQL Entity commit handle for one Entity storage boundary.
+   *
+   * @param entity Defines the captured Entity source, state, and tenant scope.
+   * @param open Opens temporary current and history record-family handles.
+   * @param lifecycle Acquires transaction clients for the captured database.
+   * @param onClose Removes this handle from the factory's live-handle set.
+   */
   constructor(
     private readonly entity: EntityStorageInput<I, S>,
     private readonly open: OpenRecords,
@@ -121,6 +136,13 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
   ) {
     this.#coordinator = new PostgresEntityCommitCoordinator(lifecycle);
   }
+
+  /**
+   * Commits one current Entity record and its optional immutable records.
+   *
+   * @param input Defines the expected and next current records plus histories.
+   * @returns Whether PostgreSQL committed the mutation or found a conflict.
+   */
   async commit<Id, State extends Message>(
     input: EntityCommitInput<Id, State>,
   ): Promise<EntityCommitResult> {
@@ -133,6 +155,10 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
       records.close();
     }
   }
+
+  /**
+   * Closes this handle to new commits while allowing started work to settle.
+   */
   close(): void {
     if (this.#open) {
       this.#open = false;
@@ -146,10 +172,15 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
   ): Promise<EntityCommitResult> {
     await this.locks(client, input, records);
     const current = await records.current.read(client, input.entityId, "for-update");
-    if (!same(current, input.expected) && !same(current, input.next)) return "conflict";
+    if (
+      !PostgresCommitValues.same(current, input.expected) &&
+      !PostgresCommitValues.same(current, input.next)
+    )
+      return "conflict";
     await this.preflight(client, input, records);
     await this.append(client, input, records);
-    if (!same(current, input.next)) await records.current.write(client, input.next);
+    if (!PostgresCommitValues.same(current, input.next))
+      await records.current.write(client, input.next);
     return "committed";
   }
   private async locks<Id, State extends Message>(
@@ -200,8 +231,8 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
     if (input.entity.stateSchema.typeName !== this.entity.stateSchema.typeName)
       throw new PostgresStorageOperationError("Entity commit state schema is incompatible.");
     if (
-      !sameBoundary(input.context, this.entity.context) ||
-      !sameBoundary(input.entity.context, this.entity.context)
+      !PostgresCommitValues.sameBoundary(input.context, this.entity.context) ||
+      !PostgresCommitValues.sameBoundary(input.entity.context, this.entity.context)
     )
       throw new PostgresStorageOperationError("Entity commit context is incompatible.");
     if (input.states?.length && !this.entity.stateHistory)
@@ -237,23 +268,30 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
       );
   }
 }
-function same(left: EntityRecord | undefined, right: EntityRecord | undefined): boolean {
-  return left === undefined || right === undefined
-    ? left === right
-    : Buffer.compare(toBinary(EntityRecordSchema, left), toBinary(EntityRecordSchema, right)) === 0;
-}
-function sameBoundary(left: object, right: object): boolean {
-  return TenantBoundary.of(left as never).key === TenantBoundary.of(right as never).key;
-}
-function retryable(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    ["40P01", "40001"].includes((error as { code?: string }).code ?? "")
-  );
-}
-function operationError(error: unknown): PostgresStorageOperationError {
-  return error instanceof PostgresStorageOperationError
-    ? error
-    : new PostgresStorageOperationError("PostgreSQL Entity commit failed.", { cause: error });
-}
+
+const PostgresCommitValues = Object.freeze({
+  same(left: EntityRecord | undefined, right: EntityRecord | undefined): boolean {
+    return left === undefined || right === undefined
+      ? left === right
+      : Buffer.compare(toBinary(EntityRecordSchema, left), toBinary(EntityRecordSchema, right)) ===
+          0;
+  },
+  sameBoundary(left: object, right: object): boolean {
+    return TenantBoundary.of(left as never).key === TenantBoundary.of(right as never).key;
+  },
+});
+
+const PostgresCommitErrors = Object.freeze({
+  retryable(error: unknown): boolean {
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      ["40P01", "40001"].includes((error as { code?: string }).code ?? "")
+    );
+  },
+  operation(error: unknown): PostgresStorageOperationError {
+    return error instanceof PostgresStorageOperationError
+      ? error
+      : new PostgresStorageOperationError("PostgreSQL Entity commit failed.", { cause: error });
+  },
+});
