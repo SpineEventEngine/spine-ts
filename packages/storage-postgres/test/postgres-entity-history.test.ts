@@ -407,7 +407,7 @@ describe("PostgreSQL Entity history", () => {
 
     expect(
       driver.calls.filter(({ sql }) => sql.startsWith('SELECT "ID"')).map(({ sql }) => sql),
-    ).toEqual([expect.stringContaining('("version", "created", "ID") < ($2, $3, $4)')]);
+    ).toEqual([expect.stringContaining('("version", "created", "ID") <= ($2, $3, $4)')]);
     expect(
       driver.calls.some(({ sql }) => sql.startsWith("DELETE") && sql.includes('"ID" IN ($1)')),
     ).toBe(true);

@@ -211,8 +211,9 @@ for the complete command, query, and subscription contract.
 ## 6. Persist application data
 
 Begin locally with in-memory storage. It is fast and useful for tests, but its
-state disappears when the process stops. Move to MySQL or Google Cloud
-Datastore when the application needs durable provider storage.
+state disappears when the process stops. Move to [MySQL](../packages/storage-rdbms/README.md),
+[PostgreSQL](../packages/storage-postgres/README.md), or Google Cloud Datastore
+when the application needs durable provider storage.
 
 Storage uses typed mappings. A generated message ID or message column uses a
 reversible `Stringifier`; primitive values use a provider-native form. Use the

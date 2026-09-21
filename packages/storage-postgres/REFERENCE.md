@@ -47,11 +47,16 @@ the common 1,000-bind plan budget and 10,000-row default with one
 overflow lookahead row. The database collation controls text ordering; the
 provider does not invent a JavaScript-compatible collation.
 
+Normalized plans support IDs; equal, greater-than, less-than, greater-or-equal,
+and less-or-equal comparisons; nested all/either predicates; declared-column
+ordering; masks; and finite limits. They do not support normalized offsets:
+`RecordQuery.offset` is the separate provider-side pagination feature.
+
 `Timestamp` values are stored as epoch nanoseconds in `BIGINT`; `Version` is
-stored as numeric `INT`. The JVM-compatible physical-name renderer folds only
-unquoted ASCII spelling, accepts valid non-ASCII identifiers, enforces the
-63-byte PostgreSQL identifier boundary, and rejects collisions before DDL,
-DML, or catalog inspection.
+stored as numeric `INT`. The JVM-compatible physical-name renderer folds plain,
+non-reserved ASCII identifiers only. Reserved and quoted-required names preserve
+their spelling; all names reject NUL, unsafe values, 63-byte overflow, and
+collisions before DDL, DML, or catalog inspection.
 
 ## Lifecycle and errors
 

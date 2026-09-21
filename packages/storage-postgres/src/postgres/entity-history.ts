@@ -395,7 +395,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   private trimSql(): string {
     return [
       `SELECT "ID" FROM ${this.#executor.table()} WHERE "entity_id" = $1`,
-      'AND ("version", "created", "ID") < ($2, $3, $4)',
+      'AND ("version", "created", "ID") <= ($2, $3, $4)',
       'ORDER BY "version" DESC, "created" DESC, "ID" DESC LIMIT $5',
     ].join(" ");
   }

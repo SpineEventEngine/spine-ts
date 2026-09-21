@@ -72,6 +72,15 @@ describe("PostgreSQL table foundation", () => {
     );
   });
 
+  it("preserves quoted PostgreSQL identifier spelling for reserved and non-ASCII names", () => {
+    const resolver = new PostgresTableResolver();
+
+    expect(resolver.resolve("example.Source", undefined, "Select").tableName).toBe("Select");
+    expect(resolver.resolve("example.Unicode", undefined, "Éclair").tableName).toBe("Éclair");
+    expect(() => resolver.resolve("example.Bad", undefined, "bad name")).toThrow(/invalid/i);
+    expect(() => resolver.resolve("example.Nul", undefined, "bad\u0000name")).toThrow(/invalid/i);
+  });
+
   it("builds the complete record-family layout with PostgreSQL payload columns", () => {
     const table = PostgresTableSpecs.resolvedPostgresTableSpec({
       tableName: "records",
