@@ -53,8 +53,9 @@ Started: `2026-09-21 09:03 WEST`
 
 ## Slice Progress
 
-1. Contract and package skeleton: complete.
-2. Connection, tenancy, names, and schema: pending.
+1. Contract and package skeleton: complete at `a9010b8f5`; independent
+   mechanical verification is clean after its TSDoc correction.
+2. Connection, tenancy, names, and schema: active.
 3. Record operations and query pushdown: pending.
 4. Entity histories and atomic operations: pending.
 5. Live PostgreSQL acceptance: pending.
@@ -143,3 +144,19 @@ packages/storage-postgres/test/postgres-builder-contract.test.ts` passed
   `onCreateRecordStorage()` that the narrower package checker did not report.
   Task 1 remains active until the same implementation author corrects this,
   reruns the affected checks, removes ignored build output, and pushes the fix.
+- The same author corrected the full-TSDoc finding in `a9010b8f5`. Fresh
+  orchestrator evidence passed the 3 focused tests and complete TSDoc gate;
+  local and remote SHAs matched, the checkout was clean, and no ignored package
+  build output remained. Task 1 is accepted.
+
+## Slice 2 Dispatch
+
+- Existing `implementer` role continues as the sole production writer for the
+  connection/tenancy/name/schema foundation. Explicit dispatch remains
+  `gpt-5.6-terra` / `medium`; child spawning is prohibited.
+- The slice brief requires strict test-first behavior and the selected TDD
+  skill's complete test-double guidance. Driver doubles may isolate external
+  I/O only; tests must assert provider behavior, and no test-only production
+  method is permitted.
+- Ordinary tests cannot start Docker or require a live database. Live
+  PostgreSQL 16/18 evidence remains slice 5 work.
