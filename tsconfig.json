@@ -19,6 +19,7 @@
     { "path": "./packages/server/test-fixtures" },
     { "path": "./packages/storage" },
     { "path": "./packages/storage-datastore" },
+    { "path": "./packages/storage-postgres" },
     { "path": "./packages/storage-rdbms" },
     { "path": "./packages/testing" },
     { "path": "./packages/testing/test-fixtures" },

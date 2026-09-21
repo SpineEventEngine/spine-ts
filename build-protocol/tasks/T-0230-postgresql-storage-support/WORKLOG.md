@@ -53,7 +53,7 @@ Started: `2026-09-21 09:03 WEST`
 
 ## Slice Progress
 
-1. Contract and package skeleton: active.
+1. Contract and package skeleton: complete.
 2. Connection, tenancy, names, and schema: pending.
 3. Record operations and query pushdown: pending.
 4. Entity histories and atomic operations: pending.
@@ -65,3 +65,51 @@ Started: `2026-09-21 09:03 WEST`
 
 No blocking question remains. Public naming, PostgreSQL compatibility floor,
 package boundary, driver, and excluded concepts are resolved in `TASK.md`.
+
+## Slice 1: Contract And Package Skeleton
+
+- RED (initial test correction):
+  `pnpm --config.verify-deps-before-run=false exec vitest run packages/storage-postgres/test/postgres-builder-contract.test.ts`
+  first failed before test collection because the new package manifest had not
+  yet supplied `@bufbuild/protobuf/wkt`. The test was corrected to avoid that
+  unrelated package dependency.
+- RED (missing feature): the same command then failed with `Cannot find module
+'../src/index.js' imported from .../packages/storage-postgres/test/postgres-builder-contract.test.ts`.
+  This established that the public PostgreSQL entrypoint and its builder
+  contract were absent before production source was added.
+- RED (asynchronous construction error): after adding the public-error test,
+  the focused command ran three tests and failed one with `Error: PostgreSQL
+storage options are required.` at `Builder.build`. The builder threw
+  synchronously despite its `Promise` return contract.
+- GREEN: after returning rejected promises for invalid builder state, the same
+  focused command passed `3 passed (3)` in one test file. The final focused
+  preflight also passed:
+  `pnpm exec tsc --noEmit -p packages/storage-postgres/tsconfig.json`,
+  `pnpm exec tsc --noEmit -p tsconfig.eslint.json`,
+  `pnpm exec eslint packages/storage-postgres/src packages/storage-postgres/test`,
+  `node scripts/check-tsdoc.mjs packages/storage-postgres`, explicit Prettier
+  checking for changed source/manifest/project files, and `git diff --check`.
+- Added `packages/storage-postgres` with its published manifest, package
+  project, package-local contract test, PostgreSQL-named factory/options/tenant
+  options/table/custom-DDL types, stable provider error classes, and Entity
+  handle type. The root entrypoint exports only this declared stable surface.
+  The package declares direct `pg` `8.23.0` runtime and `@types/pg` `8.23.1`
+  development dependencies, without a MySQL adapter, ORM, query builder,
+  Testcontainers, or patched dependency.
+- Updated `pnpm-lock.yaml` and the root TypeScript project reference. No
+  connection, SQL, schema, CRUD, query, history, atomic, live-provider,
+  broad-documentation, or release-inventory behavior was added. Generated
+  `packages/storage-postgres/dist/tsconfig.tsbuildinfo` was removed before
+  recording this boundary.
+- Changed tracked files: `pnpm-lock.yaml`, `tsconfig.json`,
+  `packages/storage-postgres/package.json`, `packages/storage-postgres/tsconfig.json`,
+  `packages/storage-postgres/src/index.ts`,
+  `packages/storage-postgres/src/postgres/errors.ts`,
+  `packages/storage-postgres/src/postgres/entity-history.ts`,
+  `packages/storage-postgres/src/postgres/storage-factory.ts`, and
+  `packages/storage-postgres/test/postgres-builder-contract.test.ts`.
+- Self-review: the root has no `pg` pool/client, SQL/compiler/catalog/lock, or
+  test-helper export. `PostgresStorageFactory.newBuilder()` is the sole static
+  construction vocabulary, and `build()` reports configuration failure through
+  its promised result. The factory stores contract configuration only; actual
+  pool creation and all database behavior remain for slice 2 onward.

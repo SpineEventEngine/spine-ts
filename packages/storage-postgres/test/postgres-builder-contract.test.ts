@@ -1,0 +1,52 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+import { describe, expect, it } from "vitest";
+
+import {
+  PostgresStorageConfigurationError,
+  PostgresStorageFactory,
+  type PostgresCreateOperationFactory,
+  type PostgresStorageFactoryBuilder,
+} from "../src/index.js";
+
+describe("PostgresStorageFactory builder contract", () => {
+  it("exposes PostgreSQL-named construction and custom DDL contracts", () => {
+    const builder: PostgresStorageFactoryBuilder = PostgresStorageFactory.newBuilder();
+    const operation: PostgresCreateOperationFactory = (table) => ({
+      sql: `CREATE TABLE ${table.tableName} ()`,
+    });
+
+    expect(builder.setOptions({ url: "postgresql://db.example/spine" })).toBe(builder);
+    expect(builder.useOperationFactory(operation)).toBe(builder);
+    expect("create" in PostgresStorageFactory).toBe(false);
+  });
+
+  it("returns an open factory that closes idempotently", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgres://db.example/spine" })
+      .build();
+
+    expect(factory.isOpen()).toBe(true);
+    factory.close();
+    factory.close();
+    expect(factory.isOpen()).toBe(false);
+  });
+
+  it("reports absent construction options with the public configuration error", async () => {
+    await expect(PostgresStorageFactory.newBuilder().build()).rejects.toBeInstanceOf(
+      PostgresStorageConfigurationError,
+    );
+  });
+});
