@@ -35,6 +35,7 @@ import {
   PostgresStorageDataError,
   PostgresStorageOperationError,
   PostgresTransactionErrors,
+  PostgresClientDisposal,
 } from "./errors.js";
 import { PostgresIdColumn } from "./id-column.js";
 import type { PostgresTableSpec } from "./storage-factory.js";
@@ -441,12 +442,16 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   private async using<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     await this.prepare();
     const client = await this.lifecycle.acquire();
+    let discard = false;
     try {
       return await work(client);
     } catch (error) {
+      discard = PostgresClientDisposal.required(error);
       throw operationError(error);
     } finally {
-      client.release();
+      client.release(
+        discard ? new Error("PostgreSQL client discarded after lock cleanup failure.") : undefined,
+      );
     }
   }
 

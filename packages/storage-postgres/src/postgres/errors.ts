@@ -37,7 +37,9 @@ export class PostgresStorageDataError extends Error {}
  */
 export class PostgresStorageOperationError extends Error {}
 
-/** Classifies the only PostgreSQL transaction errors that may be retried. */
+/**
+ * Classifies the only PostgreSQL transaction errors that may be retried.
+ */
 export const PostgresTransactionErrors: Readonly<{ retryable(error: unknown): boolean }> =
   Object.freeze({
     retryable(error: unknown): boolean {
@@ -48,3 +50,20 @@ export const PostgresTransactionErrors: Readonly<{ retryable(error: unknown): bo
       );
     },
   });
+
+const discardedClients = new WeakSet<object>();
+
+/**
+ * Tracks operation errors whose PostgreSQL clients must not return to the pool.
+ */
+export const PostgresClientDisposal: Readonly<{
+  mark(error: unknown): void;
+  required(error: unknown): boolean;
+}> = Object.freeze({
+  mark(error: unknown): void {
+    if (typeof error === "object" && error !== null) discardedClients.add(error);
+  },
+  required(error: unknown): boolean {
+    return typeof error === "object" && error !== null && discardedClients.has(error);
+  },
+});

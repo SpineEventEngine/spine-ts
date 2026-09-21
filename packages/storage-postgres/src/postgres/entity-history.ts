@@ -35,7 +35,11 @@ import type {
   RecordStorage,
 } from "@spine-event-engine/storage";
 
-import { PostgresStorageDataError } from "./errors.js";
+import {
+  PostgresClientDisposal,
+  PostgresStorageDataError,
+  PostgresStorageOperationError,
+} from "./errors.js";
 import { PostgresRecordStorage, type PostgresRecordExecutor } from "./record-storage.js";
 
 /**
@@ -209,14 +213,10 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     this.assertOpen();
     HistoryValues.assertKeep(keepMostRecent);
     await this.#executor.using(async (client) => {
-      const family = this.familyKey();
-      const entity = this.#executor.lock(
-        "entity-mutation",
-        this.input.sourceType.typeName,
-        this.entityIdentity(entityId),
-      );
+      const [family, entity] = this.trimLocks(entityId);
       await client.query("SELECT pg_advisory_lock_shared($1)", [family]);
       await client.query("SELECT pg_advisory_lock($1)", [entity]);
+      let operationFailure: unknown;
       try {
         const boundary = await this.trimBoundary(client, entityId, keepMostRecent);
         while (
@@ -226,9 +226,18 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
         ) {
           // The next page starts only while this history remains open.
         }
+      } catch (error) {
+        operationFailure = error;
+        throw error;
       } finally {
-        await client.query("SELECT pg_advisory_unlock($1)", [entity]).catch(() => undefined);
-        await client.query("SELECT pg_advisory_unlock_shared($1)", [family]).catch(() => undefined);
+        await PostgresSessionLocks.cleanup(
+          client,
+          [
+            [entity, false],
+            [family, true],
+          ],
+          operationFailure,
+        );
       }
     });
   }
@@ -238,6 +247,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     await this.#executor.using(async (client) => {
       const key = this.#executor.lock("history-family", this.#executor.table());
       await client.query("SELECT pg_advisory_lock($1)", [key]);
+      let operationFailure: unknown;
       try {
         const cutoff = HistoryValues.nanos(olderThan);
         const highWater = await this.highWater(client, cutoff);
@@ -245,8 +255,17 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
           while (this.#open && (await this.truncatePage(client, cutoff, highWater))) {
             // The next page starts only while this history remains open.
           }
+      } catch (error) {
+        operationFailure = error;
+        throw error;
       } finally {
-        await client.query("SELECT pg_advisory_unlock($1)", [key]).catch(() => undefined);
+        const cleanup = await PostgresSessionLocks.unlock(client, key, false).catch(
+          (error: unknown) => error,
+        );
+        if (cleanup instanceof Error) {
+          PostgresClientDisposal.mark(operationFailure ?? cleanup);
+          if (operationFailure === undefined) throw cleanup;
+        }
       }
     });
   }
@@ -286,6 +305,17 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
 
   private familyKey(): bigint {
     return this.#executor.lock("history-family", this.#executor.table());
+  }
+
+  private trimLocks(id: I): readonly [bigint, bigint] {
+    return [
+      this.familyKey(),
+      this.#executor.lock(
+        "entity-mutation",
+        this.input.sourceType.typeName,
+        this.entityIdentity(id),
+      ),
+    ];
   }
 
   private entityKey(entityId: EntityRecord["entityId"]): bigint {
@@ -448,6 +478,7 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
     await this.#executor.using(async (client) => {
       const key = this.familyKey();
       await client.query("SELECT pg_advisory_lock($1)", [key]);
+      let operationFailure: unknown;
       try {
         const cutoff = HistoryValues.nanos(olderThan);
         const highWater = await this.highWater(client, cutoff);
@@ -455,8 +486,17 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
           while (this.#open && (await this.deletePage(client, cutoff, highWater))) {
             // The next page starts only while this history remains open.
           }
+      } catch (error) {
+        operationFailure = error;
+        throw error;
       } finally {
-        await client.query("SELECT pg_advisory_unlock($1)", [key]).catch(() => undefined);
+        const cleanup = await PostgresSessionLocks.unlock(client, key, false).catch(
+          (error: unknown) => error,
+        );
+        if (cleanup instanceof Error) {
+          PostgresClientDisposal.mark(operationFailure ?? cleanup);
+          if (operationFailure === undefined) throw cleanup;
+        }
       }
     });
   }
@@ -560,6 +600,35 @@ const HistoryValues = Object.freeze({
   },
   nanos(value: Timestamp): bigint {
     return value.seconds * 1_000_000_000n + BigInt(value.nanos || 0);
+  },
+});
+
+const PostgresSessionLocks = Object.freeze({
+  async cleanup(
+    client: import("pg").PoolClient,
+    locks: readonly (readonly [bigint, boolean])[],
+    operationFailure: unknown,
+  ): Promise<void> {
+    for (const [key, shared] of locks) {
+      const cleanup = await this.unlock(client, key, shared).catch((error: unknown) => error);
+      if (cleanup instanceof Error) {
+        PostgresClientDisposal.mark(operationFailure ?? cleanup);
+        if (operationFailure === undefined) throw cleanup;
+      }
+    }
+  },
+  async unlock(client: import("pg").PoolClient, key: bigint, shared: boolean): Promise<void> {
+    try {
+      const result = await client.query<{ readonly pg_advisory_unlock: boolean }>(
+        shared ? "SELECT pg_advisory_unlock_shared($1)" : "SELECT pg_advisory_unlock($1)",
+        [key],
+      );
+      if (result.rows[0]?.pg_advisory_unlock !== true)
+        throw new PostgresStorageOperationError("PostgreSQL history cleanup failed.");
+    } catch (error) {
+      if (error instanceof PostgresStorageOperationError) throw error;
+      throw new PostgresStorageOperationError("PostgreSQL history cleanup failed.");
+    }
   },
 });
 

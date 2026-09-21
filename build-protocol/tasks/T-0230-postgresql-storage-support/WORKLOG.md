@@ -1352,3 +1352,13 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   whole-batch retry, sanitized public operation wrappers, current Entity
   defaults, and durable-provider/mapping documentation. Session advisory unlock
   hardening and final deterministic gates remain in progress.
+
+## Advisory Lock Cleanup Correction
+
+- RED: focused PostgreSQL Entity-history tests proved that false and rejected
+  session advisory unlocks were silently ignored for trim and both truncate
+  paths. GREEN: 22 focused tests pass after each unlock result is checked.
+- Cleanup-only failure now exposes a sanitized `PostgresStorageOperationError`
+  and releases the affected `pg` client with an error so the pool discards it.
+  If an operation already failed, that error remains observable while the same
+  discard marker prevents a possibly locked client from returning to the pool.

@@ -32,6 +32,7 @@ import { describe, expect, it, vi } from "vitest";
 const driver = vi.hoisted(() => {
   const calls: { client: number; sql: string; values: readonly unknown[] }[] = [];
   const keyPages: unknown[][] = [];
+  const unlocks: (false | Error)[] = [];
   let deleteHook: (() => Promise<unknown>) | undefined;
   let historyRecords: readonly { readonly bytes: Uint8Array; readonly ID?: string }[] = [];
   let highWater:
@@ -53,7 +54,13 @@ const driver = vi.hoisted(() => {
     const lock = lockRequest(sql, values, client);
     if (lock !== undefined) return acquire(lock);
     const unlock = unlockRequest(sql, values, client);
-    if (unlock !== undefined) releaseLock(unlock);
+    if (unlock !== undefined) {
+      releaseLock(unlock);
+      const outcome = unlocks.shift();
+      if (outcome instanceof Error) return Promise.reject(outcome);
+      if (outcome === false) return Promise.resolve({ rows: [{ pg_advisory_unlock: false }] });
+      return Promise.resolve({ rows: [{ pg_advisory_unlock: true }] });
+    }
     if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
     if (sql.includes("columns WHERE")) {
       if (values[1] === "google_protobuf_stringvalue")
@@ -135,7 +142,10 @@ const driver = vi.hoisted(() => {
     const client = nextClient++;
     return Promise.resolve({
       query: (sql: string, values: readonly unknown[] = []) => query(client, sql, values),
-      release: releaseClient,
+      release: (...args: unknown[]) => {
+        releaseClient(...args);
+        for (const lock of [...(held.get(client) ?? [])]) releaseLock({ client, ...lock });
+      },
     });
   });
   const end = vi.fn(() => Promise.resolve());
@@ -146,6 +156,7 @@ const driver = vi.hoisted(() => {
     Pool,
     calls,
     keyPages,
+    failUnlock: (outcome: false | Error) => unlocks.push(outcome),
     setHistoryRecords: (records: readonly { readonly bytes: Uint8Array; readonly ID?: string }[]) =>
       (historyRecords = records),
     setHighWater: (value: typeof highWater) => (highWater = value),
@@ -414,6 +425,51 @@ describe("PostgreSQL Entity history", () => {
     const calls = driver.calls.slice(before).filter(({ sql }) => sql.startsWith('SELECT "ID"'));
     expect(calls).toHaveLength(2);
     expect(calls.every(({ values }) => values.at(-1) === 128)).toBe(true);
+  });
+
+  it("discards the trim client and reports a sanitized error when advisory unlock is false", async () => {
+    const factory = await postgresFactory();
+    const entity = factory.createEntityStorage(entityInput(true));
+    const releases = driver.release.mock.calls.length;
+    driver.failUnlock(false);
+
+    await expect(entity.states.trim("task", 0)).rejects.toThrow(/history cleanup failed/i);
+
+    expect(driver.release.mock.calls.length).toBeGreaterThan(releases);
+    expect(driver.release.mock.calls.at(-1)?.[0]).toBeInstanceOf(Error);
+  });
+
+  it.each(["states", "events"] as const)(
+    "discards the %s truncate client when advisory unlock rejects",
+    async (history) => {
+      const factory = await postgresFactory();
+      const entity = factory.createEntityStorage(
+        entityInput(history === "states", history === "events"),
+      );
+      const releases = driver.release.mock.calls.length;
+      driver.failUnlock(new Error("postgres password and SQL"));
+
+      await expect(
+        entity[history].truncate(create(TimestampSchema, { seconds: 5n })),
+      ).rejects.toThrow(/history cleanup failed/i);
+
+      expect(driver.release.mock.calls.length).toBeGreaterThan(releases);
+      expect(driver.release.mock.calls.at(-1)?.[0]).toBeInstanceOf(Error);
+    },
+  );
+
+  it("preserves an earlier trim failure while discarding after unlock failure", async () => {
+    const factory = await postgresFactory();
+    const entity = factory.createEntityStorage(entityInput(true));
+    const releases = driver.release.mock.calls.length;
+    driver.setDeleteHook(() => Promise.reject(new Error("earlier operation failure")));
+    driver.failUnlock(false);
+
+    await expect(entity.states.trim("task", 0)).rejects.toThrow(/record operation failed/i);
+
+    expect(driver.release.mock.calls.length).toBeGreaterThan(releases);
+    expect(driver.release.mock.calls.at(-1)?.[0]).toBeInstanceOf(Error);
+    driver.setDeleteHook(undefined);
   });
 
   it("freezes a high-water key before bounded state-history truncation", async () => {

@@ -29,7 +29,13 @@ export class PostgresTableResolver {
     this.set(`record:${recordType}`, name);
   }
 
-  /** Sets a grouped record-family table name. */
+  /**
+   * Sets a grouped record-family table name.
+   *
+   * @param sourceType Names the source type.
+   * @param recordType Names the grouped record type.
+   * @param name Names the physical table.
+   */
   setGroupName(sourceType: string, recordType: string, name: string): void {
     this.set(`group:${sourceType}\u0000${recordType}`, name);
   }
