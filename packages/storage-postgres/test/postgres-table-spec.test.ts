@@ -81,6 +81,22 @@ describe("PostgreSQL table foundation", () => {
     expect(() => resolver.resolve("example.Nul", undefined, "bad\u0000name")).toThrow(/invalid/i);
   });
 
+  it("matches JVM physical-name byte, collision, and grouped-name boundaries", () => {
+    const resolver = new PostgresTableResolver();
+    const sixtyThree = "a".repeat(63);
+
+    expect(resolver.resolve("Example.Mixed", undefined).tableName).toBe("example_mixed");
+    expect(resolver.resolve("example.Custom", undefined, "MixedCase").tableName).toBe("mixedcase");
+    expect(
+      resolver.resolve("example.Group", "states", "StateTable", "example.Record").tableName,
+    ).toBe("statetable");
+    expect(resolver.resolve("example.Bytes", undefined, sixtyThree).tableName).toBe(sixtyThree);
+    resolver.resolve("example.First", undefined, "CaseOnly");
+    expect(() => resolver.resolve("example.Second", undefined, "caseonly")).toThrow(/collides/i);
+    expect(() => resolver.resolve("example.Long", undefined, `${sixtyThree}x`)).toThrow(/invalid/i);
+    expect(() => resolver.resolve("example.Empty", undefined, "")).toThrow(/invalid/i);
+  });
+
   it("builds the complete record-family layout with PostgreSQL payload columns", () => {
     const table = PostgresTableSpecs.resolvedPostgresTableSpec({
       tableName: "records",
