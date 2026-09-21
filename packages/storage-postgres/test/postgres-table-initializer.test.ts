@@ -53,6 +53,25 @@ describe("PostgresTableInitializer", () => {
     ]);
   });
 
+  it("accepts PostgreSQL information_schema integer for a declared INT column", async () => {
+    const fixture = client(
+      catalog({ columns: [...columns(), column("version", "integer", "YES")] }),
+    );
+    const initializer = new PostgresTableInitializer(fixture, "spine", {
+      tableName: "states",
+      columns: [
+        { name: "ID", postgresType: "VARCHAR(512)", nullable: false },
+        { name: "bytes", postgresType: "BYTEA", nullable: false },
+        { name: "version", postgresType: "INT", nullable: true },
+      ],
+      primaryKey: ["ID"],
+    } as never);
+
+    await initializer.prepare();
+
+    expect(fixture.calls).toContain("COMMIT");
+  });
+
   it("retries the complete initialization once for a serialization failure with a fresh client", async () => {
     const first = client(catalog(), { code: "40001" });
     const second = client(catalog());

@@ -565,3 +565,11 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   scoped ESLint, Prettier, full TSDoc, cleanup rules, and diff hygiene passed.
 - Limitation: enabled bounded state/event histories, atomic Entity commit, and
   fenced cleanup remain active Task 4 work.
+
+## PostgreSQL Catalog INT Compatibility
+
+- RED: the generated state-history `version` layout exposed that PostgreSQL
+  `information_schema.columns.data_type` reports `integer`, while the provider
+  declared canonical `INT`; literal comparison rejected the compatible layout.
+- GREEN: table inspection now recognizes `integer` as PostgreSQL's catalog form
+  of declared `INT`. The focused initializer suite passed `12 passed (12)`.

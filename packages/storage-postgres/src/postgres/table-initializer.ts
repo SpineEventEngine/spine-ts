@@ -173,6 +173,7 @@ const PostgresCatalog = Object.freeze({
   type(expected: string, actual: ColumnRow): boolean {
     if (expected === "VARCHAR(512)")
       return actual.data_type === "character varying" && actual.character_maximum_length === 512;
+    if (expected === "INT") return actual.data_type === "integer";
     return expected.toLowerCase() === actual.data_type.toLowerCase();
   },
   default(value: string | null | undefined): string | null {
