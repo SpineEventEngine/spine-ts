@@ -61,6 +61,73 @@ export interface PostgresRecordLifecycle {
 }
 
 /**
+ * Performs package-local bounded operations for one PostgreSQL record family.
+ *
+ * This capability deliberately stays outside the package root: Entity history
+ * uses it to keep its SQL and transaction scope on the PostgreSQL provider.
+ */
+export interface PostgresHistoryExecutor<R extends Message> {
+  /**
+   * Prepares the backing table before acquiring an operation client.
+   * @returns A promise that resolves when the table is compatible.
+   */
+  prepare(): Promise<void>;
+
+  /**
+   * Returns one PostgreSQL transaction with rollback and client release.
+   * @param work Performs work with the transaction client.
+   * @returns The work result.
+   */
+  transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T>;
+
+  /**
+   * Returns bounded work on one acquired PostgreSQL client.
+   * @param work Performs work with the acquired client.
+   * @returns The work result.
+   */
+  using<T>(work: (client: PoolClient) => Promise<T>): Promise<T>;
+
+  /**
+   * Stores an immutable record on a caller-managed transaction client.
+   * @param client Provides the transaction client.
+   * @param record Provides the record to store.
+   * @returns A promise that resolves after storage or identity confirmation.
+   */
+  appendImmutable(client: PoolClient, record: R): Promise<void>;
+
+  /**
+   * Decodes records returned by one bounded PostgreSQL statement.
+   * @param client Provides the transaction client.
+   * @param sql Supplies bounded provider SQL.
+   * @param values Supplies bound SQL values.
+   * @returns Decoded records.
+   */
+  query(client: PoolClient, sql: string, values: readonly unknown[]): Promise<readonly R[]>;
+
+  /**
+   * Converts one declared column value to its PostgreSQL representation.
+   * @param name Names the declared column.
+   * @param value Supplies the logical column value.
+   * @returns The PostgreSQL parameter value.
+   */
+  column(name: string, value: unknown): unknown;
+
+  /**
+   * Returns the fully qualified backing table identifier.
+   * @returns The validated table identifier.
+   */
+  table(): string;
+
+  /**
+   * Returns a hash for one provider-private advisory-lock identity.
+   * @param domain Separates lock kinds.
+   * @param identity Identifies the locked resource.
+   * @returns A signed PostgreSQL advisory key.
+   */
+  lock(domain: string, identity: string): bigint;
+}
+
+/**
  * Stores one record family in one qualified PostgreSQL table.
  */
 export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
@@ -119,6 +186,25 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    */
   prepare(): Promise<void> {
     return this.#initializer.prepare();
+  }
+
+  /**
+   * Opens package-local bounded history operations for this record family.
+   *
+   * @internal
+   * @returns PostgreSQL-only history execution capabilities.
+   */
+  historyExecutor(): PostgresHistoryExecutor<R> {
+    return {
+      prepare: () => this.prepare(),
+      transaction: (work) => this.transaction(work),
+      using: (work) => this.using(work),
+      appendImmutable: (client, record) => this.appendImmutableOn(client, record),
+      query: (client, sql, values) => this.historyEntries(client, sql, values),
+      column: (name, value) => this.historyColumn(name, value),
+      table: () => this.qualified(),
+      lock: (domain, identity) => this.historyKey(domain, identity),
+    };
   }
 
   /**
@@ -341,6 +427,51 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
 
   private async writeOn(client: PoolClient, record: R): Promise<void> {
     await client.query(this.upsertSql(), this.values(record));
+  }
+
+  private async appendImmutableOn(client: PoolClient, record: R): Promise<void> {
+    const id = this.recordSpec.idValueIn(record);
+    const inserted = await client.query(this.immutableSql(), this.values(record));
+    if (inserted.rowCount === 1) return;
+    const existing = await this.readOn(client, id);
+    if (existing === undefined || this.same(existing, record)) return;
+    throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
+  }
+
+  private async historyEntries(
+    client: PoolClient,
+    sql: string,
+    values: readonly unknown[],
+  ): Promise<readonly R[]> {
+    const result = await client.query<Row>(sql, [...values]);
+    try {
+      return result.rows.map((row) => fromBinary(this.recordSpec.recordType, bytes(row.bytes)));
+    } catch (error) {
+      throw new PostgresStorageDataError("Stored PostgreSQL record data is invalid.", {
+        cause: error,
+      });
+    }
+  }
+
+  private historyColumn(name: string, value: unknown): unknown {
+    const column = this.recordSpec.columns.find((candidate) => candidate.name === name);
+    if (column === undefined)
+      throw new PostgresStorageOperationError(`PostgreSQL history column is not declared: ${name}`);
+    return ColumnMappings.value(this.#columns, column.type, value);
+  }
+
+  private historyKey(domain: string, identity: string): bigint {
+    return createHash("sha256")
+      .update(`spine-postgres-${domain}\0`)
+      .update(this.lifecycle.databaseName)
+      .update("\0")
+      .update(this.lifecycle.schema)
+      .update("\0")
+      .update(this.table.tableName)
+      .update("\0")
+      .update(identity)
+      .digest()
+      .readBigInt64BE();
   }
 
   private values(record: R): unknown[] {

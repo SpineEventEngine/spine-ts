@@ -573,3 +573,23 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   declared canonical `INT`; literal comparison rejected the compatible layout.
 - GREEN: table inspection now recognizes `integer` as PostgreSQL's catalog form
   of declared `INT`. The focused initializer suite passed `12 passed (12)`.
+
+## Task 4A Bounded PostgreSQL State History
+
+- RED: enabled state append rejected through the disabled SPI port. A close-race
+  test also exposed synchronous post-close append failure instead of the port's
+  rejected Promise behavior.
+- GREEN: factory-created Entity handles now create grouped PostgreSQL state and
+  event record families. State append uses shared transaction family and
+  canonical Entity locks; bounded reads use entity predicates and limits;
+  trim and truncate use 128-key pages, session locks, per-page transactions,
+  and a bound truncate high-water key. Closing the handle closes grouped state
+  storage and lets an acquired page settle without beginning another.
+- Failure characterization: an injected delete failure rolls back the page,
+  releases and unlocks its client, retains the operation error, and a later
+  call reprocesses the same key. Event history append and bounded truncate use
+  their separate family lock domain.
+- Evidence: focused Entity-history suite passed `9 passed (9)`; package
+  typecheck, scoped ESLint, cleanup enforcement, Prettier, and diff hygiene
+  passed. Driver doubles cover provider SQL and resource behavior; live
+  PostgreSQL concurrency remains outside this checkpoint.

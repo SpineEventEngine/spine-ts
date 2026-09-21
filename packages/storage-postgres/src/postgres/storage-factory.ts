@@ -289,7 +289,9 @@ export class PostgresStorageFactory extends StorageFactory {
    * @returns A new builder.
    */
   static newBuilder(): PostgresStorageFactoryBuilder {
-    return new Builder((entries) => PostgresStorageFactory.connect(entries));
+    return new Builder((entries, resolver, operation, stringifiers) =>
+      PostgresStorageFactory.connect(entries, resolver, operation, stringifiers),
+    );
   }
 
   /**
@@ -322,6 +324,14 @@ export class PostgresStorageFactory extends StorageFactory {
     recordSpec: RecordSpec<I, R>,
     group?: StorageGroup,
   ): RecordStorage<I, R> {
+    return this.createPostgresRecordStorage(context, recordSpec, group);
+  }
+
+  private createPostgresRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): PostgresRecordStorage<I, R> {
     const table = this.resolver.resolve(
       recordSpec.sourceType.typeName,
       group?.name,
@@ -363,7 +373,8 @@ export class PostgresStorageFactory extends StorageFactory {
     const registration = {} as { handle: PostgresEntityStorage<I, S> };
     const handle = new PostgresEntityStorage(
       input,
-      this.createRecordStorage(input.context, input.recordSpec),
+      this.createPostgresRecordStorage(input.context, input.recordSpec),
+      (spec, group) => this.createPostgresRecordStorage(input.context, spec, group),
       () => this.#handles.delete(registration.handle),
     );
     registration.handle = handle;

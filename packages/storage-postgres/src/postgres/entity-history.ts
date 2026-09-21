@@ -12,8 +12,11 @@
  * the License.
  */
 
-import type { Message } from "@bufbuild/protobuf";
+import { fromBinary, type Message } from "@bufbuild/protobuf";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import type { Event, EventId } from "@spine-event-engine/proto";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import type { EntityStateKey } from "@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js";
 import type {
   EntityEventHistoryPort,
   EntityRecordStorage,
@@ -23,12 +26,17 @@ import type {
 import {
   disabledEventHistoryPort,
   disabledStateHistoryPort,
+  eventHistorySpec,
+  stateHistorySpec,
 } from "@spine-event-engine/storage/provider";
 import type {
   NormalizedQueryEntry,
   NormalizedQueryPlan,
   RecordStorage,
 } from "@spine-event-engine/storage";
+
+import { PostgresStorageDataError } from "./errors.js";
+import { PostgresRecordStorage, type PostgresHistoryExecutor } from "./record-storage.js";
 
 /**
  * Describes PostgreSQL-backed Entity record-family handles.
@@ -92,16 +100,29 @@ export class PostgresEntityStorage<I, S extends Message> implements PostgresEnti
    *
    * @param input Supplies Entity identity and materialized column definitions.
    * @param records Stores current Entity record envelopes.
+   * @param open Opens grouped PostgreSQL record families.
    * @param onClose Unregisters this Entity handle from its factory.
    */
   constructor(
     input: EntityStorageInput<I, S>,
-    private readonly records: RecordStorage<I, EntityRecord>,
+    private readonly records: PostgresRecordStorage<I, EntityRecord>,
+    open: <Id, R extends Message>(
+      spec: import("@spine-event-engine/storage").RecordSpec<Id, R>,
+      group?: import("@spine-event-engine/storage").StorageGroup,
+    ) => PostgresRecordStorage<Id, R>,
     private readonly onClose: () => void,
   ) {
     this.current = new PostgresCurrentStorage(input, records);
-    this.states = disabledStateHistoryPort<I, S>();
-    this.events = disabledEventHistoryPort<I>();
+    const states = input.stateHistory ? stateHistorySpec(input.stateSchema) : undefined;
+    this.states =
+      states === undefined
+        ? disabledStateHistoryPort<I, S>()
+        : new PostgresStates(input, open(states.spec, states.group));
+    const events = input.eventHistory ? eventHistorySpec(input.stateSchema) : undefined;
+    this.events =
+      events === undefined
+        ? disabledEventHistoryPort<I>()
+        : new PostgresEvents(input, open(events.spec, events.group));
   }
 
   /**
@@ -124,6 +145,391 @@ export class PostgresEntityStorage<I, S extends Message> implements PostgresEnti
     this.events.close();
     this.onClose();
   }
+}
+
+class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, S> {
+  readonly #executor: PostgresHistoryExecutor<EntityRecord>;
+  #open = true;
+
+  constructor(
+    private readonly input: EntityStorageInput<I, S>,
+    private readonly records: PostgresRecordStorage<EntityStateKey, EntityRecord>,
+  ) {
+    this.#executor = records.historyExecutor();
+  }
+
+  append(record: EntityRecord): Promise<void> {
+    if (!this.#open) return Promise.reject(new Error("Entity state history is closed."));
+    return this.#executor.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock_shared($1)", [this.familyKey()]);
+      await client.query("SELECT pg_advisory_xact_lock($1)", [this.entityKey(record.entityId)]);
+      await this.#executor.appendImmutable(client, record);
+    });
+  }
+
+  async backward(
+    entityId: I,
+    depth: number,
+    startingFromVersion?: bigint,
+  ): Promise<readonly EntityRecord[]> {
+    this.assertOpen();
+    HistoryValues.assertDepth(depth);
+    await this.#executor.prepare();
+    return this.#executor.transaction((client) =>
+      this.#executor.query(
+        client,
+        this.backwardSql(startingFromVersion),
+        this.backwardValues(entityId, depth, startingFromVersion),
+      ),
+    );
+  }
+
+  async stateAt(entityId: I, time: Timestamp): Promise<S | undefined> {
+    this.assertOpen();
+    await this.#executor.prepare();
+    const records = await this.#executor.transaction((client) =>
+      this.#executor.query(client, this.stateAtSql(), [
+        this.entityValue(entityId),
+        HistoryValues.nanos(time),
+        1,
+      ]),
+    );
+    const record = records[0];
+    if (record?.state === undefined) return undefined;
+    try {
+      return fromBinary(this.input.stateSchema, record.state.value);
+    } catch (error) {
+      throw new PostgresStorageDataError("Stored PostgreSQL state data is invalid.", {
+        cause: error,
+      });
+    }
+  }
+
+  async trim(entityId: I, keepMostRecent: number): Promise<void> {
+    this.assertOpen();
+    HistoryValues.assertKeep(keepMostRecent);
+    await this.#executor.using(async (client) => {
+      const family = this.familyKey();
+      const entity = this.#executor.lock("history-entity", this.entityIdentity(entityId));
+      await client.query("SELECT pg_advisory_lock_shared($1)", [family]);
+      await client.query("SELECT pg_advisory_lock($1)", [entity]);
+      try {
+        while (this.#open && (await this.trimPage(client, entityId, keepMostRecent))) {
+          // The next page starts only while this history remains open.
+        }
+      } finally {
+        await client.query("SELECT pg_advisory_unlock($1)", [entity]).catch(() => undefined);
+        await client.query("SELECT pg_advisory_unlock_shared($1)", [family]).catch(() => undefined);
+      }
+    });
+  }
+
+  async truncate(olderThan: Timestamp): Promise<void> {
+    this.assertOpen();
+    await this.#executor.using(async (client) => {
+      const key = this.#executor.lock("history-family", "state");
+      await client.query("SELECT pg_advisory_lock($1)", [key]);
+      try {
+        const cutoff = HistoryValues.nanos(olderThan);
+        const highWater = await this.highWater(client, cutoff);
+        if (highWater !== undefined)
+          while (this.#open && (await this.truncatePage(client, cutoff, highWater))) {
+            // The next page starts only while this history remains open.
+          }
+      } finally {
+        await client.query("SELECT pg_advisory_unlock($1)", [key]).catch(() => undefined);
+      }
+    });
+  }
+
+  close(): void {
+    if (!this.#open) return;
+    this.#open = false;
+    this.records.close();
+  }
+
+  private backwardSql(startingFromVersion: bigint | undefined): string {
+    const continuation = startingFromVersion === undefined ? "" : ' AND "version" < $2';
+    const limit = startingFromVersion === undefined ? 2 : 3;
+    return [
+      `SELECT "bytes" FROM ${this.#executor.table()} WHERE "entity_id" = $1${continuation}`,
+      'ORDER BY "version" DESC, "created" DESC',
+      `LIMIT $${String(limit)}`,
+    ].join(" ");
+  }
+
+  private backwardValues(id: I, depth: number, version: bigint | undefined): readonly unknown[] {
+    return version === undefined
+      ? [this.entityValue(id), depth]
+      : [this.entityValue(id), version, depth];
+  }
+
+  private stateAtSql(): string {
+    return [
+      `SELECT "bytes" FROM ${this.#executor.table()} WHERE "entity_id" = $1 AND "created" <= $2`,
+      'ORDER BY "created" DESC, "version" DESC LIMIT $3',
+    ].join(" ");
+  }
+
+  private entityValue(id: I): unknown {
+    return this.#executor.column("entity_id", this.input.id.pack(id));
+  }
+
+  private familyKey(): bigint {
+    return this.#executor.lock("history-family", "state");
+  }
+
+  private entityKey(entityId: EntityRecord["entityId"]): bigint {
+    if (entityId === undefined) throw new Error("State history requires EntityRecord.entityId.");
+    const id = this.input.id.unpack(entityId);
+    if (id === undefined) throw new Error("State history EntityRecord ID does not match storage.");
+    return this.#executor.lock("history-entity", this.entityIdentity(id));
+  }
+
+  private entityIdentity(id: I): string {
+    return this.input.id.key(id);
+  }
+
+  private assertOpen(): void {
+    if (!this.#open) throw new Error("Entity state history is closed.");
+  }
+
+  private async trimPage(client: import("pg").PoolClient, id: I, keep: number): Promise<boolean> {
+    await client.query("BEGIN");
+    try {
+      const keys = await this.keys(client, this.trimSql(), [this.entityValue(id), keep, 128]);
+      await this.deleteKeys(client, keys);
+      await client.query("COMMIT");
+      return keys.length === 128;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private async truncatePage(
+    client: import("pg").PoolClient,
+    olderThan: bigint,
+    highWater: HistoryKey,
+  ): Promise<boolean> {
+    await client.query("BEGIN");
+    try {
+      const keys = await this.keys(client, this.truncateSql(), [olderThan, ...highWater, 128]);
+      await this.deleteKeys(client, keys);
+      await client.query("COMMIT");
+      return keys.length === 128;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private async keys(
+    client: import("pg").PoolClient,
+    sql: string,
+    values: readonly unknown[],
+  ): Promise<readonly unknown[]> {
+    return (await client.query<{ readonly ID: unknown }>(sql, [...values])).rows.map(
+      ({ ID }) => ID,
+    );
+  }
+
+  private deleteKeys(client: import("pg").PoolClient, keys: readonly unknown[]): Promise<void> {
+    if (keys.length === 0) return Promise.resolve();
+    const binds = keys.map((_, index) => `$${String(index + 1)}`).join(", ");
+    return client
+      .query(`DELETE FROM ${this.#executor.table()} WHERE "ID" IN (${binds})`, [...keys])
+      .then(() => undefined);
+  }
+
+  private trimSql(): string {
+    return [
+      `SELECT "ID" FROM ${this.#executor.table()} WHERE "entity_id" = $1`,
+      'ORDER BY "version" DESC, "created" DESC LIMIT $3 OFFSET $2',
+    ].join(" ");
+  }
+
+  private truncateSql(): string {
+    return [
+      `SELECT "ID" FROM ${this.#executor.table()} WHERE "created" < $1`,
+      'AND ("created", "version", "ID") <= ($2, $3, $4)',
+      'ORDER BY "created" ASC, "version" ASC, "ID" ASC LIMIT $5',
+    ].join(" ");
+  }
+
+  private async highWater(
+    client: import("pg").PoolClient,
+    olderThan: bigint,
+  ): Promise<HistoryKey | undefined> {
+    const result = await client.query<HistoryRow>(
+      [
+        `SELECT "created", "version", "ID" FROM ${this.#executor.table()} WHERE "created" < $1`,
+        'ORDER BY "created" DESC, "version" DESC, "ID" DESC LIMIT $2',
+      ].join(" "),
+      [olderThan, 1],
+    );
+    const key = result.rows[0];
+    return key === undefined ? undefined : [key.created, key.version, key.ID];
+  }
+}
+
+class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> {
+  readonly #executor: PostgresHistoryExecutor<Event>;
+  #open = true;
+
+  constructor(
+    private readonly input: EntityStorageInput<I, S>,
+    private readonly records: PostgresRecordStorage<EventId, Event>,
+  ) {
+    this.#executor = records.historyExecutor();
+  }
+
+  append(record: Event): Promise<void> {
+    if (!this.#open) return Promise.reject(new Error("Entity event history is closed."));
+    return this.#executor.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock_shared($1)", [this.familyKey()]);
+      await this.#executor.appendImmutable(client, record);
+    });
+  }
+
+  async backward(id: I, depth: number, version?: bigint): Promise<readonly Event[]> {
+    this.assertOpen();
+    HistoryValues.assertDepth(depth);
+    await this.#executor.prepare();
+    return this.#executor.transaction((client) =>
+      this.#executor.query(
+        client,
+        this.backwardSql(version),
+        this.backwardValues(id, depth, version),
+      ),
+    );
+  }
+
+  async truncate(olderThan: Timestamp): Promise<void> {
+    this.assertOpen();
+    await this.#executor.using(async (client) => {
+      const key = this.familyKey();
+      await client.query("SELECT pg_advisory_lock($1)", [key]);
+      try {
+        const cutoff = HistoryValues.nanos(olderThan);
+        const highWater = await this.highWater(client, cutoff);
+        if (highWater !== undefined)
+          while (this.#open && (await this.deletePage(client, cutoff, highWater))) {
+            // The next page starts only while this history remains open.
+          }
+      } finally {
+        await client.query("SELECT pg_advisory_unlock($1)", [key]).catch(() => undefined);
+      }
+    });
+  }
+
+  close(): void {
+    if (!this.#open) return;
+    this.#open = false;
+    this.records.close();
+  }
+
+  private backwardSql(version: bigint | undefined): string {
+    const continuation = version === undefined ? "" : ' AND "version" < $2';
+    const limit = version === undefined ? 2 : 3;
+    return [
+      `SELECT "bytes" FROM ${this.#executor.table()} WHERE "entity_id" = $1${continuation}`,
+      'ORDER BY "version" DESC, "created" DESC',
+      `LIMIT $${String(limit)}`,
+    ].join(" ");
+  }
+
+  private backwardValues(id: I, depth: number, version: bigint | undefined): readonly unknown[] {
+    const entity = this.#executor.column("entity_id", this.input.id.pack(id));
+    return version === undefined ? [entity, depth] : [entity, version, depth];
+  }
+
+  private familyKey(): bigint {
+    return this.#executor.lock("history-family", "event");
+  }
+
+  private assertOpen(): void {
+    if (!this.#open) throw new Error("Entity event history is closed.");
+  }
+
+  private async highWater(
+    client: import("pg").PoolClient,
+    olderThan: bigint,
+  ): Promise<HistoryKey | undefined> {
+    const result = await client.query<HistoryRow>(this.highWaterSql(), [olderThan, 1]);
+    const key = result.rows[0];
+    return key === undefined ? undefined : [key.created, key.version, key.ID];
+  }
+
+  private async deletePage(
+    client: import("pg").PoolClient,
+    olderThan: bigint,
+    highWater: HistoryKey,
+  ): Promise<boolean> {
+    await client.query("BEGIN");
+    try {
+      const keys = await this.keys(client, [olderThan, ...highWater, 128]);
+      await this.deleteKeys(client, keys);
+      await client.query("COMMIT");
+      return keys.length === 128;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private keys(
+    client: import("pg").PoolClient,
+    values: readonly unknown[],
+  ): Promise<readonly unknown[]> {
+    return client
+      .query<{ readonly ID: unknown }>(this.deleteSql(), [...values])
+      .then(({ rows }) => rows.map(({ ID }) => ID));
+  }
+
+  private deleteKeys(client: import("pg").PoolClient, keys: readonly unknown[]): Promise<void> {
+    if (keys.length === 0) return Promise.resolve();
+    const binds = keys.map((_, index) => `$${String(index + 1)}`).join(", ");
+    return client
+      .query(`DELETE FROM ${this.#executor.table()} WHERE "ID" IN (${binds})`, [...keys])
+      .then(() => undefined);
+  }
+
+  private highWaterSql(): string {
+    return [
+      `SELECT "created", "version", "ID" FROM ${this.#executor.table()} WHERE "created" < $1`,
+      'ORDER BY "created" DESC, "version" DESC, "ID" DESC LIMIT $2',
+    ].join(" ");
+  }
+
+  private deleteSql(): string {
+    return [
+      `SELECT "ID" FROM ${this.#executor.table()} WHERE "created" < $1`,
+      'AND ("created", "version", "ID") <= ($2, $3, $4)',
+      'ORDER BY "created" ASC, "version" ASC, "ID" ASC LIMIT $5',
+    ].join(" ");
+  }
+}
+
+const HistoryValues = Object.freeze({
+  assertDepth(value: number): void {
+    if (!Number.isSafeInteger(value) || value <= 0)
+      throw new Error("Entity history depth must be a positive finite integer.");
+  },
+  assertKeep(value: number): void {
+    if (!Number.isSafeInteger(value) || value < 0)
+      throw new Error("Entity state history retention must be a non-negative safe integer.");
+  },
+  nanos(value: Timestamp): bigint {
+    return value.seconds * 1_000_000_000n + BigInt(value.nanos || 0);
+  },
+});
+
+type HistoryKey = readonly [unknown, unknown, unknown];
+interface HistoryRow {
+  readonly created: unknown;
+  readonly version: unknown;
+  readonly ID: unknown;
 }
 
 class PostgresCurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
