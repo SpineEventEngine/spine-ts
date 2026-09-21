@@ -273,3 +273,14 @@ IF NOT EXISTS` statements and requires `"spine"."groupedtable"` and
   `75/75`; changed-file ESLint, package typecheck, TSDoc, cleanup, Prettier,
   and diff hygiene pass. Live PostgreSQL 16/18 verification remains unavailable
   without supplied connection URLs.
+
+## Last-Correction Affected Re-review Gate
+
+- Frozen pushed endpoint: `75167a0aa`.
+- Independent PostgreSQL package coverage passes 158 tests with 94.36%
+  statements (`972/1030`), 90.47% branches (`551/609`), 95.13% functions
+  (`313/329`), and 96.71% lines (`855/884`).
+- Style/maintainability and performance/reliability reopen independently at
+  explicit `gpt-5.6-terra` / `high`, read-only and without prior review memory
+  or child agents. The documentation corrections are deterministic replacements
+  of the exact reviewed phrases and therefore do not reopen that lane.

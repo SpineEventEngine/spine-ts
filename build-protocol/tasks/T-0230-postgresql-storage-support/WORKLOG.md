@@ -1553,6 +1553,17 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   targets, protect partial lock acquisition with reverse-order cleanup/discard
   behavior while preserving the original error, and correct the stale prose.
 
+## Last-Correction Affected Re-review Gate
+
+- Independent exact PostgreSQL coverage at pushed endpoint `75167a0aa` passes
+  158 tests: 94.36% statements (`972/1030`), 90.47% branches (`551/609`),
+  95.13% functions (`313/329`), and 96.71% lines (`855/884`).
+- The affected style and reliability concerns reopen with no prior review
+  memory. Dispatches explicitly use `style_maintainability_reviewer` and
+  `performance_reliability_reviewer`, both at `gpt-5.6-terra` / `high`.
+  Reviews are read-only and cannot spawn children. The deterministic 18-to-19
+  and “any durable adapter” wording corrections do not reopen documentation.
+
 ## Last-Correction Implementation Evidence
 
 - Existing role/function: continuing `implementer`, explicitly configured as
