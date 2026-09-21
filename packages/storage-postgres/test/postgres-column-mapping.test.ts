@@ -24,12 +24,23 @@ describe("PostgresColumnMapping", () => {
   it("converts timestamp and version columns to exact native values", () => {
     const mapping = new PostgresColumnMapping();
 
-    expect(mapping.of(ColumnTypes.message(TimestampSchema))(create(TimestampSchema, { seconds: 4n, nanos: 7 }))).toBe(4_000_000_007n);
-    expect(mapping.of(ColumnTypes.message(VersionSchema))(create(VersionSchema, { number: 7 }))).toBe(7);
+    expect(
+      mapping.of(ColumnTypes.message(TimestampSchema))(
+        create(TimestampSchema, { seconds: 4n, nanos: 7 }),
+      ),
+    ).toBe(4_000_000_007n);
+    expect(
+      mapping.of(ColumnTypes.message(VersionSchema))(create(VersionSchema, { number: 7 })),
+    ).toBe(7);
   });
 
-  it.each([ScalarType.BYTES, ScalarType.FLOAT, ScalarType.DOUBLE])("keeps PostgreSQL-native scalar values", (type) => {
-    const value = type === ScalarType.BYTES ? new Uint8Array([1]) : 1.5;
-    expect(new PostgresColumnMapping().of(ColumnTypes.scalar(type))(value as never)).toEqual(value);
-  });
+  it.each([ScalarType.BYTES, ScalarType.FLOAT, ScalarType.DOUBLE])(
+    "keeps PostgreSQL-native scalar values",
+    (type) => {
+      const value = type === ScalarType.BYTES ? new Uint8Array([1]) : 1.5;
+      expect(new PostgresColumnMapping().of(ColumnTypes.scalar(type))(value as never)).toEqual(
+        value,
+      );
+    },
+  );
 });

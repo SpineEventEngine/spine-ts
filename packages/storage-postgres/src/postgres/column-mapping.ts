@@ -15,7 +15,11 @@
 import { ScalarType, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { StringifierRegistry } from "@spine-event-engine/core";
-import type { ColumnMapping, ColumnTypeMapping, RecordColumnType } from "@spine-event-engine/storage";
+import type {
+  ColumnMapping,
+  ColumnTypeMapping,
+  RecordColumnType,
+} from "@spine-event-engine/storage";
 
 const timestampType = "google.protobuf.Timestamp";
 const versionType = "spine.core.Version";
@@ -42,9 +46,12 @@ export class PostgresColumnMapping implements ColumnMapping<unknown> {
   of<V>(type: RecordColumnType<V>): ColumnTypeMapping<V, unknown> {
     if (type.kind === "scalar") return PostgresColumnMappings.scalar(type.scalar);
     if (type.kind === "enum") return (value) => value;
-    if (type.message.typeName === timestampType) return (value) => PostgresColumnMappings.timestamp(value);
-    if (type.message.typeName === versionType) return (value) => PostgresColumnMappings.version(value);
-    return (value) => this.#stringifiers.forMessage(type.message as GenMessage<Message>).toString(value as Message);
+    if (type.message.typeName === timestampType)
+      return (value) => PostgresColumnMappings.timestamp(value);
+    if (type.message.typeName === versionType)
+      return (value) => PostgresColumnMappings.version(value);
+    return (value) =>
+      this.#stringifiers.forMessage(type.message as GenMessage<Message>).toString(value as Message);
   }
 
   /**
@@ -58,7 +65,8 @@ export class PostgresColumnMapping implements ColumnMapping<unknown> {
 }
 
 const PostgresColumnMappings = Object.freeze({
-  scalar<V>(_type: ScalarType): ColumnTypeMapping<V, unknown> {
+  scalar<V>(type: ScalarType): ColumnTypeMapping<V, unknown> {
+    void type;
     return (value) => value;
   },
   timestamp(value: unknown): bigint {

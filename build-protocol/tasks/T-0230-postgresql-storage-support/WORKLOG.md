@@ -340,3 +340,15 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   `tsc --noEmit` and scoped ESLint over the changed runtime/test files pass.
   This checkpoint intentionally precedes the remaining Task 3 batch,
   immutable/CAS, and query behavior coverage.
+
+## Task 3 Cleanup Correction
+
+- Corrected every cleanup finding in the Task 3 runtime, including the
+  PostgreSQL column-mapping test. The explicit ignored generated output was
+  `packages/storage-postgres/dist/tsconfig.tsbuildinfo`; it was removed.
+- Added the task-specific `T-0230` standalone-function necessity partition and
+  taught the cleanup checker to route `storage-postgres` sources to that
+  partition. The existing `T-0080H` ledger was restored unchanged.
+- GREEN evidence: `pnpm lint:cleanup -- ...` passed, package typecheck and
+  scoped ESLint passed, serial Task 1–3 PostgreSQL tests passed `30/30`, and
+  `git diff --check` passed.

@@ -1,0 +1,65 @@
+[
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-postgres/src/postgres/storage-factory.ts",
+    "kind": "function-declaration",
+    "identity": "createOperation()#1",
+    "name": "createOperation",
+    "disposition": "necessity",
+    "reason": "TypeScript PostgreSQL factory boundary: createOperation remains standalone because generic record-family types require the exact public creation callback bridge."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-postgres/src/postgres/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "quote()#1",
+    "name": "quote",
+    "disposition": "necessity",
+    "reason": "TypeScript PostgreSQL SQL boundary: quote remains standalone because factory initialization and record statements require the exact identifier renderer."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-postgres/src/postgres/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "where()#1",
+    "name": "where",
+    "disposition": "necessity",
+    "reason": "TypeScript PostgreSQL SQL boundary: where remains standalone because record and normalized-plan statements share the exact empty predicate rendering."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-postgres/src/postgres/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "bytes()#1",
+    "name": "bytes",
+    "disposition": "necessity",
+    "reason": "TypeScript PostgreSQL data boundary: bytes remains standalone because single reads and query rows share the exact binary payload conversion."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-postgres/src/postgres/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "operator()#1",
+    "name": "operator",
+    "disposition": "necessity",
+    "reason": "TypeScript PostgreSQL query boundary: operator remains standalone because every normalized comparison shares the exact admitted SQL operator mapping."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-postgres/src/postgres/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "retryable()#1",
+    "name": "retryable",
+    "disposition": "necessity",
+    "reason": "TypeScript PostgreSQL transaction boundary: retryable remains standalone because compare-and-set retries share the exact SQLSTATE admission rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-postgres/src/postgres/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "operationError()#1",
+    "name": "operationError",
+    "disposition": "necessity",
+    "reason": "TypeScript PostgreSQL provider boundary: operationError remains standalone because record operations share the exact sanitized provider-error conversion."
+  }
+]

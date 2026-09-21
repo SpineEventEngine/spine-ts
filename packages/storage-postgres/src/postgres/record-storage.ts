@@ -274,7 +274,10 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     let sql = `SELECT "ID", "bytes" FROM ${this.qualified()}${where(clauses)} ORDER BY ${order}`;
     if (query.limit !== undefined) sql += ` LIMIT ${bind.add(query.limit)}`;
     if (query.offset !== undefined)
-      sql += `${query.limit === undefined ? ` LIMIT ${bind.add(9_223_372_036_854_775_807n)}` : ""} OFFSET ${bind.add(query.offset)}`;
+      sql +=
+        query.limit === undefined
+          ? this.offsetSql(bind, query.offset)
+          : ` OFFSET ${bind.add(query.offset)}`;
     return bind.done(sql);
   }
 
@@ -308,7 +311,8 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       clauses.push(`"ID" IN (${query.ids.map((id) => bind.add(this.id(id))).join(", ")})`);
     for (const filter of query.filters ?? [])
       clauses.push(
-        `${this.column(filter.column === "id" ? "ID" : filter.column)} IS NOT DISTINCT FROM ${bind.add(this.value(filter.column, filter.value))}`,
+        `${this.column(filter.column === "id" ? "ID" : filter.column)} ` +
+          `IS NOT DISTINCT FROM ${bind.add(this.value(filter.column, filter.value))}`,
       );
     return clauses;
   }
@@ -317,7 +321,8 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     return [
       ...(query.sort ?? []).map(
         (item) =>
-          `${this.column(item.field === "id" ? "ID" : item.field)} ${item.direction === "desc" ? "DESC NULLS LAST" : "ASC NULLS FIRST"}`,
+          this.column(item.field === "id" ? "ID" : item.field) +
+          ` ${item.direction === "desc" ? "DESC NULLS LAST" : "ASC NULLS FIRST"}`,
       ),
       '"ID" ASC',
     ].join(", ");
@@ -336,16 +341,21 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
         .slice(0, index)
         .map(
           (item, previous) =>
-            `${this.column(item.field === "id" ? "ID" : item.field)} IS NOT DISTINCT FROM ${bind.add(this.value(item.field, after.values[previous]?.value))}`,
+            `${this.column(item.field === "id" ? "ID" : item.field)} ` +
+            `IS NOT DISTINCT FROM ${bind.add(this.value(item.field, after.values[previous]?.value))}`,
         );
       const value = this.value(field, field === "ID" ? after.id : after.values[index]?.value);
       terms.push(
-        `(${[...prefix, this.afterTerm(this.column(field), current.direction ?? "asc", value, bind)].join(" AND ")})`,
+        `(${[
+          ...prefix,
+          this.afterTerm(this.column(field), current.direction ?? "asc", value, bind),
+        ].join(" AND ")})`,
       );
     }
     const equal = sort.map(
       (item, index) =>
-        `${this.column(item.field === "id" ? "ID" : item.field)} IS NOT DISTINCT FROM ${bind.add(this.value(item.field, after.values[index]?.value))}`,
+        `${this.column(item.field === "id" ? "ID" : item.field)} ` +
+        `IS NOT DISTINCT FROM ${bind.add(this.value(item.field, after.values[index]?.value))}`,
     );
     terms.push(`(${[...equal, `"ID" > ${bind.add(this.id(after.id))}`].join(" AND ")})`);
     return `(${terms.join(" OR ")})`;
@@ -360,8 +370,12 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     if (predicate.kind === "ids")
       return `"ID" IN (${predicate.ids.map((id) => bind.add(this.id(id))).join(", ")})`;
     if (predicate.kind === "comparison")
-      return `${this.column(predicate.column)} ${operator(predicate.operator)} ${bind.add(this.value(predicate.column, predicate.value))}`;
-    return `(${predicate.predicates.map((child) => this.predicate(child, bind)).join(predicate.kind === "all" ? " AND " : " OR ")})`;
+      return (
+        `${this.column(predicate.column)} ${operator(predicate.operator)} ` +
+        bind.add(this.value(predicate.column, predicate.value))
+      );
+    const joiner = predicate.kind === "all" ? " AND " : " OR ";
+    return `(${predicate.predicates.map((child) => this.predicate(child, bind)).join(joiner)})`;
   }
 
   private column(name: string): string {
@@ -409,7 +423,12 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
   private insertSql(): string {
     const names = ["ID", "bytes", ...this.recordSpec.columns.map(({ name }) => name)];
-    return `INSERT INTO ${this.qualified()} (${names.map(quote).join(", ")}) VALUES (${names.map((_, index) => `$${String(index + 1)}`).join(", ")})`;
+    const columns = names.map(quote).join(", ");
+    const values = names.map((_, index) => `$${String(index + 1)}`).join(", ");
+    return `INSERT INTO ${this.qualified()} (${columns}) VALUES (${values})`;
+  }
+  private offsetSql(bind: Binds, offset: number): string {
+    return ` LIMIT ${bind.add(9_223_372_036_854_775_807n)} OFFSET ${bind.add(offset)}`;
   }
   private casKey(id: I): bigint {
     return createHash("sha256")
