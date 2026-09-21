@@ -1306,3 +1306,33 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   endpoint, complete human-requirements ledger, concern scope, read-only rule,
   and prohibition on child agents. Findings will be collected as one complete
   batch before any correction begins.
+
+## Final Specialist Wave And Correction Dispatch
+
+- Four independent read-only reviews completed against frozen endpoint
+  `c09c961d6bf75e2cb90fb36fa2dc2c2e0882dd15`. Explicit role profiles were
+  `style_maintainability_reviewer` at `gpt-5.6-terra` / `high`,
+  `typescript_api_docs_reviewer` at `gpt-5.6-terra` / `high`,
+  `performance_reliability_reviewer` at `gpt-5.6-terra` / `high`, and
+  `documentation_reviewer` at `gpt-5.6-luna` / `medium`. Child spawning and
+  writes were prohibited. Runtime-profile introspection is unavailable, so the
+  immutable explicit role configurations are the accepted metadata.
+- The complete wave produced twelve distinct accepted corrections after
+  merging the duplicated grouped-table-name report. They cover grouped name
+  routing, the binding JVM physical-name renderer, the private Entity seam,
+  centralized retry classification, inclusive history continuation, current
+  Entity defaults, whole-batch retry, safe session-lock cleanup, sanitized
+  public errors, keyset state trimming, user-guide integration, and exact
+  mapping/name documentation. `REVIEW.md` records the concrete batch.
+- Existing role: one continuing `implementer` for the complete coherent batch.
+  Explicit dispatch profile is `gpt-5.6-terra` / `medium`; child spawning is
+  prohibited. This author is the sole production writer and may change the
+  PostgreSQL package source/tests plus directly affected storage documentation
+  and task records. No unrelated MySQL/runtime behavior may change.
+- Runtime corrections require focused failing tests before production edits.
+  Mechanical documentation and private-helper extraction may follow the proven
+  behavior changes. Required evidence includes focused suites, full PostgreSQL
+  coverage, tooling typecheck, build, scoped lint, cleanup/method limits,
+  TSDoc, documentation/API/snippet checks, packaging/external-consumer proof,
+  formatting, and diff hygiene. After correction, only substantively affected
+  review concerns reopen before the final single `verify:release` run.
