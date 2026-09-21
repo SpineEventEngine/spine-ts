@@ -1101,6 +1101,10 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   `pnpm proto:check-generated:current` both passed; focused Prettier checks and
   `git diff --check` passed. The correction is committed and pushed as the
   follow-up integration commit.
+- Independent affected-concern reverification at `e7a661061` confirmed that
+  local `HEAD` and `origin/add-postgresql-storage` match, the worktree is clean,
+  all eight manifests declare `2.0.0-snapshot.13`, and both generated-source
+  checks pass. No Task 6 Proto-manifest finding remains.
 
 ## Task 4 History Verification Correction
 
