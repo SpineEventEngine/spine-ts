@@ -34,6 +34,7 @@ import { entityStorage } from "./postgres-entity-seam.js";
 const driver = vi.hoisted(() => {
   const calls: { client: number; sql: string; values: readonly unknown[] }[] = [];
   const keyPages: unknown[][] = [];
+  let stateRows: { ID: string; version: number; created: bigint }[] | undefined;
   const unlocks: (false | Error)[] = [];
   let deleteHook: (() => Promise<unknown>) | undefined;
   let historyRecords: readonly { readonly bytes: Uint8Array; readonly ID?: string }[] = [];
@@ -130,11 +131,28 @@ const driver = vi.hoisted(() => {
     if (sql.startsWith('SELECT "ID", "bytes"')) return Promise.resolve({ rows: historyRecords });
     if (sql.startsWith('SELECT "created"'))
       return Promise.resolve({ rows: highWater === undefined ? [] : [highWater] });
+    if (sql.startsWith('SELECT "version", "created", "ID"') && stateRows !== undefined) {
+      const offset = values[1] as number;
+      const row = orderedStates()[offset];
+      return Promise.resolve({ rows: row === undefined ? [] : [row] });
+    }
     if (sql.startsWith('SELECT "version", "created", "ID"'))
       return Promise.resolve({ rows: [{ version: 1, created: 1n, ID: "retained-key" }] });
     if (sql.startsWith('SELECT "ID"')) {
+      if (stateRows !== undefined) {
+        const boundary = [values[1] as number, values[2] as bigint, values[3] as string] as const;
+        const rows = orderedStates()
+          .filter((row) => compareState(row, boundary) <= 0)
+          .slice(0, values[4] as number);
+        return Promise.resolve({ rows: rows.map(({ ID }) => ({ ID })) });
+      }
       const keys = keyPages.shift() ?? ["retained-key"];
       return Promise.resolve({ rows: keys.map((ID) => ({ ID })) });
+    }
+    if (sql.startsWith("DELETE") && stateRows !== undefined) {
+      const ids = new Set(values as string[]);
+      stateRows = stateRows.filter(({ ID }) => !ids.has(ID));
+      return Promise.resolve({ rowCount: ids.size, rows: [] });
     }
     if (sql.startsWith("DELETE") && deleteHook !== undefined) return deleteHook();
     return Promise.resolve({ rowCount: 1, rows: [] });
@@ -158,6 +176,10 @@ const driver = vi.hoisted(() => {
     Pool,
     calls,
     keyPages,
+    setStateRows: (rows: readonly { ID: string; version: number; created: bigint }[]) =>
+      (stateRows = [...rows]),
+    clearStateRows: () => (stateRows = undefined),
+    stateRows: () => stateRows ?? [],
     failUnlock: (outcome: false | Error) => unlocks.push(outcome),
     setHistoryRecords: (records: readonly { readonly bytes: Uint8Array; readonly ID?: string }[]) =>
       (historyRecords = records),
@@ -172,6 +194,26 @@ const driver = vi.hoisted(() => {
     const transaction = sql.includes("pg_advisory_xact_lock");
     if (!transaction && !sql.includes("pg_advisory_lock")) return undefined;
     return { client, key: String(values[0]), shared, transaction };
+  }
+
+  function orderedStates() {
+    return [...(stateRows ?? [])].sort(
+      (left, right) =>
+        right.version - left.version ||
+        Number(right.created - left.created) ||
+        right.ID.localeCompare(left.ID),
+    );
+  }
+
+  function compareState(
+    row: { ID: string; version: number; created: bigint },
+    boundary: readonly [number, bigint, string],
+  ): number {
+    return (
+      row.version - boundary[0] ||
+      Number(row.created - boundary[1]) ||
+      row.ID.localeCompare(boundary[2])
+    );
   }
 
   function unlockRequest(sql: string, values: readonly unknown[], client: number) {
@@ -427,6 +469,44 @@ describe("PostgreSQL Entity history", () => {
     const calls = driver.calls.slice(before).filter(({ sql }) => sql.startsWith('SELECT "ID"'));
     expect(calls).toHaveLength(2);
     expect(calls.every(({ values }) => values.at(-1) === 128)).toBe(true);
+  });
+
+  it.each([
+    [0, 1],
+    [3, 12],
+    [5, 300],
+  ])("retains exactly %i newest state rows from %i rows", async (keep, count) => {
+    driver.setStateRows(
+      Array.from({ length: count }, (_, index) => ({
+        ID: `state-${String(index)}`,
+        version: index,
+        created: BigInt(index),
+      })),
+    );
+    const factory = await postgresFactory();
+    const states = entityStorage(factory, entityInput(true)).states;
+    const before = driver.calls.length;
+
+    try {
+      await states.trim("task", keep);
+      expect(
+        driver
+          .stateRows()
+          .map(({ version }) => version)
+          .sort((a, b) => b - a),
+      ).toEqual(Array.from({ length: keep }, (_, index) => count - index - 1));
+      const calls = driver.calls.slice(before);
+      expect(
+        calls.filter(({ sql }) => sql.startsWith('SELECT "version", "created", "ID"')),
+      ).toHaveLength(1);
+      expect(
+        calls
+          .filter(({ sql }) => sql.startsWith('SELECT "ID"'))
+          .every(({ sql }) => !sql.includes("OFFSET")),
+      ).toBe(true);
+    } finally {
+      driver.clearStateRows();
+    }
   });
 
   it("discards the trim client and reports a sanitized error when advisory unlock is false", async () => {
