@@ -532,6 +532,26 @@ describe("PostgreSQL Entity history", () => {
     expect(driver.release.mock.calls.at(-1)?.[0]).toBeInstanceOf(Error);
   });
 
+  it("releases successful state trim Entity and family locks in reverse order", async () => {
+    const factory = await postgresFactory();
+    const entity = entityStorage(factory, entityInput(true));
+    const before = driver.calls.length;
+
+    await expect(entity.states.trim("task", 0)).resolves.toBeUndefined();
+
+    const locks = driver.calls
+      .slice(before)
+      .filter(
+        ({ sql }) =>
+          sql === "SELECT pg_advisory_unlock($1)" || sql === "SELECT pg_advisory_unlock_shared($1)",
+      )
+      .map(({ sql }) => sql);
+    expect(locks).toEqual([
+      "SELECT pg_advisory_unlock($1)",
+      "SELECT pg_advisory_unlock_shared($1)",
+    ]);
+  });
+
   it("releases the acquired family lock and discards the client after Entity lock acquisition fails", async () => {
     const factory = await postgresFactory();
     const entity = entityStorage(factory, entityInput(true));

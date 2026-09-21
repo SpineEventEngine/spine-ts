@@ -300,3 +300,16 @@ Two test-only findings are accepted:
 2. Add a successful two-lock trim assertion that the exclusive Entity unlock
    precedes the shared family unlock. Keep the partial-acquisition/discard test
    as its distinct case.
+
+## Last-Correction Test-Hardening Evidence
+
+- The grouped builder regression now uses exact ordered equality for the two
+  `CREATE TABLE IF NOT EXISTS` qualified targets; missing, extra, duplicate, or
+  reordered DDL fails.
+- A distinct successful state-trim regression requires the exclusive Entity
+  session unlock before the shared family unlock. The partial-acquisition,
+  cleanup-failure, discard, and sanitized-error regression remains separate.
+- This batch changes tests and T-0230 records only; production code and public
+  contracts are unchanged. Focused history/record tests pass `69/69`; scoped
+  lint, TSDoc, cleanup, formatting, and diff checks are recorded with the
+  pushed commit. The live PostgreSQL URL limitation remains unchanged.

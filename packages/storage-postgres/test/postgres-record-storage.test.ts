@@ -178,9 +178,10 @@ describe("Postgres record storage", () => {
       .filter(({ sql }) => sql.startsWith("CREATE TABLE IF NOT EXISTS"))
       .map(({ sql }) => /CREATE TABLE IF NOT EXISTS ("[^"]+"\."[^"]+")/.exec(sql)?.[1]);
 
-    expect(createdTables).toEqual(
-      expect.arrayContaining(['"spine"."groupedtable"', '"spine"."google_protobuf_stringvalue"']),
-    );
+    expect(createdTables).toEqual([
+      '"spine"."groupedtable"',
+      '"spine"."google_protobuf_stringvalue"',
+    ]);
   });
 
   it("closes live record handles once and rejects record creation after factory close", async () => {

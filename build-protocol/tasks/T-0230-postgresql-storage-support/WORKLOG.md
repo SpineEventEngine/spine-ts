@@ -1603,3 +1603,19 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   `tsc --noEmit`; `pnpm lint:tsdoc`; `pnpm lint:cleanup`; changed-file Prettier
   check; and `git diff --check`. The remaining limitation is unchanged: no
   PostgreSQL 16/18 connection URLs were supplied for live-provider acceptance.
+
+## Last-Correction Test-Hardening Evidence
+
+- Existing role/function: continuing `implementer`, explicitly configured as
+  `gpt-5.6-terra` / `medium`; no child agents were dispatched. This is a
+  test-only batch: production code and public contracts remain unchanged.
+- The grouped public-builder test now requires exactly the two deterministic
+  `CREATE TABLE IF NOT EXISTS` targets, in order: the configured grouped table
+  and the separate ungrouped default table. Extra or duplicate DDL fails.
+- A separate successful state-trim case proves both session locks release in
+  reverse order: exclusive per-Entity unlock, then shared family unlock. It is
+  separate from the induced partial-acquisition/failed-cleanup discard case.
+- Focused history and record tests pass `69/69`. Changed-file ESLint, TSDoc,
+  cleanup, formatting, and diff hygiene remain required before the test-only
+  commit. Live PostgreSQL 16/18 verification remains unavailable without
+  supplied connection URLs.
