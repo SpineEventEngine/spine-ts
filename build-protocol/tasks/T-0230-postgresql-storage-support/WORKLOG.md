@@ -238,3 +238,25 @@ PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
   accepted as external debt: this branch changed package versions, so release
   integration must repair the generated manifest versions before final
   verification.
+
+## Slice 2 Mechanical Verification Finding
+
+- Actual verifier profile: immutable explicit dispatch `gpt-5.6-luna` / `low`;
+  runtime self-introspection was unavailable. No files were changed.
+- PASS: focused five-file suite (25/25), package typecheck, scoped ESLint,
+  cleanup/method-size enforcement, dependency boundaries, diff hygiene,
+  ignored-output scan, clean checkout, and matching local/remote SHA.
+- FAIL: repository-wide `pnpm lint:tsdoc` reports an undocumented
+  `PostgresTableInitializer` constructor and invalid TSDoc block openers in
+  `table-initializer.ts` and `table-spec.ts`. Fresh orchestrator reproduction
+  confirms the same eight diagnostics.
+- The formatter wrapper could not find a bare `prettier` executable in its
+  subprocess environment; this is a verification-command limitation, not a
+  code finding. The correction batch must run the workspace Prettier CLI
+  directly.
+- `verify:task` independently reproduces the planned Proto manifest version
+  mismatch before reaching tests. Release integration remains responsible for
+  correcting that branch-created version inconsistency.
+- Task 2 remains unaccepted. The same implementation author receives one
+  correction batch: repair only the TSDoc findings, run the affected gates and
+  focused suite, remove generated output, commit, and push.
