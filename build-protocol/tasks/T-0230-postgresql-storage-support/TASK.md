@@ -12,10 +12,10 @@ package. It provides the same Spine storage behavior as the current MySQL
 adapter, using PostgreSQL-native connections, SQL, transactions, schema
 inspection, and identifier rules. This planning task does not implement it.
 
-Recommended names used below are `@spine-event-engine/storage-postgresql`,
-`PostgreSqlStorageFactory`, `PostgreSqlStorageFactoryOptions`, and
-`PostgreSqlTenantStorageOptions`. The human will decide the final public
-spelling after review; the design does not depend on that spelling.
+The public package is `@spine-event-engine/storage-postgres`, located at
+`packages/storage-postgres`. Its main public types are
+`PostgresStorageFactory`, `PostgresStorageFactoryOptions`, and
+`PostgresTenantStorageOptions`.
 
 ## Classification and Requirements
 
@@ -102,8 +102,8 @@ abstraction.
 
 The package root exports only its factory, builder/options, stable provider
 errors, provider Entity handle type, and the complete existing creation-
-customization shape: `PostgreSqlTableSpec`, `PostgreSqlCreateOperation`, and
-`PostgreSqlCreateOperationFactory`. The builder exposes
+customization shape: `PostgresTableSpec`, `PostgresCreateOperation`, and
+`PostgresCreateOperationFactory`. The builder exposes
 `useOperationFactory(factory)`. Compile-only external-consumer tests prove a
 caller can implement that callback without importing provider internals. The
 root does not export `pg` pools/clients, lock keys, compiler objects, catalog
@@ -445,8 +445,8 @@ These corrections increase the implementation estimate by two active hours at
 the low end and preserve the one-writer sequence. The final focused re-review
 confirmed the corrected plan is clean and introduced no new contradiction.
 
-## Questions Reserved Until Review
+## Resolved Public Naming
 
-Only material questions surviving independent review will be asked. The current
-candidate is exact public spelling; the JVM/live-test evidence resolves the
-minimum supported version as PostgreSQL 16.
+The human selected `@spine-event-engine/storage-postgres` and `Postgres...`
+public type names. No planning question remains. The JVM/live-test evidence
+resolves the minimum supported version as PostgreSQL 16.
