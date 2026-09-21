@@ -68,6 +68,13 @@ package boundary, driver, and excluded concepts are resolved in `TASK.md`.
 
 ## Slice 1: Contract And Package Skeleton
 
+- Mechanical verification assignment recorded before dispatch: orchestrator-
+  dispatched read-only verification over the Task 1 endpoint, explicit
+  `gpt-5.6-luna` / `low`, no child spawning. It will rerun the focused contract
+  test, package/typecheck boundary, lint/TSDoc/format/diff checks, generated-
+  output inspection, dependency/public-export scan, and remote-SHA check without
+  editing files.
+
 - RED (initial test correction):
   `pnpm --config.verify-deps-before-run=false exec vitest run packages/storage-postgres/test/postgres-builder-contract.test.ts`
   first failed before test collection because the new package manifest had not
