@@ -389,6 +389,17 @@ PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
   and non-retry error matrices remain to be expanded before Task 3 can be
   accepted.
 
+## Task 3 Immutable Disappearance Race
+
+- RED: the focused record suite failed `accepts an immutable insert when a
+conflicting row disappears before inspection`: `ON CONFLICT DO NOTHING`
+  followed by no selected row reported an immutable collision.
+- GREEN: after a non-inserting immutable insert, an absent row now has the same
+  successful race disposition as the MySQL adapter; an identical row still
+  succeeds and a differing decoded payload still rejects. The focused suite
+  passed `8 passed (8)`, package typecheck, scoped ESLint, Prettier, and
+  `git diff --check`.
+
 ## Task 3 Record Runtime Checkpoint
 
 - Existing role/function: continuing `implementer`, configured explicitly as

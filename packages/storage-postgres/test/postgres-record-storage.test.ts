@@ -168,6 +168,29 @@ describe("Postgres record storage", () => {
     ).rejects.toThrow("immutable record collides");
   });
 
+  it("accepts an immutable insert when a conflicting row disappears before inspection", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    let inserts = 0;
+    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
+      driver.calls.push({ sql, values });
+      if (sql.startsWith("INSERT INTO")) {
+        inserts += 1;
+        return Promise.resolve({ rowCount: 0, rows: [] });
+      }
+      if (sql.startsWith('SELECT "bytes"')) return Promise.resolve({ rows: [] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(
+      (
+        storage as unknown as { writeImmutable(record: ReturnType<typeof create>): Promise<void> }
+      ).writeImmutable(create(StringValueSchema, { value: "one" })),
+    ).resolves.toBeUndefined();
+
+    expect(inserts).toBe(1);
+  });
+
   it("retries a serialization-failed compare-and-set once with a fresh client", async () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();

@@ -142,7 +142,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       const inserted = await client.query(this.immutableSql(), this.values(record));
       if (inserted.rowCount === 1) return;
       const existing = await this.readOn(client, id);
-      if (existing !== undefined && this.same(existing, record)) return;
+      if (existing === undefined || this.same(existing, record)) return;
       throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
     });
   }
