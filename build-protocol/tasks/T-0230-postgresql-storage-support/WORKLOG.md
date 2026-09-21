@@ -858,3 +858,34 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   package gate, inspect history/commit/cleanup tests for production-path and
   false-positive gaps, check generated output and the official remote SHA, and
   report the known Proto-manifest version mismatch separately from Task 4.
+
+## Task 4 Mechanical Verification Findings
+
+- Actual profile evidence: the immutable dispatch explicitly selected
+  `gpt-5.6-luna` / `low`; runtime self-introspection was unavailable. The
+  verifier made no changes.
+- Independent evidence at `579f64a5b`: all `10` PostgreSQL test files passed
+  `106/106`; package typecheck, scoped ESLint, full TSDoc,
+  cleanup/method-length, Prettier, and `git diff --check` passed. The checkout
+  was clean, contained no untracked output, used the official `origin`, and
+  matched the remote SHA. Production factory, record, transaction, lock, and
+  coordinator paths were exercised without test-only runtime APIs.
+- Accepted findings: Task 4 lacks explicit two-factory append-vs-truncate and
+  append-vs-trim coordination tests, and event-history truncation lacks direct
+  multi-page/high-water coverage. These are required Task 4A concurrency and
+  symmetry claims, so Task 4 is not accepted until one correction batch adds
+  this evidence and fixes any behavior it exposes.
+- Live-provider behavior remains intentionally unverified until Task 5. The
+  known Proto manifest snapshot mismatch remains Task 6 release integration.
+
+## Task 4 Verification Correction Dispatch
+
+- Existing role: `implementer`; responsibility is limited to the three
+  accepted history-test findings and any PostgreSQL history defect those tests
+  expose. No other production writer may edit overlapping files.
+- Explicit dispatch profile: `gpt-5.6-terra` / `medium`; child spawning is
+  prohibited. Runtime self-introspection may be unavailable, so the immutable
+  configured role/profile and explicit dispatch fields are the acceptance
+  evidence.
+- Common SPI, MySQL, server behavior, live-provider setup, documentation,
+  release integration, Proto, and versions remain excluded.
