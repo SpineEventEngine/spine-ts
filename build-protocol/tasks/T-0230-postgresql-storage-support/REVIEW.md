@@ -339,3 +339,14 @@ Two test-only findings are accepted:
 - `pnpm typecheck:tooling` and focused Entity-history tests pass after this
   correction. No production or public-contract file changed; scoped static
   evidence accompanies the pushed test-only commit.
+
+## Final Release-Verification Test Repair
+
+- The single final `verify:release` run at `824f45485` had one failure and
+  `4,884` passes: MessageBoard manifest expectations remained at snapshot.12
+  after `6fab47c6d` updated its manifest dependencies to snapshot.13.
+- Five stale expected Spine package versions in the startup contract now match
+  `2.0.0-snapshot.13`; the Connect RPC and local-start assertions are unchanged.
+  The exact startup contract and release-policy/package-artifact tests pass
+  `31/31`. This is a test-only correction with no production or public-contract
+  change; tooling/static evidence accompanies the pushed commit.

@@ -1654,3 +1654,20 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
 - `pnpm typecheck:tooling` and the focused Entity-history suite pass after the
   correction. Production code and public contracts remain unchanged; scoped
   lint, TSDoc, cleanup, formatting, and diff checks precede the pushed commit.
+
+## Final Release-Verification Test Repair
+
+- The one converged `verify:release` run at `824f45485` ended with one failed
+  test and `4,884` passed. The failure was the MessageBoard manifest contract:
+  branch commit `6fab47c6d` moved its package dependencies to
+  `2.0.0-snapshot.13`, while five assertions in
+  `examples/todo/test/startup-contract.test.ts` still expected snapshot.12.
+- The smallest test-only correction updates those five expected Spine package
+  versions to `2.0.0-snapshot.13`. The `@connectrpc/connect-node` and exact
+  local start-command assertions remain unchanged. Repository search confirms
+  no other snapshot.12 references outside records or build outputs.
+- RED reproduced the exact startup-contract failure. The startup contract plus
+  release-policy and package-artifact tests pass `31/31` after correction.
+  Tooling typecheck, changed-file lint, formatting, and diff hygiene precede
+  the immediate feature-branch push. No production or public-contract file is
+  changed.
