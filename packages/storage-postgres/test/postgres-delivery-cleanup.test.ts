@@ -17,7 +17,7 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/provider";
 import { RecordSpec } from "@spine-event-engine/storage";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const driver = vi.hoisted(() => {
   const rows = new Map<string, Uint8Array>();
@@ -42,8 +42,14 @@ const driver = vi.hoisted(() => {
   });
   return {
     Pool,
+    connect,
     query,
     set: (id: string, record: StringValue) => rows.set(id, toBinary(StringValueSchema, record)),
+    reset: () => {
+      rows.clear();
+      query.mockClear();
+      connect.mockClear();
+    },
   };
 });
 
@@ -52,6 +58,10 @@ vi.mock("pg", () => ({ Pool: driver.Pool }));
 import { PostgresStorageFactory } from "../src/index.js";
 
 describe("PostgreSQL delivery cleanup", () => {
+  beforeEach(() => {
+    driver.reset();
+  });
+
   it("registers a factory-managed delivery cleanup handle", async () => {
     const factory = await postgresFactory();
 
@@ -77,6 +87,32 @@ describe("PostgreSQL delivery cleanup", () => {
     )?.[1]?.[0];
 
     expect(cleanupLock).toBe(mutationLock);
+  });
+
+  it("keeps the Inbox row when the session snapshot is stale", async () => {
+    const factory = await postgresFactory();
+    const expected = create(StringValueSchema, { value: "active" });
+    driver.set("session", create(StringValueSchema, { value: "replaced" }));
+    driver.set("inbox", expected);
+
+    await expect(
+      DeliveryCleanupStorageFactories.create(factory).remove(cleanupInput(expected)),
+    ).resolves.toBe(false);
+    expect(driver.query.mock.calls.some(([sql]) => sql.startsWith("DELETE"))).toBe(false);
+  });
+
+  it("declines cancellation before opening cleanup record families", async () => {
+    const factory = await postgresFactory();
+    const expected = create(StringValueSchema, { value: "active" });
+    const before = driver.connect.mock.calls.length;
+
+    await expect(
+      DeliveryCleanupStorageFactories.create(factory).remove({
+        ...cleanupInput(expected),
+        operation: { signal: { aborted: true } },
+      }),
+    ).resolves.toBe(false);
+    expect(driver.connect).toHaveBeenCalledTimes(before);
   });
 });
 

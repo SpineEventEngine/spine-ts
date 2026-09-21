@@ -788,3 +788,12 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   compare-and-set. Package typecheck, scoped ESLint, full TSDoc, and cleanup
   rules passed. Retry, every rollback boundary, cancellation, and close/drain
   matrices remain active.
+
+## Task 4C Snapshot And Admission Green
+
+- GREEN: the focused production-path suite now proves a changed locked session
+  snapshot returns `false` without an Inbox `DELETE`, and an already-cancelled
+  operation returns `false` before either cleanup record family is opened.
+- Evidence: focused cleanup coverage passed `4/4`. The transaction-aware
+  rollback/retry and close/drain cases remain to be added before Task 4C can be
+  accepted.
