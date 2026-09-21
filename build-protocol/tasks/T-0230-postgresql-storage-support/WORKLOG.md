@@ -1146,7 +1146,7 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   not change to accommodate test mocks.
 - Required evidence is a clean `pnpm typecheck:tooling`, the full hermetic
   PostgreSQL package suite, scoped ESLint and formatting, and `git diff
-  --check`. After correction, the entire cheap preflight restarts before
+--check`. After correction, the entire cheap preflight restarts before
   specialist review.
 - GREEN for the test-fixture batch: commit `a30b816e6` changes only the five
   assigned test files and this log. `pnpm typecheck:tooling`, the 109-test
@@ -1180,3 +1180,20 @@ packages/storage-postgres/test --maxWorkers=1` passed `10/10` files and
   `109/109` tests; the normal configuration excludes the live
   `postgresql-integration.test.ts`. Scoped ESLint and Prettier checks passed
   for all five files, and `git diff --check` passed.
+
+## Final Cheap-Preflight Copyright Correction
+
+- Existing role/function: continuing sole `implementer`, explicitly configured
+  `gpt-5.6-terra` / `medium`; child spawning was prohibited. Runtime-profile
+  introspection is unavailable on this surface, so the immutable configured
+  role/profile is the available dispatch evidence.
+- RED: the restarted cheap preflight reached `pnpm lint:copyright` after its
+  build, tooling typecheck, scoped ESLint, cleanup, and TSDoc checks. The
+  checker reported exactly four malformed source headers, one missing source
+  header, three malformed test headers, and one missing test header in the
+  PostgreSQL package.
+- GREEN: normalized only those nine CodeMatters notices to the checker’s exact
+  canonical Apache-2.0 header and preserved one blank separator after each.
+  Runtime and test logic, public contracts, and generated output are unchanged.
+- Evidence: `pnpm lint:copyright`, scoped Prettier on all nine header files,
+  and `git diff --check` passed.
