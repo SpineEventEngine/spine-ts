@@ -797,3 +797,12 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
 - Evidence: focused cleanup coverage passed `4/4`. The transaction-aware
   rollback/retry and close/drain cases remain to be added before Task 4C can be
   accepted.
+
+## Task 4C Retry Green
+
+- GREEN: a transaction-aware cleanup driver now stages Inbox deletion until
+  `COMMIT`. A raw PostgreSQL `40001` commit failure rolls back that staged
+  deletion, obtains a fresh transaction attempt, and commits the retry.
+- Evidence: focused cleanup coverage passed `5/5`; the retry test observed one
+  `ROLLBACK` and verified the Inbox row was removed only by the successful
+  attempt. Non-retry and close/drain cases remain active.

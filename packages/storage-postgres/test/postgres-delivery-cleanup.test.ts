@@ -21,17 +21,44 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const driver = vi.hoisted(() => {
   const rows = new Map<string, Uint8Array>();
+  let commitFailure: Error | undefined;
+  let transaction = false;
+  let pendingDeletes: string[] = [];
   const query = vi.fn((sql: string, values: readonly unknown[] = []) => {
     if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
     if (sql.includes("columns WHERE")) return Promise.resolve({ rows: columns() });
     if (sql.includes("PRIMARY KEY"))
       return Promise.resolve({ rows: [{ column_name: "ID", ordinal_position: 1 }] });
+    if (sql === "BEGIN") {
+      transaction = true;
+      pendingDeletes = [];
+      return Promise.resolve({ rows: [] });
+    }
+    if (sql === "ROLLBACK") {
+      transaction = false;
+      pendingDeletes = [];
+      return Promise.resolve({ rows: [] });
+    }
+    if (sql === "COMMIT" && commitFailure !== undefined) {
+      const error = commitFailure;
+      commitFailure = undefined;
+      return Promise.reject(error);
+    }
+    if (sql === "COMMIT") {
+      for (const id of pendingDeletes) rows.delete(id);
+      transaction = false;
+      pendingDeletes = [];
+      return Promise.resolve({ rows: [] });
+    }
     if (sql.startsWith('SELECT "bytes"')) {
       const bytes = rows.get(String(values[0]));
       return Promise.resolve({ rows: bytes === undefined ? [] : [{ bytes }] });
     }
     if (sql.startsWith("DELETE")) {
-      const deleted = rows.delete(String(values[0]));
+      const id = String(values[0]);
+      const deleted = rows.has(id);
+      if (transaction && deleted) pendingDeletes.push(id);
+      else rows.delete(id);
       return Promise.resolve({ rowCount: deleted ? 1 : 0, rows: [] });
     }
     return Promise.resolve({ rowCount: 0, rows: [] });
@@ -45,11 +72,16 @@ const driver = vi.hoisted(() => {
     connect,
     query,
     set: (id: string, record: StringValue) => rows.set(id, toBinary(StringValueSchema, record)),
+    has: (id: string) => rows.has(id),
     reset: () => {
       rows.clear();
+      commitFailure = undefined;
+      transaction = false;
+      pendingDeletes = [];
       query.mockClear();
       connect.mockClear();
     },
+    failCommit: (error: Error) => (commitFailure = error),
   };
 });
 
@@ -113,6 +145,20 @@ describe("PostgreSQL delivery cleanup", () => {
       }),
     ).resolves.toBe(false);
     expect(driver.connect).toHaveBeenCalledTimes(before);
+  });
+
+  it("retries a serialization failure without publishing the failed deletion", async () => {
+    const factory = await postgresFactory();
+    const expected = create(StringValueSchema, { value: "active" });
+    driver.set("session", expected);
+    driver.set("inbox", expected);
+    driver.failCommit(Object.assign(new Error("retry"), { code: "40001" }));
+
+    await expect(
+      DeliveryCleanupStorageFactories.create(factory).remove(cleanupInput(expected)),
+    ).resolves.toBe(true);
+    expect(driver.query.mock.calls.filter(([sql]) => sql === "ROLLBACK")).toHaveLength(1);
+    expect(driver.has("inbox")).toBe(false);
   });
 });
 
