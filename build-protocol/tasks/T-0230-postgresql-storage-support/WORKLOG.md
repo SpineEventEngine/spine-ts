@@ -308,3 +308,15 @@ PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
   It does not configure global `pg` type parsers.
 - Evidence: the same focused test passes 4/4 and package
   `tsc --noEmit -p packages/storage-postgres/tsconfig.json` passes.
+
+## Task 3 Implementation Handoff
+
+- The continuing implementation context durably pushed the column-conversion
+  checkpoint as `559796200`, then returned twice at the next record-runtime
+  instruction without a command, edit, blocker, or new evidence. It is not a
+  productive context for the remaining coherent slice.
+- A fresh existing `implementer` receives the remaining factory/handle wiring,
+  CRUD/batch/immutable, compare-and-set/retry, and query-pushdown work. The
+  dispatch is explicitly `gpt-5.6-terra` / `medium`, prohibits children, and
+  starts from the clean pushed checkpoint. This is a serialized handoff; only
+  one production writer remains active.
