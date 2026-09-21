@@ -15,7 +15,7 @@
 import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
-import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+import { ColumnTypes, RecordColumn, RecordSpec, StorageGroup } from "@spine-event-engine/storage";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 interface QueryResult {
@@ -154,6 +154,30 @@ describe("Postgres record storage", () => {
     expect(write?.sql).toContain("VALUES ($1, $2, $3)");
     expect(write?.values?.[0]).toBe("one");
     expect(write?.values?.[1]).toBeInstanceOf(Uint8Array);
+  });
+
+  it("routes a public grouped table-name registration only to its grouped family", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .setTableName(StringValueSchema, StringValueSchema, "GroupedTable")
+      .build();
+    const grouped = factory.createRecordStorage(
+      { name: "test", multitenant: false },
+      recordSpec(),
+      new StorageGroup("audit"),
+    );
+    const ungrouped = factory.createRecordStorage(
+      { name: "test", multitenant: false },
+      recordSpec(),
+    );
+
+    await grouped.write(create(StringValueSchema, { value: "grouped" }));
+    await ungrouped.write(create(StringValueSchema, { value: "plain" }));
+
+    expect(driver.calls.some(({ sql }) => sql.includes('"groupedtable"'))).toBe(true);
+    expect(driver.calls.some(({ sql }) => sql.includes('"google_protobuf_stringvalue"'))).toBe(
+      true,
+    );
   });
 
   it("closes live record handles once and rejects record creation after factory close", async () => {

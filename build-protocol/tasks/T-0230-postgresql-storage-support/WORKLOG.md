@@ -1382,6 +1382,14 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   statements `961/1019` (94.30%), branches `540/598` (90.30%), functions
   `310/326` (95.09%), and lines `844/873` (96.67%).
 
+## Final Grouped Name And Retention Corrections
+
+- RED/GREEN: grouped public-builder routing now has a DDL-facing regression:
+  a three-argument registration prepares the custom grouped table while the
+  ungrouped source still prepares its default table. Trim uses the frozen
+  obsolete boundary inclusively, so `keep=0` deletes that first obsolete key
+  and later 128-key pages continue from the same stable boundary.
+
 ## Private Entity-Seam Test Correction
 
 - Independent post-correction verification passed the dependency-aware
