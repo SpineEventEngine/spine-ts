@@ -134,6 +134,23 @@ describe("Postgres record storage", () => {
     expect(write?.values?.[1]).toBeInstanceOf(Uint8Array);
   });
 
+  it("closes live record handles once and rejects record creation after factory close", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const storage = factory.createRecordStorage({ name: "test", multitenant: false }, recordSpec());
+
+    factory.close();
+    factory.close();
+    await Promise.resolve();
+
+    expect(storage.isOpen()).toBe(false);
+    expect(driver.end).toHaveBeenCalledOnce();
+    expect(() =>
+      factory.createRecordStorage({ name: "test", multitenant: false }, recordSpec()),
+    ).toThrow(/closed/i);
+  });
+
   it("writes a batch in source order inside one PostgreSQL transaction", async () => {
     const storage = await recordStorage();
 
@@ -149,6 +166,24 @@ describe("Postgres record storage", () => {
     expect(begin).toBeGreaterThan(-1);
     expect(commit).toBeGreaterThan(begin);
     expect(writes.map(({ values }) => values?.[0])).toEqual(["first", "second"]);
+  });
+
+  it("sanitizes a record-driver failure and releases its operation client", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
+      driver.calls.push({ sql, values });
+      if (sql.startsWith("INSERT INTO")) return Promise.reject(new Error("secret driver detail"));
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(storage.write(create(StringValueSchema, { value: "one" }))).rejects.toThrow(
+      "record operation failed",
+    );
+
+    expect(driver.release).toHaveBeenCalledOnce();
   });
 
   it("prepares before acquiring the operation client for a pool of one", async () => {
@@ -181,6 +216,25 @@ describe("Postgres record storage", () => {
     await expect(
       storage.writeImmutable(create(StringValueSchema, { value: "two" })),
     ).rejects.toThrow("immutable record collides");
+  });
+
+  it("accepts an immutable record when the conflicting payload is identical", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    const record = create(StringValueSchema, { value: "one" });
+    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
+      driver.calls.push({ sql, values });
+      if (sql.startsWith("INSERT INTO")) return Promise.resolve({ rowCount: 0, rows: [] });
+      if (sql.startsWith('SELECT "bytes"'))
+        return Promise.resolve({ rows: [{ bytes: toBinary(StringValueSchema, record) }] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(
+      (storage as unknown as { writeImmutable(value: StringValue): Promise<void> }).writeImmutable(
+        record,
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it("accepts an immutable insert when a conflicting row disappears before inspection", async () => {
@@ -233,6 +287,27 @@ describe("Postgres record storage", () => {
       );
     },
   );
+
+  it("stops after the single permitted retry and releases both CAS clients", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
+      driver.calls.push({ sql, values });
+      if (sql === "BEGIN")
+        return Promise.reject(Object.assign(new Error("serialization failure"), { code: "40001" }));
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(
+      storage.compareAndSet("one", undefined, create(StringValueSchema, { value: "one" })),
+    ).rejects.toThrow("record operation failed");
+
+    expect(driver.connect).toHaveBeenCalledTimes(2);
+    expect(driver.calls.filter(({ sql }) => sql === "ROLLBACK")).toHaveLength(2);
+    expect(driver.release).toHaveBeenCalledTimes(2);
+  });
 
   it("does not retry a non-transactional compare-and-set error", async () => {
     const storage = await recordStorage();
@@ -453,21 +528,70 @@ describe("Postgres record storage", () => {
     expect(query?.sql).toContain('ORDER BY "value" DESC NULLS LAST, "ID" ASC LIMIT $1 OFFSET $2');
     expect(query?.values).toEqual([3, 2]);
   });
+
+  it("decodes stable ID-tied query rows in PostgreSQL result order", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    const first = create(StringValueSchema, { value: "first" });
+    const second = create(StringValueSchema, { value: "second" });
+    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
+      driver.calls.push({ sql, values });
+      if (sql.startsWith('SELECT "ID", "bytes"')) {
+        return Promise.resolve({
+          rows: [
+            { ID: "first", bytes: toBinary(StringValueSchema, first) },
+            { ID: "second", bytes: toBinary(StringValueSchema, second) },
+          ],
+        });
+      }
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(storage.query({ sort: [{ field: "value" }] })).resolves.toEqual([first, second]);
+
+    const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).toContain('ORDER BY "value" ASC NULLS FIRST, "ID" ASC');
+  });
+
+  it("requests one overflow candidate and rejects it after decoded plan evaluation", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    const first = create(StringValueSchema, { value: "first" });
+    const second = create(StringValueSchema, { value: "second" });
+    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
+      driver.calls.push({ sql, values });
+      if (sql.startsWith('SELECT "ID", "bytes"')) {
+        return Promise.resolve({
+          rows: [
+            { ID: "first", bytes: toBinary(StringValueSchema, first) },
+            { ID: "second", bytes: toBinary(StringValueSchema, second) },
+          ],
+        });
+      }
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(storage.queryPlan({ candidateLimit: 1 })).rejects.toThrow(/candidate limit/i);
+
+    const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.values).toEqual([2]);
+  });
 });
 
 async function recordStorage() {
   const factory = await PostgresStorageFactory.newBuilder()
     .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
     .build();
-  return factory.createRecordStorage(
-    { name: "test", multitenant: false },
-    new RecordSpec({
-      recordType: StringValueSchema,
-      idKind: "string",
-      extractId: (record) => record.value,
-      columns: valueColumns(),
-    }),
-  );
+  return factory.createRecordStorage({ name: "test", multitenant: false }, recordSpec());
+}
+
+function recordSpec(): RecordSpec<string, StringValue> {
+  return new RecordSpec({
+    recordType: StringValueSchema,
+    idKind: "string",
+    extractId: (record) => record.value,
+    columns: valueColumns(),
+  });
 }
 
 function valueColumns(): readonly RecordColumn<StringValue, string>[] {

@@ -439,6 +439,22 @@ DISTINCT FROM`; an ascending null continuation emits `IS NOT NULL` rather than
   `LIMIT` and `OFFSET`, and descending declared ordering explicitly emits
   `NULLS LAST`. The focused record suite passed `23 passed (23)`.
 
+## Task 3 Remaining Record Acceptance Characterization
+
+- Characterization: an immutable conflict with byte-identical Protobuf payloads
+  succeeds. A driver write failure is sanitized to the provider operation error
+  and releases the acquired client.
+- Characterization: a second retryable CAS failure stops after exactly one retry,
+  rolls back both transactions, and releases both clients.
+- Characterization: factory close closes live record handles once, begins one
+  pool drain, and the base factory lifecycle rejects later record creation.
+- Characterization: decoded rows retain PostgreSQL result order under the stable
+  declared-column/ID tie sort. A normalized plan requests candidate-limit-plus-one
+  rows and shared evaluation rejects an overflow candidate set.
+- GREEN evidence: the focused record suite passed `29 passed (29)`. This closes
+  the Task 3 driver-double acceptance matrix; live PostgreSQL remains explicitly
+  outside this slice.
+
 ## Task 3 Record Runtime Checkpoint
 
 - Existing role/function: continuing `implementer`, configured explicitly as
