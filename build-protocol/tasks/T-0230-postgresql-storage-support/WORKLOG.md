@@ -1009,6 +1009,45 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   public production paths, hermetic suite/gates, clean output/remote state, and
   the honest absence of live PostgreSQL 16/18 evidence.
 
+## Task 5 Harness Verification Result
+
+- Actual profile evidence: the immutable dispatch explicitly selected
+  `gpt-5.6-luna` / `medium`; runtime self-introspection was unavailable. The
+  verifier made no changes and started no service, container, or database.
+- Read-only verification confirmed clear fail-fast errors for each of the
+  three URL variables, rejection of expected major `15`, exact `:16`/`:18`
+  command selection, `SHOW server_version_num` plus floor/requested-major
+  checks on all three databases, infrastructure-only inventory, and an
+  explicitly selected PostgreSQL Inbox suite using two public factory paths.
+  Stable-inventory coverage passed `6/6`; TSDoc, cleanup, format, diff,
+  clean-tree, official-remote, and local/remote SHA checks passed.
+- PostgreSQL 16 and 18 remain unverified because no explicit URLs are
+  configured and automatic Docker startup is prohibited. Task 5 cannot claim
+  live completion until those external endpoints are supplied.
+- The verifier could not reproduce the recorded `115/115` hermetic command
+  after ignored workspace `dist` output had been correctly removed: clean
+  package entrypoints were unresolved until dependency packages are rebuilt.
+  This does not identify a Task 5 harness defect, but the evidence is not
+  accepted as clean-checkout proof. Task 6 must first repair the known Proto
+  manifest/version and release integration, then the dependency-aware final
+  verification must rebuild and rerun these suites.
+
+## Task 6 Documentation And Release Integration Dispatch
+
+- Function: one serialized documentation/package/release-integration author;
+  this is not a new project role. Explicit dispatch profile is
+  `gpt-5.6-luna` / `medium`, appropriate for package, dependency, documentation,
+  and version-specific integration. Child spawning is prohibited. Runtime
+  self-introspection may be unavailable, so the immutable explicit dispatch is
+  the profile evidence.
+- Scope includes PostgreSQL user/setup/API documentation, TypeDoc and package
+  inventories, artifact/release/build policies, root project/package metadata,
+  internal dependency pins and lockfile, and correction/regeneration of the
+  branch-created Proto snapshot.13 manifest mismatch. It must preserve the
+  existing version-only commit and keep dependency/lock changes separate.
+- No runtime semantics, MySQL behavior, live-service startup, third-party
+  patching, or speculative feature is permitted.
+
 ## Task 4 History Verification Correction
 
 - Existing role/function: continuing sole `implementer`, explicitly configured
