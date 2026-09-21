@@ -1422,3 +1422,24 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   for meaningful observable coverage of the newly added naming, retry,
   cleanup, schema-default, trim, and sanitized-error branches. Thresholds,
   exclusions, ignored branches, and production behavior must not change.
+- GREEN: commit `34ca4b669` adds observable tests for current Entity defaults,
+  both `writeAll` retry outcomes, both builder table-name overloads, and tenant-
+  bound rejection. Exact coverage passes 151 tests with 94.30% statements
+  (`961/1019`), 90.30% branches (`540/598`), 95.09% functions (`310/326`), and
+  96.67% lines (`844/873`).
+
+## Corrected Preflight Acceptance
+
+- Dependency-aware build, tooling typecheck, scoped ESLint, cleanup/method
+  limits, TSDoc, copyright, repository formatting, diff hygiene, documentation
+  audience, TypeDoc/API, snippets, Proto lint/current-generated checks, logging
+  containment, production-dependency policy, and release readiness pass.
+- The affected server/release/tooling suite passes 234 tests in 13 files. It
+  builds real tarballs, installs them into a clean consumer, and compiles that
+  consumer against `@spine-event-engine/storage-postgres`.
+- The four substantively changed review concerns reopen against the correction
+  endpoint. Dispatch profiles remain the existing explicit role profiles:
+  style, TypeScript/API, and performance/reliability at `gpt-5.6-terra` /
+  `high`; documentation at `gpt-5.6-luna` / `medium`. Reviews are read-only,
+  independent, and cannot spawn children. The complete wave is collected before
+  any further correction.
