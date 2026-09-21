@@ -1687,3 +1687,28 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   re-review, and local release verification are complete. Live PostgreSQL 16
   and 18 acceptance remains pending only because the required database URLs
   were not supplied; no container or fallback database was started.
+
+## Human-Authorized Local Docker Acceptance
+
+- The human explicitly authorized local Docker for this task. Docker Desktop
+  was started and its unresponsive API socket was recovered with one controlled
+  Desktop restart. A disposable `postgres:16` container reports PostgreSQL
+  `16.15`; three isolated databases were created for the primary and two tenant
+  URLs. No repository-managed container automation was added.
+- RED: `test:postgresql:16` ran 12 tests and reported 3 failures, 5 passes, and
+  4 skips. Stale and concurrent record CAS operations both succeeded, and the
+  Entity commit failed during immutable state-history preflight.
+- Database inspection proves the CAS write used the replacement message's
+  derived ID instead of the caller-specified storage slot: slot `a` remained
+  unchanged while `updated` and `other` appeared as new rows; the competing
+  case retained `before` and inserted both `first` and `second`.
+- The Entity failure has a distinct fixture cause. Its state-history key embeds
+  an `Any` Entity ID, while the live factory omitted the generated-type registry
+  used by real server wiring. Direct default-stringifier reproduction fails
+  because `google.protobuf.StringValue` is absent from that registry. Existing
+  focused Entity tests and production examples explicitly configure it.
+- One bounded correction is authorized: first add a focused failing test that
+  CAS binds the caller's slot ID even when the replacement derives another ID;
+  then minimally change the PostgreSQL CAS write path. Separately configure the
+  live factory with a `StringifierRegistry` backed by the fixture type registry.
+  No public API, schema, or automatic-container behavior changes.

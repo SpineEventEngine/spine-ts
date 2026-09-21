@@ -363,3 +363,22 @@ Two test-only findings are accepted:
 - The branch is locally release-ready. Live PostgreSQL 16/18 acceptance is not
   claimed and remains pending externally supplied database URLs. Ordinary
   verification did not start Docker or substitute another implementation.
+
+## Live PostgreSQL 16 Finding
+
+After explicit human authorization, the live suite ran against a disposable
+PostgreSQL 16.15 container and found two independent causes:
+
+1. PostgreSQL CAS locks and reads the requested storage slot, but its successful
+   replacement write derives the SQL `ID` from the replacement message. This
+   violates the shared `RecordStorage.compareAndSet` contract, which defines
+   `id` as the actual storage slot independently of the record body's logical
+   ID. Live rows and both stale/concurrent failures prove the defect.
+2. The live Entity fixture omitted the generated-type registry required to
+   stringify its `Any`-containing state-history key. Production examples and
+   focused Entity fixtures configure that registry; the provider's public
+   registry seam is already correct.
+
+The accepted correction is one production-path slot-ID binding fix with a
+test-first regression, plus the live-fixture registry configuration. Review and
+release verification reopen only after PostgreSQL 16 and 18 pass.
