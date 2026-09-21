@@ -433,6 +433,33 @@ DISTINCT FROM`; an ascending null continuation emits `IS NOT NULL` rather than
   IDs in the same database/schema/table identity domain. The focused record
   suite passed `22 passed (22)`.
 
+## Task 3 Writer Completion
+
+- The continuing implementation author completed and pushed the record/query
+  slice through `25ed738e5`. The final serial Task 1-3 PostgreSQL suite passed
+  58/58. Package typecheck, scoped ESLint, Prettier, full TSDoc, cleanup rules,
+  diff hygiene, generated-output cleanup, clean-tree, and local/remote SHA
+  checks passed.
+- Coverage includes immutable identical/collision/disappearance paths,
+  sanitized write failure/release, CAS mismatch/absent/retry/non-retry/second-
+  retry cleanup, advisory identity, factory/handle closure and post-close
+  rejection, normalized and RecordQuery bounds/null/order/continuation behavior,
+  stable tie decoding, and overflow rejection.
+- Live PostgreSQL behavior remains intentionally outside Task 3 and is not
+  claimed by this evidence.
+
+## Task 3 Mechanical Verification Dispatch
+
+- Function: independent read-only mechanical verification, not a new project
+  role. Explicit dispatch is `gpt-5.6-luna` / `low`; child spawning and edits
+  are prohibited. Runtime self-introspection may be unavailable, so the
+  immutable dispatch profile is the expected metadata.
+- Verify the seven-file serial suite, package typecheck, scoped ESLint,
+  Prettier, full TSDoc, cleanup/method-size/ledger enforcement, diff hygiene,
+  generated output, dependency/public-export boundaries, clean checkout, and
+  matching local/remote SHA. Inspect the Task 3 matrix for named acceptance
+  coverage and report omissions without editing.
+
 ## Task 3 RecordQuery Window Characterization
 
 - Characterization: a finite RecordQuery offset compiles to bound PostgreSQL
