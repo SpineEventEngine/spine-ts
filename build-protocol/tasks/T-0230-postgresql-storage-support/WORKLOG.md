@@ -225,3 +225,16 @@ PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
   this checkout because `pnpm proto:generate` fails first with the existing
   `@spine-event-engine/proto` manifest/package-version mismatch. No generated
   files were retained, and direct package typechecking and focused tests pass.
+
+## Slice 2 Mechanical Verification Dispatch
+
+- Function: read-only mechanical verification; this is not a new project role.
+- Expected profile: `gpt-5.6-luna` / `low`, passed explicitly in the dispatch;
+  child spawning and file changes are prohibited.
+- The verifier must independently check the focused suite, package typecheck,
+  ESLint, Prettier, full TSDoc, cleanup/method-size enforcement, diff hygiene,
+  ignored output, dependency boundaries, clean checkout, and local/remote SHA.
+- The known `verify:task` Proto-manifest version failure is classified but not
+  accepted as external debt: this branch changed package versions, so release
+  integration must repair the generated manifest versions before final
+  verification.
