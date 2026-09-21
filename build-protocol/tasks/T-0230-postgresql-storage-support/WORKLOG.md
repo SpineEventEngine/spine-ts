@@ -120,3 +120,10 @@ storage options are required.` at `Builder.build`. The builder threw
   construction vocabulary, and `build()` reports configuration failure through
   its promised result. The factory stores contract configuration only; actual
   pool creation and all database behavior remain for slice 2 onward.
+- Independent mechanical verification at `cd8181874` passed the 3 focused
+  tests, package typecheck, ESLint, Prettier, diff, dependency/public-export,
+  untracked-output, clean-tree, and remote-SHA checks. The repository-wide
+  TSDoc lane found five missing documentation entries on
+  `onCreateRecordStorage()` that the narrower package checker did not report.
+  Task 1 remains active until the same implementation author corrects this,
+  reruns the affected checks, removes ignored build output, and pushes the fix.
