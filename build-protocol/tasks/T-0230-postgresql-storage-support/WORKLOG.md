@@ -1146,5 +1146,27 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   not change to accommodate test mocks.
 - Required evidence is a clean `pnpm typecheck:tooling`, the full hermetic
   PostgreSQL package suite, scoped ESLint and formatting, and `git diff
-  --check`. After correction, the entire cheap preflight restarts before
+--check`. After correction, the entire cheap preflight restarts before
   specialist review.
+
+## Final Cheap-Preflight Test-Type Correction
+
+- Existing role/function: continuing sole `implementer`, explicitly configured
+  `gpt-5.6-terra` / `medium`; child spawning was prohibited. Runtime-profile
+  introspection is unavailable on this surface, so the immutable configured
+  role/profile is the available dispatch evidence.
+- RED: `pnpm typecheck:tooling` failed only in the five assigned PostgreSQL
+  test files. The errors demonstrated readonly counter mutation, missing
+  coordinated-lock client metadata, exact-optional call recording, handwritten
+  values in place of generated `Timestamp` messages, and `vi.fn()` query,
+  result, and tuple inference narrower than exercised test calls.
+- GREEN: test fixtures now preserve the same exercised behavior while using
+  generated timestamp messages, explicit client metadata at lock release,
+  immutable counter replacement, exact-optional call records, and local query
+  and lifecycle fixture types. No production source, generated output, or
+  public contract changed.
+- Evidence: `pnpm typecheck:tooling` passed. `pnpm exec vitest run
+packages/storage-postgres/test --maxWorkers=1` passed `10/10` files and
+  `109/109` tests; the normal configuration excludes the live
+  `postgresql-integration.test.ts`. Scoped ESLint and Prettier checks passed
+  for all five files, and `git diff --check` passed.

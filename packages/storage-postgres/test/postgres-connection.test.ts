@@ -15,7 +15,10 @@ import { TenantIdSchema } from "@spine-event-engine/proto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const driver = vi.hoisted(() => {
-  const query = vi.fn(() => Promise.resolve({ rowCount: 0, rows: [] }));
+  const query = vi.fn((sql: string) => {
+    void sql;
+    return Promise.resolve({ rowCount: 0, rows: [] });
+  });
   const release = vi.fn();
   const connect = vi.fn(() => Promise.resolve({ query, release }));
   const end = vi.fn(() => Promise.resolve());

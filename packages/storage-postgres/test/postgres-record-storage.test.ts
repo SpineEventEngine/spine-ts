@@ -17,10 +17,19 @@ import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+interface QueryResult {
+  readonly rowCount?: number;
+  readonly rows: readonly Record<string, unknown>[];
+}
+type Query = (sql: string, values?: readonly unknown[]) => Promise<QueryResult>;
+
 const driver = vi.hoisted(() => {
   const calls: { sql: string; values?: readonly unknown[] }[] = [];
-  const query = vi.fn((sql: string, values?: readonly unknown[]) => {
-    calls.push({ sql, values });
+  const recordCall = (sql: string, values: readonly unknown[] | undefined) => {
+    calls.push(values === undefined ? { sql } : { sql, values });
+  };
+  const query = vi.fn<Query>((sql, values) => {
+    recordCall(sql, values);
     if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
     if (sql.includes("columns WHERE")) {
       return Promise.resolve({
@@ -60,7 +69,7 @@ const driver = vi.hoisted(() => {
   const Pool = vi.fn(function Pool() {
     return { connect, end };
   });
-  return { Pool, calls, connect, end, query, release };
+  return { Pool, calls, connect, end, query, recordCall, release };
 });
 
 vi.mock("pg", () => ({ Pool: driver.Pool }));
@@ -70,8 +79,8 @@ import { PostgresStorageFactory } from "../src/index.js";
 describe("Postgres record storage", () => {
   beforeEach(() => {
     driver.query.mockReset();
-    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
-      driver.calls.push({ sql, values });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
       if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
       if (sql.includes("columns WHERE")) {
         return Promise.resolve({
@@ -173,8 +182,8 @@ describe("Postgres record storage", () => {
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
     vi.clearAllMocks();
     driver.calls.length = 0;
-    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
-      driver.calls.push({ sql, values });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
       if (sql.startsWith("INSERT INTO")) return Promise.reject(new Error("secret driver detail"));
       return Promise.resolve({ rowCount: 1, rows: [] });
     });
@@ -188,8 +197,8 @@ describe("Postgres record storage", () => {
 
   it("prepares before acquiring the operation client for a pool of one", async () => {
     const storage = await recordStorage();
-    driver.query.mockImplementationOnce((sql: string, values?: readonly unknown[]) => {
-      driver.calls.push({ sql, values });
+    driver.query.mockImplementationOnce((sql, values) => {
+      driver.recordCall(sql, values);
       expect(sql).toBe("BEGIN");
       expect(driver.connect).toHaveBeenCalledTimes(2);
       return Promise.resolve({ rowCount: 1, rows: [] });
@@ -205,8 +214,8 @@ describe("Postgres record storage", () => {
     };
     const existing = create(StringValueSchema, { value: "one" });
     await storage.write(existing);
-    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
-      driver.calls.push({ sql, values });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
       if (sql.startsWith("INSERT INTO")) return Promise.resolve({ rowCount: 0, rows: [] });
       if (sql.startsWith('SELECT "bytes"'))
         return Promise.resolve({ rows: [{ bytes: toBinary(StringValueSchema, existing) }] });
@@ -222,8 +231,8 @@ describe("Postgres record storage", () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
     const record = create(StringValueSchema, { value: "one" });
-    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
-      driver.calls.push({ sql, values });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
       if (sql.startsWith("INSERT INTO")) return Promise.resolve({ rowCount: 0, rows: [] });
       if (sql.startsWith('SELECT "bytes"'))
         return Promise.resolve({ rows: [{ bytes: toBinary(StringValueSchema, record) }] });
@@ -241,8 +250,8 @@ describe("Postgres record storage", () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
     let inserts = 0;
-    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
-      driver.calls.push({ sql, values });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
       if (sql.startsWith("INSERT INTO")) {
         inserts += 1;
         return Promise.resolve({ rowCount: 0, rows: [] });
@@ -268,8 +277,8 @@ describe("Postgres record storage", () => {
       vi.clearAllMocks();
       driver.calls.length = 0;
       let failed = false;
-      driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
-        driver.calls.push({ sql, values });
+      driver.query.mockImplementation((sql, values) => {
+        driver.recordCall(sql, values);
         if (sql === "BEGIN" && !failed) {
           failed = true;
           return Promise.reject(Object.assign(new Error("transaction failure"), { code }));
@@ -293,8 +302,8 @@ describe("Postgres record storage", () => {
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
     vi.clearAllMocks();
     driver.calls.length = 0;
-    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
-      driver.calls.push({ sql, values });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
       if (sql === "BEGIN")
         return Promise.reject(Object.assign(new Error("serialization failure"), { code: "40001" }));
       return Promise.resolve({ rowCount: 1, rows: [] });
@@ -314,8 +323,8 @@ describe("Postgres record storage", () => {
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
     vi.clearAllMocks();
     driver.calls.length = 0;
-    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
-      driver.calls.push({ sql, values });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
       if (sql === "BEGIN")
         return Promise.reject(Object.assign(new Error("constraint"), { code: "23505" }));
       return Promise.resolve({ rowCount: 1, rows: [] });
@@ -334,8 +343,8 @@ describe("Postgres record storage", () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
     const stored = create(StringValueSchema, { value: "stored" });
-    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
-      driver.calls.push({ sql, values });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
       if (sql.startsWith('SELECT "bytes"'))
         return Promise.resolve({ rows: [{ bytes: toBinary(StringValueSchema, stored) }] });
       return Promise.resolve({ rowCount: 1, rows: [] });
@@ -534,8 +543,8 @@ describe("Postgres record storage", () => {
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
     const first = create(StringValueSchema, { value: "first" });
     const second = create(StringValueSchema, { value: "second" });
-    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
-      driver.calls.push({ sql, values });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
       if (sql.startsWith('SELECT "ID", "bytes"')) {
         return Promise.resolve({
           rows: [
@@ -558,8 +567,8 @@ describe("Postgres record storage", () => {
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
     const first = create(StringValueSchema, { value: "first" });
     const second = create(StringValueSchema, { value: "second" });
-    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
-      driver.calls.push({ sql, values });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
       if (sql.startsWith('SELECT "ID", "bytes"')) {
         return Promise.resolve({
           rows: [

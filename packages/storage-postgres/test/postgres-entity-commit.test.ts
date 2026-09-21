@@ -42,10 +42,10 @@ const driver = vi.hoisted(() => {
   let blocked: Promise<void> = Promise.resolve();
   let drained: (() => void)[] = [];
   const query = vi.fn((sql: string, values: readonly unknown[] = []) => {
-    if (failure !== undefined && sql.includes(failure.sql) && failure.after-- === 1) {
-      const next = failure.error;
-      failure = undefined;
-      return Promise.reject(next);
+    if (failure !== undefined && sql.includes(failure.sql)) {
+      const next = failure;
+      failure = next.after === 1 ? undefined : { ...next, after: next.after - 1 };
+      if (next.after === 1) return Promise.reject(next.error);
     }
     if (blocker !== undefined && sql.includes(blocker.sql)) {
       const blockedQuery = blocker;
@@ -270,7 +270,7 @@ describe("PostgreSQL Entity commit", () => {
     await history.states.append(record("task"));
     const historyKeys = driver.query.mock.calls
       .filter(([sql]) => sql.includes("pg_advisory_xact_lock"))
-      .map(([, values]) => values[0]);
+      .map(([, values]) => values?.[0]);
     driver.query.mockClear();
     const commit = EntityCommitStorageFactories.create(factory, entity);
 
@@ -284,7 +284,7 @@ describe("PostgreSQL Entity commit", () => {
 
     const commitKeys = driver.query.mock.calls
       .filter(([sql]) => sql.includes("pg_advisory_xact_lock"))
-      .map(([, values]) => values[0]);
+      .map(([, values]) => values?.[0]);
     expect(commitKeys).toEqual(expect.arrayContaining(historyKeys));
   });
 

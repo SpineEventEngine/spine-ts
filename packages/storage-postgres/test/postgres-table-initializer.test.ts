@@ -2,6 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PostgresTableInitializer } from "../src/postgres/table-initializer.js";
 
+type TableLifecycle = ConstructorParameters<typeof PostgresTableInitializer>[0];
+type TableClient = Awaited<ReturnType<TableLifecycle["acquire"]>>;
+interface TableQueryResult {
+  readonly rows: readonly Record<string, unknown>[];
+}
+type TableQuery = (sql: string, values?: readonly unknown[]) => Promise<TableQueryResult>;
+
 describe("PostgresTableInitializer", () => {
   it.each([
     ["missing column", catalog({ columns: columns().slice(0, 1) })],
@@ -114,7 +121,7 @@ describe("PostgresTableInitializer", () => {
 });
 
 function initialize(
-  lifecycle: { readonly acquire: () => Promise<never>; readonly lockIdentity?: string },
+  lifecycle: TableLifecycle,
   schema = "spine",
   tableName = "records",
 ): PostgresTableInitializer {
@@ -132,7 +139,7 @@ function client(layout: Catalog, failure?: { readonly code: string }) {
   const calls: string[] = [];
   const release = vi.fn();
   let fail = failure;
-  const query = vi.fn((sql: string) => {
+  const query = vi.fn<TableQuery>((sql) => {
     calls.push(sql);
     if (sql === "BEGIN" && fail !== undefined) {
       const error = fail;
@@ -150,8 +157,8 @@ function client(layout: Catalog, failure?: { readonly code: string }) {
     calls,
     query,
     release,
-    value: { query, release },
-    acquire: () => Promise.resolve({ query, release } as never),
+    value: { query, release } as unknown as TableClient,
+    acquire: () => Promise.resolve({ query, release } as unknown as TableClient),
   };
 }
 

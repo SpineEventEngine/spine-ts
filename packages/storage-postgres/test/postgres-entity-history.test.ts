@@ -13,7 +13,12 @@
  */
 
 import { create, fromBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  StringValueSchema,
+  TimestampSchema,
+  type StringValue,
+} from "@bufbuild/protobuf/wkt";
 import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import {
@@ -186,13 +191,14 @@ const driver = vi.hoisted(() => {
     const entry = locks.get(lock.key);
     if (entry === undefined) return;
     if (lock.shared) entry.shared.delete(lock.client);
-    else entry.exclusive = undefined;
+    else delete entry.exclusive;
     if (entry.exclusive === undefined && entry.shared.size === 0) locks.delete(lock.key);
     drain();
   }
 
   function releaseTransactions(client: number) {
-    for (const lock of [...(held.get(client) ?? [])]) if (lock.transaction) releaseLock(lock);
+    for (const lock of [...(held.get(client) ?? [])])
+      if (lock.transaction) releaseLock({ client, ...lock });
   }
 
   function drain() {
@@ -284,7 +290,7 @@ describe("PostgreSQL Entity history", () => {
     const factory = await postgresFactory();
     const entity = factory.createEntityStorage(entityInput(true));
 
-    await entity.states.truncate({ seconds: 5n });
+    await entity.states.truncate(create(TimestampSchema, { seconds: 5n }));
 
     expect(
       driver.calls.some(({ sql }) => sql.startsWith('SELECT "created", "version", "ID"')),
@@ -319,7 +325,7 @@ describe("PostgreSQL Entity history", () => {
     const before = driver.calls.length;
     const truncating = first
       .createEntityStorage(entityInput(false, true))
-      .events.truncate({ seconds: 5n });
+      .events.truncate(create(TimestampSchema, { seconds: 5n }));
     await vi.waitFor(() => {
       expect(finishDelete).toBeDefined();
     });
@@ -418,7 +424,7 @@ describe("PostgreSQL Entity history", () => {
     const entity = factory.createEntityStorage(entityInput(false, true));
     const before = driver.calls.length;
 
-    await entity.events.truncate({ seconds: 5n });
+    await entity.events.truncate(create(TimestampSchema, { seconds: 5n }));
 
     const pages = driver.calls.slice(before).filter(({ sql }) => sql.startsWith('SELECT "ID"'));
     expect(pages).toHaveLength(2);
