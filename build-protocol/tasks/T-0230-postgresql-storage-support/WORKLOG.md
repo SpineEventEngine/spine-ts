@@ -1490,3 +1490,20 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
 - One final read-only affected-concern re-review uses the same explicit role
   profiles and frozen endpoint. No correction begins from a partial report. A
   clean wave advances directly to the one final `verify:release` profile.
+
+## Final Re-review And Last Correction Dispatch
+
+- All four final affected reviewers completed against frozen endpoint
+  `856171c31` with their explicit recorded profiles, read-only scope, and no
+  child agents. API review is clean. The complete accepted batch is the exact
+  binding keyword list, strict grouped DDL assertions, an advancing trim keyset
+  cursor, and four stale documentation inventories; `REVIEW.md` records it.
+- The performance review's provider-managed history-index proposal is rejected:
+  the accepted task explicitly assigns indexes to applications, while Spine
+  manages only record-family tables. Adding and strictly validating new indexes
+  would create an unapproved physical-storage contract without live plan
+  evidence.
+- The same existing `implementer` receives the last coherent correction batch
+  at explicit `gpt-5.6-terra` / `medium`, without child agents. Runtime changes
+  require RED/GREEN evidence; unrelated storage layout, MySQL behavior,
+  thresholds, and live-service startup remain out of scope.

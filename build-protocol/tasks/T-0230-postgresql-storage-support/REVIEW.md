@@ -1,6 +1,6 @@
 # T-0230 Review Record
 
-Status: Final corrections implemented; final affected re-review ready
+Status: Final affected re-review complete; last correction batch pending
 
 Initial review endpoint: `c09c961d6bf75e2cb90fb36fa2dc2c2e0882dd15`
 Correction endpoint: `34ca4b669c78612bb158bba6635524e2c00341ed`
@@ -173,3 +173,36 @@ verification gap.
   including packed external-consumer compilation.
 - The last re-review is restricted to these corrected concerns. A clean wave
   advances directly to the single final `verify:release` run.
+
+## Final Affected Re-review Disposition
+
+All four final reviewers completed against the frozen endpoint with the same
+explicit immutable role profiles, read-only scope, and child-agent prohibition.
+The API lane is clean and confirms grouped routing, private/public declarations,
+root exports, dependencies, error types, and packed-consumer compatibility. The
+final accepted correction batch is:
+
+1. Replace the handwritten PostgreSQL reserved-word approximation with the
+   exact QueryDSL 5.1.0 PostgreSQL keyword list used by the binding JVM commit.
+   Add positive and negative goldens such as binding keyword `Cross` and plain
+   non-keyword `New`.
+2. Make the grouped-name regression assert the two specific `CREATE TABLE`
+   statements, so later DML cannot satisfy a DDL claim accidentally.
+3. Advance state-trim keyset pages. Keep the frozen first-obsolete high-water
+   key, but after each full page bind the last `(version, created, ID)` as a
+   strict continuation cursor. Prove page two uses a different tuple while
+   exact zero/partial/multi-page retention remains correct.
+4. Add PostgreSQL to the root README provider inventory.
+5. Update release-publishing documentation from 18 to 19 public packages and
+   include `@spine-event-engine/storage-postgres` in trusted-publisher setup.
+6. Update architecture documentation that still says only Datastore/MySQL are
+   durable providers, including PostgreSQL's database-per-tenant rule.
+7. Replace the stale API-docs “MySQL-first” inventory wording with explicit
+   MySQL and PostgreSQL provider coverage.
+
+The proposed automatic/strictly verified history indexes are rejected for this
+milestone. `TASK.md` explicitly assigns indexes to applications and says Spine
+manages only record-family tables. The accepted bounded-maintenance contract
+limits transferred keys and page size; it did not approve a provider-managed
+index schema. No live query-plan evidence demonstrates a defect. A future index
+contract would require a separately approved storage-layout milestone.
