@@ -210,7 +210,11 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     HistoryValues.assertKeep(keepMostRecent);
     await this.#executor.using(async (client) => {
       const family = this.familyKey();
-      const entity = this.#executor.lock("history-entity", this.entityIdentity(entityId));
+      const entity = this.#executor.lock(
+        "entity-mutation",
+        this.input.sourceType.typeName,
+        this.entityIdentity(entityId),
+      );
       await client.query("SELECT pg_advisory_lock_shared($1)", [family]);
       await client.query("SELECT pg_advisory_lock($1)", [entity]);
       try {
@@ -227,7 +231,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   async truncate(olderThan: Timestamp): Promise<void> {
     this.assertOpen();
     await this.#executor.using(async (client) => {
-      const key = this.#executor.lock("history-family", "state");
+      const key = this.#executor.lock("history-family", this.#executor.table());
       await client.query("SELECT pg_advisory_lock($1)", [key]);
       try {
         const cutoff = HistoryValues.nanos(olderThan);
@@ -276,14 +280,18 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   }
 
   private familyKey(): bigint {
-    return this.#executor.lock("history-family", "state");
+    return this.#executor.lock("history-family", this.#executor.table());
   }
 
   private entityKey(entityId: EntityRecord["entityId"]): bigint {
     if (entityId === undefined) throw new Error("State history requires EntityRecord.entityId.");
     const id = this.input.id.unpack(entityId);
     if (id === undefined) throw new Error("State history EntityRecord ID does not match storage.");
-    return this.#executor.lock("history-entity", this.entityIdentity(id));
+    return this.#executor.lock(
+      "entity-mutation",
+      this.input.sourceType.typeName,
+      this.entityIdentity(id),
+    );
   }
 
   private entityIdentity(id: I): string {
@@ -445,7 +453,7 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
   }
 
   private familyKey(): bigint {
-    return this.#executor.lock("history-family", "event");
+    return this.#executor.lock("history-family", this.#executor.table());
   }
 
   private assertOpen(): void {

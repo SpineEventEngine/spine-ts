@@ -149,7 +149,7 @@ export interface PostgresRecordExecutor<I, R extends Message> {
    * @param identity Identifies the locked resource.
    * @returns A signed PostgreSQL advisory key.
    */
-  lock(domain: string, identity: string): bigint;
+  lock(domain: string, ...identity: readonly string[]): bigint;
 }
 
 /**
@@ -231,7 +231,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       query: (client, sql, values) => this.historyEntries(client, sql, values),
       column: (name, value) => this.historyColumn(name, value),
       table: () => this.qualified(),
-      lock: (domain, identity) => this.historyKey(domain, identity),
+      lock: (domain, ...identity) => this.historyKey(domain, identity),
     };
   }
 
@@ -494,16 +494,14 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     return ColumnMappings.value(this.#columns, column.type, value);
   }
 
-  private historyKey(domain: string, identity: string): bigint {
+  private historyKey(domain: string, identity: readonly string[]): bigint {
     return createHash("sha256")
       .update(`spine-postgres-${domain}\0`)
       .update(this.lifecycle.databaseName)
       .update("\0")
       .update(this.lifecycle.schema)
       .update("\0")
-      .update(this.table.tableName)
-      .update("\0")
-      .update(identity)
+      .update(identity.join("\0"))
       .digest()
       .readBigInt64BE();
   }

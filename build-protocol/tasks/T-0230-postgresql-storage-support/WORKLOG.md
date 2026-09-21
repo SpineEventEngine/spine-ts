@@ -669,3 +669,13 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
 - Evidence: focused serial commit coverage passed `8/8`; package typecheck
   passed. Full immutable append/failure-injection and two-factory close-race
   matrices remain active.
+
+## Task 4B Lock Identity Correction
+
+- GREEN: package-local record lock hashing now takes explicit identity parts
+  after the captured database/schema. Family callers supply the qualified
+  history table, and state history plus atomic commit share the
+  `entity-mutation` source-type/logical-Entity identity.
+- Evidence: focused commit/history serial coverage passed `17/17`; the commit
+  suite directly compares advisory key parameters from a state append and an
+  atomic state commit and passed `9/9` after the assertion.

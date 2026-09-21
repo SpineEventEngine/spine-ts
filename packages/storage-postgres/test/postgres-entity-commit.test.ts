@@ -25,7 +25,7 @@ import {
   EntityCommitStorageFactories,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const driver = vi.hoisted(() => {
   let commitFailure: Error | undefined;
@@ -57,6 +57,13 @@ const driver = vi.hoisted(() => {
     failCommit: (error: Error | undefined) => (commitFailure = error),
     setCurrent: (record: EntityRecord | undefined) =>
       (current = record === undefined ? undefined : toBinary(EntityRecordSchema, record)),
+    reset: () => {
+      commitFailure = undefined;
+      current = undefined;
+      query.mockClear();
+      connect.mockClear();
+      release.mockClear();
+    },
   };
 });
 
@@ -65,6 +72,7 @@ vi.mock("pg", () => ({ Pool: driver.Pool }));
 import { PostgresStorageFactory } from "../src/index.js";
 
 describe("PostgreSQL Entity commit", () => {
+  beforeEach(() => driver.reset());
   it("rejects disabled state history before preparing or acquiring a client", async () => {
     const factory = await postgresFactory();
     const entity = entityInput();
@@ -147,6 +155,31 @@ describe("PostgreSQL Entity commit", () => {
     ).resolves.toBe("committed");
 
     expect(driver.connect).toHaveBeenCalledTimes(before + 3);
+  });
+
+  it("uses the same family and Entity advisory keys as state history", async () => {
+    const factory = await postgresFactory();
+    const entity = entityInput(true);
+    const history = factory.createEntityStorage(entity);
+    await history.states.append(record("task"));
+    const historyKeys = driver.query.mock.calls
+      .filter(([sql]) => String(sql).includes("pg_advisory_xact_lock"))
+      .map(([, values]) => values[0]);
+    driver.query.mockClear();
+    const commit = EntityCommitStorageFactories.create(factory, entity);
+
+    await commit.commit({
+      context: entity.context,
+      entity,
+      entityId: "task",
+      next: record("task"),
+      states: [record("task")],
+    });
+
+    const commitKeys = driver.query.mock.calls
+      .filter(([sql]) => String(sql).includes("pg_advisory_xact_lock"))
+      .map(([, values]) => values[0]);
+    expect(commitKeys).toEqual(expect.arrayContaining(historyKeys));
   });
 
   it("returns conflict from a locked current record without writes", async () => {

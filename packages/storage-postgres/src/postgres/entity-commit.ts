@@ -168,7 +168,8 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
     await client.query("SELECT pg_advisory_xact_lock($1)", [
       records.current.lock(
         "entity-mutation",
-        `${input.entity.sourceType.typeName}\0${this.entity.id.key(input.entityId as never)}`,
+        input.entity.sourceType.typeName,
+        this.entity.id.key(input.entityId as never),
       ),
     ]);
   }
