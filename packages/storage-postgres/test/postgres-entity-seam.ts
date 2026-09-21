@@ -24,7 +24,13 @@ interface EntityStorageSeam {
   ): PostgresEntityStorage<I, S>;
 }
 
-/** Invokes the private runtime Entity-storage seam through its structural contract. */
+/**
+ * Invokes the private runtime Entity-storage seam through its structural contract.
+ *
+ * @param factory Provides the PostgreSQL factory under test.
+ * @param input Configures the Entity storage families.
+ * @returns The factory-managed PostgreSQL Entity storage handle.
+ */
 export function entityStorage<I, S extends Message>(
   factory: PostgresStorageFactory,
   input: EntityStorageInput<I, S>,
