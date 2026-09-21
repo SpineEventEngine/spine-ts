@@ -1577,6 +1577,27 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   explicit `gpt-5.6-terra` / `medium`, without child agents. No production or
   public-contract change is authorized.
 
+## Final Convergence Preflight
+
+- Test-only commits `24e88d103` and `824f45485` prove the exact two-table DDL
+  set, successful Entity-before-family unlock order, and explicit type-safe
+  fixture guards. No production or public contract changed after the clean
+  affected re-review.
+- The generated dependency-aware build and tooling typecheck pass. Exact
+  PostgreSQL coverage passes 159 tests: 94.36% statements (`972/1030`), 90.47%
+  branches (`551/609`), 95.13% functions (`313/329`), and 96.71% lines
+  (`855/884`).
+- Scoped ESLint, cleanup and callable limits, TSDoc, copyright, formatting,
+  diff hygiene, documentation audience, TypeDoc/API, snippets, Proto lint and
+  generated-current checks, logging containment, production dependencies, and
+  release readiness all pass.
+- The final cheap packaging/release suite passes 234 tests in 13 files. It
+  creates all 19 tarballs, installs them in a clean consumer, and compiles that
+  consumer against `@spine-event-engine/storage-postgres`.
+- Review and deterministic corrections have converged. The next and only
+  expensive verification profile is one `pnpm verify:release` run. Live
+  PostgreSQL 16/18 verification remains external because no URLs were supplied.
+
 ## Last-Correction Implementation Evidence
 
 - Existing role/function: continuing `implementer`, explicitly configured as

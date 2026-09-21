@@ -301,6 +301,23 @@ Two test-only findings are accepted:
    precedes the shared family unlock. Keep the partial-acquisition/discard test
    as its distinct case.
 
+## Final Convergence Evidence
+
+- The two accepted test findings are corrected without production or public API
+  changes. The DDL test requires the exact two targets; lock tests separately
+  prove successful reverse release and partial-acquisition discard behavior.
+  Explicit guards also satisfy the tooling typechecker without weakening the
+  runtime assertions.
+- Final cheap preflight passes generated build, tooling typecheck, all static,
+  documentation, Proto, dependency, and release-readiness gates. PostgreSQL
+  coverage passes 159 tests at 94.36% statements, 90.47% branches, 95.13%
+  functions, and 96.71% lines.
+- Packaging/release verification passes 234 tests in 13 files, including all 19
+  package tarballs, clean installation, and external TypeScript compilation.
+- All relevant review concerns now have accepted dispositions. The only
+  remaining local gate is the single final `pnpm verify:release` profile. Live
+  PostgreSQL 16/18 acceptance still requires externally supplied database URLs.
+
 ## Last-Correction Test-Hardening Evidence
 
 - The grouped builder regression now uses exact ordered equality for the two
