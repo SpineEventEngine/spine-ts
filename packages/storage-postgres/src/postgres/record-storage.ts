@@ -38,24 +38,51 @@ import { PostgresTableInitializer } from "./table-initializer.js";
 
 const maximumNormalizedPlanBinds = 1_000;
 
-/** Manages PostgreSQL clients for one record-family handle. */
+/**
+ * Manages PostgreSQL clients for one record-family handle.
+ */
 export interface PostgresRecordLifecycle {
-  /** Names the selected database for advisory coordination. */
+  /**
+   * Names the selected database for advisory coordination.
+   */
   readonly databaseName: string;
-  /** Names the resolved schema. */
+
+  /**
+   * Names the resolved schema.
+   */
   readonly schema: string;
-  /** Acquires an available PostgreSQL client. */
+
+  /**
+   * Acquires an available PostgreSQL client.
+   *
+   * @returns A client that the caller releases.
+   */
   acquire(): Promise<PoolClient>;
 }
 
-/** Stores one record family in one qualified PostgreSQL table. */
+/**
+ * Stores one record family in one qualified PostgreSQL table.
+ */
 export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  /**
+   * Reports that compare-and-set uses PostgreSQL transaction coordination.
+   */
   override readonly atomicCompareAndSet = true;
   readonly #idColumn: PostgresIdColumn<I>;
   readonly #columns: ColumnMapping<unknown>;
   readonly #initializer: PostgresTableInitializer;
 
-  /** Creates a PostgreSQL record-family handle. */
+  /**
+   * Creates a PostgreSQL record-family handle.
+   *
+   * @param context Identifies the storage boundary for this handle.
+   * @param spec Defines the record type, ID type, and declared columns.
+   * @param table Supplies the resolved physical table layout.
+   * @param lifecycle Acquires clients for the selected database and schema.
+   * @param onClose Removes this handle from the factory's live set.
+   * @param create Optionally supplies custom create-table SQL.
+   * @param stringifiers Converts message IDs and columns reversibly.
+   */
   constructor(
     context: StorageContext,
     spec: RecordSpec<I, R>,
@@ -76,24 +103,39 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     );
   }
 
-  /** Names the resolved physical table. */
+  /**
+   * Returns the resolved physical table name.
+   *
+   * @returns The physical table name without its schema.
+   */
   get tableName(): string {
     return this.table.tableName;
   }
 
-  /** Prepares this table before an external coordinator transaction. */
+  /**
+   * Prepares this table before an external coordinator transaction.
+   *
+   * @returns A promise that resolves after compatible initialization.
+   */
   prepare(): Promise<void> {
     return this.#initializer.prepare();
   }
 
-  /** Closes this handle and unregisters it from the factory. */
+  /**
+   * Closes this handle and unregisters it from the factory.
+   */
   override close(): void {
     if (!this.isOpen()) return;
     super.close();
     this.onClose();
   }
 
-  /** Writes an immutable record or confirms an identical existing payload. */
+  /**
+   * Writes an immutable record or confirms an identical existing payload.
+   *
+   * @param record Provides the immutable record to store.
+   * @returns A promise that resolves when the payload is stored or confirmed.
+   */
   async writeImmutable(record: R): Promise<void> {
     const id = this.recordSpec.idValueIn(record);
     await this.using(async (client) => {
@@ -105,33 +147,57 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     });
   }
 
-  /** Confirms that an immutable record is absent or byte-identical. */
+  /**
+   * Checks whether an immutable record is absent or byte-identical.
+   *
+   * @param record Provides the immutable record to inspect.
+   * @returns A promise that rejects when the stored payload differs.
+   */
   async assertImmutable(record: R): Promise<void> {
     const existing = await this.read(this.recordSpec.idValueIn(record));
     if (existing === undefined || this.same(existing, record)) return;
     throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
   }
 
-  /** Deletes one record by storage ID. */
+  /**
+   * Deletes one record by storage ID.
+   *
+   * @param id Identifies the record to delete.
+   * @returns Whether a stored record was deleted.
+   */
   protected async deleteRecord(id: I): Promise<boolean> {
     return this.using(
       async (client) => (await client.query(this.deleteSql(), [this.id(id)])).rowCount === 1,
     );
   }
 
-  /** Reads one record by storage ID. */
+  /**
+   * Reads one record by storage ID.
+   *
+   * @param id Identifies the record to read.
+   * @returns The decoded record, when present.
+   */
   protected readRecord(id: I): Promise<R | undefined> {
     return this.using((client) => this.readOn(client, id));
   }
 
-  /** Selects query records through one parameterized PostgreSQL statement. */
+  /**
+   * Returns query records from one parameterized PostgreSQL statement.
+   *
+   * @param query Defines IDs, filters, order, continuation, and bounds.
+   * @returns The decoded records admitted by the query.
+   */
   protected async queryRecordEntries(query: RecordQuery<I>): Promise<readonly RecordEntry<I, R>[]> {
     if (query.ids?.length === 0) return [];
     const compiled = this.recordQuery(query);
     return this.using((client) => this.entries(client, compiled));
   }
 
-  /** Advertises complete normalized-plan pushdown. */
+  /**
+   * Returns complete normalized-plan pushdown capabilities.
+   *
+   * @returns The normalized query features implemented by this storage.
+   */
   protected override queryCapabilities(): StorageQueryCapabilities {
     return {
       comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
@@ -139,7 +205,12 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     };
   }
 
-  /** Executes a normalized plan as one parameterized statement. */
+  /**
+   * Executes a normalized plan as one parameterized statement.
+   *
+   * @param plan Defines the validated normalized predicate and bounds.
+   * @returns The decoded records admitted by the plan.
+   */
   protected override async queryPlanRecordEntries(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
@@ -147,7 +218,14 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     return this.using((client) => this.entries(client, compiled));
   }
 
-  /** Atomically applies one compare-and-set mutation with bounded retry. */
+  /**
+   * Compares and atomically applies one mutation with bounded retry.
+   *
+   * @param id Identifies the record guarded by the transaction advisory lock.
+   * @param expected Specifies the current materialized record required to write.
+   * @param next Specifies the replacement record, or absence for deletion.
+   * @returns Whether the current stored payload matched the expected payload.
+   */
   protected async compareAndSetRecord(
     id: I,
     expected: Materialized<I, R> | undefined,
@@ -164,14 +242,24 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     throw new PostgresStorageOperationError("PostgreSQL record operation failed.");
   }
 
-  /** Writes all supplied materialized records in source order and one transaction. */
+  /**
+   * Writes all supplied materialized records in source order and one transaction.
+   *
+   * @param records Provides the materialized records to write.
+   * @returns A promise that resolves after the transaction commits.
+   */
   protected async writeAllRecords(records: readonly Materialized<I, R>[]): Promise<void> {
     await this.transaction(async (client) => {
       for (const record of records) await this.writeOn(client, record.record);
     });
   }
 
-  /** Writes one materialized record. */
+  /**
+   * Writes one materialized record.
+   *
+   * @param record Provides the materialized record to write.
+   * @returns A promise that resolves after PostgreSQL applies the upsert.
+   */
   protected writeRecord(record: Materialized<I, R>): Promise<void> {
     return this.using((client) => this.writeOn(client, record.record));
   }
@@ -192,9 +280,9 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+    await this.prepare();
     const client = await this.lifecycle.acquire();
     try {
-      await this.prepare();
       await client.query("BEGIN");
       const result = await work(client);
       await client.query("COMMIT");
@@ -208,9 +296,9 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   private async using<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+    await this.prepare();
     const client = await this.lifecycle.acquire();
     try {
-      await this.prepare();
       return await work(client);
     } catch (error) {
       throw operationError(error);

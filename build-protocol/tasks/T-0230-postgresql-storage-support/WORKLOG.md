@@ -340,6 +340,33 @@ PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
   `gpt-5.6-terra` / `medium`, with no children. This remains a serialized
   handoff with one production writer.
 
+## Task 3 Record Runtime Correction Checkpoint
+
+- Existing role/function: continuing `implementer`, explicitly configured as
+  `gpt-5.6-terra` / `medium`; no child work was dispatched and the execution
+  surface does not expose runtime model metadata.
+- Characterization: the inherited change moves lazy table preparation before
+  operation-client acquisition. The new pool-size-one regression proves that
+  `BEGIN` is not issued until the initializer has acquired and released its
+  client. This prevents a handle from holding the only client while initialization
+  waits for another.
+- Characterization: the immutable collision test stores a Protobuf payload,
+  simulates `ON CONFLICT DO NOTHING`, and returns the existing binary payload.
+  A different payload rejects with the sanitized immutable-collision error.
+- RED: the full `pnpm lint:tsdoc` gate failed before documentation correction,
+  reporting 49 new runtime/factory contract diagnostics plus five TSDoc-format
+  diagnostics. The report covered record lifecycle acquisition, constructor
+  inputs, record operations, query capability/plan behavior, and the factory
+  creation seam.
+- GREEN: documented each affected runtime/factory contract accurately without
+  suppression and corrected the TSDoc block layout. Fresh evidence passed full
+  `pnpm lint:tsdoc`; `postgres-record-storage.test.ts` passed `4 passed (4)`;
+  package `tsc --noEmit`; scoped ESLint; explicit Prettier; `pnpm lint:cleanup`;
+  and `git diff --check`.
+- Limitation: this checkpoint verifies driver-double behavior only; no live
+  PostgreSQL provider is run in Task 3. CAS and normalized-query acceptance
+  remain in this active task slice.
+
 ## Task 3 Record Runtime Checkpoint
 
 - Existing role/function: continuing `implementer`, configured explicitly as

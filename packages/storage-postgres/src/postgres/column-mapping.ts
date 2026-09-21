@@ -24,7 +24,9 @@ import type {
 const timestampType = "google.protobuf.Timestamp";
 const versionType = "spine.core.Version";
 
-/** Converts typed Protobuf columns to PostgreSQL-native parameters. */
+/**
+ * Converts typed Protobuf columns to PostgreSQL-native parameters.
+ */
 export class PostgresColumnMapping implements ColumnMapping<unknown> {
   readonly #stringifiers: StringifierRegistry;
 
@@ -55,7 +57,7 @@ export class PostgresColumnMapping implements ColumnMapping<unknown> {
   }
 
   /**
-   * Preserves SQL null values.
+   * Returns a conversion that preserves SQL null values.
    *
    * @returns The null conversion.
    */

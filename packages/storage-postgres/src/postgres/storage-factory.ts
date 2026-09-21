@@ -309,12 +309,12 @@ export class PostgresStorageFactory extends StorageFactory {
   }
 
   /**
-   * Rejects record-storage creation until the PostgreSQL runtime slice is available.
+   * Creates a record-storage handle for the selected PostgreSQL tenant.
    *
-   * @param _context Identifies the requested storage boundary.
-   * @param _recordSpec Describes the requested record family.
-   * @param _group Separates records that share a source type.
-   * @returns Does not return because this contract-only factory has no record runtime.
+   * @param context Identifies the requested storage boundary.
+   * @param recordSpec Describes the requested record family.
+   * @param group Separates records that share a source type.
+   * @returns A live handle bound to the resolved tenant table.
    */
   protected override onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { RecordSpec } from "@spine-event-engine/storage";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -103,6 +103,38 @@ describe("Postgres record storage", () => {
     expect(begin).toBeGreaterThan(-1);
     expect(commit).toBeGreaterThan(begin);
     expect(writes.map(({ values }) => values?.[0])).toEqual(["first", "second"]);
+  });
+
+  it("prepares before acquiring the operation client for a pool of one", async () => {
+    const storage = await recordStorage();
+    driver.query.mockImplementationOnce((sql: string, values?: readonly unknown[]) => {
+      driver.calls.push({ sql, values });
+      expect(sql).toBe("BEGIN");
+      expect(driver.connect).toHaveBeenCalledTimes(2);
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await storage.write(create(StringValueSchema, { value: "one" }));
+  });
+
+  it("rejects an immutable record when the existing payload differs", async () => {
+    const storage = (await recordStorage()) as unknown as {
+      write(record: ReturnType<typeof create>): Promise<void>;
+      writeImmutable(record: ReturnType<typeof create>): Promise<void>;
+    };
+    const existing = create(StringValueSchema, { value: "one" });
+    await storage.write(existing);
+    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
+      driver.calls.push({ sql, values });
+      if (sql.startsWith("INSERT INTO")) return Promise.resolve({ rowCount: 0, rows: [] });
+      if (sql.startsWith('SELECT "bytes"'))
+        return Promise.resolve({ rows: [{ bytes: toBinary(StringValueSchema, existing) }] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(
+      storage.writeImmutable(create(StringValueSchema, { value: "two" })),
+    ).rejects.toThrow("immutable record collides");
   });
 });
 
