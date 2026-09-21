@@ -352,3 +352,12 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
 - GREEN evidence: `pnpm lint:cleanup -- ...` passed, package typecheck and
   scoped ESLint passed, serial Task 1–3 PostgreSQL tests passed `30/30`, and
   `git diff --check` passed.
+
+## Task 3 Batch Characterization
+
+- Focused batch behavior observes one PostgreSQL transaction and preserves the
+  supplied record order in bound upsert parameters. This test passed directly
+  because the provisional runtime already contained the transaction path; it
+  is characterization evidence rather than a new RED/GREEN implementation.
+- Evidence: the focused record suite passes `2/2`; package typecheck, scoped
+  ESLint, cleanup enforcement, and `git diff --check` pass.

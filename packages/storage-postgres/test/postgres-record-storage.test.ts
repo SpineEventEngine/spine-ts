@@ -87,4 +87,35 @@ describe("Postgres record storage", () => {
     expect(write?.values?.[0]).toBe("one");
     expect(write?.values?.[1]).toBeInstanceOf(Uint8Array);
   });
+
+  it("writes a batch in source order inside one PostgreSQL transaction", async () => {
+    const storage = await recordStorage();
+
+    await storage.writeAll([
+      create(StringValueSchema, { value: "first" }),
+      create(StringValueSchema, { value: "second" }),
+    ]);
+
+    const statements = driver.calls.map(({ sql }) => sql);
+    const begin = statements.lastIndexOf("BEGIN");
+    const commit = statements.lastIndexOf("COMMIT");
+    const writes = driver.calls.filter(({ sql }) => sql.startsWith("INSERT INTO"));
+    expect(begin).toBeGreaterThan(-1);
+    expect(commit).toBeGreaterThan(begin);
+    expect(writes.map(({ values }) => values?.[0])).toEqual(["first", "second"]);
+  });
 });
+
+async function recordStorage() {
+  const factory = await PostgresStorageFactory.newBuilder()
+    .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+    .build();
+  return factory.createRecordStorage(
+    { name: "test", multitenant: false },
+    new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    }),
+  );
+}
