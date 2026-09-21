@@ -460,6 +460,34 @@ DISTINCT FROM`; an ascending null continuation emits `IS NOT NULL` rather than
   matching local/remote SHA. Inspect the Task 3 matrix for named acceptance
   coverage and report omissions without editing.
 
+## Task 3 Acceptance
+
+- Independent mechanical verification used the explicitly dispatched immutable
+  `gpt-5.6-luna` / `low` profile; runtime self-introspection was unavailable.
+  It made no changes.
+- PASS: seven serial files and 58/58 tests, package typecheck, scoped ESLint,
+  Prettier, full TSDoc, cleanup/method-size/T-0230 ledger enforcement, diff
+  hygiene, generated-output scan, dependency/public-export boundaries, clean
+  checkout, and matching local/remote SHA at `b1a53c4b9`.
+- The verifier confirmed every named Task 3 acceptance category is represented
+  by production-path driver-double evidence. It reported no finding. Task 3 is
+  accepted; live PostgreSQL remains Task 5 evidence.
+
+## Slice 4 Dispatch
+
+- Existing role/function: continuing `implementer`, explicitly configured as
+  `gpt-5.6-terra` / `medium`; child spawning remains prohibited. Runtime
+  self-introspection may be unavailable, so the immutable role/profile is the
+  expected metadata.
+- Scope is Entity current/state/event handles with bounded 128-key provider SQL
+  history, atomic Entity commit, and fenced Inbox cleanup. The binding current
+  JVM history sources were freshly reread at the recorded upstream SHAs; the
+  accepted PostgreSQL locking/page/close plan supplies provider mechanics not
+  defined by JVM.
+- Strict production-path RED/GREEN checkpoints, advisory-lock/resource evidence,
+  and frequent pushed commits are mandatory. Live PostgreSQL, docs/release
+  integration, Proto-manifest correction, and Task 5+ work remain excluded.
+
 ## Task 3 RecordQuery Window Characterization
 
 - Characterization: a finite RecordQuery offset compiles to bound PostgreSQL
