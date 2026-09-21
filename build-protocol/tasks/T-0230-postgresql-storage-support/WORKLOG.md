@@ -769,6 +769,19 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   MySQL, server behavior, live PostgreSQL, docs/release integration, and
   versions remain excluded.
 
+## Task 4C Completion Handoff
+
+- The first Task 4C author pushed registration/session-lock alignment, exact
+  stale/cancelled snapshot behavior, and serialization-retry checkpoints
+  through `03645ef55`, then returned twice while explicitly reporting the
+  remaining non-retry and close/drain matrix incomplete. The checkout is clean
+  at that pushed boundary.
+- A serialized replacement `implementer`, explicitly configured as
+  `gpt-5.6-terra` / `medium`, receives only the unfinished transaction-failure,
+  cancellation-boundary, two-factory, and lifecycle evidence. Child spawning
+  is prohibited. There is still one production writer, and the accepted
+  cleanup design plus existing tests remain unchanged.
+
 ## Task 4C Registry RED
 
 - RED: the new real-factory cleanup-registry test failed as expected with
