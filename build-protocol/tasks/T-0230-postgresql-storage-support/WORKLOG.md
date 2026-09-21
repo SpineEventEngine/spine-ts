@@ -1117,6 +1117,15 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   correction; 16/17 focused release CLI tests passed. The one staged-consumer
   test was blocked when pnpm offline installation could not find
   `@grpc/grpc-js@1.14.5` in the local store; no packaging assertion failed.
+- After the missing package was added only to pnpm's local cache, the same
+  staged-consumer test reached TypeScript and found a real published-declaration
+  defect: emitted PostgreSQL declarations import `PoolClient` from `pg`, while
+  `@types/pg` is declared only as a development dependency. Because `pg` does
+  not ship those declarations, clean consumers cannot compile.
+- The package integration correction must move the exact pinned `@types/pg`
+  version into runtime `dependencies` and update the lockfile importer. It must
+  preserve the public types, strict consumer proof, and existing version; no
+  fake local driver types or weakened release checks are permitted.
 
 ## Task 4 History Verification Correction
 
