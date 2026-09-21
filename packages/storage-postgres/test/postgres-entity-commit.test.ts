@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, fromBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { Int32ValueSchema, StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
@@ -29,11 +29,14 @@ import { describe, expect, it, vi } from "vitest";
 
 const driver = vi.hoisted(() => {
   let commitFailure: Error | undefined;
+  let current: Uint8Array | undefined;
   const query = vi.fn((sql: string, values: readonly unknown[] = []) => {
     if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
     if (sql.includes("columns WHERE")) return Promise.resolve({ rows: columns(String(values[1])) });
     if (sql.includes("PRIMARY KEY"))
       return Promise.resolve({ rows: [{ column_name: "ID", ordinal_position: 1 }] });
+    if (sql.startsWith('SELECT "bytes"'))
+      return Promise.resolve({ rows: current === undefined ? [] : [{ bytes: current }] });
     if (sql === "COMMIT" && commitFailure !== undefined) {
       const failure = commitFailure;
       commitFailure = undefined;
@@ -52,6 +55,8 @@ const driver = vi.hoisted(() => {
     query,
     release,
     failCommit: (error: Error | undefined) => (commitFailure = error),
+    setCurrent: (record: EntityRecord | undefined) =>
+      (current = record === undefined ? undefined : toBinary(EntityRecordSchema, record)),
   };
 });
 
@@ -142,6 +147,30 @@ describe("PostgreSQL Entity commit", () => {
     ).resolves.toBe("committed");
 
     expect(driver.connect).toHaveBeenCalledTimes(before + 3);
+  });
+
+  it("returns conflict from a locked current record without writes", async () => {
+    const factory = await postgresFactory();
+    const entity = entityInput();
+    const commit = EntityCommitStorageFactories.create(factory, entity);
+    driver.setCurrent(record("task"));
+    const writes = driver.query.mock.calls.filter(([sql]) =>
+      String(sql).startsWith("INSERT"),
+    ).length;
+
+    await expect(
+      commit.commit({
+        context: entity.context,
+        entity,
+        entityId: "task",
+        next: record("task", "next"),
+      }),
+    ).resolves.toBe("conflict");
+
+    expect(
+      driver.query.mock.calls.filter(([sql]) => String(sql).startsWith("INSERT")),
+    ).toHaveLength(writes);
+    driver.setCurrent(undefined);
   });
 
   it("rejects incompatible state schema and expected Entity identity before acquisition", async () => {
@@ -276,9 +305,14 @@ function columns(sql: string) {
       ];
 }
 
-function record(id: string): EntityRecord {
+function record(id: string, state?: string): EntityRecord {
   return create(EntityRecordSchema, {
     entityId: Identifiers.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+    ...(state === undefined
+      ? {}
+      : {
+          state: Identifiers.pack(StringValueSchema, create(StringValueSchema, { value: state })),
+        }),
   });
 }
 

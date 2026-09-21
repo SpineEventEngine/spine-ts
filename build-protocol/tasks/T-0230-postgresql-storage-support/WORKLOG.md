@@ -656,3 +656,16 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   `tsc --noEmit` passed. The fixture uses the actual packed `StringValue`
   decoder rather than a placeholder. The following prepared-family and
   transaction-order slice remains active.
+
+## Task 4B Prepared Transaction Slices
+
+- GREEN: temporary current and optional state families are opened per call,
+  prepared sequentially, then closed in `finally`; the coordinator acquires one
+  fresh operation client only after preparation and retries exactly once for
+  raw PostgreSQL `40001`/`40P01` failures with rollback and release.
+- GREEN: current reads use `FOR UPDATE`; complete Protobuf-byte equality makes
+  a stale current result `conflict` without an insert, while an identical next
+  record remains an idempotent replay.
+- Evidence: focused serial commit coverage passed `8/8`; package typecheck
+  passed. Full immutable append/failure-injection and two-factory close-race
+  matrices remain active.
