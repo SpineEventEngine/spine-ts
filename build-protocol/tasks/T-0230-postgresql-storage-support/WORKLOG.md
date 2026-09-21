@@ -120,6 +120,22 @@ storage options are required.` at `Builder.build`. The builder threw
   construction vocabulary, and `build()` reports configuration failure through
   its promised result. The factory stores contract configuration only; actual
   pool creation and all database behavior remain for slice 2 onward.
+
+## Slice 1 Documentation Correction
+
+- Mechanical verification found five `lint:tsdoc` diagnostics on
+  `PostgresStorageFactory.onCreateRecordStorage()`: no semantic summary, no
+  documentation for `_context`, `_recordSpec`, or `_group`, and no return
+  documentation. Added accurate TSDoc describing its deliberate contract-only
+  rejection without changing behavior.
+- GREEN: `pnpm --config.verify-deps-before-run=false exec vitest run
+packages/storage-postgres/test/postgres-builder-contract.test.ts` passed
+  `3 passed (3)`; `pnpm --config.verify-deps-before-run=false lint:tsdoc`
+  reported `TSDoc enforcement checks passed.`; scoped ESLint, Prettier, and
+  `git diff --check` passed.
+- Removed generated `packages/storage-postgres/dist/tsconfig.tsbuildinfo`
+  after verification. The only committed correction is
+  `packages/storage-postgres/src/postgres/storage-factory.ts` plus this log.
 - Independent mechanical verification at `cd8181874` passed the 3 focused
   tests, package typecheck, ESLint, Prettier, diff, dependency/public-export,
   untracked-output, clean-tree, and remote-SHA checks. The repository-wide

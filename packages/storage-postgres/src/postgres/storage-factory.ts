@@ -274,6 +274,14 @@ export class PostgresStorageFactory extends StorageFactory {
     return new Builder((configuration) => new PostgresStorageFactory(configuration));
   }
 
+  /**
+   * Rejects record-storage creation until the PostgreSQL runtime slice is available.
+   *
+   * @param _context Identifies the requested storage boundary.
+   * @param _recordSpec Describes the requested record family.
+   * @param _group Separates records that share a source type.
+   * @returns Does not return because this contract-only factory has no record runtime.
+   */
   protected override onCreateRecordStorage<I, R extends Message>(
     _context: StorageContext,
     _recordSpec: RecordSpec<I, R>,
