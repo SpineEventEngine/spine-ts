@@ -1768,4 +1768,25 @@ record-body)` and observed the upsert bind `record-body` instead of `slot`.
   baseline SHA. Both reviewers detected that it did not resolve and independently
   used the target commit's actual parent shown above, so the reviewed diff was
   correct.
+
+## Final Post-Live Verification
+
+- The first `verify:task` invocation omitted its required test-selection
+  arguments and stopped before checks. The corrected broad branch preflight
+  passed all deterministic gates and 4,885 tests, but two unrelated stress tests
+  exceeded their short timeouts under parallel load: the cleanup large-file-list
+  case took 5.9 seconds against 5 seconds, and the real staged-release case took
+  31.6 seconds against 30 seconds.
+- Both timeout cases passed immediately when rerun separately with one worker:
+  cleanup `120/120`; release CLI `17/17` in 13.9 seconds. No production or test
+  change was made for load-induced timing.
+- Fresh `pnpm verify:release` at pushed endpoint `7a17e4a65` exits zero. All 300
+  test files and all 4,887 tests pass with one worker. Coverage is 93.32%
+  statements (`23846/25551`), 90.11% branches (`14095/15641`), 93.03%
+  functions (`6039/6491`), and 94.51% lines (`22050/23330`).
+- The same release run passes Node, Proto generation/style/frozen descriptors,
+  build and tooling typechecks, ESLint, cleanup, TSDoc, copyright, formatting,
+  documentation/API/snippets, generated-output checks, logging containment,
+  production dependencies, release readiness, all 19 package tarballs, clean
+  external installation, and consumer compilation.
   No public API, schema, or automatic-container behavior changes.

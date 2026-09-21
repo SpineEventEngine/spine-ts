@@ -421,3 +421,20 @@ release verification reopen only after PostgreSQL 16 and 18 pass.
   skipped cases are the MySQL and Datastore suites; both PostgreSQL Inbox tests
   and all six PostgreSQL package acceptance tests ran. This resolves the final
   live-provider evidence gap alongside the equivalent PostgreSQL 16.15 result.
+
+## Final Acceptance After Live Corrections
+
+- `pnpm verify:release` passes at `7a17e4a65`: 300/300 test files and
+  4,887/4,887 tests. Coverage is 93.32% statements, 90.11% branches, 93.03%
+  functions, and 94.51% lines.
+- Every deterministic build, static, documentation, Proto, dependency,
+  release-readiness, package-artifact, clean-install, and consumer-compilation
+  gate passes in that same serial run.
+- A broad parallel `verify:task` run first timed out in two unrelated stress
+  cases after all deterministic gates passed. Separate one-worker reruns passed
+  cleanup 120/120 and release CLI 17/17, and the authoritative one-worker
+  release profile then passed all 4,887 tests. This is accepted as verified
+  resource contention, not a product defect.
+- PostgreSQL 16.15 and 18.6 live acceptance, correction re-review, documentation,
+  and final release verification are complete. No unresolved finding or external
+  evidence gap remains for T-0230.
