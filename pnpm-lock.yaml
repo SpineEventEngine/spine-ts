@@ -638,6 +638,9 @@ importers:
       '@spine-event-engine/storage-datastore':
         specifier: 2.0.0-snapshot.13
         version: link:../storage-datastore
+      '@spine-event-engine/storage-postgres':
+        specifier: 2.0.0-snapshot.13
+        version: link:../storage-postgres
       '@spine-event-engine/storage-rdbms':
         specifier: 2.0.0-snapshot.13
         version: link:../storage-rdbms

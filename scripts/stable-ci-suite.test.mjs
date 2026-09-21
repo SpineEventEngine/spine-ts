@@ -26,6 +26,7 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const expectedInfrastructureFiles = [
   "packages/storage-datastore/test/datastore-cloud.test.ts",
   "packages/storage-datastore/test/datastore-emulator.test.ts",
+  "packages/storage-postgres/test/postgresql-integration.test.ts",
   "packages/storage-rdbms/test/mysql-integration.test.ts",
   "packages/server/test/delivery/inbox-provider-cleanup.test.ts",
 ];
@@ -65,6 +66,19 @@ describe("stable CI test inventory", () => {
       /^node scripts\/mysql\.mjs && SPINE_TS_INBOX_PROVIDER=mysql pnpm /u,
     );
     expect(rdbms.scripts["test:mysql"]).toContain("inbox-provider-cleanup.test.ts");
+
+    const postgres = JSON.parse(readFileSync(join(root, "packages/storage-postgres/package.json")));
+    expect(postgres.scripts["test:postgresql"]).toMatch(
+      /^node scripts\/postgresql\.mjs && SPINE_TS_INBOX_PROVIDER=postgresql pnpm /u,
+    );
+    expect(postgres.scripts["test:postgresql"]).toContain("vitest.infrastructure.config.ts");
+    expect(postgres.scripts["test:postgresql"]).toContain("postgresql-integration.test.ts");
+    expect(postgres.scripts["test:postgresql:16"]).toMatch(
+      /^SPINE_TS_POSTGRESQL_EXPECTED_MAJOR=16 pnpm test:postgresql$/u,
+    );
+    expect(postgres.scripts["test:postgresql:18"]).toMatch(
+      /^SPINE_TS_POSTGRESQL_EXPECTED_MAJOR=18 pnpm test:postgresql$/u,
+    );
   });
 
   it("fails provider commands before Vitest when their required setup is absent", () => {
@@ -90,6 +104,13 @@ describe("stable CI test inventory", () => {
       },
     );
     expect(mysqlVerifier.status).not.toBe(0);
+
+    const postgresVerifier = spawnSync(
+      process.execPath,
+      ["packages/storage-postgres/scripts/postgresql.mjs"],
+      { env: withoutProviderEnvironment() },
+    );
+    expect(postgresVerifier.status).not.toBe(0);
   });
 
   it("retains self-contained loopback and child-process coverage in the ordinary suite", () => {
@@ -106,5 +127,7 @@ function withoutProviderEnvironment() {
   delete environment.DATASTORE_PROJECT_ID;
   delete environment.SPINE_TS_MYSQL_URL;
   delete environment.SPINE_TS_MYSQL_ADMIN_URL;
+  delete environment.SPINE_TS_POSTGRESQL_URL;
+  delete environment.SPINE_TS_POSTGRESQL_EXPECTED_MAJOR;
   return environment;
 }

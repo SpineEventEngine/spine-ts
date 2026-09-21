@@ -951,6 +951,50 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   PostgreSQL 16 and 18 execution remains a reported external-input blocker
   until explicit URLs are supplied.
 
+## Task 5 Live-Acceptance Harness
+
+- RED: the stable infrastructure-inventory test failed after it was changed to
+  require a PostgreSQL live-test file and package command. The package had
+  neither, so the failure proved that ordinary Vitest selection had no explicit
+  PostgreSQL live path. A second preflight check failed with the expected
+  missing `SPINE_TS_POSTGRESQL_URL` message before Vitest could start.
+- GREEN: `@spine-event-engine/storage-postgres` now provides
+  `test:postgresql`, plus `test:postgresql:16` and `test:postgresql:18`.
+  Every command requires explicit `SPINE_TS_POSTGRESQL_URL`,
+  `SPINE_TS_POSTGRESQL_TENANT_A_URL`, and
+  `SPINE_TS_POSTGRESQL_TENANT_B_URL`; it starts neither Docker nor a fallback
+  provider. The `:16` and `:18` commands set an expected major. The live test
+  opens all three configured databases, runs `SHOW server_version_num` on each,
+  requires PostgreSQL 16 or later, and requires the selected major when one was
+  requested.
+- The live suite is registered only in the infrastructure inventory. It uses
+  public factory/provider paths to cover table/catalog initialization,
+  CRUD/query/CAS, concurrent two-factory CAS, tenant database isolation,
+  atomic Entity commits, bounded state-history trim/truncate, concurrent Entity
+  commit conflict, and factory/record lifecycle. The existing server Inbox
+  cleanup suite now has a real `postgresql` provider block with two independent
+  `PostgresStorageFactory` instances, proving exact delivered-row removal and
+  stale-session fencing through production Inbox paths. The command explicitly
+  selects both provider test files, so no PostgreSQL cleanup test is silently
+  skipped.
+- Retry injection is deliberately not simulated in the live suite: the public
+  factory has no test-only fault hook, and a real deadlock/serialization test
+  would require a privileged, timing-sensitive external setup. The existing
+  hermetic provider tests continue to prove the bounded retry and rollback
+  paths. Live execution proves the public success/concurrency/lifecycle paths
+  without adding a test-only runtime API.
+- Mechanical evidence: the missing-URL command stopped before Vitest with the
+  expected message; invalid expected major `15` was rejected before Vitest;
+  the serial hermetic PostgreSQL plus provider-selection and infrastructure
+  suites passed `115/115`; package and server no-emit typechecks passed;
+  scoped ESLint, full TSDoc, cleanup/method-length enforcement, Prettier, and
+  `git diff --check` passed. Standard generated build output was rebuilt before
+  tests and will be removed before recording the checkpoint.
+- External evidence remains blocked: no PostgreSQL URL is configured and
+  automatic Docker startup is prohibited. Therefore no PostgreSQL 16 or 18
+  command has run against a live server, and this task does not claim either as
+  passed.
+
 ## Task 4 History Verification Correction
 
 - Existing role/function: continuing sole `implementer`, explicitly configured
