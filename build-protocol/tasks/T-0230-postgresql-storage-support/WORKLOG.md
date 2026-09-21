@@ -400,6 +400,21 @@ conflicting row disappears before inspection`: `ON CONFLICT DO NOTHING`
   passed `8 passed (8)`, package typecheck, scoped ESLint, Prettier, and
   `git diff --check`.
 
+## Task 3 Query and CAS Matrix Characterization
+
+- Characterization: after aligning the test fixture's declared nullable `value`
+  column with its catalog row, production-path tests verified all five normalized
+  comparisons, nested `all`/`either`, a declared descending order, mask admission,
+  and candidate-limit-plus-one SQL bounds. Each uses numbered PostgreSQL binds.
+- Characterization: `RecordQuery` filtering with null compiles through `IS NOT
+DISTINCT FROM`; an ascending null continuation emits `IS NOT NULL` rather than
+  a comparison to null, and ordering emits `ASC NULLS FIRST`.
+- Characterization: compare-and-set retries one complete transaction with fresh
+  clients for both `40001` and `40P01`, including rollback before retry. A `23505`
+  error does not retry, rolls back, releases the client once, and surfaces the
+  sanitized provider operation error. The focused record suite passed `17 passed
+(17)`.
+
 ## Task 3 Record Runtime Checkpoint
 
 - Existing role/function: continuing `implementer`, configured explicitly as

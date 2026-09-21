@@ -12,9 +12,9 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { RecordSpec } from "@spine-event-engine/storage";
+import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const driver = vi.hoisted(() => {
@@ -37,6 +37,13 @@ const driver = vi.hoisted(() => {
             data_type: "bytea",
             character_maximum_length: null,
             is_nullable: "NO",
+            column_default: null,
+          },
+          {
+            column_name: "value",
+            data_type: "text",
+            character_maximum_length: null,
+            is_nullable: "YES",
             column_default: null,
           },
         ],
@@ -83,6 +90,13 @@ describe("Postgres record storage", () => {
               is_nullable: "NO",
               column_default: null,
             },
+            {
+              column_name: "value",
+              data_type: "text",
+              character_maximum_length: null,
+              is_nullable: "YES",
+              column_default: null,
+            },
           ],
         });
       }
@@ -107,6 +121,7 @@ describe("Postgres record storage", () => {
         recordType: StringValueSchema,
         idKind: "string",
         extractId: (record) => record.value,
+        columns: valueColumns(),
       }),
     );
 
@@ -114,7 +129,7 @@ describe("Postgres record storage", () => {
 
     const write = driver.calls.find(({ sql }) => sql.startsWith("INSERT INTO"));
     expect(write?.sql).toContain('"spine"."google_protobuf_stringvalue"');
-    expect(write?.sql).toContain("VALUES ($1, $2)");
+    expect(write?.sql).toContain("VALUES ($1, $2, $3)");
     expect(write?.values?.[0]).toBe("one");
     expect(write?.values?.[1]).toBeInstanceOf(Uint8Array);
   });
@@ -191,29 +206,53 @@ describe("Postgres record storage", () => {
     expect(inserts).toBe(1);
   });
 
-  it("retries a serialization-failed compare-and-set once with a fresh client", async () => {
+  it.each(["40001", "40P01"] as const)(
+    "retries compare-and-set once with a fresh client for %s",
+    async (code) => {
+      const storage = await recordStorage();
+      await (storage as unknown as { prepare(): Promise<void> }).prepare();
+      vi.clearAllMocks();
+      driver.calls.length = 0;
+      let failed = false;
+      driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
+        driver.calls.push({ sql, values });
+        if (sql === "BEGIN" && !failed) {
+          failed = true;
+          return Promise.reject(Object.assign(new Error("transaction failure"), { code }));
+        }
+        return Promise.resolve({ rowCount: 1, rows: [] });
+      });
+
+      await expect(
+        storage.compareAndSet("one", undefined, create(StringValueSchema, { value: "one" })),
+      ).resolves.toBe(true);
+
+      expect(driver.connect).toHaveBeenCalledTimes(2);
+      expect(driver.calls.map(({ sql }) => sql)).toEqual(
+        expect.arrayContaining(["BEGIN", "ROLLBACK", "BEGIN", "COMMIT"]),
+      );
+    },
+  );
+
+  it("does not retry a non-transactional compare-and-set error", async () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
     vi.clearAllMocks();
     driver.calls.length = 0;
-    let failed = false;
     driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
       driver.calls.push({ sql, values });
-      if (sql === "BEGIN" && !failed) {
-        failed = true;
-        return Promise.reject(Object.assign(new Error("serialization failure"), { code: "40001" }));
-      }
+      if (sql === "BEGIN")
+        return Promise.reject(Object.assign(new Error("constraint"), { code: "23505" }));
       return Promise.resolve({ rowCount: 1, rows: [] });
     });
 
     await expect(
       storage.compareAndSet("one", undefined, create(StringValueSchema, { value: "one" })),
-    ).resolves.toBe(true);
+    ).rejects.toThrow("record operation failed");
 
-    expect(driver.connect).toHaveBeenCalledTimes(2);
-    expect(driver.calls.map(({ sql }) => sql)).toEqual(
-      expect.arrayContaining(["BEGIN", "ROLLBACK", "BEGIN", "COMMIT"]),
-    );
+    expect(driver.connect).toHaveBeenCalledTimes(1);
+    expect(driver.calls.map(({ sql }) => sql)).toEqual(["BEGIN", "ROLLBACK"]);
+    expect(driver.release).toHaveBeenCalledTimes(1);
   });
 
   it("pushes normalized ID selection into one numbered PostgreSQL statement", async () => {
@@ -244,6 +283,83 @@ describe("Postgres record storage", () => {
     expect(driver.connect).not.toHaveBeenCalled();
     expect(driver.calls).toEqual([]);
   });
+
+  it.each([
+    ["equal", "IS NOT DISTINCT FROM"],
+    ["greaterThan", ">"],
+    ["lessThan", "<"],
+    ["greaterOrEqual", ">="],
+    ["lessOrEqual", "<="],
+  ] as const)(
+    "pushes the %s comparison into bound PostgreSQL SQL",
+    async (operator, sqlOperator) => {
+      const storage = await recordStorage();
+      await (storage as unknown as { prepare(): Promise<void> }).prepare();
+      vi.clearAllMocks();
+      driver.calls.length = 0;
+
+      await storage.queryPlan({
+        predicate: { kind: "comparison", column: "value", operator, value: "two" },
+      });
+
+      const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+      expect(query?.sql).toContain(`WHERE "value" ${sqlOperator} $1`);
+      expect(query?.values).toEqual(["two", 10_001]);
+    },
+  );
+
+  it("pushes nested normalized predicates with declared ordering and a candidate bound", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+
+    await storage.queryPlan({
+      predicate: {
+        kind: "all",
+        predicates: [
+          { kind: "comparison", column: "value", operator: "greaterOrEqual", value: "b" },
+          {
+            kind: "either",
+            predicates: [
+              { kind: "ids", ids: ["two"] },
+              { kind: "comparison", column: "value", operator: "lessOrEqual", value: "z" },
+            ],
+          },
+        ],
+      },
+      mask: { paths: ["value"] },
+      order: [{ column: "value", direction: "desc" }],
+      limit: 8,
+      candidateLimit: 2,
+    });
+
+    const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).toContain(
+      'WHERE ("value" >= $1 AND ("ID" IN ($2) OR "value" <= $3)) ORDER BY "value" DESC NULLS LAST, "ID" ASC LIMIT $4',
+    );
+    expect(query?.values).toEqual(["b", "two", "z", 3]);
+  });
+
+  it("uses null-safe filters and an explicit null continuation predicate", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+
+    await storage.query({
+      filters: [{ column: "value", value: null }],
+      sort: [{ field: "value", direction: "asc" }],
+      after: { values: [{ field: "value", value: null }], id: "one" },
+      limit: 2,
+    });
+
+    const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).toContain('"value" IS NOT DISTINCT FROM $1');
+    expect(query?.sql).toContain('("value" IS NOT NULL)');
+    expect(query?.sql).toContain('ORDER BY "value" ASC NULLS FIRST, "ID" ASC LIMIT $4');
+    expect(query?.values).toEqual([null, null, "one", 2]);
+  });
 });
 
 async function recordStorage() {
@@ -256,6 +372,13 @@ async function recordStorage() {
       recordType: StringValueSchema,
       idKind: "string",
       extractId: (record) => record.value,
+      columns: valueColumns(),
     }),
   );
+}
+
+function valueColumns(): readonly RecordColumn<StringValue, string>[] {
+  return [
+    new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
+  ];
 }
