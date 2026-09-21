@@ -433,6 +433,12 @@ DISTINCT FROM`; an ascending null continuation emits `IS NOT NULL` rather than
   IDs in the same database/schema/table identity domain. The focused record
   suite passed `22 passed (22)`.
 
+## Task 3 RecordQuery Window Characterization
+
+- Characterization: a finite RecordQuery offset compiles to bound PostgreSQL
+  `LIMIT` and `OFFSET`, and descending declared ordering explicitly emits
+  `NULLS LAST`. The focused record suite passed `23 passed (23)`.
+
 ## Task 3 Record Runtime Checkpoint
 
 - Existing role/function: continuing `implementer`, configured explicitly as

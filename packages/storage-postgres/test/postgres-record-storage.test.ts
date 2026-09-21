@@ -440,6 +440,19 @@ describe("Postgres record storage", () => {
     expect(query?.sql).toContain('ORDER BY "value" ASC NULLS FIRST, "ID" ASC LIMIT $4');
     expect(query?.values).toEqual([null, null, "one", 2]);
   });
+
+  it("uses PostgreSQL's finite offset window and descending null order", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+
+    await storage.query({ sort: [{ field: "value", direction: "desc" }], limit: 3, offset: 2 });
+
+    const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).toContain('ORDER BY "value" DESC NULLS LAST, "ID" ASC LIMIT $1 OFFSET $2');
+    expect(query?.values).toEqual([3, 2]);
+  });
 });
 
 async function recordStorage() {
