@@ -38,6 +38,8 @@ import { Identifiers } from "@spine-event-engine/core";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { entityStorage } from "./postgres-entity-seam.js";
+
 import { PostgresStorageFactory } from "../src/index.js";
 
 const url = requireUrl("SPINE_TS_POSTGRESQL_URL");
@@ -158,7 +160,7 @@ describe("PostgreSQL live storage acceptance", () => {
     const scope = context("entity");
     const input = entityInput(scope);
     const commits = EntityCommitStorageFactories.create(factory, input);
-    const entity = factory.createEntityStorage(input);
+    const entity = entityStorage(factory, input);
     try {
       await expect(commits.commit(entityMutation(scope, input, "task"))).resolves.toBe("committed");
       await expect(entity.current.read("task")).resolves.toEqual(current("task", "next", 1));

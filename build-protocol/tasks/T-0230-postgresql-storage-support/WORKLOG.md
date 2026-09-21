@@ -1363,6 +1363,12 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   If an operation already failed, that error remains observable while the same
   discard marker prevents a possibly locked client from returning to the pool.
 
+## Private Entity Seam Test Correction
+
+- GREEN: `pnpm typecheck:tooling` passes after PostgreSQL tests invoke the
+  private runtime Entity seam through one typed `unknown` structural cast; the
+  serial PostgreSQL suite passes 144 tests.
+
 ## Private Entity-Seam Test Correction
 
 - Independent post-correction verification passed the dependency-aware

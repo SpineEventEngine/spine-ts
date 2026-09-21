@@ -29,6 +29,8 @@ import { RecordSpec } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
 
+import { entityStorage } from "./postgres-entity-seam.js";
+
 const driver = vi.hoisted(() => {
   const calls: { client: number; sql: string; values: readonly unknown[] }[] = [];
   const keyPages: unknown[][] = [];
@@ -281,8 +283,8 @@ describe("PostgreSQL Entity history", () => {
 
   it("reads state at a timestamp and bounds state and event history continuations", async () => {
     const factory = await postgresFactory();
-    const states = factory.createEntityStorage(entityInput(true)).states;
-    const events = factory.createEntityStorage(entityInput(false, true)).events;
+    const states = entityStorage(factory, entityInput(true)).states;
+    const events = entityStorage(factory, entityInput(false, true)).events;
     const state = create(StringValueSchema, { value: "at-five" });
     const before = driver.calls.length;
     driver.setHistoryRecords([
@@ -311,7 +313,7 @@ describe("PostgreSQL Entity history", () => {
 
   it("returns no point-in-time state for a state-less record and rejects malformed state bytes", async () => {
     const factory = await postgresFactory();
-    const states = factory.createEntityStorage(entityInput(true)).states;
+    const states = entityStorage(factory, entityInput(true)).states;
     const at = create(TimestampSchema, { seconds: 5n });
     driver.setHistoryRecords([{ bytes: toBinary(EntityRecordSchema, create(EntityRecordSchema)) }]);
 
@@ -338,7 +340,7 @@ describe("PostgreSQL Entity history", () => {
 
   it("reads, writes, and maps current Entity query entries through the factory handle", async () => {
     const factory = await postgresFactory();
-    const current = factory.createEntityStorage(entityInput()).current;
+    const current = entityStorage(factory, entityInput()).current;
     const record = stateRecord("task", "current", 2);
     driver.setHistoryRecords([{ ID: "task", bytes: toBinary(EntityRecordSchema, record) }]);
 
@@ -357,8 +359,8 @@ describe("PostgreSQL Entity history", () => {
 
   it("rejects invalid history bounds before preparing a record family", async () => {
     const factory = await postgresFactory();
-    const states = factory.createEntityStorage(entityInput(true)).states;
-    const events = factory.createEntityStorage(entityInput(false, true)).events;
+    const states = entityStorage(factory, entityInput(true)).states;
+    const events = entityStorage(factory, entityInput(false, true)).events;
 
     await expect(states.backward("task", 0)).rejects.toThrow(/positive finite integer/i);
     await expect(events.backward("task", Number.NaN)).rejects.toThrow(/positive finite integer/i);
@@ -371,8 +373,8 @@ describe("PostgreSQL Entity history", () => {
 
   it("does not open a deletion page when history has no pre-cutoff high-water record", async () => {
     const factory = await postgresFactory();
-    const states = factory.createEntityStorage(entityInput(true)).states;
-    const events = factory.createEntityStorage(entityInput(false, true)).events;
+    const states = entityStorage(factory, entityInput(true)).states;
+    const events = entityStorage(factory, entityInput(false, true)).events;
     driver.setHighWater(undefined);
     const before = driver.calls.length;
 
@@ -385,7 +387,7 @@ describe("PostgreSQL Entity history", () => {
 
   it("rejects history work after its Entity handle closes", async () => {
     const factory = await postgresFactory();
-    const entity = factory.createEntityStorage(entityInput(true, true));
+    const entity = entityStorage(factory, entityInput(true, true));
 
     entity.close();
     entity.close();
@@ -399,7 +401,7 @@ describe("PostgreSQL Entity history", () => {
 
   it("trims state history through bounded key pages", async () => {
     const factory = await postgresFactory();
-    const entity = factory.createEntityStorage(entityInput(true));
+    const entity = entityStorage(factory, entityInput(true));
 
     await expect(entity.states.trim("task", 0)).resolves.toBeUndefined();
 
@@ -417,7 +419,7 @@ describe("PostgreSQL Entity history", () => {
       [],
     );
     const factory = await postgresFactory();
-    const entity = factory.createEntityStorage(entityInput(true));
+    const entity = entityStorage(factory, entityInput(true));
     const before = driver.calls.length;
 
     await entity.states.trim("task", 0);
@@ -429,7 +431,7 @@ describe("PostgreSQL Entity history", () => {
 
   it("discards the trim client and reports a sanitized error when advisory unlock is false", async () => {
     const factory = await postgresFactory();
-    const entity = factory.createEntityStorage(entityInput(true));
+    const entity = entityStorage(factory, entityInput(true));
     const releases = driver.release.mock.calls.length;
     driver.failUnlock(false);
 
@@ -443,7 +445,8 @@ describe("PostgreSQL Entity history", () => {
     "discards the %s truncate client when advisory unlock rejects",
     async (history) => {
       const factory = await postgresFactory();
-      const entity = factory.createEntityStorage(
+      const entity = entityStorage(
+        factory,
         entityInput(history === "states", history === "events"),
       );
       const releases = driver.release.mock.calls.length;
@@ -460,7 +463,7 @@ describe("PostgreSQL Entity history", () => {
 
   it("preserves an earlier trim failure while discarding after unlock failure", async () => {
     const factory = await postgresFactory();
-    const entity = factory.createEntityStorage(entityInput(true));
+    const entity = entityStorage(factory, entityInput(true));
     const releases = driver.release.mock.calls.length;
     driver.setDeleteHook(() => Promise.reject(new Error("earlier operation failure")));
     driver.failUnlock(false);
@@ -474,7 +477,7 @@ describe("PostgreSQL Entity history", () => {
 
   it("freezes a high-water key before bounded state-history truncation", async () => {
     const factory = await postgresFactory();
-    const entity = factory.createEntityStorage(entityInput(true));
+    const entity = entityStorage(factory, entityInput(true));
 
     await entity.states.truncate(create(TimestampSchema, { seconds: 5n }));
 
@@ -509,15 +512,15 @@ describe("PostgreSQL Entity history", () => {
     const first = await postgresFactory();
     const second = await postgresFactory();
     const before = driver.calls.length;
-    const truncating = first
-      .createEntityStorage(entityInput(false, true))
-      .events.truncate(create(TimestampSchema, { seconds: 5n }));
+    const truncating = entityStorage(first, entityInput(false, true)).events.truncate(
+      create(TimestampSchema, { seconds: 5n }),
+    );
     await vi.waitFor(() => {
       expect(finishDelete).toBeDefined();
     });
-    const appending = second
-      .createEntityStorage(entityInput(false, true))
-      .events.append(eventRecord("event-2", "task", 2));
+    const appending = entityStorage(second, entityInput(false, true)).events.append(
+      eventRecord("event-2", "task", 2),
+    );
 
     await vi.waitFor(() => {
       expect(
@@ -549,13 +552,13 @@ describe("PostgreSQL Entity history", () => {
     const first = await postgresFactory();
     const second = await postgresFactory();
     const before = driver.calls.length;
-    const trimming = first.createEntityStorage(entityInput(true)).states.trim("task", 0);
+    const trimming = entityStorage(first, entityInput(true)).states.trim("task", 0);
     await vi.waitFor(() => {
       expect(finishDelete).toBeDefined();
     });
-    const appending = second
-      .createEntityStorage(entityInput(true))
-      .states.append(stateRecord("task", "two", 2));
+    const appending = entityStorage(second, entityInput(true)).states.append(
+      stateRecord("task", "two", 2),
+    );
 
     await vi.waitFor(() => {
       expect(
@@ -595,7 +598,7 @@ describe("PostgreSQL Entity history", () => {
 
   it("enables immutable diagnostic event history through the factory handle", async () => {
     const factory = await postgresFactory();
-    const entity = factory.createEntityStorage(entityInput(false, true));
+    const entity = entityStorage(factory, entityInput(false, true));
 
     await expect(entity.events.append(eventRecord("event-1", "task", 1))).resolves.toBeUndefined();
   });
@@ -607,7 +610,7 @@ describe("PostgreSQL Entity history", () => {
       ["retained-event"],
     );
     const factory = await postgresFactory();
-    const entity = factory.createEntityStorage(entityInput(false, true));
+    const entity = entityStorage(factory, entityInput(false, true));
     const before = driver.calls.length;
 
     await entity.events.truncate(create(TimestampSchema, { seconds: 5n }));
@@ -626,7 +629,7 @@ describe("PostgreSQL Entity history", () => {
 
   it("closes grouped state history with its Entity handle", async () => {
     const factory = await postgresFactory();
-    const entity = factory.createEntityStorage(entityInput(true));
+    const entity = entityStorage(factory, entityInput(true));
 
     entity.close();
 
@@ -649,7 +652,7 @@ describe("PostgreSQL Entity history", () => {
         }),
     );
     const factory = await postgresFactory();
-    const entity = factory.createEntityStorage(entityInput(true));
+    const entity = entityStorage(factory, entityInput(true));
     const before = driver.calls.length;
     const trimming = entity.states.trim("task", 0);
     await vi.waitFor(() => {
@@ -673,7 +676,7 @@ describe("PostgreSQL Entity history", () => {
     driver.keyPages.push(["retry-key"]);
     driver.setDeleteHook(() => Promise.reject(failure));
     const factory = await postgresFactory();
-    const entity = factory.createEntityStorage(entityInput(true));
+    const entity = entityStorage(factory, entityInput(true));
     await entity.states.backward("task", 1);
     const before = driver.calls.length;
     const releases = driver.release.mock.calls.length;

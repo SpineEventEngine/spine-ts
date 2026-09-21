@@ -28,6 +28,8 @@ import {
 } from "@spine-event-engine/storage/provider";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { entityStorage } from "./postgres-entity-seam.js";
+
 const driver = vi.hoisted(() => {
   let commitFailure: Error | undefined;
   let failure: { readonly sql: string; readonly after: number; readonly error: Error } | undefined;
@@ -266,7 +268,7 @@ describe("PostgreSQL Entity commit", () => {
   it("uses the same family and Entity advisory keys as state history", async () => {
     const factory = await postgresFactory();
     const entity = entityInput(true);
-    const history = factory.createEntityStorage(entity);
+    const history = entityStorage(factory, entity);
     await history.states.append(record("task"));
     const historyKeys = driver.query.mock.calls
       .filter(([sql]) => sql.includes("pg_advisory_xact_lock"))
