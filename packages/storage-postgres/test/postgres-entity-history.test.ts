@@ -502,7 +502,7 @@ describe("PostgreSQL Entity history", () => {
       const pages = calls.filter(({ sql }) => sql.startsWith('SELECT "ID"'));
       expect(pages.every(({ sql }) => !sql.includes("OFFSET"))).toBe(true);
       if (count > 256) {
-        expect(pages[1]?.values?.slice(1, 4)).not.toEqual(pages[0]?.values?.slice(1, 4));
+        expect(pages[1].values.slice(1, 4)).not.toEqual(pages[0].values.slice(1, 4));
         expect(pages[1]?.sql).toContain('("version", "created", "ID") < ($2, $3, $4)');
       }
     } finally {
