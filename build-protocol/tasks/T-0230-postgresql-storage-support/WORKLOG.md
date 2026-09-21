@@ -1362,3 +1362,15 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   and releases the affected `pg` client with an error so the pool discards it.
   If an operation already failed, that error remains observable while the same
   discard marker prevents a possibly locked client from returning to the pool.
+
+## Private Entity-Seam Test Correction
+
+- Independent post-correction verification passed the dependency-aware
+  production build and the complete serial PostgreSQL suite (`144/144`), then
+  `pnpm typecheck:tooling` found 26 test calls that still accessed the now-
+  private `createEntityStorage` method directly. Focused Vitest transpilation
+  does not typecheck those calls.
+- The same `gpt-5.6-terra` / `medium` implementer receives one test-only batch:
+  route every affected test through an explicit structural runtime-test helper,
+  matching the server's real structural probe. Production visibility, runtime
+  behavior, public declarations, and the private seam must remain unchanged.
