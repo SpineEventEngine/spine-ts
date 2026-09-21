@@ -1443,3 +1443,24 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   `high`; documentation at `gpt-5.6-luna` / `medium`. Reviews are read-only,
   independent, and cannot spawn children. The complete wave is collected before
   any further correction.
+
+## Affected Re-review And Final Correction Dispatch
+
+- All four affected reviewers completed against frozen endpoint `a9476bb0e`.
+  Their explicit role/profile metadata matched the recorded dispatch, writes
+  and child agents were prohibited, and the full wave was collected before
+  correction.
+- Accepted findings are the trim retained-boundary off-by-one, missing grouped-
+  builder behavior coverage, incomplete JVM name goldens plus a real quoted-name
+  spelling mismatch, the durable-storage workflow omission, and the missing
+  normalized-query matrix. `REVIEW.md` contains the merged six-item batch.
+- Official source validation used `SpineEventEngine/jdbc-storage` commit
+  `c747908403764eb9` and its QueryDSL 5.1.0 renderer. Ordinary ASCII names are
+  unquoted and PostgreSQL-folded; reserved and non-plain/non-ASCII names are
+  quoted and preserve spelling. The correction must reproduce that physical
+  result before TS's consistent SQL quoting and collision checks.
+- The same existing `implementer` receives the coherent runtime/test/docs batch
+  with explicit `gpt-5.6-terra` / `medium`, no child agents, and sole production-
+  writer responsibility. Runtime changes require focused RED/GREEN evidence;
+  thresholds, exclusions, unrelated MySQL behavior, and live-service startup
+  remain forbidden.

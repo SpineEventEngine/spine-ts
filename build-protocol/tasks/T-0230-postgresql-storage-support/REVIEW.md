@@ -1,6 +1,6 @@
 # T-0230 Review Record
 
-Status: Accepted corrections implemented; affected re-review ready
+Status: Affected re-review complete; final correction batch pending
 
 Initial review endpoint: `c09c961d6bf75e2cb90fb36fa2dc2c2e0882dd15`
 Correction endpoint: `34ca4b669c78612bb158bba6635524e2c00341ed`
@@ -8,13 +8,13 @@ Baseline: `6fffcd6102b3eff94b0f77eb6db2fbf2e02ba172`
 
 ## Planned Review Concerns
 
-| Concern                          | Existing role                      | Model           | Reasoning | Scope                                                                                                                                                                                                                                             | Disposition                                |
-| -------------------------------- | ---------------------------------- | --------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| Style and maintainability        | `style_maintainability_reviewer`   | `gpt-5.6-terra` | high      | Package structure, simplicity, method size, duplication, tests                                                                                                                                                                                    | Corrections implemented; re-review pending |
-| Documentation completeness       | `documentation_reviewer`           | `gpt-5.6-luna`  | medium    | README, reference, storage guide, release and operational claims                                                                                                                                                                                  | Corrections implemented; re-review pending |
-| TypeScript and API documentation | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` | high      | Public exports, types, TSDoc, compatibility, external consumer                                                                                                                                                                                    | Corrections implemented; re-review pending |
-| Performance and reliability      | `performance_reliability_reviewer` | `gpt-5.6-terra` | high      | SQL bounds, transactions, locks, histories, retries, lifecycle                                                                                                                                                                                    | Corrections implemented; re-review pending |
-| Security release readiness       | N/A                                | —               | —         | Dedicated security review is reserved for final project/release readiness by the current protocol; SQL binding, credential handling, TLS, tenant/schema isolation, and dependency policy remain mandatory mechanical and specialist-review inputs | N/A with concrete reason                   |
+| Concern                          | Existing role                      | Model           | Reasoning | Scope                                                                                                                                                                                                                                             | Disposition                   |
+| -------------------------------- | ---------------------------------- | --------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Style and maintainability        | `style_maintainability_reviewer`   | `gpt-5.6-terra` | high      | Package structure, simplicity, method size, duplication, tests                                                                                                                                                                                    | Complete; 3 findings accepted |
+| Documentation completeness       | `documentation_reviewer`           | `gpt-5.6-luna`  | medium    | README, reference, storage guide, release and operational claims                                                                                                                                                                                  | Complete; 3 findings accepted |
+| TypeScript and API documentation | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` | high      | Public exports, types, TSDoc, compatibility, external consumer                                                                                                                                                                                    | Complete; 1 finding accepted  |
+| Performance and reliability      | `performance_reliability_reviewer` | `gpt-5.6-terra` | high      | SQL bounds, transactions, locks, histories, retries, lifecycle                                                                                                                                                                                    | Complete; 1 finding accepted  |
+| Security release readiness       | N/A                                | —               | —         | Dedicated security review is reserved for final project/release readiness by the current protocol; SQL binding, credential handling, TLS, tenant/schema isolation, and dependency policy remain mandatory mechanical and specialist-review inputs | N/A with concrete reason      |
 
 All relevant reviewers will receive the complete Human-Imposed Requirements
 Ledger from `TASK.md`, the immutable review endpoint, concern-specific paths,
@@ -108,3 +108,43 @@ separate external verification gap, not part of this code correction batch.
   correction batch. Reviewers receive the initial endpoint, correction
   endpoint, exact accepted findings, and current files. No code changes may
   begin until the complete affected wave is collected.
+
+## Affected Re-review Disposition
+
+All four affected reviewers completed against the frozen correction endpoint.
+The same explicit immutable role profiles were used; reviews were read-only and
+had no child agents. The wave confirms the inclusive history, Entity defaults,
+whole-batch retry, shared classifier, session-lock discard/error precedence,
+sanitized public errors, private Entity seam, grouped routing implementation,
+root declarations, dependency declarations, and most documentation corrections.
+
+The final accepted batch is:
+
+1. Correct the trim boundary off-by-one. The boundary selected at `OFFSET keep`
+   is the first obsolete state, so keyset deletion must include that complete
+   `(version, created, ID)` key. Prove exact retained counts for zero, a partial
+   page, and multiple pages.
+2. Add an end-to-end public-builder grouped-name regression: the configured
+   `(sourceType, recordType, group)` family uses its custom table while the
+   ungrouped source remains distinct.
+3. Implement and pin the complete binding JVM physical-name matrix. Official
+   `jdbc-storage` commit `c747908403764eb9` delegates to QueryDSL 5.1.0:
+   ordinary ASCII identifiers are emitted unquoted and PostgreSQL folds their
+   ASCII capitals; PostgreSQL reserved words and names containing characters
+   illegal in a plain identifier are quoted and preserve spelling. TS may quote
+   the resulting physical name in SQL, but must reproduce that stored spelling
+   before collision checks. Add reserved, non-ASCII/case, custom, exact 63-byte,
+   case-only, and over-limit/collision cases through resolver and DDL-facing
+   behavior. Reject unsafe or over-limit names before access.
+4. Include PostgreSQL in the user guide's main move-to-durable-storage sentence,
+   without dropping MySQL or Datastore.
+5. Document the exact normalized PostgreSQL matrix: IDs, five comparisons,
+   nested `all`/`either`, declared-column ordering, mask, finite limit, and that
+   normalized plans have no offset while `RecordQuery.offset` remains separate.
+6. Keep README/reference name claims aligned with the corrected binding renderer;
+   do not narrow the documentation to the rejected lowercase-only behavior.
+
+The grouped test finding appeared in style and API review, and the trim finding
+appeared in style and reliability review; each is one correction. No affected-
+wave finding is rejected. Missing live PostgreSQL URLs remains the external
+verification gap.
