@@ -597,3 +597,24 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   `8 files, 68 tests`; package `tsc --noEmit`, scoped ESLint, Prettier,
   full `lint:tsdoc`, `lint:cleanup`, and `git diff --check` passed. No
   generated output was retained.
+
+## Task 4B Architecture Escalation
+
+- RED: the internal registry rejects PostgreSQL atomic Entity commit until the
+  provider registers its capability. Factory registration and a tracked handle
+  made construction green; a current-record-only prototype also reached one
+  PostgreSQL transaction and Entity advisory lock.
+- The prototype is deliberately uncommitted and incomplete. It cannot yet bind
+  the current locked read, grouped immutable state/diagnostic appends, delivery-
+  event appends, and current write to one supplied client. Committing that body
+  would falsely claim atomic Entity behavior.
+- This is a demonstrated package-architecture blocker: the private record and
+  history executor needs the smallest semantic extension for caller-managed-
+  client work, while pools, clients, raw SQL, and provider helpers remain
+  outside the public root and common SPI.
+- Existing function: `requirements_splitter`, explicitly configured
+  `gpt-5.6-sol` / `high`, no history and no child spawning. It receives a
+  read-only bounded design task for executor shape, preparation/lock order,
+  retry boundary, lifecycle, and TDD slices. Runtime self-introspection may be
+  unavailable; immutable configured role/profile is the expected metadata.
+  The sole production writer is paused during this pass.
