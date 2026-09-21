@@ -398,4 +398,26 @@ release verification reopen only after PostgreSQL 16 and 18 pass.
   the public contract.
 - Focused record/entity-history tests pass `71/71`. The exact PG16 command with
   all supplied URLs passes `8 passed, 4 skipped`; typecheck and scoped static
-  checks accompany the pushed commit. The existing PG18 URL gap remains.
+  checks accompany the pushed commit.
+
+## Live-Correction Re-Review And PostgreSQL 18
+
+- The memory-free performance/reliability reviewer found no correctness,
+  persistence, concurrency, lifecycle, or bounded-resource issue in
+  `d8c7fe9764ad865c1a6820f0c3b13cc08d512ee1`. It confirmed that CAS locks,
+  reads, and writes the caller-selected slot while ordinary and immutable writes
+  retain body-derived IDs, and that shared and exclusive advisory unlock results
+  use their real PostgreSQL column names.
+- The memory-free style/maintainability reviewer also found no issue. It accepted
+  the private optional ID seam, focused regressions, public builder-based registry
+  setup, and run-isolated/domain-correct live fixtures.
+- Both reviewers were existing configured roles dispatched explicitly as
+  `gpt-5.6-terra` / `high`. The prompts' expanded baseline SHA was mistyped and
+  did not resolve; both reviewers independently used the target commit's actual
+  parent, `d301ac32d4e251f32c6c0267a130f4f47845a5cd`, so review scope remained the
+  intended correction commit.
+- PostgreSQL 18.6 passes the exact `test:postgresql:18` command: 2 files pass,
+  8 tests pass, and 4 provider-specific tests skip. Inspection confirms the
+  skipped cases are the MySQL and Datastore suites; both PostgreSQL Inbox tests
+  and all six PostgreSQL package acceptance tests ran. This resolves the final
+  live-provider evidence gap alongside the equivalent PostgreSQL 16.15 result.

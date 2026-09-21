@@ -3,7 +3,7 @@
 `@spine-event-engine/storage-postgres` stores Spine TS records in PostgreSQL.
 It is a separate provider package; the existing `storage-rdbms` package remains
 the MySQL provider. PostgreSQL support currently targets PostgreSQL 16 or newer,
-but this repository has not yet recorded live PostgreSQL 16 or 18 evidence.
+with live acceptance recorded against PostgreSQL 16.15 and 18.6.
 
 This is an experimental snapshot package. Use Node 24 or newer. For the precise
 public API and operational rules, see the [coding-agent reference](REFERENCE.md).
@@ -94,9 +94,8 @@ The tenant URLs must name two distinct databases; separate schemas in one
 database do not prove the multitenant boundary.
 
 Use `test:postgresql:16` or `test:postgresql:18` when the URL points to the
-corresponding server major. Until those commands have run against provisioned
-services, PostgreSQL 16+ remains the intended compatibility floor rather than
-a recorded live-success claim.
+corresponding server major. The repository's initial acceptance ran both
+commands successfully against PostgreSQL 16.15 and 18.6.
 
 Use a dedicated database account with DDL, metadata, and DML permissions. Keep
 URLs and credentials out of source control, configure TLS for production, and

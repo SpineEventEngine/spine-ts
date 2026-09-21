@@ -1742,4 +1742,30 @@ record-body)` and observed the upsert bind `record-body` instead of `slot`.
   CAS binds the caller's slot ID even when the replacement derives another ID;
   then minimally change the PostgreSQL CAS write path. Separately configure the
   live factory with a `StringifierRegistry` backed by the fixture type registry.
+
+## PostgreSQL 18 Live Acceptance And Correction Review
+
+- The human explicitly authorized local Docker. A disposable `postgres:18`
+  container reported server version `18.6`; the primary and two tenant URLs
+  named three separate databases. No repository-managed container automation
+  was added.
+- The exact `test:postgresql:18` command passes: both files pass, with 8 tests
+  passed and 4 skipped. The skips are the two MySQL-only and two
+  Datastore-only Inbox cases in the shared provider test. Both PostgreSQL Inbox
+  cases and all six PostgreSQL storage acceptance cases ran.
+- The PostgreSQL 16 result remains 8 passed and 4 provider-specific skips on
+  PostgreSQL 16.15. The supported compatibility floor and current stable-major
+  acceptance are therefore both demonstrated against live servers.
+- Two independent memory-free reviewers inspected correction commit
+  `d8c7fe9764ad865c1a6820f0c3b13cc08d512ee1` against its actual parent
+  `d301ac32d4e251f32c6c0267a130f4f47845a5cd`. Existing roles were
+  `performance_reliability_reviewer` and `style_maintainability_reviewer`, each
+  explicitly dispatched as `gpt-5.6-terra` / `high`; the execution surface did
+  not expose additional runtime self-introspection. Neither reviewer found an
+  issue. Their PostgreSQL 18 residual-risk note was made before the passing
+  18.6 run and is now resolved.
+- Dispatch hygiene correction: the review prompts contained a mistyped expanded
+  baseline SHA. Both reviewers detected that it did not resolve and independently
+  used the target commit's actual parent shown above, so the reviewed diff was
+  correct.
   No public API, schema, or automatic-container behavior changes.

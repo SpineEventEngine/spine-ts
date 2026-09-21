@@ -78,5 +78,6 @@ explicit `SPINE_TS_POSTGRESQL_URL`, `SPINE_TS_POSTGRESQL_TENANT_A_URL`, and
 `SPINE_TS_POSTGRESQL_TENANT_B_URL` values naming three test databases, then run
 the package's `test:postgresql:16`
 or `test:postgresql:18` command against a matching service. The repository
-currently records no live PostgreSQL 16/18 result, so documentation must not
-claim a completed live acceptance.
+records successful live acceptance against PostgreSQL 16.15 and 18.6. The four
+skipped cases in each run are the MySQL and Datastore variants in the shared
+Inbox test file; both PostgreSQL Inbox cases run.
