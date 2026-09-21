@@ -1048,6 +1048,22 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
 - No runtime semantics, MySQL behavior, live-service startup, third-party
   patching, or speculative feature is permitted.
 
+## Task 6 Independent Verification Dispatch
+
+- Function: independent read-only documentation, package, release-inventory,
+  and generated-artifact verification of Task 6 at `40a040486`; this is not a
+  new project role.
+- Expected profile: `gpt-5.6-luna` / `medium`, passed explicitly in the
+  dispatch; child spawning and file changes are prohibited. Runtime
+  self-introspection may be unavailable, so the immutable explicit dispatch is
+  the profile evidence.
+- The verifier must check the beginner/reference accuracy, live-command
+  variables, public export/TypeDoc expectations, every 19-package/27-path
+  inventory, server dependency pin/lockfile, Proto manifest consistency,
+  generated-output cleanliness, and whether the reported missing
+  `protoc-gen-es` and ignored `.superpowers` readiness diagnostics affect the
+  committed branch or require correction.
+
 ## Task 6 Integration Evidence
 
 - RED: `pnpm proto:generate` initially failed because
