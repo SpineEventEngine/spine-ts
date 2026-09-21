@@ -1507,3 +1507,30 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   at explicit `gpt-5.6-terra` / `medium`, without child agents. Runtime changes
   require RED/GREEN evidence; unrelated storage layout, MySQL behavior,
   thresholds, and live-service startup remain out of scope.
+
+## Last-Correction Preflight And Review Dispatch
+
+- The exact PostgreSQL suite passes 157 tests with 94.34% statements
+  (`968/1026`), 90.47% branches (`551/609`), 95.12% functions (`312/328`), and
+  96.70% lines (`851/880`). The dependency-aware build and tooling typecheck
+  pass.
+- Scoped ESLint, cleanup and callable limits, TSDoc, copyright, formatting,
+  diff hygiene, documentation audience, TypeDoc/API, snippets, Proto lint and
+  current-generation checks, logging containment, production-dependency
+  policy, and release readiness pass at `5e3c0631e`.
+- The affected packaging/release suite passes 234 tests in 13 files. It packs
+  all 19 public packages, installs them in a clean project, and compiles an
+  external TypeScript consumer of `@spine-event-engine/storage-postgres`.
+- The final read-only review reopens only the concerns changed since endpoint
+  `856171c31`: style/maintainability for exact name rendering, strict grouped
+  DDL assertions, and cursor clarity; performance/reliability for advancing
+  trim continuation and exact retention; documentation for the corrected
+  provider inventories and renderer claims. The TypeScript/API concern is N/A
+  because no public type, export, declaration, or package boundary changed
+  after its clean review.
+- Dispatches explicitly use the existing `style_maintainability_reviewer` at
+  `gpt-5.6-terra` / `high`, `performance_reliability_reviewer` at
+  `gpt-5.6-terra` / `high`, and `documentation_reviewer` at `gpt-5.6-luna` /
+  `medium`. Each review is independent, read-only, receives no prior review
+  memory, and may not spawn child agents. The complete wave is collected before
+  any correction.

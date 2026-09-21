@@ -206,3 +206,23 @@ manages only record-family tables. The accepted bounded-maintenance contract
 limits transferred keys and page size; it did not approve a provider-managed
 index schema. No live query-plan evidence demonstrates a defect. A future index
 contract would require a separately approved storage-layout milestone.
+
+## Last-Correction Review Gate
+
+- Frozen endpoint: `5e3c0631e`.
+- Exact PostgreSQL coverage: 157 tests; 94.34% statements (`968/1026`), 90.47%
+  branches (`551/609`), 95.12% functions (`312/328`), and 96.70% lines
+  (`851/880`).
+- Build, tooling typecheck, scoped lint, cleanup/callable limits, TSDoc,
+  copyright, formatting, diff hygiene, documentation, TypeDoc/API, snippets,
+  Proto, logging, dependency, and release-readiness gates pass.
+- Packaging/release verification passes 234 tests in 13 files, including all 19
+  tarballs and clean external TypeScript consumption of the PostgreSQL package.
+- Reopened concerns and explicit profiles: style/maintainability,
+  `gpt-5.6-terra` / `high`; performance/reliability, `gpt-5.6-terra` / `high`;
+  documentation, `gpt-5.6-luna` / `medium`. Reviews are read-only, independent,
+  receive no prior review conclusions, and cannot spawn children.
+- TypeScript/API is N/A for this final delta: its preceding review was clean,
+  and the accepted corrections changed internal renderer data, trim paging,
+  assertions, and documentation inventories without changing any public type,
+  export, declaration, error contract, or package boundary.
