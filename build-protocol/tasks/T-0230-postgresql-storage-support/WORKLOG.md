@@ -889,3 +889,28 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   evidence.
 - Common SPI, MySQL, server behavior, live-provider setup, documentation,
   release integration, Proto, and versions remain excluded.
+
+## Task 4 History Verification Correction
+
+- Existing role/function: continuing sole `implementer`, explicitly configured
+  `gpt-5.6-terra` / `medium`; child spawning was prohibited. Runtime profile
+  introspection is unavailable on this surface, so the immutable configured
+  role/profile is the available dispatch evidence.
+- RED: the accepted concurrency and event-history assertions did not exist.
+  The first focused execution of the new coordinated driver stopped before
+  behavior ran because its pool-release spy and lock-release helper had the
+  same name. Renaming the helper produced the intended two-client lock model;
+  no PostgreSQL runtime defect was exposed.
+- GREEN: two independently built `PostgresStorageFactory` instances now prove
+  that an event append takes its shared family lock but cannot insert while a
+  global event truncation holds the exclusive family lock through a 128-key
+  page and its next page. It resumes only after the truncation unlocks. The
+  state case proves the family-then-Entity order for both trim and append and
+  that append cannot insert while trim holds its session locks. Direct event
+  truncation coverage proves two 128-key ID-only pages use the frozen
+  `(created, version, ID)` high-water boundary and never select payload bytes.
+- Evidence: the focused serial Entity-history suite passed `12/12`; the full
+  serial PostgreSQL package suite passed `109/109`; package
+  `tsc --noEmit`, scoped ESLint, full TSDoc, cleanup/method-length enforcement,
+  Prettier, and `git diff --check` passed. The correction changes only
+  `postgres-entity-history.test.ts`; no generated output was retained.

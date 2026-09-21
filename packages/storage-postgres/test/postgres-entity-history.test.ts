@@ -25,11 +25,23 @@ import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
 
 const driver = vi.hoisted(() => {
-  const calls: { sql: string; values: readonly unknown[] }[] = [];
+  const calls: { client: number; sql: string; values: readonly unknown[] }[] = [];
   const keyPages: unknown[][] = [];
   let deleteHook: (() => Promise<unknown>) | undefined;
-  const query = vi.fn((sql: string, values: readonly unknown[] = []) => {
-    calls.push({ sql, values });
+  let nextClient = 0;
+  const locks = new Map<string, { exclusive?: number; shared: Set<number> }>();
+  const held = new Map<number, { key: string; shared: boolean; transaction: boolean }[]>();
+  const waiting: {
+    readonly lock: { client: number; key: string; shared: boolean; transaction: boolean };
+    readonly resolve: (value: { rows: never[] }) => void;
+  }[] = [];
+  const query = (client: number, sql: string, values: readonly unknown[] = []) => {
+    calls.push({ client, sql, values });
+    if (sql === "COMMIT" || sql === "ROLLBACK") releaseTransactions(client);
+    const lock = lockRequest(sql, values, client);
+    if (lock !== undefined) return acquire(lock);
+    const unlock = unlockRequest(sql, values, client);
+    if (unlock !== undefined) releaseLock(unlock);
     if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
     if (sql.includes("columns WHERE")) {
       if (values[1] === "google_protobuf_stringvalue")
@@ -101,9 +113,15 @@ const driver = vi.hoisted(() => {
     }
     if (sql.startsWith("DELETE") && deleteHook !== undefined) return deleteHook();
     return Promise.resolve({ rowCount: 1, rows: [] });
+  };
+  const releaseClient = vi.fn();
+  const connect = vi.fn(() => {
+    const client = nextClient++;
+    return Promise.resolve({
+      query: (sql: string, values: readonly unknown[] = []) => query(client, sql, values),
+      release: releaseClient,
+    });
   });
-  const release = vi.fn();
-  const connect = vi.fn(() => Promise.resolve({ query, release }));
   const end = vi.fn(() => Promise.resolve());
   const Pool = vi.fn(function Pool() {
     return { connect, end };
@@ -113,8 +131,83 @@ const driver = vi.hoisted(() => {
     calls,
     keyPages,
     setDeleteHook: (hook: (() => Promise<unknown>) | undefined) => (deleteHook = hook),
-    release,
+    release: releaseClient,
   };
+
+  function lockRequest(sql: string, values: readonly unknown[], client: number) {
+    const shared =
+      sql.includes("pg_advisory_xact_lock_shared") || sql.includes("pg_advisory_lock_shared");
+    const transaction = sql.includes("pg_advisory_xact_lock");
+    if (!transaction && !sql.includes("pg_advisory_lock")) return undefined;
+    return { client, key: String(values[0]), shared, transaction };
+  }
+
+  function unlockRequest(sql: string, values: readonly unknown[], client: number) {
+    if (!sql.includes("pg_advisory_unlock")) return undefined;
+    return { client, key: String(values[0]), shared: sql.includes("_shared"), transaction: false };
+  }
+
+  function acquire(lock: { client: number; key: string; shared: boolean; transaction: boolean }) {
+    if (available(lock)) {
+      grant(lock);
+      return Promise.resolve({ rows: [] });
+    }
+    return new Promise<{ rows: never[] }>((resolve) => {
+      waiting.push({ lock, resolve });
+    });
+  }
+
+  function available(lock: { client: number; key: string; shared: boolean }) {
+    const entry = locks.get(lock.key);
+    return (
+      entry === undefined ||
+      (lock.shared
+        ? entry.exclusive === undefined
+        : entry.exclusive === undefined && entry.shared.size === 0)
+    );
+  }
+
+  function grant(lock: { client: number; key: string; shared: boolean; transaction: boolean }) {
+    const entry = locks.get(lock.key) ?? { shared: new Set<number>() };
+    if (lock.shared) entry.shared.add(lock.client);
+    else entry.exclusive = lock.client;
+    locks.set(lock.key, entry);
+    held.set(lock.client, [...(held.get(lock.client) ?? []), lock]);
+  }
+
+  function releaseLock(lock: { client: number; key: string; shared: boolean }) {
+    const clientLocks = held.get(lock.client) ?? [];
+    const index = clientLocks.findIndex(
+      (item) => item.key === lock.key && item.shared === lock.shared,
+    );
+    if (index < 0) return;
+    clientLocks.splice(index, 1);
+    held.set(lock.client, clientLocks);
+    const entry = locks.get(lock.key);
+    if (entry === undefined) return;
+    if (lock.shared) entry.shared.delete(lock.client);
+    else entry.exclusive = undefined;
+    if (entry.exclusive === undefined && entry.shared.size === 0) locks.delete(lock.key);
+    drain();
+  }
+
+  function releaseTransactions(client: number) {
+    for (const lock of [...(held.get(client) ?? [])]) if (lock.transaction) releaseLock(lock);
+  }
+
+  function drain() {
+    for (let index = 0; index < waiting.length;) {
+      const waiter = waiting[index];
+      if (waiter === undefined) return;
+      if (!available(waiter.lock)) {
+        index += 1;
+        continue;
+      }
+      waiting.splice(index, 1);
+      grant(waiter.lock);
+      waiter.resolve({ rows: [] });
+    }
+  }
 });
 
 vi.mock("pg", () => ({ Pool: driver.Pool }));
@@ -206,11 +299,137 @@ describe("PostgreSQL Entity history", () => {
     ).toBe(true);
   });
 
+  it("waits to append an event until another factory finishes global truncation", async () => {
+    let finishDelete: (() => void) | undefined;
+    driver.keyPages.splice(0);
+    driver.keyPages.push(
+      Array.from({ length: 128 }, (_, index) => `event-${String(index)}`),
+      [],
+    );
+    driver.setDeleteHook(
+      () =>
+        new Promise((resolve) => {
+          finishDelete = () => {
+            resolve({ rowCount: 128, rows: [] });
+          };
+        }),
+    );
+    const first = await postgresFactory();
+    const second = await postgresFactory();
+    const before = driver.calls.length;
+    const truncating = first
+      .createEntityStorage(entityInput(false, true))
+      .events.truncate({ seconds: 5n });
+    await vi.waitFor(() => {
+      expect(finishDelete).toBeDefined();
+    });
+    const appending = second
+      .createEntityStorage(entityInput(false, true))
+      .events.append(eventRecord("event-2", "task", 2));
+
+    await vi.waitFor(() => {
+      expect(
+        driver.calls.slice(before).some(({ sql }) => sql.includes("pg_advisory_xact_lock_shared")),
+      ).toBe(true);
+    });
+    expect(driver.calls.slice(before).some(({ sql }) => sql.startsWith("INSERT"))).toBe(false);
+
+    finishDelete?.();
+    await Promise.all([truncating, appending]);
+
+    const calls = driver.calls.slice(before);
+    const unlock = calls.findIndex(({ sql }) => sql.includes("pg_advisory_unlock($1)"));
+    expect(calls.findIndex(({ sql }) => sql.startsWith("INSERT"))).toBeGreaterThan(unlock);
+    expect(calls.filter(({ sql }) => sql.startsWith('SELECT "ID"'))).toHaveLength(2);
+    driver.setDeleteHook(undefined);
+  });
+
+  it("holds the state family and Entity locks while another factory trims", async () => {
+    let finishDelete: (() => void) | undefined;
+    driver.setDeleteHook(
+      () =>
+        new Promise((resolve) => {
+          finishDelete = () => {
+            resolve({ rowCount: 1, rows: [] });
+          };
+        }),
+    );
+    const first = await postgresFactory();
+    const second = await postgresFactory();
+    const before = driver.calls.length;
+    const trimming = first.createEntityStorage(entityInput(true)).states.trim("task", 0);
+    await vi.waitFor(() => {
+      expect(finishDelete).toBeDefined();
+    });
+    const appending = second
+      .createEntityStorage(entityInput(true))
+      .states.append(stateRecord("task", "two", 2));
+
+    await vi.waitFor(() => {
+      expect(
+        driver.calls.slice(before).some(({ sql }) => sql.includes("pg_advisory_xact_lock_shared")),
+      ).toBe(true);
+    });
+    const calls = driver.calls.slice(before);
+    const trimClient = calls.find(
+      ({ sql }) => sql === "SELECT pg_advisory_lock_shared($1)",
+    )?.client;
+    const appendClient = calls.find(
+      ({ sql }) => sql === "SELECT pg_advisory_xact_lock_shared($1)",
+    )?.client;
+    const trimFamily = calls.findIndex(
+      ({ client, sql }) => client === trimClient && sql === "SELECT pg_advisory_lock_shared($1)",
+    );
+    const trimEntity = calls.findIndex(
+      ({ client, sql }) => client === trimClient && sql === "SELECT pg_advisory_lock($1)",
+    );
+    const appendFamily = calls.findIndex(
+      ({ client, sql }) =>
+        client === appendClient && sql === "SELECT pg_advisory_xact_lock_shared($1)",
+    );
+    const appendEntity = calls.findIndex(
+      ({ client, sql }) => client === appendClient && sql === "SELECT pg_advisory_xact_lock($1)",
+    );
+    expect(trimFamily).toBeGreaterThanOrEqual(0);
+    expect(trimEntity).toBeGreaterThan(trimFamily);
+    expect(appendFamily).toBeGreaterThanOrEqual(0);
+    expect(appendEntity).toBeGreaterThan(appendFamily);
+    expect(driver.calls.slice(before).some(({ sql }) => sql.startsWith("INSERT"))).toBe(false);
+
+    finishDelete?.();
+    await Promise.all([trimming, appending]);
+    driver.setDeleteHook(undefined);
+  });
+
   it("enables immutable diagnostic event history through the factory handle", async () => {
     const factory = await postgresFactory();
     const entity = factory.createEntityStorage(entityInput(false, true));
 
     await expect(entity.events.append(eventRecord("event-1", "task", 1))).resolves.toBeUndefined();
+  });
+
+  it("truncates event history in bounded high-water pages without reading payloads", async () => {
+    driver.keyPages.splice(0);
+    driver.keyPages.push(
+      Array.from({ length: 128 }, (_, index) => `event-${String(index)}`),
+      ["retained-event"],
+    );
+    const factory = await postgresFactory();
+    const entity = factory.createEntityStorage(entityInput(false, true));
+    const before = driver.calls.length;
+
+    await entity.events.truncate({ seconds: 5n });
+
+    const pages = driver.calls.slice(before).filter(({ sql }) => sql.startsWith('SELECT "ID"'));
+    expect(pages).toHaveLength(2);
+    expect(pages.every(({ sql }) => !sql.includes('"bytes"'))).toBe(true);
+    expect(
+      pages.every(
+        ({ sql, values }) =>
+          sql.includes('("created", "version", "ID") <=') && values.at(-1) === 128,
+      ),
+    ).toBe(true);
+    expect(pages.every(({ values }) => values.includes("high-water"))).toBe(true);
   });
 
   it("closes grouped state history with its Entity handle", async () => {
