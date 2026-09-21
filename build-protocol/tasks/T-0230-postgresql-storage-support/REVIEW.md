@@ -350,3 +350,16 @@ Two test-only findings are accepted:
   The exact startup contract and release-policy/package-artifact tests pass
   `31/31`. This is a test-only correction with no production or public-contract
   change; tooling/static evidence accompanies the pushed commit.
+
+## Final Acceptance
+
+- `pnpm verify:release` passes at `0e4da7938`: 300/300 test files and
+  4,885/4,885 tests, with 93.32% statements, 90.11% branches, 93.03% functions,
+  and 94.51% lines.
+- Every canonical review concern has a recorded disposition. The affected
+  re-review accepted the production corrections; its two test-strength findings
+  and the later deterministic type/version assertions are resolved without
+  reopening production or public-contract review.
+- The branch is locally release-ready. Live PostgreSQL 16/18 acceptance is not
+  claimed and remains pending externally supplied database URLs. Ordinary
+  verification did not start Docker or substitute another implementation.

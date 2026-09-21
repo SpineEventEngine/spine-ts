@@ -1,6 +1,6 @@
 # T-0230: PostgreSQL Storage Support Plan
 
-Status: Implementation in progress
+Status: Implementation and local verification complete; live acceptance pending supplied URLs
 Start: `2026-09-20`
 Baseline: `6fffcd6102b3eff94b0f77eb6db2fbf2e02ba172`
 Branch: `add-postgresql-storage`

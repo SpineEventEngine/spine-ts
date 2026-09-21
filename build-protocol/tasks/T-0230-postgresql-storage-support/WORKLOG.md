@@ -1671,3 +1671,19 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   Tooling typecheck, changed-file lint, formatting, and diff hygiene precede
   the immediate feature-branch push. No production or public-contract file is
   changed.
+
+## Final Release Verification
+
+- Fresh `pnpm verify:release` at corrected pushed endpoint `0e4da7938` exits
+  zero. All 300 test files and all 4,885 tests pass.
+- Repository coverage is 93.32% statements (`23845/25550`), 90.11% branches
+  (`14091/15637`), 93.03% functions (`6039/6491`), and 94.51% lines
+  (`22049/23329`). The same run passes Node, generated build/tooling typecheck,
+  repository lint, cleanup/callable limits, TSDoc, copyright, formatting,
+  documentation, TypeDoc/API, snippets, Proto generation/lint/current output,
+  logging containment, production dependencies, release readiness, all 19
+  package tarballs, clean external installation, and consumer compilation.
+- Implementation, deterministic verification, independent review, affected
+  re-review, and local release verification are complete. Live PostgreSQL 16
+  and 18 acceptance remains pending only because the required database URLs
+  were not supplied; no container or fallback database was started.
