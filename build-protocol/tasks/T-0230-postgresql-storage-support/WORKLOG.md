@@ -731,3 +731,40 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   Prettier, diff hygiene, generated-output inspection, and local/remote SHA
   checks. It must also inspect the transaction-aware assertions for false
   positives without changing files.
+
+## Task 4B Mechanical Verification Result
+
+- Actual profile evidence: the immutable dispatch explicitly selected
+  `gpt-5.6-luna` / `low`; runtime self-introspection was unavailable. The
+  verifier made no changes.
+- Independent evidence at `73086a804`: focused Entity-commit coverage passed
+  `15/15`; the complete serial PostgreSQL package suite passed `83/83`;
+  package typecheck, scoped ESLint, full TSDoc, cleanup/method-length,
+  Prettier, and `git diff --check` passed. The checkout was clean, contained no
+  generated/untracked output, used the official `origin`, and matched the
+  remote branch SHA.
+- Read-only assertion inspection confirmed that the production factory,
+  executors, coordinator, and SQL paths cover both family locks, Entity lock,
+  locked current read, every immutable preflight/append family, current write,
+  commit rollback, replay/collision, independent factories, and close/drain
+  lifecycle without an identified false-positive gap. Task 4B is accepted.
+- `pnpm proto:check-generated` remains blocked by the branch-created release
+  integration mismatch: `packages/proto/package.json` is
+  `2.0.0-snapshot.13`, while `spine-proto-manifest.json` still records
+  `2.0.0-snapshot.12`. Task 6 must regenerate/correct that manifest before
+  release verification; it is not a Task 4B runtime finding.
+
+## Task 4C Implementation Dispatch
+
+- Existing role: `implementer`; responsibility is the bounded PostgreSQL
+  fenced-Inbox cleanup slice and its focused tests. No other production writer
+  may edit overlapping files.
+- Explicit dispatch profile: `gpt-5.6-terra` / `medium`; child spawning is
+  prohibited. Runtime self-introspection may be unavailable, so the immutable
+  configured role/profile and explicit dispatch fields are the acceptance
+  evidence.
+- Scope is limited to registering tracked cleanup handles, one-client exact-
+  snapshot cleanup with matching session-record fencing, exact retry/resource
+  behavior, close/drain lifecycle, and production-path tests. Common SPI,
+  MySQL, server behavior, live PostgreSQL, docs/release integration, and
+  versions remain excluded.
