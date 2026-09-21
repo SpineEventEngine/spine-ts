@@ -160,3 +160,36 @@ packages/storage-postgres/test/postgres-builder-contract.test.ts` passed
   method is permitted.
 - Ordinary tests cannot start Docker or require a live database. Live
   PostgreSQL 16/18 evidence remains slice 5 work.
+- The initial implementation context completed the connection, naming, ID,
+  table-spec, and first initializer RED/GREEN steps, then returned
+  `NEEDS_CONTEXT` twice. After the orchestrator supplied the private initializer
+  boundary and an exact catalog-test batch, it returned immediately without a
+  command or edit. That context is unavailable for productive continuation.
+- A fresh existing `implementer` receives only the remaining Task 2 catalog,
+  retry/race, tenant/configuration, lifecycle, verification, and commit work.
+  The dispatch is explicit `gpt-5.6-terra` / `medium`, prohibits children, and
+  preserves the current uncommitted TDD work. This is a serialized handoff;
+  there is still only one production writer.
+
+## Slice 2 In-Progress RED/GREEN Boundary
+
+- RED: `pnpm --config.verify-deps-before-run=false exec vitest run
+packages/storage-postgres/test/postgres-builder-contract.test.ts
+packages/storage-postgres/test/postgres-connection.test.ts` failed the new
+  connection test because the `pg` `Pool` constructor had zero calls. The
+  contract-only factory had no connection behavior.
+- GREEN: added validated PostgreSQL pool configuration, explicit/default schema
+  proof, retired-layout inspection, probe release, partial-failure pool close,
+  and idempotent contained pool draining. The same focused pair passed.
+- RED: the private PostgreSQL table resolver/type-mapping module was absent;
+  `postgres-table-spec.test.ts` failed to import `table-spec.js`.
+- GREEN: native `BYTEA`, `TEXT`, integer, boolean, `REAL`, and `DOUBLE
+PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
+  `postgres-table-spec.test.ts`.
+- RED: `postgres-id-column.test.ts` failed to import the absent private ID
+  conversion module.
+- GREEN: PostgreSQL ID conversion now reads `BIGINT` through `BigInt` without
+  JavaScript number precision loss. The accumulated focused suite passed six
+  tests, package typecheck, scoped ESLint, full TSDoc, Prettier, and
+  `git diff --check`; generated `dist/tsconfig.tsbuildinfo` was removed after
+  verification.
