@@ -1,6 +1,6 @@
 # T-0230: PostgreSQL Storage Support Plan
 
-Status: Planned and independently reviewed
+Status: Implementation in progress
 Start: `2026-09-20`
 Baseline: `6fffcd6102b3eff94b0f77eb6db2fbf2e02ba172`
 Branch: `add-postgresql-storage`
@@ -10,7 +10,8 @@ Branch: `add-postgresql-storage`
 Add PostgreSQL as a durable Spine TS storage provider in a separate published npm
 package. It provides the same Spine storage behavior as the current MySQL
 adapter, using PostgreSQL-native connections, SQL, transactions, schema
-inspection, and identifier rules. This planning task does not implement it.
+inspection, and identifier rules. The accepted implementation started on
+`2026-09-21`.
 
 The public package is `@spine-event-engine/storage-postgres`, located at
 `packages/storage-postgres`. Its main public types are
@@ -37,6 +38,30 @@ public APIs, release inventory, and live-provider verification.
   limited to independent research, checks, documentation, and review.
 - Runtime work starts with focused failing tests. Live PostgreSQL tests remain
   outside ordinary CI and require explicit URLs.
+
+## Human-Imposed Requirements Ledger
+
+- PostgreSQL support is a new package parallel to MySQL, not a mode added to
+  the MySQL package.
+- The public names are exactly `@spine-event-engine/storage-postgres` and
+  `Postgres...`, including `PostgresStorageFactory`.
+- Current Spine JVM behavior is binding wherever it defines storage meaning or
+  physical values.
+- Do not invent an outbox, crash-recovery mechanism, generic SQL framework, or
+  other speculative feature. Implement only realistic behavior required by the
+  accepted storage contracts.
+- Keep real TypeScript and Protobuf source readable. Encoded descriptor data or
+  Base64 must not replace ordinary source code or domain-correct fixtures.
+- Follow repository naming, Proto layout, TSDoc, maximum-method-length, package,
+  testing, review, model-routing, and verification rules mechanically and in
+  specialist review.
+- Do not patch third-party packages in place.
+- Keep implementation in this chat and existing feature branch. Do not create
+  another Codex task or additional worktree for this implementation.
+- Push every feature-branch commit to the official `origin` immediately.
+- Execute the current build protocol strictly, including test-first runtime
+  changes, durable logs, one production writer, aggregated specialist review,
+  and one final release verification after convergence.
 
 ## Evidence Checked
 
@@ -340,8 +365,10 @@ Exit: external packed install works and release tooling expects 19 packages.
 1. Run focused tests and changed-line/branch coverage (at least 90% each).
 2. Run deterministic preflight before reviewers.
 3. In one wave, review performance/reliability, TypeScript/API, style and method
-   size, documentation, and final security (SQL, secrets/TLS, tenants/schema,
-   dependencies, release).
+   size, and documentation. Check SQL binding, secret/TLS handling,
+   tenants/schema isolation, dependencies, and release rules mechanically. Per
+   the current build protocol, the dedicated security reviewer remains a final
+   project/release-readiness role and is not a per-task lane.
 4. Return one accepted finding batch to the same writer; reopen only concerns
    substantively affected by corrections.
 5. Run live PostgreSQL once after convergence, then one `verify:release`, packed
@@ -421,10 +448,41 @@ two-database tenant isolation.
 | ------------------------- | ----------------------------------------------------------------------------------- | --------------- | --------- | ---------- |
 | Requirements splitter     | Independently map requirements, JVM behavior, package boundary, risks, and sequence | `gpt-5.6-sol`   | `high`    | No history |
 | Independent plan reviewer | Check this completed plan for missing, invented, or contradictory work              | `gpt-5.6-terra` | `high`    | No history |
+| Implementation author     | Implement the accepted slices serially with focused TDD and current logs            | `gpt-5.6-terra` | `medium`  | Task brief |
 
 Desktop supports explicit model/reasoning dispatch. Runtime self-introspection
 is unavailable; immutable configured roles and explicit call fields are the
 acceptance evidence.
+
+## Skill Applicability Record
+
+The session skill inventory, `build-protocol/skills/EXPECTED_SKILLS.md`, the
+complete `~/.agents/skills` entrypoint scan, and
+`~/.agents/.skill-lock.json` were checked on `2026-09-21`.
+
+- Selected and read: `implement`, `test-driven-development`, and
+  `subagent-driven-development`.
+- `test-driven-development` governs every runtime behavior slice. Generated
+  output and package metadata remain mechanically verified exceptions.
+- The project protocol overrides the generic subagent skill where they differ:
+  one continuing implementation author handles the coherent provider, and one
+  complete specialist wave reviews the converged milestone instead of spawning
+  interchangeable per-slice reviewers.
+- `using-git-worktrees` is not selected because the human requires this chat
+  and existing feature checkout, and only one production writer is active.
+- `planning-with-files` is not selected because the accepted tracked task plan
+  and required tracked work/review logs provide the durable execution state.
+- `monorepo-management`, `nodejs-backend-patterns`, and
+  `typescript-advanced-types` were metadata-triaged but not selected: repository
+  package/runtime conventions and the existing MySQL adapter are narrower and
+  authoritative for this provider.
+- `systematic-debugging`, `requesting-code-review`, and
+  `verification-before-completion` will be read and applied when their governed
+  failure, review, and completion stages are reached.
+
+The installed-skill lock confirms the selected skill sources. No required skill
+source was unreachable. Skills remain advisory under this task ledger and the
+repository protocol.
 
 ## Independent Review Disposition
 
