@@ -1619,3 +1619,17 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   cleanup, formatting, and diff hygiene remain required before the test-only
   commit. Live PostgreSQL 16/18 verification remains unavailable without
   supplied connection URLs.
+
+## Last-Correction Tooling-Typecheck Repair
+
+- Cheap preflight at `24e88d103` reported TS2532 in the test-only Entity
+  history driver and multi-page assertion. The failure was in `splice(...)[0]`
+  and indexed page access under `noUncheckedIndexedAccess`, not production
+  code.
+- The test now explicitly rejects a missing configured lock failure and missing
+  expected keyset pages before accessing either value. These guards preserve
+  the assertions and produce clear runtime failures instead of weakening tests
+  with non-null assertions.
+- `pnpm typecheck:tooling` and the focused Entity-history suite pass after the
+  correction. Production code and public contracts remain unchanged; scoped
+  lint, TSDoc, cleanup, formatting, and diff checks precede the pushed commit.

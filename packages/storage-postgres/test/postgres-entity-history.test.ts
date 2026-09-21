@@ -231,7 +231,11 @@ const driver = vi.hoisted(() => {
             sql ===
             (lock.shared ? "SELECT pg_advisory_lock_shared($1)" : "SELECT pg_advisory_lock($1)"),
         );
-    if (failure >= 0) return Promise.reject(lockFailures.splice(failure, 1)[0].error);
+    if (failure >= 0) {
+      const lockFailure = lockFailures.splice(failure, 1)[0];
+      if (lockFailure === undefined) throw new Error("Expected a configured session-lock failure.");
+      return Promise.reject(lockFailure.error);
+    }
     if (available(lock)) {
       grant(lock);
       return Promise.resolve({ rows: [] });
@@ -512,8 +516,11 @@ describe("PostgreSQL Entity history", () => {
       const pages = calls.filter(({ sql }) => sql.startsWith('SELECT "ID"'));
       expect(pages.every(({ sql }) => !sql.includes("OFFSET"))).toBe(true);
       if (count > 256) {
-        expect(pages[1].values.slice(1, 4)).not.toEqual(pages[0].values.slice(1, 4));
-        expect(pages[1]?.sql).toContain('("version", "created", "ID") < ($2, $3, $4)');
+        const [firstPage, secondPage] = pages;
+        if (firstPage === undefined || secondPage === undefined)
+          throw new Error("Expected multiple state-trim keyset pages.");
+        expect(secondPage.values.slice(1, 4)).not.toEqual(firstPage.values.slice(1, 4));
+        expect(secondPage.sql).toContain('("version", "created", "ID") < ($2, $3, $4)');
       }
     } finally {
       driver.clearStateRows();

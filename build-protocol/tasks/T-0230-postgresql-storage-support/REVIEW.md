@@ -313,3 +313,12 @@ Two test-only findings are accepted:
   contracts are unchanged. Focused history/record tests pass `69/69`; scoped
   lint, TSDoc, cleanup, formatting, and diff checks are recorded with the
   pushed commit. The live PostgreSQL URL limitation remains unchanged.
+
+## Last-Correction Tooling-Typecheck Repair
+
+- Cheap preflight at `24e88d103` found TS2532 in two test-only indexed-access
+  paths. Explicit runtime guards now fail clearly if the configured lock error
+  or expected multi-page calls are absent, before test code reads the values.
+- `pnpm typecheck:tooling` and focused Entity-history tests pass after this
+  correction. No production or public-contract file changed; scoped static
+  evidence accompanies the pushed test-only commit.
