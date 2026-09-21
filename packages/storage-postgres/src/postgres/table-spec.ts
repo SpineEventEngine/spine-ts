@@ -17,7 +17,9 @@ import type { RecordColumn, RecordColumnType } from "@spine-event-engine/storage
 import type { PostgresColumnSpec, PostgresTableSpec } from "./storage-factory.js";
 import { PostgresIdColumn } from "./id-column.js";
 
-/** Resolves PostgreSQL-native declared-column and record-family table layouts. */
+/**
+ * Resolves PostgreSQL-native declared-column and record-family table layouts.
+ */
 export const PostgresTableSpecs: PostgresTableSpecifications = Object.freeze({
   postgresColumnType(type: RecordColumnType): string {
     switch (type.kind) {

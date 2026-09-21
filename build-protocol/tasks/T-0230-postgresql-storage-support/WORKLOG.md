@@ -226,6 +226,21 @@ PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
   `@spine-event-engine/proto` manifest/package-version mismatch. No generated
   files were retained, and direct package typechecking and focused tests pass.
 
+## Task 2 TSDoc Correction
+
+- RED: the full `pnpm lint:tsdoc` deterministic review reported eight fresh
+  diagnostics: the private `PostgresTableInitializer` constructor lacked its
+  semantic summary and all four parameter descriptions, while one-line TSDoc
+  block openers in the initializer and table-spec source violated repository
+  formatting rules.
+- GREEN: documented the private constructor's lifecycle/schema/table/custom
+  creation inputs and converted the three affected blocks to valid multiline
+  TSDoc. No runtime behavior changed.
+- Evidence: full `pnpm lint:tsdoc`, serial five-file focused suite (25/25),
+  package `tsc --noEmit`, scoped ESLint, Prettier on changed package files and
+  this log, `pnpm lint:cleanup`, and `git diff --check` all pass. Removed the
+  ignored generated `packages/storage-postgres/dist/tsconfig.tsbuildinfo`.
+
 ## Slice 2 Mechanical Verification Dispatch
 
 - Function: read-only mechanical verification; this is not a new project role.

@@ -4,10 +4,20 @@ import type { PoolClient } from "pg";
 import type { PostgresColumnSpec, PostgresTableSpec } from "./storage-factory.js";
 import { PostgresStorageSchemaError } from "./errors.js";
 
-/** Prepares one PostgreSQL record-family table. */
+/**
+ * Prepares one PostgreSQL record-family table.
+ */
 export class PostgresTableInitializer {
   #ready: Promise<void> | undefined;
 
+  /**
+   * Creates a private initializer for one resolved PostgreSQL table.
+   *
+   * @param lifecycle Acquires clients and supplies the stable database lock identity.
+   * @param schema Names the resolved PostgreSQL schema.
+   * @param table Describes the canonical record-family layout.
+   * @param customCreate Optionally supplies caller-defined create-table SQL.
+   */
   constructor(
     private readonly lifecycle: PostgresClientLifecycle,
     private readonly schema: string,
@@ -15,7 +25,11 @@ export class PostgresTableInitializer {
     private readonly customCreate?: () => string,
   ) {}
 
-  /** Prepares the table once. @returns Completion of initialization. */
+  /**
+   * Prepares the table once.
+   *
+   * @returns Completion of initialization.
+   */
   prepare(): Promise<void> {
     this.#ready ??= this.attempt().catch((error: unknown) => this.retry(error));
     return this.#ready;
