@@ -320,3 +320,23 @@ PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
   dispatch is explicitly `gpt-5.6-terra` / `medium`, prohibits children, and
   starts from the clean pushed checkpoint. This is a serialized handoff; only
   one production writer remains active.
+
+## Task 3 Record Runtime Checkpoint
+
+- Existing role/function: continuing `implementer`, configured explicitly as
+  `gpt-5.6-terra` / `medium`; no child work was dispatched. Runtime profile
+  introspection is unavailable on this surface.
+- RED: `pnpm --config.verify-deps-before-run=false exec vitest run
+packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
+  failed with `PostgreSQL record storage is not implemented.` from the factory
+  creation seam. This proved the test reached the production factory path.
+- GREEN: introduced the private PostgreSQL record handle and factory wiring.
+  A factory-created handle selects its tenant database/schema, resolves the
+  table spec/name, copies configured stringifiers, lazily initializes its table,
+  registers/unregisters with factory close, emits fully-qualified quoted table
+  names, binds record IDs and Protobuf binary payloads as `$n` parameters, and
+  uses PostgreSQL upsert syntax.
+- GREEN evidence: the focused test passes `1 passed (1)`; package
+  `tsc --noEmit` and scoped ESLint over the changed runtime/test files pass.
+  This checkpoint intentionally precedes the remaining Task 3 batch,
+  immutable/CAS, and query behavior coverage.

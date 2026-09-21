@@ -26,11 +26,10 @@ import {
 import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/provider";
 import { Pool, type PoolConfig, type PoolClient } from "pg";
 
-import {
-  PostgresStorageConfigurationError,
-  PostgresStorageConnectionError,
-  PostgresStorageOperationError,
-} from "./errors.js";
+import { PostgresStorageConfigurationError, PostgresStorageConnectionError } from "./errors.js";
+import { PostgresRecordStorage, type PostgresRecordLifecycle } from "./record-storage.js";
+import { PostgresTableResolver } from "./table-resolver.js";
+import { PostgresTableSpecs } from "./table-spec.js";
 
 /**
  * Configures a PostgreSQL storage connection pool.
@@ -267,11 +266,17 @@ export interface PostgresStorageFactoryBuilder {
  * Provides the PostgreSQL storage-factory public contract.
  */
 export class PostgresStorageFactory extends StorageFactory {
+  readonly #handles = new Set<{ close(): void }>();
   readonly #databases: ReadonlyMap<string | symbol, PostgresDatabase>;
   readonly #catalog: TenantCatalog;
   #closed: Promise<void> | undefined;
 
-  private constructor(databases: readonly PostgresDatabase[]) {
+  private constructor(
+    databases: readonly PostgresDatabase[],
+    private readonly resolver: PostgresTableResolver,
+    private readonly operation: PostgresCreateOperationFactory | undefined,
+    private readonly stringifiers: StringifierRegistry,
+  ) {
     super();
     this.#databases = new Map(databases.map((database) => [database.boundary.key, database]));
     this.#catalog = new PostgresTenantCatalog(databases.map(({ boundary }) => boundary));
@@ -312,29 +317,55 @@ export class PostgresStorageFactory extends StorageFactory {
    * @returns Does not return because this contract-only factory has no record runtime.
    */
   protected override onCreateRecordStorage<I, R extends Message>(
-    _context: StorageContext,
-    _recordSpec: RecordSpec<I, R>,
-    _group?: StorageGroup,
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
   ): RecordStorage<I, R> {
-    void _context;
-    void _recordSpec;
-    void _group;
-    throw new PostgresStorageOperationError("PostgreSQL record storage is not implemented.");
+    const table = this.resolver.resolve(
+      recordSpec.sourceType.typeName,
+      group?.name,
+      undefined,
+      recordSpec.recordType.typeName,
+    );
+    const spec = PostgresTableSpecs.resolvedPostgresTableSpec({
+      tableName: table.tableName,
+      sourceType: recordSpec.sourceType,
+      recordType: recordSpec.recordType,
+      idType: recordSpec.idType,
+      ...(group === undefined ? {} : { groupName: group.name }),
+      declaredColumns: recordSpec.columns,
+    });
+    const database = this.database(context);
+    const handle = new PostgresRecordStorage(
+      context,
+      recordSpec,
+      spec,
+      this.connections(database),
+      () => this.#handles.delete(handle),
+      this.operation === undefined ? undefined : createOperation(this.operation, spec),
+      this.stringifiers,
+    );
+    this.#handles.add(handle);
+    return handle;
   }
 
   private async drain(): Promise<void> {
     super.close();
+    for (const handle of this.#handles) handle.close();
     await this.#catalog.close();
     await Promise.all([...this.#databases.values()].map(({ pool }) => pool.end()));
   }
 
   private static async connect(
     entries: readonly PostgresDatabaseConfig[],
+    resolver = new PostgresTableResolver(),
+    operation?: PostgresCreateOperationFactory,
+    stringifiers = new StringifierRegistry(),
   ): Promise<PostgresStorageFactory> {
     const connected: PostgresDatabase[] = [];
     try {
       for (const entry of entries) connected.push(await PostgresStorageFactory.prove(entry));
-      return new PostgresStorageFactory(connected);
+      return new PostgresStorageFactory(connected, resolver, operation, stringifiers);
     } catch (error) {
       await Promise.all(connected.map(({ pool }) => pool.end().catch(() => undefined)));
       if (error instanceof PostgresStorageConfigurationError) throw error;
@@ -349,7 +380,7 @@ export class PostgresStorageFactory extends StorageFactory {
       try {
         const schema = await PostgresSchemas.resolve(client, entry.schema);
         await PostgresSchemas.assertUsable(client, schema);
-        return { boundary: entry.boundary, pool, schema };
+        return { boundary: entry.boundary, pool, schema, databaseName: entry.databaseName };
       } finally {
         client.release();
       }
@@ -358,6 +389,25 @@ export class PostgresStorageFactory extends StorageFactory {
       throw error;
     }
   }
+
+  private database(context: StorageContext): PostgresDatabase {
+    const boundary = TenantBoundary.of(context);
+    const database = this.#databases.get(boundary.key);
+    if (database !== undefined) return database;
+    throw new PostgresStorageConfigurationError(
+      boundary.single
+        ? "PostgreSQL storage is configured for multiple tenants."
+        : "PostgreSQL storage has no configured database for the requested tenant.",
+    );
+  }
+
+  private connections(database: PostgresDatabase): PostgresRecordLifecycle {
+    return {
+      databaseName: database.databaseName,
+      schema: database.schema,
+      acquire: () => database.pool.connect(),
+    };
+  }
 }
 
 class Builder implements PostgresStorageFactoryBuilder {
@@ -365,7 +415,7 @@ class Builder implements PostgresStorageFactoryBuilder {
   #tenantOptions: readonly PostgresTenantStorageOptions[] | undefined;
   #operationFactory: PostgresCreateOperationFactory | undefined;
   #stringifiers = new StringifierRegistry();
-  readonly #tableNames: unknown[][] = [];
+  readonly #resolver = new PostgresTableResolver();
 
   setOptions(options: PostgresStorageFactoryOptions): this {
     this.#options = {
@@ -395,7 +445,10 @@ class Builder implements PostgresStorageFactoryBuilder {
     name: string,
   ): this;
   setTableName(...args: unknown[]): this {
-    this.#tableNames.push(args);
+    this.#resolver.setRecordName(
+      (args[0] as GenMessage<Message>).typeName,
+      args[args.length - 1] as string,
+    );
     return this;
   }
 
@@ -407,6 +460,9 @@ class Builder implements PostgresStorageFactoryBuilder {
   constructor(
     private readonly connect: (
       entries: readonly PostgresDatabaseConfig[],
+      resolver: PostgresTableResolver,
+      operation: PostgresCreateOperationFactory | undefined,
+      stringifiers: StringifierRegistry,
     ) => Promise<PostgresStorageFactory>,
   ) {}
 
@@ -422,10 +478,7 @@ class Builder implements PostgresStorageFactoryBuilder {
         this.#options === undefined
           ? PostgresConfigurations.multitenant(this.#tenantOptions ?? [])
           : [PostgresConfigurations.single(this.#options)];
-      void this.#operationFactory;
-      void this.#stringifiers;
-      void this.#tableNames;
-      return this.connect(entries);
+      return this.connect(entries, this.#resolver, this.#operationFactory, this.#stringifiers);
     } catch (error) {
       return Promise.reject(
         error instanceof Error
@@ -440,6 +493,7 @@ interface PostgresDatabase {
   readonly boundary: TenantBoundary;
   readonly pool: Pool;
   readonly schema: string;
+  readonly databaseName: string;
 }
 
 interface PostgresDatabaseConfig {
@@ -447,6 +501,7 @@ interface PostgresDatabaseConfig {
   readonly poolOptions: PoolConfig;
   readonly schema: string | undefined;
   readonly target: string;
+  readonly databaseName: string;
 }
 
 class PostgresTenantCatalog implements TenantCatalog {
@@ -514,6 +569,7 @@ const PostgresConfigurations = Object.freeze({
       boundary,
       schema: options.schema,
       target: `${url.hostname.toLowerCase()}:${String(port)}/${database.toLowerCase()}`,
+      databaseName: database,
       poolOptions: {
         host: url.hostname,
         ...(url.port === "" ? {} : { port }),
@@ -563,6 +619,13 @@ const PostgresConfigurations = Object.freeze({
     return value === undefined || (Number.isInteger(value) && value > 0);
   },
 });
+
+function createOperation<I, R extends Message>(
+  operation: PostgresCreateOperationFactory,
+  table: PostgresTableSpec<I, R>,
+): () => string {
+  return () => operation(table).sql;
+}
 
 const PostgresSchemas = Object.freeze({
   async resolve(client: PoolClient, explicit: string | undefined): Promise<string> {
