@@ -76,6 +76,8 @@ describe("PostgreSQL table foundation", () => {
     const resolver = new PostgresTableResolver();
 
     expect(resolver.resolve("example.Source", undefined, "Select").tableName).toBe("Select");
+    expect(resolver.resolve("example.Cross", undefined, "Cross").tableName).toBe("Cross");
+    expect(resolver.resolve("example.New", undefined, "New").tableName).toBe("new");
     expect(resolver.resolve("example.Unicode", undefined, "Éclair").tableName).toBe("Éclair");
     expect(() => resolver.resolve("example.Bad", undefined, "bad name")).toThrow(/invalid/i);
     expect(() => resolver.resolve("example.Nul", undefined, "bad\u0000name")).toThrow(/invalid/i);

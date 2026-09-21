@@ -9,7 +9,7 @@ an npm token. Never add a token fallback.
 4. `publish.yml` runs for the `master` push through OIDC with pinned Lerna
    `10.0.1 publish from-package`.
 
-Every merge may result in a release. Keep one version across the root, 18 public
+Every merge may result in a release. Keep one version across the root, 19 public
 packages, and seven examples. Maintainers make a standalone commit named `Bump
 version -> <version>`; concrete internal pins and `pnpm-lock.yaml` change
 separately. `publishConfig.access` remains package metadata, but a static
@@ -29,7 +29,7 @@ has one trusted publisher; replacing it replaces that connection.
 
 - `@spine-event-engine/auth`, `@spine-event-engine/client-node`, `@spine-event-engine/client-react`, `@spine-event-engine/client-web`, `@spine-event-engine/core`, `@spine-event-engine/delivery-client`
 - `@spine-event-engine/delivery-server`, `@spine-event-engine/deployment`, `@spine-event-engine/deployment-gce`, `@spine-event-engine/deployment-gke`, `@spine-event-engine/proto`, `@spine-event-engine/proto-tools`
-- `@spine-event-engine/server`, `@spine-event-engine/storage`, `@spine-event-engine/storage-datastore`, `@spine-event-engine/storage-rdbms`, `@spine-event-engine/testing`, `@spine-event-engine/transport`
+- `@spine-event-engine/server`, `@spine-event-engine/storage`, `@spine-event-engine/storage-datastore`, `@spine-event-engine/storage-postgres`, `@spine-event-engine/storage-rdbms`, `@spine-event-engine/testing`, `@spine-event-engine/transport`
 
 Create `gh-actions-environment` before activation. Allow deployment from `master`
 only, disable bypass, and leave required reviewers off by default so a merge can
@@ -48,7 +48,7 @@ issue because the latest released configuration still sets
 
 Before activation, protect `master`: require pull requests and successful PR
 verification, prohibit direct pushes, and disable bypass. Repository code cannot
-configure this environment or the 18 npm trusted publishers; an operator must
+configure this environment or the 19 npm trusted publishers; an operator must
 provide that configuration evidence before activation.
 
 The workflow verifies packed contents and a fresh external consumer before

@@ -712,7 +712,7 @@ command and event work stays in the existing buses and generated services.
 `createRecordStorage(context, spec, group?)`, plus `RecordStorage`, `RecordSpec`,
 `RecordColumn`, query/mask contracts, and an in-memory implementation. It does
 not implement repositories, transactions, buses, delivery workers, service
-APIs or delivery workers. Datastore and MySQL RDBMS adapters implement this
+APIs or delivery workers. Datastore, MySQL, and PostgreSQL RDBMS adapters implement this
 contract in their packages; choosing and operating either adapter remains
 application deployment work, not a production deployment guarantee.
 
@@ -800,7 +800,8 @@ indexes are catalog views: MySQL enumerates configured tenant/database entries,
 Datastore enumerates native namespaces, and memory enumerates tenant slices. No
 generic `TenantId` row is persisted. Raw system contexts and tenant indexes
 remain internal framework details.
-Datastore and MySQL RDBMS packages provide durable storage adapters. They do
+Datastore, MySQL, and PostgreSQL RDBMS packages provide durable storage adapters. PostgreSQL
+uses one physical database per tenant rather than schemas as a tenant boundary. They do
 not by themselves establish production deployment or supervision guarantees.
 The distributed Message Board example demonstrates transport-backed delivery
 workers and a standalone Gateway. Applications still choose the deployment topology,
