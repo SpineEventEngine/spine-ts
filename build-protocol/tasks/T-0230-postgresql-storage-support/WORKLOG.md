@@ -845,3 +845,16 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
 --maxWorkers=1` passed `23/23`. The serial PostgreSQL package suite passed
   `106/106`; package `tsc --noEmit`, scoped ESLint, full TSDoc, cleanup rules,
   Prettier, and `git diff --check` passed. No generated output was retained.
+
+## Task 4 Mechanical Verification Dispatch
+
+- Function: independent read-only mechanical and assertion verification of the
+  complete Task 4 endpoint at `afbc1c220`; this is not a new project role.
+- Expected profile: `gpt-5.6-luna` / `low`, passed explicitly in the dispatch;
+  child spawning and file changes are prohibited. Runtime self-introspection
+  may be unavailable, so the immutable explicit dispatch is the profile
+  evidence.
+- The verifier must rerun all PostgreSQL tests serially and every deterministic
+  package gate, inspect history/commit/cleanup tests for production-path and
+  false-positive gaps, check generated output and the official remote SHA, and
+  report the known Proto-manifest version mismatch separately from Task 4.
