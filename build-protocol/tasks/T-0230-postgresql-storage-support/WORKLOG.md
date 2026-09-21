@@ -1283,3 +1283,26 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   `93.43%` (`299/320`), and lines `96.62%` (`801/829`).
   `pnpm typecheck:tooling`, scoped ESLint, scoped Prettier, and `git diff
 --check` also passed.
+
+## Final Cheap Preflight Acceptance
+
+- Review endpoint `84b60061b51ad1a053417b835b7594a5d0134024` is clean,
+  pushed, and identical to `origin/add-postgresql-storage`.
+- Dependency-aware build, tooling typecheck, scoped ESLint, cleanup and method
+  limits, TSDoc, copyright, formatting, diff hygiene, documentation audience,
+  TypeDoc/API, snippets, Proto lint/current-generated checks, logging
+  containment, production-dependency policy, and release-readiness checks all
+  pass.
+- The full hermetic PostgreSQL coverage suite passes 140 tests with 93.89%
+  statements, 90.01% branches, 93.43% functions, and 96.62% lines.
+- The affected server/release/tooling suite passes 234 tests in 13 files. The
+  release proof packs the packages and compiles a clean external TypeScript
+  consumer against `@spine-event-engine/storage-postgres`.
+- Live PostgreSQL 16 and 18 verification remains blocked only by the absence of
+  the six approved database URLs. The implementation does not start Docker or
+  replace that evidence with a fake provider.
+- The final specialist wave uses the four existing relevant roles. Every
+  dispatch records its explicit immutable role profile, review baseline and
+  endpoint, complete human-requirements ledger, concern scope, read-only rule,
+  and prohibition on child agents. Findings will be collected as one complete
+  batch before any correction begins.
