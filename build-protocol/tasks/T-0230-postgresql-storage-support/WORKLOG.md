@@ -1534,3 +1534,21 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   `medium`. Each review is independent, read-only, receives no prior review
   memory, and may not spawn child agents. The complete wave is collected before
   any correction.
+
+## Last-Correction Review And Implementation Dispatch
+
+- The complete three-lane wave was collected before correction. Four findings
+  are confirmed: the reserved-word set is not the exact QueryDSL 5.1 list; the
+  grouped-name regression can pass on DML without proving DDL; a failure while
+  acquiring the per-Entity session lock can leave the already-acquired family
+  lock on a pooled client; and three documentation phrases still describe two
+  adapters or 18 packages.
+- The trim cursor itself is accepted: it freezes the first obsolete key,
+  includes it in page one, advances by the last key of each full page, and
+  retains exact counts in bounded 128-key pages.
+- The existing `implementer` receives one coherent correction batch at explicit
+  `gpt-5.6-terra` / `medium`, with sole production-writer responsibility and no
+  child agents. It must use the authoritative QueryDSL 5.1 resource, add exact
+  positive/negative keyword goldens, assert the two specific `CREATE TABLE`
+  targets, protect partial lock acquisition with reverse-order cleanup/discard
+  behavior while preserving the original error, and correct the stale prose.

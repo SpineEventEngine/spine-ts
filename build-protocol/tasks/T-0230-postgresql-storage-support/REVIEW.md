@@ -226,3 +226,27 @@ contract would require a separately approved storage-layout milestone.
   and the accepted corrections changed internal renderer data, trim paging,
   assertions, and documentation inventories without changing any public type,
   export, declaration, error contract, or package boundary.
+
+## Last-Correction Review Disposition
+
+The full independent wave completed against the frozen endpoint before any
+correction. Style and reliability accept the advancing trim cursor. The
+accepted correction batch is:
+
+1. Replace the approximate reserved-word set with the exact QueryDSL 5.1
+   PostgreSQL keyword resource used by the binding JVM. Add positive and
+   negative goldens that catch both omitted and extra words.
+2. Make the grouped three-argument registration regression filter and assert
+   the two specific `CREATE TABLE IF NOT EXISTS` targets. Later writes must not
+   be able to satisfy this DDL claim.
+3. Protect partial acquisition of the family and per-Entity session advisory
+   locks. Track acquired locks, release them in reverse order, and discard a
+   client after uncertain cleanup while preserving the original acquisition
+   error. Add an induced second-lock failure regression.
+4. Change the two remaining release-runbook claims from 18 packages to 19 and
+   replace the architecture phrase “either adapter” now that three durable
+   adapters are listed.
+
+No other finding is accepted or deferred. The TypeScript/API lane remains N/A
+for this delta for the reason recorded above. PostgreSQL 16/18 live acceptance
+remains an external evidence gap because database URLs were not supplied.
