@@ -1158,6 +1158,20 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   CodeMatters headers. This deterministic header-only batch returns to the
   same implementation context; after correction, the complete preflight must
   restart again.
+- GREEN for the header batch: commit `eb0c2b647` normalizes seven malformed
+  headers and adds two missing headers without changing logic. Copyright,
+  focused formatting, and diff hygiene pass.
+- After removing ignored task-created `.superpowers/sdd` scratch from the
+  repository checkout, the restarted deterministic gates passed through
+  release readiness. The 109-test PostgreSQL coverage run passed every test
+  but failed the required 90% thresholds: 85.61% statements, 78.94% branches,
+  85% functions, and 89.14% lines. Coverage is lowest in history maintenance,
+  ID conversion, record query/error paths, and factory lifecycle/error paths.
+- The same `gpt-5.6-terra` / `medium` implementer receives one test-only
+  coverage correction batch. Tests must demonstrate meaningful observable
+  behavior; exclusions, ignored branches, threshold changes, broad casts, and
+  production changes made only to satisfy coverage are prohibited. The full
+  preflight restarts after all four metrics reach at least 90%.
 
 ## Final Cheap-Preflight Test-Type Correction
 
