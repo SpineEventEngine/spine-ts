@@ -49,6 +49,25 @@ describe("PostgreSQL table foundation", () => {
     }).toThrow(/invalid/i);
   });
 
+  it("resolves grouped defaults and explicit names while refusing reused physical tables", () => {
+    const resolver = new PostgresTableResolver();
+
+    expect(resolver.resolve("example.Source", "audit", undefined, "example.Record").tableName).toBe(
+      "audit_record",
+    );
+    expect(
+      resolver.resolve("example.Other", "audit", "ExplicitName", "example.Record").tableName,
+    ).toBe("explicitname");
+    expect(resolver.resolve("example.Source", "audit").tableName).toBe("audit_source");
+    resolver.setRecordName("example.Source", "source_table");
+    resolver.setRecordName("example.Source", "renamed_source_table");
+    resolver.resolve("example.First", undefined, "shared_table");
+
+    expect(() => resolver.resolve("example.Second", undefined, "shared_table")).toThrow(
+      /collides/i,
+    );
+  });
+
   it("builds the complete record-family layout with PostgreSQL payload columns", () => {
     const table = PostgresTableSpecs.resolvedPostgresTableSpec({
       tableName: "records",

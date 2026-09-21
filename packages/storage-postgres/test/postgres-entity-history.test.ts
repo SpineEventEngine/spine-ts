@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, fromBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   AnySchema,
   StringValueSchema,
@@ -33,6 +33,13 @@ const driver = vi.hoisted(() => {
   const calls: { client: number; sql: string; values: readonly unknown[] }[] = [];
   const keyPages: unknown[][] = [];
   let deleteHook: (() => Promise<unknown>) | undefined;
+  let historyRecords: readonly { readonly bytes: Uint8Array; readonly ID?: string }[] = [];
+  let highWater:
+    { readonly created: bigint; readonly version: number; readonly ID: string } | undefined = {
+    created: 1n,
+    version: 2,
+    ID: "high-water",
+  };
   let nextClient = 0;
   const locks = new Map<string, { exclusive?: number; shared: Set<number> }>();
   const held = new Map<number, { key: string; shared: boolean; transaction: boolean }[]>();
@@ -110,8 +117,10 @@ const driver = vi.hoisted(() => {
     }
     if (sql.includes("PRIMARY KEY"))
       return Promise.resolve({ rows: [{ column_name: "ID", ordinal_position: 1 }] });
+    if (sql.startsWith('SELECT "bytes"')) return Promise.resolve({ rows: historyRecords });
+    if (sql.startsWith('SELECT "ID", "bytes"')) return Promise.resolve({ rows: historyRecords });
     if (sql.startsWith('SELECT "created"'))
-      return Promise.resolve({ rows: [{ created: 1n, version: 2, ID: "high-water" }] });
+      return Promise.resolve({ rows: highWater === undefined ? [] : [highWater] });
     if (sql.startsWith('SELECT "ID"')) {
       const keys = keyPages.shift() ?? ["retained-key"];
       return Promise.resolve({ rows: keys.map((ID) => ({ ID })) });
@@ -135,6 +144,9 @@ const driver = vi.hoisted(() => {
     Pool,
     calls,
     keyPages,
+    setHistoryRecords: (records: readonly { readonly bytes: Uint8Array; readonly ID?: string }[]) =>
+      (historyRecords = records),
+    setHighWater: (value: typeof highWater) => (highWater = value),
     setDeleteHook: (hook: (() => Promise<unknown>) | undefined) => (deleteHook = hook),
     release: releaseClient,
   };
@@ -252,6 +264,124 @@ describe("PostgreSQL Entity history", () => {
     ).createEntityStorage(entityInput(true));
 
     await expect(entity.states.append(stateRecord("task", "one", 1))).resolves.toBeUndefined();
+  });
+
+  it("reads state at a timestamp and bounds state and event history continuations", async () => {
+    const factory = await postgresFactory();
+    const states = factory.createEntityStorage(entityInput(true)).states;
+    const events = factory.createEntityStorage(entityInput(false, true)).events;
+    const state = create(StringValueSchema, { value: "at-five" });
+    const before = driver.calls.length;
+    driver.setHistoryRecords([
+      { bytes: toBinary(EntityRecordSchema, stateRecord("task", "at-five", 1)) },
+    ]);
+    await expect(
+      states.stateAt("task", create(TimestampSchema, { seconds: 5n, nanos: 4 })),
+    ).resolves.toEqual(state);
+    driver.setHistoryRecords([]);
+    await expect(
+      states.stateAt("task", create(TimestampSchema, { seconds: 6n })),
+    ).resolves.toBeUndefined();
+    await states.backward("task", 2, 9n);
+    await events.backward("task", 3, 10n);
+
+    const calls = driver.calls.slice(before);
+    expect(
+      calls.some(
+        ({ sql, values }) => sql.includes('"created" <= $2') && values[1] === 5_000_000_004n,
+      ),
+    ).toBe(true);
+    expect(
+      calls.some(({ sql }) => sql.includes('"version" < $2') && sql.includes("LIMIT $3")),
+    ).toBe(true);
+  });
+
+  it("returns no point-in-time state for a state-less record and rejects malformed state bytes", async () => {
+    const factory = await postgresFactory();
+    const states = factory.createEntityStorage(entityInput(true)).states;
+    const at = create(TimestampSchema, { seconds: 5n });
+    driver.setHistoryRecords([{ bytes: toBinary(EntityRecordSchema, create(EntityRecordSchema)) }]);
+
+    await expect(states.stateAt("task", at)).resolves.toBeUndefined();
+
+    driver.setHistoryRecords([
+      {
+        bytes: toBinary(
+          EntityRecordSchema,
+          create(EntityRecordSchema, {
+            state: {
+              typeUrl: "type.googleapis.com/google.protobuf.StringValue",
+              value: Uint8Array.of(255),
+            },
+          }),
+        ),
+      },
+    ]);
+    await expect(states.stateAt("task", at)).rejects.toThrow(
+      /stored PostgreSQL state data is invalid/i,
+    );
+    driver.setHistoryRecords([]);
+  });
+
+  it("reads, writes, and maps current Entity query entries through the factory handle", async () => {
+    const factory = await postgresFactory();
+    const current = factory.createEntityStorage(entityInput()).current;
+    const record = stateRecord("task", "current", 2);
+    driver.setHistoryRecords([{ ID: "task", bytes: toBinary(EntityRecordSchema, record) }]);
+
+    await expect(current.write(record)).resolves.toBeUndefined();
+    await expect(current.read("task")).resolves.toEqual(record);
+    await expect(current.query({})).resolves.toEqual([
+      {
+        id: "task",
+        record,
+        columns: new Map(),
+      },
+    ]);
+    driver.calls.splice(0);
+    driver.setHistoryRecords([]);
+  });
+
+  it("rejects invalid history bounds before preparing a record family", async () => {
+    const factory = await postgresFactory();
+    const states = factory.createEntityStorage(entityInput(true)).states;
+    const events = factory.createEntityStorage(entityInput(false, true)).events;
+
+    await expect(states.backward("task", 0)).rejects.toThrow(/positive finite integer/i);
+    await expect(events.backward("task", Number.NaN)).rejects.toThrow(/positive finite integer/i);
+    await expect(states.backward("task", Number.POSITIVE_INFINITY)).rejects.toThrow(
+      /positive finite integer/i,
+    );
+    await expect(states.trim("task", -1)).rejects.toThrow(/non-negative safe integer/i);
+    await expect(states.trim("task", Number.NaN)).rejects.toThrow(/non-negative safe integer/i);
+  });
+
+  it("does not open a deletion page when history has no pre-cutoff high-water record", async () => {
+    const factory = await postgresFactory();
+    const states = factory.createEntityStorage(entityInput(true)).states;
+    const events = factory.createEntityStorage(entityInput(false, true)).events;
+    driver.setHighWater(undefined);
+    const before = driver.calls.length;
+
+    await states.truncate(create(TimestampSchema, { seconds: 5n }));
+    await events.truncate(create(TimestampSchema, { seconds: 5n }));
+
+    expect(driver.calls.slice(before).some(({ sql }) => sql.startsWith('SELECT "ID"'))).toBe(false);
+    driver.setHighWater({ created: 1n, version: 2, ID: "high-water" });
+  });
+
+  it("rejects history work after its Entity handle closes", async () => {
+    const factory = await postgresFactory();
+    const entity = factory.createEntityStorage(entityInput(true, true));
+
+    entity.close();
+    entity.close();
+
+    await expect(entity.states.backward("task", 1)).rejects.toThrow(/state history is closed/i);
+    await expect(entity.events.backward("task", 1)).rejects.toThrow(/event history is closed/i);
+    await expect(entity.events.append(eventRecord("closed", "task", 1))).rejects.toThrow(
+      /event history is closed/i,
+    );
   });
 
   it("trims state history through bounded key pages", async () => {

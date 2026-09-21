@@ -14,10 +14,17 @@
 
 import { create } from "@bufbuild/protobuf";
 import { TenantIdSchema } from "@spine-event-engine/proto";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+interface QueryResult {
+  readonly rowCount?: number;
+  readonly rows: readonly Record<string, unknown>[];
+}
+type Query = (sql: string) => Promise<QueryResult>;
+
 const driver = vi.hoisted(() => {
-  const query = vi.fn((sql: string) => {
+  const query = vi.fn<Query>((sql) => {
     void sql;
     return Promise.resolve({ rowCount: 0, rows: [] });
   });
@@ -64,6 +71,114 @@ describe("PostgresStorageFactory connection", () => {
     await expect(PostgresStorageFactory.newBuilder().setTenantOptions([]).build()).rejects.toThrow(
       /requires tenants/i,
     );
+  });
+
+  it("rejects missing or mixed single-tenant and multitenant configuration", async () => {
+    await expect(PostgresStorageFactory.newBuilder().build()).rejects.toThrow(
+      /options are required/i,
+    );
+    await expect(
+      PostgresStorageFactory.newBuilder()
+        .setOptions({ url: "postgresql://db.example/spine" })
+        .setTenantOptions([
+          { tenantId: tenant("one"), options: { url: "postgresql://db.example/one" } },
+        ])
+        .build(),
+    ).rejects.toThrow(/either single-tenant or multitenant/i);
+  });
+
+  it.each([
+    ["an unparsable URL", { url: "not a PostgreSQL URL" }, /valid URL/i],
+    [
+      "a zero connection timeout",
+      { url: "postgresql://db.example/spine", connectTimeoutMs: 0 },
+      /timeout/i,
+    ],
+    [
+      "a non-integer connection limit",
+      { url: "postgresql://db.example/spine", connectionLimit: 1.5 },
+      /connection limit/i,
+    ],
+  ] as const)("rejects %s before constructing a pool", async (_name, options, message) => {
+    await expect(PostgresStorageFactory.newBuilder().setOptions(options).build()).rejects.toThrow(
+      message,
+    );
+    expect(driver.Pool).not.toHaveBeenCalled();
+  });
+
+  it("uses the server current schema and rejects unavailable or retired layouts", async () => {
+    driver.query.mockImplementation((sql: string) => {
+      if (sql.includes("current_schema")) return Promise.resolve({ rows: [{ schema: "spine" }] });
+      if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
+      if (sql.includes("information_schema.columns"))
+        return Promise.resolve({ rowCount: 0, rows: [] });
+      return Promise.resolve({ rowCount: 0, rows: [] });
+    });
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine" })
+      .build();
+    factory.close();
+
+    expect(driver.query.mock.calls.some(([sql]) => sql.includes("current_schema"))).toBe(true);
+
+    driver.query.mockImplementation((sql: string) =>
+      Promise.resolve({ rowCount: sql.includes("schemata") ? 0 : 0, rows: [] }),
+    );
+    await expect(
+      PostgresStorageFactory.newBuilder()
+        .setOptions({ url: "postgresql://db.example/spine", schema: "missing" })
+        .build(),
+    ).rejects.toThrow(/schema does not exist/i);
+
+    driver.query.mockImplementation((sql: string) => {
+      if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
+      if (sql.includes("information_schema.columns"))
+        return Promise.resolve({ rowCount: 1, rows: [] });
+      return Promise.resolve({ rowCount: 0, rows: [] });
+    });
+    await expect(
+      PostgresStorageFactory.newBuilder()
+        .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+        .build(),
+    ).rejects.toThrow(/retired storage layout/i);
+  });
+
+  it("rejects an absent or invalid server current schema", async () => {
+    driver.query.mockImplementation((sql: string) => {
+      if (sql.includes("current_schema")) return Promise.resolve({ rows: [{ schema: null }] });
+      return Promise.resolve({ rowCount: 0, rows: [] });
+    });
+
+    await expect(
+      PostgresStorageFactory.newBuilder()
+        .setOptions({ url: "postgresql://db.example/spine" })
+        .build(),
+    ).rejects.toThrow(/schema is invalid/i);
+  });
+
+  it("lists configured tenants and rejects an unknown retained tenant", async () => {
+    driver.query.mockImplementation((sql: string) =>
+      Promise.resolve({ rowCount: sql.includes("schemata") ? 1 : 0, rows: [] }),
+    );
+    const first = tenant("one");
+    const second = tenant("two");
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setTenantOptions([
+        { tenantId: first, options: { url: "postgresql://db.example/one", schema: "spine" } },
+        { tenantId: second, options: { url: "postgresql://db.example/two", schema: "spine" } },
+      ])
+      .build();
+    const catalog = factory.tenantCatalog();
+
+    const boundaries = await catalog.all();
+    expect(boundaries).toHaveLength(2);
+    const configured = boundaries[0];
+    if (configured === undefined) throw new Error("Expected one configured PostgreSQL tenant.");
+    await expect(catalog.keep(configured)).resolves.toBeUndefined();
+    await expect(catalog.keep(TenantBoundary.from(tenant("unknown")))).rejects.toThrow(
+      /not configured/i,
+    );
+    factory.close();
   });
 
   it("rejects duplicate tenants and normalized physical database targets", async () => {

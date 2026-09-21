@@ -1211,3 +1211,29 @@ packages/storage-postgres/test --maxWorkers=1` passed `10/10` files and
   Runtime and test logic, public contracts, and generated output are unchanged.
 - Evidence: `pnpm lint:copyright`, scoped Prettier on all nine header files,
   and `git diff --check` passed.
+
+## PostgreSQL Coverage Correction
+
+- Existing role/function: continuing sole `implementer`, explicitly configured
+  `gpt-5.6-terra` / `medium`; child spawning was prohibited. Runtime-profile
+  introspection is unavailable on this surface, so the immutable configured
+  role/profile is the available dispatch evidence.
+- RED: the required PostgreSQL coverage command passed its original `109/109`
+  tests but failed every global threshold: statements `85.61%`, branches
+  `78.94%`, functions `85.00%`, and lines `89.14%`. The coverage report
+  identified unexercised ID conversion, factory configuration/catalog/schema,
+  Entity history/current-record, record mutation/query, column mapping, and
+  table-resolution behavior.
+- GREEN: added behavior-focused tests for message and primitive ID conversion
+  boundaries; factory configuration, server schema, and tenant catalog paths;
+  Entity point-in-time state, history bounds/high-water/closed handles, and
+  current-record forwarding; record read/delete/CAS/query paths; enum/null
+  mapping; and grouped/explicit table resolution. Production source, thresholds,
+  exclusions, ignored branches, and public contracts are unchanged.
+- Evidence: `pnpm exec vitest run --coverage --maxWorkers=1
+--coverage.include='packages/storage-postgres/src/**/*.ts'
+packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
+  statements `93.89%` (`907/966`), branches `90.01%` (`496/551`), functions
+  `93.43%` (`299/320`), and lines `96.62%` (`801/829`).
+  `pnpm typecheck:tooling`, scoped ESLint, scoped Prettier, and `git diff
+--check` also passed.

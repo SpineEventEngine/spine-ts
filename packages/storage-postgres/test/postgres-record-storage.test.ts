@@ -195,6 +195,45 @@ describe("Postgres record storage", () => {
     expect(driver.release).toHaveBeenCalledOnce();
   });
 
+  it("reads one stored record and reports whether deletion changed a row", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    const record = create(StringValueSchema, { value: "stored" });
+    let deleted = false;
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith('SELECT "bytes"') && values?.[0] === "missing")
+        return Promise.resolve({ rows: [] });
+      if (sql.startsWith('SELECT "bytes"'))
+        return Promise.resolve({ rows: [{ bytes: toBinary(StringValueSchema, record) }] });
+      if (sql.startsWith("DELETE")) {
+        deleted = !deleted;
+        return Promise.resolve({ rowCount: deleted ? 1 : 0, rows: [] });
+      }
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(storage.read("stored")).resolves.toEqual(record);
+    await expect(storage.read("missing")).resolves.toBeUndefined();
+    await expect(storage.delete("stored")).resolves.toBe(true);
+    await expect(storage.delete("stored")).resolves.toBe(false);
+  });
+
+  it("rejects corrupt stored bytes and preserves the provider data-error boundary", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith('SELECT "bytes"'))
+        return Promise.resolve({ rows: [{ bytes: Uint8Array.of(255) }] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(storage.read("corrupt")).rejects.toThrow(
+      /stored PostgreSQL record data is invalid/i,
+    );
+  });
+
   it("prepares before acquiring the operation client for a pool of one", async () => {
     const storage = await recordStorage();
     driver.query.mockImplementationOnce((sql, values) => {
@@ -225,6 +264,20 @@ describe("Postgres record storage", () => {
     await expect(
       storage.writeImmutable(create(StringValueSchema, { value: "two" })),
     ).rejects.toThrow("immutable record collides");
+  });
+
+  it("persists an immutable record when its ID has no conflict", async () => {
+    const storage = await recordStorage();
+
+    await expect(
+      (storage as unknown as { writeImmutable(record: StringValue): Promise<void> }).writeImmutable(
+        create(StringValueSchema, { value: "new" }),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(driver.calls.some(({ sql }) => sql.includes('ON CONFLICT ("ID") DO NOTHING'))).toBe(
+      true,
+    );
   });
 
   it("accepts an immutable record when the conflicting payload is identical", async () => {
@@ -318,6 +371,22 @@ describe("Postgres record storage", () => {
     expect(driver.release).toHaveBeenCalledTimes(2);
   });
 
+  it("deletes the matching current row through compare-and-set", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    const current = create(StringValueSchema, { value: "one" });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith('SELECT "bytes"'))
+        return Promise.resolve({ rows: [{ bytes: toBinary(StringValueSchema, current) }] });
+      if (sql.startsWith("DELETE")) return Promise.resolve({ rowCount: 1, rows: [] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(storage.compareAndSet("one", current, undefined)).resolves.toBe(true);
+    expect(driver.calls.some(({ sql }) => sql.startsWith("DELETE"))).toBe(true);
+  });
+
   it("does not retry a non-transactional compare-and-set error", async () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
@@ -388,6 +457,33 @@ describe("Postgres record storage", () => {
     const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
     expect(query?.sql).toContain('WHERE "ID" IN ($1, $2) ORDER BY "ID" ASC LIMIT $3');
     expect(query?.values).toEqual(["one", "two", 10_001]);
+  });
+
+  it("pushes record IDs and column filters into one PostgreSQL query", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+
+    await storage.query({ ids: ["one", "two"], filters: [{ column: "value", value: "two" }] });
+
+    const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).toContain('WHERE "ID" IN ($1, $2) AND "value" IS NOT DISTINCT FROM $3');
+    expect(query?.sql).toContain('ORDER BY "ID" ASC');
+    expect(query?.values).toEqual(["one", "two", "two"]);
+  });
+
+  it("uses the PostgreSQL finite offset window when no explicit record limit is supplied", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+
+    await storage.query({ offset: 4 });
+
+    const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).toContain('ORDER BY "ID" ASC LIMIT $1 OFFSET $2');
+    expect(query?.values).toEqual([9_223_372_036_854_775_807n, 4]);
   });
 
   it("rejects an oversized normalized bind plan before acquiring a client", async () => {
@@ -536,6 +632,24 @@ describe("Postgres record storage", () => {
     const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
     expect(query?.sql).toContain('ORDER BY "value" DESC NULLS LAST, "ID" ASC LIMIT $1 OFFSET $2');
     expect(query?.values).toEqual([3, 2]);
+  });
+
+  it("continues descending records after a non-null value and includes the ID tie-breaker", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+
+    await storage.query({
+      sort: [{ field: "value", direction: "desc" }],
+      after: { values: [{ field: "value", value: "middle" }], id: "one" },
+      limit: 2,
+    });
+
+    const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).toContain('"value" < $1');
+    expect(query?.sql).toContain('"value" IS NOT DISTINCT FROM $2 AND "ID" > $3');
+    expect(query?.values).toEqual(["middle", "middle", "one", 2]);
   });
 
   it("decodes stable ID-tied query rows in PostgreSQL result order", async () => {

@@ -14,7 +14,7 @@
 
 import { create, ScalarType } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { VersionSchema } from "@spine-event-engine/proto";
+import { EntityOption_KindSchema, VersionSchema } from "@spine-event-engine/proto";
 import { ColumnTypes } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
@@ -43,4 +43,11 @@ describe("PostgresColumnMapping", () => {
       );
     },
   );
+
+  it("preserves enum values and SQL nulls", () => {
+    const mapping = new PostgresColumnMapping();
+
+    expect(mapping.of(ColumnTypes.enum(EntityOption_KindSchema))(2)).toBe(2);
+    expect(mapping.ofNull()(null)).toBeNull();
+  });
 });
