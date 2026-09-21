@@ -1172,6 +1172,17 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   behavior; exclusions, ignored branches, threshold changes, broad casts, and
   production changes made only to satisfy coverage are prohibited. The full
   preflight restarts after all four metrics reach at least 90%.
+- GREEN for coverage: commit `c19332941` expands observable behavior tests to
+  140 passing tests with 93.89% statements, 90.01% branches, 93.43% functions,
+  and 96.62% lines. Production code, thresholds, exclusions, and configuration
+  are unchanged.
+- The next complete preflight passed every deterministic gate and coverage.
+  Its affected release/tooling suite passed 233 tests and found one packaging
+  defect: `packages/storage-rdbms/README.md` linked to PostgreSQL through
+  `../storage-postgres/README.md`, which escapes the published MySQL package
+  tarball. The documentation integration context must replace it with the
+  stable public repository/package documentation URL, then the full preflight
+  restarts.
 
 ## Final Cheap-Preflight Test-Type Correction
 
