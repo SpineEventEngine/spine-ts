@@ -1400,3 +1400,18 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   correction. Cleanup must run after captured operation work without throwing
   from `finally`; cleanup-only failure still discards the client and rejects,
   while an earlier operation error remains observable.
+- GREEN: commit `5a8c57754` moves cleanup error selection outside `finally`.
+  Scoped ESLint and the serial PostgreSQL suite (`144/144`) pass. A subsequent
+  deterministic TSDoc-only correction for the test seam is pushed as
+  `a57cf2fe8`.
+
+## Post-Correction Coverage Finding
+
+- The complete static/documentation/Proto/dependency/release-readiness gates
+  pass at `a57cf2fe8`. The exact PostgreSQL coverage run passes all `144/144`
+  tests and exceeds statements, functions, and lines, but branch coverage is
+  `88.12%` (`527/598`) against the required 90% threshold.
+- The same `gpt-5.6-terra` / `medium` implementer receives one test-only batch
+  for meaningful observable coverage of the newly added naming, retry,
+  cleanup, schema-default, trim, and sanitized-error branches. Thresholds,
+  exclusions, ignored branches, and production behavior must not change.
