@@ -1,9 +1,10 @@
 # T-0230 Review Record
 
-Status: Affected re-review complete; final correction batch pending
+Status: Final corrections implemented; final affected re-review ready
 
 Initial review endpoint: `c09c961d6bf75e2cb90fb36fa2dc2c2e0882dd15`
 Correction endpoint: `34ca4b669c78612bb158bba6635524e2c00341ed`
+Final correction endpoint: `ac6ef3245ad7713c5f08eaf81ea4cacb7bdd9bb0`
 Baseline: `6fffcd6102b3eff94b0f77eb6db2fbf2e02ba172`
 
 ## Planned Review Concerns
@@ -148,3 +149,27 @@ The grouped test finding appeared in style and API review, and the trim finding
 appeared in style and reliability review; each is one correction. No affected-
 wave finding is rejected. Missing live PostgreSQL URLs remains the external
 verification gap.
+
+## Final Correction Evidence
+
+- State trim now deletes the first obsolete boundary key inclusively. Fixture-
+  level tests run the production path and prove exact retention for zero,
+  partial-page, and 300-row multi-page cases; the boundary query runs once and
+  later pages use keyset continuation.
+- A public-builder regression proves that the three-argument grouped custom
+  name reaches grouped DDL while the ungrouped source family remains distinct.
+- Physical-name goldens cover generated/custom plain-name folding, reserved and
+  non-ASCII preserved spelling, grouped DDL-facing resolution, ordinary case-
+  only collision, exact 63-byte acceptance, over-limit/difference-after-limit
+  rejection, and invalid values.
+- The user guide includes PostgreSQL in its durable-storage workflow, and the
+  PostgreSQL reference documents the exact normalized-query matrix and accurate
+  JVM-compatible name behavior.
+- Final cheap preflight passes 157 PostgreSQL tests with 94.31% statements
+  (`962/1020`), 90.39% branches (`546/604`), 95.10% functions (`311/327`), and
+  96.68% lines (`846/875`). Build, tooling typecheck, lint, cleanup, TSDoc,
+  copyright, formatting, docs/API/snippets, Proto, dependency, logging, and
+  release-readiness gates pass. The 234-test package/release suite also passes,
+  including packed external-consumer compilation.
+- The last re-review is restricted to these corrected concerns. A clean wave
+  advances directly to the single final `verify:release` run.

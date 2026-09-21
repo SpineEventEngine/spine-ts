@@ -1472,3 +1472,21 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   writer responsibility. Runtime changes require focused RED/GREEN evidence;
   thresholds, exclusions, unrelated MySQL behavior, and live-service startup
   remain forbidden.
+
+## Final Correction Acceptance
+
+- Commits through `ac6ef3245` correct exact trim retention, reproduce the
+  binding JVM plain-versus-quoted physical-name result, add the complete golden
+  matrix and public-builder grouped DDL regression, complete the user/reference
+  documentation, and add fixture-level retention tests for zero, partial, and
+  300-row multi-page trim cases.
+- Final cheap preflight passes 157 PostgreSQL tests with 94.31% statements,
+  90.39% branches, 95.10% functions, and 96.68% lines. Dependency-aware build,
+  tooling typecheck, scoped ESLint, cleanup, TSDoc, copyright, formatting, diff
+  hygiene, docs audience/API/snippets, Proto lint/current generation, logging,
+  production-dependency, and release-readiness gates pass.
+- The affected server/release/tooling suite passes 234 tests in 13 files,
+  including tarball installation and external TypeScript compilation.
+- One final read-only affected-concern re-review uses the same explicit role
+  profiles and frozen endpoint. No correction begins from a partial report. A
+  clean wave advances directly to the one final `verify:release` profile.
