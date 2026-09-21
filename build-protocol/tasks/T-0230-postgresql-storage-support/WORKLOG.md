@@ -1655,6 +1655,37 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   correction. Production code and public contracts remain unchanged; scoped
   lint, TSDoc, cleanup, formatting, and diff checks precede the pushed commit.
 
+## PostgreSQL 16 Live-Acceptance Corrections
+
+- Existing role/function: continuing `implementer`, explicitly configured as
+  `gpt-5.6-terra` / `medium`; no child agents were dispatched. Human-authorized
+  Docker access used the existing disposable PostgreSQL 16.15 container only;
+  it was not removed or otherwise administered.
+- RED: the record-storage regression called `compareAndSet("slot", undefined,
+record-body)` and observed the upsert bind `record-body` instead of `slot`.
+  The CAS transaction locked and read the requested slot but wrote the record's
+  derived ID.
+- GREEN: CAS supplies its caller slot to the private upsert value path; ordinary
+  and immutable writes still derive their IDs from record bodies. The focused
+  record suite passes `43/43`.
+- Live factories now set a `StringifierRegistry` with
+  `TypeRegistry([StringValueSchema])`, matching focused fixtures and allowing
+  Entity state-history `Any` values to serialize reversibly. This changes only
+  the live fixture, not provider defaults or public API.
+- PG16 investigation then exposed persistent-fixture collisions in the
+  ungrouped Entity-current table and a producer-ID type-URL mismatch. Live
+  Entity IDs are now run-unique, and Event producer IDs use the same
+  `Identifiers.pack` route as Entity IDs. These preserve isolation and the
+  asserted Entity-history behavior.
+- A subsequent live failure proved PostgreSQL returns
+  `pg_advisory_unlock_shared` for shared unlocks, while the adapter read only
+  `pg_advisory_unlock`. RED used the real shared-result shape in the focused
+  driver; GREEN decodes the correct field for each unlock SQL statement.
+- Evidence: focused record/entity-history tests pass `71/71`; the exact PG16
+  package command with all three supplied URLs and expected major 16 passes
+  `8 passed, 4 skipped`. Tooling typecheck, scoped lint, TSDoc, cleanup,
+  formatting, and diff hygiene precede the coherent push.
+
 ## Final Release-Verification Test Repair
 
 - The one converged `verify:release` run at `824f45485` ended with one failed

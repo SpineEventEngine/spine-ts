@@ -382,3 +382,20 @@ PostgreSQL 16.15 container and found two independent causes:
 The accepted correction is one production-path slot-ID binding fix with a
 test-first regression, plus the live-fixture registry configuration. Review and
 release verification reopen only after PostgreSQL 16 and 18 pass.
+
+## PostgreSQL 16 Live-Acceptance Corrections
+
+- A focused RED test proved CAS wrote a replacement under its body-derived ID
+  rather than the caller-selected slot. The private upsert value path now
+  accepts the CAS slot; regular and immutable writes retain record-derived IDs.
+- Live factories now configure the same Stringifier/TypeRegistry setup used by
+  focused Entity fixtures. During the required PG16 investigation, run-unique
+  Entity IDs corrected persistent ungrouped-current fixture collisions, and
+  Event producer IDs were aligned with the Entity ID packing route.
+- PostgreSQL native shared-unlock rows use `pg_advisory_unlock_shared`; a
+  focused real-shape regression led to conditional decoding of shared versus
+  exclusive result columns. This fixes a live cleanup failure without changing
+  the public contract.
+- Focused record/entity-history tests pass `71/71`. The exact PG16 command with
+  all supplied URLs passes `8 passed, 4 skipped`; typecheck and scoped static
+  checks accompany the pushed commit. The existing PG18 URL gap remains.

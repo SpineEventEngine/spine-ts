@@ -489,6 +489,19 @@ describe("Postgres record storage", () => {
     expect(driver.calls.some(({ sql }) => sql.startsWith("DELETE"))).toBe(true);
   });
 
+  it("writes a compare-and-set replacement at the caller-selected slot", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    driver.calls.length = 0;
+
+    await expect(
+      storage.compareAndSet("slot", undefined, create(StringValueSchema, { value: "record-body" })),
+    ).resolves.toBe(true);
+
+    const write = driver.calls.find(({ sql }) => sql.startsWith("INSERT INTO"));
+    expect(write?.values?.[0]).toBe("slot");
+  });
+
   it("does not retry a non-transactional compare-and-set error", async () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();

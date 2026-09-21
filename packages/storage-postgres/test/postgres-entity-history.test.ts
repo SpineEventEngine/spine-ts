@@ -63,7 +63,9 @@ const driver = vi.hoisted(() => {
       const outcome = unlocks.shift();
       if (outcome instanceof Error) return Promise.reject(outcome);
       if (outcome === false) return Promise.resolve({ rows: [{ pg_advisory_unlock: false }] });
-      return Promise.resolve({ rows: [{ pg_advisory_unlock: true }] });
+      return Promise.resolve({
+        rows: [unlock.shared ? { pg_advisory_unlock_shared: true } : { pg_advisory_unlock: true }],
+      });
     }
     if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
     if (sql.includes("columns WHERE")) {
@@ -537,6 +539,13 @@ describe("PostgreSQL Entity history", () => {
 
     expect(driver.release.mock.calls.length).toBeGreaterThan(releases);
     expect(driver.release.mock.calls.at(-1)?.[0]).toBeInstanceOf(Error);
+  });
+
+  it("accepts PostgreSQL's named shared advisory unlock result", async () => {
+    const factory = await postgresFactory();
+    const entity = entityStorage(factory, entityInput(true));
+
+    await expect(entity.states.trim("task", 0)).resolves.toBeUndefined();
   });
 
   it("releases successful state trim Entity and family locks in reverse order", async () => {

@@ -418,7 +418,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       const current = await this.readOn(client, id, true);
       if (!this.same(current, expected?.record)) return false;
       if (next === undefined) await client.query(this.deleteSql(), [this.id(id)]);
-      else await this.writeOn(client, next.record);
+      else await this.writeOn(client, next.record, id);
       return true;
     });
   }
@@ -487,8 +487,12 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     }
   }
 
-  private async writeOn(client: PoolClient, record: R): Promise<void> {
-    await client.query(this.upsertSql(), this.values(record));
+  private async writeOn(
+    client: PoolClient,
+    record: R,
+    id = this.recordSpec.idValueIn(record),
+  ): Promise<void> {
+    await client.query(this.upsertSql(), this.values(record, id));
   }
 
   private async deleteOn(client: PoolClient, id: I): Promise<boolean> {
@@ -544,10 +548,10 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       .readBigInt64BE();
   }
 
-  private values(record: R): unknown[] {
+  private values(record: R, id = this.recordSpec.idValueIn(record)): unknown[] {
     const materialized = this.recordSpec.materialize(record);
     return [
-      this.id(materialized.id),
+      this.id(id),
       toBinary(this.recordSpec.recordType, record),
       ...this.recordSpec.columns.map((column) =>
         ColumnMappings.value(this.#columns, column.type, materialized.columns.get(column.name)),

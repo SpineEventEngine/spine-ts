@@ -12,13 +12,8 @@
  * the License.
  */
 
-import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
-import {
-  AnySchema,
-  StringValueSchema,
-  TimestampSchema,
-  type StringValue,
-} from "@bufbuild/protobuf/wkt";
+import { create, fromBinary, ScalarType } from "@bufbuild/protobuf";
+import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import {
   EventIdSchema,
   EventSchema,
@@ -34,7 +29,7 @@ import {
   EntityCommitStorageFactories,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
-import { Identifiers } from "@spine-event-engine/core";
+import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -62,7 +57,7 @@ describe("PostgreSQL live storage acceptance", () => {
       assertSupportedServer(tenantAUrl, expectedMajor),
       assertSupportedServer(tenantBUrl, expectedMajor),
     ]);
-    factory = await PostgresStorageFactory.newBuilder().setOptions({ url }).build();
+    factory = await postgresBuilder().setOptions({ url }).build();
   });
 
   afterAll(() => {
@@ -98,7 +93,7 @@ describe("PostgreSQL live storage acceptance", () => {
   });
 
   it("serializes competing compare-and-set operations from independent factories", async () => {
-    const second = await PostgresStorageFactory.newBuilder().setOptions({ url }).build();
+    const second = await postgresBuilder().setOptions({ url }).build();
     const scope = context("cas");
     const records = factory.createRecordStorage(scope, stringSpec(), group("cas"));
     const other = second.createRecordStorage(scope, stringSpec(), group("cas"));
@@ -123,7 +118,7 @@ describe("PostgreSQL live storage acceptance", () => {
   it("keeps equal record families in their configured tenant databases", async () => {
     const tenantA = tenant("a");
     const tenantB = tenant("b");
-    const tenants = await PostgresStorageFactory.newBuilder()
+    const tenants = await postgresBuilder()
       .setTenantOptions([
         { tenantId: tenantA, options: { url: tenantAUrl } },
         { tenantId: tenantB, options: { url: tenantBUrl } },
@@ -159,20 +154,21 @@ describe("PostgreSQL live storage acceptance", () => {
   it("commits Entity state and event histories atomically and maintains them in bounded pages", async () => {
     const scope = context("entity");
     const input = entityInput(scope);
+    const id = entityId("history");
     const commits = EntityCommitStorageFactories.create(factory, input);
     const entity = entityStorage(factory, input);
     try {
-      await expect(commits.commit(entityMutation(scope, input, "task"))).resolves.toBe("committed");
-      await expect(entity.current.read("task")).resolves.toEqual(current("task", "next", 1));
-      await expect(entity.states.backward("task", 10)).resolves.toHaveLength(1);
-      await expect(entity.events.backward("task", 10)).resolves.toHaveLength(1);
+      await expect(commits.commit(entityMutation(scope, input, id))).resolves.toBe("committed");
+      await expect(entity.current.read(id)).resolves.toEqual(current(id, "next", 1));
+      await expect(entity.states.backward(id, 10)).resolves.toHaveLength(1);
+      await expect(entity.events.backward(id, 10)).resolves.toHaveLength(1);
 
-      await entity.states.append(current("task", "later", 2));
-      await entity.states.append(current("task", "latest", 3));
-      await entity.states.trim("task", 1);
-      await expect(entity.states.backward("task", 10)).resolves.toHaveLength(1);
+      await entity.states.append(current(id, "later", 2));
+      await entity.states.append(current(id, "latest", 3));
+      await entity.states.trim(id, 1);
+      await expect(entity.states.backward(id, 10)).resolves.toHaveLength(1);
       await entity.states.truncate(create(TimestampSchema, { seconds: 10n }));
-      await expect(entity.states.backward("task", 10)).resolves.toEqual([]);
+      await expect(entity.states.backward(id, 10)).resolves.toEqual([]);
     } finally {
       commits.close();
       entity.close();
@@ -180,9 +176,10 @@ describe("PostgreSQL live storage acceptance", () => {
   });
 
   it("allows only one concurrent Entity commit with the same expected record", async () => {
-    const second = await PostgresStorageFactory.newBuilder().setOptions({ url }).build();
+    const second = await postgresBuilder().setOptions({ url }).build();
     const scope = context("entity_cas");
     const input = entityInput(scope, false, false);
+    const id = entityId("cas");
     const firstCommit = EntityCommitStorageFactories.create(factory, input);
     const secondCommit = EntityCommitStorageFactories.create(second, input);
     try {
@@ -190,14 +187,14 @@ describe("PostgreSQL live storage acceptance", () => {
         firstCommit.commit({
           context: scope,
           entity: input,
-          entityId: "task",
-          next: current("task", "a", 1),
+          entityId: id,
+          next: current(id, "a", 1),
         }),
         secondCommit.commit({
           context: scope,
           entity: input,
-          entityId: "task",
-          next: current("task", "b", 1),
+          entityId: id,
+          next: current(id, "b", 1),
         }),
       ]);
       expect(results.filter((result) => result === "committed")).toHaveLength(1);
@@ -210,7 +207,7 @@ describe("PostgreSQL live storage acceptance", () => {
   });
 
   it("closes live record handles and rejects new ones after pool draining begins", async () => {
-    const closing = await PostgresStorageFactory.newBuilder().setOptions({ url }).build();
+    const closing = await postgresBuilder().setOptions({ url }).build();
     const scope = context("lifecycle");
     const records = closing.createRecordStorage(scope, stringSpec(), group("lifecycle"));
     closing.close();
@@ -244,6 +241,16 @@ function tenantContext(name: string, tenantId: ReturnType<typeof tenant>) {
 
 function group(name: string): StorageGroup {
   return new StorageGroup(`t0230_pg_${run}_${name}`);
+}
+
+function entityId(name: string): string {
+  return `t0230_pg_${run}_${name}`;
+}
+
+function postgresBuilder() {
+  const stringifiers = new StringifierRegistry();
+  stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+  return PostgresStorageFactory.newBuilder().setStringifierRegistry(stringifiers);
 }
 
 function value(text: string): StringValue {
@@ -319,10 +326,7 @@ function event(id: string, entityId: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: {
-      producerId: create(AnySchema, {
-        typeUrl: `type.spine.io/${StringValueSchema.typeName}`,
-        value: toBinary(StringValueSchema, value(entityId)),
-      }),
+      producerId: Identifiers.pack(StringValueSchema, value(entityId)),
       version: create(VersionSchema, {
         number: 1,
         timestamp: create(TimestampSchema, { seconds: 1n }),

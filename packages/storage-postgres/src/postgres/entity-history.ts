@@ -617,11 +617,14 @@ const PostgresSessionLocks = Object.freeze({
   },
   async unlock(client: import("pg").PoolClient, key: bigint, shared: boolean): Promise<void> {
     try {
-      const result = await client.query<{ readonly pg_advisory_unlock: boolean }>(
-        shared ? "SELECT pg_advisory_unlock_shared($1)" : "SELECT pg_advisory_unlock($1)",
-        [key],
-      );
-      if (result.rows[0]?.pg_advisory_unlock !== true)
+      const result = await client.query<{
+        readonly pg_advisory_unlock?: boolean;
+        readonly pg_advisory_unlock_shared?: boolean;
+      }>(shared ? "SELECT pg_advisory_unlock_shared($1)" : "SELECT pg_advisory_unlock($1)", [key]);
+      const unlocked = shared
+        ? result.rows[0]?.pg_advisory_unlock_shared
+        : result.rows[0]?.pg_advisory_unlock;
+      if (unlocked !== true)
         throw new PostgresStorageOperationError("PostgreSQL history cleanup failed.");
     } catch (error) {
       if (error instanceof PostgresStorageOperationError) throw error;
