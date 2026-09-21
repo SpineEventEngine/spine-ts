@@ -1552,3 +1552,30 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   positive/negative keyword goldens, assert the two specific `CREATE TABLE`
   targets, protect partial lock acquisition with reverse-order cleanup/discard
   behavior while preserving the original error, and correct the stale prose.
+
+## Last-Correction Implementation Evidence
+
+- Existing role/function: continuing `implementer`, explicitly configured as
+  `gpt-5.6-terra` / `medium`; no child agents were dispatched. Runtime profile
+  introspection is unavailable on this surface, so the immutable configured
+  profile is the available metadata.
+- Independent authority check: downloaded Maven Central's
+  `com.querydsl:querydsl-sql:5.1.0` source jar and read
+  `keywords/postgresql`. `PostgreSQLTemplates` passes `Keywords.POSTGRESQL` to
+  its superclass, and `Keywords` loads that exact resource. The resolver now
+  copies its complete list, including `COLLATION`, and excludes `BETWEEN`.
+- RED: the targeted test command failed because `Collation` folded to
+  `collation` and a raw second session-lock acquisition error escaped. The DDL
+  regression and induced cleanup-discard assertions were added in the same
+  focused test batch.
+- GREEN: focused PostgreSQL tests pass `75/75`. The resolver preserves binding
+  keyword behavior while retaining folding, collision, and byte-limit behavior.
+  The grouped builder test filters `CREATE TABLE IF NOT EXISTS` SQL and checks
+  the exact grouped custom and ungrouped default qualified targets. State trim
+  tracks acquired session locks, reverses the acquired sequence for cleanup,
+  and the second-lock plus failed-unlock test proves release with discard and a
+  sanitized original operation error.
+- Scoped validation passed: targeted Vitest; changed-file ESLint; package
+  `tsc --noEmit`; `pnpm lint:tsdoc`; `pnpm lint:cleanup`; changed-file Prettier
+  check; and `git diff --check`. The remaining limitation is unchanged: no
+  PostgreSQL 16/18 connection URLs were supplied for live-provider acceptance.

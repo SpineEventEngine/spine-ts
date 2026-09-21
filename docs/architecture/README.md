@@ -713,7 +713,7 @@ command and event work stays in the existing buses and generated services.
 `RecordColumn`, query/mask contracts, and an in-memory implementation. It does
 not implement repositories, transactions, buses, delivery workers, service
 APIs or delivery workers. Datastore, MySQL, and PostgreSQL RDBMS adapters implement this
-contract in their packages; choosing and operating either adapter remains
+contract in their packages; choosing and operating any durable adapter remains
 application deployment work, not a production deployment guarantee.
 
 `RecordSpec` binds one generated Protobuf record schema, optional generated ID

@@ -54,7 +54,7 @@ provide that configuration evidence before activation.
 The workflow verifies packed contents and a fresh external consumer before
 mutation, then publishes validated `.publish` directories. Immediately before
 Lerna, strict registry selection identifies only the missing names from the
-exact 18-package policy inventory and creates a disposable non-Git pnpm/Lerna
+exact 19-package policy inventory and creates a disposable non-Git pnpm/Lerna
 workspace containing only those package root manifests and `.publish`
 directories. The pinned Lerna binary runs from that workspace. A 5xx response,
 timeout, malformed record, empty selection, or fully published release fails
@@ -66,7 +66,7 @@ byte identity between staged and published tarballs, integrity-aware resume,
 per-dependency visibility waits, and per-package tag-race checks. Lerna/npm
 repack the validated directories, so the proof is semantic rather than byte
 identity, and same-version recovery is by name/version only. Final verification
-checks every one of the 18 package versions and the aggregate selected tag;
+checks every one of the 19 package versions and the aggregate selected tag;
 investigate any mismatch rather than attempting same-version repair.
 
 If final registry verification shows a missing version or selected tag, stop and

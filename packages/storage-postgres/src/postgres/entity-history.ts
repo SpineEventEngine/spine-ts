@@ -214,10 +214,13 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     HistoryValues.assertKeep(keepMostRecent);
     await this.#executor.using(async (client) => {
       const [family, entity] = this.trimLocks(entityId);
-      await client.query("SELECT pg_advisory_lock_shared($1)", [family]);
-      await client.query("SELECT pg_advisory_lock($1)", [entity]);
+      const acquired: [bigint, boolean][] = [];
       let operationFailure: unknown;
       try {
+        await client.query("SELECT pg_advisory_lock_shared($1)", [family]);
+        acquired.push([family, true]);
+        await client.query("SELECT pg_advisory_lock($1)", [entity]);
+        acquired.push([entity, false]);
         let cursor = await this.trimBoundary(client, entityId, keepMostRecent);
         let includeCursor = true;
         while (cursor !== undefined && this.#open) {
@@ -229,14 +232,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
         operationFailure = error;
         throw error;
       } finally {
-        await PostgresSessionLocks.cleanup(
-          client,
-          [
-            [entity, false],
-            [family, true],
-          ],
-          operationFailure,
-        );
+        await PostgresSessionLocks.cleanup(client, acquired.reverse(), operationFailure);
       }
     });
   }

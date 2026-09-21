@@ -174,9 +174,12 @@ describe("Postgres record storage", () => {
     await grouped.write(create(StringValueSchema, { value: "grouped" }));
     await ungrouped.write(create(StringValueSchema, { value: "plain" }));
 
-    expect(driver.calls.some(({ sql }) => sql.includes('"groupedtable"'))).toBe(true);
-    expect(driver.calls.some(({ sql }) => sql.includes('"google_protobuf_stringvalue"'))).toBe(
-      true,
+    const createdTables = driver.calls
+      .filter(({ sql }) => sql.startsWith("CREATE TABLE IF NOT EXISTS"))
+      .map(({ sql }) => /CREATE TABLE IF NOT EXISTS ("[^"]+"\."[^"]+")/.exec(sql)?.[1]);
+
+    expect(createdTables).toEqual(
+      expect.arrayContaining(['"spine"."groupedtable"', '"spine"."google_protobuf_stringvalue"']),
     );
   });
 

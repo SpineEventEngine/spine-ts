@@ -34,6 +34,7 @@ import { entityStorage } from "./postgres-entity-seam.js";
 const driver = vi.hoisted(() => {
   const calls: { client: number; sql: string; values: readonly unknown[] }[] = [];
   const keyPages: unknown[][] = [];
+  const lockFailures: { sql: string; error: Error }[] = [];
   let stateRows: { ID: string; version: number; created: bigint }[] | undefined;
   const unlocks: (false | Error)[] = [];
   let deleteHook: (() => Promise<unknown>) | undefined;
@@ -186,6 +187,7 @@ const driver = vi.hoisted(() => {
     setHighWater: (value: typeof highWater) => (highWater = value),
     setDeleteHook: (hook: (() => Promise<unknown>) | undefined) => (deleteHook = hook),
     release: releaseClient,
+    failLock: (sql: string, error: Error) => lockFailures.push({ sql, error }),
   };
 
   function lockRequest(sql: string, values: readonly unknown[], client: number) {
@@ -222,6 +224,14 @@ const driver = vi.hoisted(() => {
   }
 
   function acquire(lock: { client: number; key: string; shared: boolean; transaction: boolean }) {
+    const failure = lock.transaction
+      ? -1
+      : lockFailures.findIndex(
+          ({ sql }) =>
+            sql ===
+            (lock.shared ? "SELECT pg_advisory_lock_shared($1)" : "SELECT pg_advisory_lock($1)"),
+        );
+    if (failure >= 0) return Promise.reject(lockFailures.splice(failure, 1)[0].error);
     if (available(lock)) {
       grant(lock);
       return Promise.resolve({ rows: [] });
@@ -518,6 +528,28 @@ describe("PostgreSQL Entity history", () => {
 
     await expect(entity.states.trim("task", 0)).rejects.toThrow(/history cleanup failed/i);
 
+    expect(driver.release.mock.calls.length).toBeGreaterThan(releases);
+    expect(driver.release.mock.calls.at(-1)?.[0]).toBeInstanceOf(Error);
+  });
+
+  it("releases the acquired family lock and discards the client after Entity lock acquisition fails", async () => {
+    const factory = await postgresFactory();
+    const entity = entityStorage(factory, entityInput(true));
+    const before = driver.calls.length;
+    const releases = driver.release.mock.calls.length;
+    driver.failLock("SELECT pg_advisory_lock($1)", new Error("postgres password and SQL"));
+    driver.failUnlock(false);
+
+    await expect(entity.states.trim("task", 0)).rejects.toThrow(/record operation failed/i);
+
+    const calls = driver.calls.slice(before);
+    expect(calls.map(({ sql }) => sql)).toEqual(
+      expect.arrayContaining([
+        "SELECT pg_advisory_lock_shared($1)",
+        "SELECT pg_advisory_lock($1)",
+        "SELECT pg_advisory_unlock_shared($1)",
+      ]),
+    );
     expect(driver.release.mock.calls.length).toBeGreaterThan(releases);
     expect(driver.release.mock.calls.at(-1)?.[0]).toBeInstanceOf(Error);
   });

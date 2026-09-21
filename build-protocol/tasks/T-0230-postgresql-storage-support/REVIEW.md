@@ -1,6 +1,6 @@
 # T-0230 Review Record
 
-Status: Final affected re-review complete; last correction batch pending
+Status: Final affected re-review complete; last correction batch implemented
 
 Initial review endpoint: `c09c961d6bf75e2cb90fb36fa2dc2c2e0882dd15`
 Correction endpoint: `34ca4b669c78612bb158bba6635524e2c00341ed`
@@ -250,3 +250,26 @@ accepted correction batch is:
 No other finding is accepted or deferred. The TypeScript/API lane remains N/A
 for this delta for the reason recorded above. PostgreSQL 16/18 live acceptance
 remains an external evidence gap because database URLs were not supplied.
+
+## Last-Correction Implementation Evidence
+
+- The authoritative keyword source was independently verified from Maven
+  Central's `com.querydsl:querydsl-sql:5.1.0` source jar:
+  `keywords/postgresql`, which `Keywords.POSTGRESQL` loads for
+  `PostgreSQLTemplates`. The complete resource replaces the handwritten
+  approximation. Goldens cover binding keyword `Collation` and non-keyword
+  `Between`, alongside existing `Cross`, `New`, folding, collision, and byte
+  boundary cases.
+- The grouped three-argument builder regression now filters only `CREATE TABLE
+IF NOT EXISTS` statements and requires `"spine"."groupedtable"` and
+  `"spine"."google_protobuf_stringvalue"`; DML cannot satisfy the assertion.
+- State trim records successful session acquisitions, releases only recorded
+  locks in reverse order, and uses the established cleanup/disposal path. An
+  induced per-Entity acquisition failure plus failed unlock proves that the
+  family lock is released, the client is discarded, and the public result is
+  the sanitized original operation error rather than cleanup details.
+- `docs/release-publishing.md` now consistently states 19 packages, and the
+  storage architecture refers to any durable adapter. Targeted tests pass
+  `75/75`; changed-file ESLint, package typecheck, TSDoc, cleanup, Prettier,
+  and diff hygiene pass. Live PostgreSQL 16/18 verification remains unavailable
+  without supplied connection URLs.
