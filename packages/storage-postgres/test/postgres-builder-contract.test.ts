@@ -33,17 +33,6 @@ describe("PostgresStorageFactory builder contract", () => {
     expect("create" in PostgresStorageFactory).toBe(false);
   });
 
-  it("returns an open factory that closes idempotently", async () => {
-    const factory = await PostgresStorageFactory.newBuilder()
-      .setOptions({ url: "postgres://db.example/spine" })
-      .build();
-
-    expect(factory.isOpen()).toBe(true);
-    factory.close();
-    factory.close();
-    expect(factory.isOpen()).toBe(false);
-  });
-
   it("reports absent construction options with the public configuration error", async () => {
     await expect(PostgresStorageFactory.newBuilder().build()).rejects.toBeInstanceOf(
       PostgresStorageConfigurationError,

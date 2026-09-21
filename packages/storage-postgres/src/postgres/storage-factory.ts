@@ -23,8 +23,14 @@ import {
   type StorageContext,
   type StorageGroup,
 } from "@spine-event-engine/storage";
+import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/provider";
+import { Pool, type PoolConfig, type PoolClient } from "pg";
 
-import { PostgresStorageConfigurationError, PostgresStorageOperationError } from "./errors.js";
+import {
+  PostgresStorageConfigurationError,
+  PostgresStorageConnectionError,
+  PostgresStorageOperationError,
+} from "./errors.js";
 
 /**
  * Configures a PostgreSQL storage connection pool.
@@ -261,8 +267,14 @@ export interface PostgresStorageFactoryBuilder {
  * Provides the PostgreSQL storage-factory public contract.
  */
 export class PostgresStorageFactory extends StorageFactory {
-  private constructor(private readonly configuration: PostgresFactoryConfiguration) {
+  readonly #databases: ReadonlyMap<string | symbol, PostgresDatabase>;
+  readonly #catalog: TenantCatalog;
+  #closed: Promise<void> | undefined;
+
+  private constructor(databases: readonly PostgresDatabase[]) {
     super();
+    this.#databases = new Map(databases.map((database) => [database.boundary.key, database]));
+    this.#catalog = new PostgresTenantCatalog(databases.map(({ boundary }) => boundary));
   }
 
   /**
@@ -271,7 +283,24 @@ export class PostgresStorageFactory extends StorageFactory {
    * @returns A new builder.
    */
   static newBuilder(): PostgresStorageFactoryBuilder {
-    return new Builder((configuration) => new PostgresStorageFactory(configuration));
+    return new Builder((entries) => PostgresStorageFactory.connect(entries));
+  }
+
+  /**
+   * Returns the configured provider tenant catalog.
+   *
+   * @returns The configured tenant catalog.
+   */
+  tenantCatalog(): TenantCatalog {
+    return this.#catalog;
+  }
+
+  /**
+   * Closes the factory and begins idempotent PostgreSQL pool draining.
+   */
+  override close(): void {
+    this.#closed ??= this.drain();
+    void this.#closed.catch(() => undefined);
   }
 
   /**
@@ -291,6 +320,43 @@ export class PostgresStorageFactory extends StorageFactory {
     void _recordSpec;
     void _group;
     throw new PostgresStorageOperationError("PostgreSQL record storage is not implemented.");
+  }
+
+  private async drain(): Promise<void> {
+    super.close();
+    await this.#catalog.close();
+    await Promise.all([...this.#databases.values()].map(({ pool }) => pool.end()));
+  }
+
+  private static async connect(
+    entries: readonly PostgresDatabaseConfig[],
+  ): Promise<PostgresStorageFactory> {
+    const connected: PostgresDatabase[] = [];
+    try {
+      for (const entry of entries) connected.push(await PostgresStorageFactory.prove(entry));
+      return new PostgresStorageFactory(connected);
+    } catch (error) {
+      await Promise.all(connected.map(({ pool }) => pool.end().catch(() => undefined)));
+      if (error instanceof PostgresStorageConfigurationError) throw error;
+      throw new PostgresStorageConnectionError("Unable to connect to PostgreSQL.");
+    }
+  }
+
+  private static async prove(entry: PostgresDatabaseConfig): Promise<PostgresDatabase> {
+    const pool = new Pool(entry.poolOptions);
+    try {
+      const client = await pool.connect();
+      try {
+        const schema = await PostgresSchemas.resolve(client, entry.schema);
+        await PostgresSchemas.assertUsable(client, schema);
+        return { boundary: entry.boundary, pool, schema };
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      await pool.end().catch(() => undefined);
+      throw error;
+    }
   }
 }
 
@@ -339,40 +405,198 @@ class Builder implements PostgresStorageFactoryBuilder {
   }
 
   constructor(
-    private readonly create: (
-      configuration: PostgresFactoryConfiguration,
-    ) => PostgresStorageFactory,
+    private readonly connect: (
+      entries: readonly PostgresDatabaseConfig[],
+    ) => Promise<PostgresStorageFactory>,
   ) {}
 
   build(): Promise<PostgresStorageFactory> {
-    if (this.#options === undefined && this.#tenantOptions === undefined) {
-      return Promise.reject(
-        new PostgresStorageConfigurationError("PostgreSQL storage options are required."),
-      );
-    }
-    if (this.#options !== undefined && this.#tenantOptions !== undefined) {
-      return Promise.reject(
-        new PostgresStorageConfigurationError(
+    try {
+      if (this.#options === undefined && this.#tenantOptions === undefined)
+        throw new PostgresStorageConfigurationError("PostgreSQL storage options are required.");
+      if (this.#options !== undefined && this.#tenantOptions !== undefined)
+        throw new PostgresStorageConfigurationError(
           "Configure either single-tenant or multitenant PostgreSQL storage, not both.",
-        ),
+        );
+      const entries =
+        this.#options === undefined
+          ? PostgresConfigurations.multitenant(this.#tenantOptions ?? [])
+          : [PostgresConfigurations.single(this.#options)];
+      void this.#operationFactory;
+      void this.#stringifiers;
+      void this.#tableNames;
+      return this.connect(entries);
+    } catch (error) {
+      return Promise.reject(
+        error instanceof Error
+          ? error
+          : new PostgresStorageConfigurationError("PostgreSQL storage configuration is invalid."),
       );
     }
-    return Promise.resolve(
-      this.create({
-        options: this.#options,
-        tenantOptions: this.#tenantOptions,
-        operationFactory: this.#operationFactory,
-        stringifiers: this.#stringifiers,
-        tableNames: this.#tableNames,
-      }),
-    );
   }
 }
 
-interface PostgresFactoryConfiguration {
-  readonly options: PostgresStorageFactoryOptions | undefined;
-  readonly tenantOptions: readonly PostgresTenantStorageOptions[] | undefined;
-  readonly operationFactory: PostgresCreateOperationFactory | undefined;
-  readonly stringifiers: StringifierRegistry;
-  readonly tableNames: readonly unknown[][];
+interface PostgresDatabase {
+  readonly boundary: TenantBoundary;
+  readonly pool: Pool;
+  readonly schema: string;
 }
+
+interface PostgresDatabaseConfig {
+  readonly boundary: TenantBoundary;
+  readonly poolOptions: PoolConfig;
+  readonly schema: string | undefined;
+  readonly target: string;
+}
+
+class PostgresTenantCatalog implements TenantCatalog {
+  constructor(private readonly boundaries: readonly TenantBoundary[]) {}
+
+  all(): Promise<readonly TenantBoundary[]> {
+    return Promise.resolve(this.boundaries);
+  }
+
+  keep(boundary: TenantBoundary): Promise<void> {
+    if (!this.boundaries.some(({ key }) => key === boundary.key)) {
+      return Promise.reject(
+        new PostgresStorageConfigurationError("PostgreSQL tenant is not configured."),
+      );
+    }
+    return Promise.resolve();
+  }
+
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+const PostgresConfigurations = Object.freeze({
+  single(options: PostgresStorageFactoryOptions): PostgresDatabaseConfig {
+    return PostgresConfigurations.parse(TenantBoundary.single, options);
+  },
+
+  multitenant(entries: readonly PostgresTenantStorageOptions[]): readonly PostgresDatabaseConfig[] {
+    if (entries.length === 0) {
+      throw new PostgresStorageConfigurationError(
+        "Multitenant PostgreSQL storage requires tenants.",
+      );
+    }
+    const configured = entries.map(({ tenantId, options }) =>
+      PostgresConfigurations.parse(TenantBoundary.from(tenantId), options),
+    );
+    PostgresConfigurations.assertDistinct(configured);
+    return configured;
+  },
+
+  assertDistinct(entries: readonly PostgresDatabaseConfig[]): void {
+    const tenants = new Set<string | symbol>();
+    const targets = new Set<string>();
+    for (const entry of entries) {
+      if (tenants.has(entry.boundary.key)) {
+        throw new PostgresStorageConfigurationError("PostgreSQL storage has a duplicate tenant.");
+      }
+      if (targets.has(entry.target)) {
+        throw new PostgresStorageConfigurationError(
+          "PostgreSQL tenants must use distinct physical databases.",
+        );
+      }
+      tenants.add(entry.boundary.key);
+      targets.add(entry.target);
+    }
+  },
+
+  parse(boundary: TenantBoundary, options: PostgresStorageFactoryOptions): PostgresDatabaseConfig {
+    const url = PostgresConfigurations.url(options.url);
+    PostgresConfigurations.validate(options);
+    const port = url.port === "" ? 5432 : Number(url.port);
+    const database = decodeURIComponent(url.pathname.slice(1));
+    return {
+      boundary,
+      schema: options.schema,
+      target: `${url.hostname.toLowerCase()}:${String(port)}/${database.toLowerCase()}`,
+      poolOptions: {
+        host: url.hostname,
+        ...(url.port === "" ? {} : { port }),
+        database,
+        ...(url.username === "" ? {} : { user: decodeURIComponent(url.username) }),
+        ...(url.password === "" ? {} : { password: decodeURIComponent(url.password) }),
+        ...(options.connectionLimit === undefined ? {} : { max: options.connectionLimit }),
+        ...(options.connectTimeoutMs === undefined
+          ? {}
+          : { connectionTimeoutMillis: options.connectTimeoutMs }),
+        ...(options.tls === undefined ? {} : { ssl: options.tls }),
+      },
+    };
+  },
+
+  url(value: string): URL {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new PostgresStorageConfigurationError("PostgreSQL storage requires a valid URL.");
+    }
+    if (
+      (url.protocol !== "postgres:" && url.protocol !== "postgresql:") ||
+      url.pathname.length <= 1 ||
+      url.hash !== "" ||
+      url.search !== ""
+    ) {
+      throw new PostgresStorageConfigurationError("PostgreSQL storage URL requires a database.");
+    }
+    return url;
+  },
+
+  validate(options: PostgresStorageFactoryOptions): void {
+    if (!PostgresConfigurations.positive(options.connectionLimit)) {
+      throw new PostgresStorageConfigurationError("PostgreSQL connection limit is invalid.");
+    }
+    if (!PostgresConfigurations.positive(options.connectTimeoutMs)) {
+      throw new PostgresStorageConfigurationError("PostgreSQL connection timeout is invalid.");
+    }
+    if (options.schema !== undefined && !/^[A-Za-z_][A-Za-z0-9_]{0,62}$/u.test(options.schema)) {
+      throw new PostgresStorageConfigurationError("PostgreSQL schema name is invalid.");
+    }
+  },
+
+  positive(value: number | undefined): boolean {
+    return value === undefined || (Number.isInteger(value) && value > 0);
+  },
+});
+
+const PostgresSchemas = Object.freeze({
+  async resolve(client: PoolClient, explicit: string | undefined): Promise<string> {
+    const schema = explicit ?? (await PostgresSchemas.current(client));
+    const result = await client.query(
+      "SELECT 1 FROM information_schema.schemata WHERE schema_name = $1",
+      [schema],
+    );
+    if (result.rowCount !== 1)
+      throw new PostgresStorageConfigurationError("PostgreSQL schema does not exist.");
+    return schema;
+  },
+
+  async current(client: PoolClient): Promise<string> {
+    const result = await client.query<{ readonly schema: string | null }>(
+      "SELECT current_schema() AS schema",
+    );
+    const schema = result.rows[0]?.schema;
+    if (schema === null || schema === undefined || !/^[A-Za-z_][A-Za-z0-9_]{0,62}$/u.test(schema)) {
+      throw new PostgresStorageConfigurationError("PostgreSQL schema is invalid.");
+    }
+    return schema;
+  },
+
+  async assertUsable(client: PoolClient, schema: string): Promise<void> {
+    const result = await client.query(
+      "SELECT 1 FROM information_schema.columns WHERE table_schema = $1 " +
+        "AND LOWER(column_name) IN ('_scope', '_revision') LIMIT 1",
+      [schema],
+    );
+    if ((result.rowCount ?? 0) > 0) {
+      throw new PostgresStorageConfigurationError(
+        "The configured database contains the retired storage layout.",
+      );
+    }
+  },
+});

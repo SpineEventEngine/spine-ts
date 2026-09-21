@@ -193,3 +193,35 @@ PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
   tests, package typecheck, scoped ESLint, full TSDoc, Prettier, and
   `git diff --check`; generated `dist/tsconfig.tsbuildinfo` was removed after
   verification.
+
+## Task 2 Takeover Completion
+
+- Existing role/function: continuing `implementer`; configured profile was
+  `gpt-5.6-terra` / `medium`. The task surface does not expose runtime model
+  metadata, so this immutable dispatch profile is the available evidence.
+- The replacement author first confirmed the inherited foundation with
+  `pnpm exec vitest run packages/storage-postgres/test/postgres-{builder-contract,connection,id-column,table-spec,table-initializer}.test.ts --maxWorkers=1`:
+  8 tests passed before the new work.
+- RED: the catalog suite failed against the count-only initializer for an exact
+  compatible PostgreSQL layout, retry with a fresh client, and deterministic
+  advisory-lock identity. The failure was the expected generic incompatible
+  schema result, proving the initializer lacked complete catalog inspection.
+- GREEN: private initialization now creates the exact table shape, reads
+  complete parameterized column/primary-key/unique catalog rows, rejects
+  missing or extra columns, incompatible native type/nullability/default,
+  wrong ordered primary key, and non-primary unique constraints. It rolls back
+  and releases on every failure and retries exactly once only for `40001` or
+  `40P01`, using a new acquired client. Its transaction advisory key includes
+  a fixed table-lock domain plus database/schema/table identity.
+- Characterization and boundary coverage now verifies URL/pool/schema/tenant
+  rejection, normalized duplicate physical targets, TLS translation, sanitized
+  driver errors, partial-pool cleanup, idempotent contained drain, and no
+  global `pg` type-parser mutation. `Builder.build()` now consistently returns
+  a rejected promise for invalid configuration instead of throwing synchronously.
+- GREEN evidence: focused Task 1+2 suite passed 25/25; package `tsc --noEmit`,
+  scoped ESLint, Prettier, full `pnpm lint:tsdoc`, and `git diff --check` pass.
+  Formatting was applied mechanically and the focused suite was rerun green.
+- Limitation: `pnpm verify:task -- --no-coverage ...` cannot reach its tests in
+  this checkout because `pnpm proto:generate` fails first with the existing
+  `@spine-event-engine/proto` manifest/package-version mismatch. No generated
+  files were retained, and direct package typechecking and focused tests pass.
