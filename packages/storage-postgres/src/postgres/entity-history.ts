@@ -257,16 +257,15 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
           }
       } catch (error) {
         operationFailure = error;
-        throw error;
-      } finally {
-        const cleanup = await PostgresSessionLocks.unlock(client, key, false).catch(
-          (error: unknown) => error,
-        );
-        if (cleanup instanceof Error) {
-          PostgresClientDisposal.mark(operationFailure ?? cleanup);
-          if (operationFailure === undefined) throw cleanup;
-        }
       }
+      const cleanup = await PostgresSessionLocks.unlock(client, key, false).catch(
+        (error: unknown) => error,
+      );
+      if (cleanup instanceof Error) PostgresClientDisposal.mark(operationFailure ?? cleanup);
+      if (operationFailure instanceof Error) throw operationFailure;
+      if (operationFailure !== undefined)
+        throw new PostgresStorageOperationError("PostgreSQL state history operation failed.");
+      if (cleanup instanceof Error) throw cleanup;
     });
   }
 
@@ -488,16 +487,15 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
           }
       } catch (error) {
         operationFailure = error;
-        throw error;
-      } finally {
-        const cleanup = await PostgresSessionLocks.unlock(client, key, false).catch(
-          (error: unknown) => error,
-        );
-        if (cleanup instanceof Error) {
-          PostgresClientDisposal.mark(operationFailure ?? cleanup);
-          if (operationFailure === undefined) throw cleanup;
-        }
       }
+      const cleanup = await PostgresSessionLocks.unlock(client, key, false).catch(
+        (error: unknown) => error,
+      );
+      if (cleanup instanceof Error) PostgresClientDisposal.mark(operationFailure ?? cleanup);
+      if (operationFailure instanceof Error) throw operationFailure;
+      if (operationFailure !== undefined)
+        throw new PostgresStorageOperationError("PostgreSQL event history operation failed.");
+      if (cleanup instanceof Error) throw cleanup;
     });
   }
 

@@ -1369,6 +1369,12 @@ packages/storage-postgres/test` passed `10/10` files and `140/140` tests:
   private runtime Entity seam through one typed `unknown` structural cast; the
   serial PostgreSQL suite passes 144 tests.
 
+## Advisory Cleanup Control Flow
+
+- GREEN: state and event truncation now capture operation failures, perform
+  session cleanup, then select the original failure before any cleanup failure;
+  focused history tests pass without `no-unsafe-finally` violations.
+
 ## Private Entity-Seam Test Correction
 
 - Independent post-correction verification passed the dependency-aware
