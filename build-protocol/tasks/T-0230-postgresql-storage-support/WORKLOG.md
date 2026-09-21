@@ -714,5 +714,20 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   conflict; and active work releasing before the factory pool drain finishes.
 - Evidence: focused serial commit suite passed `15/15`; the complete serial
   PostgreSQL package suite passed `83/83`; package `tsc --noEmit` and scoped
-  ESLint passed. Full TSDoc, cleanup, formatting, and diff-hygiene checks are
-  the final Task 4B pre-commit checks.
+  ESLint, full TSDoc, cleanup/method-length enforcement, Prettier, and
+  `git diff --check` passed. Commit `acbde1cec` was pushed to `origin`; local
+  and remote branch heads matched and the checkout was clean.
+
+## Task 4B Mechanical Verification Dispatch
+
+- Function: independent read-only mechanical verification of the complete
+  Task 4B endpoint; this is not a new project role.
+- Expected profile: `gpt-5.6-luna` / `low`, passed explicitly in the dispatch;
+  child spawning and file changes are prohibited. Runtime self-introspection
+  may be unavailable, so the immutable explicit dispatch is the available
+  profile evidence.
+- The verifier must independently rerun the focused and full package tests,
+  package typecheck, scoped ESLint, full TSDoc, cleanup/method-length,
+  Prettier, diff hygiene, generated-output inspection, and local/remote SHA
+  checks. It must also inspect the transaction-aware assertions for false
+  positives without changing files.
