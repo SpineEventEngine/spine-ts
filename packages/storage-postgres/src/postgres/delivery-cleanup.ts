@@ -103,6 +103,7 @@ export class PostgresDeliveryCleanupStorage implements DeliveryCleanupStorage {
         return result;
       } catch (error) {
         await client.query("ROLLBACK").catch(() => undefined);
+        if (error instanceof CleanupExpired) throw error;
         if (attempt === 0 && PostgresCleanupErrors.retryable(error)) continue;
         throw PostgresCleanupErrors.operation(error);
       } finally {
@@ -127,7 +128,9 @@ export class PostgresDeliveryCleanupStorage implements DeliveryCleanupStorage {
     const session = sessions.historyExecutor();
     const delivered = inbox.historyExecutor();
     await client.query("SELECT pg_advisory_xact_lock($1)", [session.lockRecord(input.session.id)]);
+    if (!PostgresCleanupValues.active(input)) return false;
     const currentSession = await session.read(client, input.session.id, "for-update");
+    if (!PostgresCleanupValues.active(input)) return false;
     if (!PostgresCleanupValues.current(input, currentSession)) return false;
     const currentInbox = await delivered.read(client, input.inbox.id, "for-update");
     if (!PostgresCleanupValues.same(input.inbox.spec, currentInbox, input.inbox.expected))

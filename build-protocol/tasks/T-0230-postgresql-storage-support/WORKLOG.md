@@ -819,3 +819,29 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
 - Evidence: focused cleanup coverage passed `5/5`; the retry test observed one
   `ROLLBACK` and verified the Inbox row was removed only by the successful
   attempt. Non-retry and close/drain cases remain active.
+
+## Task 4C Completion
+
+- RED: cancellation immediately after the session advisory lock still read both
+  snapshots; cancellation immediately after the session read still read the
+  Inbox; and cancellation after a staged `DELETE` was wrapped as an operation
+  error instead of returning `false` after rollback. Focused production-path
+  tests failed for each behavior before the correction.
+- GREEN: cleanup now checks the cooperative operation boundary after taking the
+  session lock and after reading the session. The coordinator preserves its
+  internal cancellation result through rollback so the public cleanup call
+  returns `false`, and the staged Inbox deletion is not committed.
+- GREEN: the transaction-aware real-factory suite now covers missing,
+  replaced, and byte-different current snapshots; stale session replacement
+  through a second PostgreSQL factory; cancellation before opening, after lock,
+  after session read, and after staged deletion; all operation boundaries;
+  ordinary non-retry; `40001` and `40P01` one-retry behavior with four fresh
+  client acquisitions; closed-handle and closed-factory admission; in-flight
+  cleanup while pool draining; idempotent close; and a contained pool-drain
+  rejection. It makes Inbox changes durable only at `COMMIT` and discards them
+  at `ROLLBACK`.
+- Evidence: `pnpm exec vitest run
+packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
+--maxWorkers=1` passed `23/23`. The serial PostgreSQL package suite passed
+  `106/106`; package `tsc --noEmit`, scoped ESLint, full TSDoc, cleanup rules,
+  Prettier, and `git diff --check` passed. No generated output was retained.
