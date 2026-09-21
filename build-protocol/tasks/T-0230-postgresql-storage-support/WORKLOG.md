@@ -1130,3 +1130,21 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   `tsc --noEmit`, scoped ESLint, full TSDoc, cleanup/method-length enforcement,
   Prettier, and `git diff --check` passed. The correction changes only
   `postgres-entity-history.test.ts`; no generated output was retained.
+
+## Final Cheap-Preflight Correction Dispatch
+
+- The first converged preflight reached a clean dependency-aware production
+  build, then `pnpm typecheck:tooling` failed on PostgreSQL test helpers and
+  mocks. The failures are confined to test TypeScript: readonly assignment,
+  exact-optional-property handling, incomplete coordinated-lock metadata,
+  generated `Timestamp` construction, and mock functions whose inferred query
+  result or tuple types are narrower than the exercised calls.
+- One continuing implementation function receives this complete correction
+  batch for the affected PostgreSQL tests only. Explicit dispatch profile is
+  the existing `implementer` role configured as `gpt-5.6-terra` / `medium`;
+  child spawning is prohibited. Production behavior and public contracts must
+  not change to accommodate test mocks.
+- Required evidence is a clean `pnpm typecheck:tooling`, the full hermetic
+  PostgreSQL package suite, scoped ESLint and formatting, and `git diff
+  --check`. After correction, the entire cheap preflight restarts before
+  specialist review.
