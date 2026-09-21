@@ -638,3 +638,21 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   receives the preserved uncommitted RED/prototype and the bounded architecture
   result. Child spawning is prohibited. This is a serialized handoff; there is
   still only one production writer.
+
+## Task 4B Validation and Lifecycle Slice
+
+- Existing role/function: continuing sole `implementer`, explicitly configured
+  `gpt-5.6-terra` / `medium`; no child work was dispatched. Runtime profile
+  introspection is unavailable on this surface.
+- RED: the dedicated `postgres-entity-commit.test.ts` test passed a nonempty
+  state-history array to an Entity with state history disabled. The preserved
+  current-only prototype incorrectly resolved `committed`.
+- GREEN: the private commit handle now rejects disabled state or diagnostic
+  history, incompatible source/context boundaries, malformed Entity records,
+  and blank or duplicate event IDs before creating temporary records or
+  acquiring an operation client. Its close is idempotent, unregisters the
+  tracked handle, and rejects later commits without a client acquisition.
+- Evidence: focused serial commit coverage passed `4/4`; package
+  `tsc --noEmit` passed. The fixture uses the actual packed `StringValue`
+  decoder rather than a placeholder. The following prepared-family and
+  transaction-order slice remains active.

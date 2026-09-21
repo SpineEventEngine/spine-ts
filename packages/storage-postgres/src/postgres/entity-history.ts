@@ -36,7 +36,7 @@ import type {
 } from "@spine-event-engine/storage";
 
 import { PostgresStorageDataError } from "./errors.js";
-import { PostgresRecordStorage, type PostgresHistoryExecutor } from "./record-storage.js";
+import { PostgresRecordStorage, type PostgresRecordExecutor } from "./record-storage.js";
 
 /**
  * Describes PostgreSQL-backed Entity record-family handles.
@@ -148,7 +148,7 @@ export class PostgresEntityStorage<I, S extends Message> implements PostgresEnti
 }
 
 class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, S> {
-  readonly #executor: PostgresHistoryExecutor<EntityRecord>;
+  readonly #executor: PostgresRecordExecutor<EntityStateKey, EntityRecord>;
   #open = true;
 
   constructor(
@@ -374,7 +374,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
 }
 
 class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> {
-  readonly #executor: PostgresHistoryExecutor<Event>;
+  readonly #executor: PostgresRecordExecutor<EventId, Event>;
   #open = true;
 
   constructor(

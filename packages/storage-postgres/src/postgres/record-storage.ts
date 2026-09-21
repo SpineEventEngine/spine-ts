@@ -66,7 +66,7 @@ export interface PostgresRecordLifecycle {
  * This capability deliberately stays outside the package root: Entity history
  * uses it to keep its SQL and transaction scope on the PostgreSQL provider.
  */
-export interface PostgresHistoryExecutor<R extends Message> {
+export interface PostgresRecordExecutor<I, R extends Message> {
   /**
    * Prepares the backing table before acquiring an operation client.
    * @returns A promise that resolves when the table is compatible.
@@ -88,12 +88,37 @@ export interface PostgresHistoryExecutor<R extends Message> {
   using<T>(work: (client: PoolClient) => Promise<T>): Promise<T>;
 
   /**
+   * Reads one record on a caller-managed client.
+   * @param client Provides the transaction client.
+   * @param id Identifies the stored record.
+   * @param lock Requests a row lock when present.
+   * @returns The decoded record, when present.
+   */
+  read(client: PoolClient, id: I, lock?: "for-update"): Promise<R | undefined>;
+
+  /**
+   * Confirms that an immutable record is absent or byte-identical.
+   * @param client Provides the transaction client.
+   * @param record Provides the immutable record to inspect.
+   * @returns A promise that rejects for a conflicting payload.
+   */
+  assertImmutable(client: PoolClient, record: R): Promise<void>;
+
+  /**
    * Stores an immutable record on a caller-managed transaction client.
    * @param client Provides the transaction client.
    * @param record Provides the record to store.
    * @returns A promise that resolves after storage or identity confirmation.
    */
   appendImmutable(client: PoolClient, record: R): Promise<void>;
+
+  /**
+   * Writes one mutable record on a caller-managed transaction client.
+   * @param client Provides the transaction client.
+   * @param record Provides the record to write.
+   * @returns A promise that resolves after the upsert.
+   */
+  write(client: PoolClient, record: R): Promise<void>;
 
   /**
    * Decodes records returned by one bounded PostgreSQL statement.
@@ -194,12 +219,15 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @internal
    * @returns PostgreSQL-only history execution capabilities.
    */
-  historyExecutor(): PostgresHistoryExecutor<R> {
+  historyExecutor(): PostgresRecordExecutor<I, R> {
     return {
       prepare: () => this.prepare(),
       transaction: (work) => this.transaction(work),
       using: (work) => this.using(work),
+      read: (client, id, lock) => this.readOn(client, id, lock === "for-update"),
+      assertImmutable: (client, record) => this.assertImmutableOn(client, record),
       appendImmutable: (client, record) => this.appendImmutableOn(client, record),
+      write: (client, record) => this.writeOn(client, record),
       query: (client, sql, values) => this.historyEntries(client, sql, values),
       column: (name, value) => this.historyColumn(name, value),
       table: () => this.qualified(),
@@ -434,6 +462,12 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     const inserted = await client.query(this.immutableSql(), this.values(record));
     if (inserted.rowCount === 1) return;
     const existing = await this.readOn(client, id);
+    if (existing === undefined || this.same(existing, record)) return;
+    throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
+  }
+
+  private async assertImmutableOn(client: PoolClient, record: R): Promise<void> {
+    const existing = await this.readOn(client, this.recordSpec.idValueIn(record));
     if (existing === undefined || this.same(existing, record)) return;
     throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
   }

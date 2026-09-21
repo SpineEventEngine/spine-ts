@@ -32,6 +32,25 @@ const driver = vi.hoisted(() => {
     calls.push({ sql, values });
     if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
     if (sql.includes("columns WHERE")) {
+      if (values[1] === "google_protobuf_stringvalue")
+        return Promise.resolve({
+          rows: [
+            {
+              column_name: "ID",
+              data_type: "character varying",
+              character_maximum_length: 512,
+              is_nullable: "NO",
+              column_default: null,
+            },
+            {
+              column_name: "bytes",
+              data_type: "bytea",
+              character_maximum_length: null,
+              is_nullable: "NO",
+              column_default: null,
+            },
+          ],
+        });
       return Promise.resolve({
         rows: [
           {
