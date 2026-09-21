@@ -1146,8 +1146,18 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   not change to accommodate test mocks.
 - Required evidence is a clean `pnpm typecheck:tooling`, the full hermetic
   PostgreSQL package suite, scoped ESLint and formatting, and `git diff
---check`. After correction, the entire cheap preflight restarts before
+  --check`. After correction, the entire cheap preflight restarts before
   specialist review.
+- GREEN for the test-fixture batch: commit `a30b816e6` changes only the five
+  assigned test files and this log. `pnpm typecheck:tooling`, the 109-test
+  hermetic PostgreSQL suite, scoped ESLint and Prettier, and `git diff --check`
+  pass; no production or public contract changed.
+- The restarted preflight passed the dependency-aware build, tooling
+  typecheck, scoped ESLint, cleanup rules, and TSDoc, then copyright checking
+  found nine new PostgreSQL source/test files with missing or malformed
+  CodeMatters headers. This deterministic header-only batch returns to the
+  same implementation context; after correction, the complete preflight must
+  restart again.
 
 ## Final Cheap-Preflight Test-Type Correction
 
