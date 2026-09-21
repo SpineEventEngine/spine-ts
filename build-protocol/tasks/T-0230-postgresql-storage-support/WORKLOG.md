@@ -1117,6 +1117,20 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   correction; 16/17 focused release CLI tests passed. The one staged-consumer
   test was blocked when pnpm offline installation could not find
   `@grpc/grpc-js@1.14.5` in the local store; no packaging assertion failed.
+
+## Declaration Dependency Correction
+
+- Finding: packed PostgreSQL declarations import `PoolClient` from `pg`, while
+  `pg` ships no declarations. Keeping `@types/pg` in devDependencies caused a
+  clean external TypeScript consumer to report TS7016.
+- Correction: moved exactly `@types/pg` version `8.23.1` from devDependencies
+  to dependencies in `packages/storage-postgres/package.json` and regenerated
+  only the corresponding pnpm-lock importer data. Versions, declarations,
+  public APIs, release logic, and thresholds are unchanged.
+- Evidence: `pnpm install --frozen-lockfile --offline` passed;
+  `pnpm check:production-dependencies` passed; package metadata and release
+  CLI tests passed 31/31, including the packed external consumer; focused
+  formatting and diff checks passed.
 - After the missing package was added only to pnpm's local cache, the same
   staged-consumer test reached TypeScript and found a real published-declaration
   defect: emitted PostgreSQL declarations import `PoolClient` from `pg`, while

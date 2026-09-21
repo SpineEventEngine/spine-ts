@@ -719,13 +719,12 @@ importers:
       '@spine-event-engine/storage':
         specifier: workspace:*
         version: link:../storage
-      pg:
-        specifier: 8.23.0
-        version: 8.23.0
-    devDependencies:
       '@types/pg':
         specifier: 8.23.1
         version: 8.23.1
+      pg:
+        specifier: 8.23.0
+        version: 8.23.0
 
   packages/storage-rdbms:
     dependencies:
