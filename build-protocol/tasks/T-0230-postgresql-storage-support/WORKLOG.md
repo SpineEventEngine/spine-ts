@@ -367,6 +367,28 @@ PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
   PostgreSQL provider is run in Task 3. CAS and normalized-query acceptance
   remain in this active task slice.
 
+## Task 3 CAS and Query Characterization Checkpoint
+
+- Existing role/function: continuing `implementer`, explicitly configured as
+  `gpt-5.6-terra` / `medium`; no child work was dispatched.
+- Fixture correction: an added CAS test initially failed because the preceding
+  immutable test's custom driver implementation persisted across cases and made
+  factory construction report a retired layout. Resetting the driver query
+  implementation in `beforeEach` restored independent production-path fixtures;
+  no runtime code changed for this correction.
+- GREEN characterization: a `40001` on the first `BEGIN` rolls back, acquires a
+  fresh operation client, and retries exactly once through advisory lock, row
+  check, upsert, and commit. The focused test observed two client acquisitions
+  and `BEGIN`, `ROLLBACK`, `BEGIN`, `COMMIT`.
+- GREEN characterization: normalized ID selection compiles to one fully
+  qualified SQL statement with `$1`, `$2`, and candidate-bound `$3`; 1,000 IDs
+  reject at the common bind budget before client acquisition. The focused record
+  suite passed `7 passed (7)`.
+- Limitation: this is partial Task 3 acceptance. The declared-column comparison,
+  nested predicate, continuation/null-order, RecordQuery window, immutable-race,
+  and non-retry error matrices remain to be expanded before Task 3 can be
+  accepted.
+
 ## Task 3 Record Runtime Checkpoint
 
 - Existing role/function: continuing `implementer`, configured explicitly as

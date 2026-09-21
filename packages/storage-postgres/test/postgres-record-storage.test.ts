@@ -62,7 +62,38 @@ import { PostgresStorageFactory } from "../src/index.js";
 
 describe("Postgres record storage", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    driver.query.mockReset();
+    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
+      driver.calls.push({ sql, values });
+      if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
+      if (sql.includes("columns WHERE")) {
+        return Promise.resolve({
+          rows: [
+            {
+              column_name: "ID",
+              data_type: "character varying",
+              character_maximum_length: 512,
+              is_nullable: "NO",
+              column_default: null,
+            },
+            {
+              column_name: "bytes",
+              data_type: "bytea",
+              character_maximum_length: null,
+              is_nullable: "NO",
+              column_default: null,
+            },
+          ],
+        });
+      }
+      if (sql.includes("PRIMARY KEY"))
+        return Promise.resolve({ rows: [{ column_name: "ID", ordinal_position: 1 }] });
+      if (sql.includes("table_constraints")) return Promise.resolve({ rows: [] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+    driver.connect.mockClear();
+    driver.release.mockClear();
+    driver.end.mockClear();
     driver.calls.length = 0;
   });
 
@@ -135,6 +166,60 @@ describe("Postgres record storage", () => {
     await expect(
       storage.writeImmutable(create(StringValueSchema, { value: "two" })),
     ).rejects.toThrow("immutable record collides");
+  });
+
+  it("retries a serialization-failed compare-and-set once with a fresh client", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+    let failed = false;
+    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
+      driver.calls.push({ sql, values });
+      if (sql === "BEGIN" && !failed) {
+        failed = true;
+        return Promise.reject(Object.assign(new Error("serialization failure"), { code: "40001" }));
+      }
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(
+      storage.compareAndSet("one", undefined, create(StringValueSchema, { value: "one" })),
+    ).resolves.toBe(true);
+
+    expect(driver.connect).toHaveBeenCalledTimes(2);
+    expect(driver.calls.map(({ sql }) => sql)).toEqual(
+      expect.arrayContaining(["BEGIN", "ROLLBACK", "BEGIN", "COMMIT"]),
+    );
+  });
+
+  it("pushes normalized ID selection into one numbered PostgreSQL statement", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+
+    await storage.queryPlan({ predicate: { kind: "ids", ids: ["one", "two"] } });
+
+    const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).toContain('WHERE "ID" IN ($1, $2) ORDER BY "ID" ASC LIMIT $3');
+    expect(query?.values).toEqual(["one", "two", 10_001]);
+  });
+
+  it("rejects an oversized normalized bind plan before acquiring a client", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+
+    await expect(
+      storage.queryPlan({
+        predicate: { kind: "ids", ids: Array.from({ length: 1_000 }, (_, index) => String(index)) },
+      }),
+    ).rejects.toThrow("bind budget");
+
+    expect(driver.connect).not.toHaveBeenCalled();
+    expect(driver.calls).toEqual([]);
   });
 });
 
