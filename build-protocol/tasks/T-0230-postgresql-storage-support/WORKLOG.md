@@ -995,6 +995,20 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   command has run against a live server, and this task does not claim either as
   passed.
 
+## Task 5 Harness Verification Dispatch
+
+- Function: independent read-only mechanical and version-specific review of
+  the Task 5 harness at `38b692714`; this is not a new project role.
+- Expected profile: `gpt-5.6-luna` / `medium`, passed explicitly in the
+  dispatch because the check includes package commands and PostgreSQL-version
+  claim validation. Child spawning and file changes are prohibited. Runtime
+  self-introspection may be unavailable, so the immutable explicit dispatch is
+  the profile evidence.
+- The verifier must confirm fail-fast behavior, infrastructure-only inventory,
+  all-three-database version checks, non-skipped PostgreSQL Inbox coverage,
+  public production paths, hermetic suite/gates, clean output/remote state, and
+  the honest absence of live PostgreSQL 16/18 evidence.
+
 ## Task 4 History Verification Correction
 
 - Existing role/function: continuing sole `implementer`, explicitly configured
