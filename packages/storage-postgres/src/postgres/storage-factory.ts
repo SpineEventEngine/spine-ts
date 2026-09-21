@@ -28,6 +28,7 @@ import { Pool, type PoolConfig, type PoolClient } from "pg";
 
 import { PostgresStorageConfigurationError, PostgresStorageConnectionError } from "./errors.js";
 import { PostgresRecordStorage, type PostgresRecordLifecycle } from "./record-storage.js";
+import { PostgresEntityStorage } from "./entity-history.js";
 import { PostgresTableResolver } from "./table-resolver.js";
 import { PostgresTableSpecs } from "./table-spec.js";
 
@@ -345,6 +346,27 @@ export class PostgresStorageFactory extends StorageFactory {
       this.operation === undefined ? undefined : createOperation(this.operation, spec),
       this.stringifiers,
     );
+    this.#handles.add(handle);
+    return handle;
+  }
+
+  /**
+   * Creates the internal Entity-current and history storage seam.
+   *
+   * @param input Supplies the Entity storage configuration.
+   * @returns A factory-managed PostgreSQL Entity handle.
+   */
+  createEntityStorage<I, S extends Message>(
+    input: import("@spine-event-engine/storage/provider").EntityStorageInput<I, S>,
+  ): PostgresEntityStorage<I, S> {
+    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    const registration = {} as { handle: PostgresEntityStorage<I, S> };
+    const handle = new PostgresEntityStorage(
+      input,
+      this.createRecordStorage(input.context, input.recordSpec),
+      () => this.#handles.delete(registration.handle),
+    );
+    registration.handle = handle;
     this.#handles.add(handle);
     return handle;
   }

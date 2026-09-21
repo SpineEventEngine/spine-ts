@@ -550,3 +550,18 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   is characterization evidence rather than a new RED/GREEN implementation.
 - Evidence: the focused record suite passes `2/2`; package typecheck, scoped
   ESLint, cleanup enforcement, and `git diff --check` pass.
+
+## Task 4A Entity Handle Wiring
+
+- Existing role/function: continuing sole `implementer`, explicitly configured
+  `gpt-5.6-terra` / `medium`; no child work was dispatched.
+- RED: the factory-created Entity production-path test failed with
+  `TypeError: factory.createEntityStorage is not a function`.
+- GREEN: added the private PostgreSQL Entity-handle seam. It creates a tracked
+  current-record handle through the existing factory path and exposes disabled
+  state/event ports when histories are disabled. Factory close closes and
+  unregisters the current handle.
+- Evidence: the focused Entity test passed `1 passed (1)`; package typecheck,
+  scoped ESLint, Prettier, full TSDoc, cleanup rules, and diff hygiene passed.
+- Limitation: enabled bounded state/event histories, atomic Entity commit, and
+  fenced cleanup remain active Task 4 work.
