@@ -90,6 +90,8 @@ describe("TypeScript documentation snippets", () => {
       "packages/storage-rdbms/REFERENCE.md",
       "packages/storage-datastore/README.md",
       "packages/storage-datastore/REFERENCE.md",
+      "packages/storage-postgres/README.md",
+      "packages/storage-postgres/REFERENCE.md",
       "examples/orders/README.md",
       "examples/orders/REFERENCE.md",
       "examples/projects/README.md",

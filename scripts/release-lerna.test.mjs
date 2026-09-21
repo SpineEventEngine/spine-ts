@@ -73,14 +73,14 @@ describe("Lerna workspace discovery", () => {
     });
   });
 
-  it("discovers all workspace packages while retaining the exact 18 public package boundary", () => {
+  it("discovers all workspace packages while retaining the exact 19 public package boundary", () => {
     const result = spawnSync("pnpm", ["exec", "lerna", "list", "--all", "--json"], {
       cwd: root,
       encoding: "utf8",
     });
     expect(result.status).toBe(0);
     const packages = JSON.parse(result.stdout);
-    expect(packages).toHaveLength(29);
+    expect(packages).toHaveLength(30);
     expect(packages.filter((entry) => entry.private)).toHaveLength(11);
     expect(
       packages.find((entry) => entry.name === "@spine-event-engine/server-blackbox-tests"),
@@ -180,7 +180,7 @@ describe("Lerna workspace discovery", () => {
       );
       expect(result.status).toBe(0);
       expect(result.stdout + result.stderr).not.toContain("ECYCLE");
-      expect(JSON.parse(result.stdout)).toHaveLength(18);
+      expect(JSON.parse(result.stdout)).toHaveLength(19);
     } finally {
       rmSync(fixture, { force: true, recursive: true });
     }

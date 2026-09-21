@@ -23,6 +23,7 @@ export const releaseManifestPaths = [
   "packages/server/package.json",
   "packages/storage/package.json",
   "packages/storage-datastore/package.json",
+  "packages/storage-postgres/package.json",
   "packages/storage-rdbms/package.json",
   "packages/testing/package.json",
   "packages/transport/package.json",
@@ -75,10 +76,10 @@ export function readReleaseManifests(root) {
  */
 export function validateReleasePolicy(entries) {
   if (entries.length !== releaseManifestPaths.length)
-    throw new Error("Release manifests do not match the exact 26-path inventory");
+    throw new Error("Release manifests do not match the exact 27-path inventory");
   for (const [index, entry] of entries.entries())
     if (entry.path !== releaseManifestPaths[index])
-      throw new Error("Release manifests do not match the exact 26-path inventory");
+      throw new Error("Release manifests do not match the exact 27-path inventory");
   const root = entries[0].manifest;
   const release = classifyReleaseVersion(root.version);
   const publicEntries = entries.filter(({ path }) => path.startsWith("packages/"));

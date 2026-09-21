@@ -1048,6 +1048,31 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
 - No runtime semantics, MySQL behavior, live-service startup, third-party
   patching, or speculative feature is permitted.
 
+## Task 6 Integration Evidence
+
+- RED: `pnpm proto:generate` initially failed because
+  `packages/proto/spine-proto-manifest.json` still declared snapshot.12 while
+  the workspace was snapshot.13. The release/package inventory tests also
+  exposed the expected stale 18-public-package/26-path assumptions.
+- GREEN: corrected the Proto manifest to snapshot.13; added the PostgreSQL
+  package to the 19-public-package/27-release-path, publication, boundary,
+  TypeDoc, audience, snippet, build-cleanup, release-readiness, and
+  infrastructure inventories; added package README/REFERENCE assets; pinned
+  package metadata and verified the existing `pg`/`@types/pg` lock entries;
+  updated storage user guidance and removed the stale MySQL PostgreSQL claim.
+- Documentation now describes URL/TLS/schema configuration, single and
+  multitenant routing, lifecycle, first write/read, live test environment
+  variables, PostgreSQL 16+ as an intended floor, and the absence of live
+  PostgreSQL 16/18 evidence. Tenant examples name two distinct databases.
+- Evidence: `pnpm proto:generate` passed; dependency-aware
+  `pnpm typecheck:build:generated` passed; focused release/package/docs suite
+  passed 64/64; TypeDoc API check, audience, cleanup, and TSDoc checks passed;
+  `pnpm install --lockfile-only --offline` reported already up to date;
+  Prettier and `git diff --check` were run. `check-generated-clean` could not
+  complete in this environment because `protoc-gen-es` was unavailable on
+  PATH; release readiness also reports pre-existing `.superpowers` internal
+  history terms outside this integration diff.
+
 ## Task 4 History Verification Correction
 
 - Existing role/function: continuing sole `implementer`, explicitly configured

@@ -199,7 +199,7 @@ describe("package metadata", () => {
   it("declares Apache-2.0 for every framework package without classifying examples as publishable", () => {
     const frameworkPackages = productionPackagePaths(repoRoot);
 
-    expect(frameworkPackages).toHaveLength(18);
+    expect(frameworkPackages).toHaveLength(19);
     expect(
       frameworkPackages.every((path) => readJson(`${path}/package.json`).license === "Apache-2.0"),
     ).toBe(true);
@@ -218,7 +218,7 @@ describe("package metadata", () => {
       access: "public",
     };
 
-    expect(frameworkPackages).toHaveLength(18);
+    expect(frameworkPackages).toHaveLength(19);
     for (const packagePath of frameworkPackages) {
       const packageJson = readJson(`${packagePath}/package.json`);
 
@@ -283,6 +283,7 @@ describe("package metadata", () => {
       "packages/server/test-fixtures",
       "packages/storage",
       "packages/storage-datastore",
+      "packages/storage-postgres",
       "packages/storage-rdbms",
       "packages/testing",
       "packages/testing/test-fixtures",

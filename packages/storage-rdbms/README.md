@@ -212,8 +212,8 @@ operations plan.
 
 Use a dedicated database and account, protect the connection URL, configure
 TLS, and plan backups, monitoring, and migrations. Indexed `bigint` values must
-fit the exact signed 64-bit MySQL range. PostgreSQL support is planned for the
-same package but is not implemented.
+fit the exact signed 64-bit MySQL range. PostgreSQL is provided separately by
+[`@spine-event-engine/storage-postgres`](../storage-postgres/README.md).
 
 Before starting this corrected layout against an existing database, run the
 legacy-layout inventory for every configured tenant database:

@@ -58,6 +58,7 @@ const exactFrameworkPackages = [
   "server",
   "storage",
   "storage-datastore",
+  "storage-postgres",
   "storage-rdbms",
   "testing",
   "transport",

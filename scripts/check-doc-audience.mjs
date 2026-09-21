@@ -13,6 +13,7 @@ const entries = [
   "packages/proto",
   "packages/server",
   "packages/storage-datastore",
+  "packages/storage-postgres",
   "packages/storage-rdbms",
   "packages/storage",
   "packages/testing",

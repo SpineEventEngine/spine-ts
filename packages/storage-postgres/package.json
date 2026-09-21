@@ -20,7 +20,9 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "REFERENCE.md"
   ],
   "scripts": {
     "test:postgresql": "node scripts/postgresql.mjs && SPINE_TS_INBOX_PROVIDER=postgresql pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/storage-postgres/test/postgresql-integration.test.ts packages/server/test/delivery/inbox-provider-cleanup.test.ts",

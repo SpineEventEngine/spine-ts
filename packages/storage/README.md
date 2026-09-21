@@ -165,7 +165,8 @@ ordinary Event Store is intentionally ungrouped.
 ## 🗄️ Choose a durable adapter
 
 `@spine-event-engine/storage-datastore` provides Google Cloud Datastore
-storage. `@spine-event-engine/storage-rdbms` provides MySQL storage. Configure
+storage. `@spine-event-engine/storage-rdbms` provides MySQL storage and
+`@spine-event-engine/storage-postgres` provides PostgreSQL storage. Configure
 those packages in application code and pass the resulting factory to the Spine
 server; this package does not choose a database.
 
@@ -174,6 +175,7 @@ server; this package does not choose a database.
 | Local development and tests | `InMemoryStorageFactory` in this package                                                                                                 |
 | Google Cloud Datastore      | [`@spine-event-engine/storage-datastore`](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-datastore/README.md) |
 | MySQL                       | [`@spine-event-engine/storage-rdbms`](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-rdbms/README.md)         |
+| PostgreSQL                  | [`@spine-event-engine/storage-postgres`](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-postgres/README.md)   |
 
 ## ⚠️ Lifecycle differences
 
@@ -186,5 +188,6 @@ shutdown and queries.
 
 - [Datastore adapter](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-datastore/README.md)
 - [MySQL adapter](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-rdbms/README.md)
+- [PostgreSQL adapter](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-postgres/README.md)
 - [Server](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/README.md)
 - [Reference for coding agents](REFERENCE.md)
