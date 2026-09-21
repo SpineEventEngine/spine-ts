@@ -321,6 +321,25 @@ PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
   starts from the clean pushed checkpoint. This is a serialized handoff; only
   one production writer remains active.
 
+## Task 3 Runtime Correction Handoff
+
+- The replacement author pushed record runtime, cleanup, and batch
+  characterization checkpoints through `73a2d9fc8`. Orchestrator inspection
+  then found that an operation acquired a pool client before lazy table
+  initialization acquired another, which can deadlock a pool limited to one
+  client.
+- The author corrected preparation order and added focused immutable/order
+  coverage locally; typecheck, focused tests, ESLint, cleanup, formatting, and
+  diff checks were reported green. Full TSDoc found 49 new documentation
+  diagnostics. The author then returned repeatedly without applying that
+  ordinary correction or producing the required checkpoint.
+- A fresh existing `implementer` receives the preserved uncommitted runtime and
+  test changes. Its first bounded responsibility is accurate TSDoc, complete
+  immutable/order verification, log evidence, and a pushed checkpoint; it then
+  continues CAS and query acceptance. Dispatch is explicit
+  `gpt-5.6-terra` / `medium`, with no children. This remains a serialized
+  handoff with one production writer.
+
 ## Task 3 Record Runtime Checkpoint
 
 - Existing role/function: continuing `implementer`, configured explicitly as
