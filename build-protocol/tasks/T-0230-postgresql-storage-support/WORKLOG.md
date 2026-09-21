@@ -1089,6 +1089,19 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   PATH; release readiness also reports pre-existing `.superpowers` internal
   history terms outside this integration diff.
 
+## Independent Task 6 Verification Correction
+
+- Finding: independent release verification at `4751dcbef` found eight
+  branch-created `spine-proto-manifest.json` files still declaring
+  `2.0.0-snapshot.12`: the four examples and four test-fixture packages.
+- Correction: updated only those eight `packageVersion` fields to the common
+  workspace version `2.0.0-snapshot.13`; no generated source, runtime code, or
+  unrelated manifest content changed.
+- Evidence: `pnpm proto:check-generated` and
+  `pnpm proto:check-generated:current` both passed; focused Prettier checks and
+  `git diff --check` passed. The correction is committed and pushed as the
+  follow-up integration commit.
+
 ## Task 4 History Verification Correction
 
 - Existing role/function: continuing sole `implementer`, explicitly configured
