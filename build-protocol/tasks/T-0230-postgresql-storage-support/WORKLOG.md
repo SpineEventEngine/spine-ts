@@ -618,3 +618,23 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
   retry boundary, lifecycle, and TDD slices. Runtime self-introspection may be
   unavailable; immutable configured role/profile is the expected metadata.
   The sole production writer is paused during this pass.
+
+## Task 4B Architecture Result and Handoff
+
+- The read-only architecture pass completed with no edits. It confirmed no
+  common SPI or public-root change is required and rejected the current-only
+  prototype as falsely incomplete.
+- It found and resolved a task-brief contradiction: atomic commit must preserve
+  the accepted family → Entity → row lock order, not take Entity before family.
+  State history and atomic commit also need one table-independent Entity domain
+  based on database/schema/source type/logical Entity key; record CAS remains a
+  separate domain.
+- Accepted private shape: a generic package-local record executor with supplied-
+  client read/preflight/append/write operations; a fresh-client exact-retry
+  coordinator; and a per-call temporary current/state/diagnostic/delivery bundle
+  prepared fully before transaction acquisition and closed in `finally`.
+- The existing implementation context could not complete this refactor. A fresh
+  existing `implementer`, explicitly configured `gpt-5.6-terra` / `medium`,
+  receives the preserved uncommitted RED/prototype and the bounded architecture
+  result. Child spawning is prohibited. This is a serialized handoff; there is
+  still only one production writer.
