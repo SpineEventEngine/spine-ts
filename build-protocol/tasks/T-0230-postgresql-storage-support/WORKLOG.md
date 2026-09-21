@@ -921,6 +921,36 @@ packages/storage-postgres/test/postgres-delivery-cleanup.test.ts
   stable high-water behavior, and blocked/resumed append ordering without a
   false-positive test-double shortcut.
 
+## Task 4 Affected-Concern Reverification Result
+
+- Actual profile evidence: the immutable dispatch explicitly selected
+  `gpt-5.6-luna` / `low`; runtime self-introspection was unavailable. The
+  verifier made no changes.
+- Focused history coverage independently passed `12/12`. Read-only inspection
+  confirmed two independently constructed factories, production advisory-lock
+  calls, append blocked until maintenance unlock, matching family → Entity
+  order for state append/trim, exactly two 128-key Event ID pages, no payload
+  selection, one stable high-water tuple, and later-append retention. Scoped
+  ESLint, Prettier, diff hygiene, clean-tree, official-remote, and local/remote
+  SHA checks passed at `b1b33ed95`.
+- No finding remains from the affected-concern recheck. Task 4 is accepted.
+
+## Task 5 Live-Acceptance Dispatch
+
+- Existing role: `implementer`; responsibility is the explicit PostgreSQL live
+  acceptance harness, package command, and PostgreSQL 16/18 behavior suite. No
+  other production writer may edit overlapping files.
+- Explicit dispatch profile: `gpt-5.6-terra` / `medium`; child spawning is
+  prohibited. Runtime self-introspection may be unavailable, so the immutable
+  configured role/profile and explicit dispatch fields are the acceptance
+  evidence.
+- `SPINE_TS_POSTGRESQL_URL` is currently unset and `psql` is unavailable.
+  Docker is installed, but the accepted task explicitly forbids automatic
+  container startup. The author must implement deterministic fail-fast
+  preflight and the live suite without inventing container management; actual
+  PostgreSQL 16 and 18 execution remains a reported external-input blocker
+  until explicit URLs are supplied.
+
 ## Task 4 History Verification Correction
 
 - Existing role/function: continuing sole `implementer`, explicitly configured
