@@ -255,6 +255,44 @@ describe("Postgres record storage", () => {
     expect(driver.release).toHaveBeenCalledTimes(1);
   });
 
+  it("returns false without mutation when compare-and-set finds a different payload", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    const stored = create(StringValueSchema, { value: "stored" });
+    driver.query.mockImplementation((sql: string, values?: readonly unknown[]) => {
+      driver.calls.push({ sql, values });
+      if (sql.startsWith('SELECT "bytes"'))
+        return Promise.resolve({ rows: [{ bytes: toBinary(StringValueSchema, stored) }] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(
+      storage.compareAndSet(
+        "one",
+        create(StringValueSchema, { value: "expected" }),
+        create(StringValueSchema, { value: "next" }),
+      ),
+    ).resolves.toBe(false);
+
+    expect(driver.calls.some(({ sql }) => sql.startsWith("INSERT INTO"))).toBe(false);
+    expect(driver.calls.map(({ sql }) => sql)).toEqual(expect.arrayContaining(["BEGIN", "COMMIT"]));
+  });
+
+  it("derives distinct transaction advisory keys for distinct storage IDs", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    driver.calls.length = 0;
+
+    await storage.compareAndSet("one", undefined, create(StringValueSchema, { value: "one" }));
+    await storage.compareAndSet("two", undefined, create(StringValueSchema, { value: "two" }));
+
+    const keys = driver.calls
+      .filter(({ sql }) => sql === "SELECT pg_advisory_xact_lock($1)")
+      .map(({ values }) => values?.[0]);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).not.toEqual(keys[1]);
+  });
+
   it("pushes normalized ID selection into one numbered PostgreSQL statement", async () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();

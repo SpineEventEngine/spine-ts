@@ -424,6 +424,15 @@ DISTINCT FROM`; an ascending null continuation emits `IS NOT NULL` rather than
 - GREEN evidence: the focused record suite passed `20 passed (20)`. These tests
   exercise the factory-created runtime handle and driver boundary only.
 
+## Task 3 CAS Outcome and Lock Identity Characterization
+
+- Characterization: a differing stored payload returns `false` from
+  compare-and-set without issuing an insert, while its transaction still
+  commits. Absent-row conditional creation remains covered by the retry cases.
+- Characterization: transaction advisory-lock values differ for distinct record
+  IDs in the same database/schema/table identity domain. The focused record
+  suite passed `22 passed (22)`.
+
 ## Task 3 Record Runtime Checkpoint
 
 - Existing role/function: continuing `implementer`, configured explicitly as
