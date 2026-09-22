@@ -67,3 +67,10 @@ export const PostgresClientDisposal: Readonly<{
     return typeof error === "object" && error !== null && discardedClients.has(error);
   },
 });
+
+/** Supplies an Error token that tells node-postgres to discard a failed client. */
+export const PostgresRollbackErrors: Readonly<{ discard(error: unknown): Error }> = Object.freeze({
+  discard(error: unknown): Error {
+    return error instanceof Error ? error : new Error("PostgreSQL transaction rollback failed.");
+  },
+});

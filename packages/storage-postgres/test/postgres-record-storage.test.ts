@@ -297,6 +297,22 @@ describe("Postgres record storage", () => {
     expect(driver.release).toHaveBeenCalledOnce();
   });
 
+  it("discards a transaction client when the operation and rollback both fail", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql === "BEGIN") return Promise.reject(new Error("secret operation"));
+      if (sql === "ROLLBACK") return Promise.reject(new Error("secret rollback"));
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(storage.write(create(StringValueSchema, { value: "one" }))).rejects.toThrow(
+      "record operation failed",
+    );
+    expect(driver.release).toHaveBeenCalledWith(expect.any(Error));
+  });
+
   it("reads one stored record and reports whether deletion changed a row", async () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();

@@ -16,7 +16,11 @@ import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 
 import type { PostgresColumnSpec, PostgresTableSpec } from "./storage-factory.js";
-import { PostgresStorageSchemaError, PostgresTransactionErrors } from "./errors.js";
+import {
+  PostgresRollbackErrors,
+  PostgresStorageSchemaError,
+  PostgresTransactionErrors,
+} from "./errors.js";
 
 /**
  * Prepares one PostgreSQL record-family table.
@@ -56,6 +60,7 @@ export class PostgresTableInitializer {
 
   private async attempt(): Promise<void> {
     const client = await this.lifecycle.acquire();
+    let discard: Error | undefined;
     try {
       await client.query("BEGIN");
       await this.lock(client);
@@ -63,10 +68,14 @@ export class PostgresTableInitializer {
       await this.verify(client);
       await client.query("COMMIT");
     } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        discard = PostgresRollbackErrors.discard(error);
+      }
       throw error;
     } finally {
-      client.release();
+      client.release(discard);
     }
   }
 

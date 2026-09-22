@@ -501,6 +501,14 @@ The reviewer independently ran the hermetic PostgreSQL suite (`10` files,
   sorted batch locks with source-order writes. `46/46` focused tests, ESLint,
   package TypeScript checking, Prettier, and diff checking pass.
 
+### Round 1 Finding 2 Correction Evidence
+
+- Record, initializer, Entity-commit, and delivery-cleanup transaction catches
+  now discard a client after rollback failure without replacing the original
+  operation failure. Focused coordinator coverage injects a record operation
+  and rollback failure and proves both `release(error)` and the stable public
+  operation error. The focused coordinator suite passes `97/97`.
+
 All four findings are consequential and technically consistent with the shared
 storage contracts and provider error policy; none is rejected or deferred. The
 existing PostgreSQL implementer context receives one test-first correction batch.

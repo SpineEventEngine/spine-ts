@@ -32,7 +32,11 @@ import {
 } from "@spine-event-engine/storage/provider";
 import type { PoolClient } from "pg";
 
-import { PostgresStorageOperationError, PostgresTransactionErrors } from "./errors.js";
+import {
+  PostgresRollbackErrors,
+  PostgresStorageOperationError,
+  PostgresTransactionErrors,
+} from "./errors.js";
 import {
   PostgresRecordStorage,
   type PostgresRecordExecutor,
@@ -47,17 +51,22 @@ class PostgresEntityCommitCoordinator {
   async commit<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const client = await this.lifecycle.acquire();
+      let discard: Error | undefined;
       try {
         await client.query("BEGIN");
         const result = await work(client);
         await client.query("COMMIT");
         return result;
       } catch (error) {
-        await client.query("ROLLBACK").catch(() => undefined);
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          discard = PostgresRollbackErrors.discard(error);
+        }
         if (attempt === 0 && PostgresTransactionErrors.retryable(error)) continue;
         throw PostgresCommitErrors.operation(error);
       } finally {
-        client.release();
+        client.release(discard);
       }
     }
     throw new Error("Unreachable PostgreSQL Entity commit retry.");

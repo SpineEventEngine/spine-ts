@@ -21,7 +21,11 @@ import {
 import type { RecordSpec, StorageContext } from "@spine-event-engine/storage";
 import type { PoolClient } from "pg";
 
-import { PostgresStorageOperationError, PostgresTransactionErrors } from "./errors.js";
+import {
+  PostgresRollbackErrors,
+  PostgresStorageOperationError,
+  PostgresTransactionErrors,
+} from "./errors.js";
 import { PostgresRecordStorage, type PostgresRecordLifecycle } from "./record-storage.js";
 
 type OpenRecords = <I, R extends Message>(
@@ -96,18 +100,23 @@ export class PostgresDeliveryCleanupStorage implements DeliveryCleanupStorage {
   ): Promise<boolean> {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const client = await this.lifecycle(input.context).acquire();
+      let discard: Error | undefined;
       try {
         await client.query("BEGIN");
         const result = await this.removeOn(client, input, inbox, sessions);
         await client.query("COMMIT");
         return result;
       } catch (error) {
-        await client.query("ROLLBACK").catch(() => undefined);
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          discard = PostgresRollbackErrors.discard(error);
+        }
         if (error instanceof CleanupExpired) throw error;
         if (attempt === 0 && PostgresTransactionErrors.retryable(error)) continue;
         throw PostgresCleanupErrors.operation(error);
       } finally {
-        client.release();
+        client.release(discard);
       }
     }
     throw new Error("Unreachable PostgreSQL cleanup retry.");

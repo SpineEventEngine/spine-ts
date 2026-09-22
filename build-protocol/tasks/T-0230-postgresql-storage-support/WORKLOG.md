@@ -1803,3 +1803,13 @@ record-body)` and observed the upsert bind `record-body` instead of `slot`.
   deduplicates and sorts lock keys before retaining the original write order.
   Focused Vitest passes `46/46`; changed-file ESLint, the storage-postgres
   TypeScript check, Prettier, and `git diff --check` pass.
+
+## Round 1 Correction: Rollback Disposal
+
+- Coordinators for record storage, table preparation, Entity commits, and
+  delivery cleanup now pass the original operation error to `release(error)`
+  when `ROLLBACK` itself fails, while retaining their prior sanitized public
+  error paths. The record coordinator regression injects secret-bearing
+  operation and rollback failures and proves sanitization plus discard.
+- Focused coordinator tests pass `97/97`; changed-file ESLint and the package
+  TypeScript check pass.

@@ -36,6 +36,7 @@ import {
   PostgresStorageOperationError,
   PostgresTransactionErrors,
   PostgresClientDisposal,
+  PostgresRollbackErrors,
 } from "./errors.js";
 import { PostgresIdColumn } from "./id-column.js";
 import type { PostgresTableSpec } from "./storage-factory.js";
@@ -427,16 +428,21 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     await this.prepare();
     const client = await this.lifecycle.acquire();
+    let discard: Error | undefined;
     try {
       await client.query("BEGIN");
       const result = await work(client);
       await client.query("COMMIT");
       return result;
     } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        discard = PostgresRollbackErrors.discard(error);
+      }
       throw error;
     } finally {
-      client.release();
+      client.release(discard);
     }
   }
 
