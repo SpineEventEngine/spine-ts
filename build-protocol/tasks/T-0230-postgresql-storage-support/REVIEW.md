@@ -661,3 +661,26 @@ the surface exposes it; otherwise the configured role/profile is the evidence.
 The reviewer must cite precise paths and lines, classify every finding, check
 the visible human-imposed requirements ledger, and avoid findings about
 historical or superseded prose unless an active document presents it as current.
+
+### Human And Agentic Documentation Audit Result
+
+The independent `documentation_reviewer` completed the read-only audit with no
+inherited conversation and no child agents. The dispatch explicitly selected
+the configured `gpt-5.6-luna` / `medium` profile; the surface did not expose
+additional runtime self-introspection.
+
+The reviewer reported no P0 or P1 finding and one accepted P2 standards issue:
+`docs/architecture/README.md` twice grouped Datastore with “RDBMS” adapters or
+packages. Datastore is not relational, and the document itself distinguishes
+Datastore namespaces from relational databases. The correction now names the
+Datastore adapter/package separately from the MySQL and PostgreSQL RDBMS
+adapters/packages. The specification axis found no missing, incorrect, or
+unrequested PostgreSQL behavior in the changed human or agentic documentation.
+
+The correction passes Prettier for the complete changed-document set,
+`docs:audience:check`, `docs:check:generated` (including API inventory and
+TypeScript snippets), `git diff --check`, and the targeted terminology scan.
+No accepted finding remains. The task-verification wrapper's documentation-only
+mode is unavailable because it sees the complete mixed-code feature branch;
+this correction therefore uses the protocol's focused documentation gates and
+retains the prior successful release verification for unchanged runtime code.
