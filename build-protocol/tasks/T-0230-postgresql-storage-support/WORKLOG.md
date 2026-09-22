@@ -1,6 +1,6 @@
 # T-0230 Work Log
 
-Status: Final release verification pending
+Status: Complete
 Branch: `add-postgresql-storage`
 Checkout: `/Users/armiol/development/experiments/spine-ts`
 Baseline: `6fffcd6102b3eff94b0f77eb6db2fbf2e02ba172`
@@ -1992,5 +1992,9 @@ operation failed.` and explicitly rejects the secret-bearing raw text, while
 - The memory-free maintainability, API, and documentation re-reviews have
   converged. Their accepted follow-up findings are corrected, and final
   confirmations report no remaining issue. The public API inventory now
-  includes `PostgresDdlType`; final release verification is the only remaining
-  task step.
+  includes `PostgresDdlType`.
+- The authoritative `pnpm verify:release` at `d3472b129` passed every static,
+  documentation, packaging, external-consumer, and coverage gate: `300/300`
+  test files and `4,902/4,902` tests passed. The earlier seven failures from the
+  contended task wrapper also passed individually before this single-worker
+  release run. No task work remains.

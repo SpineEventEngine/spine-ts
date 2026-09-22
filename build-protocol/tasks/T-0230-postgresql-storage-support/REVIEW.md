@@ -1,6 +1,6 @@
 # T-0230 Review Record
 
-Status: Source-quality correction review in progress
+Status: Complete; source-quality correction accepted
 
 Initial review endpoint: `c09c961d6bf75e2cb90fb36fa2dc2c2e0882dd15`
 Correction endpoint: `34ca4b669c78612bb158bba6635524e2c00341ed`
@@ -748,4 +748,12 @@ contract assertion passes, and the final API confirmation found no issue.
 
 The new public `PostgresDdlType` is included in the API documentation inventory.
 API docs, audience checks, TSDoc, cleanup enforcement, formatting, and diff
-hygiene pass. No review finding remains; final release verification is pending.
+hygiene pass. No review finding remains.
+
+### Final Source-Quality Verification
+
+The authoritative `pnpm verify:release` at `d3472b129` passed all generated,
+typechecking, lint, documentation, packaging, dependency, release-readiness,
+external-consumer, and coverage gates. All `300/300` test files and
+`4,902/4,902` tests passed. The correction is accepted with no unresolved
+finding or deferred work.
