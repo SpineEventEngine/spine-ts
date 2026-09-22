@@ -1,6 +1,6 @@
 # T-0230: PostgreSQL Storage Support Plan
 
-Status: Complete
+Status: Correction in progress
 Start: `2026-09-20`
 Baseline: `6fffcd6102b3eff94b0f77eb6db2fbf2e02ba172`
 Branch: `add-postgresql-storage`
@@ -62,6 +62,19 @@ public APIs, release inventory, and live-provider verification.
 - Execute the current build protocol strictly, including test-first runtime
   changes, durable logs, one production writer, aggregated specialist review,
   and one final release verification after convergence.
+- Permanent enforcement files must use stable package or policy names, never
+  internal task numbers.
+- Every authored production class and method introduced or modified by the task
+  requires semantic TSDoc, including non-exported declarations.
+- Every generic type parameter on an authored declaration requires a meaningful
+  `@typeParam` description.
+- Separate declarations and method bodies with blank lines wherever the
+  declaration boundaries would otherwise run together.
+- PostgreSQL DDL type names must come from one typed package-local vocabulary.
+  Do not scatter raw SQL type strings or misuse `pg` wire OIDs as DDL names.
+- User-facing TSDoc must use direct domain language. Do not use unexplained
+  implementation shorthand such as “fenced” when the actual behavior is a
+  transaction lock plus current-record verification.
 
 ## Evidence Checked
 

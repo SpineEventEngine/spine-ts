@@ -111,6 +111,9 @@ export interface PostgresTenantStorageOptions {
 
 /**
  * Describes one resolved PostgreSQL record-family table.
+ *
+ * @typeParam I The storage identifier type.
+ * @typeParam R The stored Protobuf record type.
  */
 export interface PostgresTableSpec<I, R extends Message> {
   // prettier-ignore
@@ -201,6 +204,8 @@ export interface PostgresCreateOperation {
 /**
  * Creates a create-table operation for one resolved record family.
  *
+ * @typeParam I The storage identifier type.
+ * @typeParam R The stored Protobuf record type.
  * @param table Describes the resolved table layout.
  * @returns The create-table operation.
  */
@@ -241,6 +246,7 @@ export interface PostgresStorageFactoryBuilder {
   /**
    * Sets the ungrouped table name for a record-family source type.
    *
+   * @typeParam S The source Protobuf message type.
    * @param sourceType Identifies the ungrouped family source Protobuf type.
    * @param name Specifies the physical table name.
    * @returns This builder.
@@ -250,6 +256,8 @@ export interface PostgresStorageFactoryBuilder {
   /**
    * Sets the grouped table name for a source and record type.
    *
+   * @typeParam S The source Protobuf message type.
+   * @typeParam R The record Protobuf message type.
    * @param sourceType Identifies the source Protobuf type.
    * @param recordType Identifies the record Protobuf type.
    * @param name Specifies the physical table name.
@@ -282,10 +290,21 @@ export interface PostgresStorageFactoryBuilder {
  */
 export class PostgresStorageFactory extends StorageFactory {
   readonly #handles = new Set<{ close(): void }>();
+
   readonly #databases: ReadonlyMap<string | symbol, PostgresDatabase>;
+
   readonly #catalog: TenantCatalog;
+
   #closed: Promise<void> | undefined;
 
+  /**
+   * Creates a connected factory from validated database resources.
+   *
+   * @param databases Supply the configured tenant databases.
+   * @param resolver Resolves record families to physical table names.
+   * @param operation Optionally creates custom table SQL.
+   * @param stringifiers Convert message IDs and columns reversibly.
+   */
   private constructor(
     databases: readonly PostgresDatabase[],
     private readonly resolver: PostgresTableResolver,
@@ -334,6 +353,8 @@ export class PostgresStorageFactory extends StorageFactory {
   /**
    * Creates a record-storage handle for the selected PostgreSQL tenant.
    *
+   * @typeParam I The storage identifier type.
+   * @typeParam R The stored Protobuf record type.
    * @param context Identifies the requested storage boundary.
    * @param recordSpec Describes the requested record family.
    * @param group Separates records that share a source type.
@@ -347,6 +368,16 @@ export class PostgresStorageFactory extends StorageFactory {
     return this.createPostgresRecordStorage(context, recordSpec, group);
   }
 
+  /**
+   * Creates one PostgreSQL record handle and tracks it until closure.
+   *
+   * @typeParam I The storage identifier type.
+   * @typeParam R The stored Protobuf record type.
+   * @param context Identifies the storage boundary.
+   * @param recordSpec Describes the record family.
+   * @param group Optionally separates records sharing a source type.
+   * @returns The live PostgreSQL record handle.
+   */
   private createPostgresRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
@@ -384,6 +415,8 @@ export class PostgresStorageFactory extends StorageFactory {
   /**
    * Creates the internal Entity-current and history storage seam.
    *
+   * @typeParam I The Entity identifier type.
+   * @typeParam S The Entity state message type.
    * @param input Supplies the Entity storage configuration.
    * @returns A factory-managed PostgreSQL Entity handle.
    */
@@ -403,6 +436,14 @@ export class PostgresStorageFactory extends StorageFactory {
     return handle;
   }
 
+  /**
+   * Creates the transaction coordinator for Entity current state and history.
+   *
+   * @typeParam I The Entity identifier type.
+   * @typeParam S The Entity state message type.
+   * @param input Supplies the Entity storage configuration.
+   * @returns A factory-managed commit coordinator.
+   */
   private createEntityCommitStorage<I, S extends Message>(
     input: import("@spine-event-engine/storage/provider").EntityStorageInput<I, S>,
   ): PostgresEntityCommitStorage<I, S> {
@@ -420,6 +461,11 @@ export class PostgresStorageFactory extends StorageFactory {
     return handle;
   }
 
+  /**
+   * Creates the provider's delivered-Inbox cleanup coordinator.
+   *
+   * @returns A factory-managed cleanup coordinator.
+   */
   private createDeliveryCleanupStorage(): PostgresDeliveryCleanupStorage {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     const registration = {} as { handle: PostgresDeliveryCleanupStorage };
@@ -433,6 +479,11 @@ export class PostgresStorageFactory extends StorageFactory {
     return handle;
   }
 
+  /**
+   * Closes live handles, the tenant catalog, and all pools.
+   *
+   * @returns A promise that resolves after every pool closes.
+   */
   private async drain(): Promise<void> {
     super.close();
     for (const handle of this.#handles) handle.close();
@@ -440,6 +491,15 @@ export class PostgresStorageFactory extends StorageFactory {
     await Promise.all([...this.#databases.values()].map(({ pool }) => pool.end()));
   }
 
+  /**
+   * Connects every configured database before exposing a factory.
+   *
+   * @param entries Supply validated database configurations.
+   * @param resolver Resolves physical table names.
+   * @param operation Optionally creates custom table SQL.
+   * @param stringifiers Convert message values reversibly.
+   * @returns The connected factory.
+   */
   private static async connect(
     entries: readonly PostgresDatabaseConfig[],
     resolver = new PostgresTableResolver(),
@@ -457,6 +517,12 @@ export class PostgresStorageFactory extends StorageFactory {
     }
   }
 
+  /**
+   * Opens one pool and proves its selected schema is usable.
+   *
+   * @param entry Supplies one database configuration.
+   * @returns The connected database resource.
+   */
   private static async prove(entry: PostgresDatabaseConfig): Promise<PostgresDatabase> {
     const pool = new Pool(entry.poolOptions);
     try {
@@ -474,6 +540,12 @@ export class PostgresStorageFactory extends StorageFactory {
     }
   }
 
+  /**
+   * Finds the configured database for a storage context.
+   *
+   * @param context Identifies the tenant boundary.
+   * @returns The matching database resource.
+   */
   private database(context: StorageContext): PostgresDatabase {
     const boundary = TenantBoundary.of(context);
     const database = this.#databases.get(boundary.key);
@@ -485,6 +557,12 @@ export class PostgresStorageFactory extends StorageFactory {
     );
   }
 
+  /**
+   * Exposes record-lifecycle operations for one database resource.
+   *
+   * @param database Supplies the connected database.
+   * @returns Its package-local record lifecycle.
+   */
   private connections(database: PostgresDatabase): PostgresRecordLifecycle {
     return {
       databaseName: database.databaseName,
@@ -494,13 +572,26 @@ export class PostgresStorageFactory extends StorageFactory {
   }
 }
 
+/**
+ * Collects validated options before connecting a PostgreSQL storage factory.
+ */
 class Builder implements PostgresStorageFactoryBuilder {
   #options: PostgresStorageFactoryOptions | undefined;
+
   #tenantOptions: readonly PostgresTenantStorageOptions[] | undefined;
+
   #operationFactory: PostgresCreateOperationFactory | undefined;
+
   #stringifiers = new StringifierRegistry();
+
   readonly #resolver = new PostgresTableResolver();
 
+  /**
+   * Sets the single-database connection options.
+   *
+   * @param options Specify the PostgreSQL connection.
+   * @returns This builder.
+   */
   setOptions(options: PostgresStorageFactoryOptions): this {
     this.#options = {
       ...options,
@@ -509,6 +600,12 @@ class Builder implements PostgresStorageFactoryBuilder {
     return this;
   }
 
+  /**
+   * Sets the complete tenant-to-database registry.
+   *
+   * @param entries Assign tenants to distinct databases.
+   * @returns This builder.
+   */
   setTenantOptions(entries: readonly PostgresTenantStorageOptions[]): this {
     this.#tenantOptions = entries.map(({ tenantId, options }) => ({
       tenantId,
@@ -517,17 +614,49 @@ class Builder implements PostgresStorageFactoryBuilder {
     return this;
   }
 
+  /**
+   * Sets custom reversible message stringifiers.
+   *
+   * @param registry Supplies the schema-bound registry.
+   * @returns This builder.
+   */
   setStringifierRegistry(registry: StringifierRegistry): this {
     this.#stringifiers = new StringifierRegistry(registry);
     return this;
   }
 
+  /**
+   * Sets an ungrouped table name through this overload.
+   *
+   * @typeParam S The source Protobuf message type.
+   * @param sourceType Identifies the record-family source.
+   * @param name Specifies the physical table name.
+   * @returns This builder.
+   */
   setTableName<S extends Message>(sourceType: GenMessage<S>, name: string): this;
+
+  /**
+   * Sets a grouped table name through this overload.
+   *
+   * @typeParam S The source Protobuf message type.
+   * @typeParam R The record Protobuf message type.
+   * @param sourceType Identifies the source.
+   * @param recordType Identifies the grouped record.
+   * @param name Specifies the physical table name.
+   * @returns This builder.
+   */
   setTableName<S extends Message, R extends Message>(
     sourceType: GenMessage<S>,
     recordType: GenMessage<R>,
     name: string,
   ): this;
+
+  /**
+   * Applies either supported table-name overload.
+   *
+   * @param args Supply the overload arguments.
+   * @returns This builder.
+   */
   setTableName(...args: unknown[]): this {
     if (args.length === 2)
       this.#resolver.setRecordName((args[0] as GenMessage<Message>).typeName, args[1] as string);
@@ -540,11 +669,22 @@ class Builder implements PostgresStorageFactoryBuilder {
     return this;
   }
 
+  /**
+   * Sets the custom create-table operation factory.
+   *
+   * @param factory Creates SQL for resolved table specifications.
+   * @returns This builder.
+   */
   useOperationFactory(factory: PostgresCreateOperationFactory): this {
     this.#operationFactory = factory;
     return this;
   }
 
+  /**
+   * Creates a builder with its factory connection function.
+   *
+   * @param connect Connects validated database configurations.
+   */
   constructor(
     private readonly connect: (
       entries: readonly PostgresDatabaseConfig[],
@@ -554,6 +694,11 @@ class Builder implements PostgresStorageFactoryBuilder {
     ) => Promise<PostgresStorageFactory>,
   ) {}
 
+  /**
+   * Validates the selected mode and connects a factory.
+   *
+   * @returns The connected PostgreSQL storage factory.
+   */
   build(): Promise<PostgresStorageFactory> {
     try {
       if (this.#options === undefined && this.#tenantOptions === undefined)
@@ -577,6 +722,9 @@ class Builder implements PostgresStorageFactoryBuilder {
   }
 }
 
+/**
+ * Holds one connected tenant database resource.
+ */
 interface PostgresDatabase {
   readonly boundary: TenantBoundary;
   readonly pool: Pool;
@@ -584,6 +732,9 @@ interface PostgresDatabase {
   readonly databaseName: string;
 }
 
+/**
+ * Contains validated settings used to open one database pool.
+ */
 interface PostgresDatabaseConfig {
   readonly boundary: TenantBoundary;
   readonly poolOptions: PoolConfig;
@@ -592,13 +743,32 @@ interface PostgresDatabaseConfig {
   readonly databaseName: string;
 }
 
+/**
+ * Reports the immutable tenant boundaries configured by the factory.
+ */
 class PostgresTenantCatalog implements TenantCatalog {
+  /**
+   * Creates a catalog from configured tenant boundaries.
+   *
+   * @param boundaries Supply the configured boundaries.
+   */
   constructor(private readonly boundaries: readonly TenantBoundary[]) {}
 
+  /**
+   * Returns every configured boundary.
+   *
+   * @returns The configured boundaries.
+   */
   all(): Promise<readonly TenantBoundary[]> {
     return Promise.resolve(this.boundaries);
   }
 
+  /**
+   * Checks that a boundary belongs to this fixed catalog.
+   *
+   * @param boundary Supplies the boundary to confirm.
+   * @returns A promise that resolves when the boundary is configured.
+   */
   keep(boundary: TenantBoundary): Promise<void> {
     if (!this.boundaries.some(({ key }) => key === boundary.key)) {
       return Promise.reject(
@@ -608,16 +778,36 @@ class PostgresTenantCatalog implements TenantCatalog {
     return Promise.resolve();
   }
 
+  /**
+   * Closes the catalog, which holds no external resources.
+   *
+   * @returns An already resolved promise.
+   */
   close(): Promise<void> {
     return Promise.resolve();
   }
 }
 
+/**
+ * Validates public options and builds internal database configurations.
+ */
 const PostgresConfigurations = Object.freeze({
+  /**
+   * Builds the single-tenant database configuration.
+   *
+   * @param options Specify the database connection.
+   * @returns The validated internal configuration.
+   */
   single(options: PostgresStorageFactoryOptions): PostgresDatabaseConfig {
     return PostgresConfigurations.parse(TenantBoundary.single, options);
   },
 
+  /**
+   * Builds configurations for the complete tenant registry.
+   *
+   * @param entries Assign tenants to their databases.
+   * @returns Validated internal configurations.
+   */
   multitenant(entries: readonly PostgresTenantStorageOptions[]): readonly PostgresDatabaseConfig[] {
     if (entries.length === 0) {
       throw new PostgresStorageConfigurationError(
@@ -631,6 +821,11 @@ const PostgresConfigurations = Object.freeze({
     return configured;
   },
 
+  /**
+   * Rejects duplicate tenants and shared physical database targets.
+   *
+   * @param entries Supply validated database configurations.
+   */
   assertDistinct(entries: readonly PostgresDatabaseConfig[]): void {
     const tenants = new Set<string | symbol>();
     const targets = new Set<string>();
@@ -648,6 +843,13 @@ const PostgresConfigurations = Object.freeze({
     }
   },
 
+  /**
+   * Converts one public database configuration to pool settings.
+   *
+   * @param boundary Identifies the tenant boundary.
+   * @param options Specify the database connection.
+   * @returns The internal database configuration.
+   */
   parse(boundary: TenantBoundary, options: PostgresStorageFactoryOptions): PostgresDatabaseConfig {
     const url = PostgresConfigurations.url(options.url);
     PostgresConfigurations.validate(options);
@@ -673,6 +875,12 @@ const PostgresConfigurations = Object.freeze({
     };
   },
 
+  /**
+   * Parses and validates a PostgreSQL database URL.
+   *
+   * @param value Supplies the configured URL.
+   * @returns The parsed URL.
+   */
   url(value: string): URL {
     let url: URL;
     try {
@@ -691,6 +899,11 @@ const PostgresConfigurations = Object.freeze({
     return url;
   },
 
+  /**
+   * Validates scalar connection and schema options.
+   *
+   * @param options Supply the public configuration.
+   */
   validate(options: PostgresStorageFactoryOptions): void {
     if (!PostgresConfigurations.positive(options.connectionLimit)) {
       throw new PostgresStorageConfigurationError("PostgreSQL connection limit is invalid.");
@@ -703,11 +916,26 @@ const PostgresConfigurations = Object.freeze({
     }
   },
 
+  /**
+   * Checks whether an optional numeric setting is a positive integer.
+   *
+   * @param value Supplies the optional setting.
+   * @returns Whether the setting is absent or valid.
+   */
   positive(value: number | undefined): boolean {
     return value === undefined || (Number.isInteger(value) && value > 0);
   },
 });
 
+/**
+ * Adapts a public create-table operation to the record handle callback.
+ *
+ * @typeParam I The storage identifier type.
+ * @typeParam R The stored Protobuf record type.
+ * @param operation Creates a public operation for a resolved table.
+ * @param table Supplies the resolved table specification.
+ * @returns A callback that returns the operation SQL.
+ */
 function createOperation<I, R extends Message>(
   operation: PostgresCreateOperationFactory,
   table: PostgresTableSpec<I, R>,
@@ -715,7 +943,17 @@ function createOperation<I, R extends Message>(
   return () => operation(table).sql;
 }
 
+/**
+ * Resolves and validates schemas used by connected pools.
+ */
 const PostgresSchemas = Object.freeze({
+  /**
+   * Resolves an explicit or connection-default schema.
+   *
+   * @param client Provides a connected client.
+   * @param explicit Optionally names the configured schema.
+   * @returns The existing schema name.
+   */
   async resolve(client: PoolClient, explicit: string | undefined): Promise<string> {
     const schema = explicit ?? (await PostgresSchemas.current(client));
     const result = await client.query(
@@ -727,6 +965,12 @@ const PostgresSchemas = Object.freeze({
     return schema;
   },
 
+  /**
+   * Reads and validates the connection's current schema.
+   *
+   * @param client Provides a connected client.
+   * @returns The current schema name.
+   */
   async current(client: PoolClient): Promise<string> {
     const result = await client.query<{ readonly schema: string | null }>(
       "SELECT current_schema() AS schema",
@@ -738,6 +982,13 @@ const PostgresSchemas = Object.freeze({
     return schema;
   },
 
+  /**
+   * Rejects schemas that contain the retired storage layout.
+   *
+   * @param client Provides a connected client.
+   * @param schema Names the selected schema.
+   * @returns A promise that resolves when the schema is usable.
+   */
   async assertUsable(client: PoolClient, schema: string): Promise<void> {
     const result = await client.query(
       "SELECT 1 FROM information_schema.columns WHERE table_schema = $1 " +

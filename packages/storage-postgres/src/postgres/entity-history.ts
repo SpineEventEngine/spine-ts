@@ -44,7 +44,21 @@ import {
 import { PostgresRecordStorage, type PostgresRecordExecutor } from "./record-storage.js";
 
 /**
+ * Opens one grouped PostgreSQL record family for an Entity history.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf record type.
+ */
+type OpenRecords = <I, R extends Message>(
+  spec: import("@spine-event-engine/storage").RecordSpec<I, R>,
+  group?: import("@spine-event-engine/storage").StorageGroup,
+) => PostgresRecordStorage<I, R>;
+
+/**
  * Describes PostgreSQL-backed Entity record-family handles.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
  */
 export interface PostgresEntityStorageHandle<I, S extends Message> {
   // prettier-ignore
@@ -79,6 +93,9 @@ export interface PostgresEntityStorageHandle<I, S extends Message> {
 
 /**
  * Provides PostgreSQL-backed current Entity storage and optional disabled history ports.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
  */
 export class PostgresEntityStorage<I, S extends Message> implements PostgresEntityStorageHandle<
   I,
@@ -98,6 +115,7 @@ export class PostgresEntityStorage<I, S extends Message> implements PostgresEnti
    * Exposes optional Entity event history.
    */
   readonly events: EntityEventHistoryPort<I>;
+
   #open = true;
 
   /**
@@ -111,10 +129,7 @@ export class PostgresEntityStorage<I, S extends Message> implements PostgresEnti
   constructor(
     input: EntityStorageInput<I, S>,
     private readonly records: PostgresRecordStorage<I, EntityRecord>,
-    open: <Id, R extends Message>(
-      spec: import("@spine-event-engine/storage").RecordSpec<Id, R>,
-      group?: import("@spine-event-engine/storage").StorageGroup,
-    ) => PostgresRecordStorage<Id, R>,
+    open: OpenRecords,
     private readonly onClose: () => void,
   ) {
     this.current = new PostgresCurrentStorage(input, records);
@@ -152,10 +167,23 @@ export class PostgresEntityStorage<I, S extends Message> implements PostgresEnti
   }
 }
 
+/**
+ * Stores and reads the state history for one Entity type.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
+ */
 class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, S> {
   readonly #executor: PostgresRecordExecutor<EntityStateKey, EntityRecord>;
+
   #open = true;
 
+  /**
+   * Creates a state-history port around one grouped record family.
+   *
+   * @param input Supplies Entity identity and state-schema definitions.
+   * @param records Stores immutable Entity state records.
+   */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: PostgresRecordStorage<EntityStateKey, EntityRecord>,
@@ -163,6 +191,12 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     this.#executor = records.historyExecutor();
   }
 
+  /**
+   * Stores one immutable Entity state record.
+   *
+   * @param record Entity state record to append.
+   * @returns Completion after PostgreSQL stores the record.
+   */
   append(record: EntityRecord): Promise<void> {
     if (!this.#open) return Promise.reject(new Error("Entity state history is closed."));
     return this.#executor
@@ -176,6 +210,14 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
       });
   }
 
+  /**
+   * Reads Entity states backward from an optional version.
+   *
+   * @param entityId Entity whose history is read.
+   * @param depth Maximum number of states to return.
+   * @param startingFromVersion Optional inclusive starting version.
+   * @returns Entity state records in descending version order.
+   */
   async backward(
     entityId: I,
     depth: number,
@@ -197,6 +239,13 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
       });
   }
 
+  /**
+   * Reads the Entity state active at a given time.
+   *
+   * @param entityId Entity whose state is read.
+   * @param time Inclusive state timestamp.
+   * @returns Decoded state, or `undefined` when no state existed.
+   */
   async stateAt(entityId: I, time: Timestamp): Promise<S | undefined> {
     this.assertOpen();
     await this.#executor.prepare();
@@ -222,6 +271,13 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     }
   }
 
+  /**
+   * Removes all but the requested number of recent states for one Entity.
+   *
+   * @param entityId Entity whose history is trimmed.
+   * @param keepMostRecent Number of newest states to retain.
+   * @returns Completion after all older pages are deleted.
+   */
   async trim(entityId: I, keepMostRecent: number): Promise<void> {
     this.assertOpen();
     HistoryValues.assertKeep(keepMostRecent);
@@ -254,6 +310,12 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
       });
   }
 
+  /**
+   * Deletes state-history records older than a timestamp.
+   *
+   * @param olderThan Exclusive history cutoff.
+   * @returns Completion after all matching pages are deleted.
+   */
   async truncate(olderThan: Timestamp): Promise<void> {
     this.assertOpen();
     await this.#executor.using(async (client) => {
@@ -281,12 +343,21 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     });
   }
 
+  /**
+   * Closes this state-history port.
+   */
   close(): void {
     if (!this.#open) return;
     this.#open = false;
     this.records.close();
   }
 
+  /**
+   * Builds the backward state-history query.
+   *
+   * @param startingFromVersion Optional inclusive starting version.
+   * @returns Parameterized PostgreSQL query text.
+   */
   private backwardSql(startingFromVersion: bigint | undefined): string {
     const continuation = startingFromVersion === undefined ? "" : ' AND "version" <= $2';
     const limit = startingFromVersion === undefined ? 2 : 3;
@@ -297,12 +368,25 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     ].join(" ");
   }
 
+  /**
+   * Builds bind values for a backward state-history query.
+   *
+   * @param id Entity identifier.
+   * @param depth Maximum number of states.
+   * @param version Optional inclusive starting version.
+   * @returns PostgreSQL bind values in query order.
+   */
   private backwardValues(id: I, depth: number, version: bigint | undefined): readonly unknown[] {
     return version === undefined
       ? [this.entityValue(id), depth]
       : [this.entityValue(id), version, depth];
   }
 
+  /**
+   * Builds the point-in-time state query.
+   *
+   * @returns Parameterized PostgreSQL query text.
+   */
   private stateAtSql(): string {
     return [
       `SELECT "bytes" FROM ${this.#executor.table()} WHERE "entity_id" = $1 AND "created" <= $2`,
@@ -310,14 +394,31 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     ].join(" ");
   }
 
+  /**
+   * Converts an Entity identifier to its stored column value.
+   *
+   * @param id Entity identifier.
+   * @returns PostgreSQL-bound identifier value.
+   */
   private entityValue(id: I): unknown {
     return this.#executor.column("entity_id", this.input.id.pack(id));
   }
 
+  /**
+   * Calculates the lock key shared by this history family.
+   *
+   * @returns PostgreSQL advisory-lock key.
+   */
   private familyKey(): bigint {
     return this.#executor.lock("history-family", this.#executor.table());
   }
 
+  /**
+   * Calculates the family and Entity lock keys used while trimming.
+   *
+   * @param id Entity identifier.
+   * @returns Family lock followed by Entity lock.
+   */
   private trimLocks(id: I): readonly [bigint, bigint] {
     return [
       this.familyKey(),
@@ -329,6 +430,12 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     ];
   }
 
+  /**
+   * Calculates the mutation lock for a stored Entity record.
+   *
+   * @param entityId Packed Entity identifier from the record.
+   * @returns PostgreSQL advisory-lock key.
+   */
   private entityKey(entityId: EntityRecord["entityId"]): bigint {
     if (entityId === undefined) throw new Error("State history requires EntityRecord.entityId.");
     const id = this.input.id.unpack(entityId);
@@ -340,14 +447,32 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     );
   }
 
+  /**
+   * Returns the stable string identity used in Entity mutation locks.
+   *
+   * @param id Entity identifier.
+   * @returns Stable Entity identity string.
+   */
   private entityIdentity(id: I): string {
     return this.input.id.key(id);
   }
 
+  /**
+   * Rejects state-history work after this port has closed.
+   */
   private assertOpen(): void {
     if (!this.#open) throw new Error("Entity state history is closed.");
   }
 
+  /**
+   * Deletes one bounded page of old states for an Entity.
+   *
+   * @param client PostgreSQL client holding the session locks.
+   * @param id Entity identifier.
+   * @param cursor Last retained or deleted history key.
+   * @param includeCursor Whether the page includes the supplied cursor.
+   * @returns The next page cursor, or `undefined` after the final page.
+   */
   private async trimPage(
     client: import("pg").PoolClient,
     id: I,
@@ -374,6 +499,14 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     }
   }
 
+  /**
+   * Deletes one bounded page below a timestamp and stable high-water key.
+   *
+   * @param client PostgreSQL client holding the family lock.
+   * @param olderThan Exclusive timestamp cutoff in nanoseconds.
+   * @param highWater Last key admitted when truncation began.
+   * @returns Whether another full page may remain.
+   */
   private async truncatePage(
     client: import("pg").PoolClient,
     olderThan: bigint,
@@ -391,6 +524,14 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     }
   }
 
+  /**
+   * Reads record identifiers for one bounded deletion page.
+   *
+   * @param client PostgreSQL transaction client.
+   * @param sql Parameterized key query.
+   * @param values PostgreSQL bind values.
+   * @returns Stored record identifiers.
+   */
   private async keys(
     client: import("pg").PoolClient,
     sql: string,
@@ -401,6 +542,13 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     );
   }
 
+  /**
+   * Deletes records identified by one bounded key page.
+   *
+   * @param client PostgreSQL transaction client.
+   * @param keys Stored record identifiers.
+   * @returns Completion after the deletion query.
+   */
   private deleteKeys(client: import("pg").PoolClient, keys: readonly unknown[]): Promise<void> {
     if (keys.length === 0) return Promise.resolve();
     const binds = keys.map((_, index) => `$${String(index + 1)}`).join(", ");
@@ -409,6 +557,12 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
       .then(() => undefined);
   }
 
+  /**
+   * Builds one state-history trim-page query.
+   *
+   * @param includeCursor Whether the supplied cursor belongs to the page.
+   * @returns Parameterized PostgreSQL query text.
+   */
   private trimSql(includeCursor: boolean): string {
     return [
       `SELECT "version", "created", "ID" FROM ${this.#executor.table()} WHERE "entity_id" = $1`,
@@ -417,6 +571,14 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     ].join(" ");
   }
 
+  /**
+   * Finds the first state-history key that trimming may delete.
+   *
+   * @param client PostgreSQL client holding the session locks.
+   * @param id Entity identifier.
+   * @param keep Number of newest states to retain.
+   * @returns First deletable key, or `undefined` when nothing must be removed.
+   */
   private async trimBoundary(
     client: import("pg").PoolClient,
     id: I,
@@ -433,6 +595,11 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     return key === undefined ? undefined : [key.version, key.created, key.ID];
   }
 
+  /**
+   * Builds one state-history truncation-page query.
+   *
+   * @returns Parameterized PostgreSQL query text.
+   */
   private truncateSql(): string {
     return [
       `SELECT "ID" FROM ${this.#executor.table()} WHERE "created" < $1`,
@@ -441,6 +608,13 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     ].join(" ");
   }
 
+  /**
+   * Captures the last state key eligible when truncation begins.
+   *
+   * @param client PostgreSQL client holding the family lock.
+   * @param olderThan Exclusive timestamp cutoff in nanoseconds.
+   * @returns Stable high-water key, or `undefined` when nothing is eligible.
+   */
   private async highWater(
     client: import("pg").PoolClient,
     olderThan: bigint,
@@ -457,10 +631,23 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   }
 }
 
+/**
+ * Stores and reads the event history for one Entity type.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type used to derive the history family.
+ */
 class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> {
   readonly #executor: PostgresRecordExecutor<EventId, Event>;
+
   #open = true;
 
+  /**
+   * Creates an event-history port around one grouped record family.
+   *
+   * @param input Supplies Entity identity and state-schema definitions.
+   * @param records Stores immutable Entity events.
+   */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: PostgresRecordStorage<EventId, Event>,
@@ -468,6 +655,12 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
     this.#executor = records.historyExecutor();
   }
 
+  /**
+   * Stores one immutable Entity event.
+   *
+   * @param record Event to append.
+   * @returns Completion after PostgreSQL stores the event.
+   */
   append(record: Event): Promise<void> {
     if (!this.#open) return Promise.reject(new Error("Entity event history is closed."));
     return this.#executor
@@ -480,6 +673,14 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
       });
   }
 
+  /**
+   * Reads Entity events backward from an optional version.
+   *
+   * @param id Entity identifier.
+   * @param depth Maximum number of events to return.
+   * @param version Optional inclusive starting version.
+   * @returns Events in descending version order.
+   */
   async backward(id: I, depth: number, version?: bigint): Promise<readonly Event[]> {
     this.assertOpen();
     HistoryValues.assertDepth(depth);
@@ -497,6 +698,12 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
       });
   }
 
+  /**
+   * Deletes Entity events older than a timestamp.
+   *
+   * @param olderThan Exclusive history cutoff.
+   * @returns Completion after all matching pages are deleted.
+   */
   async truncate(olderThan: Timestamp): Promise<void> {
     this.assertOpen();
     await this.#executor.using(async (client) => {
@@ -524,12 +731,21 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
     });
   }
 
+  /**
+   * Closes this event-history port.
+   */
   close(): void {
     if (!this.#open) return;
     this.#open = false;
     this.records.close();
   }
 
+  /**
+   * Builds the backward event-history query.
+   *
+   * @param version Optional inclusive starting version.
+   * @returns Parameterized PostgreSQL query text.
+   */
   private backwardSql(version: bigint | undefined): string {
     const continuation = version === undefined ? "" : ' AND "version" <= $2';
     const limit = version === undefined ? 2 : 3;
@@ -540,19 +756,42 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
     ].join(" ");
   }
 
+  /**
+   * Builds bind values for a backward event-history query.
+   *
+   * @param id Entity identifier.
+   * @param depth Maximum number of events.
+   * @param version Optional inclusive starting version.
+   * @returns PostgreSQL bind values in query order.
+   */
   private backwardValues(id: I, depth: number, version: bigint | undefined): readonly unknown[] {
     const entity = this.#executor.column("entity_id", this.input.id.pack(id));
     return version === undefined ? [entity, depth] : [entity, version, depth];
   }
 
+  /**
+   * Calculates the lock key shared by this history family.
+   *
+   * @returns PostgreSQL advisory-lock key.
+   */
   private familyKey(): bigint {
     return this.#executor.lock("history-family", this.#executor.table());
   }
 
+  /**
+   * Rejects event-history work after this port has closed.
+   */
   private assertOpen(): void {
     if (!this.#open) throw new Error("Entity event history is closed.");
   }
 
+  /**
+   * Captures the last event key eligible when truncation begins.
+   *
+   * @param client PostgreSQL client holding the family lock.
+   * @param olderThan Exclusive timestamp cutoff in nanoseconds.
+   * @returns Stable high-water key, or `undefined` when nothing is eligible.
+   */
   private async highWater(
     client: import("pg").PoolClient,
     olderThan: bigint,
@@ -562,6 +801,14 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
     return key === undefined ? undefined : [key.created, key.version, key.ID];
   }
 
+  /**
+   * Deletes one bounded page below a timestamp and stable high-water key.
+   *
+   * @param client PostgreSQL client holding the family lock.
+   * @param olderThan Exclusive timestamp cutoff in nanoseconds.
+   * @param highWater Last key admitted when truncation began.
+   * @returns Whether another full page may remain.
+   */
   private async deletePage(
     client: import("pg").PoolClient,
     olderThan: bigint,
@@ -579,6 +826,13 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
     }
   }
 
+  /**
+   * Reads event identifiers for one bounded deletion page.
+   *
+   * @param client PostgreSQL transaction client.
+   * @param values PostgreSQL bind values.
+   * @returns Stored event identifiers.
+   */
   private keys(
     client: import("pg").PoolClient,
     values: readonly unknown[],
@@ -588,6 +842,13 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
       .then(({ rows }) => rows.map(({ ID }) => ID));
   }
 
+  /**
+   * Deletes events identified by one bounded key page.
+   *
+   * @param client PostgreSQL transaction client.
+   * @param keys Stored event identifiers.
+   * @returns Completion after the deletion query.
+   */
   private deleteKeys(client: import("pg").PoolClient, keys: readonly unknown[]): Promise<void> {
     if (keys.length === 0) return Promise.resolve();
     const binds = keys.map((_, index) => `$${String(index + 1)}`).join(", ");
@@ -596,6 +857,11 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
       .then(() => undefined);
   }
 
+  /**
+   * Builds the event high-water query.
+   *
+   * @returns Parameterized PostgreSQL query text.
+   */
   private highWaterSql(): string {
     return [
       `SELECT "created", "version", "ID" FROM ${this.#executor.table()} WHERE "created" < $1`,
@@ -603,6 +869,11 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
     ].join(" ");
   }
 
+  /**
+   * Builds one event-history deletion-page query.
+   *
+   * @returns Parameterized PostgreSQL query text.
+   */
   private deleteSql(): string {
     return [
       `SELECT "ID" FROM ${this.#executor.table()} WHERE "created" < $1`,
@@ -613,20 +884,46 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
 }
 
 const HistoryValues = Object.freeze({
+  /**
+   * Validates a requested history read depth.
+   *
+   * @param value Requested history depth.
+   */
   assertDepth(value: number): void {
     if (!Number.isSafeInteger(value) || value <= 0)
       throw new Error("Entity history depth must be a positive finite integer.");
   },
+
+  /**
+   * Validates a requested state retention count.
+   *
+   * @param value Number of newest states to keep.
+   */
   assertKeep(value: number): void {
     if (!Number.isSafeInteger(value) || value < 0)
       throw new Error("Entity state history retention must be a non-negative safe integer.");
   },
+
+  /**
+   * Converts a Protobuf timestamp to epoch nanoseconds.
+   *
+   * @param value Protobuf timestamp.
+   * @returns Epoch nanoseconds.
+   */
   nanos(value: Timestamp): bigint {
     return value.seconds * 1_000_000_000n + BigInt(value.nanos || 0);
   },
 });
 
 const PostgresSessionLocks = Object.freeze({
+  /**
+   * Clears all session locks and marks the client after a release failure.
+   *
+   * @param client PostgreSQL client holding the locks.
+   * @param locks Lock keys paired with their shared/exclusive mode.
+   * @param operationFailure Earlier operation failure, when present.
+   * @returns Completion after all releases are attempted.
+   */
   async cleanup(
     client: import("pg").PoolClient,
     locks: readonly (readonly [bigint, boolean])[],
@@ -640,6 +937,15 @@ const PostgresSessionLocks = Object.freeze({
       }
     }
   },
+
+  /**
+   * Clears one PostgreSQL advisory session lock.
+   *
+   * @param client PostgreSQL client holding the lock.
+   * @param key Advisory-lock key.
+   * @param shared Whether the held lock is shared.
+   * @returns Completion after PostgreSQL confirms the release.
+   */
   async unlock(client: import("pg").PoolClient, key: bigint, shared: boolean): Promise<void> {
     try {
       const result = await client.query<{
@@ -665,20 +971,50 @@ interface HistoryRow {
   readonly ID: unknown;
 }
 
+/**
+ * Adapts current Entity records to the provider Entity-storage contract.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type used for materialized columns.
+ */
 class PostgresCurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
+  /**
+   * Creates current Entity storage around one record family.
+   *
+   * @param input Supplies materialized Entity columns.
+   * @param records Stores current Entity records.
+   */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: RecordStorage<I, EntityRecord>,
   ) {}
 
+  /**
+   * Reads one current Entity record.
+   *
+   * @param id Entity identifier.
+   * @returns The current record, or `undefined` when absent.
+   */
   read(id: I): Promise<EntityRecord | undefined> {
     return this.records.read(id);
   }
 
+  /**
+   * Writes one current Entity record.
+   *
+   * @param record Current Entity record.
+   * @returns Completion after PostgreSQL stores the record.
+   */
   write(record: EntityRecord): Promise<void> {
     return this.records.write(record);
   }
 
+  /**
+   * Executes one normalized current-Entity query.
+   *
+   * @param plan Normalized storage query plan.
+   * @returns Matching records with materialized column values.
+   */
   async query(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly NormalizedQueryEntry<I, EntityRecord>[]> {

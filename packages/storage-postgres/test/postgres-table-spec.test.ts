@@ -18,10 +18,24 @@ import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/se
 import { ColumnTypes, RecordColumn } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
+import { PostgresDataTypes } from "../src/postgres/data-type.js";
 import { PostgresTableSpecs } from "../src/postgres/table-spec.js";
 import { PostgresTableResolver } from "../src/postgres/table-resolver.js";
 
 describe("PostgreSQL table foundation", () => {
+  it("defines the supported PostgreSQL DDL type names once", () => {
+    expect(PostgresDataTypes).toMatchObject({
+      bigInt: "BIGINT",
+      boolean: "BOOLEAN",
+      bytea: "BYTEA",
+      doublePrecision: "DOUBLE PRECISION",
+      integer: "INT",
+      real: "REAL",
+      text: "TEXT",
+    });
+    expect(PostgresDataTypes.varchar512).toBe("VARCHAR(512)");
+  });
+
   it("maps PostgreSQL-native scalar types including float and double", () => {
     expect(
       [

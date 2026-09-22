@@ -26,6 +26,10 @@ const versionType = "spine.core.Version";
 
 /**
  * Converts typed Protobuf columns to PostgreSQL-native parameters.
+ *
+ * The common result is `unknown` because the storage SPI requires one result
+ * type while `pg` accepts different JavaScript parameter types for different
+ * PostgreSQL columns. Each conversion still preserves its typed input.
  */
 export class PostgresColumnMapping implements ColumnMapping<unknown> {
   readonly #stringifiers: StringifierRegistry;
@@ -42,6 +46,7 @@ export class PostgresColumnMapping implements ColumnMapping<unknown> {
   /**
    * Returns the native conversion for one declared column type.
    *
+   * @typeParam V Protobuf value accepted by the declared column.
    * @param type Identifies the declared Protobuf value type.
    * @returns The PostgreSQL parameter conversion.
    */
@@ -67,14 +72,35 @@ export class PostgresColumnMapping implements ColumnMapping<unknown> {
 }
 
 const PostgresColumnMappings = Object.freeze({
+  /**
+   * Maps a Protobuf scalar to the same value for the PostgreSQL driver.
+   *
+   * @typeParam V Scalar value accepted by the declared column.
+   * @param type Identifies the Protobuf scalar kind.
+   * @returns A conversion that preserves the scalar value.
+   */
   scalar<V>(type: ScalarType): ColumnTypeMapping<V, unknown> {
     void type;
     return (value) => value;
   },
+
+  /**
+   * Converts a Protobuf timestamp to epoch nanoseconds.
+   *
+   * @param value Protobuf timestamp value.
+   * @returns Epoch nanoseconds stored in PostgreSQL.
+   */
   timestamp(value: unknown): bigint {
     const timestamp = value as { readonly seconds: bigint; readonly nanos: number };
     return timestamp.seconds * 1_000_000_000n + BigInt(timestamp.nanos);
   },
+
+  /**
+   * Reads the integer value from a Spine version message.
+   *
+   * @param value Spine version message.
+   * @returns Version number stored in PostgreSQL.
+   */
   version(value: unknown): number {
     return (value as { readonly number: number }).number;
   },

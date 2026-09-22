@@ -1956,3 +1956,34 @@ operation failed.` and explicitly rejects the secret-bearing raw text, while
   `1f3b0bba9`; the already-passing release profile covers the unchanged runtime,
   and the focused documentation gates cover this correction without repeating
   the full release run.
+
+## Source Documentation And Layout Correction
+
+- Human feedback identified eight connected issues: an internal task number in
+  a permanent standalone-function ledger filename; unexplained generic result
+  typing; missing generic-parameter documentation; unexplained “fenced” prose;
+  dense declaration layout; incomplete generic TSDoc; undocumented internal
+  classes and methods; and scattered PostgreSQL DDL type strings.
+- Remaining work is estimated at 3–6 hours of active agent time. It includes a
+  complete PostgreSQL source inventory, test-first TSDoc enforcement changes,
+  package-wide documentation and layout correction, one typed DDL vocabulary,
+  focused package/tooling tests, full affected gates, review recording, commits,
+  and pushes. No external wait is expected.
+- The installed `pg` 8.23.0 API exposes type-parser OIDs such as
+  `types.builtins.VARCHAR === 1043`; it does not expose SQL DDL typename values.
+  Using those numeric OIDs in `CREATE TABLE` would be incorrect. The accepted
+  correction is a package-local typed DDL vocabulary used by production schema
+  mapping and verification.
+- `build-protocol/standalone-function-necessities/T-0230.json` is consumed by
+  `lint:cleanup`, but its task-number filename is not a suitable permanent
+  project name. It will become `storage-postgres.json`, and the checker will map
+  the package to that stable partition.
+- The current TSDoc rule enforces semantic coverage primarily for public
+  production declarations. The correction extends the rule and checker to
+  every class and method in changed authored production files and requires
+  `@typeParam` coverage for every generic declaration it checks. Existing
+  baseline files are not silently grandfathered by a new task-number ledger.
+- Selected skills are `receiving-code-review`, `test-driven-development`,
+  `systematic-debugging`, and `verification-before-completion`; each selected
+  instruction file was read before its governed action. This correction remains
+  in the current branch and context with no child agent.

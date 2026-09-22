@@ -17,6 +17,7 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { RecordColumn, RecordColumnType } from "@spine-event-engine/storage";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
+import { PostgresDataTypes } from "./data-type.js";
 import type { PostgresColumnSpec, PostgresTableSpec } from "./storage-factory.js";
 import { PostgresIdColumn } from "./id-column.js";
 
@@ -24,18 +25,33 @@ import { PostgresIdColumn } from "./id-column.js";
  * Resolves PostgreSQL-native declared-column and record-family table layouts.
  */
 export const PostgresTableSpecs: PostgresTableSpecifications = Object.freeze({
+  /**
+   * Maps one declared record-column type to PostgreSQL DDL.
+   *
+   * @param type Declared Protobuf column type.
+   * @returns Canonical PostgreSQL DDL type name.
+   */
   postgresColumnType(type: RecordColumnType): string {
     switch (type.kind) {
       case "enum":
-        return "INT";
+        return PostgresDataTypes.integer;
       case "message":
-        if (type.message.typeName === "google.protobuf.Timestamp") return "BIGINT";
-        if (type.message.typeName === "spine.core.Version") return "INT";
-        return "TEXT";
+        if (type.message.typeName === "google.protobuf.Timestamp") return PostgresDataTypes.bigInt;
+        if (type.message.typeName === "spine.core.Version") return PostgresDataTypes.integer;
+        return PostgresDataTypes.text;
       case "scalar":
         return PostgresColumnTypes.scalar(type.scalar);
     }
   },
+
+  /**
+   * Builds the complete physical layout for one record family.
+   *
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf record type.
+   * @param input Resolved schema, table, types, group, and declared columns.
+   * @returns Complete PostgreSQL table specification.
+   */
   resolvedPostgresTableSpec<I, R extends Message>(input: {
     readonly schema: string;
     readonly tableName: string;
@@ -58,7 +74,7 @@ export const PostgresTableSpecs: PostgresTableSpecifications = Object.freeze({
           postgresType: new PostgresIdColumn(input.idType).postgresType,
           nullable: false,
         },
-        { name: "bytes", postgresType: "BYTEA", nullable: false },
+        { name: "bytes", postgresType: PostgresDataTypes.bytea, nullable: false },
         ...input.declaredColumns.map((column) =>
           PostgresColumnTypes.spec(
             column,
@@ -72,8 +88,26 @@ export const PostgresTableSpecs: PostgresTableSpecifications = Object.freeze({
   },
 });
 
+/**
+ * Describes PostgreSQL table-layout operations.
+ */
 interface PostgresTableSpecifications {
+  /**
+   * Maps one declared record-column type to PostgreSQL DDL.
+   *
+   * @param type Declared Protobuf column type.
+   * @returns Canonical PostgreSQL DDL type name.
+   */
   postgresColumnType(type: RecordColumnType): string;
+
+  /**
+   * Builds the complete physical layout for one record family.
+   *
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf record type.
+   * @param input Resolved schema, table, types, group, and declared columns.
+   * @returns Complete PostgreSQL table specification.
+   */
   resolvedPostgresTableSpec<I, R extends Message>(input: {
     readonly schema: string;
     readonly tableName: string;
@@ -86,33 +120,47 @@ interface PostgresTableSpecifications {
 }
 
 const PostgresColumnTypes = Object.freeze({
+  /**
+   * Maps one Protobuf scalar kind to PostgreSQL DDL.
+   *
+   * @param type Protobuf scalar kind.
+   * @returns Canonical PostgreSQL DDL type name.
+   */
   scalar(type: ScalarType): string {
     switch (type) {
       case ScalarType.STRING:
-        return "TEXT";
+        return PostgresDataTypes.text;
       case ScalarType.INT32:
       case ScalarType.SINT32:
       case ScalarType.SFIXED32:
       case ScalarType.UINT32:
       case ScalarType.FIXED32:
-        return "INT";
+        return PostgresDataTypes.integer;
       case ScalarType.INT64:
       case ScalarType.SINT64:
       case ScalarType.SFIXED64:
       case ScalarType.UINT64:
       case ScalarType.FIXED64:
-        return "BIGINT";
+        return PostgresDataTypes.bigInt;
       case ScalarType.BOOL:
-        return "BOOLEAN";
+        return PostgresDataTypes.boolean;
       case ScalarType.BYTES:
-        return "BYTEA";
+        return PostgresDataTypes.bytea;
       case ScalarType.FLOAT:
-        return "REAL";
+        return PostgresDataTypes.real;
       case ScalarType.DOUBLE:
-        return "DOUBLE PRECISION";
+        return PostgresDataTypes.doublePrecision;
     }
   },
 
+  /**
+   * Builds one declared PostgreSQL column specification.
+   *
+   * @typeParam R Stored Protobuf record type.
+   * @param column Declared logical record column.
+   * @param currentEntity Whether this is an ungrouped current Entity table.
+   * @returns Physical PostgreSQL column specification.
+   */
   spec<R extends Message>(column: RecordColumn<R>, currentEntity: boolean): PostgresColumnSpec {
     return {
       name: column.name,

@@ -128,6 +128,7 @@ const layoutRules = new Set([
   "tsdoc-block-tag-gap",
   "tsdoc-block-tag-spacing",
   "consecutive-tsdoc-blank-line",
+  "class-member-spacing",
   "hyphenated-param",
   "inline-tsdoc-tag",
   "missing-tsdoc-blank-line",
@@ -179,6 +180,7 @@ function rejectDuplicateFailures(failures) {
 
 function scanTsdoc(root) {
   const files = trackedSourceFiles(root);
+  const changed = changedSourceFiles(root);
   const failures = [];
   const confined = [];
   for (const file of files) {
@@ -212,10 +214,33 @@ function scanTsdoc(root) {
       failures.push({ rule: "source-program", file, name: "source" });
       continue;
     }
-    visitSource(source, file, checker, failures);
+    visitSource(source, file, checker, failures, changed.has(file));
   }
 
   return failures;
+}
+
+function changedSourceFiles(root) {
+  const changed = new Set();
+  const mergeBase = spawnSync("git", ["merge-base", "origin/master", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (mergeBase.status !== 0 || mergeBase.stdout.trim() === "") return changed;
+  for (const range of [`${mergeBase.stdout.trim()}...HEAD`, undefined, "--cached"]) {
+    const args = ["diff", "--name-only", "--no-renames", "--diff-filter=ACMRD"];
+    if (range !== undefined) args.push(range);
+    const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+    if (result.status !== 0) throw new Error("Unable to classify changed TSDoc source.");
+    for (const file of result.stdout.split("\n")) if (isSemanticSource(file)) changed.add(file);
+  }
+  const untracked = spawnSync("git", ["ls-files", "--others", "--exclude-standard"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (untracked.status !== 0) throw new Error("Unable to classify untracked TSDoc source.");
+  for (const file of untracked.stdout.split("\n")) if (isSemanticSource(file)) changed.add(file);
+  return changed;
 }
 
 function isConfined(root, candidate) {
@@ -582,7 +607,7 @@ function isVagueSummary(summary) {
   return /^(?:owns|consists)\b/iu.test(summary);
 }
 
-function visitSource(source, file, checker, failures) {
+function visitSource(source, file, checker, failures, inspectChangedInternals) {
   const declarations = new Set();
   const inspected = new Set();
   for (const statement of source.statements) {
@@ -624,6 +649,112 @@ function visitSource(source, file, checker, failures) {
   }
   if (/^packages\/server\//.test(file))
     inspectInternalObjectMembers(source, file, checker, failures, inspected);
+  if (inspectChangedInternals) {
+    inspectChangedClassAndMethodDocs(source, file, checker, failures, inspected);
+    inspectChangedTypeParameters(source, file, failures);
+    inspectChangedClassMemberSpacing(source, file, failures);
+  }
+}
+
+function inspectChangedClassMemberSpacing(source, file, failures) {
+  const visit = (node) => {
+    if (ts.isClassDeclaration(node)) {
+      for (let index = 1; index < node.members.length; index += 1) {
+        const previous = node.members[index - 1];
+        const current = node.members[index];
+        const documentation = ts.getJSDocCommentsAndTags(current).filter(ts.isJSDoc).at(0);
+        const currentStart = documentation?.getStart(source) ?? current.getStart(source);
+        const separation = source.text.slice(previous.end, currentStart);
+        if ((separation.match(/\r?\n/gu) ?? []).length < 2) {
+          const line = source.getLineAndCharacterOfPosition(currentStart).line + 1;
+          failures.push({ rule: "class-member-spacing", file, name: `member@${line}` });
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(source, visit);
+}
+
+function inspectChangedClassAndMethodDocs(source, file, checker, failures, inspected) {
+  const visit = (node) => {
+    if (ts.isClassDeclaration(node) && !isExported(node)) {
+      const name = declarationName(node, undefined) ?? `class@${node.getStart(source)}`;
+      inspectDocumentation(node, file, `${name}:ClassDeclaration`, checker, failures);
+    }
+    if (isChangedMethod(node) && !methodAlreadyInspected(node, inspected)) {
+      inspectCallable(node, file, changedMethodName(node, source), checker, failures);
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(source, visit);
+}
+
+function isChangedMethod(node) {
+  return (
+    ts.isMethodDeclaration(node) ||
+    ts.isMethodSignature(node) ||
+    ts.isConstructorDeclaration(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node)
+  );
+}
+
+function methodAlreadyInspected(node, inspected) {
+  if (!belongsToInspectedDeclaration(node, inspected)) return false;
+  const owner = node.parent;
+  return !ts.isClassDeclaration(owner) || isDocumentedClassMember(owner, node);
+}
+
+function changedMethodName(node, source) {
+  const member = ts.isConstructorDeclaration(node) ? "constructor" : propertyName(node.name);
+  const owner = changedMethodOwner(node.parent);
+  const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+  return owner === undefined
+    ? `${member ?? "method"}@${line}`
+    : `${owner}.${member ?? `method@${line}`}`;
+}
+
+function changedMethodOwner(node) {
+  if (ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node)) return node.name?.text;
+  if (ts.isObjectLiteralExpression(node)) {
+    const declaration = node.parent;
+    if (ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name))
+      return declaration.name.text;
+    if (ts.isPropertyAssignment(declaration)) return propertyName(declaration.name);
+  }
+  return undefined;
+}
+
+function inspectChangedTypeParameters(source, file, failures) {
+  const visit = (node) => {
+    if (node.typeParameters?.length) {
+      const documentationNode = typeParameterDocumentationNode(node);
+      const documented = new Set(documentationFor(documentationNode).typeParameters);
+      const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+      const declaration =
+        node.name === undefined ? `${ts.SyntaxKind[node.kind]}@${line}` : node.name.getText(source);
+      for (const parameter of node.typeParameters) {
+        if (!documented.has(parameter.name.text))
+          failures.push({
+            rule: "missing-type-param",
+            file,
+            name: `${declaration}@${line}<${parameter.name.text}>`,
+          });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(source, visit);
+}
+
+function typeParameterDocumentationNode(node) {
+  if (
+    (ts.isFunctionTypeNode(node) || ts.isConstructorTypeNode(node)) &&
+    ts.isTypeAliasDeclaration(node.parent)
+  )
+    return node.parent;
+  return node;
 }
 
 function inspectInternalObjectMembers(source, file, checker, failures, inspected) {
@@ -1162,10 +1293,16 @@ function documentationFor(node) {
     jsdoc?.comment === undefined ? undefined : ts.getTextOfJSDocComment(jsdoc.comment).trim();
   const inherited =
     tags.some((tag) => tag.name === "inheritdoc") || /@inheritDoc\b/u.test(jsdoc?.getText() ?? "");
+  const typeParameters = [
+    ...(jsdoc?.getText() ?? "").matchAll(/@typeParam\s+([\p{L}_$][\w$]*)\s+([^\r\n*]+)/gu),
+  ]
+    .filter(([, , description]) => !isPlaceholder(description.trim()))
+    .map(([, name]) => name);
   return {
     summary: summary === "" ? undefined : summary,
     tags,
     duplicateParameters,
+    typeParameters,
     inherited,
     adjacent: comments
       .filter((comment) => !/@typedef\b/u.test(source.text.slice(comment.pos, comment.end)))

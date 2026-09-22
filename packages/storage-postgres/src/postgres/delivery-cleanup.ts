@@ -28,13 +28,19 @@ import {
 } from "./errors.js";
 import { PostgresRecordStorage, type PostgresRecordLifecycle } from "./record-storage.js";
 
+/**
+ * Opens one tenant-bound PostgreSQL record family.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf record type.
+ */
 type OpenRecords = <I, R extends Message>(
   context: StorageContext,
   spec: RecordSpec<I, R>,
 ) => PostgresRecordStorage<I, R>;
 
 /**
- * Coordinates one fenced delivered Inbox deletion in PostgreSQL.
+ * Deletes one delivered Inbox row only while its expected session record remains current.
  */
 export class PostgresDeliveryCleanupStorage implements DeliveryCleanupStorage {
   #open = true;
@@ -55,6 +61,10 @@ export class PostgresDeliveryCleanupStorage implements DeliveryCleanupStorage {
   /**
    * Removes an exact Inbox row while its session snapshot remains current.
    *
+   * @typeParam InboxId Inbox record identifier type.
+   * @typeParam InboxRecord Inbox record message type.
+   * @typeParam SessionId Session record identifier type.
+   * @typeParam SessionRecord Session record message type.
    * @param input Describes the expected Inbox and session records.
    * @returns Whether the exact Inbox row was deleted.
    */
@@ -88,6 +98,18 @@ export class PostgresDeliveryCleanupStorage implements DeliveryCleanupStorage {
     this.onClose();
   }
 
+  /**
+   * Executes one cleanup transaction with one retry for a serialization conflict.
+   *
+   * @typeParam InboxId Inbox record identifier type.
+   * @typeParam InboxRecord Inbox record message type.
+   * @typeParam SessionId Session record identifier type.
+   * @typeParam SessionRecord Session record message type.
+   * @param input Describes the expected Inbox and session records.
+   * @param inbox Provides the delivered Inbox record family.
+   * @param sessions Provides the session record family.
+   * @returns Whether the transaction deleted the Inbox row.
+   */
   private async coordinate<
     InboxId,
     InboxRecord extends Message,
@@ -122,6 +144,19 @@ export class PostgresDeliveryCleanupStorage implements DeliveryCleanupStorage {
     throw new Error("Unreachable PostgreSQL cleanup retry.");
   }
 
+  /**
+   * Checks the expected records and deletes the Inbox row on one transaction client.
+   *
+   * @typeParam InboxId Inbox record identifier type.
+   * @typeParam InboxRecord Inbox record message type.
+   * @typeParam SessionId Session record identifier type.
+   * @typeParam SessionRecord Session record message type.
+   * @param client PostgreSQL transaction client.
+   * @param input Describes the expected Inbox and session records.
+   * @param inbox Provides the delivered Inbox record family.
+   * @param sessions Provides the session record family.
+   * @returns Whether the exact Inbox row was deleted.
+   */
   private async removeOn<
     InboxId,
     InboxRecord extends Message,
@@ -150,17 +185,38 @@ export class PostgresDeliveryCleanupStorage implements DeliveryCleanupStorage {
     return removed;
   }
 
+  /**
+   * Rejects cleanup after this handle has closed.
+   */
   private requireOpen(): void {
     if (!this.#open) throw new PostgresStorageOperationError("Delivery cleanup storage is closed.");
   }
 }
 
 const PostgresCleanupValues = Object.freeze({
+  /**
+   * Checks whether the caller still permits the cleanup operation.
+   *
+   * @param input Carries the optional operation lifetime.
+   * @returns Whether cleanup may continue.
+   */
   active(input: {
     readonly operation?: DeliveryCleanupInput<never, never, never, never>["operation"];
   }): boolean {
     return cleanupOperationActive(input.operation);
   },
+
+  /**
+   * Compares the current session with the expected cleanup session.
+   *
+   * @typeParam InboxId Inbox record identifier type.
+   * @typeParam InboxRecord Inbox record message type.
+   * @typeParam SessionId Session record identifier type.
+   * @typeParam SessionRecord Session record message type.
+   * @param input Describes the expected cleanup records.
+   * @param actual Session record read inside the transaction.
+   * @returns Whether the session is still current and unchanged.
+   */
   current<InboxId, InboxRecord extends Message, SessionId, SessionRecord extends Message>(
     input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
     actual: SessionRecord | undefined,
@@ -171,6 +227,17 @@ const PostgresCleanupValues = Object.freeze({
       this.same(input.session.spec, actual, input.session.expected)
     );
   },
+
+  /**
+   * Compares two records through their Protobuf wire representation.
+   *
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf record type.
+   * @param spec Describes the stored record schema.
+   * @param left Record read from PostgreSQL.
+   * @param right Expected record value.
+   * @returns Whether both records have identical wire bytes.
+   */
   same<I, R extends Message>(spec: RecordSpec<I, R>, left: R | undefined, right: R): boolean {
     return (
       left !== undefined &&
@@ -180,6 +247,12 @@ const PostgresCleanupValues = Object.freeze({
 });
 
 const PostgresCleanupErrors = Object.freeze({
+  /**
+   * Converts an internal cleanup failure to the stable provider error.
+   *
+   * @param error Failure raised inside the cleanup transaction.
+   * @returns Stable public cleanup error.
+   */
   operation(error: unknown): PostgresStorageOperationError {
     return error instanceof PostgresStorageOperationError
       ? error
@@ -187,4 +260,7 @@ const PostgresCleanupErrors = Object.freeze({
   },
 });
 
+/**
+ * Signals that the cleanup lifetime ended after deletion but before commit.
+ */
 class CleanupExpired extends Error {}

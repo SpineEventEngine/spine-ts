@@ -684,3 +684,20 @@ No accepted finding remains. The task-verification wrapper's documentation-only
 mode is unavailable because it sees the complete mixed-code feature branch;
 this correction therefore uses the protocol's focused documentation gates and
 retains the prior successful release verification for unchanged runtime code.
+
+### Human Source-Quality Findings
+
+The human review reopens task acceptance for source documentation and layout.
+All eight findings are accepted as P2 task-scope corrections. Permanent policy
+data will use a stable package name; every changed PostgreSQL class, method, and
+generic parameter will receive semantic documentation; declaration boundaries
+will be visually separated; unexplained “fenced” wording will be replaced with
+the concrete lock-and-verification behavior; and PostgreSQL DDL names will come
+from one typed package-local vocabulary. The `pg` driver's numeric parser OIDs
+are explicitly rejected as DDL type-name substitutes.
+
+The ruleset correction is test-first. Checker regressions must first prove that
+undocumented internal classes/methods and undocumented type parameters fail.
+The PostgreSQL type-vocabulary regression must first fail because no canonical
+vocabulary exists. Production and documentation corrections begin only after
+those RED results are recorded.

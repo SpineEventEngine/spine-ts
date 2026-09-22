@@ -41,6 +41,12 @@ export class PostgresStorageOperationError extends Error {}
  * Preserves classified provider errors and sanitizes raw PostgreSQL failures.
  */
 export const PostgresStorageErrors: Readonly<{ operation(error: unknown): Error }> = Object.freeze({
+  /**
+   * Preserves a provider error or sanitizes a raw driver failure.
+   *
+   * @param error Failure raised by a storage operation.
+   * @returns Stable provider error.
+   */
   operation(error: unknown): Error {
     if (
       error instanceof PostgresStorageConfigurationError ||
@@ -59,6 +65,12 @@ export const PostgresStorageErrors: Readonly<{ operation(error: unknown): Error 
  */
 export const PostgresTransactionErrors: Readonly<{ retryable(error: unknown): boolean }> =
   Object.freeze({
+    /**
+     * Checks whether PostgreSQL permits one transaction retry.
+     *
+     * @param error Failure raised by PostgreSQL.
+     * @returns Whether the failure is a serialization conflict or deadlock.
+     */
     retryable(error: unknown): boolean {
       return (
         typeof error === "object" &&
@@ -77,9 +89,21 @@ export const PostgresClientDisposal: Readonly<{
   mark(error: unknown): void;
   required(error: unknown): boolean;
 }> = Object.freeze({
+  /**
+   * Marks the operation failure associated with a client that must be discarded.
+   *
+   * @param error Operation failure used as the client-release token.
+   */
   mark(error: unknown): void {
     if (typeof error === "object" && error !== null) discardedClients.add(error);
   },
+
+  /**
+   * Checks whether a failure requires client disposal.
+   *
+   * @param error Operation failure used as the client-release token.
+   * @returns Whether the client must not return to the pool.
+   */
   required(error: unknown): boolean {
     return typeof error === "object" && error !== null && discardedClients.has(error);
   },
@@ -89,6 +113,12 @@ export const PostgresClientDisposal: Readonly<{
  * Supplies an Error token that tells node-postgres to discard a failed client.
  */
 export const PostgresRollbackErrors: Readonly<{ discard(error: unknown): Error }> = Object.freeze({
+  /**
+   * Supplies an Error token to discard a client after rollback failure.
+   *
+   * @param error Original operation failure.
+   * @returns Error token passed to `pg` client release.
+   */
   discard(error: unknown): Error {
     return error instanceof Error ? error : new Error("PostgreSQL transaction rollback failed.");
   },

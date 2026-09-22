@@ -17,6 +17,7 @@
  */
 export class PostgresTableResolver {
   readonly #names = new Map<string, string>();
+
   readonly #resolved = new Map<string, string>();
 
   /**
@@ -73,6 +74,12 @@ export class PostgresTableResolver {
     return Object.freeze({ tableName });
   }
 
+  /**
+   * Registers one logical-to-physical table-name request.
+   *
+   * @param identity Stable logical record-family identity.
+   * @param name Requested physical table name.
+   */
   private set(identity: string, name: string): void {
     const physical = PostgresNames.physical(name);
     for (const [registered, value] of this.#names) {
@@ -85,12 +92,26 @@ export class PostgresTableResolver {
 }
 
 const PostgresNames = Object.freeze({
+  /**
+   * Calculates the default readable name for one record family.
+   *
+   * @param sourceType Record source type name.
+   * @param group Optional storage group name.
+   * @param recordType Optional grouped record type name.
+   * @returns Default readable table name.
+   */
   default(sourceType: string, group: string | undefined, recordType: string | undefined): string {
     if (group === undefined) return sourceType.replaceAll(".", "_");
     const type = recordType ?? sourceType;
     return `${group.replaceAll(".", "_")}_${type.slice(type.lastIndexOf(".") + 1)}`;
   },
 
+  /**
+   * Applies PostgreSQL identifier validation and case folding.
+   *
+   * @param name Requested readable table name.
+   * @returns Validated physical table name.
+   */
   physical(name: string): string {
     if (
       /\s/u.test(name) ||
@@ -104,6 +125,13 @@ const PostgresNames = Object.freeze({
       ? name.replace(/[A-Z]/g, (letter) => letter.toLowerCase())
       : name;
   },
+
+  /**
+   * Checks whether a name uses the unquoted PostgreSQL identifier grammar.
+   *
+   * @param name Requested table name.
+   * @returns Whether PostgreSQL may use the name without quoting for spelling.
+   */
   plain(name: string): boolean {
     return /^[A-Za-z_][A-Za-z0-9_]*$/u.test(name);
   },

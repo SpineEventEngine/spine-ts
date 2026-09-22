@@ -71,6 +71,9 @@ export interface PostgresRecordLifecycle {
  *
  * This capability deliberately stays outside the package root: Entity history
  * uses it to keep its SQL and transaction scope on the PostgreSQL provider.
+ *
+ * @typeParam I The storage identifier type.
+ * @typeParam R The stored Protobuf record type.
  */
 export interface PostgresRecordExecutor<I, R extends Message> {
   /**
@@ -81,6 +84,8 @@ export interface PostgresRecordExecutor<I, R extends Message> {
 
   /**
    * Returns one PostgreSQL transaction with rollback and client release.
+   *
+   * @typeParam T The value returned by the transaction work.
    * @param work Performs work with the transaction client.
    * @returns The work result.
    */
@@ -88,6 +93,8 @@ export interface PostgresRecordExecutor<I, R extends Message> {
 
   /**
    * Returns bounded work on one acquired PostgreSQL client.
+   *
+   * @typeParam T The value returned by the client work.
    * @param work Performs work with the acquired client.
    * @returns The work result.
    */
@@ -175,14 +182,20 @@ export interface PostgresRecordExecutor<I, R extends Message> {
 
 /**
  * Stores one record family in one qualified PostgreSQL table.
+ *
+ * @typeParam I The storage identifier type.
+ * @typeParam R The stored Protobuf record type.
  */
 export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   /**
    * Reports that compare-and-set uses PostgreSQL transaction coordination.
    */
   override readonly atomicCompareAndSet = true;
+
   readonly #idColumn: PostgresIdColumn<I>;
+
   readonly #columns: ColumnMapping<unknown>;
+
   readonly #initializer: PostgresTableInitializer;
 
   /**
@@ -416,6 +429,14 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     );
   }
 
+  /**
+   * Applies one compare-and-set attempt inside a transaction.
+   *
+   * @param id Identifies the guarded record.
+   * @param expected Supplies the required current materialization.
+   * @param next Supplies the replacement or requests deletion when absent.
+   * @returns Whether the current record matched the expected record.
+   */
   private async casOnce(
     id: I,
     expected: Materialized<I, R> | undefined,
@@ -431,6 +452,13 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     });
   }
 
+  /**
+   * Executes work in one transaction and always releases its client.
+   *
+   * @typeParam T The value returned by the transaction work.
+   * @param work Performs the transaction work.
+   * @returns The value returned by the work after a successful commit.
+   */
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     await this.prepare();
     const client = await this.lifecycle.acquire();
@@ -452,6 +480,13 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     }
   }
 
+  /**
+   * Executes work with one prepared and automatically released client.
+   *
+   * @typeParam T The value returned by the client work.
+   * @param work Performs the client work.
+   * @returns The value returned by the work.
+   */
   private async using<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     await this.prepare();
     const client = await this.lifecycle.acquire();
@@ -468,6 +503,14 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     }
   }
 
+  /**
+   * Reads and decodes one record on the supplied client.
+   *
+   * @param client Provides the active client.
+   * @param id Identifies the record.
+   * @param lock Whether to lock the selected row for update.
+   * @returns The decoded record, when present.
+   */
   private async readOn(client: PoolClient, id: I, lock = false): Promise<R | undefined> {
     const result = await client.query<Row>(
       `SELECT "bytes" FROM ${this.qualified()} WHERE "ID" = $1${lock ? " FOR UPDATE" : ""}`,
@@ -483,6 +526,13 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     }
   }
 
+  /**
+   * Executes a compiled query and decodes its record entries.
+   *
+   * @param client Provides the active client.
+   * @param query Supplies the compiled SQL and bind values.
+   * @returns The decoded record entries.
+   */
   private async entries(
     client: PoolClient,
     query: Compiled,
@@ -500,18 +550,41 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     }
   }
 
+  /**
+   * Acquires the transaction lock for one record slot.
+   *
+   * @param client Provides the active transaction client.
+   * @param id Identifies the record slot.
+   * @returns A promise that resolves after lock acquisition.
+   */
   private lockSlot(client: PoolClient, id: I): Promise<void> {
     return client
       .query("SELECT pg_advisory_xact_lock($1)", [this.casKey(id)])
       .then(() => undefined);
   }
 
+  /**
+   * Acquires record-slot locks in stable order to avoid deadlocks.
+   *
+   * @param client Provides the active transaction client.
+   * @param ids Identify the record slots.
+   * @returns A promise that resolves after every lock is acquired.
+   */
   private async lockSlots(client: PoolClient, ids: readonly I[]): Promise<void> {
     const keys = [...new Set(ids.map((id) => this.casKey(id)))];
     keys.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
     for (const key of keys) await client.query("SELECT pg_advisory_xact_lock($1)", [key]);
   }
 
+  /**
+   * Writes one record on a caller-managed client.
+   *
+   * @param client Provides the active transaction client.
+   * @param record Supplies the record to write.
+   * @param id Identifies the record.
+   * @param locked Whether the caller already holds the record lock.
+   * @returns A promise that resolves after the upsert.
+   */
   private async writeOn(
     client: PoolClient,
     record: R,
@@ -522,11 +595,27 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     await client.query(this.upsertSql(), this.values(record, id));
   }
 
+  /**
+   * Deletes one record on a caller-managed client.
+   *
+   * @param client Provides the active transaction client.
+   * @param id Identifies the record.
+   * @param locked Whether the caller already holds the record lock.
+   * @returns Whether PostgreSQL deleted a row.
+   */
   private async deleteOn(client: PoolClient, id: I, locked = false): Promise<boolean> {
     if (!locked) await this.lockSlot(client, id);
     return (await client.query(this.deleteSql(), [this.id(id)])).rowCount === 1;
   }
 
+  /**
+   * Stores an immutable record or confirms an identical existing record.
+   *
+   * @param client Provides the active transaction client.
+   * @param record Supplies the immutable record.
+   * @param locked Whether the caller already holds the record lock.
+   * @returns A promise that resolves after insertion or identity confirmation.
+   */
   private async appendImmutableOn(client: PoolClient, record: R, locked = false): Promise<void> {
     const id = this.recordSpec.idValueIn(record);
     if (!locked) await this.lockSlot(client, id);
@@ -537,12 +626,27 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
   }
 
+  /**
+   * Checks that an immutable record is absent or byte-identical.
+   *
+   * @param client Provides the active client.
+   * @param record Supplies the immutable record.
+   * @returns A promise that rejects for a conflicting stored payload.
+   */
   private async assertImmutableOn(client: PoolClient, record: R): Promise<void> {
     const existing = await this.readOn(client, this.recordSpec.idValueIn(record));
     if (existing === undefined || this.same(existing, record)) return;
     throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
   }
 
+  /**
+   * Executes provider SQL and decodes its record rows.
+   *
+   * @param client Provides the active client.
+   * @param sql Supplies parameterized SQL.
+   * @param values Supply the bind values.
+   * @returns The decoded records.
+   */
   private async historyEntries(
     client: PoolClient,
     sql: string,
@@ -558,6 +662,13 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     }
   }
 
+  /**
+   * Converts one declared history column value to its database representation.
+   *
+   * @param name Names the declared column.
+   * @param value Supplies its logical value.
+   * @returns The PostgreSQL parameter value.
+   */
   private historyColumn(name: string, value: unknown): unknown {
     const column = this.recordSpec.columns.find((candidate) => candidate.name === name);
     if (column === undefined)
@@ -565,6 +676,13 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     return ColumnMappings.value(this.#columns, column.type, value);
   }
 
+  /**
+   * Calculates a stable advisory-lock key within the selected database and schema.
+   *
+   * @param domain Separates lock purposes.
+   * @param identity Identifies the protected resource.
+   * @returns A signed PostgreSQL advisory-lock key.
+   */
   private historyKey(domain: string, identity: readonly string[]): bigint {
     return createHash("sha256")
       .update(`spine-postgres-${domain}\0`)
@@ -577,6 +695,13 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       .readBigInt64BE();
   }
 
+  /**
+   * Encodes one record as ordered table-column values.
+   *
+   * @param record Supplies the record to encode.
+   * @param id Identifies the record.
+   * @returns Values ordered for the generated insert statement.
+   */
   private values(record: R, id = this.recordSpec.idValueIn(record)): unknown[] {
     const materialized = this.recordSpec.materialize(record);
     return [
@@ -588,6 +713,12 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     ];
   }
 
+  /**
+   * Builds parameterized PostgreSQL SQL for a record query.
+   *
+   * @param query Defines filters, ordering, continuation, and bounds.
+   * @returns The compiled statement.
+   */
   private recordQuery(query: RecordQuery<I>): Compiled {
     const bind = new Binds();
     const clauses = this.recordClauses(query, bind);
@@ -603,6 +734,12 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     return bind.done(sql);
   }
 
+  /**
+   * Builds one bounded statement for a normalized query plan.
+   *
+   * @param plan Supplies the normalized plan.
+   * @returns The compiled statement.
+   */
   private planQuery(plan: NormalizedQueryPlan<I>): Compiled {
     const bind = new Binds();
     const predicate =
@@ -627,6 +764,13 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     );
   }
 
+  /**
+   * Builds predicates for IDs and declared-column equality filters.
+   *
+   * @param query Supplies the record query.
+   * @param bind Collects parameter values.
+   * @returns SQL predicate fragments.
+   */
   private recordClauses(query: RecordQuery<I>, bind: Binds): string[] {
     const clauses: string[] = [];
     if (query.ids !== undefined)
@@ -639,6 +783,12 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     return clauses;
   }
 
+  /**
+   * Builds deterministic ordering for one record query.
+   *
+   * @param query Supplies the requested sort order.
+   * @returns The PostgreSQL order expression.
+   */
   private recordOrder(query: RecordQuery<I>): string {
     return [
       ...(query.sort ?? []).map(
@@ -650,6 +800,13 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     ].join(", ");
   }
 
+  /**
+   * Builds the continuation predicate for one record query.
+   *
+   * @param query Supplies the sort order and continuation values.
+   * @param bind Collects parameter values.
+   * @returns The continuation predicate.
+   */
   private continuation(query: RecordQuery<I>, bind: Binds): string {
     const sort = query.sort ?? [];
     const after = query.after;
@@ -683,11 +840,27 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     return `(${terms.join(" OR ")})`;
   }
 
+  /**
+   * Builds one direction-aware continuation comparison.
+   *
+   * @param column Supplies the quoted column name.
+   * @param direction Supplies the requested sort direction.
+   * @param value Supplies the continuation value.
+   * @param bind Collects parameter values.
+   * @returns The comparison expression.
+   */
   private afterTerm(column: string, direction: string, value: unknown, bind: Binds): string {
     if (value === null) return direction === "desc" ? "FALSE" : `${column} IS NOT NULL`;
     return `(${column} IS NOT NULL AND ${column} ${direction === "desc" ? "<" : ">"} ${bind.add(value)})`;
   }
 
+  /**
+   * Builds SQL for one normalized query predicate recursively.
+   *
+   * @param predicate Supplies the normalized predicate.
+   * @param bind Collects parameter values.
+   * @returns The parameterized SQL predicate.
+   */
   private predicate(predicate: NormalizedQueryPredicate<I>, bind: Binds): string {
     if (predicate.kind === "ids")
       return `"ID" IN (${predicate.ids.map((id) => bind.add(this.id(id))).join(", ")})`;
@@ -700,6 +873,12 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     return `(${predicate.predicates.map((child) => this.predicate(child, bind)).join(joiner)})`;
   }
 
+  /**
+   * Validates and quotes one queryable column name.
+   *
+   * @param name Names the requested column.
+   * @returns The quoted PostgreSQL identifier.
+   */
   private column(name: string): string {
     if (name === "ID") return '"ID"';
     if (!this.recordSpec.columns.some((column) => column.name === name))
@@ -707,6 +886,13 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     return quote(name);
   }
 
+  /**
+   * Converts one query value to its database representation.
+   *
+   * @param name Names the ID or declared column.
+   * @param value Supplies the logical value.
+   * @returns The PostgreSQL parameter value.
+   */
   private value(name: string, value: unknown): unknown {
     if (name === "id" || name === "ID") return this.id(value as I);
     const column = this.recordSpec.columns.find((candidate) => candidate.name === name);
@@ -715,6 +901,12 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     return ColumnMappings.value(this.#columns, column.type, value);
   }
 
+  /**
+   * Converts one record ID to its database representation.
+   *
+   * @param id Supplies the logical ID.
+   * @returns The PostgreSQL parameter value.
+   */
   private id(id: I): unknown {
     try {
       return this.#idColumn.value(id);
@@ -722,6 +914,14 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       throw operationError(error);
     }
   }
+
+  /**
+   * Compares two optional records by their Protobuf bytes.
+   *
+   * @param left Supplies the first record.
+   * @param right Supplies the second record.
+   * @returns Whether both records are absent or byte-identical.
+   */
   private same(left: R | undefined, right: R | undefined): boolean {
     return left === undefined || right === undefined
       ? left === right
@@ -729,62 +929,167 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
           Buffer.from(toBinary(this.recordSpec.recordType, right)),
         );
   }
+
+  /**
+   * Returns the quoted schema-qualified table name.
+   *
+   * @returns The qualified PostgreSQL identifier.
+   */
   private qualified(): string {
     return `${quote(this.lifecycle.schema)}.${quote(this.table.tableName)}`;
   }
+
+  /**
+   * Builds the delete statement for this record family.
+   *
+   * @returns Parameterized delete SQL.
+   */
   private deleteSql(): string {
     return `DELETE FROM ${this.qualified()} WHERE "ID" = $1`;
   }
+
+  /**
+   * Builds the conflict-tolerant immutable insert statement.
+   *
+   * @returns Parameterized immutable-insert SQL.
+   */
   private immutableSql(): string {
     return `${this.insertSql()} ON CONFLICT ("ID") DO NOTHING`;
   }
+
+  /**
+   * Builds the upsert statement for this record family.
+   *
+   * @returns Parameterized upsert SQL.
+   */
   private upsertSql(): string {
     const names = ["ID", "bytes", ...this.recordSpec.columns.map(({ name }) => name)];
     const updates = names.slice(1).map((name) => `${quote(name)}=EXCLUDED.${quote(name)}`);
     return `${this.insertSql()} ON CONFLICT ("ID") DO UPDATE SET ${updates.join(", ")}`;
   }
+
+  /**
+   * Builds the base insert statement for this record family.
+   *
+   * @returns Parameterized insert SQL.
+   */
   private insertSql(): string {
     const names = ["ID", "bytes", ...this.recordSpec.columns.map(({ name }) => name)];
     const columns = names.map(quote).join(", ");
     const values = names.map((_, index) => `$${String(index + 1)}`).join(", ");
     return `INSERT INTO ${this.qualified()} (${columns}) VALUES (${values})`;
   }
+
+  /**
+   * Builds PostgreSQL's unbounded-limit form for an offset-only query.
+   *
+   * @param bind Collects parameter values.
+   * @param offset Supplies the requested row offset.
+   * @returns The limit and offset clause.
+   */
   private offsetSql(bind: Binds, offset: number): string {
     return ` LIMIT ${bind.add(9_223_372_036_854_775_807n)} OFFSET ${bind.add(offset)}`;
   }
+
+  /**
+   * Calculates the advisory key for one record mutation.
+   *
+   * @param id Identifies the record.
+   * @returns The signed advisory-lock key.
+   */
   private casKey(id: I): bigint {
     return this.historyKey("record-mutation", [this.table.tableName, String(this.id(id))]);
   }
 }
 
+/**
+ * Represents one record after its declared columns are materialized.
+ *
+ * @typeParam I The record identifier type.
+ * @typeParam R The Protobuf record type.
+ */
 type Materialized<I, R extends Message> = ReturnType<RecordSpec<I, R>["materialize"]>;
+
+/**
+ * Represents one raw record row returned by PostgreSQL.
+ */
 interface Row {
   readonly ID: unknown;
   readonly bytes: Uint8Array | Buffer;
 }
+
+/**
+ * Contains parameterized SQL and its ordered bind values.
+ */
 interface Compiled {
   readonly sql: string;
   readonly values: readonly unknown[];
 }
+
+/**
+ * Allocates PostgreSQL placeholders and collects their values.
+ */
 class Binds {
   readonly values: unknown[] = [];
+
+  /**
+   * Adds one bind value.
+   *
+   * @param value Supplies the value.
+   * @returns Its one-based PostgreSQL placeholder.
+   */
   add(value: unknown): string {
     this.values.push(value);
     return `$${String(this.values.length)}`;
   }
+
+  /**
+   * Completes one compiled statement.
+   *
+   * @param sql Supplies SQL containing the allocated placeholders.
+   * @returns The statement and collected values.
+   */
   done(sql: string): Compiled {
     return { sql, values: this.values };
   }
 }
+
+/**
+ * Quotes one PostgreSQL identifier.
+ *
+ * @param value Supplies the identifier.
+ * @returns The safely quoted identifier.
+ */
 function quote(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
+
+/**
+ * Joins predicate fragments into an optional where clause.
+ *
+ * @param clauses Supply predicate fragments.
+ * @returns An empty string or a complete where clause.
+ */
 function where(clauses: readonly string[]): string {
   return clauses.length === 0 ? "" : ` WHERE ${clauses.join(" AND ")}`;
 }
+
+/**
+ * Copies a PostgreSQL binary value into a plain byte array.
+ *
+ * @param value Supplies the returned binary value.
+ * @returns A plain byte array.
+ */
 function bytes(value: Uint8Array | Buffer): Uint8Array {
   return new Uint8Array(value);
 }
+
+/**
+ * Converts a normalized comparison name to PostgreSQL SQL.
+ *
+ * @param value Supplies the normalized comparison name.
+ * @returns Its SQL operator.
+ */
 function operator(value: string): string {
   return (
     (
@@ -801,9 +1106,23 @@ function operator(value: string): string {
     })()
   );
 }
+
+/**
+ * Reports whether a failed transaction may be attempted once more.
+ *
+ * @param error Supplies the failure.
+ * @returns Whether PostgreSQL classified it as retryable.
+ */
 function retryable(error: unknown): boolean {
   return PostgresTransactionErrors.retryable(error);
 }
+
+/**
+ * Converts an arbitrary failure to the package's record-operation error.
+ *
+ * @param error Supplies the failure.
+ * @returns The preserved or normalized storage error.
+ */
 function operationError(error: unknown): PostgresStorageOperationError {
   return error instanceof PostgresStorageOperationError || error instanceof PostgresStorageDataError
     ? error

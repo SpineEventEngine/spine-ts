@@ -47,7 +47,20 @@ import {
  * Acquires fresh clients for a complete Entity transaction and one safe retry.
  */
 class PostgresEntityCommitCoordinator {
+  /**
+   * Creates a coordinator for one tenant-bound record lifecycle.
+   *
+   * @param lifecycle Acquires transaction clients for the selected database.
+   */
   constructor(private readonly lifecycle: PostgresRecordLifecycle) {}
+
+  /**
+   * Commits one complete Entity change with one serialization retry.
+   *
+   * @typeParam T Result returned by the transaction work.
+   * @param work Applies the Entity commit on an acquired client.
+   * @returns The committed work result.
+   */
   async commit<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const client = await this.lifecycle.acquire();
@@ -73,6 +86,12 @@ class PostgresEntityCommitCoordinator {
   }
 }
 
+/**
+ * Opens one PostgreSQL record family used by an Entity commit.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf record type.
+ */
 type OpenRecords = <I, R extends Message>(
   spec: RecordSpec<I, R>,
   group?: StorageGroup,
@@ -80,13 +99,27 @@ type OpenRecords = <I, R extends Message>(
 
 /**
  * Opens and closes the exact record families participating in one commit.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
  */
 class PostgresCommitRecords<I, S extends Message> {
   readonly current: PostgresRecordExecutor<I, EntityRecord>;
+
   readonly states: PostgresRecordExecutor<EntityStateKey, EntityRecord> | undefined;
+
   readonly diagnostics: PostgresRecordExecutor<EventId, Event> | undefined;
+
   readonly events: PostgresRecordExecutor<EventId, Event> | undefined;
+
   readonly #handles: PostgresRecordStorage<unknown, Message>[];
+
+  /**
+   * Opens the current record family and each enabled immutable family.
+   *
+   * @param input Describes the Entity commit and enabled histories.
+   * @param open Opens one record family.
+   */
   constructor(input: EntityCommitInput<I, S>, open: OpenRecords) {
     const current = open(input.entity.recordSpec);
     const handles: PostgresRecordStorage<unknown, Message>[] = [current as never];
@@ -98,12 +131,31 @@ class PostgresCommitRecords<I, S extends Message> {
     this.events = input.events?.length ? this.openEvents(open, handles) : undefined;
     this.#handles = handles;
   }
+
+  /**
+   * Prepares every record family before the transaction begins.
+   *
+   * @returns Completion after all required tables are ready.
+   */
   async prepare(): Promise<void> {
     for (const handle of this.#handles) await handle.prepare();
   }
+
+  /**
+   * Closes every temporary record-family handle.
+   */
   close(): void {
     for (const handle of this.#handles) handle.close();
   }
+
+  /**
+   * Opens the Entity state-history record family.
+   *
+   * @param input Describes the Entity state schema.
+   * @param open Opens one record family.
+   * @param handles Collects handles that must close after the commit.
+   * @returns The state-history transaction executor.
+   */
   private openState(
     input: EntityCommitInput<I, S>,
     open: OpenRecords,
@@ -114,6 +166,15 @@ class PostgresCommitRecords<I, S extends Message> {
     handles.push(handle as never);
     return handle.historyExecutor();
   }
+
+  /**
+   * Opens the Entity diagnostic-event history record family.
+   *
+   * @param input Describes the Entity state schema.
+   * @param open Opens one record family.
+   * @param handles Collects handles that must close after the commit.
+   * @returns The diagnostic-history transaction executor.
+   */
   private openDiagnostic(
     input: EntityCommitInput<I, S>,
     open: OpenRecords,
@@ -124,6 +185,14 @@ class PostgresCommitRecords<I, S extends Message> {
     handles.push(handle as never);
     return handle.historyExecutor();
   }
+
+  /**
+   * Opens the shared event-store record family.
+   *
+   * @param open Opens one record family.
+   * @param handles Collects handles that must close after the commit.
+   * @returns The event-store transaction executor.
+   */
   private openEvents(
     open: OpenRecords,
     handles: PostgresRecordStorage<unknown, Message>[],
@@ -136,9 +205,13 @@ class PostgresCommitRecords<I, S extends Message> {
 
 /**
  * Represents a factory-tracked PostgreSQL Entity commit handle.
+ *
+ * @typeParam I Entity identifier type captured by this handle.
+ * @typeParam S Entity state message type captured by this handle.
  */
 export class PostgresEntityCommitStorage<I, S extends Message> implements EntityCommitStorage {
   #open = true;
+
   readonly #coordinator: PostgresEntityCommitCoordinator;
 
   /**
@@ -161,6 +234,8 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
   /**
    * Commits one current Entity record and its optional immutable records.
    *
+   * @typeParam Id Entity identifier type supplied by the commit.
+   * @typeParam State Entity state message type supplied by the commit.
    * @param input Defines the expected and next current records plus histories.
    * @returns Whether PostgreSQL committed the mutation or found a conflict.
    */
@@ -186,6 +261,17 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
       this.onClose();
     }
   }
+
+  /**
+   * Applies one validated Entity commit on an active transaction.
+   *
+   * @typeParam Id Entity identifier type supplied by the commit.
+   * @typeParam State Entity state message type supplied by the commit.
+   * @param client PostgreSQL transaction client.
+   * @param input Defines the Entity records to commit.
+   * @param records Provides the prepared record families.
+   * @returns Whether records were committed or conflicted.
+   */
   private async apply<Id, State extends Message>(
     client: PoolClient,
     input: EntityCommitInput<Id, State>,
@@ -204,6 +290,17 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
       await records.current.write(client, input.next);
     return "committed";
   }
+
+  /**
+   * Acquires locks for each mutable or append-only family in the commit.
+   *
+   * @typeParam Id Entity identifier type supplied by the commit.
+   * @typeParam State Entity state message type supplied by the commit.
+   * @param client PostgreSQL transaction client.
+   * @param input Defines the Entity records to commit.
+   * @param records Provides the prepared record families.
+   * @returns Completion after all transaction locks are acquired.
+   */
   private async locks<Id, State extends Message>(
     client: PoolClient,
     input: EntityCommitInput<Id, State>,
@@ -225,6 +322,17 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
       ),
     ]);
   }
+
+  /**
+   * Verifies that every immutable record can be appended.
+   *
+   * @typeParam Id Entity identifier type supplied by the commit.
+   * @typeParam State Entity state message type supplied by the commit.
+   * @param client PostgreSQL transaction client.
+   * @param input Defines the immutable records to verify.
+   * @param records Provides the prepared record families.
+   * @returns Completion after all immutable checks pass.
+   */
   private async preflight<Id, State extends Message>(
     client: PoolClient,
     input: EntityCommitInput<Id, State>,
@@ -235,6 +343,17 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
       await records.diagnostics?.assertImmutable(client, record);
     for (const record of input.events ?? []) await records.events?.assertImmutable(client, record);
   }
+
+  /**
+   * Stores every immutable history and event-store record.
+   *
+   * @typeParam Id Entity identifier type supplied by the commit.
+   * @typeParam State Entity state message type supplied by the commit.
+   * @param client PostgreSQL transaction client.
+   * @param input Defines the immutable records to append.
+   * @param records Provides the prepared record families.
+   * @returns Completion after all records are appended.
+   */
   private async append<Id, State extends Message>(
     client: PoolClient,
     input: EntityCommitInput<Id, State>,
@@ -245,6 +364,14 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
       await records.diagnostics?.appendImmutable(client, record);
     for (const record of input.events ?? []) await records.events?.appendImmutable(client, record);
   }
+
+  /**
+   * Validates the commit against the Entity boundary captured by this handle.
+   *
+   * @typeParam Id Entity identifier type supplied by the commit.
+   * @typeParam State Entity state message type supplied by the commit.
+   * @param input Defines the Entity records to validate.
+   */
   private validate<Id, State extends Message>(input: EntityCommitInput<Id, State>): void {
     if (!this.#open) throw new PostgresStorageOperationError("Entity commit storage is closed.");
     if (input.entity.sourceType.typeName !== this.entity.sourceType.typeName)
@@ -262,6 +389,14 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
       throw new PostgresStorageOperationError("Entity event history is disabled.");
     this.validateRows(input);
   }
+
+  /**
+   * Validates record identifiers inside one Entity commit.
+   *
+   * @typeParam Id Entity identifier type supplied by the commit.
+   * @typeParam State Entity state message type supplied by the commit.
+   * @param input Defines current and historical records to validate.
+   */
   private validateRows<Id, State extends Message>(input: EntityCommitInput<Id, State>): void {
     for (const record of [input.expected, input.next, ...(input.states ?? [])]) {
       if (record === undefined) continue;
@@ -277,6 +412,13 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
     this.validateEventIds(input.diagnostics, "diagnostic");
     this.validateEventIds(input.events, "delivery");
   }
+
+  /**
+   * Validates event identifiers for one immutable event family.
+   *
+   * @param events Events to validate when the family is enabled.
+   * @param family Names the event family in validation errors.
+   */
   private validateEventIds(events: readonly Event[] | undefined, family: string): void {
     const ids = events?.map((event) => event.id?.value) ?? [];
     if (ids.some((id) => id === undefined))
@@ -291,18 +433,39 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
 }
 
 const PostgresCommitValues = Object.freeze({
+  /**
+   * Compares two Entity records through their Protobuf wire representation.
+   *
+   * @param left Stored Entity record.
+   * @param right Expected Entity record.
+   * @returns Whether both records are absent or have identical wire bytes.
+   */
   same(left: EntityRecord | undefined, right: EntityRecord | undefined): boolean {
     return left === undefined || right === undefined
       ? left === right
       : Buffer.compare(toBinary(EntityRecordSchema, left), toBinary(EntityRecordSchema, right)) ===
           0;
   },
+
+  /**
+   * Compares two complete storage tenant boundaries.
+   *
+   * @param left First storage context.
+   * @param right Second storage context.
+   * @returns Whether both contexts select the same tenant boundary.
+   */
   sameBoundary(left: object, right: object): boolean {
     return TenantBoundary.of(left as never).key === TenantBoundary.of(right as never).key;
   },
 });
 
 const PostgresCommitErrors = Object.freeze({
+  /**
+   * Converts an internal commit failure to the stable provider error.
+   *
+   * @param error Failure raised during the Entity commit.
+   * @returns Stable public commit error.
+   */
   operation(error: unknown): PostgresStorageOperationError {
     return error instanceof PostgresStorageOperationError
       ? error

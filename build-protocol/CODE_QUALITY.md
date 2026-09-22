@@ -159,6 +159,14 @@ production and example declarations require semantic TSDoc coverage; tests and
 tooling are subject to layout rules only. Generated, distribution, dependency,
 and frozen sources are excluded.
 
+Every class and every method in a new or modified authored production file
+requires semantic TSDoc, including non-exported and private declarations. Every
+generic declaration covered by this rule requires one meaningful `@typeParam`
+entry for each type parameter. Separate consecutive declarations and class
+members with a blank line so that their boundaries remain visible;
+Prettier compatibility is necessary but is not sufficient evidence of readable
+layout.
+
 Authored example Proto uses meaningful domain documentation with a blank line
 between a field or declaration and its following documentation block. Its
 package is `spine.examples.<domain>` and its type URL prefix is

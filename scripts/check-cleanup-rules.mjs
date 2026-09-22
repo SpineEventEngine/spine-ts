@@ -30,7 +30,7 @@ const structurePartitions = [
   "T-0080L",
   "T-0080M",
   "T-0080N",
-  "T-0230",
+  "storage-postgres",
 ];
 const forbiddenEndUserServerApis = new Set([
   "defineEntityHandlers",
@@ -2368,7 +2368,7 @@ function structurePartition(file) {
     return "T-0080E";
   if (/^packages\/server\//.test(file)) return "T-0080F";
   if (/^packages\/(?:auth|client-web|client-react)\//.test(file)) return "T-0080G";
-  if (/^packages\/storage-postgres\//.test(file)) return "T-0230";
+  if (/^packages\/storage-postgres\//.test(file)) return "storage-postgres";
   if (/^packages\//.test(file)) return "T-0080H";
   if (/^examples\/message-board\/(?:app|web)\//.test(file)) return "T-0080K";
   if (/^examples\/message-board\/model\//.test(file)) return "T-0080J";

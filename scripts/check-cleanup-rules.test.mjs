@@ -354,6 +354,30 @@ describe("check-cleanup-rules", () => {
     expect(result.stderr).not.toContain("ownedBehavior()");
   });
 
+  it("accepts stable package names for PostgreSQL structure ledgers", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "packages/storage-postgres/src"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "packages/storage-postgres/src/index.ts"),
+      "export function connectPostgres(): void {}\n",
+    );
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "storage-postgres", [
+      {
+        rule: "standalone-function",
+        file: "packages/storage-postgres/src/index.ts",
+        kind: "function-declaration",
+        identity: "connectPostgres()#1",
+        name: "connectPostgres",
+        reason:
+          "TypeScript PostgreSQL boundary requires connectPostgres to remain the explicit connection declaration.",
+      },
+    ]);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "PostgreSQL package ledger"], repoRoot);
+
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
   it("rejects stale duplicate broadened and owned-behavior structure ledger entries", () => {
     const repoRoot = createFixture();
     writeFileSync(

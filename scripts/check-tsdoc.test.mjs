@@ -112,6 +112,81 @@ describe("check-tsdoc", () => {
     expect(result.stdout).toContain("TSDoc enforcement checks passed.");
   });
 
+  it("requires documentation for internal classes and methods in changed production files", () => {
+    const repoRoot = createFixture();
+    run("git", ["update-ref", "refs/remotes/origin/master", "HEAD"], repoRoot);
+    writeSource(
+      repoRoot,
+      "packages/demo/src/internal.ts",
+      ["class InternalWorker {", "  run(): void {}", "}", "void InternalWorker;", ""].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("InternalWorker");
+    expect(result.stderr).toContain("InternalWorker.run");
+  });
+
+  it("requires one description for every generic type parameter", () => {
+    const repoRoot = createFixture();
+    run("git", ["update-ref", "refs/remotes/origin/master", "HEAD"], repoRoot);
+    writeSource(
+      repoRoot,
+      "packages/demo/src/generic.ts",
+      [
+        "/**",
+        " * Represents a generic worker.",
+        " */",
+        "export class GenericWorker<Value> {",
+        "",
+        "  /**",
+        "   * Returns the supplied value.",
+        "   *",
+        "   * @param value The value to return.",
+        "   * @returns The supplied value.",
+        "   */",
+        "  run<Result>(value: Result): Result { return value; }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("missing-type-param");
+    expect(result.stderr).toContain("Value");
+    expect(result.stderr).toContain("Result");
+  });
+
+  it("requires a blank line between class members in changed production files", () => {
+    const repoRoot = createFixture();
+    run("git", ["update-ref", "refs/remotes/origin/master", "HEAD"], repoRoot);
+    writeSource(
+      repoRoot,
+      "packages/demo/src/spacing.ts",
+      [
+        "/**",
+        " * Stores two values.",
+        " */",
+        "export class Values {",
+        "  readonly first = 1;",
+        "  readonly second = 2;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("class-member-spacing");
+  });
+
   it("rejects undocumented script exports across supported source forms", () => {
     const repoRoot = createFixture();
     writeSource(

@@ -41,6 +41,12 @@ export const buildOutputPaths = Object.freeze([
 const defaultFileSystem = Object.freeze({
   exists: existsSync,
   status: lstatSync,
+
+  /**
+   * Removes one validated build-output directory.
+   *
+   * @param target Absolute directory path selected by the cleanup routine.
+   */
   remove(target) {
     rmSync(target, { recursive: true });
   },
