@@ -1911,3 +1911,31 @@ operation failed.` and explicitly rejects the secret-bearing raw text, while
   Node, Proto, generation, build, tooling, lint, cleanup, TSDoc, copyright,
   formatting, documentation, API, logging, dependency, packaging, external
   installation, and consumer-compilation gates.
+
+## Human And Agentic Documentation Audit
+
+- The human requested one additional independent documentation reviewer with no
+  inherited conversation, followed by correction of every confirmed mismatch
+  with the original PostgreSQL task expectations. The bounded scope is the 13
+  documentation files changed from `origin/master`, including public guides and
+  references plus the active `TASK.md`, `WORKLOG.md`, and `REVIEW.md`. Historical
+  review archives are evidence, not current prose to rewrite.
+- This documentation-only correction is estimated at 2–4 hours of active agent
+  work: lightweight pre-review scanning, one independent review, evidence-based
+  triage, prose and structure corrections, focused documentation verification,
+  review recording, and branch synchronization. There is no expected external
+  wait.
+- The session skill inventory and `build-protocol/skills/EXPECTED_SKILLS.md`
+  were checked together with readable `~/.agents/.skill-lock.json`. Selected
+  skills are `review`, `requesting-code-review`, `receiving-code-review`, and
+  `verification-before-completion`; each selected `SKILL.md` was read in full.
+  `review` normally splits standards and specification analysis between two
+  reviewers, but the human explicitly requested one independent reviewer, so
+  the existing documentation reviewer covers both axes in one memory-free
+  assignment. Documentation co-authoring is not selected because the task is an
+  audit against already accepted requirements, not collaborative drafting.
+- The pre-review scan confirmed a clean branch at `c152700b9`, a non-empty
+  documentation diff from `origin/master`, current task status `Complete`, and
+  no separate code or runtime correction scope. The reviewer must distinguish
+  active documentation from historical records and must not treat obsolete
+  archived statements as current claims.

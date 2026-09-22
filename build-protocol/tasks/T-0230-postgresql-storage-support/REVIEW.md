@@ -642,3 +642,22 @@ required documentation and static checks, all 19 package tarballs, clean
 external installation, and consumer compilation. PostgreSQL `16.15` and `18.6`
 also passed the exact live package acceptance. The three-round review is
 accepted with no unresolved finding.
+
+### Human And Agentic Documentation Audit Assignment
+
+One existing `documentation_reviewer` receives the complete changed-document
+set relative to `origin/master`, with no inherited conversation and no child
+agents. Its bounded concern is both review axes: conformance to current
+repository documentation standards and fidelity to the accepted PostgreSQL
+task requirements. It must separately assess human-facing prose for clarity,
+plain language, navigation, examples, and accurate supported behavior, and
+agent-facing prose for usable structure, current status, evidence, decisions,
+and separation from user guidance.
+
+The expected immutable role profile is `gpt-5.6-luna` / `medium`; both fields
+will be explicit in the dispatch. The Desktop surface supports explicit child
+model and reasoning selection. Runtime self-introspection will be recorded if
+the surface exposes it; otherwise the configured role/profile is the evidence.
+The reviewer must cite precise paths and lines, classify every finding, check
+the visible human-imposed requirements ledger, and avoid findings about
+historical or superseded prose unless an active document presents it as current.
