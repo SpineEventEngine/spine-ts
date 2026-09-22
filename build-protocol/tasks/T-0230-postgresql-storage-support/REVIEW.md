@@ -618,3 +618,27 @@ local transaction coordinators: extracting a generic database facade would
 conflict with the task's anti-overengineering requirement, and no current drift
 remains. The existing implementer context receives this test-only correction
 under its immutable `gpt-5.6-terra` / `medium` profile.
+
+### Three-Round Final Acceptance
+
+All three requested review rounds were independent, consequential, and
+memory-free. Round 1 used the configured `performance_reliability_reviewer`,
+Round 2 used the configured `typescript_api_docs_reviewer`, and Round 3 used the
+configured `style_maintainability_reviewer`; each was explicitly dispatched as
+`gpt-5.6-terra` / `high`. The execution surface exposed the immutable role and
+configured profile but no additional runtime self-introspection.
+
+Every accepted finding was corrected before the following round. The resulting
+branch has a common record-mutation fence, safe disposal after rollback failure,
+stable public driver-error boundaries, verified multi-page history maintenance,
+resolved-schema custom DDL, and isolated Entity-history fixtures. No accepted
+finding remains open, and no reviewer asked for a deferred correction.
+
+The initial post-review release attempt exposed eight test-helper type errors
+and stopped before running tests. The test-only correction passed the full cheap
+preflight. A fresh authoritative `pnpm verify:release` at `d1e7fd3c2` then
+completed successfully with `300/300` test files and `4,893/4,893` tests, all
+required documentation and static checks, all 19 package tarballs, clean
+external installation, and consumer compilation. PostgreSQL `16.15` and `18.6`
+also passed the exact live package acceptance. The three-round review is
+accepted with no unresolved finding.

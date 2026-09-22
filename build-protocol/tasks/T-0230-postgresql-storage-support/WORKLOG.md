@@ -1875,3 +1875,39 @@ operation failed.` and explicitly rejects the secret-bearing raw text, while
   narrowed the generic table callback to `StringValue`. The corrections retain
   scheduled behavior, use Promise resolver signatures, and preserve generic
   `PostgresTableSpec<I, R>` typing. `pnpm typecheck:tooling` now passes.
+
+## Human-Requested Three-Round Final Review Completion
+
+- Three consequential reviewers independently inspected the branch in sequence
+  with no inherited conversation. Each dispatch named an existing project role
+  and explicitly selected its required model and reasoning profile. All accepted
+  findings from one round were corrected, verified, committed, and pushed before
+  the next round began.
+- Round 1, performance and reliability, found four issues: normal record
+  mutations did not share the absent-row CAS fence; rollback failure did not
+  discard clients; several public paths exposed raw driver failures; and live
+  history coverage did not cross its page boundary. The corrections added the
+  shared mutation fence, safe client disposal, the public error boundary, and a
+  real multi-page history case. That case also exposed and corrected an
+  incomplete trim cursor.
+- Round 2, TypeScript and public API documentation, found that custom table DDL
+  did not receive the resolved PostgreSQL schema. `PostgresTableSpec` now carries
+  the resolved schema, and both explicit and tenant-specific non-`public`
+  schemas are covered.
+- Round 3, style and maintainability, found incomplete mutable-fixture cleanup in
+  the Entity-history suite. A complete reset now runs before every case. The
+  reviewer withdrew its provisional `@types/pg` concern after checking the
+  packed declaration and accepted the deliberately local transaction helpers.
+- Disposable PostgreSQL `16.15` and `18.6` servers passed the exact live package
+  acceptance after the consequential runtime and API corrections. The final
+  hermetic package suite passes all `167` tests.
+- The first post-review release run stopped at tooling typechecking because four
+  new test helpers had eight typing errors. Those test-only defects were fixed,
+  and the complete cheap preflight passed before the authoritative retry.
+- Fresh `pnpm verify:release` at `d1e7fd3c2` exits zero: all `300/300` test files
+  and `4,893/4,893` tests pass. Coverage is 93.31% statements
+  (`23,872/25,581`), 90.11% branches (`14,110/15,657`), 93.03% functions
+  (`6,051/6,504`), and 94.48% lines (`22,070/23,359`). The same run passes all
+  Node, Proto, generation, build, tooling, lint, cleanup, TSDoc, copyright,
+  formatting, documentation, API, logging, dependency, packaging, external
+  installation, and consumer-compilation gates.
