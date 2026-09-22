@@ -1,6 +1,6 @@
 # T-0230 Review Record
 
-Status: Final affected re-review complete; last correction batch implemented
+Status: Source-quality correction review in progress
 
 Initial review endpoint: `c09c961d6bf75e2cb90fb36fa2dc2c2e0882dd15`
 Correction endpoint: `34ca4b669c78612bb158bba6635524e2c00341ed`
@@ -701,3 +701,37 @@ undocumented internal classes/methods and undocumented type parameters fail.
 The PostgreSQL type-vocabulary regression must first fail because no canonical
 vocabulary exists. Production and documentation corrections begin only after
 those RED results are recorded.
+
+### Source-Quality Correction Review Assignment
+
+The converged correction at `9a71f961d` receives one independent review wave
+with no inherited conversation. The existing `style_maintainability_reviewer`
+checks source layout, naming, method and module clarity, and the new enforcement
+logic under its explicit immutable `gpt-5.6-terra` / `high` profile. The
+existing `typescript_api_docs_reviewer` checks TypeScript contracts, generic
+documentation, declaration output, and the PostgreSQL type vocabulary under
+its explicit immutable `gpt-5.6-terra` / `high` profile. The existing
+`documentation_reviewer` checks human and agentic wording, structure, and the
+stable policy filename under its explicit immutable `gpt-5.6-luna` / `medium`
+profile. All three assignments are read-only and concern-specific. The Desktop
+surface exposes the configured roles and profiles but not additional runtime
+self-introspection.
+
+### Source-Quality Correction Review Findings
+
+The independent wave reported nine P2 findings and no P0 or P1 finding. All are
+accepted and corrected in one batch:
+
+- active review and worklog status now match the correction state, and old
+  unexplained uses of “fenced” now name the lock and verification behavior;
+- changed-file enforcement fails with an actionable error when `origin/master`
+  is unavailable, applies semantic rules only to authored production sources,
+  covers class expressions, and rejects duplicate or stale `@typeParam` tags;
+- PostgreSQL bind values now use a concrete `PostgresParameter` union instead
+  of `unknown`, and DDL-producing contracts now use the canonical
+  `PostgresDdlType` union instead of widening back to `string`.
+
+The correction passes the complete checker suites (`188/188`), PostgreSQL unit
+tests (`168/168`), production and tooling typechecking, scoped ESLint, cleanup
+and TSDoc enforcement, repository formatting, and diff hygiene. Re-review is
+limited to the three concerns changed by this accepted batch.

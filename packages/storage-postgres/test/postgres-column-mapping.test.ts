@@ -15,14 +15,17 @@
 import { create, ScalarType } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { EntityOption_KindSchema, VersionSchema } from "@spine-event-engine/proto";
-import { ColumnTypes } from "@spine-event-engine/storage";
-import { describe, expect, it } from "vitest";
+import { ColumnTypes, type ColumnMapping } from "@spine-event-engine/storage";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { PostgresColumnMapping } from "../src/postgres/column-mapping.js";
+import type { PostgresParameter } from "../src/postgres/parameter.js";
 
 describe("PostgresColumnMapping", () => {
   it("converts timestamp and version columns to exact native values", () => {
     const mapping = new PostgresColumnMapping();
+
+    expectTypeOf(mapping).toExtend<ColumnMapping<PostgresParameter>>();
 
     expect(
       mapping.of(ColumnTypes.message(TimestampSchema))(

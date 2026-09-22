@@ -37,6 +37,7 @@ import { PostgresEntityCommitStorage } from "./entity-commit.js";
 import { PostgresDeliveryCleanupStorage } from "./delivery-cleanup.js";
 import { PostgresTableResolver } from "./table-resolver.js";
 import { PostgresTableSpecs } from "./table-spec.js";
+import type { PostgresDdlType } from "./data-type.js";
 
 /**
  * Configures a PostgreSQL storage connection pool.
@@ -176,7 +177,7 @@ export interface PostgresColumnSpec {
   /**
    * Specifies the canonical native PostgreSQL type.
    */
-  readonly postgresType: string;
+  readonly postgresType: PostgresDdlType;
 
   /**
    * Controls whether the column accepts null values.

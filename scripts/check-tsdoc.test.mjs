@@ -17,6 +17,7 @@ function createFixture() {
   writeFileSync(join(repoRoot, "packages/demo/src/index.ts"), validSource());
   run("git", ["add", "."], repoRoot);
   run("git", ["commit", "--quiet", "-m", "fixture"], repoRoot);
+  run("git", ["update-ref", "refs/remotes/origin/master", "HEAD"], repoRoot);
 
   return repoRoot;
 }
@@ -129,6 +130,53 @@ describe("check-tsdoc", () => {
     expect(result.stderr).toContain("InternalWorker.run");
   });
 
+  it("fails when the changed-file baseline is unavailable", () => {
+    const repoRoot = createFixture();
+    run("git", ["update-ref", "-d", "refs/remotes/origin/master"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Unable to determine changed TSDoc baseline");
+  });
+
+  it("does not require semantic documentation for internal script declarations", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "scripts/internal.mjs",
+      [
+        "class ScriptWorker {",
+        "",
+        "  run(value) { return value; }",
+        "}",
+        "void ScriptWorker;",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("requires documentation for changed class expressions and their methods", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/expression.ts",
+      ["export const Worker = class {", "", "  run(): void {}", "};", ""].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Worker:ClassExpression");
+    expect(result.stderr).toContain("Worker.run");
+  });
+
   it("requires one description for every generic type parameter", () => {
     const repoRoot = createFixture();
     run("git", ["update-ref", "refs/remotes/origin/master", "HEAD"], repoRoot);
@@ -160,6 +208,32 @@ describe("check-tsdoc", () => {
     expect(result.stderr).toContain("missing-type-param");
     expect(result.stderr).toContain("Value");
     expect(result.stderr).toContain("Result");
+  });
+
+  it("rejects duplicate and stale generic type parameter documentation", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/generic-tags.ts",
+      [
+        "/**",
+        " * Represents a generic value.",
+        " *",
+        " * @typeParam Value The represented value.",
+        " * @typeParam Value A duplicate description.",
+        " * @typeParam Other A parameter that does not exist.",
+        " */",
+        "export interface GenericValue<Value> { readonly value: Value; }",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("duplicate-type-param");
+    expect(result.stderr).toContain("stale-type-param");
   });
 
   it("requires a blank line between class members in changed production files", () => {
@@ -1749,7 +1823,7 @@ describe("check-tsdoc", () => {
     expect(result.stderr).not.toContain("onChange(");
   });
 
-  it("checks protected methods of exported classes without exposing private members", () => {
+  it("checks protected and private methods of changed exported classes", () => {
     const repoRoot = createFixture();
     const path = "packages/server/src/index.ts";
     writeSource(
@@ -1784,7 +1858,7 @@ describe("check-tsdoc", () => {
     expect(invalid.stderr).toContain("TransactionOwner.rollbackTransaction()");
     expect(invalid.stderr).toContain("missing-param");
     expect(invalid.stderr).toContain("missing-returns");
-    expect(invalid.stderr).not.toContain("TransactionOwner.internal(value)");
+    expect(invalid.stderr).toContain("TransactionOwner.internal(value)");
 
     writeSource(
       repoRoot,
@@ -1814,6 +1888,8 @@ describe("check-tsdoc", () => {
         "",
         "  /**\n   * Rolls back a transaction.\n   * @returns Rollback result.\n   */",
         "  protected rollbackTransaction(): string { return 'rolled-back'; }",
+        "",
+        "  /**\n   * Returns one internal transaction value.\n   * @param value Source value.\n   * @returns Internal value.\n   */",
         "  private internal(value: string): string { return value; }",
         "}",
         "",

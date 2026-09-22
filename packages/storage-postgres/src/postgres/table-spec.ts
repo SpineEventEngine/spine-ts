@@ -17,7 +17,7 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { RecordColumn, RecordColumnType } from "@spine-event-engine/storage";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
-import { PostgresDataTypes } from "./data-type.js";
+import { PostgresDataTypes, type PostgresDdlType } from "./data-type.js";
 import type { PostgresColumnSpec, PostgresTableSpec } from "./storage-factory.js";
 import { PostgresIdColumn } from "./id-column.js";
 
@@ -31,7 +31,7 @@ export const PostgresTableSpecs: PostgresTableSpecifications = Object.freeze({
    * @param type Declared Protobuf column type.
    * @returns Canonical PostgreSQL DDL type name.
    */
-  postgresColumnType(type: RecordColumnType): string {
+  postgresColumnType(type: RecordColumnType): PostgresDdlType {
     switch (type.kind) {
       case "enum":
         return PostgresDataTypes.integer;
@@ -98,7 +98,7 @@ interface PostgresTableSpecifications {
    * @param type Declared Protobuf column type.
    * @returns Canonical PostgreSQL DDL type name.
    */
-  postgresColumnType(type: RecordColumnType): string;
+  postgresColumnType(type: RecordColumnType): PostgresDdlType;
 
   /**
    * Builds the complete physical layout for one record family.
@@ -126,7 +126,7 @@ const PostgresColumnTypes = Object.freeze({
    * @param type Protobuf scalar kind.
    * @returns Canonical PostgreSQL DDL type name.
    */
-  scalar(type: ScalarType): string {
+  scalar(type: ScalarType): PostgresDdlType {
     switch (type) {
       case ScalarType.STRING:
         return PostgresDataTypes.text;

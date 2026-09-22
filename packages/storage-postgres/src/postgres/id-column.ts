@@ -16,7 +16,8 @@ import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { StringifierRegistry } from "@spine-event-engine/core";
 
-import { PostgresDataTypes } from "./data-type.js";
+import { PostgresDataTypes, type PostgresDdlType } from "./data-type.js";
+import type { PostgresParameter } from "./parameter.js";
 
 /**
  * Describes a primitive or generated-message record identifier.
@@ -37,7 +38,7 @@ export class PostgresIdColumn<I> {
   /**
    * Specifies the canonical PostgreSQL ID column type.
    */
-  readonly postgresType: string;
+  readonly postgresType: PostgresDdlType;
 
   /**
    * Creates one declared ID conversion.
@@ -59,11 +60,11 @@ export class PostgresIdColumn<I> {
    * @param id Identifies the logical record.
    * @returns The JDBC-compatible PostgreSQL value.
    */
-  value(id: I): unknown {
+  value(id: I): PostgresParameter {
     if (typeof this.type !== "string")
       return this.text(this.#stringifiers.forMessage(this.type).toString(id as never));
-    PostgresIdTypes.validate(this.type, id);
-    return this.type === "string" ? this.text(id as string) : id;
+    if (this.type === "string") return this.text(id as string);
+    return PostgresIdTypes.validate(this.type, id);
   }
 
   /**
@@ -108,7 +109,7 @@ const PostgresIdTypes = Object.freeze({
    * @param type Primitive ID kind or generated message schema.
    * @returns Canonical PostgreSQL DDL type name.
    */
-  type<I>(type: PostgresIdType<I>): string {
+  type<I>(type: PostgresIdType<I>): PostgresDdlType {
     if (typeof type !== "string") return PostgresDataTypes.varchar512;
     if (type === "string") return PostgresDataTypes.varchar512;
     if (type === "int32") return PostgresDataTypes.integer;
@@ -159,9 +160,10 @@ const PostgresIdTypes = Object.freeze({
    *
    * @param type Primitive ID kind.
    * @param value Logical identifier value.
+   * @returns The validated PostgreSQL parameter.
    */
-  validate(type: string, value: unknown): void {
-    if (type === "string" && typeof value === "string") return;
+  validate(type: string, value: unknown): PostgresParameter {
+    if (type === "string" && typeof value === "string") return value;
     if (
       type === "int32" &&
       typeof value === "number" &&
@@ -169,9 +171,9 @@ const PostgresIdTypes = Object.freeze({
       value >= -(2 ** 31) &&
       value < 2 ** 31
     )
-      return;
+      return value;
     if (type === "int64" && typeof value === "bigint" && value >= -(1n << 63n) && value < 1n << 63n)
-      return;
+      return value;
     throw new Error(`PostgreSQL ${type} ID is invalid.`);
   },
 });

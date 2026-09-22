@@ -22,6 +22,9 @@ export {
   type PostgresTableSpec,
   type PostgresTenantStorageOptions,
 } from "./postgres/storage-factory.js";
+
+export type { PostgresDdlType } from "./postgres/data-type.js";
+
 export {
   PostgresStorageConfigurationError,
   PostgresStorageConnectionError,
@@ -29,4 +32,5 @@ export {
   PostgresStorageOperationError,
   PostgresStorageSchemaError,
 } from "./postgres/errors.js";
+
 export type { PostgresEntityStorageHandle } from "./postgres/entity-history.js";

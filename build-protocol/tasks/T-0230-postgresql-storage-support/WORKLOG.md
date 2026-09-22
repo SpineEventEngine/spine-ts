@@ -291,8 +291,9 @@ PRECISION` mapping plus 63-byte lowercase physical-name validation passed in
   task surface does not expose runtime self-introspection, so the immutable
   configured role/profile is the available metadata.
 - Scope is the coherent PostgreSQL record/query runtime: typed conversion,
-  factory wiring and handle lifecycle, CRUD/batches/immutable writes, advisory-
-  fenced CAS with exact bounded retry, and complete provider SQL pushdown.
+  factory wiring and handle lifecycle, CRUD/batches/immutable writes, CAS
+  coordinated by advisory locks with exact bounded retry, and complete provider
+  SQL pushdown.
 - Strict focused RED/GREEN evidence is required. Driver doubles may isolate
   external I/O, but tests exercise production factory/storage paths and cannot
   add test-only APIs. Live PostgreSQL, histories, server atomic work, docs,
@@ -480,7 +481,8 @@ DISTINCT FROM`; an ascending null continuation emits `IS NOT NULL` rather than
   self-introspection may be unavailable, so the immutable role/profile is the
   expected metadata.
 - Scope is Entity current/state/event handles with bounded 128-key provider SQL
-  history, atomic Entity commit, and fenced Inbox cleanup. The binding current
+  history, atomic Entity commit, and Inbox cleanup that locks and verifies the
+  current session record. The binding current
   JVM history sources were freshly reread at the recorded upstream SHAs; the
   accepted PostgreSQL locking/page/close plan supplies provider mechanics not
   defined by JVM.
@@ -564,7 +566,7 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
 - Evidence: the focused Entity test passed `1 passed (1)`; package typecheck,
   scoped ESLint, Prettier, full TSDoc, cleanup rules, and diff hygiene passed.
 - Limitation: enabled bounded state/event histories, atomic Entity commit, and
-  fenced cleanup remain active Task 4 work.
+  lock-and-verify cleanup remain active Task 4 work.
 
 ## PostgreSQL Catalog INT Compatibility
 
@@ -756,9 +758,9 @@ packages/storage-postgres/test/postgres-record-storage.test.ts --maxWorkers=1`
 
 ## Task 4C Implementation Dispatch
 
-- Existing role: `implementer`; responsibility is the bounded PostgreSQL
-  fenced-Inbox cleanup slice and its focused tests. No other production writer
-  may edit overlapping files.
+- Existing role: `implementer`; responsibility is the bounded PostgreSQL Inbox
+  cleanup slice that locks and verifies the current session record, plus its
+  focused tests. No other production writer may edit overlapping files.
 - Explicit dispatch profile: `gpt-5.6-terra` / `medium`; child spawning is
   prohibited. Runtime self-introspection may be unavailable, so the immutable
   configured role/profile and explicit dispatch fields are the acceptance
@@ -1964,25 +1966,24 @@ operation failed.` and explicitly rejects the secret-bearing raw text, while
   typing; missing generic-parameter documentation; unexplained “fenced” prose;
   dense declaration layout; incomplete generic TSDoc; undocumented internal
   classes and methods; and scattered PostgreSQL DDL type strings.
-- Remaining work is estimated at 3–6 hours of active agent time. It includes a
-  complete PostgreSQL source inventory, test-first TSDoc enforcement changes,
-  package-wide documentation and layout correction, one typed DDL vocabulary,
-  focused package/tooling tests, full affected gates, review recording, commits,
-  and pushes. No external wait is expected.
+- The source inventory, test-first checker changes, package-wide documentation
+  and layout correction, typed DDL vocabulary, focused package/tooling tests,
+  and first correction push are complete. The remaining work is the independent
+  correction review, its accepted fixes, final verification, and the resulting
+  commits and pushes.
 - The installed `pg` 8.23.0 API exposes type-parser OIDs such as
   `types.builtins.VARCHAR === 1043`; it does not expose SQL DDL typename values.
   Using those numeric OIDs in `CREATE TABLE` would be incorrect. The accepted
   correction is a package-local typed DDL vocabulary used by production schema
   mapping and verification.
-- `build-protocol/standalone-function-necessities/T-0230.json` is consumed by
-  `lint:cleanup`, but its task-number filename is not a suitable permanent
-  project name. It will become `storage-postgres.json`, and the checker will map
-  the package to that stable partition.
-- The current TSDoc rule enforces semantic coverage primarily for public
-  production declarations. The correction extends the rule and checker to
-  every class and method in changed authored production files and requires
-  `@typeParam` coverage for every generic declaration it checks. Existing
-  baseline files are not silently grandfathered by a new task-number ledger.
+- The permanent cleanup-policy partition is now
+  `build-protocol/standalone-function-necessities/storage-postgres.json`, and
+  `lint:cleanup` maps the package to that stable name.
+- The TSDoc rule and checker now cover every class and method in changed
+  authored production files, require `@typeParam` coverage for every generic
+  declaration they check, and enforce blank lines between class members.
+  Existing baseline files are not silently grandfathered by a new task-number
+  ledger.
 - Selected skills are `receiving-code-review`, `test-driven-development`,
   `systematic-debugging`, and `verification-before-completion`; each selected
   instruction file was read before its governed action. This correction remains

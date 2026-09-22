@@ -39,6 +39,7 @@ import {
   PostgresRollbackErrors,
 } from "./errors.js";
 import { PostgresIdColumn } from "./id-column.js";
+import type { PostgresParameter } from "./parameter.js";
 import type { PostgresTableSpec } from "./storage-factory.js";
 import { PostgresTableInitializer } from "./table-initializer.js";
 
@@ -148,7 +149,11 @@ export interface PostgresRecordExecutor<I, R extends Message> {
    * @param values Supplies bound SQL values.
    * @returns Decoded records.
    */
-  query(client: PoolClient, sql: string, values: readonly unknown[]): Promise<readonly R[]>;
+  query(
+    client: PoolClient,
+    sql: string,
+    values: readonly PostgresParameter[],
+  ): Promise<readonly R[]>;
 
   /**
    * Converts one declared column value to its PostgreSQL representation.
@@ -156,7 +161,7 @@ export interface PostgresRecordExecutor<I, R extends Message> {
    * @param value Supplies the logical column value.
    * @returns The PostgreSQL parameter value.
    */
-  column(name: string, value: unknown): unknown;
+  column(name: string, value: unknown): PostgresParameter;
 
   /**
    * Returns the fully qualified backing table identifier.
@@ -194,7 +199,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
 
   readonly #idColumn: PostgresIdColumn<I>;
 
-  readonly #columns: ColumnMapping<unknown>;
+  readonly #columns: ColumnMapping<PostgresParameter>;
 
   readonly #initializer: PostgresTableInitializer;
 
@@ -650,7 +655,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   private async historyEntries(
     client: PoolClient,
     sql: string,
-    values: readonly unknown[],
+    values: readonly PostgresParameter[],
   ): Promise<readonly R[]> {
     const result = await client.query<Row>(sql, [...values]);
     try {
@@ -669,7 +674,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @param value Supplies its logical value.
    * @returns The PostgreSQL parameter value.
    */
-  private historyColumn(name: string, value: unknown): unknown {
+  private historyColumn(name: string, value: unknown): PostgresParameter {
     const column = this.recordSpec.columns.find((candidate) => candidate.name === name);
     if (column === undefined)
       throw new PostgresStorageOperationError(`PostgreSQL history column is not declared: ${name}`);
@@ -702,7 +707,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @param id Identifies the record.
    * @returns Values ordered for the generated insert statement.
    */
-  private values(record: R, id = this.recordSpec.idValueIn(record)): unknown[] {
+  private values(record: R, id = this.recordSpec.idValueIn(record)): PostgresParameter[] {
     const materialized = this.recordSpec.materialize(record);
     return [
       this.id(id),
@@ -849,7 +854,12 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @param bind Collects parameter values.
    * @returns The comparison expression.
    */
-  private afterTerm(column: string, direction: string, value: unknown, bind: Binds): string {
+  private afterTerm(
+    column: string,
+    direction: string,
+    value: PostgresParameter,
+    bind: Binds,
+  ): string {
     if (value === null) return direction === "desc" ? "FALSE" : `${column} IS NOT NULL`;
     return `(${column} IS NOT NULL AND ${column} ${direction === "desc" ? "<" : ">"} ${bind.add(value)})`;
   }
@@ -893,7 +903,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @param value Supplies the logical value.
    * @returns The PostgreSQL parameter value.
    */
-  private value(name: string, value: unknown): unknown {
+  private value(name: string, value: unknown): PostgresParameter {
     if (name === "id" || name === "ID") return this.id(value as I);
     const column = this.recordSpec.columns.find((candidate) => candidate.name === name);
     if (column === undefined)
@@ -907,7 +917,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @param id Supplies the logical ID.
    * @returns The PostgreSQL parameter value.
    */
-  private id(id: I): unknown {
+  private id(id: I): PostgresParameter {
     try {
       return this.#idColumn.value(id);
     } catch (error) {
@@ -1023,14 +1033,14 @@ interface Row {
  */
 interface Compiled {
   readonly sql: string;
-  readonly values: readonly unknown[];
+  readonly values: readonly PostgresParameter[];
 }
 
 /**
  * Allocates PostgreSQL placeholders and collects their values.
  */
 class Binds {
-  readonly values: unknown[] = [];
+  readonly values: PostgresParameter[] = [];
 
   /**
    * Adds one bind value.
@@ -1038,7 +1048,7 @@ class Binds {
    * @param value Supplies the value.
    * @returns Its one-based PostgreSQL placeholder.
    */
-  add(value: unknown): string {
+  add(value: PostgresParameter): string {
     this.values.push(value);
     return `$${String(this.values.length)}`;
   }

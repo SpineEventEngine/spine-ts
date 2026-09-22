@@ -226,7 +226,11 @@ function changedSourceFiles(root) {
     cwd: root,
     encoding: "utf8",
   });
-  if (mergeBase.status !== 0 || mergeBase.stdout.trim() === "") return changed;
+  if (mergeBase.status !== 0 || mergeBase.stdout.trim() === "")
+    throw new Error(
+      "Unable to determine changed TSDoc baseline from origin/master. " +
+        "Fetch the official master branch before running this check.",
+    );
   for (const range of [`${mergeBase.stdout.trim()}...HEAD`, undefined, "--cached"]) {
     const args = ["diff", "--name-only", "--no-renames", "--diff-filter=ACMRD"];
     if (range !== undefined) args.push(range);
@@ -649,16 +653,20 @@ function visitSource(source, file, checker, failures, inspectChangedInternals) {
   }
   if (/^packages\/server\//.test(file))
     inspectInternalObjectMembers(source, file, checker, failures, inspected);
-  if (inspectChangedInternals) {
+  if (inspectChangedInternals && isChangedProductionSource(file)) {
     inspectChangedClassAndMethodDocs(source, file, checker, failures, inspected);
     inspectChangedTypeParameters(source, file, failures);
     inspectChangedClassMemberSpacing(source, file, failures);
   }
 }
 
+function isChangedProductionSource(file) {
+  return /^packages\/[^/]+\/src\//.test(file) || /^examples\/.+\/src\//.test(file);
+}
+
 function inspectChangedClassMemberSpacing(source, file, failures) {
   const visit = (node) => {
-    if (ts.isClassDeclaration(node)) {
+    if (isClassLike(node)) {
       for (let index = 1; index < node.members.length; index += 1) {
         const previous = node.members[index - 1];
         const current = node.members[index];
@@ -678,9 +686,16 @@ function inspectChangedClassMemberSpacing(source, file, failures) {
 
 function inspectChangedClassAndMethodDocs(source, file, checker, failures, inspected) {
   const visit = (node) => {
-    if (ts.isClassDeclaration(node) && !isExported(node)) {
-      const name = declarationName(node, undefined) ?? `class@${node.getStart(source)}`;
-      inspectDocumentation(node, file, `${name}:ClassDeclaration`, checker, failures);
+    if (isClassLike(node) && (!ts.isClassDeclaration(node) || !isExported(node))) {
+      const name = classLikeName(node, source) ?? `class@${node.getStart(source)}`;
+      inspectDocumentation(
+        node,
+        file,
+        `${name}:${ts.SyntaxKind[node.kind]}`,
+        checker,
+        failures,
+        classDocumentationNode(node),
+      );
     }
     if (isChangedMethod(node) && !methodAlreadyInspected(node, inspected)) {
       inspectCallable(node, file, changedMethodName(node, source), checker, failures);
@@ -688,6 +703,23 @@ function inspectChangedClassAndMethodDocs(source, file, checker, failures, inspe
     ts.forEachChild(node, visit);
   };
   ts.forEachChild(source, visit);
+}
+
+function isClassLike(node) {
+  return ts.isClassDeclaration(node) || ts.isClassExpression(node);
+}
+
+function classDocumentationNode(node) {
+  if (ts.isClassExpression(node) && ts.isVariableDeclaration(node.parent))
+    return variableStatementFor(node.parent) ?? node;
+  return node;
+}
+
+function classLikeName(node, source) {
+  if (node.name !== undefined) return node.name.getText(source);
+  if (ts.isClassExpression(node) && ts.isVariableDeclaration(node.parent))
+    return node.parent.name.getText(source);
+  return undefined;
 }
 
 function isChangedMethod(node) {
@@ -703,6 +735,7 @@ function isChangedMethod(node) {
 function methodAlreadyInspected(node, inspected) {
   if (!belongsToInspectedDeclaration(node, inspected)) return false;
   const owner = node.parent;
+  if (ts.isClassExpression(owner)) return false;
   return !ts.isClassDeclaration(owner) || isDocumentedClassMember(owner, node);
 }
 
@@ -717,6 +750,8 @@ function changedMethodName(node, source) {
 
 function changedMethodOwner(node) {
   if (ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node)) return node.name?.text;
+  if (ts.isClassExpression(node) && ts.isVariableDeclaration(node.parent))
+    return node.name?.text ?? node.parent.name.getText();
   if (ts.isObjectLiteralExpression(node)) {
     const declaration = node.parent;
     if (ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name))
@@ -730,16 +765,32 @@ function inspectChangedTypeParameters(source, file, failures) {
   const visit = (node) => {
     if (node.typeParameters?.length) {
       const documentationNode = typeParameterDocumentationNode(node);
-      const documented = new Set(documentationFor(documentationNode).typeParameters);
+      const documented = documentationFor(documentationNode).typeParameters;
       const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
       const declaration =
         node.name === undefined ? `${ts.SyntaxKind[node.kind]}@${line}` : node.name.getText(source);
       for (const parameter of node.typeParameters) {
-        if (!documented.has(parameter.name.text))
+        const matches = documented.filter(({ name }) => name === parameter.name.text);
+        if (!matches.some(({ description }) => !isPlaceholder(description)))
           failures.push({
             rule: "missing-type-param",
             file,
             name: `${declaration}@${line}<${parameter.name.text}>`,
+          });
+        if (matches.length > 1)
+          failures.push({
+            rule: "duplicate-type-param",
+            file,
+            name: `${declaration}@${line}<${parameter.name.text}>`,
+          });
+      }
+      const declared = new Set(node.typeParameters.map(({ name }) => name.text));
+      for (const parameter of documented) {
+        if (!declared.has(parameter.name))
+          failures.push({
+            rule: "stale-type-param",
+            file,
+            name: `${declaration}@${line}<${parameter.name}>`,
           });
       }
     }
@@ -749,6 +800,7 @@ function inspectChangedTypeParameters(source, file, failures) {
 }
 
 function typeParameterDocumentationNode(node) {
+  if (ts.isClassExpression(node)) return classDocumentationNode(node);
   if (
     (ts.isFunctionTypeNode(node) || ts.isConstructorTypeNode(node)) &&
     ts.isTypeAliasDeclaration(node.parent)
@@ -1294,10 +1346,8 @@ function documentationFor(node) {
   const inherited =
     tags.some((tag) => tag.name === "inheritdoc") || /@inheritDoc\b/u.test(jsdoc?.getText() ?? "");
   const typeParameters = [
-    ...(jsdoc?.getText() ?? "").matchAll(/@typeParam\s+([\p{L}_$][\w$]*)\s+([^\r\n*]+)/gu),
-  ]
-    .filter(([, , description]) => !isPlaceholder(description.trim()))
-    .map(([, name]) => name);
+    ...(jsdoc?.getText() ?? "").matchAll(/@typeParam\s+([\p{L}_$][\w$]*)(?:\s+([^\r\n*]*))?/gu),
+  ].map(([, name, description = ""]) => ({ name, description: description.trim() }));
   return {
     summary: summary === "" ? undefined : summary,
     tags,

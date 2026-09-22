@@ -42,6 +42,7 @@ import {
   PostgresStorageOperationError,
 } from "./errors.js";
 import { PostgresRecordStorage, type PostgresRecordExecutor } from "./record-storage.js";
+import type { PostgresParameter } from "./parameter.js";
 
 /**
  * Opens one grouped PostgreSQL record family for an Entity history.
@@ -376,7 +377,11 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
    * @param version Optional inclusive starting version.
    * @returns PostgreSQL bind values in query order.
    */
-  private backwardValues(id: I, depth: number, version: bigint | undefined): readonly unknown[] {
+  private backwardValues(
+    id: I,
+    depth: number,
+    version: bigint | undefined,
+  ): readonly PostgresParameter[] {
     return version === undefined
       ? [this.entityValue(id), depth]
       : [this.entityValue(id), version, depth];
@@ -400,7 +405,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
    * @param id Entity identifier.
    * @returns PostgreSQL-bound identifier value.
    */
-  private entityValue(id: I): unknown {
+  private entityValue(id: I): PostgresParameter {
     return this.#executor.column("entity_id", this.input.id.pack(id));
   }
 
@@ -535,9 +540,9 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   private async keys(
     client: import("pg").PoolClient,
     sql: string,
-    values: readonly unknown[],
-  ): Promise<readonly unknown[]> {
-    return (await client.query<{ readonly ID: unknown }>(sql, [...values])).rows.map(
+    values: readonly PostgresParameter[],
+  ): Promise<readonly PostgresParameter[]> {
+    return (await client.query<{ readonly ID: PostgresParameter }>(sql, [...values])).rows.map(
       ({ ID }) => ID,
     );
   }
@@ -549,7 +554,10 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
    * @param keys Stored record identifiers.
    * @returns Completion after the deletion query.
    */
-  private deleteKeys(client: import("pg").PoolClient, keys: readonly unknown[]): Promise<void> {
+  private deleteKeys(
+    client: import("pg").PoolClient,
+    keys: readonly PostgresParameter[],
+  ): Promise<void> {
     if (keys.length === 0) return Promise.resolve();
     const binds = keys.map((_, index) => `$${String(index + 1)}`).join(", ");
     return client
@@ -764,7 +772,11 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
    * @param version Optional inclusive starting version.
    * @returns PostgreSQL bind values in query order.
    */
-  private backwardValues(id: I, depth: number, version: bigint | undefined): readonly unknown[] {
+  private backwardValues(
+    id: I,
+    depth: number,
+    version: bigint | undefined,
+  ): readonly PostgresParameter[] {
     const entity = this.#executor.column("entity_id", this.input.id.pack(id));
     return version === undefined ? [entity, depth] : [entity, version, depth];
   }
@@ -835,10 +847,10 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
    */
   private keys(
     client: import("pg").PoolClient,
-    values: readonly unknown[],
-  ): Promise<readonly unknown[]> {
+    values: readonly PostgresParameter[],
+  ): Promise<readonly PostgresParameter[]> {
     return client
-      .query<{ readonly ID: unknown }>(this.deleteSql(), [...values])
+      .query<{ readonly ID: PostgresParameter }>(this.deleteSql(), [...values])
       .then(({ rows }) => rows.map(({ ID }) => ID));
   }
 
@@ -849,7 +861,10 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
    * @param keys Stored event identifiers.
    * @returns Completion after the deletion query.
    */
-  private deleteKeys(client: import("pg").PoolClient, keys: readonly unknown[]): Promise<void> {
+  private deleteKeys(
+    client: import("pg").PoolClient,
+    keys: readonly PostgresParameter[],
+  ): Promise<void> {
     if (keys.length === 0) return Promise.resolve();
     const binds = keys.map((_, index) => `$${String(index + 1)}`).join(", ");
     return client
@@ -964,11 +979,11 @@ const PostgresSessionLocks = Object.freeze({
   },
 });
 
-type HistoryKey = readonly [unknown, unknown, unknown];
+type HistoryKey = readonly [PostgresParameter, PostgresParameter, PostgresParameter];
 interface HistoryRow {
-  readonly created: unknown;
-  readonly version: unknown;
-  readonly ID: unknown;
+  readonly created: PostgresParameter;
+  readonly version: PostgresParameter;
+  readonly ID: PostgresParameter;
 }
 
 /**

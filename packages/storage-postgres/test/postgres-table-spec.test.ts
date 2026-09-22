@@ -16,14 +16,19 @@ import { ScalarType } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { ColumnTypes, RecordColumn } from "@spine-event-engine/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { PostgresDataTypes } from "../src/postgres/data-type.js";
+import { PostgresDataTypes, type PostgresDdlType } from "../src/postgres/data-type.js";
 import { PostgresTableSpecs } from "../src/postgres/table-spec.js";
 import { PostgresTableResolver } from "../src/postgres/table-resolver.js";
 
 describe("PostgreSQL table foundation", () => {
   it("defines the supported PostgreSQL DDL type names once", () => {
+    expectTypeOf<PostgresDdlType>().not.toEqualTypeOf<string>();
+    expectTypeOf(
+      PostgresTableSpecs.postgresColumnType(ColumnTypes.scalar(ScalarType.STRING)),
+    ).toEqualTypeOf<PostgresDdlType>();
+
     expect(PostgresDataTypes).toMatchObject({
       bigInt: "BIGINT",
       boolean: "BOOLEAN",

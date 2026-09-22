@@ -41,3 +41,8 @@ export const PostgresDataTypes: Readonly<PostgresDataTypeNames> = Object.freeze(
   text: "TEXT",
   varchar512: "VARCHAR(512)",
 });
+
+/**
+ * Lists the DDL type declarations supported by this provider.
+ */
+export type PostgresDdlType = (typeof PostgresDataTypes)[keyof typeof PostgresDataTypes];

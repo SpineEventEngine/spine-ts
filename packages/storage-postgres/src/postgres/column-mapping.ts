@@ -21,17 +21,18 @@ import type {
   RecordColumnType,
 } from "@spine-event-engine/storage";
 
+import type { PostgresParameter } from "./parameter.js";
+
 const timestampType = "google.protobuf.Timestamp";
 const versionType = "spine.core.Version";
 
 /**
  * Converts typed Protobuf columns to PostgreSQL-native parameters.
  *
- * The common result is `unknown` because the storage SPI requires one result
- * type while `pg` accepts different JavaScript parameter types for different
- * PostgreSQL columns. Each conversion still preserves its typed input.
+ * The result union lists every JavaScript value produced for a `pg` bind
+ * parameter while each conversion preserves its typed Protobuf input.
  */
-export class PostgresColumnMapping implements ColumnMapping<unknown> {
+export class PostgresColumnMapping implements ColumnMapping<PostgresParameter> {
   readonly #stringifiers: StringifierRegistry;
 
   /**
@@ -50,9 +51,9 @@ export class PostgresColumnMapping implements ColumnMapping<unknown> {
    * @param type Identifies the declared Protobuf value type.
    * @returns The PostgreSQL parameter conversion.
    */
-  of<V>(type: RecordColumnType<V>): ColumnTypeMapping<V, unknown> {
+  of<V>(type: RecordColumnType<V>): ColumnTypeMapping<V, PostgresParameter> {
     if (type.kind === "scalar") return PostgresColumnMappings.scalar(type.scalar);
-    if (type.kind === "enum") return (value) => value;
+    if (type.kind === "enum") return (value) => value as PostgresParameter;
     if (type.message.typeName === timestampType)
       return (value) => PostgresColumnMappings.timestamp(value);
     if (type.message.typeName === versionType)
@@ -66,7 +67,7 @@ export class PostgresColumnMapping implements ColumnMapping<unknown> {
    *
    * @returns The null conversion.
    */
-  ofNull(): ColumnTypeMapping<null, unknown> {
+  ofNull(): ColumnTypeMapping<null, PostgresParameter> {
     return (value) => value;
   }
 }
@@ -79,9 +80,9 @@ const PostgresColumnMappings = Object.freeze({
    * @param type Identifies the Protobuf scalar kind.
    * @returns A conversion that preserves the scalar value.
    */
-  scalar<V>(type: ScalarType): ColumnTypeMapping<V, unknown> {
+  scalar<V>(type: ScalarType): ColumnTypeMapping<V, PostgresParameter> {
     void type;
-    return (value) => value;
+    return (value) => value as PostgresParameter;
   },
 
   /**

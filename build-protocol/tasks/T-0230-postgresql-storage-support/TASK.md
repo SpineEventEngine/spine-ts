@@ -84,9 +84,10 @@ public APIs, release inventory, and live-provider verification.
   public API and implementation are explicitly MySQL-named.
 - Its roughly 3,300 runtime lines and 3,100 test lines cover typed physical
   values, lazy schema creation and strict inspection, query pushdown,
-  compare-and-set, Entity histories, atomic Entity commits, fenced delivery
-  cleanup, tenant-to-database routing, and lifecycle closure. “Like MySQL” means
-  all of these behaviors, not basic CRUD alone.
+  compare-and-set, Entity histories, atomic Entity commits, delivery cleanup
+  that locks and verifies the current session record, tenant-to-database
+  routing, and lifecycle closure. “Like MySQL” means all of these behaviors,
+  not basic CRUD alone.
 - The main dialect differences occur in
   `src/mysql/record-storage.ts`: backticks, `?` parameters, `<=>`, MySQL upsert,
   `INSERT IGNORE`, `GET_LOCK`, engine checks, and MySQL catalog queries.
@@ -311,7 +312,8 @@ Exit: the package is recognized everywhere; tests fail only for missing runtime.
 3. Implement the single JVM-compatible canonical physical-name function,
    collision rules, and 63-byte limit.
 4. Implement table specs, including PostgreSQL float/double, ID/column mappings,
-   concurrent advisory-fenced DDL/catalog inspection, and no global parsers.
+   DDL and catalog inspection coordinated by an advisory lock, and no global
+   parsers.
 5. Add JVM golden, invalid configuration/name/schema, simultaneous two-factory
    initialization, rollback/client release, and lifecycle tests.
 
@@ -396,8 +398,8 @@ Exit: reviews converge, evidence is current, and every commit is on `origin`.
   assuming PostgreSQL 16/18 and remote access are available.
 
 The estimate includes histories, atomic commits, provider query execution, and
-fenced Inbox cleanup. Omitting them would create a misleading “supported”
-provider.
+Inbox cleanup that locks and verifies the current session record before
+deletion. Omitting them would create a misleading “supported” provider.
 
 ## Required Test Matrix
 
