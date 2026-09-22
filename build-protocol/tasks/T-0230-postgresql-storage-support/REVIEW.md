@@ -542,3 +542,28 @@ It remains the sole production writer, uses the immutable configured
 `implementer` profile (`gpt-5.6-terra` / `medium`), and may not spawn child
 agents. Round 2 starts only after focused and live verification, review-log
 updates, commit, and push.
+
+### Round 2: TypeScript And Public-Contract Finding
+
+Round 2 ran as the existing `typescript_api_docs_reviewer`, explicitly
+dispatched as `gpt-5.6-terra` / `high`, with no inherited conversation. The
+surface exposed the configured role/profile but no additional runtime metadata.
+The reviewer found one accepted Important issue and no other public API,
+declaration, package, or documentation defect:
+
+- `PostgresCreateOperationFactory` receives `PostgresTableSpec` without the
+  resolved schema. Custom SQL is executed unchanged while verification inspects
+  the configured schema, and pools do not set `search_path`. Therefore a generic
+  callback cannot correctly create tables for an explicit non-`public` schema or
+  tenant entries with different schemas, despite the documented custom-creation
+  contract.
+
+The smallest correction is to make the resolved schema a required part of the
+already-public resolved `PostgresTableSpec`, pass each database's resolved schema
+at every factory call site, and document that callers must quote both schema and
+table identifiers in custom SQL. Test-first coverage must include explicit
+non-`public` and distinct tenant schemas at the runtime SQL boundary and, if
+practical, live PostgreSQL acceptance. The existing PostgreSQL implementer
+context remains the sole production writer under its immutable `implementer`
+profile (`gpt-5.6-terra` / `medium`) and may not spawn child agents. Round 3
+starts only after this correction is verified, committed, and pushed.
