@@ -1,6 +1,6 @@
 # T-0230 Work Log
 
-Status: Implementation in progress
+Status: Final release verification pending
 Branch: `add-postgresql-storage`
 Checkout: `/Users/armiol/development/experiments/spine-ts`
 Baseline: `6fffcd6102b3eff94b0f77eb6db2fbf2e02ba172`
@@ -1963,14 +1963,14 @@ operation failed.` and explicitly rejects the secret-bearing raw text, while
 
 - Human feedback identified eight connected issues: an internal task number in
   a permanent standalone-function ledger filename; unexplained generic result
-  typing; missing generic-parameter documentation; unexplained “fenced” prose;
+  typing; missing generic-parameter documentation; unclear lock terminology;
   dense declaration layout; incomplete generic TSDoc; undocumented internal
   classes and methods; and scattered PostgreSQL DDL type strings.
 - The source inventory, test-first checker changes, package-wide documentation
   and layout correction, typed DDL vocabulary, focused package/tooling tests,
-  and first correction push are complete. The remaining work is the independent
-  correction review, its accepted fixes, final verification, and the resulting
-  commits and pushes.
+  and first correction push are complete. The accepted independent-review fixes
+  were committed and pushed as `baaf9d45c`. Only the focused re-review, final
+  verification, and final evidence update remain.
 - The installed `pg` 8.23.0 API exposes type-parser OIDs such as
   `types.builtins.VARCHAR === 1043`; it does not expose SQL DDL typename values.
   Using those numeric OIDs in `CREATE TABLE` would be incorrect. The accepted
@@ -1987,4 +1987,10 @@ operation failed.` and explicitly rejects the secret-bearing raw text, while
 - Selected skills are `receiving-code-review`, `test-driven-development`,
   `systematic-debugging`, and `verification-before-completion`; each selected
   instruction file was read before its governed action. This correction remains
-  in the current branch and context with no child agent.
+  in the current branch and context; the specialist reviewers were read-only
+  and did not spawn child agents.
+- The memory-free maintainability, API, and documentation re-reviews have
+  converged. Their accepted follow-up findings are corrected, and final
+  confirmations report no remaining issue. The public API inventory now
+  includes `PostgresDdlType`; final release verification is the only remaining
+  task step.

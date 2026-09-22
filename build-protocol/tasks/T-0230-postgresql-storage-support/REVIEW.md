@@ -735,3 +735,17 @@ The correction passes the complete checker suites (`188/188`), PostgreSQL unit
 tests (`168/168`), production and tooling typechecking, scoped ESLint, cleanup
 and TSDoc enforcement, repository formatting, and diff hygiene. Re-review is
 limited to the three concerns changed by this accepted batch.
+
+### Source-Quality Correction Re-review Result
+
+The maintainability re-review accepted the checker and source structure with no
+finding. The documentation re-review found two stale active-status/wording
+claims; both now reflect commit `baaf9d45c` and describe Inbox cleanup as
+locking and verifying the current session record. Its final confirmation found
+no issue. The API re-review found one remaining `string` widening in catalog
+type comparison; `PostgresCatalog.type` now accepts `PostgresDdlType`, its
+contract assertion passes, and the final API confirmation found no issue.
+
+The new public `PostgresDdlType` is included in the API documentation inventory.
+API docs, audience checks, TSDoc, cleanup enforcement, formatting, and diff
+hygiene pass. No review finding remains; final release verification is pending.

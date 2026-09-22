@@ -19,12 +19,14 @@ import { ColumnTypes, RecordColumn } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { PostgresDataTypes, type PostgresDdlType } from "../src/postgres/data-type.js";
+import type { PostgresColumnSpec } from "../src/postgres/storage-factory.js";
 import { PostgresTableSpecs } from "../src/postgres/table-spec.js";
 import { PostgresTableResolver } from "../src/postgres/table-resolver.js";
 
 describe("PostgreSQL table foundation", () => {
   it("defines the supported PostgreSQL DDL type names once", () => {
     expectTypeOf<PostgresDdlType>().not.toEqualTypeOf<string>();
+    expectTypeOf<PostgresColumnSpec["postgresType"]>().toEqualTypeOf<PostgresDdlType>();
     expectTypeOf(
       PostgresTableSpecs.postgresColumnType(ColumnTypes.scalar(ScalarType.STRING)),
     ).toEqualTypeOf<PostgresDdlType>();

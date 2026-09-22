@@ -17,6 +17,7 @@ import type { PoolClient } from "pg";
 
 import { PostgresDataTypes } from "./data-type.js";
 import type { PostgresColumnSpec, PostgresTableSpec } from "./storage-factory.js";
+import type { PostgresDdlType } from "./data-type.js";
 import {
   PostgresRollbackErrors,
   PostgresStorageErrors,
@@ -307,7 +308,7 @@ const PostgresCatalog = Object.freeze({
    * @param actual Catalog column row.
    * @returns Whether both describe the same PostgreSQL type.
    */
-  type(expected: string, actual: ColumnRow): boolean {
+  type(expected: PostgresDdlType, actual: ColumnRow): boolean {
     if (expected === PostgresDataTypes.varchar512)
       return actual.data_type === "character varying" && actual.character_maximum_length === 512;
     if (expected === PostgresDataTypes.integer) return actual.data_type === "integer";

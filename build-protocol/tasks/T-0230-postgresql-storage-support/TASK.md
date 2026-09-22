@@ -352,8 +352,8 @@ Exit: server paths relying on provider atomicity work under PostgreSQL.
    only unique tables.
 3. Prove DDL/catalog, case-sensitive IDs, all values, CRUD/queries, rollback,
    CAS races, Entity commit/history, two-database tenant isolation, pool close.
-4. Extend server Inbox provider acceptance and prove stale-session fencing
-   across independent factories.
+4. Extend server Inbox provider acceptance and prove that independent factories
+   lock and verify the current session record before deleting an Inbox row.
 5. Record exact server/image version and command separately from ordinary CI.
 
 Exit: unit SQL evidence and a real PostgreSQL server agree.

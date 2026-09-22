@@ -549,6 +549,7 @@ const expectedPostgresStorageExports = [
   "PostgresColumnSpec",
   "PostgresCreateOperation",
   "PostgresCreateOperationFactory",
+  "PostgresDdlType",
   "PostgresEntityStorageHandle",
   "PostgresStorageConfigurationError",
   "PostgresStorageConnectionError",
