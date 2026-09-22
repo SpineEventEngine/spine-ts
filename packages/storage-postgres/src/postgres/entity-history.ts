@@ -152,10 +152,6 @@ export class PostgresEntityStorage<I, S extends Message> implements PostgresEnti
   }
 }
 
-function throwHistoryOperation(error: unknown): never {
-  throw PostgresStorageErrors.operation(error);
-}
-
 class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, S> {
   readonly #executor: PostgresRecordExecutor<EntityStateKey, EntityRecord>;
   #open = true;
@@ -175,7 +171,9 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
         await client.query("SELECT pg_advisory_xact_lock($1)", [this.entityKey(record.entityId)]);
         await this.#executor.appendImmutable(client, record);
       })
-      .catch(throwHistoryOperation);
+      .catch((error: unknown) => {
+        throw PostgresStorageErrors.operation(error);
+      });
   }
 
   async backward(
@@ -194,7 +192,9 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
           this.backwardValues(entityId, depth, startingFromVersion),
         ),
       )
-      .catch(throwHistoryOperation);
+      .catch((error: unknown) => {
+        throw PostgresStorageErrors.operation(error);
+      });
   }
 
   async stateAt(entityId: I, time: Timestamp): Promise<S | undefined> {
@@ -208,7 +208,9 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
           1,
         ]),
       )
-      .catch(throwHistoryOperation);
+      .catch((error: unknown) => {
+        throw PostgresStorageErrors.operation(error);
+      });
     const record = records[0];
     if (record?.state === undefined) return undefined;
     try {
@@ -247,7 +249,9 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
           await PostgresSessionLocks.cleanup(client, acquired.reverse(), operationFailure);
         }
       })
-      .catch(throwHistoryOperation);
+      .catch((error: unknown) => {
+        throw PostgresStorageErrors.operation(error);
+      });
   }
 
   async truncate(olderThan: Timestamp): Promise<void> {
@@ -407,7 +411,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
 
   private trimSql(includeCursor: boolean): string {
     return [
-      `SELECT "ID" FROM ${this.#executor.table()} WHERE "entity_id" = $1`,
+      `SELECT "version", "created", "ID" FROM ${this.#executor.table()} WHERE "entity_id" = $1`,
       `AND ("version", "created", "ID") ${includeCursor ? "<=" : "<"} ($2, $3, $4)`,
       'ORDER BY "version" DESC, "created" DESC, "ID" DESC LIMIT $5',
     ].join(" ");
@@ -471,7 +475,9 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
         await client.query("SELECT pg_advisory_xact_lock_shared($1)", [this.familyKey()]);
         await this.#executor.appendImmutable(client, record);
       })
-      .catch(throwHistoryOperation);
+      .catch((error: unknown) => {
+        throw PostgresStorageErrors.operation(error);
+      });
   }
 
   async backward(id: I, depth: number, version?: bigint): Promise<readonly Event[]> {
@@ -486,7 +492,9 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
           this.backwardValues(id, depth, version),
         ),
       )
-      .catch(throwHistoryOperation);
+      .catch((error: unknown) => {
+        throw PostgresStorageErrors.operation(error);
+      });
   }
 
   async truncate(olderThan: Timestamp): Promise<void> {

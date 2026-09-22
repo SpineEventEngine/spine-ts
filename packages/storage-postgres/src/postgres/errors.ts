@@ -37,7 +37,9 @@ export class PostgresStorageDataError extends Error {}
  */
 export class PostgresStorageOperationError extends Error {}
 
-/** Preserves classified provider errors and sanitizes raw PostgreSQL failures. */
+/**
+ * Preserves classified provider errors and sanitizes raw PostgreSQL failures.
+ */
 export const PostgresStorageErrors: Readonly<{ operation(error: unknown): Error }> = Object.freeze({
   operation(error: unknown): Error {
     if (
@@ -83,7 +85,9 @@ export const PostgresClientDisposal: Readonly<{
   },
 });
 
-/** Supplies an Error token that tells node-postgres to discard a failed client. */
+/**
+ * Supplies an Error token that tells node-postgres to discard a failed client.
+ */
 export const PostgresRollbackErrors: Readonly<{ discard(error: unknown): Error }> = Object.freeze({
   discard(error: unknown): Error {
     return error instanceof Error ? error : new Error("PostgreSQL transaction rollback failed.");

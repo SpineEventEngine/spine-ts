@@ -163,12 +163,19 @@ describe("PostgreSQL live storage acceptance", () => {
       await expect(entity.states.backward(id, 10)).resolves.toHaveLength(1);
       await expect(entity.events.backward(id, 10)).resolves.toHaveLength(1);
 
-      await entity.states.append(current(id, "later", 2));
-      await entity.states.append(current(id, "latest", 3));
+      for (let version = 2; version <= 130; version += 1)
+        await entity.states.append(current(id, `state-${String(version)}`, version));
       await entity.states.trim(id, 1);
-      await expect(entity.states.backward(id, 10)).resolves.toHaveLength(1);
-      await entity.states.truncate(create(TimestampSchema, { seconds: 10n }));
+      await expect(entity.states.backward(id, 200)).resolves.toEqual([
+        current(id, "state-130", 130),
+      ]);
+
+      const truncationId = entityId("history-truncate");
+      for (let version = 1; version <= 130; version += 1)
+        await entity.states.append(current(truncationId, `state-${String(version)}`, version));
+      await entity.states.truncate(create(TimestampSchema, { seconds: 131n }));
       await expect(entity.states.backward(id, 10)).resolves.toEqual([]);
+      await expect(entity.states.backward(truncationId, 200)).resolves.toEqual([]);
     } finally {
       commits.close();
       entity.close();

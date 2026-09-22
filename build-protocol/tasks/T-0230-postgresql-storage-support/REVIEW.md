@@ -515,6 +515,17 @@ The reviewer independently ran the hermetic PostgreSQL suite (`10` files,
   classified provider errors and sanitize raw failures. Focused state-history
   and initializer tests pass `40/40` with package TypeScript checking.
 
+### Round 1 Finding 4 Correction Evidence
+
+- The required live 129-plus-row acceptance found a real second-page trim
+  defect: page SQL projected only `ID` although the continuation requires
+  `version`, `created`, and `ID`. The correction projects the complete tuple.
+  Hermetic state-history tests pass `28/28`.
+- Manual disposable PostgreSQL `16.15` and `18.6` servers, each with all three
+  required databases, passed their exact major acceptance command (`8` passed,
+  `4` expected provider-specific skips). Live trim and truncate each cross the
+  128-row page boundary and assert exact results.
+
 All four findings are consequential and technically consistent with the shared
 storage contracts and provider error policy; none is rejected or deferred. The
 existing PostgreSQL implementer context receives one test-first correction batch.

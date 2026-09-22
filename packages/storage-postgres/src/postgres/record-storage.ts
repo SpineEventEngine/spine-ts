@@ -278,7 +278,9 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     await this.transaction(async (client) => {
       await this.lockSlot(client, id);
       await this.appendImmutableOn(client, record, true);
-    }).catch(throwOperationError);
+    }).catch((error: unknown) => {
+      throw operationError(error);
+    });
   }
 
   /**
@@ -300,7 +302,9 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns Whether a stored record was deleted.
    */
   protected async deleteRecord(id: I): Promise<boolean> {
-    return this.transaction(async (client) => this.deleteOn(client, id)).catch(throwOperationError);
+    return this.transaction(async (client) => this.deleteOn(client, id)).catch((error: unknown) => {
+      throw operationError(error);
+    });
   }
 
   /**
@@ -406,7 +410,9 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    */
   protected writeRecord(record: Materialized<I, R>): Promise<void> {
     return this.transaction((client) => this.writeOn(client, record.record)).catch(
-      throwOperationError,
+      (error: unknown) => {
+        throw operationError(error);
+      },
     );
   }
 
@@ -802,7 +808,4 @@ function operationError(error: unknown): PostgresStorageOperationError {
   return error instanceof PostgresStorageOperationError || error instanceof PostgresStorageDataError
     ? error
     : new PostgresStorageOperationError("PostgreSQL record operation failed.");
-}
-function throwOperationError(error: unknown): never {
-  throw operationError(error);
 }

@@ -1820,3 +1820,16 @@ record-body)` and observed the upsert bind `record-body` instead of `slot`.
   without rewrapping classified provider failures. Public state and event
   append/read transaction paths apply the same boundary. Focused state-history
   and initializer tests pass `40/40` with the package TypeScript check.
+
+## Round 1 Correction: Live Bounded History Pages
+
+- The 129-plus live regression first failed on PostgreSQL 16: `trim(id, 1)`
+  retained the newest and initial rows after crossing the 128-row page boundary.
+  The next-page cursor had undefined `version` and `created` because trim
+  selected only `ID`. Selecting the complete cursor tuple is the minimal GREEN
+  correction; hermetic state-history coverage passes `28/28`.
+- Disposable local PostgreSQL containers reported `16.15` and `18.6`. Each had
+  primary, tenant-A, and tenant-B databases and ran the exact package major
+  command successfully: `8` passed and `4` expected provider-specific skips.
+  The live test appends 130 states for trim and 130 separate states for
+  truncation, asserting exact retained and empty histories rather than counts.
