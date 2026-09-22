@@ -489,6 +489,18 @@ The reviewer independently ran the hermetic PostgreSQL suite (`10` files,
    appends only three states while claiming bounded-page maintenance. A real
    129-plus-row PostgreSQL case must prove trim/truncate results across pages.
 
+### Round 1 Finding 1 Correction Evidence
+
+- The configured `implementer` (`gpt-5.6-terra` / `medium`; no additional
+  runtime metadata exposed) reproduced the absent-row race with two distinct
+  acquired client handles. RED writer order was `[write, cas]` while CAS held
+  its advisory lock.
+- The correction applies the transaction-scoped record fence to normal,
+  batch, immutable, delete, and caller-managed mutations. The focused suite
+  covers CAS racing ordinary and immutable writes and confirms distinct,
+  sorted batch locks with source-order writes. `46/46` focused tests, ESLint,
+  package TypeScript checking, Prettier, and diff checking pass.
+
 All four findings are consequential and technically consistent with the shared
 storage contracts and provider error policy; none is rejected or deferred. The
 existing PostgreSQL implementer context receives one test-first correction batch.

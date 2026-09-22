@@ -561,6 +561,73 @@ describe("Postgres record storage", () => {
     expect(keys[0]).not.toEqual(keys[1]);
   });
 
+  it("serializes an expected-absent compare-and-set ahead of a normal write", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    const scheduler = lockedQueries();
+    driver.connect.mockImplementationOnce(() => Promise.resolve(scheduler.client("cas")));
+    driver.connect.mockImplementationOnce(() => Promise.resolve(scheduler.client("write")));
+
+    const cas = storage.compareAndSet(
+      "slot",
+      undefined,
+      create(StringValueSchema, { value: "cas" }),
+    );
+    await scheduler.casLocked;
+    const write = storage.write(create(StringValueSchema, { value: "slot" }));
+    await scheduler.mutationReached;
+    scheduler.releaseCas();
+
+    await expect(cas).resolves.toBe(true);
+    await expect(write).resolves.toBeUndefined();
+    expect(scheduler.writes).toEqual(["cas", "write"]);
+  });
+
+  it("serializes an expected-absent compare-and-set ahead of an immutable write", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    const scheduler = lockedQueries();
+    driver.connect.mockImplementationOnce(() => Promise.resolve(scheduler.client("cas")));
+    driver.connect.mockImplementationOnce(() => Promise.resolve(scheduler.client("immutable")));
+
+    const cas = storage.compareAndSet(
+      "slot",
+      undefined,
+      create(StringValueSchema, { value: "slot" }),
+    );
+    await scheduler.casLocked;
+    const immutable = (
+      storage as unknown as { writeImmutable(record: StringValue): Promise<void> }
+    ).writeImmutable(create(StringValueSchema, { value: "slot" }));
+    await scheduler.mutationReached;
+    scheduler.releaseCas();
+
+    await expect(cas).resolves.toBe(true);
+    await expect(immutable).resolves.toBeUndefined();
+    expect(scheduler.writes).toEqual(["cas", "immutable"]);
+  });
+
+  it("locks each writeAll slot once in stable order without reordering writes", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    driver.calls.length = 0;
+
+    await storage.writeAll([
+      create(StringValueSchema, { value: "two" }),
+      create(StringValueSchema, { value: "one" }),
+      create(StringValueSchema, { value: "two" }),
+    ]);
+
+    const locks = driver.calls
+      .filter(({ sql }) => sql === "SELECT pg_advisory_xact_lock($1)")
+      .map(({ values }) => values?.[0] as bigint);
+    const writes = driver.calls
+      .filter(({ sql }) => sql.startsWith("INSERT INTO"))
+      .map(({ values }) => values?.[0]);
+    expect(locks).toEqual([...new Set(locks)].sort((left, right) => (left < right ? -1 : 1)));
+    expect(writes).toEqual(["two", "one", "two"]);
+  });
+
   it("pushes normalized ID selection into one numbered PostgreSQL statement", async () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
@@ -836,4 +903,118 @@ function valueColumns(): readonly RecordColumn<StringValue, string>[] {
   return [
     new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
   ];
+}
+
+function lockedQueries() {
+  const writes: string[] = [];
+  const held = new Map<bigint, string>();
+  const clientLocks = new Map<string, Set<bigint>>();
+  const waiters = new Map<bigint, (() => void)[]>();
+  let releaseCas = () => undefined;
+  let signalCasLocked = () => undefined;
+  let signalMutationReached = () => undefined;
+  const casLocked = new Promise<void>((resolve) => {
+    signalCasLocked = resolve;
+  });
+  const casReleased = new Promise<void>((resolve) => {
+    releaseCas = resolve;
+  });
+  const mutationReached = new Promise<void>((resolve) => {
+    signalMutationReached = resolve;
+  });
+  const client = (name: string) => ({
+    query: (sql: string, parameters?: readonly unknown[]) =>
+      lockedQuery(
+        name,
+        sql,
+        parameters,
+        writes,
+        held,
+        clientLocks,
+        waiters,
+        signalMutationReached,
+        async () => {
+          if (name !== "cas") return;
+          signalCasLocked();
+          await casReleased;
+        },
+      ),
+    release: vi.fn(),
+  });
+  return { casLocked, client, mutationReached, releaseCas, writes };
+}
+
+async function lockedQuery(
+  client: string,
+  sql: string,
+  parameters: readonly unknown[] | undefined,
+  writes: string[],
+  held: Map<bigint, string>,
+  clientLocks: Map<string, Set<bigint>>,
+  waiters: Map<bigint, (() => void)[]>,
+  mutationReached: () => void,
+  onCasLock: () => Promise<void>,
+): Promise<QueryResult> {
+  if (client !== "cas" && (sql === "SELECT pg_advisory_xact_lock($1)" || sql.startsWith("INSERT")))
+    mutationReached();
+  if (sql === "SELECT pg_advisory_xact_lock($1)") {
+    const key = parameters?.[0] as bigint;
+    await lock(client, key, held, clientLocks, waiters);
+    await onCasLock();
+  } else if (sql.startsWith('SELECT "bytes"')) {
+    return { rows: [] };
+  } else if (sql.startsWith("INSERT INTO")) {
+    writes.push(client);
+  } else if (sql === "COMMIT" || sql === "ROLLBACK")
+    releaseLocks(client, held, clientLocks, waiters);
+  return { rowCount: 1, rows: [] };
+}
+
+function lock(
+  client: string,
+  key: bigint,
+  held: Map<bigint, string>,
+  clientLocks: Map<string, Set<bigint>>,
+  waiters: Map<bigint, (() => void)[]>,
+): Promise<void> {
+  if (held.get(key) === undefined) {
+    takeLock(client, key, held, clientLocks);
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const queued = waiters.get(key) ?? [];
+    queued.push(() => {
+      takeLock(client, key, held, clientLocks);
+      resolve();
+    });
+    waiters.set(key, queued);
+  });
+}
+
+function takeLock(
+  client: string,
+  key: bigint,
+  held: Map<bigint, string>,
+  clientLocks: Map<string, Set<bigint>>,
+): void {
+  held.set(key, client);
+  let locks = clientLocks.get(client);
+  if (locks === undefined) {
+    locks = new Set();
+    clientLocks.set(client, locks);
+  }
+  locks.add(key);
+}
+
+function releaseLocks(
+  client: string,
+  held: Map<bigint, string>,
+  clientLocks: Map<string, Set<bigint>>,
+  waiters: Map<bigint, (() => void)[]>,
+): void {
+  for (const key of clientLocks.get(client) ?? []) {
+    held.delete(key);
+    waiters.get(key)?.shift()?.();
+  }
+  clientLocks.delete(client);
 }

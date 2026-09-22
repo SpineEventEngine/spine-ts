@@ -1790,3 +1790,16 @@ record-body)` and observed the upsert bind `record-body` instead of `slot`.
   production dependencies, release readiness, all 19 package tarballs, clean
   external installation, and consumer compilation.
   No public API, schema, or automatic-container behavior changes.
+
+## Round 1 Correction: Record Mutation Fence
+
+- The existing implementer context (`gpt-5.6-terra` / `medium`) added a
+  two-client scheduled regression before changing runtime behavior. With CAS
+  paused after acquiring its transaction advisory fence, an ordinary write on
+  the same slot produced writer order `[write, cas]` rather than the required
+  `[cas, write]`; this is the recorded RED result.
+- GREEN makes mutable writes, immutable writes, deletes, and caller-managed
+  record mutations acquire the same transaction-scoped slot fence. `writeAll`
+  deduplicates and sorts lock keys before retaining the original write order.
+  Focused Vitest passes `46/46`; changed-file ESLint, the storage-postgres
+  TypeScript check, Prettier, and `git diff --check` pass.

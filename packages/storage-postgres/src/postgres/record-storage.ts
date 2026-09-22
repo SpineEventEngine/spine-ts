@@ -274,13 +274,10 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    */
   async writeImmutable(record: R): Promise<void> {
     const id = this.recordSpec.idValueIn(record);
-    await this.using(async (client) => {
-      const inserted = await client.query(this.immutableSql(), this.values(record));
-      if (inserted.rowCount === 1) return;
-      const existing = await this.readOn(client, id);
-      if (existing === undefined || this.same(existing, record)) return;
-      throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
-    });
+    await this.transaction(async (client) => {
+      await this.lockSlot(client, id);
+      await this.appendImmutableOn(client, record, true);
+    }).catch(throwOperationError);
   }
 
   /**
@@ -302,9 +299,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns Whether a stored record was deleted.
    */
   protected async deleteRecord(id: I): Promise<boolean> {
-    return this.using(
-      async (client) => (await client.query(this.deleteSql(), [this.id(id)])).rowCount === 1,
-    );
+    return this.transaction(async (client) => this.deleteOn(client, id)).catch(throwOperationError);
   }
 
   /**
@@ -388,7 +383,11 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         await this.transaction(async (client) => {
-          for (const record of records) await this.writeOn(client, record.record);
+          await this.lockSlots(
+            client,
+            records.map((record) => this.recordSpec.idValueIn(record.record)),
+          );
+          for (const record of records) await this.writeOn(client, record.record, undefined, true);
         });
         return;
       } catch (error) {
@@ -405,7 +404,9 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns A promise that resolves after PostgreSQL applies the upsert.
    */
   protected writeRecord(record: Materialized<I, R>): Promise<void> {
-    return this.using((client) => this.writeOn(client, record.record));
+    return this.transaction((client) => this.writeOn(client, record.record)).catch(
+      throwOperationError,
+    );
   }
 
   private async casOnce(
@@ -414,11 +415,11 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     next: Materialized<I, R> | undefined,
   ): Promise<boolean> {
     return this.transaction(async (client) => {
-      await client.query("SELECT pg_advisory_xact_lock($1)", [this.casKey(id)]);
+      await this.lockSlot(client, id);
       const current = await this.readOn(client, id, true);
       if (!this.same(current, expected?.record)) return false;
-      if (next === undefined) await client.query(this.deleteSql(), [this.id(id)]);
-      else await this.writeOn(client, next.record, id);
+      if (next === undefined) await this.deleteOn(client, id, true);
+      else await this.writeOn(client, next.record, id, true);
       return true;
     });
   }
@@ -487,20 +488,36 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     }
   }
 
+  private lockSlot(client: PoolClient, id: I): Promise<void> {
+    return client
+      .query("SELECT pg_advisory_xact_lock($1)", [this.casKey(id)])
+      .then(() => undefined);
+  }
+
+  private async lockSlots(client: PoolClient, ids: readonly I[]): Promise<void> {
+    const keys = [...new Set(ids.map((id) => this.casKey(id)))];
+    keys.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+    for (const key of keys) await client.query("SELECT pg_advisory_xact_lock($1)", [key]);
+  }
+
   private async writeOn(
     client: PoolClient,
     record: R,
     id = this.recordSpec.idValueIn(record),
+    locked = false,
   ): Promise<void> {
+    if (!locked) await this.lockSlot(client, id);
     await client.query(this.upsertSql(), this.values(record, id));
   }
 
-  private async deleteOn(client: PoolClient, id: I): Promise<boolean> {
+  private async deleteOn(client: PoolClient, id: I, locked = false): Promise<boolean> {
+    if (!locked) await this.lockSlot(client, id);
     return (await client.query(this.deleteSql(), [this.id(id)])).rowCount === 1;
   }
 
-  private async appendImmutableOn(client: PoolClient, record: R): Promise<void> {
+  private async appendImmutableOn(client: PoolClient, record: R, locked = false): Promise<void> {
     const id = this.recordSpec.idValueIn(record);
+    if (!locked) await this.lockSlot(client, id);
     const inserted = await client.query(this.immutableSql(), this.values(record));
     if (inserted.rowCount === 1) return;
     const existing = await this.readOn(client, id);
@@ -779,4 +796,7 @@ function operationError(error: unknown): PostgresStorageOperationError {
   return error instanceof PostgresStorageOperationError || error instanceof PostgresStorageDataError
     ? error
     : new PostgresStorageOperationError("PostgreSQL record operation failed.");
+}
+function throwOperationError(error: unknown): never {
+  throw operationError(error);
 }
