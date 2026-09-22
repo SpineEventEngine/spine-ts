@@ -1856,3 +1856,12 @@ operation failed.` and explicitly rejects the secret-bearing raw text, while
   PostgreSQL `16.15` and `18.6` each passed their exact major command with `9`
   passed and `4` expected provider-specific skips; serial hermetic package
   coverage passes `167/167`.
+
+## Round 3 Correction: Entity-History Fixture Isolation
+
+- The Entity-history PostgreSQL driver accumulated mutable state between cases:
+  calls, key pages, failures, locks, waiters, history rows, hooks, high-water
+  state, client numbering, and mock call state. One `driver.reset()` now
+  restores every original default and runs in `beforeEach` without resetting the
+  `pg` module mock implementation. Focused Entity-history coverage passes
+  `28/28` before complete serial verification.

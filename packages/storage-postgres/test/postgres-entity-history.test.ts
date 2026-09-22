@@ -27,7 +27,7 @@ import {
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { RecordSpec } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { entityStorage } from "./postgres-entity-seam.js";
 
@@ -191,6 +191,24 @@ const driver = vi.hoisted(() => {
     Pool,
     calls,
     keyPages,
+    reset: () => {
+      calls.splice(0);
+      keyPages.splice(0);
+      lockFailures.splice(0);
+      stateRows = undefined;
+      unlocks.splice(0);
+      deleteHook = undefined;
+      historyRecords = [];
+      highWater = { created: 1n, version: 2, ID: "high-water" };
+      nextClient = 0;
+      locks.clear();
+      held.clear();
+      waiting.splice(0);
+      releaseClient.mockClear();
+      connect.mockClear();
+      end.mockClear();
+      Pool.mockClear();
+    },
     setStateRows: (rows: readonly { ID: string; version: number; created: bigint }[]) =>
       (stateRows = [...rows]),
     clearStateRows: () => (stateRows = undefined),
@@ -318,6 +336,10 @@ vi.mock("pg", () => ({ Pool: driver.Pool }));
 import { PostgresStorageFactory } from "../src/index.js";
 
 describe("PostgreSQL Entity history", () => {
+  beforeEach(() => {
+    driver.reset();
+  });
+
   it("creates a factory-managed Entity handle with disabled histories", async () => {
     const factory = await postgresFactory();
 

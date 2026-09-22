@@ -580,6 +580,14 @@ starts only after this correction is verified, committed, and pushed.
   DDL acceptance (`9` passed, `4` expected provider-specific skips). Serial
   hermetic package coverage passes `167/167`.
 
+### Round 3 Correction Evidence
+
+- The accepted test-isolation correction is test-only. `driver.reset()` clears
+  all mutable Entity-history fixture state and relevant Vitest mock call state,
+  then restores the original high-water and client-number defaults before each
+  case without changing the mocked `pg` module behavior. Focused coverage
+  passes `28/28`.
+
 ### Round 3: Style And Maintainability Finding
 
 Round 3 ran as the existing `style_maintainability_reviewer`, explicitly
