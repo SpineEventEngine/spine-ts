@@ -1833,3 +1833,12 @@ record-body)` and observed the upsert bind `record-body` instead of `slot`.
   command successfully: `8` passed and `4` expected provider-specific skips.
   The live test appends 130 states for trim and 130 separate states for
   truncation, asserting exact retained and empty histories rather than counts.
+
+## Independent Verification Correction: Entity Commit Error Boundary
+
+- Independent serial verification reported `164/165`: the Entity lock-failure
+  test still expected raw `lock failed` text after the shared record mutation
+  fence correctly sanitized it. The test now requires `PostgreSQL storage
+operation failed.` and explicitly rejects the secret-bearing raw text, while
+  retaining rollback and release assertions. Focused Entity-commit coverage
+  passes `15/15`; the complete serial package suite passes `165/165`.

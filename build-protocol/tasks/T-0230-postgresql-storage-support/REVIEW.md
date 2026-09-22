@@ -526,6 +526,15 @@ The reviewer independently ran the hermetic PostgreSQL suite (`10` files,
   `4` expected provider-specific skips). Live trim and truncate each cross the
   128-row page boundary and assert exact results.
 
+### Independent Verification Correction
+
+- Independent package verification found one stale assertion (`164/165`): an
+  Entity commit lock-failure test expected its raw driver message despite the
+  provider's sanitized public error contract. The test-only correction asserts
+  the stable operation error and absence of `lock failed`, retaining rollback
+  and release evidence. Focused coverage passes `15/15`; serial package
+  verification passes `165/165`.
+
 All four findings are consequential and technically consistent with the shared
 storage contracts and provider error policy; none is rejected or deferred. The
 existing PostgreSQL implementer context receives one test-first correction batch.

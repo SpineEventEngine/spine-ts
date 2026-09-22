@@ -296,9 +296,14 @@ describe("PostgreSQL Entity commit", () => {
     const commit = EntityCommitStorageFactories.create(factory, entity);
     driver.fail("pg_advisory_xact_lock($1)", new Error("lock failed"));
 
-    await expect(
-      commit.commit({ context: entity.context, entity, entityId: "task", next: record("task") }),
-    ).rejects.toThrow("lock failed");
+    const failure = commit.commit({
+      context: entity.context,
+      entity,
+      entityId: "task",
+      next: record("task"),
+    });
+    await expect(failure).rejects.toThrow("PostgreSQL storage operation failed.");
+    await expect(failure).rejects.not.toThrow("lock failed");
 
     expect(driver.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
     expect(driver.release).toHaveBeenCalledTimes(2);
