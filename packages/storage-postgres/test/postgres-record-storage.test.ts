@@ -156,6 +156,64 @@ describe("Postgres record storage", () => {
     expect(write?.values?.[1]).toBeInstanceOf(Uint8Array);
   });
 
+  it("passes each resolved schema to custom table creation", async () => {
+    const operations: { schema: string; sql: string }[] = [];
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "explicit_schema" })
+      .useOperationFactory((table) => {
+        const sql = `CREATE TABLE IF NOT EXISTS "${table.schema}"."${table.tableName}" ()`;
+        operations.push({ schema: table.schema, sql });
+        return { sql };
+      })
+      .build();
+    const storage = factory.createRecordStorage(
+      { name: "explicit", multitenant: false },
+      recordSpec(),
+    );
+
+    await storage.write(create(StringValueSchema, { value: "explicit" }));
+
+    expect(operations).toEqual([
+      {
+        schema: "explicit_schema",
+        sql: 'CREATE TABLE IF NOT EXISTS "explicit_schema"."google_protobuf_stringvalue" ()',
+      },
+    ]);
+  });
+
+  it("passes distinct tenant schemas to custom table creation", async () => {
+    const schemas: string[] = [];
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setTenantOptions([
+        {
+          tenantId: create(TenantIdSchema, { kind: { case: "value", value: "a" } }),
+          options: { url: "postgresql://db.example/tenant_a", schema: "tenant_a_schema" },
+        },
+        {
+          tenantId: create(TenantIdSchema, { kind: { case: "value", value: "b" } }),
+          options: { url: "postgresql://db.example/tenant_b", schema: "tenant_b_schema" },
+        },
+      ])
+      .useOperationFactory((table) => {
+        schemas.push(table.schema);
+        return { sql: `CREATE TABLE IF NOT EXISTS "${table.schema}"."${table.tableName}" ()` };
+      })
+      .build();
+    const first = factory.createRecordStorage(
+      { name: "tenant", multitenant: true, tenantId: tenantId("a") },
+      recordSpec(),
+    );
+    const second = factory.createRecordStorage(
+      { name: "tenant", multitenant: true, tenantId: tenantId("b") },
+      recordSpec(),
+    );
+
+    await first.write(create(StringValueSchema, { value: "first" }));
+    await second.write(create(StringValueSchema, { value: "second" }));
+
+    expect(schemas).toEqual(["tenant_a_schema", "tenant_b_schema"]);
+  });
+
   it("routes a public grouped table-name registration only to its grouped family", async () => {
     const factory = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
@@ -919,6 +977,10 @@ function valueColumns(): readonly RecordColumn<StringValue, string>[] {
   return [
     new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
   ];
+}
+
+function tenantId(value: string) {
+  return create(TenantIdSchema, { kind: { case: "value", value } });
 }
 
 function lockedQueries() {

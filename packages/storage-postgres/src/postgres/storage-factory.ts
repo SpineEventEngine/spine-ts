@@ -116,6 +116,14 @@ export interface PostgresTableSpec<I, R extends Message> {
   // prettier-ignore
 
   /**
+   * Names the resolved PostgreSQL schema.
+   *
+   * Custom DDL must safely quote this identifier and {@link tableName}, and
+   * remain idempotent because initialization can run repeatedly.
+   */
+  readonly schema: string;
+
+  /**
    * Names the physical table.
    */
   readonly tableName: string;
@@ -344,6 +352,7 @@ export class PostgresStorageFactory extends StorageFactory {
     recordSpec: RecordSpec<I, R>,
     group?: StorageGroup,
   ): PostgresRecordStorage<I, R> {
+    const database = this.database(context);
     const table = this.resolver.resolve(
       recordSpec.sourceType.typeName,
       group?.name,
@@ -351,6 +360,7 @@ export class PostgresStorageFactory extends StorageFactory {
       recordSpec.recordType.typeName,
     );
     const spec = PostgresTableSpecs.resolvedPostgresTableSpec({
+      schema: database.schema,
       tableName: table.tableName,
       sourceType: recordSpec.sourceType,
       recordType: recordSpec.recordType,
@@ -358,7 +368,6 @@ export class PostgresStorageFactory extends StorageFactory {
       ...(group === undefined ? {} : { groupName: group.name }),
       declaredColumns: recordSpec.columns,
     });
-    const database = this.database(context);
     const handle = new PostgresRecordStorage(
       context,
       recordSpec,

@@ -105,6 +105,7 @@ describe("PostgreSQL table foundation", () => {
 
   it("builds the complete record-family layout with PostgreSQL payload columns", () => {
     const table = PostgresTableSpecs.resolvedPostgresTableSpec({
+      schema: "spine",
       tableName: "records",
       sourceType: StringValueSchema,
       recordType: StringValueSchema,
@@ -117,6 +118,7 @@ describe("PostgreSQL table foundation", () => {
       { name: "bytes", postgresType: "BYTEA", nullable: false },
       { name: "ratio", postgresType: "REAL", nullable: true },
     ]);
+    expect(table.schema).toBe("spine");
     expect(table.primaryKey).toEqual(["ID"]);
   });
 
@@ -127,6 +129,7 @@ describe("PostgreSQL table foundation", () => {
       new RecordColumn("version", ColumnTypes.scalar(ScalarType.INT32), () => 0),
     ];
     const current = PostgresTableSpecs.resolvedPostgresTableSpec({
+      schema: "spine",
       tableName: "current",
       sourceType: StringValueSchema,
       recordType: EntityRecordSchema,
@@ -134,6 +137,7 @@ describe("PostgreSQL table foundation", () => {
       declaredColumns: columns,
     });
     const history = PostgresTableSpecs.resolvedPostgresTableSpec({
+      schema: "spine",
       tableName: "history",
       sourceType: StringValueSchema,
       recordType: EntityRecordSchema,

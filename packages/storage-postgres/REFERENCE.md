@@ -68,7 +68,9 @@ credentials, SQL text, or driver internals.
 
 Custom table creation may use `useOperationFactory(factory)` with the exported
 `PostgresTableSpec`, `PostgresCreateOperation`, and
-`PostgresCreateOperationFactory` types. Do not import pool, client, catalog, or
+`PostgresCreateOperationFactory` types. The resolved `table.schema` and
+`table.tableName` identify the target; custom SQL must safely quote both
+identifiers and remain idempotent. Do not import pool, client, catalog, or
 compiler internals.
 
 ## Live verification

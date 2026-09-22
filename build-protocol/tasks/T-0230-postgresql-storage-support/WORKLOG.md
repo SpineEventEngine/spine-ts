@@ -1842,3 +1842,17 @@ record-body)` and observed the upsert bind `record-body` instead of `slot`.
 operation failed.` and explicitly rejects the secret-bearing raw text, while
   retaining rollback and release assertions. Focused Entity-commit coverage
   passes `15/15`; the complete serial package suite passes `165/165`.
+
+## Round 2 Correction: Resolved Custom-DDL Schema
+
+- RED driver coverage showed custom creation received `schema: undefined` for
+  both an explicit non-`public` database schema and distinct tenant schemas.
+  GREEN makes `schema` required on public `PostgresTableSpec`, constructs the
+  spec only after selecting its database, and initializes through that same
+  schema. Focused builder, spec, and record tests pass `59/59`.
+- The public reference now requires custom DDL to safely quote both resolved
+  schema and table identifiers and to remain idempotent. A live explicit-schema
+  custom-DDL acceptance is included for the PostgreSQL major runs. Disposable
+  PostgreSQL `16.15` and `18.6` each passed their exact major command with `9`
+  passed and `4` expected provider-specific skips; serial hermetic package
+  coverage passes `167/167`.

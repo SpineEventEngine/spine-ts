@@ -92,6 +92,25 @@ describe("PostgreSQL live storage acceptance", () => {
     }
   });
 
+  it("creates custom DDL in an explicit non-public schema", async () => {
+    const schema = `t0230_pg_${run}_custom`;
+    const catalog = new Pool({ connectionString: url });
+    await catalog.query(`CREATE SCHEMA "${schema}"`);
+    await catalog.end();
+    const custom = await postgresBuilder()
+      .setOptions({ url, schema })
+      .useOperationFactory((table) => ({ sql: customCreate(table) }))
+      .build();
+    const storage = custom.createRecordStorage(context("custom"), stringSpec(), group("custom"));
+    try {
+      await storage.write(value("custom"));
+      await expect(storage.read("custom")).resolves.toEqual(value("custom"));
+    } finally {
+      storage.close();
+      custom.close();
+    }
+  });
+
   it("serializes competing compare-and-set operations from independent factories", async () => {
     const second = await postgresBuilder().setOptions({ url }).build();
     const scope = context("cas");
@@ -262,6 +281,24 @@ function postgresBuilder() {
 
 function value(text: string): StringValue {
   return create(StringValueSchema, { value: text });
+}
+
+function customCreate(
+  table: import("../src/index.js").PostgresTableSpec<unknown, StringValue>,
+): string {
+  const columns = table.columns
+    .map(
+      (column) =>
+        `${quoted(column.name)} ${column.postgresType}${column.nullable ? "" : " NOT NULL"}`,
+    )
+    .join(", ");
+  const target = `${quoted(table.schema)}.${quoted(table.tableName)}`;
+  const primary = table.primaryKey.map(quoted).join(", ");
+  return `CREATE TABLE IF NOT EXISTS ${target} (${columns}, PRIMARY KEY (${primary}))`;
+}
+
+function quoted(identifier: string): string {
+  return `"${identifier.replaceAll('"', '""')}"`;
 }
 
 function tenant(text: string) {

@@ -567,3 +567,15 @@ practical, live PostgreSQL acceptance. The existing PostgreSQL implementer
 context remains the sole production writer under its immutable `implementer`
 profile (`gpt-5.6-terra` / `medium`) and may not spawn child agents. Round 3
 starts only after this correction is verified, committed, and pushed.
+
+### Round 2 Correction Evidence
+
+- The configured `implementer` (`gpt-5.6-terra` / `medium`; no additional
+  runtime metadata exposed) added RED driver coverage for explicit and tenant
+  schemas. Both callback specs exposed `undefined` before the correction.
+- `PostgresTableSpec.schema` is now required and resolved from each selected
+  database before custom creation. The callback contract documents quoted,
+  idempotent schema-qualified DDL. Focused builder/spec/record coverage passes
+  `59/59`; PostgreSQL `16.15` and `18.6` each pass live explicit-schema custom
+  DDL acceptance (`9` passed, `4` expected provider-specific skips). Serial
+  hermetic package coverage passes `167/167`.

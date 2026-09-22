@@ -37,6 +37,7 @@ export const PostgresTableSpecs: PostgresTableSpecifications = Object.freeze({
     }
   },
   resolvedPostgresTableSpec<I, R extends Message>(input: {
+    readonly schema: string;
     readonly tableName: string;
     readonly sourceType: GenMessage<Message>;
     readonly recordType: GenMessage<R>;
@@ -45,6 +46,7 @@ export const PostgresTableSpecs: PostgresTableSpecifications = Object.freeze({
     readonly declaredColumns: readonly RecordColumn<R>[];
   }): PostgresTableSpec<I, R> {
     return {
+      schema: input.schema,
       tableName: input.tableName,
       sourceType: input.sourceType,
       recordType: input.recordType,
@@ -73,6 +75,7 @@ export const PostgresTableSpecs: PostgresTableSpecifications = Object.freeze({
 interface PostgresTableSpecifications {
   postgresColumnType(type: RecordColumnType): string;
   resolvedPostgresTableSpec<I, R extends Message>(input: {
+    readonly schema: string;
     readonly tableName: string;
     readonly sourceType: GenMessage<Message>;
     readonly recordType: GenMessage<R>;

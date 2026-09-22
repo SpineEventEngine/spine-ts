@@ -210,7 +210,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     this.#columns = new PostgresColumnMapping(stringifiers);
     this.#initializer = new PostgresTableInitializer(
       lifecycle,
-      lifecycle.schema,
+      table.schema,
       table as never,
       create,
     );
