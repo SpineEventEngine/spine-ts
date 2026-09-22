@@ -38,6 +38,7 @@ import type {
 import {
   PostgresClientDisposal,
   PostgresStorageDataError,
+  PostgresStorageErrors,
   PostgresStorageOperationError,
 } from "./errors.js";
 import { PostgresRecordStorage, type PostgresRecordExecutor } from "./record-storage.js";
@@ -151,6 +152,10 @@ export class PostgresEntityStorage<I, S extends Message> implements PostgresEnti
   }
 }
 
+function throwHistoryOperation(error: unknown): never {
+  throw PostgresStorageErrors.operation(error);
+}
+
 class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, S> {
   readonly #executor: PostgresRecordExecutor<EntityStateKey, EntityRecord>;
   #open = true;
@@ -164,11 +169,13 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
 
   append(record: EntityRecord): Promise<void> {
     if (!this.#open) return Promise.reject(new Error("Entity state history is closed."));
-    return this.#executor.transaction(async (client) => {
-      await client.query("SELECT pg_advisory_xact_lock_shared($1)", [this.familyKey()]);
-      await client.query("SELECT pg_advisory_xact_lock($1)", [this.entityKey(record.entityId)]);
-      await this.#executor.appendImmutable(client, record);
-    });
+    return this.#executor
+      .transaction(async (client) => {
+        await client.query("SELECT pg_advisory_xact_lock_shared($1)", [this.familyKey()]);
+        await client.query("SELECT pg_advisory_xact_lock($1)", [this.entityKey(record.entityId)]);
+        await this.#executor.appendImmutable(client, record);
+      })
+      .catch(throwHistoryOperation);
   }
 
   async backward(
@@ -179,25 +186,29 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     this.assertOpen();
     HistoryValues.assertDepth(depth);
     await this.#executor.prepare();
-    return this.#executor.transaction((client) =>
-      this.#executor.query(
-        client,
-        this.backwardSql(startingFromVersion),
-        this.backwardValues(entityId, depth, startingFromVersion),
-      ),
-    );
+    return this.#executor
+      .transaction((client) =>
+        this.#executor.query(
+          client,
+          this.backwardSql(startingFromVersion),
+          this.backwardValues(entityId, depth, startingFromVersion),
+        ),
+      )
+      .catch(throwHistoryOperation);
   }
 
   async stateAt(entityId: I, time: Timestamp): Promise<S | undefined> {
     this.assertOpen();
     await this.#executor.prepare();
-    const records = await this.#executor.transaction((client) =>
-      this.#executor.query(client, this.stateAtSql(), [
-        this.entityValue(entityId),
-        HistoryValues.nanos(time),
-        1,
-      ]),
-    );
+    const records = await this.#executor
+      .transaction((client) =>
+        this.#executor.query(client, this.stateAtSql(), [
+          this.entityValue(entityId),
+          HistoryValues.nanos(time),
+          1,
+        ]),
+      )
+      .catch(throwHistoryOperation);
     const record = records[0];
     if (record?.state === undefined) return undefined;
     try {
@@ -212,29 +223,31 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   async trim(entityId: I, keepMostRecent: number): Promise<void> {
     this.assertOpen();
     HistoryValues.assertKeep(keepMostRecent);
-    await this.#executor.using(async (client) => {
-      const [family, entity] = this.trimLocks(entityId);
-      const acquired: [bigint, boolean][] = [];
-      let operationFailure: unknown;
-      try {
-        await client.query("SELECT pg_advisory_lock_shared($1)", [family]);
-        acquired.push([family, true]);
-        await client.query("SELECT pg_advisory_lock($1)", [entity]);
-        acquired.push([entity, false]);
-        let cursor = await this.trimBoundary(client, entityId, keepMostRecent);
-        let includeCursor = true;
-        while (cursor !== undefined && this.#open) {
-          cursor = await this.trimPage(client, entityId, cursor, includeCursor);
-          includeCursor = false;
-          // The next page starts only while this history remains open.
+    await this.#executor
+      .using(async (client) => {
+        const [family, entity] = this.trimLocks(entityId);
+        const acquired: [bigint, boolean][] = [];
+        let operationFailure: unknown;
+        try {
+          await client.query("SELECT pg_advisory_lock_shared($1)", [family]);
+          acquired.push([family, true]);
+          await client.query("SELECT pg_advisory_lock($1)", [entity]);
+          acquired.push([entity, false]);
+          let cursor = await this.trimBoundary(client, entityId, keepMostRecent);
+          let includeCursor = true;
+          while (cursor !== undefined && this.#open) {
+            cursor = await this.trimPage(client, entityId, cursor, includeCursor);
+            includeCursor = false;
+            // The next page starts only while this history remains open.
+          }
+        } catch (error) {
+          operationFailure = error;
+          throw error;
+        } finally {
+          await PostgresSessionLocks.cleanup(client, acquired.reverse(), operationFailure);
         }
-      } catch (error) {
-        operationFailure = error;
-        throw error;
-      } finally {
-        await PostgresSessionLocks.cleanup(client, acquired.reverse(), operationFailure);
-      }
-    });
+      })
+      .catch(throwHistoryOperation);
   }
 
   async truncate(olderThan: Timestamp): Promise<void> {
@@ -453,23 +466,27 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
 
   append(record: Event): Promise<void> {
     if (!this.#open) return Promise.reject(new Error("Entity event history is closed."));
-    return this.#executor.transaction(async (client) => {
-      await client.query("SELECT pg_advisory_xact_lock_shared($1)", [this.familyKey()]);
-      await this.#executor.appendImmutable(client, record);
-    });
+    return this.#executor
+      .transaction(async (client) => {
+        await client.query("SELECT pg_advisory_xact_lock_shared($1)", [this.familyKey()]);
+        await this.#executor.appendImmutable(client, record);
+      })
+      .catch(throwHistoryOperation);
   }
 
   async backward(id: I, depth: number, version?: bigint): Promise<readonly Event[]> {
     this.assertOpen();
     HistoryValues.assertDepth(depth);
     await this.#executor.prepare();
-    return this.#executor.transaction((client) =>
-      this.#executor.query(
-        client,
-        this.backwardSql(version),
-        this.backwardValues(id, depth, version),
-      ),
-    );
+    return this.#executor
+      .transaction((client) =>
+        this.#executor.query(
+          client,
+          this.backwardSql(version),
+          this.backwardValues(id, depth, version),
+        ),
+      )
+      .catch(throwHistoryOperation);
   }
 
   async truncate(olderThan: Timestamp): Promise<void> {

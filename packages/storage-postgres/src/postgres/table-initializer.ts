@@ -18,6 +18,7 @@ import type { PoolClient } from "pg";
 import type { PostgresColumnSpec, PostgresTableSpec } from "./storage-factory.js";
 import {
   PostgresRollbackErrors,
+  PostgresStorageErrors,
   PostgresStorageSchemaError,
   PostgresTransactionErrors,
 } from "./errors.js";
@@ -54,7 +55,7 @@ export class PostgresTableInitializer {
   }
 
   private retry(error: unknown): Promise<void> {
-    if (!PostgresTransactionErrors.retryable(error)) throw error;
+    if (!PostgresTransactionErrors.retryable(error)) throw PostgresStorageErrors.operation(error);
     return this.attempt();
   }
 

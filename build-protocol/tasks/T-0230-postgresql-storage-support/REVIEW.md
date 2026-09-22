@@ -509,6 +509,12 @@ The reviewer independently ran the hermetic PostgreSQL suite (`10` files,
   and rollback failure and proves both `release(error)` and the stable public
   operation error. The focused coordinator suite passes `97/97`.
 
+### Round 1 Finding 3 Correction Evidence
+
+- Lazy preparation and public state/event append and read transactions preserve
+  classified provider errors and sanitize raw failures. Focused state-history
+  and initializer tests pass `40/40` with package TypeScript checking.
+
 All four findings are consequential and technically consistent with the shared
 storage contracts and provider error policy; none is rejected or deferred. The
 existing PostgreSQL implementer context receives one test-first correction batch.

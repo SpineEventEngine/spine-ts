@@ -37,6 +37,21 @@ export class PostgresStorageDataError extends Error {}
  */
 export class PostgresStorageOperationError extends Error {}
 
+/** Preserves classified provider errors and sanitizes raw PostgreSQL failures. */
+export const PostgresStorageErrors: Readonly<{ operation(error: unknown): Error }> = Object.freeze({
+  operation(error: unknown): Error {
+    if (
+      error instanceof PostgresStorageConfigurationError ||
+      error instanceof PostgresStorageConnectionError ||
+      error instanceof PostgresStorageSchemaError ||
+      error instanceof PostgresStorageDataError ||
+      error instanceof PostgresStorageOperationError
+    )
+      return error;
+    return new PostgresStorageOperationError("PostgreSQL storage operation failed.");
+  },
+});
+
 /**
  * Classifies the only PostgreSQL transaction errors that may be retried.
  */

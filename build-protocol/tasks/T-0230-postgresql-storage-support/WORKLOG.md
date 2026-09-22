@@ -1813,3 +1813,10 @@ record-body)` and observed the upsert bind `record-body` instead of `slot`.
   operation and rollback failures and proves sanitization plus discard.
 - Focused coordinator tests pass `97/97`; changed-file ESLint and the package
   TypeScript check pass.
+
+## Round 1 Correction: Public Driver-Error Boundary
+
+- Lazy table initialization now sanitizes non-retryable raw driver failures
+  without rewrapping classified provider failures. Public state and event
+  append/read transaction paths apply the same boundary. Focused state-history
+  and initializer tests pass `40/40` with the package TypeScript check.
