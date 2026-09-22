@@ -579,3 +579,26 @@ starts only after this correction is verified, committed, and pushed.
   `59/59`; PostgreSQL `16.15` and `18.6` each pass live explicit-schema custom
   DDL acceptance (`9` passed, `4` expected provider-specific skips). Serial
   hermetic package coverage passes `167/167`.
+
+### Round 3: Style And Maintainability Finding
+
+Round 3 ran as the existing `style_maintainability_reviewer`, explicitly
+dispatched as `gpt-5.6-terra` / `high`, with no inherited conversation. The
+surface exposed the configured role/profile but no additional runtime metadata.
+The reviewer found no Critical or Important issue and one accepted Minor test-
+isolation defect:
+
+- `postgres-entity-history.test.ts` uses one mutable hoisted driver across the
+  suite without a complete `beforeEach` reset. Calls, lock holders/waiters,
+  queued pages/failures, configured rows/hooks, client numbering, and mocks can
+  survive into the next case. A failing or newly extended concurrency test can
+  therefore contaminate later assertions and obscure the real regression.
+
+The test fixture must provide one complete `reset()` operation and invoke it in
+`beforeEach`; scattered per-test cleanup should be removed where redundant. The
+reviewer explicitly withdrew an `@types/pg` dependency concern after confirming
+the packed declaration requires it at consumer compile time. It also accepted
+local transaction coordinators: extracting a generic database facade would
+conflict with the task's anti-overengineering requirement, and no current drift
+remains. The existing implementer context receives this test-only correction
+under its immutable `gpt-5.6-terra` / `medium` profile.
