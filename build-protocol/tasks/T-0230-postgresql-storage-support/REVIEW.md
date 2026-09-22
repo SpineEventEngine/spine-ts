@@ -462,3 +462,37 @@ All three assignments are read-only, forbid child agents, and receive no prior
 conversation or reviewer memory. The Desktop surface supports explicit role,
 model, and reasoning dispatch. Additional runtime self-introspection is recorded
 only if the surface exposes it.
+
+### Round 1: Persistence And Reliability Findings
+
+Round 1 ran as the existing `performance_reliability_reviewer`, explicitly
+dispatched as `gpt-5.6-terra` / `high`, with no inherited conversation. The
+surface exposed the configured role/profile but no additional runtime metadata.
+The reviewer independently ran the hermetic PostgreSQL suite (`10` files,
+`161` tests) and reported four accepted findings:
+
+1. **Critical — absent-row CAS race.** CAS takes a transaction advisory lock,
+   but ordinary single/batch writes, immutable writes, and deletes do not.
+   Therefore CAS can observe absence, a normal writer can insert the slot, and
+   CAS can overwrite that row while incorrectly returning success. All concrete
+   slot mutations must use the same fence; batch locks must be distinct and
+   stable-ordered without changing caller write order.
+2. **Important — rollback failure re-pools a bad client.** Record, table-init,
+   Entity-commit, and delivery-cleanup coordinators ignore `ROLLBACK` failure and
+   call normal `release()`. A client whose transaction did not roll back must be
+   discarded with `release(error)` while the public operation preserves a
+   sanitized failure.
+3. **Important — raw driver errors escape.** Lazy table preparation and public
+   state/event history transaction paths can propagate raw node-postgres errors,
+   contrary to the provider's stable sanitized-error contract.
+4. **Minor but required — live history never crosses a page.** The live suite
+   appends only three states while claiming bounded-page maintenance. A real
+   129-plus-row PostgreSQL case must prove trim/truncate results across pages.
+
+All four findings are consequential and technically consistent with the shared
+storage contracts and provider error policy; none is rejected or deferred. The
+existing PostgreSQL implementer context receives one test-first correction batch.
+It remains the sole production writer, uses the immutable configured
+`implementer` profile (`gpt-5.6-terra` / `medium`), and may not spawn child
+agents. Round 2 starts only after focused and live verification, review-log
+updates, commit, and push.
