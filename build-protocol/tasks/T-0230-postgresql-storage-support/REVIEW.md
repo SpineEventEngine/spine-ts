@@ -438,3 +438,27 @@ release verification reopen only after PostgreSQL 16 and 18 pass.
 - PostgreSQL 16.15 and 18.6 live acceptance, correction re-review, documentation,
   and final release verification are complete. No unresolved finding or external
   evidence gap remains for T-0230.
+
+## Human-Requested Three-Round Final Review
+
+The human requested three consequential, sequential, memory-free reviews. Each
+reviewer sees the current branch only after all confirmed findings from the
+previous round have been corrected and pushed.
+
+1. Round 1 uses the existing `performance_reliability_reviewer` role, explicitly
+   dispatched as `gpt-5.6-terra` / `high`. Scope: PostgreSQL persistence,
+   transactions, concurrency, lifecycle, cleanup, retry behavior, tenant
+   isolation, and live-test adequacy across the complete T-0230 branch diff.
+2. Round 2 uses the existing `typescript_api_docs_reviewer` role, explicitly
+   dispatched as `gpt-5.6-terra` / `high`. Scope: public TypeScript contracts,
+   exports, declarations, TSDoc, package API documentation, compatibility, and
+   consumer-facing examples at the post-round-1 endpoint.
+3. Round 3 uses the existing `style_maintainability_reviewer` role, explicitly
+   dispatched as `gpt-5.6-terra` / `high`. Scope: repository rules, module depth,
+   naming, method size, readability, duplication, fixture quality, and test
+   maintainability at the post-round-2 endpoint.
+
+All three assignments are read-only, forbid child agents, and receive no prior
+conversation or reviewer memory. The Desktop surface supports explicit role,
+model, and reasoning dispatch. Additional runtime self-introspection is recorded
+only if the surface exposes it.
