@@ -588,6 +588,14 @@ starts only after this correction is verified, committed, and pushed.
   case without changing the mocked `pg` module behavior. Focused coverage
   passes `28/28`.
 
+### Release Preflight Correction Evidence
+
+- The one authoritative release attempt stopped before tests in
+  `typecheck:tooling` with eight test-only errors. Scheduled clients now expose
+  actual typed Vitest query mocks, deferred resolver slots use the Promise
+  resolver signature, and custom DDL remains generic over the public table
+  callback. Tooling typechecking passes; no production behavior changed.
+
 ### Round 3: Style And Maintainability Finding
 
 Round 3 ran as the existing `style_maintainability_reviewer`, explicitly

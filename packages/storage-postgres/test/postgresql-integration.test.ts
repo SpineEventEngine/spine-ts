@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, fromBinary, ScalarType } from "@bufbuild/protobuf";
+import { create, fromBinary, type Message, ScalarType } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import {
   EventIdSchema,
@@ -35,7 +35,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { entityStorage } from "./postgres-entity-seam.js";
 
-import { PostgresStorageFactory } from "../src/index.js";
+import { PostgresStorageFactory, type PostgresTableSpec } from "../src/index.js";
 
 const url = requireUrl("SPINE_TS_POSTGRESQL_URL");
 const tenantAUrl = requireUrl("SPINE_TS_POSTGRESQL_TENANT_A_URL");
@@ -283,9 +283,7 @@ function value(text: string): StringValue {
   return create(StringValueSchema, { value: text });
 }
 
-function customCreate(
-  table: import("../src/index.js").PostgresTableSpec<unknown, StringValue>,
-): string {
+function customCreate<I, R extends Message>(table: PostgresTableSpec<I, R>): string {
   const columns = table.columns
     .map(
       (column) =>

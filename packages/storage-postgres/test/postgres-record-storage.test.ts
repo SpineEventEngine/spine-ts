@@ -988,9 +988,9 @@ function lockedQueries() {
   const held = new Map<bigint, string>();
   const clientLocks = new Map<string, Set<bigint>>();
   const waiters = new Map<bigint, (() => void)[]>();
-  let releaseCas = () => undefined;
-  let signalCasLocked = () => undefined;
-  let signalMutationReached = () => undefined;
+  let releaseCas: (value?: void | PromiseLike<void>) => void = () => undefined;
+  let signalCasLocked: (value?: void | PromiseLike<void>) => void = () => undefined;
+  let signalMutationReached: (value?: void | PromiseLike<void>) => void = () => undefined;
   const casLocked = new Promise<void>((resolve) => {
     signalCasLocked = resolve;
   });
@@ -1000,8 +1000,8 @@ function lockedQueries() {
   const mutationReached = new Promise<void>((resolve) => {
     signalMutationReached = resolve;
   });
-  const client = (name: string) => ({
-    query: (sql: string, parameters?: readonly unknown[]) =>
+  const client = (name: string) => {
+    const query = vi.fn<Query>((sql, parameters) =>
       lockedQuery(
         name,
         sql,
@@ -1017,8 +1017,9 @@ function lockedQueries() {
           await casReleased;
         },
       ),
-    release: vi.fn(),
-  });
+    );
+    return { query, release: vi.fn() };
+  };
   return { casLocked, client, mutationReached, releaseCas, writes };
 }
 

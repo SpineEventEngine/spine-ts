@@ -1865,3 +1865,13 @@ operation failed.` and explicitly rejects the secret-bearing raw text, while
   restores every original default and runs in `beforeEach` without resetting the
   `pg` module mock implementation. Focused Entity-history coverage passes
   `28/28` before complete serial verification.
+
+## Release Preflight Correction: Test Tooling Types
+
+- The authoritative release run stopped at `typecheck:tooling` with eight
+  test-only errors: scheduled record clients used plain functions where the
+  fixture contract requires callable Vitest query mocks, deferred resolver
+  slots inferred an incompatible no-argument return, and live custom DDL
+  narrowed the generic table callback to `StringValue`. The corrections retain
+  scheduled behavior, use Promise resolver signatures, and preserve generic
+  `PostgresTableSpec<I, R>` typing. `pnpm typecheck:tooling` now passes.
