@@ -843,3 +843,52 @@ pass with 93.29% statements, 90.07% branches, 93.05% functions, and 94.46%
 lines. Packaging, external installation, consumer compilation, generated
 cleanliness, and release-readiness checks are green. The correction is accepted
 with no unresolved review finding or deferred work.
+
+## New Package Publication Tooling Follow-up
+
+The human-requested replacement of the inline first-publication recipe adds one
+release script and its tests. The existing `performance_reliability_reviewer`
+reviews external-mutation ordering, fail-closed registry checks, authentication
+cleanup, temporary-file cleanup, interruption recovery, and command safety. The
+assignment is read-only, uses no inherited conversation, prohibits child
+spawning, and explicitly uses the role's immutable `gpt-5.6-terra` / `high`
+profile. The Desktop surface exposes that configured role and profile but no
+additional runtime self-introspection.
+
+Documentation, API, Protobuf/DDD, and security specialist reviews are N/A for
+this narrow follow-up. Deterministic checks cover the humane usage text, every
+function's TSDoc, formatting, public release inventory, and the absence of
+stored repository or CI credentials. The script uses npm's standard local
+browser login and guaranteed logout; it introduces no credential store.
+
+### New Package Publication Tooling Findings
+
+The independent reviewer ran under the recorded `gpt-5.6-terra` / `high`
+profile and reported three accepted findings. Signal termination can bypass npm
+logout and temporary-directory cleanup. Recovery checks package-level existence
+but not the intended published version before changing trust settings. Final
+commands print the tag and trust record but do not compare them with the
+expected values. Add observed failing regressions for interruption, exact-version
+recovery, and parsed tag/trust verification, then correct all three before the
+final bounded gate.
+
+### New Package Publication Tooling Re-review Result
+
+All three accepted findings are corrected. `SIGINT` and `SIGTERM` now use the
+same idempotent logout and temporary-directory cleanup as ordinary failures.
+Trust-only recovery requires the exact release version to exist before npm
+login or any trust-setting change. Final verification parses npm's JSON output
+and checks the expected dist-tag, GitHub repository, workflow file,
+environment, and package-creation permission.
+
+The independent reliability re-review reported no remaining finding. Its
+focused test run passes `10/10`; deterministic lint, TSDoc, formatting,
+documentation-audience, and release-readiness checks also pass.
+
+### New Package Publication Tooling Final Verification
+
+Fresh `pnpm verify:publish` passes all repository and publication gates. All
+`302/302` test files and `4,924/4,924` tests pass with 93.29% statements, 90.07%
+branches, 93.05% functions, and 94.46% lines. Package preparation, external
+installation, release readiness, production-dependency checks, and both full
+and production dependency audits are green. No npm registry mutation was run.

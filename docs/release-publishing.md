@@ -47,80 +47,44 @@ Do this only after the pull request is otherwise ready to merge. The new package
 uses exact versions of the other framework packages, so it may not be usable
 until the same release has been published for the rest of the workspace.
 
-The example below uses `storage-postgres`. Change `package_directory` when
-bootstrapping another package.
+The repository provides `scripts/publish-new-package.mjs` for the complete
+procedure. Pass the directory of the new public package. For example:
 
 ```bash
-set -euo pipefail
-
-package_directory="packages/storage-postgres"
-package_name="$(node -p "require('./${package_directory}/package.json').name")"
-package_version="$(node -p "require('./${package_directory}/package.json').version")"
-release_tag="$(node scripts/release-cli.mjs tag)"
-archive_name="${package_name#@}"
-archive_name="${archive_name/\//-}-${package_version}.tgz"
-release_directory="$(mktemp -d "${TMPDIR:-/tmp}/spine-first-publication.XXXXXX")"
-logged_in=false
-
-cleanup() {
-  if [[ "$logged_in" == true ]]; then
-    npm logout --registry https://registry.npmjs.org/ || true
-  fi
-  rm -rf "$release_directory"
-}
-trap cleanup EXIT
-
-# Run the same checks used by the publication workflow.
-pnpm verify:publish
-
-# Build and test all release archives. Publish the prepared archive, not the
-# package directory, so the local publication uses the artifact already proved
-# by the repository release tooling.
-node scripts/release-cli.mjs prepare --output "$release_directory/release"
-package_archive="$release_directory/release/$archive_name"
-test -f "$package_archive"
-
-# Stop if the package already exists. An E404 response is expected for a package
-# that has not been published before.
-npm ping --registry https://registry.npmjs.org/
-if npm view "$package_name" name \
-  --registry https://registry.npmjs.org/; then
-  echo "$package_name already exists; do not repeat its first publication." >&2
-  exit 1
-fi
-
-# Sign in through npm's browser-based login. This creates a local session only;
-# no credential is added to the repository or to GitHub Actions.
-npm login --registry https://registry.npmjs.org/
-logged_in=true
-
-# The first publication creates the public package in the organization scope.
-npm publish "$package_archive" \
-  --access public \
-  --tag "$release_tag" \
-  --registry https://registry.npmjs.org/
-
-# Authorize the normal master workflow immediately after the package exists.
-npm trust github "$package_name" \
-  --repository SpineEventEngine/spine-ts \
-  --file publish.yml \
-  --environment gh-actions-environment \
-  --allow-publish \
-  --yes
-
-# Check both the published version and the trusted-publisher record before
-# removing the local npm session.
-npm view "$package_name@$package_version" version \
-  --registry https://registry.npmjs.org/
-npm trust list "$package_name" --json
-npm logout --registry https://registry.npmjs.org/
-logged_in=false
+pnpm release:publish-new-package packages/storage-postgres
 ```
 
-After logging out, open the package settings on npmjs.com. Confirm that the
-trusted publisher names `SpineEventEngine/spine-ts`, `publish.yml`, and
+The script:
+
+1. Confirms that the directory is one of the repository's public packages and
+   that the package does not already exist on npm.
+2. Shows the exact package, version, and release tag, then asks the maintainer to
+   type the package name before anything is published.
+3. Runs `pnpm verify:publish` and prepares the same tested package archive used
+   by CI.
+4. Opens npm's browser-based login, publishes only the new package, and adds the
+   `SpineEventEngine/spine-ts` `publish.yml` trusted publisher for
+   `gh-actions-environment`.
+5. Verifies the published version and trusted-publisher record, logs out of npm,
+   and deletes the temporary release files. The same cleanup runs if the script
+   receives `SIGINT` or `SIGTERM`.
+
+The script never adds an npm credential to the repository or GitHub Actions. If
+publication succeeds but trusted-publisher setup does not finish, rerun only the
+setup step. Recovery stops without changing npm settings unless the exact
+workspace version is already published:
+
+```bash
+pnpm release:publish-new-package --trust-only packages/storage-postgres
+```
+
+For command help, run `pnpm release:publish-new-package --help`.
+
+After the script finishes, open the package settings on npmjs.com. Confirm that
+the trusted publisher names `SpineEventEngine/spine-ts`, `publish.yml`, and
 `gh-actions-environment`, allows `npm publish`, and then disallow token-based
-publishing for the package.
+publishing for the package. This final publishing-access setting remains a
+manual npm account action.
 
 Do not change the version after this local publication. When the pull request is
 merged, registry preflight skips this already-published package, publishes the
