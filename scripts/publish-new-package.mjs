@@ -351,19 +351,19 @@ function registerCleanupHandlers(cleanup, registerSignal, exit) {
 /**
  * Publishes a previously absent package and configures its trusted publisher.
  *
- * @param options Publication dependencies and the validated package target.
- * @param options.repoRoot Repository root used for verification and preparation.
- * @param options.target Validated package and archive identity.
- * @param options.capture Command runner that returns standard output.
- * @param options.confirm Confirmation callback that guards registry mutation.
- * @param options.exit Callback that terminates after signal cleanup.
- * @param options.fetchResponse Fetch implementation used for registry checks.
- * @param options.makeTemporaryDirectory Callback that creates an isolated temporary directory.
- * @param options.removeDirectory Callback that removes the temporary directory.
- * @param options.pathExists Callback that confirms the prepared archive exists.
- * @param options.registerSignal Callback that registers signal cleanup.
- * @param options.run Foreground command runner.
- * @param options.write Progress output callback.
+ * @param repoRoot Repository root used for verification and preparation.
+ * @param target Validated package and archive identity.
+ * @param capture Command runner that returns standard output.
+ * @param confirm Confirmation callback that guards registry mutation.
+ * @param exit Callback that terminates after signal cleanup.
+ * @param fetchResponse Fetch implementation used for registry checks.
+ * @param makeTemporaryDirectory Callback that creates an isolated temporary directory.
+ * @param removeDirectory Callback that removes the temporary directory.
+ * @param pathExists Callback that confirms the prepared archive exists.
+ * @param registerSignal Callback that registers signal cleanup.
+ * @param run Foreground command runner.
+ * @param write Progress output callback.
+ * @returns A promise that resolves after publication and trusted-publisher setup finish.
  */
 export async function publishNewPackage({
   repoRoot,
@@ -410,11 +410,10 @@ export async function publishNewPackage({
 /**
  * Publishes the prepared archive and adds its trusted publisher under one login.
  *
- * @param options Prepared archive, command runner, and publication target.
- * @param options.archive Absolute path to the verified package archive.
- * @param options.capture Command runner that returns standard output.
- * @param options.run Foreground command runner.
- * @param options.target Validated package publication target.
+ * @param archive Absolute path to the verified package archive.
+ * @param capture Command runner that returns standard output.
+ * @param run Foreground command runner.
+ * @param target Validated package publication target.
  */
 async function publishAndConfigure({ archive, capture, run, target }) {
   let published = false;
@@ -442,17 +441,17 @@ async function publishAndConfigure({ archive, capture, run, target }) {
 }
 
 /**
- * Configures trusted publishing after a successful publication with incomplete setup.
+ * Sets trusted publishing after a successful publication with incomplete setup.
  *
- * @param options Recovery dependencies and the validated package target.
- * @param options.target Validated package publication target.
- * @param options.capture Command runner that returns standard output.
- * @param options.confirm Confirmation callback that guards the settings change.
- * @param options.exit Callback that terminates after signal cleanup.
- * @param options.fetchResponse Fetch implementation used for registry checks.
- * @param options.registerSignal Callback that registers signal cleanup.
- * @param options.run Foreground command runner.
- * @param options.write Progress output callback.
+ * @param target Validated package publication target.
+ * @param capture Command runner that returns standard output.
+ * @param confirm Confirmation callback that guards the settings change.
+ * @param exit Callback that terminates after signal cleanup.
+ * @param fetchResponse Fetch implementation used for registry checks.
+ * @param registerSignal Callback that registers signal cleanup.
+ * @param run Foreground command runner.
+ * @param write Progress output callback.
+ * @returns A promise that resolves after trusted-publisher setup finishes.
  */
 export async function configureTrustedPublisher({
   target,

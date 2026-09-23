@@ -892,3 +892,14 @@ Fresh `pnpm verify:publish` passes all repository and publication gates. All
 branches, 93.05% functions, and 94.46% lines. Package preparation, external
 installation, release readiness, production-dependency checks, and both full
 and production dependency audits are green. No npm registry mutation was run.
+
+### New Package Publication Tooling CI Correction
+
+The pull-request build exposed invalid TSDoc on the two exported asynchronous
+entry points. Pre-commit verification had not inspected the then-untracked
+script, while CI inspected the committed file. The destructured parameters now
+follow the repository convention, their returned promises are documented, and
+the unsupported summary verb is replaced. `CI=true pnpm lint:tsdoc` and the
+focused publication and TSDoc-checker suites pass with `77/77` tests.
+The exact workflow command, `CI=true pnpm verify:release`, also passes all
+`302/302` test files and `4,924/4,924` tests at the existing coverage baseline.
