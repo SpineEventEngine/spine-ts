@@ -1,6 +1,6 @@
 # T-0230 Work Log
 
-Status: Complete
+Status: Todo durable-storage final verification pending
 Branch: `add-postgresql-storage`
 Checkout: `/Users/armiol/development/experiments/spine-ts`
 Baseline: `6fffcd6102b3eff94b0f77eb6db2fbf2e02ba172`
@@ -1998,3 +1998,124 @@ operation failed.` and explicitly rejects the secret-bearing raw text, while
   test files and `4,902/4,902` tests passed. The earlier seven failures from the
   contended task wrapper also passed individually before this single-worker
   release run. No task work remains.
+
+## Todo Durable Storage Options
+
+- Human request: make the runnable Todo application select MySQL or PostgreSQL
+  in addition to its existing in-memory and Datastore examples, explain the
+  selection in the source, and test both new options.
+- This is a standard example-integration correction. It does not change storage
+  provider contracts. Acceptance requires a small documented composition
+  boundary, preservation of the default in-memory start, explicit configuration
+  errors, focused test-first coverage, real Todo behavior against disposable
+  MySQL and PostgreSQL servers, current human documentation, and the repository
+  verification/review gates required for the changed example and dependencies.
+- Estimate: 2–3.5 hours of active implementation, verification, review,
+  integration, and reporting, plus approximately 5–15 minutes of Docker startup
+  and live database execution.
+- Existing role: `implementer`. Responsibility: the Todo storage-selection
+  source, example manifest/lockfile, focused tests, launch guidance, and task
+  record evidence. No other agent may edit those files concurrently, and the
+  implementer must preserve unrelated changes.
+- Explicit dispatch profile: `gpt-5.6-terra` with `medium` reasoning. Child
+  spawning is prohibited. Desktop supports the explicit dispatch fields; the
+  immutable configured role/profile is acceptance evidence because additional
+  runtime self-introspection is not exposed.
+- Applicable instructions: `BUILD_PROTOCOL.md`, `CODE_QUALITY.md`, the current
+  task records, and test-driven development. Production/example behavior must
+  follow observed RED, GREEN, and refactor steps.
+
+## Todo Durable Storage Options: Implementation Evidence
+
+- RED: `pnpm --config.verify-deps-before-run=false exec vitest run
+examples/todo/test/todo-storage.test.ts --maxWorkers=1` failed because
+  `src/todo-storage.js` did not exist. The new focused contract covered the
+  in-memory default, MySQL, PostgreSQL, missing selected URLs, and an unknown
+  selection before production code was added.
+- GREEN: `src/todo-storage.ts` is the documented selection boundary. It leaves
+  `memory` as the default, builds `MysqlStorageFactory` or
+  `PostgresStorageFactory` directly for the two durable options, and binds the
+  generated Todo type registry to storage stringifiers for durable identifiers
+  and histories. URL errors name only the required environment variable; they
+  do not include configured values. `startTodoServer` accepts a caller-supplied
+  storage factory and otherwise uses that selection.
+- GREEN evidence: the focused selection suite passed `6/6`, and the compiled
+  single-process suite passed `5/5`, including storage propagation to
+  `createTodoContext`. The Todo manifest and lockfile now declare both provider
+  packages. `start:mysql` and `start:postgresql` are explicit opt-in launch
+  commands; README and user-guide commands run the smoke command/query journey
+  against supplied database URLs without starting Docker. The managed
+  multi-process Datastore example remains unchanged.
+- Remaining validation: run formatting, documentation checks, Todo typecheck,
+  and the focused aggregate test set. Live MySQL and PostgreSQL services were
+  intentionally not started in this slice; the documented commands require
+  caller-supplied URLs.
+- Lifecycle correction: environment-selected factories are registered with the
+  existing server builder through `addResource`, so server shutdown and failed
+  startup use the framework's established resource ordering and rollback. A
+  caller-supplied factory is deliberately not registered and callers close it
+  after the server finishes. Focused compiled tests now pass `30/30`, covering
+  both boundaries.
+- The selection boundary is the documented `TodoStorage` object rather than new
+  standalone functions. No standalone-function ledger was changed.
+- Final bounded verification: `pnpm -C examples/todo exec tsc --noEmit`, the
+  focused Todo test command (`30/30`), Prettier, scoped ESLint, cleanup,
+  documentation audience/snippet checks, TSDoc, and `git diff --check` pass.
+  `clean:generated-dist` removed generated declaration output and its build
+  information after validation. No live database, Docker, or release profile
+  was run; the documented opt-in launch and smoke commands remain the required
+  live MySQL/PostgreSQL evidence once supplied services are available.
+
+## Todo Durable Storage Options: Live Evidence
+
+- Independent verification first reproduced `29/30`: the barrel-import case
+  could not load generated Todo JavaScript. Investigation proved the preceding
+  `clean:generated-dist` command had deliberately removed `dist/generated`, so
+  running a compiled test without rebuilding was invalid preparation, not a
+  source defect. A clean `pnpm typecheck:build` restored the generated output;
+  the identical three-file suite then passed `30/30` unchanged.
+- A disposable Docker Official Image `mysql:8.4.10` server reported MySQL
+  `8.4.10`. The exact `start:mysql` package command used a fresh `todo`
+  database, reached listener readiness, and the checked-in smoke client posted
+  `CreateTask` and read the resulting `TaskList` successfully.
+- A disposable Docker Official Image `postgres:18` server reported PostgreSQL
+  `18.6`. The exact `start:postgresql` package command used a fresh `todo`
+  database, reached listener readiness, and the same command/query smoke journey
+  succeeded.
+- Both application processes were stopped after their smoke journey. Both
+  disposable containers were removed, and no Todo server or Vitest worker was
+  left running.
+
+## Todo Durable Storage Options: Accepted Review Corrections
+
+- RED: the new single-process context-assembly test selected a closeable
+  environment factory, rejected `createTodoContext`, and observed zero close
+  calls. The separate caller-supplied-factory test established that application
+  cleanup must not close caller storage on the same failure path.
+- GREEN: `startTodoServer` now closes only environment-selected storage when
+  context assembly rejects. After context assembly, environment storage remains
+  registered through the existing server `addResource` lifecycle, preserving
+  its established start-rollback behavior. Caller-supplied storage remains
+  caller-closed after either server shutdown or rejected startup.
+- The public package barrel no longer exports the local `TodoStorage` selector.
+  The launcher comment now documents memory as the default and environment
+  selection for MySQL/PostgreSQL. The configuration-error test captures the
+  failure and proves its supplied secret is absent. Reference wording is
+  reflowed to state caller lifecycle responsibility explicitly.
+- GREEN evidence: the focused Todo suite passes `32/32` after rebuilding the
+  compiled example. Remaining bounded checks are formatting on supported source
+  files, scoped lint/cleanup, documentation checks, TSDoc, and diff hygiene;
+  no live database, Docker, or release profile is part of this correction.
+
+## Todo Durable Storage Options: Reliability Re-review Correction
+
+- The accepted re-review finding requested one missing caller-lifecycle proof:
+  a caller-supplied storage factory remains open when the mocked server start
+  rejects after context assembly.
+- Production behavior required no change. The focused test passes with the
+  caller factory unclosed, proving that only environment-selected storage enters
+  the server resource lifecycle. The updated three-file focused suite passes
+  `33/33`, and `pnpm -C examples/todo exec tsc --noEmit` passes.
+- Dependency wiring and its lockfile update were committed separately and
+  pushed to the official feature branch as `06f4521e1`, preserving the
+  repository's dependency-commit boundary.

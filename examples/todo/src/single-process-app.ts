@@ -13,13 +13,15 @@
  */
 
 /**
- * Starts the beginner-friendly To-Do app as one Node process with in-memory storage.
+ * Starts the beginner-friendly To-Do app as one Node process with selectable local storage.
  */
 
 import { Server, type RunningServer } from "@spine-event-engine/server";
+import type { StorageFactory } from "@spine-event-engine/storage";
 
 import { createTodoContext } from "./todo-app.js";
 import { TodoProcessSignals } from "./process.js";
+import { TodoStorage } from "./todo-storage.js";
 
 /**
  * Options for the single-process To-Do server.
@@ -36,6 +38,14 @@ export interface TodoServerOptions {
    * Port for the HTTP/2 listener. Defaults to `8080`; use `0` for a free port.
    */
   readonly port?: number;
+
+  /**
+   * Supplies storage for a programmatically assembled server.
+   *
+   * When omitted, `TODO_STORAGE` selects the in-memory default, MySQL, or PostgreSQL.
+   * Callers close a supplied factory after server shutdown or rejected startup.
+   */
+  readonly storageFactory?: StorageFactory;
 }
 
 /**
@@ -44,17 +54,27 @@ export interface TodoServerOptions {
 export type TodoServer = RunningServer;
 
 /**
- * Starts one To-Do server process with in-memory storage.
+ * Starts one To-Do server process with selected local storage.
  *
- * @param options Optional listener host and port overrides.
+ * @param options Optional listener and caller-supplied storage overrides.
  * @returns The running server, which callers must close when finished.
  */
 export async function startTodoServer(options: TodoServerOptions = {}): Promise<TodoServer> {
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 8080;
-  return Server.atPort(port, { host })
-    .add(await createTodoContext())
-    .start();
+  const selectedStorage =
+    options.storageFactory === undefined ? await TodoStorage.select() : undefined;
+  const storageFactory = options.storageFactory ?? selectedStorage;
+  let context: Awaited<ReturnType<typeof createTodoContext>>;
+  try {
+    context = await createTodoContext(storageFactory === undefined ? {} : { storageFactory });
+  } catch (error) {
+    selectedStorage?.close();
+    throw error;
+  }
+  const server = Server.atPort(port, { host }).add(context);
+  if (selectedStorage !== undefined) server.addResource(selectedStorage);
+  return server.start();
 }
 
 if (

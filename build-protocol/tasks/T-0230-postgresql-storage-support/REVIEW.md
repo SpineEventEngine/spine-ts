@@ -757,3 +757,80 @@ typechecking, lint, documentation, packaging, dependency, release-readiness,
 external-consumer, and coverage gates. All `300/300` test files and
 `4,902/4,902` tests passed. The correction is accepted with no unresolved
 finding or deferred work.
+
+### Todo Durable Storage Review Assignment
+
+The uncommitted Todo correction receives one independent, memory-free review
+wave after focused and live MySQL/PostgreSQL verification. The existing
+`style_maintainability_reviewer` checks the composition boundary, naming,
+method size, tests, and unnecessary concepts under its explicit immutable
+`gpt-5.6-terra` / `high` profile. The existing `documentation_reviewer` checks
+the README, user guide, reference, and source explanations for humane reader
+order and exact runnable commands under its explicit immutable
+`gpt-5.6-luna` / `medium` profile. The existing
+`performance_reliability_reviewer` checks pool lifecycle, startup rollback,
+shutdown ordering, and live-test meaning under its explicit immutable
+`gpt-5.6-terra` / `high` profile. The existing
+`typescript_api_docs_reviewer` checks public example exports, declarations,
+TSDoc, dependency/API compatibility, and accidental contract expansion under
+its explicit immutable `gpt-5.6-terra` / `high` profile. All assignments are
+read-only, use no inherited conversation, and prohibit child spawning. The
+Desktop surface exposes their configured roles and profiles but not additional
+runtime self-introspection.
+
+Security review is N/A for this correction: it adds no authentication,
+authorization, serialization, tenant, or credential-storage mechanism. The
+review wave still checks that errors and documentation do not expose supplied
+database URLs. Protobuf/DDD review is N/A because no message, handler, domain,
+wire, or storage-provider contract changes.
+
+### Todo Durable Storage Review Findings
+
+The complete independent wave reported one P1 and five P2 findings. All are
+accepted as one correction batch:
+
+- P1: an environment-created database factory is selected before
+  `createTodoContext()` but registered with the server only afterward, so a
+  context-assembly rejection leaks its pool. Add an observed failing test for
+  that boundary and close the selected factory exactly once.
+- P2: prove URL redaction by asserting the supplied secret value is absent from
+  the reported configuration error, not merely that expected text is present.
+- P2: update the shared single-process launcher comment because memory is now
+  the default rather than the only storage mode.
+- P2: reflow the overlong Todo reference line.
+- P2: remove the accidental package-root `TodoStorage` export; environment
+  selection is launcher composition, while callers use `startTodoServer` with
+  an optional `StorageFactory`.
+- P2: document and test that callers remain responsible for a supplied factory
+  both after normal server shutdown and when startup rejects.
+
+The correction returns to the same implementation context under its already
+recorded explicit `gpt-5.6-terra` / `medium` implementer profile. Only the
+reliability concern requires re-review after correction; the remaining items
+are deterministic API, documentation, formatting, and assertion corrections.
+
+### Todo Durable Storage Reliability Re-review
+
+The P1 context-assembly leak is corrected: environment-created storage closes
+once on context failure, normal close, and server-start rollback. Re-review
+reported one remaining P2 coverage gap. Caller-supplied storage is proved
+caller-managed after normal shutdown and context-assembly failure, but the
+listener-start rejection case lacks the same explicit assertion. Add that
+focused regression and rerun the lifecycle suite; the production flow itself
+already excludes caller-supplied storage from server resources.
+
+### Todo Durable Storage Review Result
+
+All accepted findings are corrected. The P1 context-assembly leak now has an
+observed RED/GREEN regression. Environment-created storage closes exactly once
+on context failure, listener-start rollback, and normal server shutdown.
+Caller-supplied storage remains caller-managed after normal shutdown, context
+failure, and listener-start failure. The final missing case was a test-only
+correction and therefore did not reopen specialist review.
+
+The package barrel no longer exposes the environment selector, configuration
+tests explicitly reject secret-bearing error text, the shared launcher and
+human documentation describe memory as the default rather than the only mode,
+and changed lines satisfy repository formatting limits. The focused suite
+passes `33/33`; Todo typechecking, scoped lint, cleanup, TSDoc, documentation,
+formatting, and diff-hygiene checks pass. No review finding remains.

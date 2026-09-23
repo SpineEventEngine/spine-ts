@@ -21,8 +21,8 @@ examples/todo/scripts/run-single-process.sh
 The launcher builds the workspace once and starts one Node process from
 [`single-process-app.ts`](src/single-process-app.ts). It assembles the reusable
 To-Do application area (a Bounded Context) in [`todo-app.ts`](src/todo-app.ts), listens at
-`http://127.0.0.1:8080`, and keeps its Event Store in memory. Run the smoke
-client in another terminal:
+`http://127.0.0.1:8080`, and keeps its Event Store in memory by default. Run the smoke client in
+another terminal:
 
 ```bash
 pnpm --filter @spine-event-engine/example-todo smoke
@@ -36,6 +36,34 @@ flowchart LR
 ```
 
 Press `Ctrl-C` to stop the app. Its in-memory data disappears when it stops.
+
+### Durable single-process storage
+
+Set `TODO_STORAGE` to `mysql` or `postgresql` to use a durable database in the
+same single Node process. Each choice requires its matching URL; startup reports
+the missing setting without printing the URL or its credentials.
+
+```bash
+TODO_STORAGE=mysql \
+TODO_MYSQL_URL='mysql://user:password@127.0.0.1:3306/todo' \
+pnpm --filter @spine-event-engine/example-todo start:mysql
+```
+
+```bash
+TODO_STORAGE=postgresql \
+TODO_POSTGRESQL_URL='postgresql://user:password@127.0.0.1:5432/todo' \
+pnpm --filter @spine-event-engine/example-todo start:postgresql
+```
+
+With either server running, `pnpm --filter @spine-event-engine/example-todo smoke`
+posts a real To-Do command and reads the resulting task-list query through the
+selected backend. These are opt-in live checks: they use the database URL you
+supply and do not create or start database containers.
+
+`TODO_STORAGE=memory` is explicit but optional because it is the default. The
+separate managed multi-process demonstration below continues to use Datastore;
+it demonstrates shared replicas and Delivery rather than these local durable
+single-process choices.
 
 ### Multi-process app
 
