@@ -2201,3 +2201,8 @@ examples/todo/test/todo-storage.test.ts --maxWorkers=1` failed because
   typecheck, lint, documentation, generated cleanliness, package tarballs,
   clean external installation, production-dependency checks, and release
   readiness.
+- A fresh clone of pushed commit `b53c14357` passes the user's exact
+  `pnpm install --frozen-lockfile` command without any cyclic-workspace warning.
+  The source-only checkout still reports the separate pre-existing bin-link
+  warning for the not-yet-built `delivery-server` CLI; this correction neither
+  suppresses nor reclassifies that unrelated warning.
