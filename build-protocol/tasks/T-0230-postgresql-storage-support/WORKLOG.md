@@ -1,6 +1,6 @@
 # T-0230 Work Log
 
-Status: Todo durable-storage final verification pending
+Status: Complete
 Branch: `add-postgresql-storage`
 Checkout: `/Users/armiol/development/experiments/spine-ts`
 Baseline: `6fffcd6102b3eff94b0f77eb6db2fbf2e02ba172`
@@ -2140,3 +2140,20 @@ examples/todo/test/todo-storage.test.ts --maxWorkers=1` failed because
 - Dependency wiring and its lockfile update were committed separately and
   pushed to the official feature branch as `06f4521e1`, preserving the
   repository's dependency-commit boundary.
+
+## Todo Durable Storage Options: Final Verification
+
+- The corrected implementation and test typing are pushed through commit
+  `1c8320ead`. Fresh `pnpm verify:release` at that endpoint exits zero.
+- All `301/301` test files and `4,914/4,914` tests pass. Coverage is 93.29%
+  statements (`23,889/25,606`), 90.07% branches (`14,125/15,682`), 93.05%
+  functions (`6,053/6,505`), and 94.46% lines (`22,086/23,381`).
+- The same run passes Node, Proto generation/checksum/style, generated build,
+  tooling typecheck, repository lint, cleanup, TSDoc, copyright, formatting,
+  API/documentation, generated-output cleanliness, logging containment,
+  production-dependency and release-readiness gates, package tarballs, clean
+  external installation, and consumer compilation.
+- Focused and live acceptance remain current: `33/33` Todo tests pass, the new
+  selector has 100% direct source coverage, and real MySQL 8.4.10 plus
+  PostgreSQL 18.6 each completed the exact launcher and command/query smoke
+  journey. No task work remains.
