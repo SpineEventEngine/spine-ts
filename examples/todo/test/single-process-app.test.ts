@@ -86,28 +86,31 @@ describe("To-Do single-process app", () => {
   });
 
   it("passes caller-supplied durable storage to the reusable To-Do context", async () => {
-    const storageFactory = { close: vi.fn() } as never;
+    const close = vi.fn();
+    const storageFactory = { close } as never;
     const server = await startTodoServer({ storageFactory });
 
     await server.close();
 
     expect(calls.createContext).toHaveBeenLastCalledWith({ storageFactory });
-    expect(storageFactory.close).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
   });
 
   it("closes environment-selected storage after the server closes", async () => {
-    const storageFactory = { close: vi.fn() } as never;
+    const close = vi.fn();
+    const storageFactory = { close } as never;
     calls.selectStorage.mockResolvedValue(storageFactory);
 
     const server = await startTodoServer();
     await server.close();
 
     expect(calls.addResource).toHaveBeenCalledWith(storageFactory);
-    expect(storageFactory.close).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it("closes environment-selected storage when server startup fails", async () => {
-    const storageFactory = { close: vi.fn() } as never;
+    const close = vi.fn();
+    const storageFactory = { close } as never;
     calls.selectStorage.mockResolvedValue(storageFactory);
     calls.start.mockImplementationOnce(() => {
       for (const resource of calls.resources) resource.close();
@@ -116,35 +119,38 @@ describe("To-Do single-process app", () => {
 
     await expect(startTodoServer()).rejects.toThrow("listener unavailable");
 
-    expect(storageFactory.close).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it("closes environment-selected storage when context assembly fails", async () => {
-    const storageFactory = { close: vi.fn() } as never;
+    const close = vi.fn();
+    const storageFactory = { close } as never;
     calls.selectStorage.mockResolvedValue(storageFactory);
     calls.createContext.mockRejectedValueOnce(new Error("context unavailable"));
 
     await expect(startTodoServer()).rejects.toThrow("context unavailable");
 
-    expect(storageFactory.close).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it("leaves caller-supplied storage open when context assembly fails", async () => {
-    const storageFactory = { close: vi.fn() } as never;
+    const close = vi.fn();
+    const storageFactory = { close } as never;
     calls.createContext.mockRejectedValueOnce(new Error("context unavailable"));
 
     await expect(startTodoServer({ storageFactory })).rejects.toThrow("context unavailable");
 
-    expect(storageFactory.close).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
   });
 
   it("leaves caller-supplied storage open when server startup fails", async () => {
-    const storageFactory = { close: vi.fn() } as never;
+    const close = vi.fn();
+    const storageFactory = { close } as never;
     calls.start.mockRejectedValueOnce(new Error("listener unavailable"));
 
     await expect(startTodoServer({ storageFactory })).rejects.toThrow("listener unavailable");
 
-    expect(storageFactory.close).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
   });
 
   it("installs lifecycle cleanup only when Node executes the app file", async () => {

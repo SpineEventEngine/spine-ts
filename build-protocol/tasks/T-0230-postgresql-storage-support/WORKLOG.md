@@ -2116,6 +2116,27 @@ examples/todo/test/todo-storage.test.ts --maxWorkers=1` failed because
   caller factory unclosed, proving that only environment-selected storage enters
   the server resource lifecycle. The updated three-file focused suite passes
   `33/33`, and `pnpm -C examples/todo exec tsc --noEmit` passes.
+
+## Todo Durable Storage Options: Tooling Typecheck Correction
+
+- Release verification stopped at `typecheck:tooling` with six TS2339 errors in
+  the single-process storage lifecycle tests. Each fixture was intentionally
+  cast to `never` for the production storage parameter, then incorrectly used
+  through that `never` value to inspect its `close` spy.
+- The test-only correction retains one separate `close` spy per fixture and
+  asserts that spy directly. The factory values remain `never` only where the
+  production API receives them, so the lifecycle assertions are unchanged.
+- GREEN evidence: the focused Todo suite passes `33/33` and
+  `pnpm typecheck:tooling` passes. No production code changed.
+- The complete post-correction cheap preflight passes Todo and tooling
+  typechecks, the `33/33` focused suite, scoped ESLint, cleanup and TSDoc
+  enforcement, supported-file formatting, shell syntax, documentation audience
+  and snippet checks, and diff hygiene. Direct source coverage for the new
+  `TodoStorage` selector is 100% for statements, branches, functions, and
+  lines. The lifecycle suite intentionally executes compiled Todo output; a
+  source-only coverage filter therefore reports that TypeScript file as
+  untouched, while its ten compiled lifecycle behaviors pass and the release
+  profile supplies the authoritative global coverage result.
 - Dependency wiring and its lockfile update were committed separately and
   pushed to the official feature branch as `06f4521e1`, preserving the
   repository's dependency-commit boundary.
