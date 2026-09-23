@@ -32,6 +32,9 @@
     "@spine-event-engine/server": "2.0.0-snapshot.13"
   },
   "devDependencies": {
-    "@spine-event-engine/delivery-server": "workspace:*"
+    "@spine-event-engine/core": "workspace:*",
+    "@spine-event-engine/delivery-server": "workspace:*",
+    "@spine-event-engine/server-test-fixtures": "workspace:*",
+    "@spine-event-engine/storage": "workspace:*"
   }
 }

@@ -18,10 +18,12 @@ import { expect, it } from "vitest";
 
 import {
   finalPublicSurfaceProblems,
+  frameworkExampleDependencyProblems,
   isNestedPath,
   nativeServerRootDependencyProblems,
   packageExportInternalPathProblems,
   siblingPackageTreeReachProblems,
+  workspaceDependencyCycleProblems,
 } from "./package-boundary-policy.mjs";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
@@ -124,6 +126,54 @@ it("declares the final named SPI and browser surfaces in an acyclic 18-package g
   expect(finalPublicSurfaceProblems(repoRoot)).toEqual([]);
 });
 
+it("keeps framework packages independent from example applications", () => {
+  expect(frameworkExampleDependencyProblems(repoRoot)).toEqual([]);
+});
+
+it("keeps the complete pnpm workspace dependency graph acyclic", () => {
+  expect(workspaceDependencyCycleProblems(repoRoot)).toEqual([]);
+});
+
+it("detects nested examples and development-dependency cycles", () => {
+  const root = mkdtempSync(join(tmpdir(), "spine-workspace-graph-"));
+  try {
+    writeFileSync(
+      join(root, "pnpm-workspace.yaml"),
+      'packages:\n  - "packages/*"\n  - "examples/*/*"\n',
+    );
+    writeManifest(root, "packages/server", {
+      name: "@spine-event-engine/server",
+      devDependencies: {
+        "@spine-event-engine/delivery-client": "workspace:*",
+        "@spine-event-engine/example-board-app": "workspace:*",
+      },
+    });
+    writeManifest(root, "packages/delivery-client", {
+      name: "@spine-event-engine/delivery-client",
+      dependencies: { "@spine-event-engine/server": "workspace:*" },
+    });
+    writeManifest(root, "examples/message-board/app", {
+      name: "@spine-event-engine/example-board-app",
+      dependencies: { "@spine-event-engine/server": "workspace:*" },
+    });
+
+    expect(frameworkExampleDependencyProblems(root)).toEqual([
+      "@spine-event-engine/server devDependencies contains example " +
+        "@spine-event-engine/example-board-app",
+    ]);
+    expect(workspaceDependencyCycleProblems(root)).toEqual([
+      "workspace dependency graph is cyclic: " +
+        "@spine-event-engine/delivery-client -> @spine-event-engine/server -> " +
+        "@spine-event-engine/delivery-client",
+      "workspace dependency graph is cyclic: " +
+        "@spine-event-engine/example-board-app -> @spine-event-engine/server -> " +
+        "@spine-event-engine/example-board-app",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it("excludes development-only package edges from the publication graph", () => {
   const root = mkdtempSync(join(tmpdir(), "spine-public-graph-"));
   try {
@@ -147,3 +197,8 @@ it("excludes development-only package edges from the publication graph", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+function writeManifest(root, directory, manifest) {
+  mkdirSync(join(root, directory), { recursive: true });
+  writeFileSync(join(root, directory, "package.json"), JSON.stringify(manifest));
+}

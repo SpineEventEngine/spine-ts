@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./internal": "./internal.mjs",
+    "./entity/*.js": {
+      "types": "./dist/generated/entity-metadata/*.d.ts",
+      "default": "./dist/generated/entity-metadata/*.js"
+    },
     "./generated/*.js": {
       "types": "./dist/generated/*.d.ts",
       "default": "./dist/generated/*.js"

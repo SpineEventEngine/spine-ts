@@ -2157,3 +2157,47 @@ examples/todo/test/todo-storage.test.ts --maxWorkers=1` failed because
   selector has 100% direct source coverage, and real MySQL 8.4.10 plus
   PostgreSQL 18.6 each completed the exact launcher and command/query smoke
   journey. No task work remains.
+
+## Workspace Dependency Cycle Correction
+
+- Classification: standard cross-package test-placement correction. The
+  accepted behavior is that a fresh pnpm install reports no cyclic workspace
+  dependencies, framework packages do not depend on example applications, and
+  the managed remote-delivery integration behavior remains covered.
+- Estimate: 1.5-2.5 active hours for root-cause analysis, fixture replacement,
+  package relocation, focused verification, independent review, release
+  verification, clean-checkout reproduction, and push; CI waiting is separate.
+  After focused convergence, the remaining estimate is 0.5-1.0 active hour.
+- RED: the new package-boundary assertion reported
+  `@spine-event-engine/server devDependencies contains example
+@spine-event-engine/example-todo`.
+- Root cause: `server` used the Todo example and `delivery-client` as test
+  dependencies even though both already depend on `server`. Removing the Todo
+  edge exposed the second `delivery-client`/`server` cycle in pnpm's output.
+- Correction: the managed remote-delivery applications and tests now reside in
+  `delivery-client`, where the server dependency already points in the correct
+  direction. A server-local Project fixture replaces the Todo application.
+  The private server test-fixture package exposes the generated Project schemas
+  and existing internal access seam needed by these integration tests.
+- Focused evidence: a normal `pnpm install` reports no cyclic workspace
+  dependency warning. Changed-file ESLint, formatting, cleanup, TSDoc, package
+  metadata, release graph, package boundary, and both moved integration suites
+  pass; the aggregated focused run reports `34/34` tests.
+- Selected final profile: `verify:release`, because the correction changes
+  workspace manifests, the lockfile, test-package placement, and release graph
+  enforcement across shared packages.
+- The complete cheap preflight passed all deterministic gates and all changed
+  behavior, then its broad test expansion timed out in two existing tooling
+  tests under the default parallel five-second limit (`300/302` files and
+  `4,923/4,925` tests passed). The two timing-sensitive suites pass serially
+  with the release profile's timeout: `2/2` files and `188/188` tests.
+- Review corrections cover every declared pnpm workspace and dependency group,
+  consistently use Project terminology, and protect the moved managed-delivery
+  test's ordinary-CI classification. The focused correction set passes `18/18`;
+  cleanup and TSDoc enforcement pass.
+- Final `CI=true pnpm verify:release` passes all `302/302` test files and
+  `4,927/4,927` tests. Coverage remains 93.29% statements, 90.07% branches,
+  93.05% functions, and 94.46% lines. The same run passes builds, tooling
+  typecheck, lint, documentation, generated cleanliness, package tarballs,
+  clean external installation, production-dependency checks, and release
+  readiness.

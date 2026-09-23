@@ -22,12 +22,6 @@ import { create } from "@bufbuild/protobuf";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { TypeRegistry } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { TaskCreatedSchema } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_events_pb.js";
-import {
-  TaskIdSchema,
-  TaskListIdSchema,
-} from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_id_pb.js";
-import { createTodoContext } from "@spine-event-engine/example-todo";
 import {
   BoundedContext,
   EnvironmentType,
@@ -40,9 +34,11 @@ import {
   ThirdPartyContext,
   UniformAcrossAllShards,
 } from "@spine-event-engine/server";
-import { managedServerApplicationAccess } from "../../test-fixtures/internal.mjs";
 import { UserIdSchema } from "@spine-event-engine/proto";
-import { ProjectOverviewStateSchema } from "../../test-fixtures/dist/generated/entity-metadata/project_states_pb.js";
+import { ProjectCreatedSchema } from "@spine-event-engine/server-test-fixtures/entity/project_events_pb.js";
+import { ProjectOverviewStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
+import { managedServerApplicationAccess } from "@spine-event-engine/server-test-fixtures/internal";
+import { createManagedProjectContext } from "./managed-project-context.mjs";
 
 const endpoint = required("SPINE_MANAGED_REMOTE_DELIVERY_URL");
 const thirdPartyDirectory = required("SPINE_T0210_THIRD_PARTY_DIRECTORY");
@@ -51,14 +47,14 @@ const delivery = RemoteDelivery.connectTo({ endpoint });
 const strategy = UniformAcrossAllShards.forNumber(2);
 const ExternalStateSchema = ProjectOverviewStateSchema;
 
-class ExternalTaskProjection extends Projection {
-  onExternalTaskCreated(event) {
-    const id = event.id?.value;
-    if (id === undefined) throw new Error("External TaskCreated event has no task ID.");
+class ExternalProjectProjection extends Projection {
+  onExternalProjectCreated(event) {
+    const id = event.id;
+    if (id.length === 0) throw new Error("External ProjectCreated event has no project ID.");
     this.update((draft) =>
       Object.assign(
         draft,
-        create(ExternalStateSchema, { id, name: `external:${event.title}`, priority: 1 }),
+        create(ExternalStateSchema, { id, name: `external:${event.name}`, priority: 1 }),
       ),
     );
   }
@@ -69,7 +65,7 @@ if (isManagedChild) {
   ServerEnvironment.when(EnvironmentType.Production).use({
     delivery,
     storageFactory: new InMemoryStorageFactory(),
-    typeRegistry: new TypeRegistry([TaskCreatedSchema]),
+    typeRegistry: new TypeRegistry([ProjectCreatedSchema]),
   });
 }
 
@@ -81,20 +77,18 @@ const managed = await ManagedServerApplication.run({
     const registry = await generatedRegistryRoot();
     const server = Server.atPort(port, { host });
     server.add(
-      await createTodoContext({
+      await createManagedProjectContext({
         deliveryStrategy: strategy,
         subscriptionRegistry: new InMemorySubscriptionRegistry(),
       }),
     );
     server.add(
-      await BoundedContext.singleTenant("ExternalTasks")
+      await BoundedContext.singleTenant("ExternalProjects")
         .withGeneratedRegistryRoot(registry.root)
         .withDeliveryStrategy(strategy)
         .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
-        .add(ExternalTaskProjection, {
-          eventRouting: EventRouting.create().route(TaskCreatedSchema, (event) =>
-            event.id?.value === undefined ? [] : [event.id.value],
-          ),
+        .add(ExternalProjectProjection, {
+          eventRouting: EventRouting.create().route(ProjectCreatedSchema, (event) => [event.id]),
         })
         .buildAsync(),
     );
@@ -114,10 +108,9 @@ const managed = await ManagedServerApplication.run({
       }
       clearInterval(timer);
       await thirdParty.emittedEvent(
-        create(TaskCreatedSchema, {
-          id: create(TaskIdSchema, { value: "t0210-third-party" }),
-          taskListId: create(TaskListIdSchema, { value: "t0210-task-list" }),
-          title: "t0210-third-party",
+        create(ProjectCreatedSchema, {
+          id: "t0210-third-party",
+          name: "t0210-third-party",
         }),
         create(UserIdSchema, { value: "t0210-third-party" }),
       );
@@ -169,13 +162,13 @@ async function generatedRegistryRoot() {
     receivers: [
       {
         receiverKind: "entity",
-        receiverType: ExternalTaskProjection,
+        receiverType: ExternalProjectProjection,
         stateSchema: ExternalStateSchema,
         handlers: [
           {
             kind: "event-subscription",
-            methodName: "onExternalTaskCreated",
-            input: { schema: TaskCreatedSchema, origin: "external" },
+            methodName: "onExternalProjectCreated",
+            input: { schema: ProjectCreatedSchema, origin: "external" },
             outcomes: { returned: [], thrown: [] },
             parameterCount: 1,
           },

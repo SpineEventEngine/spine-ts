@@ -13,7 +13,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, globSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -114,10 +114,14 @@ describe("stable CI test inventory", () => {
   });
 
   it("retains self-contained loopback and child-process coverage in the ordinary suite", () => {
-    expect(infrastructureTestFiles).not.toContain(
-      "packages/server/test/server/managed-remote-delivery-readiness.integration.test.ts",
+    const managedDeliveryTest =
+      "packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts";
+    expect(infrastructureTestFiles).not.toContain(managedDeliveryTest);
+    expect(ordinaryConfig.test?.exclude).not.toContain(managedDeliveryTest);
+    const ordinaryFiles = (ordinaryConfig.test?.include ?? []).flatMap((pattern) =>
+      globSync(pattern, { cwd: root }),
     );
-    expect(ordinaryConfig.test?.include).toContain("packages/*/test/**/*.test.ts");
+    expect(ordinaryFiles).toContain(managedDeliveryTest);
   });
 });
 

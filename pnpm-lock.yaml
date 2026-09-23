@@ -462,9 +462,18 @@ importers:
         specifier: 2.0.0-snapshot.13
         version: link:../server
     devDependencies:
+      '@spine-event-engine/core':
+        specifier: workspace:*
+        version: link:../core
       '@spine-event-engine/delivery-server':
         specifier: workspace:*
         version: link:../delivery-server
+      '@spine-event-engine/server-test-fixtures':
+        specifier: workspace:*
+        version: link:../server/test-fixtures
+      '@spine-event-engine/storage':
+        specifier: workspace:*
+        version: link:../storage
 
   packages/delivery-server:
     dependencies:
@@ -629,15 +638,9 @@ importers:
       '@google-cloud/datastore':
         specifier: 10.1.1
         version: 10.1.1
-      '@spine-event-engine/delivery-client':
-        specifier: workspace:*
-        version: link:../delivery-client
       '@spine-event-engine/delivery-server':
         specifier: workspace:*
         version: link:../delivery-server
-      '@spine-event-engine/example-todo':
-        specifier: workspace:*
-        version: link:../../examples/todo
       '@spine-event-engine/proto-tools':
         specifier: workspace:*
         version: link:../proto-tools

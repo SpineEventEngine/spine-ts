@@ -903,3 +903,52 @@ the unsupported summary verb is replaced. `CI=true pnpm lint:tsdoc` and the
 focused publication and TSDoc-checker suites pass with `77/77` tests.
 The exact workflow command, `CI=true pnpm verify:release`, also passes all
 `302/302` test files and `4,924/4,924` tests at the existing coverage baseline.
+
+## Workspace Dependency Cycle Review Assignment
+
+The existing `style_maintainability_reviewer` will independently review the
+staged cycle correction with no inherited conversation. Its bounded concern is
+package placement, dependency direction, fixture structure, naming,
+maintainability, and preservation of the moved integration tests. The expected
+immutable role profile is `gpt-5.6-terra` with `high` reasoning, both explicit
+in dispatch. The Desktop surface exposes that configured role/profile but does
+not provide additional runtime self-introspection.
+
+Correctness and package-graph behavior are covered by the same focused review
+because the change contains no production runtime implementation. Documentation,
+TypeScript public API, Protobuf/DDD, performance, and security reviews are N/A:
+there is no published runtime API or authored Proto change, and deterministic
+checks cover formatting, TSDoc, package metadata, graph policy, and integration
+behavior.
+
+### Workspace Dependency Cycle Findings
+
+The independent reviewer ran under the recorded `gpt-5.6-terra` / `high`
+profile and reported three accepted P2 findings. The first graph guard omitted
+nested example workspaces and did not directly reject development-dependency
+cycles. The moved Project fixture retained Task names in its projection,
+handler, and context. The stable-CI inventory assertion still named the old
+server test path, so it did not protect the moved test's ordinary-suite status.
+
+The correction now expands the declared `pnpm-workspace.yaml` package patterns,
+checks every workspace dependency group for cycles, and has focused regressions
+for a nested example reverse edge and the former server/delivery-client cycle.
+Project terminology is consistent throughout the fixture and generated handler
+metadata. The stable-CI test resolves ordinary include globs and checks the exact
+moved path. Focused correction tests pass `18/18`; cleanup and TSDoc enforcement
+also pass.
+
+### Workspace Dependency Cycle Re-review Result
+
+The same independent reviewer rechecked only the three corrected concerns and
+reported no remaining finding. All declared workspace patterns and dependency
+groups are covered, Project terminology is consistent, and the exact moved test
+is selected by ordinary CI rather than infrastructure CI. The reviewer's focused
+verification passes `14/14`; formatting and diff hygiene are clean.
+
+### Workspace Dependency Cycle Final Verification
+
+The CI-equivalent `CI=true pnpm verify:release` command passes every repository
+gate. All `302/302` test files and `4,927/4,927` tests pass with the existing
+coverage baseline. Package tarballs, clean external installation, generated
+cleanliness, production dependency checks, and release readiness are green.
