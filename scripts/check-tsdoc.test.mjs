@@ -64,6 +64,7 @@ function run(command, args, cwd) {
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")} failed:\n${result.stderr}${result.stdout}`);
   }
+  return result;
 }
 
 function track(repoRoot) {
@@ -140,6 +141,48 @@ describe("check-tsdoc", () => {
     expect(result.stderr).toContain("Unable to determine changed TSDoc baseline");
   });
 
+  it("does not classify an exact rename of undocumented production source as newly changed", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/legacy.ts",
+      "class UndocumentedLegacy { run(): void {} }\nvoid UndocumentedLegacy;\n",
+    );
+    track(repoRoot);
+    run("git", ["update-ref", "refs/remotes/origin/master", "HEAD"], repoRoot);
+    run("git", ["mv", "packages/demo/src/legacy.ts", "packages/demo/src/current.ts"], repoRoot);
+
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
+  it("enforces TSDoc when a renamed production source includes content changes", () => {
+    const repoRoot = createFixture();
+    const source = [
+      "class Undocumented { run(): void {} }",
+      "void Undocumented;",
+      ...Array.from({ length: 20 }, (_, index) => `const retained${index} = ${index};`),
+      "",
+    ].join("\n");
+    writeSource(repoRoot, "packages/demo/src/legacy.ts", source);
+    track(repoRoot);
+    run("git", ["update-ref", "refs/remotes/origin/master", "HEAD"], repoRoot);
+    run("git", ["mv", "packages/demo/src/legacy.ts", "packages/demo/src/current.ts"], repoRoot);
+    writeSource(
+      repoRoot,
+      "packages/demo/src/current.ts",
+      source.replace("run(): void {}", "run(): void {} extra(): void {}"),
+    );
+    run("git", ["add", "packages/demo/src/current.ts"], repoRoot);
+
+    expect(
+      run("git", ["diff", "--cached", "--name-status", "--find-renames"], repoRoot).stdout,
+    ).toMatch(/^R(?!100)\d+\tpackages\/demo\/src\/legacy\.ts\tpackages\/demo\/src\/current\.ts/m);
+
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Undocumented");
+  });
+
   it("does not require semantic documentation for internal script declarations", () => {
     const repoRoot = createFixture();
     writeSource(
@@ -159,6 +202,19 @@ describe("check-tsdoc", () => {
     const result = runChecker(repoRoot);
 
     expect(result.status).toBe(0);
+  });
+
+  it("requires TSDoc for untracked handwritten production source", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/untracked.ts",
+      "class UndocumentedUntracked { run(): void {} }\nvoid UndocumentedUntracked;\n",
+    );
+
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("UndocumentedUntracked");
   });
 
   it("requires documentation for changed class expressions and their methods", () => {

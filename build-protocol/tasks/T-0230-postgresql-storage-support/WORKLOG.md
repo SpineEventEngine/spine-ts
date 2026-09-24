@@ -2206,3 +2206,197 @@ examples/todo/test/todo-storage.test.ts --maxWorkers=1` failed because
   The source-only checkout still reports the separate pre-existing bin-link
   warning for the not-yet-built `delivery-server` CLI; this correction neither
   suppresses nor reclassifies that unrelated warning.
+
+## First-Publication Scan Visibility Correction
+
+- Classification: standard release-tooling correction. The first PostgreSQL
+  publication returned HTTP 200 from `npm publish` and HTTP 201 while creating
+  its trusted publisher, but npm's public package endpoint returned the
+  temporary 404 used during publish-time scanning. The release script treated
+  that documented intermediate state as failure even though `npm dist-tag ls`
+  already exposed `2.0.0-snapshot.13` under `snapshot` and `latest`.
+- Acceptance: after npm accepts a first publication, the script waits for that
+  exact version to become publicly readable before reporting success. A bounded
+  wait must not republish, recreate trust, hide a persistent registry failure,
+  or alter the established browser-login and cleanup flow.
+- Estimate: 0.7-1.1 active hours for a failing regression, minimal correction,
+  focused checks, independent release-focused review, release verification,
+  push, and CI confirmation. npm's external scanning delay is separate.
+- Implementation assignment: existing `implementer`; responsibility is limited
+  to `scripts/publish-new-package.mjs`, its focused tests, and directly affected
+  release documentation. The dispatch explicitly selects the role's immutable
+  `gpt-5.6-terra` / `medium` profile, passes no conversation memory, prohibits
+  child spawning and unrelated changes, and requires RED before production
+  edits. Desktop exposes the configured role/profile but no additional runtime
+  self-introspection.
+
+## MySQL Package Rename
+
+- Classification: standard package and release migration. The user requires the
+  MySQL provider to use the precise public name
+  `@spine-event-engine/storage-mysql` instead of the generic
+  `@spine-event-engine/storage-rdbms` name.
+- Acceptance: rename the workspace directory and manifest, update every current
+  import, dependency, release/package inventory, test path, generated-doc input,
+  user link, and Todo example reference, and prove the packed new package works
+  for an external consumer. Historical task records may retain the old name
+  where they describe earlier repository state. The public inventory remains
+  19 packages: `storage-mysql` replaces `storage-rdbms`; no compatibility alias
+  or dual publication is introduced during snapshot development.
+- Npm consequence: `@spine-event-engine/storage-mysql` is a new package and
+  requires the same first-publication procedure before merge. The existing
+  `@spine-event-engine/storage-rdbms` registry package remains untouched; no
+  deprecation, unpublish, tag change, or new version is authorized.
+- Estimate: 2.5-4 active hours for the mechanical rename, dependency/lockfile
+  correction, focused package and consumer tests, documentation and API gates,
+  independent package/API review, release verification, push, and PR CI. Npm
+  first-publication and external CI waiting are separate.
+- Planned sequence: finish and accept the scan-visibility correction; establish
+  a failing inventory/consumer expectation for the new package name; perform
+  one coherent rename; run cheap preflight; review the complete rename once;
+  correct accepted findings; run `verify:release` once; push and wait for PR CI.
+- Implementation assignment: existing `implementer`; responsibility is the
+  coherent rename of the current MySQL provider package and all directly
+  affected manifests, scripts, tests, docs, and lockfile entries. The dispatch
+  explicitly selects the role's immutable `gpt-5.6-terra` / `medium` profile,
+  passes no conversation memory, prohibits child spawning and historical-log
+  rewriting, and requires RED inventory/consumer evidence before the rename.
+  Desktop exposes the configured role/profile but no additional runtime
+  self-introspection.
+- Pre-review mechanical finding: the package's 107 hermetic runtime tests and
+  197 affected tooling tests pass, as do a frozen offline install and package
+  compilation. `check-tsdoc` fails because its staged-diff classifier disables
+  rename detection and therefore treats every source in a pure package move as
+  newly authored. The correct enforcement rule is to ignore only exact `R100`
+  source moves while continuing to scan added files and renames containing any
+  edit. Add a failing checker regression before changing this classification.
+  The cleanup check's analogous rename handling also needs explicit regression
+  coverage before review.
+- RED: `node --experimental-strip-types node_modules/vitest/vitest.mjs run
+scripts/publish-new-package.test.mjs --maxWorkers=1` failed the new
+  scan-visibility regression because its injected wait had zero calls. The
+  bounded-failure regression then failed by timing out, proving that the
+  visibility budget was not injectable.
+- Superseded budget: the initial one-minute bounded poll was disproved by the
+  PostgreSQL publication scan, which took about four minutes between the npm
+  publish completion around 11:19 and public-record visibility around 11:23.
+  The first-package procedure now permits a bounded 10-minute wait with a
+  five-second polling interval; it does not apply to batch publication.
+- GREEN: the same focused Vitest command passed 12/12 after adding a bounded
+  public-readability poll after the existing publish, trust, and
+  dist-tag/trust-record checks. Tests inject both the delay and the visibility
+  budget, so they run without a real wait. A temporary 404 retries only the
+  registry read; a timeout or other registry error remains a visible failure
+  under the existing published-package recovery message, without another
+  publish or trust command.
+- Focused style evidence: `node --experimental-strip-types
+node_modules/prettier/bin/prettier.cjs --check scripts/publish-new-package.mjs
+scripts/publish-new-package.test.mjs docs/release-publishing.md` reported all
+  matched files formatted; `node --experimental-strip-types
+node_modules/eslint/bin/eslint.js scripts/publish-new-package.mjs
+scripts/publish-new-package.test.mjs` passed with no diagnostics.
+- Documentation now records the bounded public-readability wait in the
+  first-publication runbook. No full repository verification, commit, or push
+  was run by this bounded correction.
+- Budget correction RED: the focused Vitest command failed the adjusted
+  scan-visibility assertion with `expected 5000, received 1000`, confirming
+  the prior polling cadence was insufficient.
+- Budget correction GREEN: the focused Vitest command passed 12/12 with the
+  10-minute production budget and 5-second interval. The test injects delay
+  and asserts the 5-second production cadence; the timeout remains private to
+  avoid expanding the script's public surface solely for a timing assertion.
+  The default is recorded in the runbook and source constant as `10 * 60_000`.
+- Repeated focused evidence after the budget correction: Prettier and ESLint
+  passed for the two publication-script files and the runbook; `git diff
+--check` passed. No full repository verification, commit, push, or unrelated
+  storage-package rename was performed.
+
+### MySQL rename implementation
+
+- RED: `node --experimental-strip-types node_modules/vitest/vitest.mjs run
+scripts/package-metadata.test.mjs --maxWorkers=1` failed because the new
+  inventory expectation named `packages/storage-mysql`, while the workspace
+  still exposed `packages/storage-rdbms`.
+- GREEN: renamed the tracked provider tree to `packages/storage-mysql` and
+  changed its manifest, imports, workspace dependencies, release and package
+  inventories, TypeDoc and policy inputs, test paths, user/API documentation,
+  Todo and deployment examples, and lockfile links to
+  `@spine-event-engine/storage-mysql`. The public package inventory remains 19;
+  no compatibility alias or npm mutation was added.
+- Focused checks passed: package metadata and stable-CI inventory (18/18);
+  non-infrastructure MySQL, release-readiness, snippet, and legacy-layout tests
+  (153/153); MySQL `tsc -b`; TypeScript snippet and documentation-audience
+  checks; TypeDoc; and release-readiness (87 package imports, 54 package assets,
+  367 relative Markdown links). `pnpm install --offline` refreshed workspace
+  links and completed successfully.
+- External-consumer limitation: `packages/proto-tools/test/external-consumer.test.ts`
+  reached its temporary offline consumer after packing, then failed because the
+  installed `@bufbuild/buf` wrapper could not find its downloaded darwin-arm64
+  executable (`ENOENT`). The same workspace's `pnpm --dir packages/proto-tools
+exec buf --version` reports `1.71.0`; this is an environment/package-install
+  limitation unrelated to the MySQL rename, so full packed-consumer execution
+  remains unproven locally.
+- Final rename scan found no non-historical `storage-rdbms` package, path, or
+  import references. Prettier and `git diff --check` passed. No full release
+  verification, commit, push, npm mutation, or ignored `dist` output was added.
+
+### Rename-aware policy preflight correction
+
+- RED: the exact-rename TSDoc fixture failed because the changed-source scan
+  used `git diff --name-only --no-renames`, treating unchanged moved MySQL
+  source as newly authored and reporting its pre-existing documentation debt.
+- GREEN: both policy checkers now parse `git diff --name-status --find-renames`.
+  Exact `R100` moves are ignored; `R<100` destinations and `A`, `C`, and `M`
+  paths remain enforced, while deletion paths remain harmless. Focused fixtures
+  prove an undocumented exact rename is not newly checked, a content-edited
+  rename remains checked, and cleanup does not flag unchanged long methods in a
+  pure rename. Direct `check-tsdoc` and `check-cleanup-rules` pass.
+
+### Accepted publication and checker correction batch
+
+- RED: publication recovery tests showed that a visibility timeout reported a
+  duplicate-trust recovery instruction, exact existing npm trust output was not
+  accepted, and a conflicting trust was not inspected before the mutation path.
+  An undocumented untracked handwritten source was also omitted from TSDoc
+  scanning. The original edited-rename fixture staged `R100` and therefore did
+  not prove `R<100` enforcement.
+- GREEN: `--trust-only` now treats npm 11's empty output as no configuration,
+  accepts its one flat exact JSON trust object without a second `npm trust
+github`, and fails closed for a conflicting, array, or ambiguous/multiple
+  response. Recovery wording says to inspect before finishing. TSDoc now scans
+  untracked handwritten source, and both policy fixtures stage genuine edited
+  renames and assert `R<100` before enforcement. Publication/package/release
+  metadata tests pass 43/43; direct TSDoc and cleanup gates, Prettier, ESLint,
+  and diff hygiene pass. No npm mutation, full release verification, commit, or
+  push was performed.
+
+### Trusted-publisher permission re-review correction
+
+- RED: a current trusted publisher with `createPackage` and
+  `createStagedPackage` reached later tag verification because permission
+  matching accepted `createPackage` by inclusion.
+- GREEN: the matcher now requires exactly one permission, `createPackage`; an
+  extra or duplicate permission is conflicting and fails before `npm trust
+github`. `scripts/publish-new-package.test.mjs` passes 16/16, and Prettier,
+  ESLint, and `git diff --check` pass. No npm mutation, commit, push, or full
+  verification was run.
+
+- Follow-up regression: `['createPackage', 'createPackage']` rejects as an
+  unexpected trusted publisher with zero trust-create calls. The existing
+  exact-set implementation required no production change; focused publication
+  tests pass 17/17.
+
+### First-publication and MySQL rename final verification
+
+- The mandatory cheap preflight passed: changed-file formatting, diff hygiene,
+  MySQL and PostgreSQL package builds, tooling typechecking, API documentation,
+  documentation-audience checks, snippets, direct TSDoc and cleanup checks, the
+  17/17 publication tests, and the complete 193/193 policy-checker tests.
+- `CI=true pnpm verify:release` passed the complete release profile: 302/302
+  test files and 4,939/4,939 tests passed. The release checks packed all 19
+  public packages, including `storage-mysql` and `storage-postgres`, and the
+  clean external consumer installed them successfully. Coverage remained above
+  every configured threshold at 93.29% statements, 90.07% branches, 93.05%
+  functions, and 94.46% lines.
+- No npm package, trusted-publisher record, organization branch, pull request,
+  or protected branch was mutated by verification.

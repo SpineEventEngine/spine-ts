@@ -1,7 +1,7 @@
 # PostgreSQL storage for Spine TS
 
 `@spine-event-engine/storage-postgres` stores Spine TS records in PostgreSQL.
-It is a separate provider package; the existing `storage-rdbms` package remains
+It is a separate provider package; the existing `storage-mysql` package remains
 the MySQL provider. PostgreSQL support currently targets PostgreSQL 16 or newer,
 with live acceptance recorded against PostgreSQL 16.15 and 18.6.
 

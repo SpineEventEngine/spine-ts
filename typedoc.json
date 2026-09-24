@@ -29,7 +29,7 @@
     "packages/storage/src/provider.ts",
     "packages/storage-datastore/src/index.ts",
     "packages/storage-postgres/src/index.ts",
-    "packages/storage-rdbms/src/index.ts",
+    "packages/storage-mysql/src/index.ts",
     "packages/testing/src/index.ts",
     "examples/todo/src/index.ts"
   ],

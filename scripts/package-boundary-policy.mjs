@@ -107,7 +107,7 @@ const exactFrameworkPackages = [
   "storage",
   "storage-datastore",
   "storage-postgres",
-  "storage-rdbms",
+  "storage-mysql",
   "testing",
   "transport",
 ].map((directory) => `@spine-event-engine/${directory}`);

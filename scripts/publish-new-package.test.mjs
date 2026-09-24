@@ -86,6 +86,7 @@ describe("new package publication", () => {
     const output = [];
     const target = resolveNewPackageTarget(repoRoot, "packages/storage-postgres");
     const temporaryDirectory = "/tmp/new-package-publication";
+    let registryReads = 0;
     await publishNewPackage({
       repoRoot,
       target,
@@ -100,11 +101,20 @@ describe("new package publication", () => {
               permissions: ["createPackage"],
             }),
       confirm: async (name) => name === target.name,
-      fetchResponse: async () => ({ status: 404, ok: false }),
+      fetchResponse: async () => {
+        registryReads += 1;
+        if (registryReads === 1) return { status: 404, ok: false };
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ versions: { [target.version]: {} } }),
+        };
+      },
       makeTemporaryDirectory: () => temporaryDirectory,
       removeDirectory: (path) => calls.push({ kind: "remove", path }),
       pathExists: () => true,
       run: (command, args) => calls.push({ command, args }),
+      wait: async () => {},
       write: (message) => output.push(message),
     });
     expect(calls).toContainEqual({ command: "pnpm", args: ["verify:publish"] });
@@ -147,6 +157,78 @@ describe("new package publication", () => {
     });
     expect(calls.at(-1)).toEqual({ kind: "remove", path: temporaryDirectory });
     expect(output.join("\n")).toContain("published and configured");
+  });
+
+  it("waits in five-second intervals for the published version after npm scanning", async () => {
+    const calls = [];
+    const wait = vi.fn(async () => {});
+    const target = resolveNewPackageTarget(repoRoot, "packages/storage-postgres");
+    let registryReads = 0;
+    await publishNewPackage({
+      repoRoot,
+      target,
+      capture: (_command, args) =>
+        args[0] === "view"
+          ? JSON.stringify({ snapshot: target.version })
+          : JSON.stringify({
+              type: "github",
+              repository: "SpineEventEngine/spine-ts",
+              file: "publish.yml",
+              environment: "gh-actions-environment",
+              permissions: ["createPackage"],
+            }),
+      confirm: async () => true,
+      fetchResponse: async () => {
+        registryReads += 1;
+        if (registryReads < 3) return { status: 404, ok: false };
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ versions: { [target.version]: {} } }),
+        };
+      },
+      makeTemporaryDirectory: () => "/tmp/new-package-publication",
+      pathExists: () => true,
+      removeDirectory: () => {},
+      run: (command, args) => calls.push([command, ...args]),
+      wait,
+      write: () => {},
+    });
+    expect(wait).toHaveBeenCalledTimes(1);
+    expect(wait).toHaveBeenCalledWith(5_000);
+    expect(calls.filter((call) => call[1] === "publish")).toHaveLength(1);
+    expect(calls.filter((call) => call[1] === "trust")).toHaveLength(1);
+  });
+
+  it("reports an unreadable published version without repeating npm mutations", async () => {
+    const calls = [];
+    const target = resolveNewPackageTarget(repoRoot, "packages/storage-postgres");
+    await expect(
+      publishNewPackage({
+        repoRoot,
+        target,
+        capture: (_command, args) =>
+          args[0] === "view"
+            ? JSON.stringify({ snapshot: target.version })
+            : JSON.stringify({
+                type: "github",
+                repository: "SpineEventEngine/spine-ts",
+                file: "publish.yml",
+                environment: "gh-actions-environment",
+                permissions: ["createPackage"],
+              }),
+        confirm: async () => true,
+        fetchResponse: async () => ({ status: 404, ok: false }),
+        makeTemporaryDirectory: () => "/tmp/new-package-publication",
+        pathExists: () => true,
+        removeDirectory: () => {},
+        run: (command, args) => calls.push([command, ...args]),
+        visibilityTimeoutMs: 0,
+        write: () => {},
+      }),
+    ).rejects.toThrow("inspect and finish setup");
+    expect(calls.filter((call) => call[1] === "publish")).toHaveLength(1);
+    expect(calls.filter((call) => call[1] === "trust")).toHaveLength(1);
   });
 
   it("does nothing when confirmation is refused", async () => {
@@ -203,6 +285,145 @@ describe("new package publication", () => {
       }),
     ).rejects.toThrow(target.version);
     expect(run).not.toHaveBeenCalled();
+  });
+
+  it("reuses an already-correct trusted publisher without another trust mutation", async () => {
+    const calls = [];
+    const target = resolveNewPackageTarget(repoRoot, "packages/storage-postgres");
+    await configureTrustedPublisher({
+      target,
+      capture: (_command, args) =>
+        args[0] === "view"
+          ? JSON.stringify({ snapshot: target.version })
+          : JSON.stringify({
+              type: "github",
+              repository: "SpineEventEngine/spine-ts",
+              file: "publish.yml",
+              environment: "gh-actions-environment",
+              permissions: ["createPackage"],
+            }),
+      confirm: async () => true,
+      fetchResponse: async () => ({
+        status: 200,
+        ok: true,
+        json: async () => ({ versions: { [target.version]: {} } }),
+      }),
+      run: (command, args) => calls.push([command, ...args]),
+      write: () => {},
+    });
+    expect(calls.filter((call) => call[1] === "trust")).toHaveLength(0);
+  });
+
+  it("fails closed without trust mutation when a trusted publisher conflicts", async () => {
+    const calls = [];
+    const target = resolveNewPackageTarget(repoRoot, "packages/storage-postgres");
+    await expect(
+      configureTrustedPublisher({
+        target,
+        capture: () =>
+          JSON.stringify({
+            type: "github",
+            repository: "another/repository",
+            file: "publish.yml",
+            environment: "gh-actions-environment",
+            permissions: ["createPackage"],
+          }),
+        confirm: async () => true,
+        fetchResponse: async () => ({
+          status: 200,
+          ok: true,
+          json: async () => ({ versions: { [target.version]: {} } }),
+        }),
+        run: (command, args) => calls.push([command, ...args]),
+        write: () => {},
+      }),
+    ).rejects.toThrow("unexpected trusted publisher");
+    expect(calls.filter((call) => call[1] === "trust")).toHaveLength(0);
+  });
+
+  it("rejects extra trusted-publisher permissions without a trust mutation", async () => {
+    const calls = [];
+    const target = resolveNewPackageTarget(repoRoot, "packages/storage-postgres");
+    await expect(
+      configureTrustedPublisher({
+        target,
+        capture: () =>
+          JSON.stringify({
+            type: "github",
+            repository: "SpineEventEngine/spine-ts",
+            file: "publish.yml",
+            environment: "gh-actions-environment",
+            permissions: ["createPackage", "createStagedPackage"],
+          }),
+        confirm: async () => true,
+        fetchResponse: async () => ({
+          status: 200,
+          ok: true,
+          json: async () => ({ versions: { [target.version]: {} } }),
+        }),
+        run: (command, args) => calls.push([command, ...args]),
+        write: () => {},
+      }),
+    ).rejects.toThrow("unexpected trusted publisher");
+    expect(calls.filter((call) => call[1] === "trust")).toHaveLength(0);
+  });
+
+  it("rejects duplicate trusted-publisher permissions without a trust mutation", async () => {
+    const calls = [];
+    const target = resolveNewPackageTarget(repoRoot, "packages/storage-postgres");
+    await expect(
+      configureTrustedPublisher({
+        target,
+        capture: () =>
+          JSON.stringify({
+            type: "github",
+            repository: "SpineEventEngine/spine-ts",
+            file: "publish.yml",
+            environment: "gh-actions-environment",
+            permissions: ["createPackage", "createPackage"],
+          }),
+        confirm: async () => true,
+        fetchResponse: async () => ({
+          status: 200,
+          ok: true,
+          json: async () => ({ versions: { [target.version]: {} } }),
+        }),
+        run: (command, args) => calls.push([command, ...args]),
+        write: () => {},
+      }),
+    ).rejects.toThrow("unexpected trusted publisher");
+    expect(calls.filter((call) => call[1] === "trust")).toHaveLength(0);
+  });
+
+  it("creates trust only when npm reports no trusted publisher", async () => {
+    const calls = [];
+    const target = resolveNewPackageTarget(repoRoot, "packages/storage-postgres");
+    let trustReads = 0;
+    await configureTrustedPublisher({
+      target,
+      capture: (_command, args) => {
+        if (args[0] === "view") return JSON.stringify({ snapshot: target.version });
+        trustReads += 1;
+        return trustReads === 1
+          ? ""
+          : JSON.stringify({
+              type: "github",
+              repository: "SpineEventEngine/spine-ts",
+              file: "publish.yml",
+              environment: "gh-actions-environment",
+              permissions: ["createPackage"],
+            });
+      },
+      confirm: async () => true,
+      fetchResponse: async () => ({
+        status: 200,
+        ok: true,
+        json: async () => ({ versions: { [target.version]: {} } }),
+      }),
+      run: (command, args) => calls.push([command, ...args]),
+      write: () => {},
+    });
+    expect(calls.filter((call) => call[1] === "trust")).toHaveLength(1);
   });
 
   it("rejects a wrong release tag or trusted-publisher identity", async () => {

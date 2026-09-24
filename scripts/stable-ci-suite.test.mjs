@@ -27,7 +27,7 @@ const expectedInfrastructureFiles = [
   "packages/storage-datastore/test/datastore-cloud.test.ts",
   "packages/storage-datastore/test/datastore-emulator.test.ts",
   "packages/storage-postgres/test/postgresql-integration.test.ts",
-  "packages/storage-rdbms/test/mysql-integration.test.ts",
+  "packages/storage-mysql/test/mysql-integration.test.ts",
   "packages/server/test/delivery/inbox-provider-cleanup.test.ts",
 ];
 
@@ -60,12 +60,12 @@ describe("stable CI test inventory", () => {
     );
     expect(datastore.scripts["test:emulator"]).toContain("inbox-provider-cleanup.test.ts");
 
-    const rdbms = JSON.parse(readFileSync(join(root, "packages/storage-rdbms/package.json")));
-    expect(rdbms.scripts["test:mysql"]).toContain("vitest.infrastructure.config.ts");
-    expect(rdbms.scripts["test:mysql"]).toMatch(
+    const mysql = JSON.parse(readFileSync(join(root, "packages/storage-mysql/package.json")));
+    expect(mysql.scripts["test:mysql"]).toContain("vitest.infrastructure.config.ts");
+    expect(mysql.scripts["test:mysql"]).toMatch(
       /^node scripts\/mysql\.mjs && SPINE_TS_INBOX_PROVIDER=mysql pnpm /u,
     );
-    expect(rdbms.scripts["test:mysql"]).toContain("inbox-provider-cleanup.test.ts");
+    expect(mysql.scripts["test:mysql"]).toContain("inbox-provider-cleanup.test.ts");
 
     const postgres = JSON.parse(readFileSync(join(root, "packages/storage-postgres/package.json")));
     expect(postgres.scripts["test:postgresql"]).toMatch(
@@ -98,7 +98,7 @@ describe("stable CI test inventory", () => {
 
     const mysqlVerifier = spawnSync(
       process.execPath,
-      ["packages/storage-rdbms/scripts/mysql.mjs"],
+      ["packages/storage-mysql/scripts/mysql.mjs"],
       {
         env: withoutProviderEnvironment(),
       },

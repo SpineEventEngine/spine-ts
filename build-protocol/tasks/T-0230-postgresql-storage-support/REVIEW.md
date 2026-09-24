@@ -952,3 +952,74 @@ The CI-equivalent `CI=true pnpm verify:release` command passes every repository
 gate. All `302/302` test files and `4,927/4,927` tests pass with the existing
 coverage baseline. Package tarballs, clean external installation, generated
 cleanliness, production dependency checks, and release readiness are green.
+
+## First-Publication Scan And MySQL Rename Review Wave
+
+Three existing reviewer concerns receive one independent, no-memory review wave
+after mechanical preflight:
+
+1. `typescript_api_docs_reviewer`, immutable `gpt-5.6-terra` / `high`, reviews
+   public package identity, imports, declarations, TypeDoc inputs, human API
+   guidance, and clean-consumer compatibility for the replacement
+   `@spine-event-engine/storage-mysql` package.
+2. `performance_reliability_reviewer`, immutable `gpt-5.6-terra` / `high`,
+   reviews the first-publication scan wait, bounded polling, cleanup/recovery,
+   release inventory replacement, and avoidance of duplicate npm mutation.
+3. `style_maintainability_reviewer`, immutable `gpt-5.6-terra` / `high`, reviews
+   the coherent rename, current-reference completeness, checker rename
+   classification, test maintainability, and repository conventions.
+
+All three dispatches explicitly select their existing role and immutable model
+and reasoning profile, pass no conversation memory, prohibit child spawning and
+writes, and use the diff from `origin/master` plus the current working tree.
+Desktop exposes the configured profiles but no additional runtime
+self-introspection. Protobuf/DDD and security concerns are N/A: no Proto,
+domain, credential, permission, or security-boundary contract changes. The
+final release profile covers packaging and publication readiness mechanically.
+
+### Review Findings
+
+- The TypeScript/API documentation reviewer reported no actionable package
+  rename finding. Current imports, manifests, declarations, TypeDoc inputs,
+  release inventory, human guidance, and the clean-consumer proof consistently
+  use `@spine-event-engine/storage-mysql`; remaining old-name references are
+  historical records.
+- The reliability and maintainability reviewers independently found the same
+  high-severity recovery defect: trust creation can succeed before public
+  visibility times out, but the generic recovery message and `--trust-only`
+  path attempt to create the already-existing trust relationship again. Make
+  trust-only recovery inspect and accept the exact existing configuration,
+  reject a conflicting configuration, and create trust only when absent.
+- The maintainability reviewer found that untracked production sources are
+  added to the changed set but omitted from the TSDoc scan input. Include them
+  and prove an undocumented untracked source fails before staging.
+- The maintainability reviewer also found that the edited-rename test staged an
+  `R100` move and left a separate working-tree `M`; it did not exercise `R<100`.
+  Add genuine staged edited-rename regressions for both TSDoc and cleanup while
+  preserving exact-move acceptance.
+
+All three findings are accepted and return as one test-first correction batch
+to the existing implementer. No finding is rejected or deferred.
+
+### Trusted-publisher permission re-review
+
+The accepted re-review found that matching `createPackage` by inclusion could
+accept an additional npm trusted-publisher permission. The correction requires
+the exact one-permission set `['createPackage']`; duplicate or extra permissions
+are conflicting and stop recovery before `npm trust github`. A RED/GREEN
+regression proves `createPackage` plus `createStagedPackage` fails closed with
+no trust mutation. Focused publication tests, formatting, ESLint, and diff
+hygiene pass.
+
+The accepted low-severity follow-up adds the duplicate-permission case:
+`['createPackage', 'createPackage']` also fails closed without `npm trust
+github`, confirming duplicate values cannot satisfy the exact permission set.
+
+### Final disposition
+
+All accepted review findings are resolved. The maintainability re-review found
+no remaining source-scan or rename-classification issue. The reliability
+re-review confirmed the corrected trust-list handling and exact permission
+matching after the duplicate-permission regression was added. The complete
+`CI=true pnpm verify:release` profile passed 302/302 test files and 4,939/4,939
+tests, including package archives and a clean external-consumer installation.

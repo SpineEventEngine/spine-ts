@@ -1,6 +1,6 @@
 # MySQL storage for Spine TS
 
-`@spine-event-engine/storage-rdbms` stores Spine TS records in MySQL. It is a
+`@spine-event-engine/storage-mysql` stores Spine TS records in MySQL. It is a
 durable implementation of `@spine-event-engine/storage` and manages the mysql2
 connection pool and its private tables. PostgreSQL is not supported by this
 package.
@@ -24,7 +24,7 @@ For database requirements, query limits, lifecycle, and error details, see
 ```sh
 mkdir spine-mysql-app && cd spine-mysql-app
 pnpm init
-pnpm add @spine-event-engine/storage-rdbms@snapshot @spine-event-engine/storage@snapshot @bufbuild/protobuf
+pnpm add @spine-event-engine/storage-mysql@snapshot @spine-event-engine/storage@snapshot @bufbuild/protobuf
 ```
 
 Create an empty MySQL database, set an application-owned connection URL, and
@@ -38,13 +38,13 @@ Provide a MySQL URL that includes a database name. Building the factory opens
 its pool only; each record family creates and verifies its private table lazily
 on first use.
 
-<!-- docs-snippet-path: packages/storage-rdbms/src/index.ts -->
+<!-- docs-snippet-path: packages/storage-mysql/src/index.ts -->
 
 ```ts
 import { create, ScalarType } from "@bufbuild/protobuf";
 import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
-import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 
 const factory = await MysqlStorageFactory.newBuilder()
   .setOptions({
@@ -85,7 +85,7 @@ selects that pool before it opens a table or starts a transaction:
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { TenantIdSchema } from "@spine-event-engine/proto";
-import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 
 const acme = create(TenantIdSchema, { kind: { case: "value", value: "acme" } });
 const globex = create(TenantIdSchema, { kind: { case: "value", value: "globex" } });
@@ -201,7 +201,7 @@ Run the opt-in integration suite against a disposable MySQL database:
 
 ```sh
 SPINE_TS_MYSQL_URL='mysql://user:password@127.0.0.1:3306/spine_test' \
-  pnpm --filter @spine-event-engine/storage-rdbms test:mysql
+  pnpm --filter @spine-event-engine/storage-mysql test:mysql
 ```
 
 The test creates temporary adapter tables and removes them afterward. It is not a
@@ -219,7 +219,7 @@ Before starting this corrected layout against an existing database, run the
 legacy-layout inventory for every configured tenant database:
 
 ```sh
-pnpm --dir packages/storage-rdbms inventory:legacy -- \
+pnpm --dir packages/storage-mysql inventory:legacy -- \
   --url 'mysql://user:password@127.0.0.1:3306/tenant_a' \
   --url 'mysql://user:password@127.0.0.1:3306/tenant_b'
 ```

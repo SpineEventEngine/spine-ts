@@ -49,7 +49,7 @@ vi.mock("@spine-event-engine/core", () => ({
   }),
   TypeRegistry: { from: vi.fn(() => calls.typeRegistry) },
 }));
-vi.mock("@spine-event-engine/storage-rdbms", () => ({
+vi.mock("@spine-event-engine/storage-mysql", () => ({
   MysqlStorageFactory: { newBuilder: vi.fn(() => calls.mysqlBuilder) },
 }));
 vi.mock("@spine-event-engine/storage-postgres", () => ({

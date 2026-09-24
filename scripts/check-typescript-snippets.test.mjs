@@ -19,7 +19,7 @@ const documentedPackageReadmes = [
   "packages/storage/README.md",
   "packages/transport/README.md",
   "packages/storage-datastore/README.md",
-  "packages/storage-rdbms/README.md",
+  "packages/storage-mysql/README.md",
   "packages/server/README.md",
   "packages/delivery-server/README.md",
   "packages/delivery-client/README.md",
@@ -39,7 +39,7 @@ const beginnerPackageReadmes = [
   "packages/delivery-client/README.md",
   "packages/delivery-server/README.md",
   "packages/storage-datastore/README.md",
-  "packages/storage-rdbms/README.md",
+  "packages/storage-mysql/README.md",
   "packages/deployment/README.md",
 ];
 
@@ -86,8 +86,8 @@ describe("TypeScript documentation snippets", () => {
       "examples/message-board/deploy/container/README.md",
       "packages/storage/README.md",
       "packages/storage/REFERENCE.md",
-      "packages/storage-rdbms/README.md",
-      "packages/storage-rdbms/REFERENCE.md",
+      "packages/storage-mysql/README.md",
+      "packages/storage-mysql/REFERENCE.md",
       "packages/storage-datastore/README.md",
       "packages/storage-datastore/REFERENCE.md",
       "packages/storage-postgres/README.md",
@@ -205,7 +205,7 @@ describe("TypeScript documentation snippets", () => {
   it("puts Wave 14 provider and deployment first success before advanced guidance", () => {
     for (const document of [
       "packages/storage-datastore/README.md",
-      "packages/storage-rdbms/README.md",
+      "packages/storage-mysql/README.md",
     ]) {
       const source = readFileSync(resolve(root, document), "utf8");
       expect(source.indexOf("## 🚀 First snapshot success"), document).toBeGreaterThan(-1);

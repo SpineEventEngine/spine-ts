@@ -19,7 +19,7 @@ import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { Datastore } from "@google-cloud/datastore";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { createConnection, type RowDataPacket } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 

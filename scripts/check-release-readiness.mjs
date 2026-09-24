@@ -28,7 +28,7 @@ const staleDocumentationPatterns = [
     "misleading private-package registry installation",
     new RegExp(
       String.raw`\bpnpm\s+(?:add|install)\s+@spine-event-engine\/` +
-        String.raw`(?:storage-datastore|storage-postgres|storage-rdbms|storage|core|proto|transport)` +
+        String.raw`(?:storage-datastore|storage-postgres|storage-mysql|storage|core|proto|transport)` +
         String.raw`(?![\w-])(?!@(?:snapshot\b|2\.0\.0-snapshot\.3\b))`,
       "gu",
     ),

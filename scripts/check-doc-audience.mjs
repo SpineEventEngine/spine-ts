@@ -14,7 +14,7 @@ const entries = [
   "packages/server",
   "packages/storage-datastore",
   "packages/storage-postgres",
-  "packages/storage-rdbms",
+  "packages/storage-mysql",
   "packages/storage",
   "packages/testing",
   "packages/transport",

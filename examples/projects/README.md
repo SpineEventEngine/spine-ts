@@ -95,5 +95,5 @@ multi-machine transport.
 - [Server](../../packages/server/README.md)
 - [Node client](../../packages/client-node/README.md)
 - [Storage API](../../packages/storage/README.md)
-- [MySQL storage](../../packages/storage-rdbms/README.md)
+- [MySQL storage](../../packages/storage-mysql/README.md)
 - [Reference for coding agents](REFERENCE.md)

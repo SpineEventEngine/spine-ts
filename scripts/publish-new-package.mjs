@@ -13,6 +13,8 @@ import {
 
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const registry = "https://registry.npmjs.org/";
+const packageVisibilityTimeoutMs = 10 * 60_000;
+const packageVisibilityPollIntervalMs = 5_000;
 const usage = `Usage:
   pnpm release:publish-new-package <package-directory>
   pnpm release:publish-new-package --trust-only <package-directory>
@@ -156,6 +158,40 @@ async function assertPackageVersion(target, fetchResponse) {
 }
 
 /**
+ * Waits for npm's public package endpoint to expose a newly published version.
+ *
+ * @param target Validated package publication target.
+ * @param fetchResponse Fetch implementation used to read the public npm registry.
+ * @param wait Delay callback between public-registry reads.
+ * @param visibilityTimeoutMs Maximum wait for the public npm package endpoint.
+ * @returns Nothing after the exact version is publicly readable.
+ */
+async function waitForPackageVersion(target, fetchResponse, wait, visibilityTimeoutMs) {
+  const deadline = Date.now() + visibilityTimeoutMs;
+  while (true) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0)
+      throw new Error(
+        `${target.name}@${target.version} did not become publicly readable on npm within ${visibilityTimeoutMs}ms`,
+      );
+    const record = await readPackageRecord(target.name, fetchResponse, Math.min(10_000, remaining));
+    if (record !== undefined && target.version in record.versions) return;
+    const delay = Math.min(packageVisibilityPollIntervalMs, deadline - Date.now());
+    if (delay > 0) await wait(delay);
+  }
+}
+
+/**
+ * Delays a public-registry polling retry.
+ *
+ * @param milliseconds Duration before the next retry.
+ * @returns A promise that resolves after the delay.
+ */
+function waitFor(milliseconds) {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds));
+}
+
+/**
  * Runs one child process in the foreground and rejects any unsuccessful exit.
  *
  * @param command Executable name or path.
@@ -277,18 +313,32 @@ function verifyPublishedConfiguration(target, capture) {
     throw new Error(
       `${target.name} does not expose ${target.version} at the ${target.tag} release tag`,
     );
-  const trust = parseCommandJson(
+  const trusts = trustedPublishers(
+    target,
     capture("npm", ["trust", "list", target.name, "--json", "--registry", registry]),
-    "trusted publisher",
   );
-  const matches =
+  if (trusts.length === 0 || !trusts.every((trust) => isExpectedTrustedPublisher(trust)))
+    throw new Error(target.name + " has an unexpected trusted publisher configuration");
+}
+
+function trustedPublishers(target, text) {
+  if (text.trim() === "") return [];
+  const value = parseCommandJson(text, "trusted publisher");
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) return [value];
+  throw new Error(target.name + " has an unexpected trusted publisher configuration");
+}
+
+function isExpectedTrustedPublisher(trust) {
+  return (
     trust?.type === "github" &&
     trust?.repository === "SpineEventEngine/spine-ts" &&
     trust?.file === "publish.yml" &&
     trust?.environment === "gh-actions-environment" &&
     Array.isArray(trust?.permissions) &&
-    trust.permissions.includes("createPackage");
-  if (!matches) throw new Error(target.name + " has an unexpected trusted publisher configuration");
+    trust.permissions.length === 1 &&
+    new Set(trust.permissions).size === 1 &&
+    trust.permissions.includes("createPackage")
+  );
 }
 
 /**
@@ -362,6 +412,8 @@ function registerCleanupHandlers(cleanup, registerSignal, exit) {
  * @param pathExists Callback that confirms the prepared archive exists.
  * @param registerSignal Callback that registers signal cleanup.
  * @param run Foreground command runner.
+ * @param wait Delay callback between public-registry reads after publication.
+ * @param visibilityTimeoutMs Maximum wait for the public npm package endpoint.
  * @param write Progress output callback.
  * @returns A promise that resolves after publication and trusted-publisher setup finish.
  */
@@ -380,6 +432,8 @@ export async function publishNewPackage({
     return () => process.off(signal, handler);
   },
   run = (command, args) => runCommand(command, args, repoRoot),
+  wait = waitFor,
+  visibilityTimeoutMs = packageVisibilityTimeoutMs,
   write = (message) => process.stdout.write(message + "\n"),
 }) {
   const state = { loggedIn: false, temporaryDirectory: undefined };
@@ -396,7 +450,17 @@ export async function publishNewPackage({
     run(process.execPath, ["scripts/release-cli.mjs", "prepare", "--output", output]);
     const archive = join(output, target.archiveName);
     if (!pathExists(archive)) throw new Error("Prepared package archive is missing: " + archive);
-    await withNpmLogin(run, state, () => publishAndConfigure({ archive, capture, run, target }));
+    await withNpmLogin(run, state, () =>
+      publishAndConfigure({
+        archive,
+        capture,
+        fetchResponse,
+        run,
+        target,
+        visibilityTimeoutMs,
+        wait,
+      }),
+    );
   } finally {
     try {
       cleanup();
@@ -412,10 +476,21 @@ export async function publishNewPackage({
  *
  * @param archive Absolute path to the verified package archive.
  * @param capture Command runner that returns standard output.
+ * @param fetchResponse Fetch implementation used to read the public npm registry.
  * @param run Foreground command runner.
  * @param target Validated package publication target.
+ * @param visibilityTimeoutMs Maximum wait for the public npm package endpoint.
+ * @param wait Delay callback between public-registry reads after publication.
  */
-async function publishAndConfigure({ archive, capture, run, target }) {
+async function publishAndConfigure({
+  archive,
+  capture,
+  fetchResponse,
+  run,
+  target,
+  visibilityTimeoutMs,
+  wait,
+}) {
   let published = false;
   try {
     run("npm", [
@@ -431,10 +506,11 @@ async function publishAndConfigure({ archive, capture, run, target }) {
     published = true;
     await addTrustedPublisher(target, run);
     verifyPublishedConfiguration(target, capture);
+    await waitForPackageVersion(target, fetchResponse, wait, visibilityTimeoutMs);
   } catch (error) {
     if (!published) throw error;
     throw new Error(
-      `${error.message}. The package was published; rerun with --trust-only to finish setup.`,
+      `${error.message}. The package was published; rerun with --trust-only to inspect and finish setup.`,
       { cause: error },
     );
   }
@@ -474,7 +550,13 @@ export async function configureTrustedPublisher({
     write(`This will configure trusted publishing for ${target.name}.`);
     if (!(await confirm(target.name))) throw new Error("Trusted-publisher setup cancelled");
     await withNpmLogin(run, state, async () => {
-      await addTrustedPublisher(target, run);
+      const trusts = trustedPublishers(
+        target,
+        capture("npm", ["trust", "list", target.name, "--json", "--registry", registry]),
+      );
+      if (trusts.length === 0) await addTrustedPublisher(target, run);
+      else if (!trusts.every((trust) => isExpectedTrustedPublisher(trust)))
+        throw new Error(target.name + " has an unexpected trusted publisher configuration");
       verifyPublishedConfiguration(target, capture);
     });
   } finally {

@@ -232,11 +232,12 @@ function changedSourceFiles(root) {
         "Fetch the official master branch before running this check.",
     );
   for (const range of [`${mergeBase.stdout.trim()}...HEAD`, undefined, "--cached"]) {
-    const args = ["diff", "--name-only", "--no-renames", "--diff-filter=ACMRD"];
+    const args = ["diff", "--name-status", "--find-renames", "--diff-filter=ACMRD"];
     if (range !== undefined) args.push(range);
     const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
     if (result.status !== 0) throw new Error("Unable to classify changed TSDoc source.");
-    for (const file of result.stdout.split("\n")) if (isSemanticSource(file)) changed.add(file);
+    for (const file of changedDestinationPaths(result.stdout))
+      if (isSemanticSource(file)) changed.add(file);
   }
   const untracked = spawnSync("git", ["ls-files", "--others", "--exclude-standard"], {
     cwd: root,
@@ -245,6 +246,17 @@ function changedSourceFiles(root) {
   if (untracked.status !== 0) throw new Error("Unable to classify untracked TSDoc source.");
   for (const file of untracked.stdout.split("\n")) if (isSemanticSource(file)) changed.add(file);
   return changed;
+}
+
+function changedDestinationPaths(statuses) {
+  const paths = [];
+  for (const line of statuses.split("\n")) {
+    const [status, source, destination] = line.split("\t");
+    if (status === "R100") continue;
+    if (/^R\d+$/u.test(status) && destination !== undefined) paths.push(destination);
+    else if (/^[ACM]$/u.test(status) && source !== undefined) paths.push(source);
+  }
+  return paths;
 }
 
 function isConfined(root, candidate) {
@@ -313,7 +325,7 @@ function readDebt(root) {
 
 function debtPartition(file) {
   if (/^packages\/(?:proto|core|storage|transport)\//.test(file)) return "T-0080D";
-  if (/^packages\/(?:storage-datastore|storage-rdbms|delivery-server)\//.test(file))
+  if (/^packages\/(?:storage-datastore|storage-mysql|delivery-server)\//.test(file))
     return "T-0080E";
   if (/^packages\/server\//.test(file)) return "T-0080F";
   if (/^packages\/(?:auth|client-web|client-react)\//.test(file)) return "T-0080G";
@@ -397,8 +409,13 @@ function trackedSourceFiles(root) {
   });
   if (deleted.status !== 0) throw new Error(`git ls-files --deleted failed: ${deleted.stderr}`);
   const deletedFiles = new Set(deleted.stdout.split("\0"));
-  return result.stdout
-    .split("\0")
+  const untracked = spawnSync("git", ["ls-files", "--others", "--exclude-standard", "-z"], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (untracked.status !== 0) throw new Error(`git ls-files --others failed: ${untracked.stderr}`);
+  return [...new Set([...result.stdout.split("\0"), ...untracked.stdout.split("\0")])]
     .filter((file) => !deletedFiles.has(file))
     .filter(isHandwrittenSource);
 }

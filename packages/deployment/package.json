@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@spine-event-engine/storage-datastore": "workspace:*",
-    "@spine-event-engine/storage-rdbms": "workspace:*",
+    "@spine-event-engine/storage-mysql": "workspace:*",
     "mysql2": "3.23.1"
   }
 }

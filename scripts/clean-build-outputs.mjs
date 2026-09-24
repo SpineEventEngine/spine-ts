@@ -27,7 +27,7 @@ export const buildOutputPaths = Object.freeze([
   "packages/storage/dist",
   "packages/storage-datastore/dist",
   "packages/storage-postgres/dist",
-  "packages/storage-rdbms/dist",
+  "packages/storage-mysql/dist",
   "packages/testing/dist",
   "packages/testing/test-fixtures/dist",
   "examples/todo/dist",

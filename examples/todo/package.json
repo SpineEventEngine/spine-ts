@@ -47,7 +47,7 @@
     "@spine-event-engine/storage": "workspace:*",
     "@spine-event-engine/storage-datastore": "workspace:*",
     "@spine-event-engine/storage-postgres": "workspace:*",
-    "@spine-event-engine/storage-rdbms": "workspace:*",
+    "@spine-event-engine/storage-mysql": "workspace:*",
     "@google-cloud/datastore": "10.1.1"
   },
   "devDependencies": {

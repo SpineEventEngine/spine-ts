@@ -22,7 +22,7 @@
 
 import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import type { StorageFactory } from "@spine-event-engine/storage";
 
 import { todoProtoModule } from "../generated/proto-module.js";

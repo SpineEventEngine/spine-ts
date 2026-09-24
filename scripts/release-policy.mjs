@@ -24,7 +24,7 @@ export const releaseManifestPaths = [
   "packages/storage/package.json",
   "packages/storage-datastore/package.json",
   "packages/storage-postgres/package.json",
-  "packages/storage-rdbms/package.json",
+  "packages/storage-mysql/package.json",
   "packages/testing/package.json",
   "packages/transport/package.json",
   "examples/distributed-message-board/package.json",

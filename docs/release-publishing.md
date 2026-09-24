@@ -29,7 +29,7 @@ has one trusted publisher; replacing it replaces that connection.
 
 - `@spine-event-engine/auth`, `@spine-event-engine/client-node`, `@spine-event-engine/client-react`, `@spine-event-engine/client-web`, `@spine-event-engine/core`, `@spine-event-engine/delivery-client`
 - `@spine-event-engine/delivery-server`, `@spine-event-engine/deployment`, `@spine-event-engine/deployment-gce`, `@spine-event-engine/deployment-gke`, `@spine-event-engine/proto`, `@spine-event-engine/proto-tools`
-- `@spine-event-engine/server`, `@spine-event-engine/storage`, `@spine-event-engine/storage-datastore`, `@spine-event-engine/storage-postgres`, `@spine-event-engine/storage-rdbms`, `@spine-event-engine/testing`, `@spine-event-engine/transport`
+- `@spine-event-engine/server`, `@spine-event-engine/storage`, `@spine-event-engine/storage-datastore`, `@spine-event-engine/storage-postgres`, `@spine-event-engine/storage-mysql`, `@spine-event-engine/testing`, `@spine-event-engine/transport`
 
 ## Publishing a new package for the first time
 
@@ -65,14 +65,18 @@ The script:
 4. Opens npm's browser-based login, publishes only the new package, and adds the
    `SpineEventEngine/spine-ts` `publish.yml` trusted publisher for
    `gh-actions-environment`.
-5. Verifies the published version and trusted-publisher record, logs out of npm,
-   and deletes the temporary release files. The same cleanup runs if the script
-   receives `SIGINT` or `SIGTERM`.
+5. Verifies the published version and trusted-publisher record, then waits up to
+   10 minutes for npm's public package endpoint to expose that exact version,
+   retrying every five seconds.
+   It then logs out of npm and deletes the temporary release files. The same
+   cleanup runs if the script receives `SIGINT` or `SIGTERM`.
 
 The script never adds an npm credential to the repository or GitHub Actions. If
-publication succeeds but trusted-publisher setup does not finish, rerun only the
-setup step. Recovery stops without changing npm settings unless the exact
-workspace version is already published:
+publication succeeds but setup or public-readability confirmation does not
+finish, rerun only the setup step. Recovery first inspects the trusted publisher:
+it accepts the exact existing configuration, creates one only when none exists,
+and stops without npm mutation for a conflicting or ambiguous configuration.
+Recovery also requires the exact workspace version to be published:
 
 ```bash
 pnpm release:publish-new-package --trust-only packages/storage-postgres

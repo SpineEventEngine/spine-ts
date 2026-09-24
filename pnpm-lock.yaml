@@ -327,12 +327,12 @@ importers:
       '@spine-event-engine/storage-datastore':
         specifier: workspace:*
         version: link:../../packages/storage-datastore
+      '@spine-event-engine/storage-mysql':
+        specifier: workspace:*
+        version: link:../../packages/storage-mysql
       '@spine-event-engine/storage-postgres':
         specifier: workspace:*
         version: link:../../packages/storage-postgres
-      '@spine-event-engine/storage-rdbms':
-        specifier: workspace:*
-        version: link:../../packages/storage-rdbms
     devDependencies:
       '@spine-event-engine/proto-tools':
         specifier: 2.0.0-snapshot.13
@@ -511,9 +511,9 @@ importers:
       '@spine-event-engine/storage-datastore':
         specifier: workspace:*
         version: link:../storage-datastore
-      '@spine-event-engine/storage-rdbms':
+      '@spine-event-engine/storage-mysql':
         specifier: workspace:*
-        version: link:../storage-rdbms
+        version: link:../storage-mysql
       mysql2:
         specifier: 3.23.1
         version: 3.23.1(@types/node@24.13.2)
@@ -647,12 +647,12 @@ importers:
       '@spine-event-engine/storage-datastore':
         specifier: 2.0.0-snapshot.13
         version: link:../storage-datastore
+      '@spine-event-engine/storage-mysql':
+        specifier: 2.0.0-snapshot.13
+        version: link:../storage-mysql
       '@spine-event-engine/storage-postgres':
         specifier: 2.0.0-snapshot.13
         version: link:../storage-postgres
-      '@spine-event-engine/storage-rdbms':
-        specifier: 2.0.0-snapshot.13
-        version: link:../storage-rdbms
       mysql2:
         specifier: 3.23.1
         version: 3.23.1(@types/node@24.13.2)
@@ -714,6 +714,24 @@ importers:
         specifier: 2.0.0-snapshot.13
         version: link:../storage
 
+  packages/storage-mysql:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/core':
+        specifier: workspace:*
+        version: link:../core
+      '@spine-event-engine/proto':
+        specifier: workspace:*
+        version: link:../proto
+      '@spine-event-engine/storage':
+        specifier: workspace:*
+        version: link:../storage
+      mysql2:
+        specifier: 3.23.1
+        version: 3.23.1(@types/node@24.13.2)
+
   packages/storage-postgres:
     dependencies:
       '@bufbuild/protobuf':
@@ -734,24 +752,6 @@ importers:
       pg:
         specifier: 8.23.0
         version: 8.23.0
-
-  packages/storage-rdbms:
-    dependencies:
-      '@bufbuild/protobuf':
-        specifier: 2.12.1
-        version: 2.12.1
-      '@spine-event-engine/core':
-        specifier: workspace:*
-        version: link:../core
-      '@spine-event-engine/proto':
-        specifier: workspace:*
-        version: link:../proto
-      '@spine-event-engine/storage':
-        specifier: workspace:*
-        version: link:../storage
-      mysql2:
-        specifier: 3.23.1
-        version: 3.23.1(@types/node@24.13.2)
 
   packages/testing:
     dependencies:

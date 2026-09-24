@@ -130,7 +130,7 @@ the complete generated-contract and source-provenance rules.
 
 ## Durable storage providers
 
-Spine TS ships durable providers for [MySQL](../packages/storage-rdbms/README.md)
+Spine TS ships durable providers for [MySQL](../packages/storage-mysql/README.md)
 and [PostgreSQL](../packages/storage-postgres/README.md). PostgreSQL tenants
 require one physical database per tenant; schemas do not provide that boundary.
 Text sorting follows the database-native collation and can differ from
@@ -211,7 +211,7 @@ for the complete command, query, and subscription contract.
 ## 6. Persist application data
 
 Begin locally with in-memory storage. It is fast and useful for tests, but its
-state disappears when the process stops. Move to [MySQL](../packages/storage-rdbms/README.md),
+state disappears when the process stops. Move to [MySQL](../packages/storage-mysql/README.md),
 [PostgreSQL](../packages/storage-postgres/README.md), or Google Cloud Datastore
 when the application needs durable provider storage.
 

@@ -20,7 +20,7 @@
     { "path": "./packages/storage" },
     { "path": "./packages/storage-datastore" },
     { "path": "./packages/storage-postgres" },
-    { "path": "./packages/storage-rdbms" },
+    { "path": "./packages/storage-mysql" },
     { "path": "./packages/testing" },
     { "path": "./packages/testing/test-fixtures" },
     { "path": "./examples/todo" },
