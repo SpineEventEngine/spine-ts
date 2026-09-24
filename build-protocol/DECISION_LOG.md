@@ -5795,3 +5795,32 @@ Consequences:
 - BlackBox can verify external routing and produced signals without depending
   on a particular test runner. Snapshot reads are immediate; callers use the
   existing eventual helper when background processing has not settled.
+
+## D-0121: Route Project Work Through The GPT-6 Model Family
+
+Status: Accepted
+
+Date: 2026-09-24
+
+Context: The project routing was designed for GPT-5.6 Sol, Terra, and Luna.
+GPT-6 Astra, Sol, and Luna are now available. The project requires Astra High
+for the main chat and future main chats, while bounded implementation and review
+should avoid unnecessarily expensive reasoning profiles.
+
+Decision:
+
+- Configure the main project chat and requirements splitter as GPT-6 Astra with
+  high reasoning.
+- Configure implementation and the ordinary style, TypeScript/API, and
+  performance/reliability reviewers as GPT-6 Sol with medium reasoning.
+- Configure the final security reviewer as GPT-6 Sol with high reasoning.
+- Configure documentation review as GPT-6 Luna with medium reasoning, and use
+  Luna Low or Medium for mechanical verification according to classification
+  difficulty.
+- Escalate demonstrated architecture or correctness ambiguity to Astra High.
+  Keep Standard speed and do not use Max or Ultra in the normal cycle.
+
+Consequences: Project configuration supplies Astra High as the default for new
+project chats unless a person explicitly overrides it. Every child dispatch
+still names its model and reasoning. The tracked Codex profiles and the two
+active routing documents must remain synchronized when routing changes.
