@@ -2445,3 +2445,17 @@ github`. `scripts/publish-new-package.test.mjs` passes 16/16, and Prettier,
   publicly readable, and only then verifies the release tag and trusted
   publisher. The focused publication suite passes 18/18; Prettier, ESLint, and
   diff hygiene pass.
+
+### Snapshot 14 release preparation
+
+- Active source, configuration, documentation, and package metadata contain no
+  reference to the removed `storage-rdbms` package. Two records under
+  `build-protocol/tasks` and `build-protocol/reviews` retain the former task
+  name as immutable historical evidence.
+- Registry checks confirmed that `2.0.0-snapshot.14` was unused for all 19
+  public packages. Commit `ae5a1435a` applies that version to all 31 workspace
+  manifests and changes only their top-level `version` fields.
+- Internal dependency pins, the lockfile, generated Proto manifests, and
+  version-sensitive tests now use `2.0.0-snapshot.14` in this separate change.
+- Five focused suites pass 73/73 tests. Release preflight packs all 19 public
+  packages at snapshot 14 and installs them in a clean external consumer.
