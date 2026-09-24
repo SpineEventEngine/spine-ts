@@ -2406,6 +2406,10 @@ github`. `scripts/publish-new-package.test.mjs` passes 16/16, and Prettier,
 - Docker verification used MySQL 8.4.10, PostgreSQL 16.15, and PostgreSQL
   18.6. The PostgreSQL 16 and 18 profiles each passed 9/9 applicable tests;
   four cases for other providers were skipped in each profile.
+- Follow-up Docker verification used MariaDB 11.4.13. The complete live profile
+  passed against both InnoDB and Aria: 12/12 applicable tests passed and four
+  cases for other providers were skipped in each run. The documented Todo
+  `start:mysql` journey also passed against the real MariaDB instance.
 - The renamed MySQL package initially exposed live-only fixture and driver
   compatibility defects. The fixture now registers its message-valued ID type,
   isolates record families and repeated-run IDs, and provisions the canonical
