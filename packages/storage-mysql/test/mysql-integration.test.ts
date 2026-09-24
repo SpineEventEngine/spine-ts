@@ -25,6 +25,7 @@ import {
   TenantIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
+import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -62,7 +63,12 @@ live("MySQL-family record layout", () => {
 
   beforeAll(async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
-    factory = await MysqlStorageFactory.newBuilder().setOptions({ url }).build();
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+    factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url })
+      .setStringifierRegistry(stringifiers)
+      .build();
   });
   afterAll(() => {
     factory.close();
@@ -166,9 +172,10 @@ live("MySQL-family record layout", () => {
       expect(engines).toHaveLength(actualTables.length);
       expect(engines.every((table) => table.engine.toLowerCase() === engine)).toBe(true);
 
+      const run = String(Date.now());
       for (const [index, tableName] of actualTables.entries()) {
-        const id = `boundary-${String(index)}`;
-        const trigger = `t0134_fail_${String(Date.now())}_${String(index)}`;
+        const id = `boundary-${run}-${String(index)}`;
+        const trigger = `t0134_fail_${run}_${String(index)}`;
         if (admin === undefined)
           throw new Error("SPINE_TS_MYSQL_ADMIN_URL is required for trigger injection.");
         await admin.query(
@@ -277,7 +284,11 @@ live("MySQL-family record layout", () => {
     try {
       await commits.commit(mutation(context, input, "seed"));
       tables = [...mysqlEntityTables(input), mysqlRecordTableName(eventStoreRecordSpec)];
-      for (const table of tables) await pool.query(`ALTER TABLE \`${table}\` ENGINE=MyISAM`);
+      for (const table of tables)
+        await pool.query(
+          `ALTER TABLE \`${table}\` MODIFY \`ID\` VARCHAR(512) ` +
+            "CHARACTER SET latin1 COLLATE latin1_bin NOT NULL, ENGINE=MyISAM",
+        );
 
       await expect(commits.commit(mutation(context, input, "with-history"))).resolves.toBe(
         "committed",
@@ -309,8 +320,9 @@ live("MySQL-family record layout", () => {
         ),
       ],
     });
-    const first = factory.createRecordStorage(context, spec);
-    const second = factory.createRecordStorage(context, spec);
+    const group = new StorageGroup(`t0134_cas_${String(Date.now())}`);
+    const first = factory.createRecordStorage(context, spec, group);
+    const second = factory.createRecordStorage(context, spec, group);
     const pool = createPool(url);
     const engine = process.env.SPINE_TS_MYSQL_ENGINE?.toUpperCase() ?? "INNODB";
     try {
@@ -380,12 +392,13 @@ live("MySQL-family record layout", () => {
     const input = entityInput(context);
     const commits = EntityCommitStorageFactories.create(factory, input);
     const pool = createPool(url ?? "");
+    const id = `replay-${String(Date.now())}`;
     try {
-      const same = mutation(context, input, "same");
+      const same = mutation(context, input, id);
       await expect(commits.commit(same)).resolves.toBe("committed");
-      const before = await mysqlCurrentRecord(pool, input, "same");
+      const before = await mysqlCurrentRecord(pool, input, id);
       await expect(commits.commit(same)).resolves.toBe("committed");
-      await expect(mysqlCurrentRecord(pool, input, "same")).resolves.toEqual(before);
+      await expect(mysqlCurrentRecord(pool, input, id)).resolves.toEqual(before);
     } finally {
       commits.close();
       await pool.end();

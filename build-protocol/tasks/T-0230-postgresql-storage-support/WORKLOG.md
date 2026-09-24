@@ -2400,3 +2400,30 @@ github`. `scripts/publish-new-package.test.mjs` passes 16/16, and Prettier,
   functions, and 94.46% lines.
 - No npm package, trusted-publisher record, organization branch, pull request,
   or protected branch was mutated by verification.
+
+### Live database verification after the MySQL rename
+
+- Docker verification used MySQL 8.4.10, PostgreSQL 16.15, and PostgreSQL
+  18.6. The PostgreSQL 16 and 18 profiles each passed 9/9 applicable tests;
+  four cases for other providers were skipped in each profile.
+- The renamed MySQL package initially exposed live-only fixture and driver
+  compatibility defects. The fixture now registers its message-valued ID type,
+  isolates record families and repeated-run IDs, and provisions the canonical
+  ID column with `latin1_bin` before a MyISAM conversion. The MySQL adapter now
+  accepts the real `mysql2` `GET_LOCK()` success result, which may be numeric
+  `1` or string `"1"`, in both Entity commits and record compare-and-set.
+- The complete MySQL live profile passed twice consecutively after correction:
+  12/12 applicable tests passed and four cases for other providers were
+  skipped on each run. The ordinary MySQL package suite passed 107/107 tests.
+- The documented Todo application journeys passed against all three live
+  databases. `start:mysql` passed against MySQL 8.4.10, while
+  `start:postgresql` passed against PostgreSQL 16.15 and 18.6; in each case the
+  real smoke client created and read a task successfully.
+- Direct TSDoc, cleanup, package typechecking, linting, snippet, formatting,
+  and diff-hygiene checks passed after documenting the genuinely edited MySQL
+  source and splitting the two methods that exceeded the 35-line limit.
+- Final `CI=true pnpm verify:release` passed after the live-database
+  corrections: 302/302 test files and 4,939/4,939 tests passed. The clean
+  external consumer installed all 19 package tarballs, including
+  `storage-mysql` and `storage-postgres`. Coverage passed at 93.30% statements,
+  90.07% branches, 93.07% functions, and 94.46% lines.

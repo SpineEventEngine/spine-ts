@@ -39,6 +39,12 @@ It creates and verifies a family table lazily. An account therefore needs DDL
 permission, metadata reads, and DML. Existing tables are inspected and never
 altered.
 
+MyISAM and Aria impose a smaller primary-key byte limit than InnoDB. A family
+using the canonical `VARCHAR(512)` ID must therefore be provisioned with a
+one-byte binary collation, such as `latin1_bin`, and can store only IDs
+representable in that character set. An `utf8mb4` ID of that declared width
+cannot be converted to MyISAM.
+
 Before deployment, run `pnpm --dir packages/storage-mysql inventory:legacy --
 --url <database-url>` once for every configured tenant database. The command
 fails closed on connection errors, `_scope`, `_revision`, or an old primary key

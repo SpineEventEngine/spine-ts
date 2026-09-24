@@ -74,6 +74,7 @@ export class MysqlEntityCommitCoordinator {
    * @param key Identifies the advisory lock.
    * @param work Performs the connection-bound mutation.
    * @param options Requires a transaction when the caller cannot use an advisory lock.
+   * @typeParam T The mutation result type.
    * @returns Returns the work result.
    */
   async commit<T>(
@@ -84,49 +85,81 @@ export class MysqlEntityCommitCoordinator {
   ): Promise<T> {
     const connection = await this.connections.acquire();
     let locked = false;
-    let transactional = false;
     try {
-      const [rows] = await connection.query<(RowDataPacket & { engine?: string })[]>(
-        "SELECT engine AS engine FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN (?)",
-        [tables],
-      );
-      transactional =
-        rows.length === tables.length &&
-        rows.every((row) => row.engine?.toLowerCase() === "innodb");
+      const transactional = await this.allTransactional(connection, tables);
       if (!transactional && options.requireTransaction)
         throw new Error("MySQL delivery cleanup requires transactional record tables.");
-      if (transactional) {
-        for (let attempt = 0; attempt < 2; attempt += 1) {
-          try {
-            await connection.beginTransaction();
-            const result = await work(connection, true);
-            await connection.commit();
-            return result;
-          } catch (error) {
-            await connection.rollback().catch(() => undefined);
-            if (attempt === 0 && isDeadlock(error)) continue;
-            transactional = false;
-            throw error;
-          }
-        }
-        throw new Error("Unreachable InnoDB commit retry.");
-      }
-      const [lockRows] = await connection.execute<(RowDataPacket & { acquired: number })[]>(
-        "SELECT GET_LOCK(?, ?) AS acquired",
-        [key, 30],
-      );
-      if (lockRows[0]?.acquired !== 1) throw new Error("Unable to acquire MySQL entity lock.");
+      if (transactional) return await this.commitTransaction(connection, work);
+      await this.acquireLock(connection, key);
       locked = true;
       return await work(connection, false);
-    } catch (error) {
-      if (transactional) {
-        await connection.rollback().catch(() => undefined);
-      }
-      throw error;
     } finally {
       if (locked) await connection.execute("SELECT RELEASE_LOCK(?)", [key]).catch(() => undefined);
       this.connections.release(connection);
     }
+  }
+
+  /**
+   * Determines whether every participating table supports transactions.
+   *
+   * @param connection Provides the connection used for metadata inspection.
+   * @param tables Lists participating physical tables.
+   * @returns Resolves whether every table uses InnoDB.
+   */
+  private async allTransactional(
+    connection: PoolConnection,
+    tables: readonly string[],
+  ): Promise<boolean> {
+    const [rows] = await connection.query<(RowDataPacket & { engine?: string })[]>(
+      "SELECT engine AS engine FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN (?)",
+      [tables],
+    );
+    return (
+      rows.length === tables.length && rows.every((row) => row.engine?.toLowerCase() === "innodb")
+    );
+  }
+
+  /**
+   * Commits transactional work and retries one deadlock.
+   *
+   * @param connection Provides the transaction connection.
+   * @param work Performs the connection-bound mutation.
+   * @typeParam T The mutation result type.
+   * @returns Resolves to the mutation result.
+   */
+  private async commitTransaction<T>(
+    connection: PoolConnection,
+    work: (connection: PoolConnection, transactional: boolean) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await connection.beginTransaction();
+        const result = await work(connection, true);
+        await connection.commit();
+        return result;
+      } catch (error) {
+        await connection.rollback().catch(() => undefined);
+        if (attempt === 0 && isDeadlock(error)) continue;
+        throw error;
+      }
+    }
+    throw new Error("Unreachable InnoDB commit retry.");
+  }
+
+  /**
+   * Acquires the advisory lock for a non-transactional commit.
+   *
+   * @param connection Provides the lock connection.
+   * @param key Identifies the advisory lock.
+   * @returns Resolves after the lock is acquired.
+   */
+  private async acquireLock(connection: PoolConnection, key: string): Promise<void> {
+    const [rows] = await connection.execute<(RowDataPacket & { acquired: number | string })[]>(
+      "SELECT GET_LOCK(?, ?) AS acquired",
+      [key, 30],
+    );
+    if (rows[0]?.acquired !== 1 && rows[0]?.acquired !== "1")
+      throw new Error("Unable to acquire MySQL entity lock.");
   }
 }
 

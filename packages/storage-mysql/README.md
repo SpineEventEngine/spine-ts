@@ -123,6 +123,11 @@ numbers, enums, bytes, messages, `Timestamp`, and `Version`. Spine JVM JDBC
 does not support `float` or `double` record columns, so this adapter rejects
 them too.
 
+MyISAM and Aria limit the byte length of an indexed key. Their `VARCHAR(512)`
+ID column therefore needs a one-byte binary collation, such as `latin1_bin`,
+and every ID must be representable in that character set. The normal InnoDB
+table can keep the database's Unicode character set.
+
 Each record source uses a separate private table. An ungrouped family defaults to
 its Proto full name with dots replaced by underscores. A grouped family uses
 the group name with dots replaced by underscores, followed by the record type's

@@ -138,7 +138,7 @@ describe("MysqlEntityCommitCoordinator", () => {
           query: () => Promise.resolve([[{ engine: "MyISAM" }], []] as never),
           execute: (sql: string) => {
             calls.push(sql);
-            return Promise.resolve([[{ acquired: 1 }], []] as never);
+            return Promise.resolve([[{ acquired: "1" }], []] as never);
           },
         } as never),
       release: () => undefined,
