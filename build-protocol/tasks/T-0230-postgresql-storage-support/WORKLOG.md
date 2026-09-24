@@ -2431,3 +2431,17 @@ github`. `scripts/publish-new-package.test.mjs` passes 16/16, and Prettier,
   external consumer installed all 19 package tarballs, including
   `storage-mysql` and `storage-postgres`. Coverage passed at 93.30% statements,
   90.07% branches, 93.07% functions, and 94.46% lines.
+
+### First-publication visibility ordering correction
+
+- A real first publication of `storage-mysql` reproduced the remaining npm
+  replication race: publication and trusted-publisher creation succeeded, but
+  the script ran `npm view` before its public-registry wait and failed on the
+  temporary 404.
+- RED: a focused regression made `npm view` fail until the public package
+  endpoint exposed the exact version. It failed before the retry loop against
+  the former ordering.
+- GREEN: first publication now creates trust, waits for the exact version to be
+  publicly readable, and only then verifies the release tag and trusted
+  publisher. The focused publication suite passes 18/18; Prettier, ESLint, and
+  diff hygiene pass.

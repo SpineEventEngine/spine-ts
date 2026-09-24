@@ -65,9 +65,9 @@ The script:
 4. Opens npm's browser-based login, publishes only the new package, and adds the
    `SpineEventEngine/spine-ts` `publish.yml` trusted publisher for
    `gh-actions-environment`.
-5. Verifies the published version and trusted-publisher record, then waits up to
-   10 minutes for npm's public package endpoint to expose that exact version,
-   retrying every five seconds.
+5. Waits up to 10 minutes for npm's public package endpoint to expose the exact
+   version, retrying every five seconds, and only then verifies the published
+   release tag and trusted-publisher record.
    It then logs out of npm and deletes the temporary release files. The same
    cleanup runs if the script receives `SIGINT` or `SIGTERM`.
 

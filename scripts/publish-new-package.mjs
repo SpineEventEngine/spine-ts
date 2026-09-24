@@ -505,8 +505,8 @@ async function publishAndConfigure({
     ]);
     published = true;
     await addTrustedPublisher(target, run);
-    verifyPublishedConfiguration(target, capture);
     await waitForPackageVersion(target, fetchResponse, wait, visibilityTimeoutMs);
+    verifyPublishedConfiguration(target, capture);
   } catch (error) {
     if (!published) throw error;
     throw new Error(

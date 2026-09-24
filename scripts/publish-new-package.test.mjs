@@ -200,6 +200,45 @@ describe("new package publication", () => {
     expect(calls.filter((call) => call[1] === "trust")).toHaveLength(1);
   });
 
+  it("waits for public visibility before verifying release tags with npm view", async () => {
+    const target = resolveNewPackageTarget(repoRoot, "packages/storage-postgres");
+    let registryReads = 0;
+    await publishNewPackage({
+      repoRoot,
+      target,
+      capture: (_command, args) => {
+        if (args[0] === "view") {
+          if (registryReads < 3) throw new Error("npm view failed with E404");
+          return JSON.stringify({ snapshot: target.version });
+        }
+        return JSON.stringify({
+          type: "github",
+          repository: "SpineEventEngine/spine-ts",
+          file: "publish.yml",
+          environment: "gh-actions-environment",
+          permissions: ["createPackage"],
+        });
+      },
+      confirm: async () => true,
+      fetchResponse: async () => {
+        registryReads += 1;
+        if (registryReads < 3) return { status: 404, ok: false };
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ versions: { [target.version]: {} } }),
+        };
+      },
+      makeTemporaryDirectory: () => "/tmp/new-package-publication",
+      pathExists: () => true,
+      removeDirectory: () => {},
+      run: () => {},
+      wait: async () => {},
+      write: () => {},
+    });
+    expect(registryReads).toBe(3);
+  });
+
   it("reports an unreadable published version without repeating npm mutations", async () => {
     const calls = [];
     const target = resolveNewPackageTarget(repoRoot, "packages/storage-postgres");
