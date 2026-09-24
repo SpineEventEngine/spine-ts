@@ -36,8 +36,8 @@ describe("release policy", () => {
   });
 
   it("keeps the complete workspace and public-package inventories explicit", () => {
-    expect(releaseManifestPaths).toHaveLength(26);
-    expect(releaseManifestPaths.filter((path) => path.startsWith("packages/"))).toHaveLength(18);
+    expect(releaseManifestPaths).toHaveLength(27);
+    expect(releaseManifestPaths.filter((path) => path.startsWith("packages/"))).toHaveLength(19);
   });
 
   it("requires a common version, exact public inventory, tag-free metadata, and concrete pins", () => {
@@ -88,10 +88,10 @@ describe("release policy", () => {
 
   it("fails closed for each repository policy boundary", () => {
     const entries = readReleaseManifests(new URL("..", import.meta.url).pathname);
-    expect(() => validateReleasePolicy(entries.slice(1))).toThrow("26-path inventory");
+    expect(() => validateReleasePolicy(entries.slice(1))).toThrow("27-path inventory");
     const wrongPath = globalThis.structuredClone(entries);
     wrongPath[1].path = "packages/not-auth/package.json";
-    expect(() => validateReleasePolicy(wrongPath)).toThrow("26-path inventory");
+    expect(() => validateReleasePolicy(wrongPath)).toThrow("27-path inventory");
     const wrongBoundary = globalThis.structuredClone(entries);
     wrongBoundary[1].manifest.name = "@other/auth";
     expect(() => validateReleasePolicy(wrongBoundary)).toThrow("public-name inventory");
@@ -109,6 +109,6 @@ describe("release policy", () => {
     expect(() => validateReleasePolicy(wrongConfig)).toThrow("invalid publishConfig");
     const wrongPin = globalThis.structuredClone(entries);
     wrongPin[1].manifest.dependencies = { "@spine-event-engine/core": "1.0.0" };
-    expect(() => validateReleasePolicy(wrongPin)).toThrow("must use 2.0.0-snapshot.12");
+    expect(() => validateReleasePolicy(wrongPin)).toThrow("must use 2.0.0-snapshot.14");
   });
 });

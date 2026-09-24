@@ -920,7 +920,7 @@ describe("MysqlRecordStorage", () => {
 
   it("locks the existing row before compare-and-set", async () => {
     const calls: string[] = [];
-    let acquired = 1;
+    let acquired: number | string = "1";
     const connection = {
       query: (sql: string) =>
         Promise.resolve(

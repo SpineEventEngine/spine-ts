@@ -529,7 +529,7 @@ const expectedDatastoreStorageExports = [
   "NamespaceConverter",
   "RecordLayout",
 ];
-const expectedRdbmsStorageExports = [
+const expectedMysqlStorageExports = [
   "CreateOperationFactory",
   "MysqlColumnSpec",
   "MysqlCreateOperation",
@@ -544,6 +544,23 @@ const expectedRdbmsStorageExports = [
   "MysqlStorageOperationError",
   "MysqlStorageSchemaError",
   "MysqlTableSpec",
+];
+const expectedPostgresStorageExports = [
+  "PostgresColumnSpec",
+  "PostgresCreateOperation",
+  "PostgresCreateOperationFactory",
+  "PostgresDdlType",
+  "PostgresEntityStorageHandle",
+  "PostgresStorageConfigurationError",
+  "PostgresStorageConnectionError",
+  "PostgresStorageDataError",
+  "PostgresStorageFactory",
+  "PostgresStorageFactoryBuilder",
+  "PostgresStorageFactoryOptions",
+  "PostgresTenantStorageOptions",
+  "PostgresStorageOperationError",
+  "PostgresStorageSchemaError",
+  "PostgresTableSpec",
 ];
 const expectedTransportExports = [
   "ConsumerHandle",
@@ -920,7 +937,8 @@ const deploymentGkeIndexPath = join("packages", "deployment-gke", "src", "index.
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
 const storageProviderPath = join("packages", "storage", "src", "provider.ts");
 const datastoreStorageIndexPath = join("packages", "storage-datastore", "src", "index.ts");
-const rdbmsStorageIndexPath = join("packages", "storage-rdbms", "src", "index.ts");
+const mysqlStorageIndexPath = join("packages", "storage-mysql", "src", "index.ts");
+const postgresStorageIndexPath = join("packages", "storage-postgres", "src", "index.ts");
 const serverIndexPath = join("packages", "server", "src", "index.ts");
 const browserServerIndexPath = join("packages", "server", "src", "browser", "index.ts");
 const testingIndexPath = join("packages", "testing", "src", "index.ts");
@@ -997,7 +1015,11 @@ const datastoreStorageModuleNames = collectDirectModuleNames(
   apiDocs,
   "packages/storage-datastore/src",
 );
-const rdbmsStorageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage-rdbms/src");
+const mysqlStorageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage-mysql/src");
+const postgresStorageModuleNames = collectDirectModuleNames(
+  apiDocs,
+  "packages/storage-postgres/src",
+);
 const testingModuleNames = collectDirectModuleNames(apiDocs, "packages/testing/src");
 const transportModuleNames = collectDirectModuleNames(apiDocs, "packages/transport/src");
 const coreCodegenModuleNames = collectDirectModuleNames(apiDocs, "packages/core/src/codegen");
@@ -1321,7 +1343,8 @@ const declaredDeploymentGkeExports = collectNamedExports(deploymentGkeIndexPath)
 const declaredStorageExports = collectNamedExports(storageIndexPath);
 const declaredStorageProviderExports = collectModuleExports(storageProviderPath);
 const declaredDatastoreStorageExports = collectNamedExports(datastoreStorageIndexPath);
-const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
+const declaredMysqlStorageExports = collectNamedExports(mysqlStorageIndexPath);
+const declaredPostgresStorageExports = collectNamedExports(postgresStorageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
 const declaredTransportExports = collectNamedExports(transportIndexPath);
 const declaredCoreCodegenExports = collectNamedExports(coreCodegenIndexPath);
@@ -1510,14 +1533,23 @@ const missingDeclaredDatastoreStorageExports = expectedDatastoreStorageExports.f
 const unexpectedDatastoreStorageExports = declaredDatastoreStorageExports.filter(
   (name) => !expectedDatastoreStorageExports.includes(name),
 );
-const missingRdbmsStorageExports = expectedRdbmsStorageExports.filter(
-  (name) => !rdbmsStorageModuleNames.has(name),
+const missingMysqlStorageExports = expectedMysqlStorageExports.filter(
+  (name) => !mysqlStorageModuleNames.has(name),
 );
-const missingDeclaredRdbmsStorageExports = expectedRdbmsStorageExports.filter(
-  (name) => !declaredRdbmsStorageExports.includes(name),
+const missingDeclaredMysqlStorageExports = expectedMysqlStorageExports.filter(
+  (name) => !declaredMysqlStorageExports.includes(name),
 );
-const unexpectedRdbmsStorageExports = declaredRdbmsStorageExports.filter(
-  (name) => !expectedRdbmsStorageExports.includes(name),
+const unexpectedMysqlStorageExports = declaredMysqlStorageExports.filter(
+  (name) => !expectedMysqlStorageExports.includes(name),
+);
+const missingPostgresStorageExports = expectedPostgresStorageExports.filter(
+  (name) => !postgresStorageModuleNames.has(name),
+);
+const missingDeclaredPostgresStorageExports = expectedPostgresStorageExports.filter(
+  (name) => !declaredPostgresStorageExports.includes(name),
+);
+const unexpectedPostgresStorageExports = declaredPostgresStorageExports.filter(
+  (name) => !expectedPostgresStorageExports.includes(name),
 );
 const missingTestingExports = expectedTestingExports.filter(
   (name) => !testingModuleNames.has(name),
@@ -1925,26 +1957,50 @@ if (unexpectedDatastoreStorageExports.length > 0) {
   process.exit(1);
 }
 
-if (missingRdbmsStorageExports.length > 0) {
+if (missingMysqlStorageExports.length > 0) {
   console.error(
-    "TypeDoc JSON is missing expected @spine-event-engine/storage-rdbms exports: " +
-      missingRdbmsStorageExports.join(", "),
+    "TypeDoc JSON is missing expected @spine-event-engine/storage-mysql exports: " +
+      missingMysqlStorageExports.join(", "),
   );
   process.exit(1);
 }
 
-if (missingDeclaredRdbmsStorageExports.length > 0) {
+if (missingDeclaredMysqlStorageExports.length > 0) {
   console.error(
-    "@spine-event-engine/storage-rdbms root is missing expected exports: " +
-      missingDeclaredRdbmsStorageExports.join(", "),
+    "@spine-event-engine/storage-mysql root is missing expected exports: " +
+      missingDeclaredMysqlStorageExports.join(", "),
   );
   process.exit(1);
 }
 
-if (unexpectedRdbmsStorageExports.length > 0) {
+if (unexpectedMysqlStorageExports.length > 0) {
   console.error(
-    "@spine-event-engine/storage-rdbms root exports changed without updating docs expectations: " +
-      unexpectedRdbmsStorageExports.join(", "),
+    "@spine-event-engine/storage-mysql root exports changed without updating docs expectations: " +
+      unexpectedMysqlStorageExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingPostgresStorageExports.length > 0) {
+  console.error(
+    "TypeDoc JSON is missing expected @spine-event-engine/storage-postgres exports: " +
+      missingPostgresStorageExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingDeclaredPostgresStorageExports.length > 0) {
+  console.error(
+    "@spine-event-engine/storage-postgres root is missing expected exports: " +
+      missingDeclaredPostgresStorageExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedPostgresStorageExports.length > 0) {
+  console.error(
+    "@spine-event-engine/storage-postgres root exports changed without updating docs expectations: " +
+      unexpectedPostgresStorageExports.join(", "),
   );
   process.exit(1);
 }

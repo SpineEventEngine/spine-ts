@@ -27,7 +27,7 @@ import { createPool } from "mysql2/promise";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";

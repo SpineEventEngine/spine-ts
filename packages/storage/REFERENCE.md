@@ -94,7 +94,7 @@ until each handle closes. `RecordStorage.close()` rejects that handle's later
 operations. Datastore follows the base factory behavior. Adapters can define a
 stronger shutdown lifecycle: the MySQL factory closes live handles while it
 drains its pool. Read the [Datastore reference](../storage-datastore/REFERENCE.md)
-and [MySQL reference](../storage-rdbms/REFERENCE.md) before relying on shutdown
+and [MySQL reference](../storage-mysql/REFERENCE.md) or [PostgreSQL reference](../storage-postgres/REFERENCE.md) before relying on shutdown
 behavior. The in-memory backend is ephemeral and process-local. Passing one
 `InMemoryStorageBackend` to multiple in-memory factories deliberately shares
 its scoped rows.

@@ -31,7 +31,7 @@ import { createPool } from "mysql2/promise";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StorageSubscriptionRegistry } from "../../src/stand/subscription-registry.js";
-import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 
 vi.mock("mysql2/promise", () => ({ createPool: vi.fn() }));
 

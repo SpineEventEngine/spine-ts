@@ -22,10 +22,13 @@ describe("inbox provider test selection", () => {
     expect(providerEnabled("datastore", "mysql", true)).toBe(false);
     expect(providerEnabled("mysql", "datastore", true)).toBe(false);
     expect(providerEnabled("mysql", "mysql", true)).toBe(true);
+    expect(providerEnabled("postgresql", "postgresql", true)).toBe(true);
+    expect(providerEnabled("postgresql", "mysql", true)).toBe(false);
   });
 
   it("does not select an unavailable requested provider", () => {
     expect(providerEnabled("datastore", "datastore", false)).toBe(false);
     expect(providerEnabled("mysql", "mysql", false)).toBe(false);
+    expect(providerEnabled("postgresql", "postgresql", false)).toBe(false);
   });
 });

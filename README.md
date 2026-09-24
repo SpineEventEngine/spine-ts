@@ -15,7 +15,7 @@ Node.js with less code.
   events, and Projections provide query-side views through generated, type-safe
   handlers.
 - ✅ **Choose storage in application code.** Start in memory, then configure
-  Google Cloud Datastore or MySQL without changing domain handlers.
+  Google Cloud Datastore, MySQL, or PostgreSQL without changing domain handlers.
 - ✅ **Serve Node and browser clients.** Native gRPC, Connect, and gRPC-Web use
   the same Command, Query, and Subscription services.
 - ✅ **Test applications as a user would.** `BlackBox` exercises complete bounded
@@ -41,7 +41,7 @@ Node.js with less code.
 **Storage**
 
 - In-memory storage for development and tests.
-- Google Cloud Datastore and MySQL adapters for application-selected
+- Google Cloud Datastore, MySQL, and PostgreSQL adapters for application-selected
   persistence.
 
 ## 🚀 Try the Message Board application

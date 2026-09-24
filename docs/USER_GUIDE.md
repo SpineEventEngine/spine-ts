@@ -128,6 +128,16 @@ provider column simply because it appears in a message.
 Continue with the [Proto model reference](../packages/proto/REFERENCE.md) for
 the complete generated-contract and source-provenance rules.
 
+## Durable storage providers
+
+Spine TS ships durable providers for [MySQL](../packages/storage-mysql/README.md)
+and [PostgreSQL](../packages/storage-postgres/README.md). PostgreSQL tenants
+require one physical database per tenant; schemas do not provide that boundary.
+Text sorting follows the database-native collation and can differ from
+JavaScript ordering. Normalized queries have a 1,000-bind budget and a 10,000
+row default with one lookahead row; `RecordQuery` offsets remain a distinct
+provider-side pagination feature.
+
 ## 4. Implement behavior
 
 Put behavior in entity classes. An Aggregate accepts a command and returns a
@@ -201,8 +211,9 @@ for the complete command, query, and subscription contract.
 ## 6. Persist application data
 
 Begin locally with in-memory storage. It is fast and useful for tests, but its
-state disappears when the process stops. Move to MySQL or Google Cloud
-Datastore when the application needs durable provider storage.
+state disappears when the process stops. Move to [MySQL](../packages/storage-mysql/README.md),
+[PostgreSQL](../packages/storage-postgres/README.md), or Google Cloud Datastore
+when the application needs durable provider storage.
 
 Storage uses typed mappings. A generated message ID or message column uses a
 reversible `Stringifier`; primitive values use a provider-native form. Use the

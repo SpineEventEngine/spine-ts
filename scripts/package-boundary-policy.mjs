@@ -15,6 +15,14 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import ts from "typescript";
+import { parse } from "yaml";
+
+const dependencyGroups = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+];
 
 function packageDirectories(root) {
   return readdirSync(join(root, "packages"), { withFileTypes: true })
@@ -33,6 +41,46 @@ function packageManifests(root) {
     );
     return { directory, manifest };
   });
+}
+
+function workspaceManifests(root) {
+  const workspace = parse(readFileSync(join(root, "pnpm-workspace.yaml"), "utf8"));
+  if (!Array.isArray(workspace?.packages)) {
+    throw new Error("pnpm-workspace.yaml must declare a packages array.");
+  }
+  const directories = workspace.packages.flatMap((pattern) =>
+    expandWorkspacePattern(root, pattern),
+  );
+  return [...new Set(directories)]
+    .map((directory) => ({
+      directory: relative(root, directory).split(sep).join("/"),
+      manifest: JSON.parse(readFileSync(join(directory, "package.json"), "utf8")),
+    }))
+    .sort((left, right) => left.directory.localeCompare(right.directory));
+}
+
+function expandWorkspacePattern(root, pattern) {
+  if (typeof pattern !== "string" || pattern.startsWith("!") || pattern.includes("**")) {
+    throw new Error(`Unsupported pnpm workspace package pattern: ${String(pattern)}`);
+  }
+  let directories = [root];
+  for (const segment of pattern.split("/")) {
+    if (segment === "*") {
+      directories = directories.flatMap((directory) =>
+        existsSync(directory)
+          ? readdirSync(directory, { withFileTypes: true })
+              .filter((entry) => entry.isDirectory())
+              .map((entry) => join(directory, entry.name))
+          : [],
+      );
+    } else {
+      if (segment.includes("*") || segment.length === 0) {
+        throw new Error(`Unsupported pnpm workspace package pattern: ${pattern}`);
+      }
+      directories = directories.map((directory) => join(directory, segment));
+    }
+  }
+  return directories.filter((directory) => existsSync(join(directory, "package.json")));
 }
 
 const finalPublicSurfaces = new Map([
@@ -58,7 +106,8 @@ const exactFrameworkPackages = [
   "server",
   "storage",
   "storage-datastore",
-  "storage-rdbms",
+  "storage-postgres",
+  "storage-mysql",
   "testing",
   "transport",
 ].map((directory) => `@spine-event-engine/${directory}`);
@@ -75,6 +124,84 @@ export function packageExportInternalPathProblems(root) {
       .filter((path) => path.includes("internal/"))
       .map((path) => `${manifest.name} exports ${path}`);
   });
+}
+
+/**
+ * Finds framework packages that depend on example applications.
+ *
+ * Examples may depend on the framework they demonstrate. A dependency in the
+ * opposite direction couples reusable packages to applications and creates a
+ * workspace cycle as soon as the application uses that package.
+ *
+ * @param root Repository root containing package and example manifests.
+ * @returns Sorted dependencies from framework packages to example applications.
+ */
+export function frameworkExampleDependencyProblems(root) {
+  const exampleNames = new Set(
+    workspaceManifests(root)
+      .filter(({ directory }) => directory.startsWith("examples/"))
+      .map(({ manifest }) => manifest.name),
+  );
+  return packageManifests(root)
+    .flatMap(({ manifest }) =>
+      dependencyGroups.flatMap((group) =>
+        Object.keys(manifest[group] ?? {})
+          .filter((dependency) => exampleNames.has(dependency))
+          .map((dependency) => `${manifest.name} ${group} contains example ${dependency}`),
+      ),
+    )
+    .sort((left, right) => left.localeCompare(right));
+}
+
+/**
+ * Finds dependency cycles across every package declared in the pnpm workspace.
+ *
+ * @param root Repository root containing `pnpm-workspace.yaml` and package manifests.
+ * @returns Sorted cycles formed by runtime, development, optional, or peer dependencies.
+ */
+export function workspaceDependencyCycleProblems(root) {
+  const manifests = workspaceManifests(root);
+  const byName = new Map(manifests.map(({ manifest }) => [manifest.name, manifest]));
+  const state = new Map();
+  const active = [];
+  const problems = new Set();
+  const visit = (name) => {
+    state.set(name, "visiting");
+    active.push(name);
+    const manifest = byName.get(name);
+    const dependencies = dependencyGroups
+      .flatMap((group) => Object.keys(manifest?.[group] ?? {}))
+      .filter((dependency) => byName.has(dependency))
+      .sort((left, right) => left.localeCompare(right));
+    for (const dependency of new Set(dependencies)) {
+      if (state.get(dependency) === "visiting") {
+        const start = active.indexOf(dependency);
+        problems.add(normalizeCycle([...active.slice(start), dependency]));
+      } else if (state.get(dependency) === undefined) {
+        visit(dependency);
+      }
+    }
+    active.pop();
+    state.set(name, "visited");
+  };
+  for (const name of [...byName.keys()].sort((left, right) => left.localeCompare(right))) {
+    if (state.get(name) === undefined) visit(name);
+  }
+  return [...problems]
+    .map((cycle) => `workspace dependency graph is cyclic: ${cycle}`)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function normalizeCycle(cycle) {
+  const members = cycle.slice(0, -1);
+  const rotations = members.map((_, index) => [
+    ...members.slice(index),
+    ...members.slice(0, index),
+  ]);
+  const normalized = rotations
+    .map((rotation) => [...rotation, rotation[0]].join(" -> "))
+    .sort((left, right) => left.localeCompare(right));
+  return normalized[0];
 }
 
 function packageGraphProblems(manifests) {

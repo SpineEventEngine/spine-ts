@@ -14,7 +14,7 @@
 
 export function providerEnabled(
   requested: string | undefined,
-  provider: "datastore" | "mysql",
+  provider: "datastore" | "mysql" | "postgresql",
   configured: boolean,
 ): boolean {
   return requested === provider && configured;

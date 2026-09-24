@@ -29,7 +29,7 @@ import {
   InboxService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
-import { SignalMetadata } from "../../src/index.js";
+import { SignalMetadata } from "@spine-event-engine/server";
 import { UserIdSchema } from "@spine-event-engine/proto";
 import {
   CommandService,
@@ -38,12 +38,8 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { CreateTaskSchema } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_commands_pb.js";
-import {
-  TaskIdSchema,
-  TaskListIdSchema,
-} from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_id_pb.js";
-import { TaskListSchema } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_list_pb.js";
+import { CreateProjectSchema } from "@spine-event-engine/server-test-fixtures/entity/project_commands_pb.js";
+import { ProjectOverviewStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
 import { DeliveryAssembly } from "@spine-event-engine/delivery-server/testing";
 import { afterEach, expect, it } from "vitest";
 
@@ -51,7 +47,7 @@ const children = new Set<ChildProcess>();
 const deliveries = new Set<GatedDeliveryListener>();
 const handlerGates = new Set<HandlerGate>();
 const childPath = fileURLToPath(
-  new URL("./managed-remote-delivery-application.mjs", import.meta.url),
+  new URL("../test-fixtures/managed-remote-delivery-application.mjs", import.meta.url),
 );
 
 afterEach(async () => {
@@ -76,10 +72,10 @@ afterEach(async () => {
   handlerGates.clear();
 });
 
-it("resolves its managed-host access seam outside the published package", async () => {
+it("resolves its managed-host access seam from private server test fixtures", async () => {
   const source = await readFile(childPath, "utf8");
 
-  expect(source).toContain('from "../../test-fixtures/internal.mjs"');
+  expect(source).toContain('from "@spine-event-engine/server-test-fixtures/internal"');
 });
 
 it("RED-27/28 keeps the final managed subscription relay until fenced Delivery work drains", async () => {
@@ -101,16 +97,16 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
   const endpoint = String(ready.endpoint);
   const transport = createGrpcTransport({ baseUrl: endpoint });
   const subscriptions = createClient(SubscriptionService, transport);
-  const subscription = await subscriptions.subscribe(taskListTopic());
+  const subscription = await subscriptions.subscribe(projectOverviewTopic());
   const iterator = subscriptions.activate(subscription)[Symbol.asyncIterator]();
   const commands = createClient(CommandService, transport);
-  await bounded(commands.post(createTaskCommand()), "initial command");
+  await bounded(commands.post(createProjectCommand()), "initial command");
   await expect(bounded(iterator.next(), "initial update")).resolves.toMatchObject({ done: false });
 
   await handlerGate.arm();
   const nextUpdate = iterator.next();
   await bounded(
-    commands.post(createTaskCommand("t0209-drain-create", "t0209-drain-task")),
+    commands.post(createProjectCommand("t0209-drain-create", "t0209-drain-project")),
     "drained command",
   );
   await handlerGate.entered();
@@ -119,9 +115,9 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
   const draining = receive(child, "draining");
   child.send({ type: "drain" });
   await draining;
-  const postDrainTaskId = "t0209-after-drain-task";
+  const postDrainProjectId = "t0209-after-drain-project";
   const rejectedAfterDrain = await commands
-    .post(createTaskCommand("t0209-after-drain", postDrainTaskId))
+    .post(createProjectCommand("t0209-after-drain", postDrainProjectId))
     .then(
       () => undefined,
       (error: unknown) => error,
@@ -166,10 +162,10 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
   const endpoint = String(ready.endpoint);
   const transport = createGrpcTransport({ baseUrl: endpoint });
   const subscriptions = createClient(SubscriptionService, transport);
-  const subscription = await subscriptions.subscribe(taskListTopic());
+  const subscription = await subscriptions.subscribe(projectOverviewTopic());
   const iterator = subscriptions.activate(subscription)[Symbol.asyncIterator]();
   const commands = createClient(CommandService, transport);
-  await bounded(commands.post(createTaskCommand()), "replacement initial command");
+  await bounded(commands.post(createProjectCommand()), "replacement initial command");
   await expect(bounded(iterator.next(), "replacement initial update")).resolves.toMatchObject({
     done: false,
   });
@@ -187,7 +183,7 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
 
   const nextUpdate = iterator.next();
   await bounded(
-    commands.post(createTaskCommand("t0209-survivor", "t0209-survivor-task")),
+    commands.post(createProjectCommand("t0209-survivor", "t0209-survivor-project")),
     "survivor command",
   );
   await expect(bounded(nextUpdate, "survivor update")).resolves.toMatchObject({ done: false });
@@ -196,7 +192,7 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
 
   const afterRejoin = iterator.next();
   await bounded(
-    commands.post(createTaskCommand("t0209-replacement", "t0209-replacement-task")),
+    commands.post(createProjectCommand("t0209-replacement", "t0209-replacement-project")),
     "replacement command",
   );
   await expect(bounded(afterRejoin, "replacement update")).resolves.toMatchObject({ done: false });
@@ -307,26 +303,25 @@ async function currentMembers(
 }
 
 const metadata = new SignalMetadata();
-function taskListTopic() {
+function projectOverviewTopic() {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t0209" }),
     target: create(TargetSchema, {
-      type: TypeUrls.derive(TaskListSchema),
+      type: TypeUrls.derive(ProjectOverviewStateSchema),
       criterion: { case: "includeAll", value: true },
     }),
     context: metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) }),
   });
 }
-function createTaskCommand(_commandId = "t0209-create", taskId = "t0209-task") {
+function createProjectCommand(_commandId = "t0209-create", projectId = "t0209-project") {
   void _commandId;
   const actorContext = metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) });
   return SignalEnvelopes.command({
     context: metadata.commandContext({ actorContext }),
-    schema: CreateTaskSchema,
-    message: create(CreateTaskSchema, {
-      id: create(TaskIdSchema, { value: taskId }),
-      taskListId: create(TaskListIdSchema, { value: "t0209-task" }),
-      title: taskId,
+    schema: CreateProjectSchema,
+    message: create(CreateProjectSchema, {
+      id: projectId,
+      name: projectId,
     }),
   });
 }

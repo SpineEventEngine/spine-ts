@@ -14,8 +14,6 @@
 
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { createTodoContext } from "@spine-event-engine/example-todo";
-import { TaskListSchema } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_list_pb.js";
 import {
   EnvironmentType,
   ManagedServerApplication,
@@ -23,7 +21,9 @@ import {
   ServerEnvironment,
   UniformAcrossAllShards,
 } from "@spine-event-engine/server";
-import { managedServerApplicationAccess } from "../../test-fixtures/internal.mjs";
+import { ProjectOverviewStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
+import { managedServerApplicationAccess } from "@spine-event-engine/server-test-fixtures/internal";
+import { createManagedProjectContext } from "./managed-project-context.mjs";
 import process from "node:process";
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -50,7 +50,7 @@ class HandlerGateStorageFactory extends InMemoryStorageFactory {
     const delegate = super.createEntityCommitStorage(input);
     return {
       commit: async (commit) => {
-        if (commit.entity.stateSchema.typeName === TaskListSchema.typeName) {
+        if (commit.entity.stateSchema.typeName === ProjectOverviewStateSchema.typeName) {
           await writeFile(join(this.directory, "owner"), String(process.pid));
           await this.waitIfArmed();
         }
@@ -97,7 +97,8 @@ const managed = await ManagedServerApplication.run({
     const server = Server.atPort(port, { host });
     const { InMemorySubscriptionRegistry } = await import("@spine-event-engine/server");
     server.add(
-      await createTodoContext({
+      await createManagedProjectContext({
+        includeProjection: true,
         deliveryStrategy: strategy,
         subscriptionRegistry: new InMemorySubscriptionRegistry(),
         ...(storageFactory === undefined ? {} : { storageFactory }),

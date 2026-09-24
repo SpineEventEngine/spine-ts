@@ -21,6 +21,7 @@
 export const infrastructureTestFiles = Object.freeze([
   "packages/storage-datastore/test/datastore-cloud.test.ts",
   "packages/storage-datastore/test/datastore-emulator.test.ts",
-  "packages/storage-rdbms/test/mysql-integration.test.ts",
+  "packages/storage-postgres/test/postgresql-integration.test.ts",
+  "packages/storage-mysql/test/mysql-integration.test.ts",
   "packages/server/test/delivery/inbox-provider-cleanup.test.ts",
 ]);

@@ -21,7 +21,7 @@ import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine
 import { createPool } from "mysql2/promise";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { DurableSubscriptionBindings } from "../../src/browser/index.js";
 
 vi.mock("mysql2/promise", () => ({ createPool: vi.fn() }));

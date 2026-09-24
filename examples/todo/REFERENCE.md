@@ -25,6 +25,17 @@ pnpm --filter @spine-event-engine/example-todo smoke
 pnpm vitest run examples/todo/test/black-box.test.ts
 ```
 
+`startTodoServer(options)` accepts an optional caller-supplied `storageFactory`.
+The caller closes that factory after server shutdown or rejected startup.
+Otherwise, `TODO_STORAGE` selects storage: `memory` is the default, `mysql`
+requires `TODO_MYSQL_URL`, and `postgresql` requires
+`TODO_POSTGRESQL_URL`. Both durable choices configure generated To-Do message
+stringifiers so entity identifiers and histories can be stored reversibly.
+Unknown selections and missing URLs produce actionable errors without including
+the configured URL. `start:mysql` and `start:postgresql` are opt-in wrappers;
+ordinary starts and hermetic tests do not require a database. `start:multi-process`
+remains the Datastore-and-Delivery managed-replica example.
+
 Set `SPINE_TODO_BASE_URL` when the smoke client must use another local address.
 The server reports readiness only after binding and closes on `SIGINT` or
 `SIGTERM`.

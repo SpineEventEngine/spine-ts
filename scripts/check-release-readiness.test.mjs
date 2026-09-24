@@ -369,7 +369,7 @@ describe("check-release-readiness", () => {
     withTempRepository((repoRoot) => {
       writeFileSync(
         join(repoRoot, "README.md"),
-        "pnpm add @spine-event-engine/storage-datastore@snapshot @spine-event-engine/storage@snapshot\npnpm add @spine-event-engine/storage-rdbms@snapshot @spine-event-engine/storage@snapshot\n",
+        "pnpm add @spine-event-engine/storage-datastore@snapshot @spine-event-engine/storage@snapshot\npnpm add @spine-event-engine/storage-mysql@snapshot @spine-event-engine/storage@snapshot\n",
       );
       execFileSync("git", ["add", "README.md"], { cwd: repoRoot });
       expect(collectUserFacingDocumentationProblems(repoRoot)).toEqual([]);

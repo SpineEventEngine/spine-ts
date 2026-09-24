@@ -13,7 +13,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, globSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -26,7 +26,8 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const expectedInfrastructureFiles = [
   "packages/storage-datastore/test/datastore-cloud.test.ts",
   "packages/storage-datastore/test/datastore-emulator.test.ts",
-  "packages/storage-rdbms/test/mysql-integration.test.ts",
+  "packages/storage-postgres/test/postgresql-integration.test.ts",
+  "packages/storage-mysql/test/mysql-integration.test.ts",
   "packages/server/test/delivery/inbox-provider-cleanup.test.ts",
 ];
 
@@ -59,12 +60,25 @@ describe("stable CI test inventory", () => {
     );
     expect(datastore.scripts["test:emulator"]).toContain("inbox-provider-cleanup.test.ts");
 
-    const rdbms = JSON.parse(readFileSync(join(root, "packages/storage-rdbms/package.json")));
-    expect(rdbms.scripts["test:mysql"]).toContain("vitest.infrastructure.config.ts");
-    expect(rdbms.scripts["test:mysql"]).toMatch(
+    const mysql = JSON.parse(readFileSync(join(root, "packages/storage-mysql/package.json")));
+    expect(mysql.scripts["test:mysql"]).toContain("vitest.infrastructure.config.ts");
+    expect(mysql.scripts["test:mysql"]).toMatch(
       /^node scripts\/mysql\.mjs && SPINE_TS_INBOX_PROVIDER=mysql pnpm /u,
     );
-    expect(rdbms.scripts["test:mysql"]).toContain("inbox-provider-cleanup.test.ts");
+    expect(mysql.scripts["test:mysql"]).toContain("inbox-provider-cleanup.test.ts");
+
+    const postgres = JSON.parse(readFileSync(join(root, "packages/storage-postgres/package.json")));
+    expect(postgres.scripts["test:postgresql"]).toMatch(
+      /^node scripts\/postgresql\.mjs && SPINE_TS_INBOX_PROVIDER=postgresql pnpm /u,
+    );
+    expect(postgres.scripts["test:postgresql"]).toContain("vitest.infrastructure.config.ts");
+    expect(postgres.scripts["test:postgresql"]).toContain("postgresql-integration.test.ts");
+    expect(postgres.scripts["test:postgresql:16"]).toMatch(
+      /^SPINE_TS_POSTGRESQL_EXPECTED_MAJOR=16 pnpm test:postgresql$/u,
+    );
+    expect(postgres.scripts["test:postgresql:18"]).toMatch(
+      /^SPINE_TS_POSTGRESQL_EXPECTED_MAJOR=18 pnpm test:postgresql$/u,
+    );
   });
 
   it("fails provider commands before Vitest when their required setup is absent", () => {
@@ -84,19 +98,30 @@ describe("stable CI test inventory", () => {
 
     const mysqlVerifier = spawnSync(
       process.execPath,
-      ["packages/storage-rdbms/scripts/mysql.mjs"],
+      ["packages/storage-mysql/scripts/mysql.mjs"],
       {
         env: withoutProviderEnvironment(),
       },
     );
     expect(mysqlVerifier.status).not.toBe(0);
+
+    const postgresVerifier = spawnSync(
+      process.execPath,
+      ["packages/storage-postgres/scripts/postgresql.mjs"],
+      { env: withoutProviderEnvironment() },
+    );
+    expect(postgresVerifier.status).not.toBe(0);
   });
 
   it("retains self-contained loopback and child-process coverage in the ordinary suite", () => {
-    expect(infrastructureTestFiles).not.toContain(
-      "packages/server/test/server/managed-remote-delivery-readiness.integration.test.ts",
+    const managedDeliveryTest =
+      "packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts";
+    expect(infrastructureTestFiles).not.toContain(managedDeliveryTest);
+    expect(ordinaryConfig.test?.exclude).not.toContain(managedDeliveryTest);
+    const ordinaryFiles = (ordinaryConfig.test?.include ?? []).flatMap((pattern) =>
+      globSync(pattern, { cwd: root }),
     );
-    expect(ordinaryConfig.test?.include).toContain("packages/*/test/**/*.test.ts");
+    expect(ordinaryFiles).toContain(managedDeliveryTest);
   });
 });
 
@@ -106,5 +131,7 @@ function withoutProviderEnvironment() {
   delete environment.DATASTORE_PROJECT_ID;
   delete environment.SPINE_TS_MYSQL_URL;
   delete environment.SPINE_TS_MYSQL_ADMIN_URL;
+  delete environment.SPINE_TS_POSTGRESQL_URL;
+  delete environment.SPINE_TS_POSTGRESQL_EXPECTED_MAJOR;
   return environment;
 }

@@ -73,6 +73,9 @@ export interface MysqlRecordLifecycle {
 
 /**
  * Stores one record family in one physical MySQL table.
+ *
+ * @typeParam I The record identifier type.
+ * @typeParam R The stored Protobuf record type.
  */
 export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   // prettier-ignore
@@ -81,9 +84,13 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * Declares support for atomic compare-and-set operations.
    */
   override readonly atomicCompareAndSet = true;
+
   #ready: Promise<void> | undefined;
+
   #bound: import("mysql2/promise").PoolConnection | undefined;
+
   readonly #idColumn: MysqlIdColumn<I>;
+
   readonly #columnMapping: ColumnMapping<unknown>;
 
   /**
@@ -252,6 +259,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    *
    * @param connection Provides the coordinator-owned connection.
    * @param work Performs the bound storage work.
+   * @typeParam T The bound work's result type.
    * @returns Returns the work result.
    */
   async withConnection<T>(
@@ -385,6 +393,15 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     }
     throw new MysqlStorageOperationError("MySQL record operation failed.");
   }
+
+  /**
+   * Performs one compare-and-set attempt on a single connection.
+   *
+   * @param id Identifies the record slot.
+   * @param expected Provides the expected materialized record.
+   * @param next Provides the replacement materialized record.
+   * @returns Resolves whether the replacement was applied.
+   */
   private async compareAndSetOnce(
     id: I,
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
@@ -395,27 +412,12 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     try {
       await this.ready(connection);
       const transactional = await this.isTransactional(connection);
-      if (!transactional) {
-        const [rows] = await connection.execute<(RowDataPacket & { acquired: number })[]>(
-          "SELECT GET_LOCK(?, ?) AS acquired",
-          [this.casLockKey(id), 30],
-        );
-        if (rows[0]?.acquired !== 1)
-          throw new MysqlStorageOperationError("Unable to acquire MySQL record lock.");
+      if (transactional) await connection.beginTransaction();
+      else {
+        await this.acquireCasLock(connection, id);
         locked = true;
-      } else await connection.beginTransaction();
-      const current = await this.readOn(connection, id, true);
-      if (!same(this.recordSpec.recordType, current, expected?.record)) {
-        if (transactional) await connection.rollback();
-        return false;
       }
-      if (next === undefined)
-        await connection.execute(`DELETE FROM \`${this.table.tableName}\` WHERE ID=?`, [
-          this.idKey(id),
-        ] as never);
-      else await this.writeOn(connection, next.record);
-      if (transactional) await connection.commit();
-      return true;
+      return await this.applyCompareAndSet(connection, transactional, id, expected, next);
     } catch (error) {
       await connection.rollback().catch(() => undefined);
       throw error;
@@ -426,6 +428,56 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
           .catch(() => undefined);
       this.lifecycle.release(connection);
     }
+  }
+
+  /**
+   * Acquires the advisory lock for a non-transactional record slot.
+   *
+   * @param connection Provides the lock connection.
+   * @param id Identifies the record slot.
+   * @returns Resolves after the lock is acquired.
+   */
+  private async acquireCasLock(
+    connection: import("mysql2/promise").PoolConnection,
+    id: I,
+  ): Promise<void> {
+    const [rows] = await connection.execute<(RowDataPacket & { acquired: number | string })[]>(
+      "SELECT GET_LOCK(?, ?) AS acquired",
+      [this.casLockKey(id), 30],
+    );
+    if (rows[0]?.acquired !== 1 && rows[0]?.acquired !== "1")
+      throw new MysqlStorageOperationError("Unable to acquire MySQL record lock.");
+  }
+
+  /**
+   * Applies a compare-and-set while the record slot is protected.
+   *
+   * @param connection Provides the protected connection.
+   * @param transactional Tells whether the connection has an active transaction.
+   * @param id Identifies the record slot.
+   * @param expected Provides the expected materialized record.
+   * @param next Provides the replacement materialized record.
+   * @returns Resolves whether the replacement was applied.
+   */
+  private async applyCompareAndSet(
+    connection: import("mysql2/promise").PoolConnection,
+    transactional: boolean,
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    const current = await this.readOn(connection, id, true);
+    if (!same(this.recordSpec.recordType, current, expected?.record)) {
+      if (transactional) await connection.rollback();
+      return false;
+    }
+    if (next === undefined)
+      await connection.execute(`DELETE FROM \`${this.table.tableName}\` WHERE ID=?`, [
+        this.idKey(id),
+      ] as never);
+    else await this.writeOn(connection, next.record);
+    if (transactional) await connection.commit();
+    return true;
   }
 
   /**
@@ -461,6 +513,13 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     await this.using((connection) => this.writeOn(connection, record.record));
   }
 
+  /**
+   * Executes work with the coordinator-bound connection or a temporary connection.
+   *
+   * @param work Performs the database operation.
+   * @typeParam T The database operation result type.
+   * @returns Resolves to the operation result.
+   */
   private async using<T>(
     work: (connection: import("mysql2/promise").PoolConnection) => Promise<T>,
   ): Promise<T> {
@@ -478,6 +537,13 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       this.lifecycle.release(connection);
     }
   }
+
+  /**
+   * Creates and validates the physical table once for this handle.
+   *
+   * @param connection Provides the connection used for preparation.
+   * @returns Resolves when the table is ready.
+   */
   private async ready(connection: import("mysql2/promise").PoolConnection): Promise<void> {
     this.#ready ??= this.createAndInspect(connection).catch((error: unknown) => {
       this.#ready = undefined;
@@ -489,6 +555,13 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     });
     await this.#ready;
   }
+
+  /**
+   * Creates the table when absent and verifies its stored schema.
+   *
+   * @param connection Provides the connection used for schema operations.
+   * @returns Resolves after schema verification.
+   */
   private async createAndInspect(
     connection: import("mysql2/promise").PoolConnection,
   ): Promise<void> {
@@ -563,6 +636,13 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     if (engine !== undefined && !["innodb", "myisam", "aria"].includes(engine.toLowerCase()))
       throw new Error(`MySQL table ${this.table.tableName} has unsupported engine ${engine}.`);
   }
+
+  /**
+   * Verifies one physical column against the canonical table specification.
+   *
+   * @param expected Describes the required column.
+   * @param actual Describes the stored column.
+   */
   private assertCompatibleColumn(
     expected: MysqlTableSpec<I, R>["columns"][number],
     actual: ColumnRow,
@@ -588,6 +668,15 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
         `MySQL table ${this.table.tableName} has incompatible ${expected.name} collation.`,
       );
   }
+
+  /**
+   * Reads one record on the supplied connection.
+   *
+   * @param connection Provides the connection used for reading.
+   * @param id Identifies the record.
+   * @param lock Requests a row or gap lock when supported.
+   * @returns Resolves to the stored record when present.
+   */
   private async readOn(
     connection: import("mysql2/promise").PoolConnection,
     id: I,
@@ -604,6 +693,13 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       throw mysqlError(MysqlStorageDataError, "Stored MySQL record data is invalid.", error);
     }
   }
+
+  /**
+   * Determines whether the physical table supports transactions.
+   *
+   * @param connection Provides the connection used for metadata inspection.
+   * @returns Resolves whether the table uses InnoDB.
+   */
   private async isTransactional(
     connection: import("mysql2/promise").PoolConnection,
   ): Promise<boolean> {
@@ -613,6 +709,13 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     );
     return rows[0]?.engine?.toLowerCase() === "innodb";
   }
+
+  /**
+   * Calculates the fixed-width advisory-lock key for one record slot.
+   *
+   * @param id Identifies the record slot.
+   * @returns The advisory-lock key.
+   */
   private casLockKey(id: I): string {
     return createHash("sha256")
       .update(this.lifecycle.databaseName)
@@ -622,6 +725,15 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       .update(String(this.idKey(id)))
       .digest("hex");
   }
+
+  /**
+   * Checks that an immutable slot is absent or stores identical bytes.
+   *
+   * @param connection Provides the connection used for reading.
+   * @param id Identifies the immutable slot.
+   * @param record Provides the proposed immutable record.
+   * @returns Resolves whether the slot is absent.
+   */
   private async immutableAbsent(
     connection: import("mysql2/promise").PoolConnection,
     id: I,
@@ -632,6 +744,14 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     if (same(this.recordSpec.recordType, current, record)) return false;
     throw new MysqlStorageOperationError("MySQL immutable record collides.");
   }
+
+  /**
+   * Writes one record on the supplied connection.
+   *
+   * @param connection Provides the connection used for writing.
+   * @param record Provides the record to store.
+   * @returns Resolves after the write.
+   */
   private async writeOn(
     connection: import("mysql2/promise").PoolConnection,
     record: R,
@@ -662,6 +782,14 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       values as never,
     );
   }
+
+  /**
+   * Tries to insert one immutable record without replacing an existing row.
+   *
+   * @param connection Provides the connection used for writing.
+   * @param record Provides the immutable record.
+   * @returns Resolves to the insertion result.
+   */
   private async insertImmutableOn(
     connection: import("mysql2/promise").PoolConnection,
     record: R,
@@ -688,6 +816,13 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     );
     return result;
   }
+
+  /**
+   * Builds parameterized SQL for a legacy record query.
+   *
+   * @param query Specifies the legacy query.
+   * @returns The SQL statement and bound values.
+   */
   private querySql(query: RecordQuery<I>): { sql: string; values: unknown[] } {
     const values: unknown[] = [];
     const clauses: string[] = [];
@@ -768,6 +903,12 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     return { sql, values };
   }
 
+  /**
+   * Builds parameterized SQL for a normalized query plan.
+   *
+   * @param plan Specifies the normalized query plan.
+   * @returns The SQL statement and bound values.
+   */
   private planSql(plan: NormalizedQueryPlan<I>): { sql: string; values: unknown[] } {
     const values: unknown[] = [];
     const predicate =
@@ -795,6 +936,13 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     };
   }
 
+  /**
+   * Builds SQL for one normalized predicate and appends its bound values.
+   *
+   * @param predicate Specifies the predicate to compile.
+   * @param values Receives the predicate's bound values.
+   * @returns The predicate SQL.
+   */
   private planPredicate(predicate: NormalizedQueryPredicate<I>, values: unknown[]): string {
     if (predicate.kind === "ids") {
       values.push(...predicate.ids.map((id) => this.idKey(id)));
@@ -819,18 +967,37 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     return `(${predicate.predicates.map((child) => this.planPredicate(child, values)).join(joiner)})`;
   }
 
+  /**
+   * Returns the SQL spelling of a declared query column.
+   *
+   * @param column Specifies the column name.
+   * @returns The column's SQL spelling.
+   */
   private planColumn(column: string): string {
     if (column === "ID") return "ID";
     this.assertColumn(column);
     return `\`${column}\``;
   }
 
+  /**
+   * Converts a normalized query value for its declared column type.
+   *
+   * @param column Specifies the declared column.
+   * @param value Provides the query value.
+   * @returns The value accepted by the MySQL driver.
+   */
   private planValue(column: string, value: unknown): unknown {
     const declared = this.recordSpec.columns.find((candidate) => candidate.name === column);
     if (declared === undefined)
       throw new MysqlStorageOperationError(`MySQL query column is not declared: ${column}`);
     return ColumnMappings.value(this.#columnMapping, declared.type, value);
   }
+
+  /**
+   * Validates all identifiers and columns in a legacy query.
+   *
+   * @param query Specifies the query to validate.
+   */
   private validateQuery(query: RecordQuery<I>): void {
     try {
       for (const id of query.ids ?? []) this.idKey(id);
@@ -855,13 +1022,32 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       throw mysqlError(MysqlStorageOperationError, "MySQL storage identifier is invalid.", error);
     }
   }
+
+  /**
+   * Validates that a query column is declared by this storage.
+   *
+   * @param name Specifies the physical column name.
+   */
   private assertColumn(name: string): void {
     if (name !== "ID" && !this.recordSpec.columns.some((column) => column.name === name))
       throw new MysqlStorageOperationError(`MySQL query column is not declared: ${name}`);
   }
+
+  /**
+   * Converts a record identifier for use by the MySQL driver.
+   *
+   * @param id Provides the record identifier.
+   * @returns The corresponding database value.
+   */
   private idKey(id: I): unknown {
     return this.#idColumn.value(id);
   }
+
+  /**
+   * Validates that a record identifier can be stored.
+   *
+   * @param id Provides the record identifier.
+   */
   private validateId(id: I): void {
     try {
       this.idKey(id);
@@ -871,9 +1057,24 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       throw mysqlError(MysqlStorageOperationError, "MySQL storage identifier is invalid.", error);
     }
   }
+
+  /**
+   * Decodes a record identifier from a database value.
+   *
+   * @param key Provides the stored database value.
+   * @returns The reconstructed record identifier.
+   */
   private decodeId(key: unknown): I {
     return this.#idColumn.read(key);
   }
+
+  /**
+   * Converts a legacy query value for its declared column type.
+   *
+   * @param name Specifies the physical column name.
+   * @param value Provides the query value.
+   * @returns The value accepted by the MySQL driver.
+   */
   private queryValue(name: string, value: unknown): unknown {
     if (name === "ID") return this.idKey(value as I);
     const column = this.recordSpec.columns.find((candidate) => candidate.name === name);
@@ -882,12 +1083,15 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     return ColumnMappings.value(this.#columnMapping, column.type, value);
   }
 }
+
 interface PayloadRow extends RowDataPacket {
   bytes: Uint8Array;
 }
+
 interface Row extends PayloadRow {
   ID: unknown;
 }
+
 interface ColumnRow extends RowDataPacket {
   column_name: string;
   column_type?: string;
@@ -896,13 +1100,16 @@ interface ColumnRow extends RowDataPacket {
   collation_name?: string | null;
   extra?: string;
 }
+
 interface PrimaryKeyRow extends RowDataPacket {
   column_name: string;
   seq_in_index?: number;
 }
+
 interface EngineRow extends RowDataPacket {
   engine?: string;
 }
+
 interface IndexRow extends RowDataPacket {
   index_name: string;
   non_unique: number;
@@ -978,6 +1185,16 @@ function groupedIndexes(
   }
   return [...grouped.values()];
 }
+
+/**
+ * Compares two Protobuf messages by their canonical binary form.
+ *
+ * @typeParam R The compared message type.
+ * @param schema Specifies the message schema.
+ * @param left Provides the first message.
+ * @param right Provides the second message.
+ * @returns Whether both values are absent or encode to identical bytes.
+ */
 function same<R extends Message>(
   schema: import("@bufbuild/protobuf/codegenv2").GenMessage<R>,
   left: R | undefined,

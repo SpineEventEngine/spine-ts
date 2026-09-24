@@ -26,7 +26,8 @@ export const buildOutputPaths = Object.freeze([
   "packages/server/test-fixtures/dist",
   "packages/storage/dist",
   "packages/storage-datastore/dist",
-  "packages/storage-rdbms/dist",
+  "packages/storage-postgres/dist",
+  "packages/storage-mysql/dist",
   "packages/testing/dist",
   "packages/testing/test-fixtures/dist",
   "examples/todo/dist",
@@ -40,6 +41,12 @@ export const buildOutputPaths = Object.freeze([
 const defaultFileSystem = Object.freeze({
   exists: existsSync,
   status: lstatSync,
+
+  /**
+   * Removes one validated build-output directory.
+   *
+   * @param target Absolute directory path selected by the cleanup routine.
+   */
   remove(target) {
     rmSync(target, { recursive: true });
   },

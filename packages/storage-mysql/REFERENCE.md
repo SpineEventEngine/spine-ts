@@ -1,4 +1,4 @@
-# @spine-event-engine/storage-rdbms reference
+# @spine-event-engine/storage-mysql reference
 
 This reference is for agents configuring the supported MySQL storage adapter.
 
@@ -10,7 +10,7 @@ Import `MysqlStorageFactory`, `MysqlStorageOptions`, `MysqlTenantStorageOptions`
 `MysqlColumnSpec`, `MysqlStorageConfigurationError`,
 `MysqlStorageConnectionError`, `MysqlStorageSchemaError`,
 `MysqlStorageDataError`, and `MysqlStorageOperationError` from
-`@spine-event-engine/storage-rdbms`.
+`@spine-event-engine/storage-mysql`.
 
 ## Connection and schema
 
@@ -39,7 +39,13 @@ It creates and verifies a family table lazily. An account therefore needs DDL
 permission, metadata reads, and DML. Existing tables are inspected and never
 altered.
 
-Before deployment, run `pnpm --dir packages/storage-rdbms inventory:legacy --
+MyISAM and Aria impose a smaller primary-key byte limit than InnoDB. A family
+using the canonical `VARCHAR(512)` ID must therefore be provisioned with a
+one-byte binary collation, such as `latin1_bin`, and can store only IDs
+representable in that character set. An `utf8mb4` ID of that declared width
+cannot be converted to MyISAM.
+
+Before deployment, run `pnpm --dir packages/storage-mysql inventory:legacy --
 --url <database-url>` once for every configured tenant database. The command
 fails closed on connection errors, `_scope`, `_revision`, or an old primary key
 containing `_scope`. Passing this inventory is a startup prerequisite for an

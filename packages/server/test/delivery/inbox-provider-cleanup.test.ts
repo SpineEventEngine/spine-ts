@@ -18,7 +18,8 @@ import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { Datastore } from "@google-cloud/datastore";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { createConnection, type RowDataPacket } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -31,6 +32,7 @@ import { createMessage } from "./inbox-message-fixture.js";
 import { providerEnabled } from "./inbox-provider-selection.js";
 
 const mysqlUrl = process.env.SPINE_TS_MYSQL_URL;
+const postgresqlUrl = process.env.SPINE_TS_POSTGRESQL_URL;
 const datastoreHost = process.env.DATASTORE_EMULATOR_HOST;
 const datastoreProject = process.env.DATASTORE_PROJECT_ID ?? "spine-wave12";
 const inboxProvider = process.env.SPINE_TS_INBOX_PROVIDER;
@@ -72,6 +74,48 @@ describe.skipIf(!providerEnabled(inboxProvider, "mysql", mysqlUrl !== undefined)
       await expect(
         removeAcrossFactories(factory, secondFactory, context, () => mysqlCount(factory, context)),
       ).resolves.toBeUndefined();
+    });
+  },
+);
+
+describe.skipIf(!providerEnabled(inboxProvider, "postgresql", postgresqlUrl !== undefined))(
+  "PostgreSQL Inbox cleanup",
+  () => {
+    let factory: PostgresStorageFactory;
+    let secondFactory: PostgresStorageFactory;
+
+    beforeAll(async () => {
+      if (postgresqlUrl === undefined) throw new Error("SPINE_TS_POSTGRESQL_URL is required.");
+      const stringifiers = new StringifierRegistry();
+      stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+      factory = await PostgresStorageFactory.newBuilder()
+        .setOptions({ url: postgresqlUrl })
+        .setStringifierRegistry(stringifiers)
+        .build();
+      secondFactory = await PostgresStorageFactory.newBuilder()
+        .setOptions({ url: postgresqlUrl })
+        .setStringifierRegistry(stringifiers)
+        .build();
+    });
+    afterAll(() => {
+      factory.close();
+      secondFactory.close();
+    });
+
+    it("deletes only the exact delivered snapshot under the current leased session", async () => {
+      const context = {
+        name: `t0230_postgresql_${String(Date.now())}`,
+        multitenant: false,
+      } as const;
+      await expect(removeExact(factory, context)).resolves.toBeUndefined();
+    });
+
+    it("preserves a stale delivered row across independently opened factories", async () => {
+      const context = {
+        name: `t0230_postgresql_two_factory_${String(Date.now())}`,
+        multitenant: false,
+      } as const;
+      await expect(removeAcrossFactories(factory, secondFactory, context)).resolves.toBeUndefined();
     });
   },
 );
@@ -142,7 +186,7 @@ async function removeExact(
     create(WorkerIdSchema, { nodeId: { value: node }, value: "worker" });
   const seed = `${context.name}-${String(Date.now())}`;
   const session = await registry.pickUp(ShardIndex.single(), worker("current"));
-  if (session === undefined) throw new Error("Expected current MySQL/Datastore session.");
+  if (session === undefined) throw new Error("Expected current provider session.");
   const message = createMessage(`${seed}-provider`, "exact", 1n);
   await inbox.storage.write(message);
   const delivered = await inbox.markDelivered(message);
@@ -187,8 +231,8 @@ async function removeExact(
 }
 
 async function removeAcrossFactories(
-  firstFactory: MysqlStorageFactory | DatastoreStorageFactory,
-  secondFactory: MysqlStorageFactory | DatastoreStorageFactory,
+  firstFactory: MysqlStorageFactory | PostgresStorageFactory | DatastoreStorageFactory,
+  secondFactory: MysqlStorageFactory | PostgresStorageFactory | DatastoreStorageFactory,
   context: { readonly name: string; readonly multitenant: false },
   count?: (message: Parameters<Inbox["removeDelivered"]>[0]) => Promise<number>,
 ): Promise<void> {
@@ -210,15 +254,15 @@ async function removeAcrossFactories(
   const worker = (node: string) =>
     create(WorkerIdSchema, { nodeId: { value: node }, value: "two-owner" });
   const first = await firstRegistry.pickUp(ShardIndex.single(), worker("first"));
-  if (first === undefined) throw new Error("Expected first MySQL session.");
+  if (first === undefined) throw new Error("Expected first provider session.");
   const message = createMessage(`${context.name}-row`, "two-owner", 1n);
   await firstInbox.storage.write(message);
   const delivered = await firstInbox.markDelivered(message);
-  if (delivered === undefined) throw new Error("Expected MySQL delivered row.");
+  if (delivered === undefined) throw new Error("Expected delivered provider row.");
 
   now += 1_000;
   const second = await secondRegistry.pickUp(ShardIndex.single(), worker("second"));
-  if (second === undefined) throw new Error("Expected replacement MySQL session.");
+  if (second === undefined) throw new Error("Expected replacement provider session.");
   await expect(firstInbox.removeDelivered(delivered, first)).resolves.toBe(false);
   if (count !== undefined) await expect(count(delivered)).resolves.toBe(1);
   await expect(secondInbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
@@ -272,7 +316,7 @@ async function datastoreCount(
 }
 
 function open(
-  factory: MysqlStorageFactory | DatastoreStorageFactory,
+  factory: MysqlStorageFactory | PostgresStorageFactory | DatastoreStorageFactory,
   context: { readonly name: string; readonly multitenant: false },
   now?: () => Date,
 ): Inbox {

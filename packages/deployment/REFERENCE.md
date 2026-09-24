@@ -58,7 +58,7 @@ same source and record type:
 
 ```ts
 import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
-import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 
 MysqlStorageFactory.newBuilder().setTableName(
   ApplicationNodeLeaseSchema,

@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/delivery-client",
-  "version": "2.0.0-snapshot.12",
+  "version": "2.0.0-snapshot.14",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
@@ -28,10 +28,13 @@
     "@bufbuild/protobuf": "2.12.1",
     "@connectrpc/connect": "2.1.2",
     "@connectrpc/connect-node": "2.1.2",
-    "@spine-event-engine/proto": "2.0.0-snapshot.12",
-    "@spine-event-engine/server": "2.0.0-snapshot.12"
+    "@spine-event-engine/proto": "2.0.0-snapshot.14",
+    "@spine-event-engine/server": "2.0.0-snapshot.14"
   },
   "devDependencies": {
-    "@spine-event-engine/delivery-server": "workspace:*"
+    "@spine-event-engine/core": "workspace:*",
+    "@spine-event-engine/delivery-server": "workspace:*",
+    "@spine-event-engine/server-test-fixtures": "workspace:*",
+    "@spine-event-engine/storage": "workspace:*"
   }
 }

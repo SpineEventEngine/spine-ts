@@ -179,7 +179,7 @@ describe("check-cleanup-rules", () => {
 
     const result = runChecker(repoRoot);
 
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("Cleanup enforcement checks passed.");
   });
 
@@ -352,6 +352,30 @@ describe("check-cleanup-rules", () => {
     expect(result.stderr).toContain("requiredFrameworkBoundary()#1");
     expect(result.stderr).toContain("nestedCallbackIdentity()#1");
     expect(result.stderr).not.toContain("ownedBehavior()");
+  });
+
+  it("accepts stable package names for PostgreSQL structure ledgers", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "packages/storage-postgres/src"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "packages/storage-postgres/src/index.ts"),
+      "export function connectPostgres(): void {}\n",
+    );
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "storage-postgres", [
+      {
+        rule: "standalone-function",
+        file: "packages/storage-postgres/src/index.ts",
+        kind: "function-declaration",
+        identity: "connectPostgres()#1",
+        name: "connectPostgres",
+        reason:
+          "TypeScript PostgreSQL boundary requires connectPostgres to remain the explicit connection declaration.",
+      },
+    ]);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "PostgreSQL package ledger"], repoRoot);
+
+    expect(runChecker(repoRoot).status).toBe(0);
   });
 
   it("rejects stale duplicate broadened and owned-behavior structure ledger entries", () => {
@@ -811,6 +835,72 @@ describe("check-cleanup-rules", () => {
       "modified production/example callables exceed 35 physical lines",
     );
     expect(result.stderr).toContain("register");
+  });
+
+  it("does not classify unchanged long production methods as edited after an exact rename", () => {
+    const repoRoot = createFixture();
+    const body = Array.from({ length: 35 }, (_, index) => `  void ${index};`);
+    mkdirSync(join(repoRoot, "packages/demo/src/legacy"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/legacy/index.ts"),
+      ["export class Legacy {", "  long(): void {", ...body, "  }", "}", ""].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "--quiet", "-m", "long legacy method"], repoRoot);
+    run("git", ["update-ref", "refs/remotes/origin/master", "HEAD"], repoRoot);
+    mkdirSync(join(repoRoot, "packages/demo/src/current"), { recursive: true });
+    run(
+      "git",
+      ["mv", "packages/demo/src/legacy/index.ts", "packages/demo/src/current/index.ts"],
+      repoRoot,
+    );
+
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Cleanup enforcement checks passed.");
+  });
+
+  it("enforces long methods in a staged edited rename", () => {
+    const repoRoot = createFixture();
+    const body = Array.from({ length: 35 }, (_, index) => `    void ${index};`);
+    mkdirSync(join(repoRoot, "packages/demo/src/legacy"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/legacy/index.ts"),
+      ["export class Legacy {", "  long(): void {", ...body, "  }", "}", ""].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "--quiet", "-m", "long legacy method"], repoRoot);
+    run("git", ["update-ref", "refs/remotes/origin/master", "HEAD"], repoRoot);
+    mkdirSync(join(repoRoot, "packages/demo/src/current"), { recursive: true });
+    run(
+      "git",
+      ["mv", "packages/demo/src/legacy/index.ts", "packages/demo/src/current/index.ts"],
+      repoRoot,
+    );
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/current/index.ts"),
+      [
+        "export class Legacy {",
+        "  long(): void {",
+        "    void 100;",
+        ...body.slice(1),
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "packages/demo/src/current/index.ts"], repoRoot);
+
+    expect(
+      run("git", ["diff", "--cached", "--name-status", "--find-renames"], repoRoot).stdout,
+    ).toMatch(
+      /^R(?!100)\d+\tpackages\/demo\/src\/legacy\/index\.ts\tpackages\/demo\/src\/current\/index\.ts/m,
+    );
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "modified production/example callables exceed 35 physical lines",
+    );
   });
 
   it("counts modified named arrow callables", () => {

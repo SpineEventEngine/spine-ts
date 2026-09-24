@@ -67,7 +67,7 @@ definitions and local active streams, a small local `Server` lifecycle owner for
 Connect/gRPC-compatible services, `@spine-event-engine/transport`
 contracts, `@spine-event-engine/storage` contracts, and the minimal
 `@spine-event-engine/testing` BlackBox test boundary, optional Datastore storage, and
-the MySQL-first RDBMS storage factory/errors/options.
+the MySQL and PostgreSQL RDBMS storage factory, errors, and options.
 
 For managed Server cohorts, `SubscriptionService` is a live best-effort stream:
 it has no replay or cluster-completeness guarantee. The Gateway alone keeps

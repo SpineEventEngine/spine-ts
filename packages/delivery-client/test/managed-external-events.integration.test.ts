@@ -37,18 +37,14 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { CreateTaskSchema } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_commands_pb.js";
-import {
-  TaskIdSchema,
-  TaskListIdSchema,
-} from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_id_pb.js";
-import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import { CreateProjectSchema } from "@spine-event-engine/server-test-fixtures/entity/project_commands_pb.js";
+import { ProjectOverviewStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
 import { DeliveryAssembly } from "@spine-event-engine/delivery-server/testing";
-import { SignalMetadata } from "../../src/index.js";
+import { SignalMetadata } from "@spine-event-engine/server";
 import { afterEach, expect, it } from "vitest";
 
 const childPath = fileURLToPath(
-  new URL("./managed-external-events-application.mjs", import.meta.url),
+  new URL("../test-fixtures/managed-external-events-application.mjs", import.meta.url),
 );
 const children = new Set<ChildProcess>();
 const deliveries = new Set<DeliveryListener>();
@@ -66,13 +62,11 @@ afterEach(async () => {
   triggerDirectories.clear();
 });
 
-it("resolves its managed-host access seam outside the published package", async () => {
+it("resolves its managed-host access seam from private server test fixtures", async () => {
   const source = await readFile(childPath, "utf8");
 
-  expect(source).toContain('from "../../test-fixtures/internal.mjs"');
-  expect(source).toContain(
-    'from "../../test-fixtures/dist/generated/entity-metadata/project_states_pb.js"',
-  );
+  expect(source).toContain('from "@spine-event-engine/server-test-fixtures/internal"');
+  expect(source).toContain('from "@spine-event-engine/server-test-fixtures/entity/');
 });
 
 it("starts concurrent managed fixtures on independent Coordinator ports", async () => {
@@ -84,11 +78,11 @@ it("starts concurrent managed fixtures on independent Coordinator ports", async 
 }, 20_000);
 
 it(
-  "RED-17/18/29 delivers domestic Todo Events through local brokers and " +
+  "RED-17/18/29 delivers domestic Project Events through local brokers and " +
     "Delivery-backed external state subscriptions",
   async () => {
     const source = await readFile(childPath, "utf8");
-    expect(source).toContain("createTodoContext");
+    expect(source).toContain("createManagedProjectContext");
     expect(source).toContain('origin: "external"');
     expect(source).not.toMatch(/ExternalMessage|forwarder/iu);
 
@@ -99,12 +93,15 @@ it(
     const updates = subscriptions.activate(subscription)[Symbol.asyncIterator]();
     const commands = createClient(CommandService, transport);
 
-    await bounded(commands.post(createTaskCommand("t0210-domestic-one")), "first domestic command");
+    await bounded(
+      commands.post(createProjectCommand("t0210-domestic-one")),
+      "first domestic command",
+    );
     await expect(bounded(updates.next(), "first external state update")).resolves.toMatchObject({
       done: false,
     });
     await bounded(
-      commands.post(createTaskCommand("t0210-domestic-two")),
+      commands.post(createProjectCommand("t0210-domestic-two")),
       "second domestic command",
     );
     await expect(bounded(updates.next(), "second external state update")).resolves.toMatchObject({
@@ -171,15 +168,14 @@ function externalStateTopic() {
   });
 }
 
-function createTaskCommand(taskId: string) {
+function createProjectCommand(projectId: string) {
   const actorContext = metadata.actorContext({ actor: create(UserIdSchema, { value: "t0210" }) });
   return SignalEnvelopes.command({
     context: metadata.commandContext({ actorContext }),
-    schema: CreateTaskSchema,
-    message: create(CreateTaskSchema, {
-      id: create(TaskIdSchema, { value: taskId }),
-      taskListId: create(TaskListIdSchema, { value: "t0210-task-list" }),
-      title: taskId,
+    schema: CreateProjectSchema,
+    message: create(CreateProjectSchema, {
+      id: projectId,
+      name: projectId,
     }),
   });
 }

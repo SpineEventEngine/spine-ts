@@ -1,13 +1,15 @@
 {
   "name": "@spine-event-engine/example-todo",
-  "version": "2.0.0-snapshot.12",
+  "version": "2.0.0-snapshot.14",
   "private": true,
   "type": "module",
   "description": "Runnable server-side to-do example for Spine TS.",
   "scripts": {
     "start": "bash scripts/run-single-process.sh",
     "start:single-process": "bash scripts/run-single-process.sh",
+    "start:mysql": "TODO_STORAGE=mysql bash scripts/run-single-process.sh",
     "start:multi-process": "bash scripts/run-multi-process.sh",
+    "start:postgresql": "TODO_STORAGE=postgresql bash scripts/run-single-process.sh",
     "smoke": "node scripts/smoke.mjs",
     "proto:generate": "spine-proto generate",
     "clean:generated-dist": "node scripts/clean-generated-dist.mjs",
@@ -40,14 +42,16 @@
     "@spine-event-engine/client-node": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
     "@spine-event-engine/delivery-client": "workspace:*",
-    "@spine-event-engine/proto": "2.0.0-snapshot.12",
+    "@spine-event-engine/proto": "2.0.0-snapshot.14",
     "@spine-event-engine/server": "workspace:*",
     "@spine-event-engine/storage": "workspace:*",
     "@spine-event-engine/storage-datastore": "workspace:*",
+    "@spine-event-engine/storage-postgres": "workspace:*",
+    "@spine-event-engine/storage-mysql": "workspace:*",
     "@google-cloud/datastore": "10.1.1"
   },
   "devDependencies": {
-    "@spine-event-engine/proto-tools": "2.0.0-snapshot.12",
+    "@spine-event-engine/proto-tools": "2.0.0-snapshot.14",
     "@spine-event-engine/testing": "workspace:*"
   }
 }

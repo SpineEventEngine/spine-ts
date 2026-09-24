@@ -5,6 +5,37 @@ uses generated messages and a framework-generated registry for bare-decorated
 handlers. Begin with the concise [README](README.md) for prerequisites, build,
 server, and smoke commands.
 
+## Choose storage for the single-process app
+
+The normal `start` command deliberately stays beginner-friendly: it selects
+`memory`, so one process starts with no service dependency and discards data at
+shutdown. To keep data in a local MySQL or PostgreSQL database, select one
+provider before launching the same app:
+
+```bash
+TODO_STORAGE=mysql TODO_MYSQL_URL='mysql://user:password@127.0.0.1:3306/todo' \
+  pnpm --filter @spine-event-engine/example-todo start:mysql
+```
+
+```bash
+TODO_STORAGE=postgresql \
+  TODO_POSTGRESQL_URL='postgresql://user:password@127.0.0.1:5432/todo' \
+  pnpm --filter @spine-event-engine/example-todo start:postgresql
+```
+
+The selection boundary builds `MysqlStorageFactory` or `PostgresStorageFactory`
+with the generated To-Do type registry. That registry lets durable storage
+reversibly render message-valued entity IDs and history columns. A selected
+provider without its matching URL stops before startup with a message naming
+the missing variable; it never prints the supplied URL.
+
+In another terminal, run `pnpm --filter @spine-event-engine/example-todo smoke`.
+It posts a To-Do command and queries the resulting task list, providing an
+opt-in live journey through the database you supplied. The command neither
+starts Docker nor creates a database. The managed multi-process walkthrough is
+different: it intentionally uses Datastore and Delivery to demonstrate shared
+replicas, not MySQL or PostgreSQL selection.
+
 ## The path before the server starts
 
 Start with a small domain: a task has an identifier, title, and completion

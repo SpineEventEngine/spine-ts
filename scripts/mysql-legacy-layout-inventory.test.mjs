@@ -4,7 +4,7 @@ import {
   inspectMysqlUrl,
   mysqlInventoryUrls,
   mysqlLegacyFindings,
-} from "../packages/storage-rdbms/scripts/inventory-legacy-layout.mjs";
+} from "../packages/storage-mysql/scripts/inventory-legacy-layout.mjs";
 
 describe("MySQL legacy-layout inventory", () => {
   it("reports invented columns and compound scope keys", () => {

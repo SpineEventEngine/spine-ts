@@ -27,7 +27,8 @@ export const frameworkPackageNames = [
   "@spine-event-engine/server",
   "@spine-event-engine/storage",
   "@spine-event-engine/storage-datastore",
-  "@spine-event-engine/storage-rdbms",
+  "@spine-event-engine/storage-postgres",
+  "@spine-event-engine/storage-mysql",
   "@spine-event-engine/testing",
   "@spine-event-engine/transport",
 ];

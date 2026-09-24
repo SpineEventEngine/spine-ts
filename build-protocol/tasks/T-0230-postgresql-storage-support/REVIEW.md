@@ -1,0 +1,1025 @@
+# T-0230 Review Record
+
+Status: Complete; source-quality correction accepted
+
+Initial review endpoint: `c09c961d6bf75e2cb90fb36fa2dc2c2e0882dd15`
+Correction endpoint: `34ca4b669c78612bb158bba6635524e2c00341ed`
+Final correction endpoint: `ac6ef3245ad7713c5f08eaf81ea4cacb7bdd9bb0`
+Baseline: `6fffcd6102b3eff94b0f77eb6db2fbf2e02ba172`
+
+## Planned Review Concerns
+
+| Concern                          | Existing role                      | Model           | Reasoning | Scope                                                                                                                                                                                                                                             | Disposition                   |
+| -------------------------------- | ---------------------------------- | --------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Style and maintainability        | `style_maintainability_reviewer`   | `gpt-5.6-terra` | high      | Package structure, simplicity, method size, duplication, tests                                                                                                                                                                                    | Complete; 3 findings accepted |
+| Documentation completeness       | `documentation_reviewer`           | `gpt-5.6-luna`  | medium    | README, reference, storage guide, release and operational claims                                                                                                                                                                                  | Complete; 3 findings accepted |
+| TypeScript and API documentation | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` | high      | Public exports, types, TSDoc, compatibility, external consumer                                                                                                                                                                                    | Complete; 1 finding accepted  |
+| Performance and reliability      | `performance_reliability_reviewer` | `gpt-5.6-terra` | high      | SQL bounds, transactions, locks, histories, retries, lifecycle                                                                                                                                                                                    | Complete; 1 finding accepted  |
+| Security release readiness       | N/A                                | —               | —         | Dedicated security review is reserved for final project/release readiness by the current protocol; SQL binding, credential handling, TLS, tenant/schema isolation, and dependency policy remain mandatory mechanical and specialist-review inputs | N/A with concrete reason      |
+
+All relevant reviewers will receive the complete Human-Imposed Requirements
+Ledger from `TASK.md`, the immutable review endpoint, concern-specific paths,
+and the rule that superseded historical text is not a finding unless current
+task records or changed documentation claim it as active behavior. Reviewers
+must not spawn children. Runtime metadata acceptance follows the explicit
+dispatch fields and immutable existing-role profiles when self-introspection is
+unavailable.
+
+## Mechanical Preflight
+
+- The immutable review endpoint and `origin/add-postgresql-storage` match, and
+  the checkout is clean.
+- Dependency-aware build, tooling typecheck, scoped ESLint, cleanup and method
+  limits, TSDoc, copyright, formatting, diff hygiene, documentation audience,
+  TypeDoc/API, snippets, Proto lint/current-generated checks, logging
+  containment, production-dependency policy, and release-readiness checks pass.
+- The PostgreSQL package suite passes 140 tests with 93.89% statements, 90.01%
+  branches, 93.43% functions, and 96.62% lines.
+- The affected server/release/tooling suite passes 234 tests in 13 files. It
+  packs the workspace packages and compiles a clean external TypeScript
+  consumer against the PostgreSQL tarball.
+- PostgreSQL 16 and 18 live acceptance remains externally blocked because the
+  required database URLs have not been supplied. Ordinary verification neither
+  starts Docker nor substitutes an in-memory implementation.
+
+## Specialist Review Wave
+
+Each reviewer received the immutable endpoint, complete requirements ledger,
+concern-specific scope, read-only rule, and child-agent prohibition. Every
+dispatch explicitly selected the existing role's required profile. The review
+surface does not report runtime self-introspection, so the immutable configured
+role/profile is the available metadata; no visible mismatch occurred.
+
+### Accepted correction batch
+
+1. Make the three-argument `setTableName(sourceType, recordType, name)` overload
+   register and resolve the grouped family instead of silently changing the
+   ungrouped source family.
+2. Replace lowercase-only ASCII table-name handling with the single binding
+   JVM-compatible physical-name renderer and its mixed-case, reserved, custom,
+   non-ASCII, case-only, and 63-byte golden matrix. Use it for registration,
+   collision checks, DDL, DML, and inspection.
+3. Make the structural `createEntityStorage` seam private in TypeScript, as in
+   the MySQL factory, so it is callable by the runtime probe without appearing
+   as supported public factory API.
+4. Centralize the PostgreSQL deadlock/serialization classifier while retaining
+   caller-specific retry and error behavior.
+5. Make state and event backward history include the requested starting version
+   and prove the returned behavior, not only SQL text.
+6. Apply `NOT NULL DEFAULT false`, `NOT NULL DEFAULT false`, and
+   `NOT NULL DEFAULT 0` to ungrouped current `EntityRecord` columns `archived`,
+   `deleted`, and `version`, including DDL and catalog-validation evidence.
+7. Retry the complete `writeAll` transaction once, on a fresh client, only for
+   `40P01` or `40001`; a second failure must stop.
+8. Treat failed or false session advisory unlocks as cleanup failures. Preserve
+   an earlier operation error, but discard rather than pool a possibly locked
+   client when cleanup alone fails, and expose only a sanitized provider error.
+9. Remove raw driver errors from public operation-error cause chains while
+   preserving already-classified provider errors and internal retry decisions.
+10. Freeze a state-trim boundary once and delete older keys in stable 128-key
+    keyset pages instead of repeating `OFFSET keep` for every page.
+11. Add PostgreSQL to the user storage guide with discovery links, database-per-
+    tenant guidance, native-collation caveat, and query bounds.
+12. Document exact epoch-nanosecond `Timestamp` and numeric `Version` mappings,
+    plus the corrected physical-name rules and collision/63-byte behavior.
+
+The grouped-name report appeared in both style and API review and is one
+correction. The physical-name documentation follows the corrected renderer; it
+must not describe the rejected lowercase-only implementation. No reported
+finding was rejected or deferred. Live PostgreSQL 16/18 evidence remains a
+separate external verification gap, not part of this code correction batch.
+
+## Correction Evidence
+
+- All twelve accepted corrections are implemented. Follow-up preflight findings
+  corrected private-seam test typing, session-unlock discard/error precedence,
+  unsafe `finally` control flow, test-helper TSDoc, and coverage of the new
+  branches without changing thresholds or exclusions.
+- Dependency-aware build, tooling typecheck, scoped ESLint, cleanup/method
+  limits, TSDoc, copyright, repository formatting, diff hygiene, documentation
+  audience, TypeDoc/API, snippets, Proto lint/current-generated checks, logging
+  containment, production dependencies, and release readiness pass.
+- Exact PostgreSQL coverage passes 151 tests: 94.30% statements (`961/1019`),
+  90.30% branches (`540/598`), 95.09% functions (`310/326`), and 96.67% lines
+  (`844/873`).
+- The affected server/release/tooling suite passes 234 tests in 13 files,
+  including real package tarballs, clean dependency installation, and external
+  TypeScript compilation against the PostgreSQL package.
+- Re-review is restricted to the four concerns substantively changed by the
+  correction batch. Reviewers receive the initial endpoint, correction
+  endpoint, exact accepted findings, and current files. No code changes may
+  begin until the complete affected wave is collected.
+
+## Affected Re-review Disposition
+
+All four affected reviewers completed against the frozen correction endpoint.
+The same explicit immutable role profiles were used; reviews were read-only and
+had no child agents. The wave confirms the inclusive history, Entity defaults,
+whole-batch retry, shared classifier, session-lock discard/error precedence,
+sanitized public errors, private Entity seam, grouped routing implementation,
+root declarations, dependency declarations, and most documentation corrections.
+
+The final accepted batch is:
+
+1. Correct the trim boundary off-by-one. The boundary selected at `OFFSET keep`
+   is the first obsolete state, so keyset deletion must include that complete
+   `(version, created, ID)` key. Prove exact retained counts for zero, a partial
+   page, and multiple pages.
+2. Add an end-to-end public-builder grouped-name regression: the configured
+   `(sourceType, recordType, group)` family uses its custom table while the
+   ungrouped source remains distinct.
+3. Implement and pin the complete binding JVM physical-name matrix. Official
+   `jdbc-storage` commit `c747908403764eb9` delegates to QueryDSL 5.1.0:
+   ordinary ASCII identifiers are emitted unquoted and PostgreSQL folds their
+   ASCII capitals; PostgreSQL reserved words and names containing characters
+   illegal in a plain identifier are quoted and preserve spelling. TS may quote
+   the resulting physical name in SQL, but must reproduce that stored spelling
+   before collision checks. Add reserved, non-ASCII/case, custom, exact 63-byte,
+   case-only, and over-limit/collision cases through resolver and DDL-facing
+   behavior. Reject unsafe or over-limit names before access.
+4. Include PostgreSQL in the user guide's main move-to-durable-storage sentence,
+   without dropping MySQL or Datastore.
+5. Document the exact normalized PostgreSQL matrix: IDs, five comparisons,
+   nested `all`/`either`, declared-column ordering, mask, finite limit, and that
+   normalized plans have no offset while `RecordQuery.offset` remains separate.
+6. Keep README/reference name claims aligned with the corrected binding renderer;
+   do not narrow the documentation to the rejected lowercase-only behavior.
+
+The grouped test finding appeared in style and API review, and the trim finding
+appeared in style and reliability review; each is one correction. No affected-
+wave finding is rejected. Missing live PostgreSQL URLs remains the external
+verification gap.
+
+## Final Correction Evidence
+
+- State trim now deletes the first obsolete boundary key inclusively. Fixture-
+  level tests run the production path and prove exact retention for zero,
+  partial-page, and 300-row multi-page cases; the boundary query runs once and
+  later pages use keyset continuation.
+- A public-builder regression proves that the three-argument grouped custom
+  name reaches grouped DDL while the ungrouped source family remains distinct.
+- Physical-name goldens cover generated/custom plain-name folding, reserved and
+  non-ASCII preserved spelling, grouped DDL-facing resolution, ordinary case-
+  only collision, exact 63-byte acceptance, over-limit/difference-after-limit
+  rejection, and invalid values.
+- The user guide includes PostgreSQL in its durable-storage workflow, and the
+  PostgreSQL reference documents the exact normalized-query matrix and accurate
+  JVM-compatible name behavior.
+- Final cheap preflight passes 157 PostgreSQL tests with 94.31% statements
+  (`962/1020`), 90.39% branches (`546/604`), 95.10% functions (`311/327`), and
+  96.68% lines (`846/875`). Build, tooling typecheck, lint, cleanup, TSDoc,
+  copyright, formatting, docs/API/snippets, Proto, dependency, logging, and
+  release-readiness gates pass. The 234-test package/release suite also passes,
+  including packed external-consumer compilation.
+- The last re-review is restricted to these corrected concerns. A clean wave
+  advances directly to the single final `verify:release` run.
+
+## Final Affected Re-review Disposition
+
+All four final reviewers completed against the frozen endpoint with the same
+explicit immutable role profiles, read-only scope, and child-agent prohibition.
+The API lane is clean and confirms grouped routing, private/public declarations,
+root exports, dependencies, error types, and packed-consumer compatibility. The
+final accepted correction batch is:
+
+1. Replace the handwritten PostgreSQL reserved-word approximation with the
+   exact QueryDSL 5.1.0 PostgreSQL keyword list used by the binding JVM commit.
+   Add positive and negative goldens such as binding keyword `Cross` and plain
+   non-keyword `New`.
+2. Make the grouped-name regression assert the two specific `CREATE TABLE`
+   statements, so later DML cannot satisfy a DDL claim accidentally.
+3. Advance state-trim keyset pages. Keep the frozen first-obsolete high-water
+   key, but after each full page bind the last `(version, created, ID)` as a
+   strict continuation cursor. Prove page two uses a different tuple while
+   exact zero/partial/multi-page retention remains correct.
+4. Add PostgreSQL to the root README provider inventory.
+5. Update release-publishing documentation from 18 to 19 public packages and
+   include `@spine-event-engine/storage-postgres` in trusted-publisher setup.
+6. Update architecture documentation that still says only Datastore/MySQL are
+   durable providers, including PostgreSQL's database-per-tenant rule.
+7. Replace the stale API-docs “MySQL-first” inventory wording with explicit
+   MySQL and PostgreSQL provider coverage.
+
+The proposed automatic/strictly verified history indexes are rejected for this
+milestone. `TASK.md` explicitly assigns indexes to applications and says Spine
+manages only record-family tables. The accepted bounded-maintenance contract
+limits transferred keys and page size; it did not approve a provider-managed
+index schema. No live query-plan evidence demonstrates a defect. A future index
+contract would require a separately approved storage-layout milestone.
+
+## Last-Correction Review Gate
+
+- Frozen endpoint: `5e3c0631e`.
+- Exact PostgreSQL coverage: 157 tests; 94.34% statements (`968/1026`), 90.47%
+  branches (`551/609`), 95.12% functions (`312/328`), and 96.70% lines
+  (`851/880`).
+- Build, tooling typecheck, scoped lint, cleanup/callable limits, TSDoc,
+  copyright, formatting, diff hygiene, documentation, TypeDoc/API, snippets,
+  Proto, logging, dependency, and release-readiness gates pass.
+- Packaging/release verification passes 234 tests in 13 files, including all 19
+  tarballs and clean external TypeScript consumption of the PostgreSQL package.
+- Reopened concerns and explicit profiles: style/maintainability,
+  `gpt-5.6-terra` / `high`; performance/reliability, `gpt-5.6-terra` / `high`;
+  documentation, `gpt-5.6-luna` / `medium`. Reviews are read-only, independent,
+  receive no prior review conclusions, and cannot spawn children.
+- TypeScript/API is N/A for this final delta: its preceding review was clean,
+  and the accepted corrections changed internal renderer data, trim paging,
+  assertions, and documentation inventories without changing any public type,
+  export, declaration, error contract, or package boundary.
+
+## Last-Correction Review Disposition
+
+The full independent wave completed against the frozen endpoint before any
+correction. Style and reliability accept the advancing trim cursor. The
+accepted correction batch is:
+
+1. Replace the approximate reserved-word set with the exact QueryDSL 5.1
+   PostgreSQL keyword resource used by the binding JVM. Add positive and
+   negative goldens that catch both omitted and extra words.
+2. Make the grouped three-argument registration regression filter and assert
+   the two specific `CREATE TABLE IF NOT EXISTS` targets. Later writes must not
+   be able to satisfy this DDL claim.
+3. Protect partial acquisition of the family and per-Entity session advisory
+   locks. Track acquired locks, release them in reverse order, and discard a
+   client after uncertain cleanup while preserving the original acquisition
+   error. Add an induced second-lock failure regression.
+4. Change the two remaining release-runbook claims from 18 packages to 19 and
+   replace the architecture phrase “either adapter” now that three durable
+   adapters are listed.
+
+No other finding is accepted or deferred. The TypeScript/API lane remains N/A
+for this delta for the reason recorded above. PostgreSQL 16/18 live acceptance
+remains an external evidence gap because database URLs were not supplied.
+
+## Last-Correction Implementation Evidence
+
+- The authoritative keyword source was independently verified from Maven
+  Central's `com.querydsl:querydsl-sql:5.1.0` source jar:
+  `keywords/postgresql`, which `Keywords.POSTGRESQL` loads for
+  `PostgreSQLTemplates`. The complete resource replaces the handwritten
+  approximation. Goldens cover binding keyword `Collation` and non-keyword
+  `Between`, alongside existing `Cross`, `New`, folding, collision, and byte
+  boundary cases.
+- The grouped three-argument builder regression now filters only `CREATE TABLE
+IF NOT EXISTS` statements and requires `"spine"."groupedtable"` and
+  `"spine"."google_protobuf_stringvalue"`; DML cannot satisfy the assertion.
+- State trim records successful session acquisitions, releases only recorded
+  locks in reverse order, and uses the established cleanup/disposal path. An
+  induced per-Entity acquisition failure plus failed unlock proves that the
+  family lock is released, the client is discarded, and the public result is
+  the sanitized original operation error rather than cleanup details.
+- `docs/release-publishing.md` now consistently states 19 packages, and the
+  storage architecture refers to any durable adapter. Targeted tests pass
+  `75/75`; changed-file ESLint, package typecheck, TSDoc, cleanup, Prettier,
+  and diff hygiene pass. Live PostgreSQL 16/18 verification remains unavailable
+  without supplied connection URLs.
+
+## Last-Correction Affected Re-review Gate
+
+- Frozen pushed endpoint: `75167a0aa`.
+- Independent PostgreSQL package coverage passes 158 tests with 94.36%
+  statements (`972/1030`), 90.47% branches (`551/609`), 95.13% functions
+  (`313/329`), and 96.71% lines (`855/884`).
+- Style/maintainability and performance/reliability reopen independently at
+  explicit `gpt-5.6-terra` / `high`, read-only and without prior review memory
+  or child agents. The documentation corrections are deterministic replacements
+  of the exact reviewed phrases and therefore do not reopen that lane.
+
+## Last-Correction Affected Re-review Disposition
+
+Both affected reviews completed before correction. The production correction
+is accepted: the exact 100-keyword QueryDSL resource matches independently,
+partial acquisition cleans only acquired locks, cleanup uncertainty discards
+the client without replacing the original sanitized operation failure, and the
+advancing trim cursor is unchanged and correct.
+
+Two test-only findings are accepted:
+
+1. Replace grouped DDL subset matching with an exact two-target assertion, so
+   extra or duplicate `CREATE TABLE IF NOT EXISTS` statements fail the test.
+2. Add a successful two-lock trim assertion that the exclusive Entity unlock
+   precedes the shared family unlock. Keep the partial-acquisition/discard test
+   as its distinct case.
+
+## Final Convergence Evidence
+
+- The two accepted test findings are corrected without production or public API
+  changes. The DDL test requires the exact two targets; lock tests separately
+  prove successful reverse release and partial-acquisition discard behavior.
+  Explicit guards also satisfy the tooling typechecker without weakening the
+  runtime assertions.
+- Final cheap preflight passes generated build, tooling typecheck, all static,
+  documentation, Proto, dependency, and release-readiness gates. PostgreSQL
+  coverage passes 159 tests at 94.36% statements, 90.47% branches, 95.13%
+  functions, and 96.71% lines.
+- Packaging/release verification passes 234 tests in 13 files, including all 19
+  package tarballs, clean installation, and external TypeScript compilation.
+- All relevant review concerns now have accepted dispositions. The only
+  remaining local gate is the single final `pnpm verify:release` profile. Live
+  PostgreSQL 16/18 acceptance still requires externally supplied database URLs.
+
+## Last-Correction Test-Hardening Evidence
+
+- The grouped builder regression now uses exact ordered equality for the two
+  `CREATE TABLE IF NOT EXISTS` qualified targets; missing, extra, duplicate, or
+  reordered DDL fails.
+- A distinct successful state-trim regression requires the exclusive Entity
+  session unlock before the shared family unlock. The partial-acquisition,
+  cleanup-failure, discard, and sanitized-error regression remains separate.
+- This batch changes tests and T-0230 records only; production code and public
+  contracts are unchanged. Focused history/record tests pass `69/69`; scoped
+  lint, TSDoc, cleanup, formatting, and diff checks are recorded with the
+  pushed commit. The live PostgreSQL URL limitation remains unchanged.
+
+## Last-Correction Tooling-Typecheck Repair
+
+- Cheap preflight at `24e88d103` found TS2532 in two test-only indexed-access
+  paths. Explicit runtime guards now fail clearly if the configured lock error
+  or expected multi-page calls are absent, before test code reads the values.
+- `pnpm typecheck:tooling` and focused Entity-history tests pass after this
+  correction. No production or public-contract file changed; scoped static
+  evidence accompanies the pushed test-only commit.
+
+## Final Release-Verification Test Repair
+
+- The single final `verify:release` run at `824f45485` had one failure and
+  `4,884` passes: MessageBoard manifest expectations remained at snapshot.12
+  after `6fab47c6d` updated its manifest dependencies to snapshot.13.
+- Five stale expected Spine package versions in the startup contract now match
+  `2.0.0-snapshot.13`; the Connect RPC and local-start assertions are unchanged.
+  The exact startup contract and release-policy/package-artifact tests pass
+  `31/31`. This is a test-only correction with no production or public-contract
+  change; tooling/static evidence accompanies the pushed commit.
+
+## Final Acceptance
+
+- `pnpm verify:release` passes at `0e4da7938`: 300/300 test files and
+  4,885/4,885 tests, with 93.32% statements, 90.11% branches, 93.03% functions,
+  and 94.51% lines.
+- Every canonical review concern has a recorded disposition. The affected
+  re-review accepted the production corrections; its two test-strength findings
+  and the later deterministic type/version assertions are resolved without
+  reopening production or public-contract review.
+- The branch is locally release-ready. Live PostgreSQL 16/18 acceptance is not
+  claimed and remains pending externally supplied database URLs. Ordinary
+  verification did not start Docker or substitute another implementation.
+
+## Live PostgreSQL 16 Finding
+
+After explicit human authorization, the live suite ran against a disposable
+PostgreSQL 16.15 container and found two independent causes:
+
+1. PostgreSQL CAS locks and reads the requested storage slot, but its successful
+   replacement write derives the SQL `ID` from the replacement message. This
+   violates the shared `RecordStorage.compareAndSet` contract, which defines
+   `id` as the actual storage slot independently of the record body's logical
+   ID. Live rows and both stale/concurrent failures prove the defect.
+2. The live Entity fixture omitted the generated-type registry required to
+   stringify its `Any`-containing state-history key. Production examples and
+   focused Entity fixtures configure that registry; the provider's public
+   registry seam is already correct.
+
+The accepted correction is one production-path slot-ID binding fix with a
+test-first regression, plus the live-fixture registry configuration. Review and
+release verification reopen only after PostgreSQL 16 and 18 pass.
+
+## PostgreSQL 16 Live-Acceptance Corrections
+
+- A focused RED test proved CAS wrote a replacement under its body-derived ID
+  rather than the caller-selected slot. The private upsert value path now
+  accepts the CAS slot; regular and immutable writes retain record-derived IDs.
+- Live factories now configure the same Stringifier/TypeRegistry setup used by
+  focused Entity fixtures. During the required PG16 investigation, run-unique
+  Entity IDs corrected persistent ungrouped-current fixture collisions, and
+  Event producer IDs were aligned with the Entity ID packing route.
+- PostgreSQL native shared-unlock rows use `pg_advisory_unlock_shared`; a
+  focused real-shape regression led to conditional decoding of shared versus
+  exclusive result columns. This fixes a live cleanup failure without changing
+  the public contract.
+- Focused record/entity-history tests pass `71/71`. The exact PG16 command with
+  all supplied URLs passes `8 passed, 4 skipped`; typecheck and scoped static
+  checks accompany the pushed commit.
+
+## Live-Correction Re-Review And PostgreSQL 18
+
+- The memory-free performance/reliability reviewer found no correctness,
+  persistence, concurrency, lifecycle, or bounded-resource issue in
+  `d8c7fe9764ad865c1a6820f0c3b13cc08d512ee1`. It confirmed that CAS locks,
+  reads, and writes the caller-selected slot while ordinary and immutable writes
+  retain body-derived IDs, and that shared and exclusive advisory unlock results
+  use their real PostgreSQL column names.
+- The memory-free style/maintainability reviewer also found no issue. It accepted
+  the private optional ID seam, focused regressions, public builder-based registry
+  setup, and run-isolated/domain-correct live fixtures.
+- Both reviewers were existing configured roles dispatched explicitly as
+  `gpt-5.6-terra` / `high`. The prompts' expanded baseline SHA was mistyped and
+  did not resolve; both reviewers independently used the target commit's actual
+  parent, `d301ac32d4e251f32c6c0267a130f4f47845a5cd`, so review scope remained the
+  intended correction commit.
+- PostgreSQL 18.6 passes the exact `test:postgresql:18` command: 2 files pass,
+  8 tests pass, and 4 provider-specific tests skip. Inspection confirms the
+  skipped cases are the MySQL and Datastore suites; both PostgreSQL Inbox tests
+  and all six PostgreSQL package acceptance tests ran. This resolves the final
+  live-provider evidence gap alongside the equivalent PostgreSQL 16.15 result.
+
+## Final Acceptance After Live Corrections
+
+- `pnpm verify:release` passes at `7a17e4a65`: 300/300 test files and
+  4,887/4,887 tests. Coverage is 93.32% statements, 90.11% branches, 93.03%
+  functions, and 94.51% lines.
+- Every deterministic build, static, documentation, Proto, dependency,
+  release-readiness, package-artifact, clean-install, and consumer-compilation
+  gate passes in that same serial run.
+- A broad parallel `verify:task` run first timed out in two unrelated stress
+  cases after all deterministic gates passed. Separate one-worker reruns passed
+  cleanup 120/120 and release CLI 17/17, and the authoritative one-worker
+  release profile then passed all 4,887 tests. This is accepted as verified
+  resource contention, not a product defect.
+- PostgreSQL 16.15 and 18.6 live acceptance, correction re-review, documentation,
+  and final release verification are complete. No unresolved finding or external
+  evidence gap remains for T-0230.
+
+## Human-Requested Three-Round Final Review
+
+The human requested three consequential, sequential, memory-free reviews. Each
+reviewer sees the current branch only after all confirmed findings from the
+previous round have been corrected and pushed.
+
+1. Round 1 uses the existing `performance_reliability_reviewer` role, explicitly
+   dispatched as `gpt-5.6-terra` / `high`. Scope: PostgreSQL persistence,
+   transactions, concurrency, lifecycle, cleanup, retry behavior, tenant
+   isolation, and live-test adequacy across the complete T-0230 branch diff.
+2. Round 2 uses the existing `typescript_api_docs_reviewer` role, explicitly
+   dispatched as `gpt-5.6-terra` / `high`. Scope: public TypeScript contracts,
+   exports, declarations, TSDoc, package API documentation, compatibility, and
+   consumer-facing examples at the post-round-1 endpoint.
+3. Round 3 uses the existing `style_maintainability_reviewer` role, explicitly
+   dispatched as `gpt-5.6-terra` / `high`. Scope: repository rules, module depth,
+   naming, method size, readability, duplication, fixture quality, and test
+   maintainability at the post-round-2 endpoint.
+
+All three assignments are read-only, forbid child agents, and receive no prior
+conversation or reviewer memory. The Desktop surface supports explicit role,
+model, and reasoning dispatch. Additional runtime self-introspection is recorded
+only if the surface exposes it.
+
+### Round 1: Persistence And Reliability Findings
+
+Round 1 ran as the existing `performance_reliability_reviewer`, explicitly
+dispatched as `gpt-5.6-terra` / `high`, with no inherited conversation. The
+surface exposed the configured role/profile but no additional runtime metadata.
+The reviewer independently ran the hermetic PostgreSQL suite (`10` files,
+`161` tests) and reported four accepted findings:
+
+1. **Critical — absent-row CAS race.** CAS takes a transaction advisory lock,
+   but ordinary single/batch writes, immutable writes, and deletes do not.
+   Therefore CAS can observe absence, a normal writer can insert the slot, and
+   CAS can overwrite that row while incorrectly returning success. All concrete
+   slot mutations must use the same fence; batch locks must be distinct and
+   stable-ordered without changing caller write order.
+2. **Important — rollback failure re-pools a bad client.** Record, table-init,
+   Entity-commit, and delivery-cleanup coordinators ignore `ROLLBACK` failure and
+   call normal `release()`. A client whose transaction did not roll back must be
+   discarded with `release(error)` while the public operation preserves a
+   sanitized failure.
+3. **Important — raw driver errors escape.** Lazy table preparation and public
+   state/event history transaction paths can propagate raw node-postgres errors,
+   contrary to the provider's stable sanitized-error contract.
+4. **Minor but required — live history never crosses a page.** The live suite
+   appends only three states while claiming bounded-page maintenance. A real
+   129-plus-row PostgreSQL case must prove trim/truncate results across pages.
+
+### Round 1 Finding 1 Correction Evidence
+
+- The configured `implementer` (`gpt-5.6-terra` / `medium`; no additional
+  runtime metadata exposed) reproduced the absent-row race with two distinct
+  acquired client handles. RED writer order was `[write, cas]` while CAS held
+  its advisory lock.
+- The correction applies the transaction-scoped record fence to normal,
+  batch, immutable, delete, and caller-managed mutations. The focused suite
+  covers CAS racing ordinary and immutable writes and confirms distinct,
+  sorted batch locks with source-order writes. `46/46` focused tests, ESLint,
+  package TypeScript checking, Prettier, and diff checking pass.
+
+### Round 1 Finding 2 Correction Evidence
+
+- Record, initializer, Entity-commit, and delivery-cleanup transaction catches
+  now discard a client after rollback failure without replacing the original
+  operation failure. Focused coordinator coverage injects a record operation
+  and rollback failure and proves both `release(error)` and the stable public
+  operation error. The focused coordinator suite passes `97/97`.
+
+### Round 1 Finding 3 Correction Evidence
+
+- Lazy preparation and public state/event append and read transactions preserve
+  classified provider errors and sanitize raw failures. Focused state-history
+  and initializer tests pass `40/40` with package TypeScript checking.
+
+### Round 1 Finding 4 Correction Evidence
+
+- The required live 129-plus-row acceptance found a real second-page trim
+  defect: page SQL projected only `ID` although the continuation requires
+  `version`, `created`, and `ID`. The correction projects the complete tuple.
+  Hermetic state-history tests pass `28/28`.
+- Manual disposable PostgreSQL `16.15` and `18.6` servers, each with all three
+  required databases, passed their exact major acceptance command (`8` passed,
+  `4` expected provider-specific skips). Live trim and truncate each cross the
+  128-row page boundary and assert exact results.
+
+### Independent Verification Correction
+
+- Independent package verification found one stale assertion (`164/165`): an
+  Entity commit lock-failure test expected its raw driver message despite the
+  provider's sanitized public error contract. The test-only correction asserts
+  the stable operation error and absence of `lock failed`, retaining rollback
+  and release evidence. Focused coverage passes `15/15`; serial package
+  verification passes `165/165`.
+
+All four findings are consequential and technically consistent with the shared
+storage contracts and provider error policy; none is rejected or deferred. The
+existing PostgreSQL implementer context receives one test-first correction batch.
+It remains the sole production writer, uses the immutable configured
+`implementer` profile (`gpt-5.6-terra` / `medium`), and may not spawn child
+agents. Round 2 starts only after focused and live verification, review-log
+updates, commit, and push.
+
+### Round 2: TypeScript And Public-Contract Finding
+
+Round 2 ran as the existing `typescript_api_docs_reviewer`, explicitly
+dispatched as `gpt-5.6-terra` / `high`, with no inherited conversation. The
+surface exposed the configured role/profile but no additional runtime metadata.
+The reviewer found one accepted Important issue and no other public API,
+declaration, package, or documentation defect:
+
+- `PostgresCreateOperationFactory` receives `PostgresTableSpec` without the
+  resolved schema. Custom SQL is executed unchanged while verification inspects
+  the configured schema, and pools do not set `search_path`. Therefore a generic
+  callback cannot correctly create tables for an explicit non-`public` schema or
+  tenant entries with different schemas, despite the documented custom-creation
+  contract.
+
+The smallest correction is to make the resolved schema a required part of the
+already-public resolved `PostgresTableSpec`, pass each database's resolved schema
+at every factory call site, and document that callers must quote both schema and
+table identifiers in custom SQL. Test-first coverage must include explicit
+non-`public` and distinct tenant schemas at the runtime SQL boundary and, if
+practical, live PostgreSQL acceptance. The existing PostgreSQL implementer
+context remains the sole production writer under its immutable `implementer`
+profile (`gpt-5.6-terra` / `medium`) and may not spawn child agents. Round 3
+starts only after this correction is verified, committed, and pushed.
+
+### Round 2 Correction Evidence
+
+- The configured `implementer` (`gpt-5.6-terra` / `medium`; no additional
+  runtime metadata exposed) added RED driver coverage for explicit and tenant
+  schemas. Both callback specs exposed `undefined` before the correction.
+- `PostgresTableSpec.schema` is now required and resolved from each selected
+  database before custom creation. The callback contract documents quoted,
+  idempotent schema-qualified DDL. Focused builder/spec/record coverage passes
+  `59/59`; PostgreSQL `16.15` and `18.6` each pass live explicit-schema custom
+  DDL acceptance (`9` passed, `4` expected provider-specific skips). Serial
+  hermetic package coverage passes `167/167`.
+
+### Round 3 Correction Evidence
+
+- The accepted test-isolation correction is test-only. `driver.reset()` clears
+  all mutable Entity-history fixture state and relevant Vitest mock call state,
+  then restores the original high-water and client-number defaults before each
+  case without changing the mocked `pg` module behavior. Focused coverage
+  passes `28/28`.
+
+### Release Preflight Correction Evidence
+
+- The one authoritative release attempt stopped before tests in
+  `typecheck:tooling` with eight test-only errors. Scheduled clients now expose
+  actual typed Vitest query mocks, deferred resolver slots use the Promise
+  resolver signature, and custom DDL remains generic over the public table
+  callback. Tooling typechecking passes; no production behavior changed.
+
+### Round 3: Style And Maintainability Finding
+
+Round 3 ran as the existing `style_maintainability_reviewer`, explicitly
+dispatched as `gpt-5.6-terra` / `high`, with no inherited conversation. The
+surface exposed the configured role/profile but no additional runtime metadata.
+The reviewer found no Critical or Important issue and one accepted Minor test-
+isolation defect:
+
+- `postgres-entity-history.test.ts` uses one mutable hoisted driver across the
+  suite without a complete `beforeEach` reset. Calls, lock holders/waiters,
+  queued pages/failures, configured rows/hooks, client numbering, and mocks can
+  survive into the next case. A failing or newly extended concurrency test can
+  therefore contaminate later assertions and obscure the real regression.
+
+The test fixture must provide one complete `reset()` operation and invoke it in
+`beforeEach`; scattered per-test cleanup should be removed where redundant. The
+reviewer explicitly withdrew an `@types/pg` dependency concern after confirming
+the packed declaration requires it at consumer compile time. It also accepted
+local transaction coordinators: extracting a generic database facade would
+conflict with the task's anti-overengineering requirement, and no current drift
+remains. The existing implementer context receives this test-only correction
+under its immutable `gpt-5.6-terra` / `medium` profile.
+
+### Three-Round Final Acceptance
+
+All three requested review rounds were independent, consequential, and
+memory-free. Round 1 used the configured `performance_reliability_reviewer`,
+Round 2 used the configured `typescript_api_docs_reviewer`, and Round 3 used the
+configured `style_maintainability_reviewer`; each was explicitly dispatched as
+`gpt-5.6-terra` / `high`. The execution surface exposed the immutable role and
+configured profile but no additional runtime self-introspection.
+
+Every accepted finding was corrected before the following round. The resulting
+branch has a common record-mutation fence, safe disposal after rollback failure,
+stable public driver-error boundaries, verified multi-page history maintenance,
+resolved-schema custom DDL, and isolated Entity-history fixtures. No accepted
+finding remains open, and no reviewer asked for a deferred correction.
+
+The initial post-review release attempt exposed eight test-helper type errors
+and stopped before running tests. The test-only correction passed the full cheap
+preflight. A fresh authoritative `pnpm verify:release` at `d1e7fd3c2` then
+completed successfully with `300/300` test files and `4,893/4,893` tests, all
+required documentation and static checks, all 19 package tarballs, clean
+external installation, and consumer compilation. PostgreSQL `16.15` and `18.6`
+also passed the exact live package acceptance. The three-round review is
+accepted with no unresolved finding.
+
+### Human And Agentic Documentation Audit Assignment
+
+One existing `documentation_reviewer` receives the complete changed-document
+set relative to `origin/master`, with no inherited conversation and no child
+agents. Its bounded concern is both review axes: conformance to current
+repository documentation standards and fidelity to the accepted PostgreSQL
+task requirements. It must separately assess human-facing prose for clarity,
+plain language, navigation, examples, and accurate supported behavior, and
+agent-facing prose for usable structure, current status, evidence, decisions,
+and separation from user guidance.
+
+The expected immutable role profile is `gpt-5.6-luna` / `medium`; both fields
+will be explicit in the dispatch. The Desktop surface supports explicit child
+model and reasoning selection. Runtime self-introspection will be recorded if
+the surface exposes it; otherwise the configured role/profile is the evidence.
+The reviewer must cite precise paths and lines, classify every finding, check
+the visible human-imposed requirements ledger, and avoid findings about
+historical or superseded prose unless an active document presents it as current.
+
+### Human And Agentic Documentation Audit Result
+
+The independent `documentation_reviewer` completed the read-only audit with no
+inherited conversation and no child agents. The dispatch explicitly selected
+the configured `gpt-5.6-luna` / `medium` profile; the surface did not expose
+additional runtime self-introspection.
+
+The reviewer reported no P0 or P1 finding and one accepted P2 standards issue:
+`docs/architecture/README.md` twice grouped Datastore with “RDBMS” adapters or
+packages. Datastore is not relational, and the document itself distinguishes
+Datastore namespaces from relational databases. The correction now names the
+Datastore adapter/package separately from the MySQL and PostgreSQL RDBMS
+adapters/packages. The specification axis found no missing, incorrect, or
+unrequested PostgreSQL behavior in the changed human or agentic documentation.
+
+The correction passes Prettier for the complete changed-document set,
+`docs:audience:check`, `docs:check:generated` (including API inventory and
+TypeScript snippets), `git diff --check`, and the targeted terminology scan.
+No accepted finding remains. The task-verification wrapper's documentation-only
+mode is unavailable because it sees the complete mixed-code feature branch;
+this correction therefore uses the protocol's focused documentation gates and
+retains the prior successful release verification for unchanged runtime code.
+
+### Human Source-Quality Findings
+
+The human review reopens task acceptance for source documentation and layout.
+All eight findings are accepted as P2 task-scope corrections. Permanent policy
+data will use a stable package name; every changed PostgreSQL class, method, and
+generic parameter will receive semantic documentation; declaration boundaries
+will be visually separated; unexplained “fenced” wording will be replaced with
+the concrete lock-and-verification behavior; and PostgreSQL DDL names will come
+from one typed package-local vocabulary. The `pg` driver's numeric parser OIDs
+are explicitly rejected as DDL type-name substitutes.
+
+The ruleset correction is test-first. Checker regressions must first prove that
+undocumented internal classes/methods and undocumented type parameters fail.
+The PostgreSQL type-vocabulary regression must first fail because no canonical
+vocabulary exists. Production and documentation corrections begin only after
+those RED results are recorded.
+
+### Source-Quality Correction Review Assignment
+
+The converged correction at `9a71f961d` receives one independent review wave
+with no inherited conversation. The existing `style_maintainability_reviewer`
+checks source layout, naming, method and module clarity, and the new enforcement
+logic under its explicit immutable `gpt-5.6-terra` / `high` profile. The
+existing `typescript_api_docs_reviewer` checks TypeScript contracts, generic
+documentation, declaration output, and the PostgreSQL type vocabulary under
+its explicit immutable `gpt-5.6-terra` / `high` profile. The existing
+`documentation_reviewer` checks human and agentic wording, structure, and the
+stable policy filename under its explicit immutable `gpt-5.6-luna` / `medium`
+profile. All three assignments are read-only and concern-specific. The Desktop
+surface exposes the configured roles and profiles but not additional runtime
+self-introspection.
+
+### Source-Quality Correction Review Findings
+
+The independent wave reported nine P2 findings and no P0 or P1 finding. All are
+accepted and corrected in one batch:
+
+- active review and worklog status now match the correction state, and old
+  unexplained uses of “fenced” now name the lock and verification behavior;
+- changed-file enforcement fails with an actionable error when `origin/master`
+  is unavailable, applies semantic rules only to authored production sources,
+  covers class expressions, and rejects duplicate or stale `@typeParam` tags;
+- PostgreSQL bind values now use a concrete `PostgresParameter` union instead
+  of `unknown`, and DDL-producing contracts now use the canonical
+  `PostgresDdlType` union instead of widening back to `string`.
+
+The correction passes the complete checker suites (`188/188`), PostgreSQL unit
+tests (`168/168`), production and tooling typechecking, scoped ESLint, cleanup
+and TSDoc enforcement, repository formatting, and diff hygiene. Re-review is
+limited to the three concerns changed by this accepted batch.
+
+### Source-Quality Correction Re-review Result
+
+The maintainability re-review accepted the checker and source structure with no
+finding. The documentation re-review found two stale active-status/wording
+claims; both now reflect commit `baaf9d45c` and describe Inbox cleanup as
+locking and verifying the current session record. Its final confirmation found
+no issue. The API re-review found one remaining `string` widening in catalog
+type comparison; `PostgresCatalog.type` now accepts `PostgresDdlType`, its
+contract assertion passes, and the final API confirmation found no issue.
+
+The new public `PostgresDdlType` is included in the API documentation inventory.
+API docs, audience checks, TSDoc, cleanup enforcement, formatting, and diff
+hygiene pass. No review finding remains.
+
+### Final Source-Quality Verification
+
+The authoritative `pnpm verify:release` at `d3472b129` passed all generated,
+typechecking, lint, documentation, packaging, dependency, release-readiness,
+external-consumer, and coverage gates. All `300/300` test files and
+`4,902/4,902` tests passed. The correction is accepted with no unresolved
+finding or deferred work.
+
+### Todo Durable Storage Review Assignment
+
+The uncommitted Todo correction receives one independent, memory-free review
+wave after focused and live MySQL/PostgreSQL verification. The existing
+`style_maintainability_reviewer` checks the composition boundary, naming,
+method size, tests, and unnecessary concepts under its explicit immutable
+`gpt-5.6-terra` / `high` profile. The existing `documentation_reviewer` checks
+the README, user guide, reference, and source explanations for humane reader
+order and exact runnable commands under its explicit immutable
+`gpt-5.6-luna` / `medium` profile. The existing
+`performance_reliability_reviewer` checks pool lifecycle, startup rollback,
+shutdown ordering, and live-test meaning under its explicit immutable
+`gpt-5.6-terra` / `high` profile. The existing
+`typescript_api_docs_reviewer` checks public example exports, declarations,
+TSDoc, dependency/API compatibility, and accidental contract expansion under
+its explicit immutable `gpt-5.6-terra` / `high` profile. All assignments are
+read-only, use no inherited conversation, and prohibit child spawning. The
+Desktop surface exposes their configured roles and profiles but not additional
+runtime self-introspection.
+
+Security review is N/A for this correction: it adds no authentication,
+authorization, serialization, tenant, or credential-storage mechanism. The
+review wave still checks that errors and documentation do not expose supplied
+database URLs. Protobuf/DDD review is N/A because no message, handler, domain,
+wire, or storage-provider contract changes.
+
+### Todo Durable Storage Review Findings
+
+The complete independent wave reported one P1 and five P2 findings. All are
+accepted as one correction batch:
+
+- P1: an environment-created database factory is selected before
+  `createTodoContext()` but registered with the server only afterward, so a
+  context-assembly rejection leaks its pool. Add an observed failing test for
+  that boundary and close the selected factory exactly once.
+- P2: prove URL redaction by asserting the supplied secret value is absent from
+  the reported configuration error, not merely that expected text is present.
+- P2: update the shared single-process launcher comment because memory is now
+  the default rather than the only storage mode.
+- P2: reflow the overlong Todo reference line.
+- P2: remove the accidental package-root `TodoStorage` export; environment
+  selection is launcher composition, while callers use `startTodoServer` with
+  an optional `StorageFactory`.
+- P2: document and test that callers remain responsible for a supplied factory
+  both after normal server shutdown and when startup rejects.
+
+The correction returns to the same implementation context under its already
+recorded explicit `gpt-5.6-terra` / `medium` implementer profile. Only the
+reliability concern requires re-review after correction; the remaining items
+are deterministic API, documentation, formatting, and assertion corrections.
+
+### Todo Durable Storage Reliability Re-review
+
+The P1 context-assembly leak is corrected: environment-created storage closes
+once on context failure, normal close, and server-start rollback. Re-review
+reported one remaining P2 coverage gap. Caller-supplied storage is proved
+caller-managed after normal shutdown and context-assembly failure, but the
+listener-start rejection case lacks the same explicit assertion. Add that
+focused regression and rerun the lifecycle suite; the production flow itself
+already excludes caller-supplied storage from server resources.
+
+### Todo Durable Storage Review Result
+
+All accepted findings are corrected. The P1 context-assembly leak now has an
+observed RED/GREEN regression. Environment-created storage closes exactly once
+on context failure, listener-start rollback, and normal server shutdown.
+Caller-supplied storage remains caller-managed after normal shutdown, context
+failure, and listener-start failure. The final missing case was a test-only
+correction and therefore did not reopen specialist review.
+
+The package barrel no longer exposes the environment selector, configuration
+tests explicitly reject secret-bearing error text, the shared launcher and
+human documentation describe memory as the default rather than the only mode,
+and changed lines satisfy repository formatting limits. The focused suite
+passes `33/33`; Todo typechecking, scoped lint, cleanup, TSDoc, documentation,
+formatting, and diff-hygiene checks pass. No review finding remains.
+
+### Todo Durable Storage Final Verification
+
+Fresh `pnpm verify:release` at pushed implementation endpoint `1c8320ead`
+passes every repository gate. All `301/301` test files and `4,914/4,914` tests
+pass with 93.29% statements, 90.07% branches, 93.05% functions, and 94.46%
+lines. Packaging, external installation, consumer compilation, generated
+cleanliness, and release-readiness checks are green. The correction is accepted
+with no unresolved review finding or deferred work.
+
+## New Package Publication Tooling Follow-up
+
+The human-requested replacement of the inline first-publication recipe adds one
+release script and its tests. The existing `performance_reliability_reviewer`
+reviews external-mutation ordering, fail-closed registry checks, authentication
+cleanup, temporary-file cleanup, interruption recovery, and command safety. The
+assignment is read-only, uses no inherited conversation, prohibits child
+spawning, and explicitly uses the role's immutable `gpt-5.6-terra` / `high`
+profile. The Desktop surface exposes that configured role and profile but no
+additional runtime self-introspection.
+
+Documentation, API, Protobuf/DDD, and security specialist reviews are N/A for
+this narrow follow-up. Deterministic checks cover the humane usage text, every
+function's TSDoc, formatting, public release inventory, and the absence of
+stored repository or CI credentials. The script uses npm's standard local
+browser login and guaranteed logout; it introduces no credential store.
+
+### New Package Publication Tooling Findings
+
+The independent reviewer ran under the recorded `gpt-5.6-terra` / `high`
+profile and reported three accepted findings. Signal termination can bypass npm
+logout and temporary-directory cleanup. Recovery checks package-level existence
+but not the intended published version before changing trust settings. Final
+commands print the tag and trust record but do not compare them with the
+expected values. Add observed failing regressions for interruption, exact-version
+recovery, and parsed tag/trust verification, then correct all three before the
+final bounded gate.
+
+### New Package Publication Tooling Re-review Result
+
+All three accepted findings are corrected. `SIGINT` and `SIGTERM` now use the
+same idempotent logout and temporary-directory cleanup as ordinary failures.
+Trust-only recovery requires the exact release version to exist before npm
+login or any trust-setting change. Final verification parses npm's JSON output
+and checks the expected dist-tag, GitHub repository, workflow file,
+environment, and package-creation permission.
+
+The independent reliability re-review reported no remaining finding. Its
+focused test run passes `10/10`; deterministic lint, TSDoc, formatting,
+documentation-audience, and release-readiness checks also pass.
+
+### New Package Publication Tooling Final Verification
+
+Fresh `pnpm verify:publish` passes all repository and publication gates. All
+`302/302` test files and `4,924/4,924` tests pass with 93.29% statements, 90.07%
+branches, 93.05% functions, and 94.46% lines. Package preparation, external
+installation, release readiness, production-dependency checks, and both full
+and production dependency audits are green. No npm registry mutation was run.
+
+### New Package Publication Tooling CI Correction
+
+The pull-request build exposed invalid TSDoc on the two exported asynchronous
+entry points. Pre-commit verification had not inspected the then-untracked
+script, while CI inspected the committed file. The destructured parameters now
+follow the repository convention, their returned promises are documented, and
+the unsupported summary verb is replaced. `CI=true pnpm lint:tsdoc` and the
+focused publication and TSDoc-checker suites pass with `77/77` tests.
+The exact workflow command, `CI=true pnpm verify:release`, also passes all
+`302/302` test files and `4,924/4,924` tests at the existing coverage baseline.
+
+## Workspace Dependency Cycle Review Assignment
+
+The existing `style_maintainability_reviewer` will independently review the
+staged cycle correction with no inherited conversation. Its bounded concern is
+package placement, dependency direction, fixture structure, naming,
+maintainability, and preservation of the moved integration tests. The expected
+immutable role profile is `gpt-5.6-terra` with `high` reasoning, both explicit
+in dispatch. The Desktop surface exposes that configured role/profile but does
+not provide additional runtime self-introspection.
+
+Correctness and package-graph behavior are covered by the same focused review
+because the change contains no production runtime implementation. Documentation,
+TypeScript public API, Protobuf/DDD, performance, and security reviews are N/A:
+there is no published runtime API or authored Proto change, and deterministic
+checks cover formatting, TSDoc, package metadata, graph policy, and integration
+behavior.
+
+### Workspace Dependency Cycle Findings
+
+The independent reviewer ran under the recorded `gpt-5.6-terra` / `high`
+profile and reported three accepted P2 findings. The first graph guard omitted
+nested example workspaces and did not directly reject development-dependency
+cycles. The moved Project fixture retained Task names in its projection,
+handler, and context. The stable-CI inventory assertion still named the old
+server test path, so it did not protect the moved test's ordinary-suite status.
+
+The correction now expands the declared `pnpm-workspace.yaml` package patterns,
+checks every workspace dependency group for cycles, and has focused regressions
+for a nested example reverse edge and the former server/delivery-client cycle.
+Project terminology is consistent throughout the fixture and generated handler
+metadata. The stable-CI test resolves ordinary include globs and checks the exact
+moved path. Focused correction tests pass `18/18`; cleanup and TSDoc enforcement
+also pass.
+
+### Workspace Dependency Cycle Re-review Result
+
+The same independent reviewer rechecked only the three corrected concerns and
+reported no remaining finding. All declared workspace patterns and dependency
+groups are covered, Project terminology is consistent, and the exact moved test
+is selected by ordinary CI rather than infrastructure CI. The reviewer's focused
+verification passes `14/14`; formatting and diff hygiene are clean.
+
+### Workspace Dependency Cycle Final Verification
+
+The CI-equivalent `CI=true pnpm verify:release` command passes every repository
+gate. All `302/302` test files and `4,927/4,927` tests pass with the existing
+coverage baseline. Package tarballs, clean external installation, generated
+cleanliness, production dependency checks, and release readiness are green.
+
+## First-Publication Scan And MySQL Rename Review Wave
+
+Three existing reviewer concerns receive one independent, no-memory review wave
+after mechanical preflight:
+
+1. `typescript_api_docs_reviewer`, immutable `gpt-5.6-terra` / `high`, reviews
+   public package identity, imports, declarations, TypeDoc inputs, human API
+   guidance, and clean-consumer compatibility for the replacement
+   `@spine-event-engine/storage-mysql` package.
+2. `performance_reliability_reviewer`, immutable `gpt-5.6-terra` / `high`,
+   reviews the first-publication scan wait, bounded polling, cleanup/recovery,
+   release inventory replacement, and avoidance of duplicate npm mutation.
+3. `style_maintainability_reviewer`, immutable `gpt-5.6-terra` / `high`, reviews
+   the coherent rename, current-reference completeness, checker rename
+   classification, test maintainability, and repository conventions.
+
+All three dispatches explicitly select their existing role and immutable model
+and reasoning profile, pass no conversation memory, prohibit child spawning and
+writes, and use the diff from `origin/master` plus the current working tree.
+Desktop exposes the configured profiles but no additional runtime
+self-introspection. Protobuf/DDD and security concerns are N/A: no Proto,
+domain, credential, permission, or security-boundary contract changes. The
+final release profile covers packaging and publication readiness mechanically.
+
+### Review Findings
+
+- The TypeScript/API documentation reviewer reported no actionable package
+  rename finding. Current imports, manifests, declarations, TypeDoc inputs,
+  release inventory, human guidance, and the clean-consumer proof consistently
+  use `@spine-event-engine/storage-mysql`; remaining old-name references are
+  historical records.
+- The reliability and maintainability reviewers independently found the same
+  high-severity recovery defect: trust creation can succeed before public
+  visibility times out, but the generic recovery message and `--trust-only`
+  path attempt to create the already-existing trust relationship again. Make
+  trust-only recovery inspect and accept the exact existing configuration,
+  reject a conflicting configuration, and create trust only when absent.
+- The maintainability reviewer found that untracked production sources are
+  added to the changed set but omitted from the TSDoc scan input. Include them
+  and prove an undocumented untracked source fails before staging.
+- The maintainability reviewer also found that the edited-rename test staged an
+  `R100` move and left a separate working-tree `M`; it did not exercise `R<100`.
+  Add genuine staged edited-rename regressions for both TSDoc and cleanup while
+  preserving exact-move acceptance.
+
+All three findings are accepted and return as one test-first correction batch
+to the existing implementer. No finding is rejected or deferred.
+
+### Trusted-publisher permission re-review
+
+The accepted re-review found that matching `createPackage` by inclusion could
+accept an additional npm trusted-publisher permission. The correction requires
+the exact one-permission set `['createPackage']`; duplicate or extra permissions
+are conflicting and stop recovery before `npm trust github`. A RED/GREEN
+regression proves `createPackage` plus `createStagedPackage` fails closed with
+no trust mutation. Focused publication tests, formatting, ESLint, and diff
+hygiene pass.
+
+The accepted low-severity follow-up adds the duplicate-permission case:
+`['createPackage', 'createPackage']` also fails closed without `npm trust
+github`, confirming duplicate values cannot satisfy the exact permission set.
+
+### Final disposition
+
+All accepted review findings are resolved. The maintainability re-review found
+no remaining source-scan or rename-classification issue. The reliability
+re-review confirmed the corrected trust-list handling and exact permission
+matching after the duplicate-permission regression was added. The complete
+`CI=true pnpm verify:release` profile passed 302/302 test files and 4,939/4,939
+tests, including package archives and a clean external-consumer installation.

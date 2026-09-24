@@ -253,7 +253,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/entity-commit.ts",
+    "file": "packages/storage-mysql/src/mysql/entity-commit.ts",
     "kind": "function-declaration",
     "identity": "isDeadlock()#1",
     "name": "isDeadlock",
@@ -262,7 +262,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/entity-commit.ts",
+    "file": "packages/storage-mysql/src/mysql/entity-commit.ts",
     "kind": "function-declaration",
     "identity": "mysqlEntityLockKey()#1",
     "name": "mysqlEntityLockKey",
@@ -271,7 +271,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
+    "file": "packages/storage-mysql/src/mysql/entity-history.ts",
     "kind": "function-declaration",
     "identity": "disabledEvents()#1",
     "name": "disabledEvents",
@@ -280,7 +280,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
+    "file": "packages/storage-mysql/src/mysql/entity-history.ts",
     "kind": "function-declaration",
     "identity": "disabledStates()#1",
     "name": "disabledStates",
@@ -289,7 +289,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
+    "file": "packages/storage-mysql/src/mysql/entity-history.ts",
     "kind": "function-declaration",
     "identity": "sameEntityId()#1",
     "name": "sameEntityId",
@@ -298,7 +298,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/errors.ts",
+    "file": "packages/storage-mysql/src/mysql/errors.ts",
     "kind": "function-declaration",
     "identity": "mysqlError()#1",
     "name": "mysqlError",
@@ -307,7 +307,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "file": "packages/storage-mysql/src/mysql/record-storage.ts",
     "kind": "function-declaration",
     "identity": "compatibleMysqlType()#1",
     "name": "compatibleMysqlType",
@@ -316,7 +316,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "file": "packages/storage-mysql/src/mysql/record-storage.ts",
     "kind": "function-declaration",
     "identity": "groupedIndexes()#1",
     "name": "groupedIndexes",
@@ -325,7 +325,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "file": "packages/storage-mysql/src/mysql/record-storage.ts",
     "kind": "function-declaration",
     "identity": "isBinaryType()#1",
     "name": "isBinaryType",
@@ -334,7 +334,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "file": "packages/storage-mysql/src/mysql/record-storage.ts",
     "kind": "function-declaration",
     "identity": "mysqlColumnDefinition()#1",
     "name": "mysqlColumnDefinition",
@@ -343,7 +343,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "file": "packages/storage-mysql/src/mysql/record-storage.ts",
     "kind": "function-declaration",
     "identity": "mysqlDeadlock()#1",
     "name": "mysqlDeadlock",
@@ -352,7 +352,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "file": "packages/storage-mysql/src/mysql/record-storage.ts",
     "kind": "function-declaration",
     "identity": "normalizedDefault()#1",
     "name": "normalizedDefault",
@@ -361,7 +361,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "file": "packages/storage-mysql/src/mysql/record-storage.ts",
     "kind": "function-declaration",
     "identity": "same()#1",
     "name": "same",
@@ -370,7 +370,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "file": "packages/storage-mysql/src/mysql/record-storage.ts",
     "kind": "function-declaration",
     "identity": "sameDefault()#1",
     "name": "sameDefault",
@@ -379,7 +379,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/storage-factory.ts",
+    "file": "packages/storage-mysql/src/mysql/storage-factory.ts",
     "kind": "function-declaration",
     "identity": "sameEntity()#1",
     "name": "sameEntity",
@@ -388,7 +388,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/table-spec.ts",
+    "file": "packages/storage-mysql/src/mysql/table-spec.ts",
     "kind": "function-declaration",
     "identity": "entityAttributeDefault()#1",
     "name": "entityAttributeDefault",
@@ -397,7 +397,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/table-spec.ts",
+    "file": "packages/storage-mysql/src/mysql/table-spec.ts",
     "kind": "function-declaration",
     "identity": "mysqlColumnSpec()#1",
     "name": "mysqlColumnSpec",
@@ -406,7 +406,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/table-spec.ts",
+    "file": "packages/storage-mysql/src/mysql/table-spec.ts",
     "kind": "function-declaration",
     "identity": "mysqlColumnType()#1",
     "name": "mysqlColumnType",
@@ -415,7 +415,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/table-spec.ts",
+    "file": "packages/storage-mysql/src/mysql/table-spec.ts",
     "kind": "function-declaration",
     "identity": "resolvedMysqlTableSpec()#1",
     "name": "resolvedMysqlTableSpec",
@@ -424,7 +424,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/testing.ts",
+    "file": "packages/storage-mysql/src/mysql/testing.ts",
     "kind": "function-declaration",
     "identity": "mysqlCurrentRecord()#1",
     "name": "mysqlCurrentRecord",
@@ -433,7 +433,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/testing.ts",
+    "file": "packages/storage-mysql/src/mysql/testing.ts",
     "kind": "function-declaration",
     "identity": "mysqlEntityTables()#1",
     "name": "mysqlEntityTables",
@@ -442,7 +442,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/testing.ts",
+    "file": "packages/storage-mysql/src/mysql/testing.ts",
     "kind": "function-declaration",
     "identity": "mysqlHistoryCounts()#1",
     "name": "mysqlHistoryCounts",
@@ -451,7 +451,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/testing.ts",
+    "file": "packages/storage-mysql/src/mysql/testing.ts",
     "kind": "function-declaration",
     "identity": "mysqlRecordTableName()#1",
     "name": "mysqlRecordTableName",
@@ -460,7 +460,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/testing.ts",
+    "file": "packages/storage-mysql/src/mysql/testing.ts",
     "kind": "function-declaration",
     "identity": "recordBytes()#1",
     "name": "recordBytes",
@@ -469,7 +469,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/testing.ts",
+    "file": "packages/storage-mysql/src/mysql/testing.ts",
     "kind": "function-declaration",
     "identity": "sameAny()#1",
     "name": "sameAny",
@@ -487,7 +487,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/storage-factory.ts",
+    "file": "packages/storage-mysql/src/mysql/storage-factory.ts",
     "kind": "function-declaration",
     "identity": "assertNoRetiredLayout()#1",
     "name": "assertNoRetiredLayout",

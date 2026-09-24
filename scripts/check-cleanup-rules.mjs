@@ -30,6 +30,7 @@ const structurePartitions = [
   "T-0080L",
   "T-0080M",
   "T-0080N",
+  "storage-postgres",
 ];
 const forbiddenEndUserServerApis = new Set([
   "defineEntityHandlers",
@@ -399,7 +400,12 @@ function changedLines(repoRoot, runGitCommand) {
       ? [`${mergeBase.stdout.trim()}...HEAD`, undefined, "--cached"]
       : ["HEAD"];
   for (const range of ranges) {
-    const args = ["diff", "--unified=0", "--no-renames"];
+    const statusArgs = ["diff", "--name-status", "--find-renames", "--diff-filter=ACMRD"];
+    if (range !== undefined) statusArgs.push(range);
+    const statuses = runGitCommand(repoRoot, statusArgs);
+    if (statuses.status !== 0) throw new Error("Unable to classify changed source with git diff.");
+    const destinations = changedDestinationPaths(statuses.stdout);
+    const args = ["diff", "--unified=0", "--find-renames"];
     if (range !== undefined) args.push(range);
     const result = runGitCommand(repoRoot, args);
     if (result.status !== 0) throw new Error("Unable to classify changed source with git diff.");
@@ -407,7 +413,7 @@ function changedLines(repoRoot, runGitCommand) {
     for (const line of result.stdout.split("\n")) {
       if (line.startsWith("+++ b/")) file = line.slice(6);
       const match = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/u.exec(line);
-      if (file !== undefined && match !== null) {
+      if (file !== undefined && destinations.has(file) && match !== null) {
         const start = Number(match[1]);
         const count = Number(match[2] ?? "1");
         if (count > 0) {
@@ -433,6 +439,17 @@ function changedLines(repoRoot, runGitCommand) {
       );
   }
   return changed;
+}
+
+function changedDestinationPaths(statuses) {
+  const paths = new Set();
+  for (const line of statuses.split("\n")) {
+    const [status, source, destination] = line.split("\t");
+    if (status === "R100") continue;
+    if (/^R\d+$/u.test(status) && destination !== undefined) paths.add(destination);
+    else if (/^[ACM]$/u.test(status) && source !== undefined) paths.add(source);
+  }
+  return paths;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -2363,10 +2380,11 @@ function structureFailureDetail(failure) {
 
 function structurePartition(file) {
   if (/^packages\/(?:proto|core|storage|transport)\//.test(file)) return "T-0080D";
-  if (/^packages\/(?:storage-datastore|storage-rdbms|delivery-server)\//.test(file))
+  if (/^packages\/(?:storage-datastore|storage-mysql|delivery-server)\//.test(file))
     return "T-0080E";
   if (/^packages\/server\//.test(file)) return "T-0080F";
   if (/^packages\/(?:auth|client-web|client-react)\//.test(file)) return "T-0080G";
+  if (/^packages\/storage-postgres\//.test(file)) return "storage-postgres";
   if (/^packages\//.test(file)) return "T-0080H";
   if (/^examples\/message-board\/(?:app|web)\//.test(file)) return "T-0080K";
   if (/^examples\/message-board\/model\//.test(file)) return "T-0080J";
