@@ -2,7 +2,8 @@
 
 Task: entity-and-handler-declarations.
 Branch and checkout: `entity-and-signal-handler-declarations`, existing checkout.
-Start: 25 September 2026. Status: implementation in progress.
+Start: 25 September 2026. Status: implementation and all three review/fix rounds
+complete; final release verification in progress.
 
 Requirements and acceptance are in
 [the plan](../planning/entity-and-handler-declarations.md), including its complete
@@ -175,3 +176,15 @@ No PR creation is authorized yet; the request remains unanswered.
   server TypeScript checks, targeted ESLint, `pnpm lint:cleanup`, and
   `pnpm lint:tsdoc` passed. The orchestrator will run the full release profile
   once after the review convergence checkpoint.
+
+## Final verification
+
+All three correction checkpoints are pushed: `f4746b8b7`, `c01966b29`, and
+`97ea44d0c`. The final cheap checks include 437 focused tests, strict TypeScript,
+lint, cleanup, TSDoc, formatting, compiled documentation and audience checks.
+The selected final profile is `pnpm verify:release`, followed by
+`node scripts/release-cli.mjs prepare --check`, matching the Build workflow.
+No publication is requested or performed.
+
+The branch has no open PR. Build runs only on PRs to master; permission to
+create one remains unanswered. Local checks cannot be reported as GitHub CI.

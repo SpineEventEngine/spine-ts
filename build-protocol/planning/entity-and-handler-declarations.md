@@ -1,6 +1,7 @@
 # Entity and signal-handler declarations
 
-Status: Implementation authorized on 25 September 2026; work in progress.
+Status: implementation and three independent review/fix rounds complete.
+Final release verification is in progress; GitHub CI requires a pull request.
 
 Branch: `entity-and-signal-handler-declarations`
 

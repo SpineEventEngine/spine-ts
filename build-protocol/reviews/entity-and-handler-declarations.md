@@ -1,6 +1,6 @@
 # Entity and handler declarations: reviews
 
-Status: all three fresh review rounds complete; final corrections in progress.
+Status: all three fresh review/fix rounds complete; all findings addressed.
 
 Each of three rounds must use fresh reviewers with no inherited history and no
 saved memory. Review the full branch changeset against the human requirements
@@ -9,10 +9,10 @@ and their focused checks before starting the next round.
 
 ## Required concerns
 
-- Code style and maintainability: two round 3 test corrections in progress.
+- Code style and maintainability: all findings corrected and checked.
 - Documentation completeness: rounds 2 and 3 clear.
-- TypeScript and public API: round 3 Promise-alias correction in progress.
-- Performance and reliability: round 3 transaction correction in progress.
+- TypeScript and public API: all findings corrected and checked.
+- Performance and reliability: all findings corrected and checked.
 
 All four concerns apply: runtime behavior and persistence, public declarations
 and generated metadata, substantial source structure, and public documentation
@@ -232,6 +232,12 @@ The history assertion now checks every record and fails if any Version is
 missing. The fixture and helper names describe Spine Version messages. All 277
 routing tests and their lint/format checks passed. Final combined checks and
 the correction checkpoint precede the one repository-wide release verification.
+
+The final correction checkpoint `97ea44d0c` is pushed. The combined 437 tests,
+tooling/server typechecks, ESLint, cleanup, TSDoc, formatting and diff checks
+passed. All seventeen reviewer findings across the three rounds were addressed;
+the related generic Promise-alias case found by main was corrected with the
+same checker-based change. No review used memory or earlier review results.
 
 The combined focused run passed 437 tests in six files with one Vitest worker.
 Root tooling and server TypeScript checks, targeted ESLint, cleanup, and TSDoc
