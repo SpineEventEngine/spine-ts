@@ -758,7 +758,7 @@ const HandlerSources = Object.freeze({
     const signal = HandlerSources.schemaUseFromType(signalType, scope.imports);
     const returned = HandlerSources.emittedSchemaUses(
       node.type === undefined ? undefined : HandlerSources.unwrapOuterPromise(node.type, scope),
-      handler.name,
+      HandlerSources.handlerKind(handler.name, signal?.kind),
       scope,
     );
     return signal === undefined || returned === undefined
@@ -1586,9 +1586,8 @@ const HandlerSources = Object.freeze({
     className: string,
     method: string | undefined,
   ): boolean {
-    if (decorator === "Subscribe") {
+    if (decorator === "Subscribe")
       return HandlerSources.validateSubscribeReturn(node, scope, className, method);
-    }
     if (node.type === undefined) {
       HandlerTypes.pushDiagnostic(
         scope,
@@ -1602,18 +1601,8 @@ const HandlerSources = Object.freeze({
     }
 
     const returnType = HandlerSources.unwrapOuterPromise(node.type, scope);
-    const envelope = HandlerSources.frameworkEnvelope(returnType, scope.imports);
-    if (envelope !== undefined) {
-      HandlerTypes.pushDiagnostic(
-        scope,
-        "FRAMEWORK_ENVELOPE_RETURN",
-        node.type,
-        `Handler return type must not be framework ${envelope}.`,
-        className,
-        method,
-      );
+    if (HandlerSources.rejectFrameworkEnvelope(node, returnType, scope, className, method))
       return true;
-    }
 
     return HandlerSources.validateEmittedReturn(
       node,
@@ -1622,7 +1611,60 @@ const HandlerSources = Object.freeze({
       className,
       method,
       returnType,
+      HandlerSources.resolvedHandlerKind(node, decorator, scope),
     );
+  },
+
+  /**
+   * Checks for a framework envelope used as an application handler return.
+   *
+   * @param node Decorated handler method.
+   * @param returnType Unwrapped declared return type.
+   * @param scope Current source and import context.
+   * @param className Receiver class name for diagnostics.
+   * @param method Handler method name for diagnostics.
+   * @returns Whether an invalid framework envelope was reported.
+   */
+  rejectFrameworkEnvelope(
+    node: ts.MethodDeclaration,
+    returnType: ts.TypeNode,
+    scope: AnalyzerScope,
+    className: string,
+    method: string | undefined,
+  ): boolean {
+    const envelope = HandlerSources.frameworkEnvelope(returnType, scope.imports);
+    if (envelope === undefined) return false;
+    HandlerTypes.pushDiagnostic(
+      scope,
+      "FRAMEWORK_ENVELOPE_RETURN",
+      node.type ?? node,
+      `Handler return type must not be framework ${envelope}.`,
+      className,
+      method,
+    );
+    return true;
+  },
+
+  /**
+   * Resolves a handler role from its input signal.
+   *
+   * @param node Decorated handler method.
+   * @param decorator Handler decorator under inspection.
+   * @param scope Current source and import context.
+   * @returns The concrete generated handler role.
+   */
+  resolvedHandlerKind(
+    node: ts.MethodDeclaration,
+    decorator: HandlerDecorator,
+    scope: AnalyzerScope,
+  ): GeneratedHandlerKind {
+    const first = node.parameters[0]?.type;
+    const input =
+      first === undefined
+        ? undefined
+        : (HandlerSources.externalMarker(first, scope)?.type ?? first);
+    const signal = HandlerSources.schemaUseFromType(input, scope.imports);
+    return HandlerSources.handlerKind(decorator, signal?.kind);
   },
 
   /**
@@ -1642,7 +1684,11 @@ const HandlerSources = Object.freeze({
   ): boolean {
     if (
       node.type !== undefined &&
-      HandlerSources.isExplicitVoidType(HandlerSources.unwrapOuterPromise(node.type, scope))
+      (scope.program
+        .getTypeChecker()
+        .getTypeFromTypeNode(HandlerSources.unwrapOuterPromise(node.type, scope)).flags &
+        ts.TypeFlags.Void) !==
+        0
     ) {
       return false;
     }
@@ -1663,6 +1709,7 @@ const HandlerSources = Object.freeze({
    *
    * @param className The receiver class name used in records and diagnostics.
    * @param decorator The decorator under inspection.
+   * @param kind The resolved handler role.
    * @param method The handler method name.
    * @param node The syntax node being inspected.
    * @param returnType The declared handler return type.
@@ -1676,9 +1723,10 @@ const HandlerSources = Object.freeze({
     className: string,
     method: string | undefined,
     returnType = node.type,
+    kind: GeneratedHandlerKind = HandlerSources.handlerKind(decorator, undefined),
   ): boolean {
-    const schemas = HandlerSources.emittedSchemaUses(returnType, decorator, scope);
-    const issue = HandlerSources.emittedIssue(schemas, decorator, returnType, scope);
+    const schemas = HandlerSources.emittedSchemaUses(returnType, kind, scope);
+    const issue = HandlerSources.emittedIssue(schemas, decorator, kind, returnType, scope);
     return issue === undefined
       ? false
       : HandlerSources.returnDiagnostic(
@@ -1695,6 +1743,7 @@ const HandlerSources = Object.freeze({
    * Finds the first invalid emitted return shape.
    *
    * @param decorator The decorator under inspection.
+   * @param kind The resolved handler role.
    * @param returnType The declared handler return type.
    * @param schemas The generated schemas under inspection.
    * @param scope The current source, imports, program, and diagnostic collection.
@@ -1703,6 +1752,7 @@ const HandlerSources = Object.freeze({
   emittedIssue(
     schemas: readonly SchemaUse[] | undefined,
     decorator: HandlerDecorator,
+    kind: GeneratedHandlerKind,
     returnType: ts.TypeNode | undefined,
     scope: AnalyzerScope,
   ): { readonly code: BuildHandlerDiagnostic["code"]; readonly message: string } | undefined {
@@ -1717,21 +1767,62 @@ const HandlerSources = Object.freeze({
         code: "INVALID_EMITTED_SCHEMA",
         message: `@${decorator} return type must emit generated ${expected} schemas.`,
       };
-    if (
-      (decorator === "Assign" || decorator === "Command") &&
-      (schemas.length === 0 || HandlerSources.optionalOnlyTuple(returnType, scope))
-    )
+    if (HandlerSources.missingRequiredOutput(kind, schemas, returnType, scope))
       return {
         code: "MISSING_EMITTED_SCHEMAS",
         message: `@${decorator} handlers must emit at least one schema.`,
       };
-    const emptyReaction = decorator === "React" && schemas.length === 0;
-    if (emptyReaction && !HandlerSources.isExplicitVoidType(returnType))
+    if (HandlerSources.missingReactionOutput(kind, schemas, returnType, scope))
       return {
-        code: "MISSING_EMITTED_SCHEMAS",
-        message: "@React handlers must emit at least one schema unless they return explicit void.",
+        code: HandlerSources.isExplicitVoidType(returnType)
+          ? "UNSUPPORTED_RETURN_TYPE"
+          : "MISSING_EMITTED_SCHEMAS",
+        message: `@${decorator} no-output reactions must declare undefined.`,
       };
     return undefined;
+  },
+
+  /**
+   * Checks whether a required-output handler lacks a guaranteed Event.
+   *
+   * @param kind Resolved handler role.
+   * @param schemas Resolved output schemas.
+   * @param returnType Declared return type.
+   * @param scope Current TypeScript analysis context.
+   * @returns Whether the handler lacks a guaranteed output.
+   */
+  missingRequiredOutput(
+    kind: GeneratedHandlerKind,
+    schemas: readonly SchemaUse[],
+    returnType: ts.TypeNode | undefined,
+    scope: AnalyzerScope,
+  ): boolean {
+    return (
+      (kind === "command-assignment" || kind === "command-substitution") &&
+      (schemas.length === 0 || HandlerSources.optionalOnlyTuple(returnType, scope))
+    );
+  },
+
+  /**
+   * Checks whether a reaction omits its explicit undefined result.
+   *
+   * @param kind Resolved handler role.
+   * @param schemas Resolved output schemas.
+   * @param returnType Declared return type.
+   * @param scope Current TypeScript analysis context.
+   * @returns Whether the reaction return is invalid.
+   */
+  missingReactionOutput(
+    kind: GeneratedHandlerKind,
+    schemas: readonly SchemaUse[],
+    returnType: ts.TypeNode | undefined,
+    scope: AnalyzerScope,
+  ): boolean {
+    if (kind !== "event-reaction" && kind !== "command-reaction") return false;
+    if (schemas.length !== 0) return false;
+    if (returnType === undefined) return true;
+    const type = scope.program.getTypeChecker().getTypeFromTypeNode(returnType);
+    return (type.flags & ts.TypeFlags.Undefined) === 0;
   },
 
   /**
@@ -1743,11 +1834,30 @@ const HandlerSources = Object.freeze({
    */
   optionalOnlyTuple(typeNode: ts.TypeNode | undefined, scope: AnalyzerScope): boolean {
     if (typeNode === undefined) return false;
-    const type = scope.program.getTypeChecker().getTypeFromTypeNode(typeNode);
-    return (
-      scope.program.getTypeChecker().isTupleType(type) &&
-      (type as ts.TupleTypeReference).target.minLength === 0
-    );
+    const checker = scope.program.getTypeChecker();
+    const type = checker.getTypeFromTypeNode(typeNode);
+    return (type.isUnion() ? type.types : [type]).some((branch) => {
+      if (!checker.isTupleType(branch)) return false;
+      const tuple = branch as ts.TupleTypeReference;
+      const members = checker.getTypeArguments(tuple);
+      return !members.some(
+        (member, index) =>
+          ((tuple.target.elementFlags[index] ?? 0) & ts.ElementFlags.Required) !== 0 &&
+          !HandlerSources.includesUndefined(member),
+      );
+    });
+  },
+
+  /**
+   * Checks for an undefined alternative in a resolved tuple member.
+   *
+   * @param type Resolved TypeScript member type.
+   * @returns Whether the member can be undefined.
+   */
+  includesUndefined(type: ts.Type): boolean {
+    return type.isUnion()
+      ? type.types.some(HandlerSources.includesUndefined)
+      : (type.flags & ts.TypeFlags.Undefined) !== 0;
   },
 
   /**
@@ -2050,9 +2160,7 @@ const HandlerSources = Object.freeze({
     imports: ImportState,
     walk: TypeWalk,
   ): SchemaReference | undefined {
-    if (!HandlerSources.consumeTypeWalk(walk)) {
-      return undefined;
-    }
+    if (!HandlerSources.consumeTypeWalk(walk)) return undefined;
     if (ts.isParenthesizedTypeNode(typeNode)) {
       return HandlerSources.schemaFromTypeQuery(typeNode.type, imports, walk);
     }
@@ -2074,38 +2182,45 @@ const HandlerSources = Object.freeze({
   /**
    * Collects generated schemas allowed by a handler's return type.
    *
-   * @param decorator The decorator under inspection.
+   * @param kind The resolved handler role.
    * @param scope The current source, imports, program, and diagnostic collection.
    * @param typeNode The declared type node under inspection.
    * @returns The emitted schema uses, or undefined when the return type is invalid.
    */
   emittedSchemaUses(
     typeNode: ts.TypeNode | undefined,
-    decorator: HandlerDecorator,
+    kind: GeneratedHandlerKind,
     scope: AnalyzerScope,
   ): readonly SchemaUse[] | undefined {
-    if (decorator === "Subscribe") {
-      return typeNode?.kind === ts.SyntaxKind.VoidKeyword ? [] : undefined;
-    }
+    if (kind === "event-subscription" || kind === "state-subscription") return [];
     if (typeNode?.kind === ts.SyntaxKind.VoidKeyword) {
       return [];
     }
     if (typeNode === undefined) {
       return undefined;
     }
-
+    const optional = kind === "event-reaction" || kind === "command-reaction";
     const direct = HandlerSources.schemaListFromType(
       typeNode,
       scope.imports,
       HandlerSources.newTypeWalk(),
-      decorator === "React",
+      optional,
     );
     if (direct !== undefined) return direct;
     const unwrapped = HandlerSources.unwrapReadonly(typeNode);
-    return ts.isTupleTypeNode(unwrapped) || ts.isArrayTypeNode(unwrapped)
-      ? undefined
-      : (HandlerSources.checkedPromiseSchemas(typeNode, scope, decorator === "React") ??
-          HandlerSources.checkedSchemas(typeNode, scope, decorator === "React"));
+    if (
+      ts.isTupleTypeNode(unwrapped) &&
+      unwrapped.elements.some(
+        (member) =>
+          ts.isRestTypeNode(member) ||
+          (ts.isNamedTupleMember(member) && member.dotDotDotToken !== undefined),
+      )
+    )
+      return undefined;
+    return (
+      HandlerSources.checkedPromiseSchemas(typeNode, scope, optional) ??
+      HandlerSources.checkedSchemas(typeNode, scope, optional)
+    );
   },
 
   /**
@@ -2203,14 +2318,36 @@ const HandlerSources = Object.freeze({
       return HandlerSources.fromCheckedTuple(type, checker, scope, walk, collectionDepth);
     }
     if (checker.isArrayType(type)) {
-      if (collectionDepth > 0) return undefined;
-      const member = checker.getTypeArguments(type as ts.TypeReference)[0];
-      return member === undefined
-        ? undefined
-        : HandlerSources.fromCheckedType(member, checker, scope, walk, false, collectionDepth + 1);
+      return HandlerSources.fromCheckedArray(type, checker, scope, walk, optional, collectionDepth);
     }
     const schema = HandlerSources.checkedMessage(type, scope);
     return schema === undefined ? undefined : [schema];
+  },
+
+  /**
+   * Resolves one checked array without permitting nested collections.
+   *
+   * @param type Checked array type.
+   * @param checker TypeScript type checker.
+   * @param scope Current source and imports.
+   * @param walk Bounded alias traversal state.
+   * @param optional Whether undefined may occur within the array.
+   * @param collectionDepth Number of enclosing collections.
+   * @returns Array member schemas, or undefined for an invalid shape.
+   */
+  fromCheckedArray(
+    type: ts.Type,
+    checker: ts.TypeChecker,
+    scope: AnalyzerScope,
+    walk: TypeWalk,
+    optional: boolean,
+    collectionDepth: number,
+  ): readonly SchemaUse[] | undefined {
+    if (collectionDepth > 0) return undefined;
+    const member = checker.getTypeArguments(type as ts.TypeReference)[0];
+    return member === undefined
+      ? undefined
+      : HandlerSources.fromCheckedType(member, checker, scope, walk, optional, collectionDepth + 1);
   },
 
   /**
@@ -2303,6 +2440,7 @@ const HandlerSources = Object.freeze({
    * @param typeNode The declared type node under inspection.
    * @param walk The bounded alias traversal state.
    * @param optional Whether a whole reaction result may be absent.
+   * @param collectionDepth Number of enclosing array or tuple collections.
    * @returns The emitted schemas, or undefined when the declared type is unsupported.
    */
   schemaListFromType(
@@ -2310,34 +2448,64 @@ const HandlerSources = Object.freeze({
     imports: ImportState,
     walk: TypeWalk,
     optional = false,
+    collectionDepth = 0,
   ): readonly SchemaUse[] | undefined {
-    if (!HandlerSources.consumeTypeWalk(walk)) {
-      return undefined;
-    }
+    if (!HandlerSources.consumeTypeWalk(walk)) return undefined;
     const unwrapped = HandlerSources.unwrapReadonly(typeNode);
     if (optional && unwrapped.kind === ts.SyntaxKind.UndefinedKeyword) return [];
     if (ts.isUnionTypeNode(unwrapped)) {
       const branches = unwrapped.types.map((branch) =>
-        HandlerSources.schemaListFromType(branch, imports, walk, optional),
+        HandlerSources.schemaListFromType(branch, imports, walk, optional, collectionDepth),
       );
       return branches.some((branch) => branch === undefined)
         ? undefined
         : branches.flatMap((branch) => branch ?? []);
     }
-    if (ts.isArrayTypeNode(unwrapped)) {
-      const item = HandlerSources.schemaUseFromType(unwrapped.elementType, imports, walk);
-      return item === undefined ? undefined : [item];
-    }
-    if (ts.isTupleTypeNode(unwrapped)) {
-      return HandlerSources.schemaListFromTuple(unwrapped, imports, walk);
-    }
-    if (ts.isTypeReferenceNode(unwrapped) && HandlerSources.isArrayReferenceType(unwrapped)) {
-      const item = HandlerSources.schemaUseFromType(unwrapped.typeArguments?.[0], imports, walk);
-      return item === undefined ? undefined : [item];
-    }
+    if (
+      ts.isArrayTypeNode(unwrapped) ||
+      ts.isTupleTypeNode(unwrapped) ||
+      (ts.isTypeReferenceNode(unwrapped) && HandlerSources.isArrayReferenceType(unwrapped))
+    )
+      return HandlerSources.schemaListFromCollection(
+        unwrapped,
+        imports,
+        walk,
+        optional,
+        collectionDepth,
+      );
 
     const schema = HandlerSources.schemaUseFromType(unwrapped, imports, walk);
     return schema === undefined ? undefined : [schema];
+  },
+
+  /**
+   * Resolves a declared array or tuple collection return.
+   *
+   * @param typeNode Declared collection type.
+   * @param imports Indexed imports for the source.
+   * @param walk Bounded alias traversal state.
+   * @param optional Whether undefined is permitted in a reaction result.
+   * @param collectionDepth Number of enclosing collections.
+   * @returns Collection member schemas, or undefined for an invalid shape.
+   */
+  schemaListFromCollection(
+    typeNode: ts.TypeNode,
+    imports: ImportState,
+    walk: TypeWalk,
+    optional: boolean,
+    collectionDepth: number,
+  ): readonly SchemaUse[] | undefined {
+    if (collectionDepth > 0) return undefined;
+    if (ts.isTupleTypeNode(typeNode))
+      return HandlerSources.schemaListFromTuple(typeNode, imports, walk);
+    const member = ts.isArrayTypeNode(typeNode)
+      ? typeNode.elementType
+      : ts.isTypeReferenceNode(typeNode)
+        ? typeNode.typeArguments?.[0]
+        : undefined;
+    return member === undefined
+      ? undefined
+      : HandlerSources.schemaListFromType(member, imports, walk, optional, collectionDepth + 1);
   },
 
   /**
@@ -2356,7 +2524,7 @@ const HandlerSources = Object.freeze({
     const schemas: SchemaUse[] = [];
 
     for (const element of typeNode.elements) {
-      const member = HandlerSources.schemaFromTupleElement(element, imports, walk);
+      const member = HandlerSources.schemaFromTupleElement(element, imports, walk, true);
       if (member === undefined) {
         return undefined;
       }
@@ -2372,12 +2540,14 @@ const HandlerSources = Object.freeze({
    * @param imports The imports indexed for the current source.
    * @param typeNode The declared type node under inspection.
    * @param walk The bounded alias traversal state.
+   * @param optional Whether this tuple member may be absent.
    * @returns The member's schema use, or undefined when it cannot resolve.
    */
   schemaFromTupleElement(
     typeNode: ts.TypeNode | ts.NamedTupleMember,
     imports: ImportState,
     walk: TypeWalk,
+    optional: boolean,
   ): readonly SchemaUse[] | undefined {
     const member = ts.isNamedTupleMember(typeNode) ? typeNode.type : typeNode;
     if (ts.isNamedTupleMember(typeNode) && typeNode.dotDotDotToken !== undefined) return undefined;
@@ -2385,15 +2555,16 @@ const HandlerSources = Object.freeze({
     const candidate = HandlerSources.unwrapReadonly(
       ts.isOptionalTypeNode(member) ? member.type : member,
     );
-    if (ts.isUnionTypeNode(candidate)) {
-      const branches = candidate.types.map((branch) =>
-        HandlerSources.schemaUseFromType(branch, imports, walk),
-      );
-      return branches.some((branch) => branch === undefined)
-        ? undefined
-        : branches.flatMap((branch) => (branch === undefined ? [] : [branch]));
-    }
-    return HandlerSources.singleSchema(candidate, imports, walk);
+    const optionalMember = ts.isNamedTupleMember(typeNode)
+      ? typeNode.questionToken !== undefined
+      : ts.isOptionalTypeNode(member);
+    return HandlerSources.schemaListFromType(
+      candidate,
+      imports,
+      walk,
+      optional || optionalMember,
+      1,
+    );
   },
 
   /**
@@ -2599,7 +2770,7 @@ const HandlerSources = Object.freeze({
       return typeNode;
     }
     const alias = scope.imports.localTypeAliases.get(unwrapped.typeName.text);
-    if (alias !== undefined) {
+    if (alias !== undefined && unwrapped.typeArguments?.length === undefined) {
       return (
         HandlerSources.resolveAlias(unwrapped.typeName.text, alias, walk, (resolved) =>
           HandlerSources.unwrapOuterPromise(resolved, scope, walk),

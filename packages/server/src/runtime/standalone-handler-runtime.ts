@@ -221,6 +221,15 @@ export class StandaloneHandlerRuntime {
    * @returns Completion of output submission, without waiting for downstream handlers.
    */
   #publish(binding: Binding, output: unknown, source: Command | Event): Promise<void> {
+    if (
+      (binding.handler.kind === "event-subscription" ||
+        binding.handler.kind === "state-subscription") &&
+      output !== undefined
+    ) {
+      throw new Error(
+        `Standalone subscriber "${binding.handler.methodName}" must not return signals.`,
+      );
+    }
     const values = StandaloneHandlerRuntime.#outputValues(output);
     if (!this.#canPublish(binding, values)) return Promise.resolve();
     if (
@@ -357,10 +366,10 @@ export class StandaloneHandlerRuntime {
    * Normalizes optional handler output into a list of values.
    *
    * @param output A handler result that may be absent, singular, or an array.
-   * @returns An ordered list without undefined slots, or an empty list for nullish output.
+   * @returns An ordered list without undefined slots, or an empty list for undefined output.
    */
   static #outputValues(output: unknown): readonly unknown[] {
-    return output === undefined || output === null
+    return output === undefined
       ? []
       : Array.isArray(output)
         ? output.filter((value) => value !== undefined)

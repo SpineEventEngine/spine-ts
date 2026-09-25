@@ -55,3 +55,26 @@ were changed. The checkpoint Build check was in progress when inspected.
 Standalone runtime regression tests reproduced acceptance of invalid null and
 empty-array subscriber results. After raw-result validation, all 19 focused
 runtime tests passed. Repository transaction checks are being implemented next.
+
+Runtime checkpoint evidence: repository routing passed 279/279 after replacing
+old envelope-returning fixtures with domain Events and direct state mutation.
+Registry ingestion passed 20/20. Analyzer declaration-equivalence tests cover
+aliases, concrete generic aliases, direct arrays/tuples, optional tuple members,
+and required-output guarantees across union branches. Affected proto-tools and
+server no-emit typechecks passed.
+
+The proposed code checkpoint was held after `lint:tsdoc` failed. It reported
+missing documentation for new analyzer parameters and existing undocumented
+methods/interfaces/generics throughout the newly touched generated-registry
+file. The implementer is correcting those findings and running the cleanup
+gate before requesting another checkpoint. No failing code checkpoint was
+committed or pushed. Main formatted the eight code/test files during the
+implementer's agreed edit pause; the same implementer then resumed.
+
+Runtime checkpoint cleared: one single-worker Vitest run passed 387 tests across
+the analyzer, generated-registry, repository-routing, and standalone-runtime
+files. Proto-tools and server no-emit typechecks passed. `lint:cleanup` and
+`lint:tsdoc` passed after completing registry documentation, extracting small
+helpers, and updating decorator return-type TSDoc. These are bounded checks;
+retired-API deletion, script/example updates, full verification, and code review
+remain pending.

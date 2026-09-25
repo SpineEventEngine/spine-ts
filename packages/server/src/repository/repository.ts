@@ -2106,11 +2106,10 @@ class AggregateCommandExecution {
         handler.parameterCount,
         context,
       );
-      RepositoryHandlers.requireDeclaredOutputs(
-        handler,
-        this.#support.normalizeProducedSignals(produced),
-        true,
-      );
+      const signals = this.#support.normalizeProducedSignals(produced);
+      if (signals.length === 0)
+        throw new Error("Repository aggregate command handlers must return at least one event.");
+      RepositoryHandlers.requireDeclaredOutputs(handler, signals);
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(current, true),
       );
@@ -2902,19 +2901,7 @@ class ProjectionEventExecution {
     transactionalEntityAccess.start(entity);
     try {
       for (const subscriber of subscribers) {
-        const subscriberMessage = EntityInvocation.unpackRequired(
-          packedMessage,
-          subscriber.handler.schema,
-          "event",
-        );
-        const eventContext = EntityInvocation.eventHandlerContext(this.#event);
-        await EntityInvocation.invokeEntityMethod(
-          entity,
-          subscriber.handler.methodName,
-          subscriberMessage,
-          subscriber.handler.parameterCount,
-          eventContext,
-        );
+        await this.#invokeSubscriber(entity, subscriber, packedMessage);
       }
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(current),
@@ -2926,6 +2913,38 @@ class ProjectionEventExecution {
       transactionalEntityAccess.rollback(entity);
       throw error;
     }
+  }
+
+  /**
+   * Invokes one Event subscriber and checks its raw return value.
+   *
+   * @param entity Projection instance to update.
+   * @param subscriber Selected Event subscriber.
+   * @param packedMessage Packed source Event message.
+   * @returns Completion after the subscriber returns undefined.
+   */
+  async #invokeSubscriber(
+    entity: object,
+    subscriber: RepositoryEventSubscribers[number],
+    packedMessage: NonNullable<Event["message"]>,
+  ): Promise<void> {
+    const message = EntityInvocation.unpackRequired(
+      packedMessage,
+      subscriber.handler.schema,
+      "event",
+    );
+    const context = EntityInvocation.eventHandlerContext(this.#event);
+    const result = await EntityInvocation.invokeEntityMethod(
+      entity,
+      subscriber.handler.methodName,
+      message,
+      subscriber.handler.parameterCount,
+      context,
+    );
+    if (result !== undefined)
+      throw new Error(
+        `Projection subscriber "${subscriber.handler.methodName}" must not return signals.`,
+      );
   }
 
   /**
@@ -2945,13 +2964,17 @@ class ProjectionEventExecution {
     try {
       for (const subscriber of subscribers) {
         const context = EntityInvocation.eventHandlerContext(this.#event);
-        await EntityInvocation.invokeEntityMethod(
+        const result = await EntityInvocation.invokeEntityMethod(
           entity,
           subscriber.handler.methodName,
           state,
           subscriber.handler.parameterCount,
           context,
         );
+        if (result !== undefined)
+          throw new Error(
+            `Projection subscriber "${subscriber.handler.methodName}" must not return signals.`,
+          );
       }
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(current),
@@ -3553,6 +3576,8 @@ class ProcessManagerCommandExecution {
         EntityInvocation.commandHandlerContext(this.#command),
       );
       const signals = this.#support.normalizeProducedSignals(produced);
+      if (signals.length === 0)
+        throw new Error("Repository Process Manager command handlers must return a signal.");
       RepositoryHandlers.requireDeclaredOutputs(assignee.handler, signals);
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(

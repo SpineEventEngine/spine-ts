@@ -318,6 +318,12 @@ describe("generated handler registry ingestion", () => {
     expect(
       standalone(Commander, {
         ...reaction,
+        outcomes: { ...reaction.outcomes, returned: [] },
+      }),
+    ).not.toThrow();
+    expect(
+      standalone(Commander, {
+        ...reaction,
         input: { ...reaction.input, schema: StartReviewSchema },
       }),
     ).toThrow(HandlerRegistryIngestionError);
@@ -327,10 +333,6 @@ describe("generated handler registry ingestion", () => {
         input: { ...reaction.input, schema: ReviewRejectedSchema },
       }),
     ).not.toThrow();
-    expect(
-      standalone(Commander, { ...reaction, outcomes: { ...reaction.outcomes, returned: [] } }),
-    ).toThrow(HandlerRegistryIngestionError);
-
     const eventReaction = domainHandler("event-reaction");
     expect(standalone(Reactor, eventReaction)).not.toThrow();
     expect(

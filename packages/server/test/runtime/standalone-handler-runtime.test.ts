@@ -98,6 +98,22 @@ class ContextSubscriber extends AbstractEventSubscriber {
 }
 
 class EmptyReactor extends AbstractEventReactor {
+  react(): undefined {
+    return undefined;
+  }
+}
+
+class ResultSubscriber extends AbstractEventSubscriber {
+  constructor(readonly result: unknown) {
+    super();
+  }
+
+  subscribe(): unknown {
+    return this.result;
+  }
+}
+
+class NullReactor extends AbstractEventReactor {
   react(): null {
     return null;
   }
@@ -799,6 +815,65 @@ describe("StandaloneHandlerRuntime", () => {
         }),
       ),
     ).resolves.toBeUndefined();
+  });
+
+  it("rejects every concrete subscriber result before it can be normalized away", async () => {
+    for (const result of [null, [], [undefined]]) {
+      const subscriber = new ResultSubscriber(result);
+      const group: GeneratedStandaloneHandlerGroup = {
+        receiverKind: "standalone",
+        receiverType: ResultSubscriber,
+        handlers: [
+          {
+            kind: "event-subscription",
+            methodName: "subscribe",
+            input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      };
+      const dispatcher = new StandaloneHandlerRuntime([
+        { group, instance: subscriber, publisher: {} as never },
+      ]).eventDispatcher();
+      if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+      await expect(
+        dispatcher.dispatch(
+          create(EventSchema, {
+            id: { value: "subscriber-result" },
+            message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+          }),
+        ),
+      ).rejects.toThrow('Standalone subscriber "subscribe" must not return signals.');
+    }
+  });
+
+  it("rejects a null reactor result instead of treating it as absent", async () => {
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: NullReactor,
+      handlers: [
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      { group, instance: new NullReactor(), publisher: {} as never },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+    await expect(
+      dispatcher.dispatch(
+        create(EventSchema, {
+          id: { value: "null-reactor" },
+          message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+        }),
+      ),
+    ).rejects.toThrow(/undeclared signal/);
   });
 
   it("publishes an array of reactor Events with Event ancestry", async () => {

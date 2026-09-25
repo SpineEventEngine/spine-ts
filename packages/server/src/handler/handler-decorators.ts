@@ -21,6 +21,7 @@ import {
   type HandlerKind,
   type HandlerMethodName,
   type HandlerMetadata,
+  type HandlerRegistrationBuilder,
   type WhereOptions,
 } from "./handler-metadata.js";
 
@@ -192,10 +193,10 @@ export function Assign(
  * tuple. Arrays support `T[]`, `readonly T[]`, `Array<T>`, and `ReadonlyArray<T>`;
  * tuples support readonly, named, optional, and union-valued entries. Concrete
  * local/imported aliases and one outer built-in `Promise` are supported.
- * A Command-input handler must return at least one Command. An Event/rejection
- * reaction may return an empty typed Command array, but its declaration must
- * still name a Command schema: neither `void` nor `CommandType | undefined`
- * is a supported declaration. Optional-only tuples are also rejected.
+ * A Command-input handler must declare a guaranteed Command output. An
+ * Event/rejection reaction may declare `undefined` alone or in any supported
+ * union, and may return an empty typed Command array. `void` is not supported
+ * for reactions; optional-only tuples are rejected for Command inputs.
  *
  * Every result must be a declared domain Command, not a framework envelope.
  * Nested collections, rest tuples, nested promises, custom thenables, `any`,
@@ -235,7 +236,9 @@ export function Command(
  * Creates an Event/rejection or Entity-state subscriber declaration.
  *
  * Bare `@Subscribe` accepts generated Event/rejection or descriptor-marked
- * Entity-state inputs and declares `void` or one built-in `Promise<void>`.
+ * Entity-state inputs and declares `void` or one built-in `Promise<void>`;
+ * aliases and parenthesized forms of `void` are supported, but `undefined`
+ * alone is not a subscriber return type.
  * It does not return signals; unions, arrays, and tuples of messages belong in
  * producing handlers such as {@link React}, not subscribers. Nested promises
  * and custom thenables are unsupported. Event/rejection inputs produce
@@ -278,10 +281,11 @@ export function Subscribe(
  * `Array<T>`, and `ReadonlyArray<T>`; tuples support readonly, named, optional,
  * and union-valued entries. Concrete local/imported aliases are supported.
  *
- * Declare explicit `void` for no output, or a type such as
+ * Declare explicit `undefined` for no output, or a type such as
  * `TaskRenamed | undefined` when a reaction sometimes emits an Event. Empty
  * arrays and absent optional tuple entries produce no signals. Any supported
- * result may have exactly one outer built-in `Promise`, including `Promise<void>`.
+ * result may have exactly one outer built-in `Promise`, including `Promise<undefined>`.
+ * `void` is not a valid reactor return type.
  * Nested collections, rest tuples, nested promises, custom thenables, `any`,
  * and `unknown` are unsupported. TypeScript checks tuple structure; Spine checks
  * each actual Event against this handler's declarations and preserves order.
@@ -380,38 +384,49 @@ export function materializeDecoratedEntityHandlers<
 ): EntityHandlersMetadata<Instance, StateSchema> {
   const decoratedHandlers = DecoratorMetadata.collect(entityType);
 
-  return EntityHandlers.define(
-    entityType,
-    stateSchema,
-    (builder) =>
-      decoratedHandlers.map((handler) => {
-        const methodName = handler.methodName as HandlerMethodName<Instance>;
-
-        switch (handler.kind) {
-          case "command-assignment":
-            return builder.assign(DecoratorMetadata.schema(handler), methodName);
-          case "command-substitution":
-            throw new TypeError(
-              "Command substitutions require generated registry metadata with emitted schemas.",
-            );
-          case "command-reaction":
-            throw new TypeError(
-              "@Command handlers require generated registry metadata with emitted schemas.",
-            );
-          case "event-subscription":
-            return builder.subscribe(DecoratorMetadata.schema(handler), methodName);
-          case "event-reaction":
-            return builder.react(DecoratorMetadata.schema(handler), methodName);
-          case "event-application":
-            return builder.apply(DecoratorMetadata.schema(handler), methodName, {
-              allowImport: handler.allowImport ?? false,
-            });
-        }
-      }) satisfies readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
+  return EntityHandlers.define(entityType, stateSchema, (builder) =>
+    decoratedHandlers.map((handler) =>
+      DecoratorMetadata.materializeLegacyHandler(builder, handler),
+    ),
   );
 }
 
 const DecoratorMetadata = Object.freeze({
+  /**
+   * Builds legacy schema-bearing metadata for one decorated Entity method.
+   *
+   * @typeParam Instance Entity receiver type.
+   * @param builder Entity handler registration builder.
+   * @param handler Decorated method record.
+   * @returns Canonical handler metadata.
+   */
+  materializeLegacyHandler<Instance extends object>(
+    builder: HandlerRegistrationBuilder<Instance>,
+    handler: DecoratedHandlerRecord,
+  ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>> {
+    const methodName = handler.methodName as HandlerMethodName<Instance>;
+    switch (handler.kind) {
+      case "command-assignment":
+        return builder.assign(DecoratorMetadata.schema(handler), methodName);
+      case "command-substitution":
+        throw new TypeError(
+          "Command substitutions require generated registry metadata with emitted schemas.",
+        );
+      case "command-reaction":
+        throw new TypeError(
+          "@Command handlers require generated registry metadata with emitted schemas.",
+        );
+      case "event-subscription":
+        return builder.subscribe(DecoratorMetadata.schema(handler), methodName);
+      case "event-reaction":
+        return builder.react(DecoratorMetadata.schema(handler), methodName);
+      case "event-application":
+        return builder.apply(DecoratorMetadata.schema(handler), methodName, {
+          allowImport: handler.allowImport ?? false,
+        });
+    }
+  },
+
   /**
    * Validates a public instance method and reads its string name.
    *

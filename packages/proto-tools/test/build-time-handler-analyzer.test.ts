@@ -37,6 +37,127 @@ function entityReceivers(analysis: ReturnType<typeof BuildHandlerAnalyzer.analyz
 }
 
 describe("build-time handler analyzer", () => {
+  it("treats concrete aliases, tuple members, arrays, and void subscriber aliases consistently", () => {
+    const program = programWithSources(
+      "src/return-shapes.ts",
+      {
+        "src/return-shapes.ts": `
+        import { ProcessManager, Assign, React, Subscribe } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+        type Either<T> = T | TaskRenamed;
+        type Pair<T> = [TaskCreated, T | undefined];
+        type MaybeTuple = [TaskCreated?] | [TaskRenamed];
+        type VoidAlias = void;
+        export class ReturnShapes extends ProcessManager<string, typeof TaskSchema> {
+          @React direct(event: TaskCreated): (TaskCreated | TaskRenamed | undefined)[] {
+            throw Error(String(event));
+          }
+          @React alias(event: TaskCreated): Array<Either<TaskCreated> | undefined> { throw Error(String(event)); }
+          @React tuple(event: TaskCreated): [TaskCreated, Either<TaskCreated> | undefined] {
+            throw Error(String(event));
+          }
+          @Assign optional(command: CreateTask): [TaskCreated, TaskRenamed?] { throw Error(String(command)); }
+          @Assign union(command: CreateTask): [TaskCreated, TaskRenamed | undefined] { throw Error(String(command)); }
+          @Assign generic(command: CreateTask): Pair<TaskRenamed> { throw Error(String(command)); }
+          @Assign missing(command: CreateTask): [TaskCreated | undefined] { throw Error(String(command)); }
+          @Assign missingUnion(command: CreateTask): [TaskCreated?] | [TaskRenamed] { throw Error(String(command)); }
+          @Assign missingAlias(command: CreateTask): MaybeTuple { throw Error(String(command)); }
+          @Subscribe parenthesized(event: TaskCreated): (void) { void event; }
+          @Subscribe aliased(event: TaskCreated): Promise<VoidAlias> { void event; return Promise.resolve(); }
+          @Subscribe invalid(event: TaskCreated): undefined { void event; return undefined; }
+        }
+      `,
+        "generated/task_pb.ts": generatedTypedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+          "TaskRenamed",
+        ),
+      },
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
+      ["MISSING_EMITTED_SCHEMAS", "missing"],
+      ["MISSING_EMITTED_SCHEMAS", "missingUnion"],
+      ["MISSING_EMITTED_SCHEMAS", "missingAlias"],
+      ["INVALID_SUBSCRIBE_RETURN", "invalid"],
+    ]);
+    expect(entityReceivers(result)[0]?.handlers.map(({ methodName }) => methodName)).toEqual([
+      "direct",
+      "alias",
+      "tuple",
+      "optional",
+      "union",
+      "generic",
+      "parenthesized",
+      "aliased",
+    ]);
+  });
+
+  it("resolves optional reaction results by input kind across equivalent declarations", () => {
+    const program = programWithSources(
+      "src/optional-reactions.ts",
+      {
+        "src/optional-reactions.ts": `
+        import { ProcessManager, Command, React, Subscribe } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+        import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+        type Optional<T> = T | undefined;
+        export class Reactions extends ProcessManager<string, typeof TaskSchema> {
+          @Command fromEvent(event: TaskCreated): RenameTask | undefined | CreateTask { throw Error(String(event)); }
+          @Command fromAlias(event: TaskCreated): Promise<Optional<RenameTask>> { throw Error(String(event)); }
+          @Command silentCommand(event: TaskCreated): Promise<undefined> { throw Error(String(event)); }
+          @React fromArray(event: TaskCreated): (TaskRenamed | undefined)[] { throw Error(String(event)); }
+          @React silentEvent(event: TaskCreated): undefined { throw Error(String(event)); }
+          @Command transform(command: CreateTask): CreateTask | undefined { throw Error(String(command)); }
+          @React invalidVoid(event: TaskCreated): void { void event; }
+          @Subscribe invalidSubscriber(event: TaskCreated): undefined { return undefined; }
+        }
+      `,
+        "generated/task_pb.ts": generatedTypedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+          "RenameTask",
+        ),
+        "generated/events_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+          "TaskRenamed",
+        ),
+      },
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
+      ["UNSUPPORTED_RETURN_TYPE", "transform"],
+      ["UNSUPPORTED_RETURN_TYPE", "invalidVoid"],
+      ["INVALID_SUBSCRIBE_RETURN", "invalidSubscriber"],
+    ]);
+    expect(
+      entityReceivers(result)[0]?.handlers.map(({ methodName, outcomes }) => [
+        methodName,
+        outcomes.returned.map(({ exportName }) => exportName),
+      ]),
+    ).toEqual([
+      ["fromEvent", ["RenameTaskSchema", "CreateTaskSchema"]],
+      ["fromAlias", ["RenameTaskSchema"]],
+      ["silentCommand", []],
+      ["fromArray", ["TaskRenamedSchema"]],
+      ["silentEvent", []],
+    ]);
+  });
+
   it("generates the exact access-approval @Command union declaration", () => {
     const program = programWithSources(
       "src/access-approvals.ts",
@@ -773,8 +894,9 @@ describe("build-time handler analyzer", () => {
           throw new Error(String(event));
         }
         @React
-        observeRejection(rejection: TaskAlreadyDone): void {
+        observeRejection(rejection: TaskAlreadyDone): undefined {
           void rejection;
+          return undefined;
         }
       }
       export class TaskSubscriber extends AbstractEventSubscriber {
@@ -1690,7 +1812,7 @@ describe("build-time handler analyzer", () => {
     );
   });
 
-  it("accepts no-emission React handlers with explicit void returns", () => {
+  it("accepts no-emission React handlers with explicit undefined returns", () => {
     const result = analyzeBuildHandlers(programWithSource("src/reaction.ts", noEmissionSource));
 
     expect(result.diagnostics).toEqual([]);
@@ -1786,7 +1908,7 @@ describe("build-time handler analyzer", () => {
     expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_EMITTED_SCHEMAS",
-      "MISSING_EMITTED_SCHEMAS",
+      "UNSUPPORTED_RETURN_TYPE",
     ]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
       "silentAssign",
@@ -2808,8 +2930,9 @@ const noEmissionSource = `
 
   export class TaskProjection extends Projection<string, typeof TaskListSchema> {
     @React
-    observe(event: TaskCreated): void {
+    observe(event: TaskCreated): undefined {
       void event;
+      return undefined;
     }
   }
 `;
