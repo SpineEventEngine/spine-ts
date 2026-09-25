@@ -155,6 +155,101 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
+  it("resolves every branch of an optional union tuple member", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/optional-union-tuple.ts",
+        `
+      import { Aggregate, Assign } from "@spine-event-engine/server";
+      import { TaskSchema } from "../generated/task_pb.js";
+      import { type CreateTask } from "../generated/commands_pb.js";
+      import { type TaskCreated, type TaskRenamed } from "../generated/spine/examples/todo/task_events_pb.js";
+      import { type TaskCompleted } from "../generated/spine/examples/todo/task_events_pb.js";
+      export class OptionalUnionTuple extends Aggregate<string, typeof TaskSchema> {
+        @Assign
+        produce(command: CreateTask): readonly [TaskCreated, (TaskRenamed | TaskCompleted)?] {
+          throw new Error(String(command));
+        }
+      }
+    `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers[0]?.outcomes.returned).toEqual([
+      schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
+      schema("../generated/spine/examples/todo/task_events_pb.js", "TaskRenamedSchema"),
+      schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCompletedSchema"),
+    ]);
+  });
+
+  it("resolves an imported whole-return alias with one outer Promise", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/imported-promise.ts", {
+        "src/imported-promise.ts": `
+        import { Aggregate, Assign } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type Result } from "./result-alias.js";
+        export class ImportedPromise extends Aggregate<string, typeof TaskSchema> {
+          @Assign produce(command: CreateTask): Result { throw new Error(String(command)); }
+        }
+      `,
+        "src/result-alias.ts": `
+        import { type TaskCreated } from "../generated/events_pb.js";
+        export type Result = Promise<TaskCreated>;
+      `,
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+        ),
+      }),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers[0]?.outcomes.returned).toEqual([
+      schema("../generated/events_pb.js", "TaskCreatedSchema"),
+    ]);
+  });
+
+  it("rejects nested arrays hidden behind a return alias", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/nested-array-alias.ts", {
+        "src/nested-array-alias.ts": `
+        import { Aggregate, Assign } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type Results } from "./result-alias.js";
+        export class NestedArrayAlias extends Aggregate<string, typeof TaskSchema> {
+          @Assign produce(command: CreateTask): Results { throw new Error(String(command)); }
+        }
+      `,
+        "src/result-alias.ts": `
+        import { type TaskCreated } from "../generated/events_pb.js";
+        export type Results = TaskCreated[][];
+      `,
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+        ),
+      }),
+    );
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_RETURN_TYPE",
+    ]);
+  });
+
   it("rejects invalid branches of unions rather than omitting them", () => {
     const result = analyzeBuildHandlers(
       programWithSource(

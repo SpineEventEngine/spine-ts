@@ -2131,6 +2131,7 @@ const HandlerSources = Object.freeze({
    * @param scope The current source, imports, program, and diagnostic collection.
    * @param type The checked or declared type under inspection.
    * @param walk The bounded alias traversal state.
+   * @param collectionDepth Number of array or tuple containers already entered.
    * @returns The schema uses, or undefined when a checked type is unsupported.
    */
   fromCheckedType(
@@ -2139,31 +2140,62 @@ const HandlerSources = Object.freeze({
     scope: AnalyzerScope,
     walk: TypeWalk,
     optional = false,
+    collectionDepth = 0,
   ): readonly SchemaUse[] | undefined {
     if (!HandlerSources.consumeTypeWalk(walk)) return undefined;
     if (optional && (type.flags & ts.TypeFlags.Undefined) !== 0) return [];
     if (type.isUnion()) {
-      return HandlerSources.checkedBranches(type.types, checker, scope, walk, optional);
-    }
-    if (checker.isTupleType(type)) {
-      const tuple = type as ts.TupleTypeReference;
-      if (tuple.target.combinedFlags & ts.ElementFlags.Variable) return undefined;
       return HandlerSources.checkedBranches(
-        checker.getTypeArguments(tuple),
+        type.types,
         checker,
         scope,
         walk,
-        true,
+        optional,
+        collectionDepth,
       );
     }
+    if (checker.isTupleType(type)) {
+      return HandlerSources.fromCheckedTuple(type, checker, scope, walk, collectionDepth);
+    }
     if (checker.isArrayType(type)) {
+      if (collectionDepth > 0) return undefined;
       const member = checker.getTypeArguments(type as ts.TypeReference)[0];
       return member === undefined
         ? undefined
-        : HandlerSources.fromCheckedType(member, checker, scope, walk);
+        : HandlerSources.fromCheckedType(member, checker, scope, walk, false, collectionDepth + 1);
     }
     const schema = HandlerSources.checkedMessage(type, scope);
     return schema === undefined ? undefined : [schema];
+  },
+
+  /**
+   * Resolves one checked tuple without permitting nested collection shapes.
+   *
+   * @param type Checked tuple type.
+   * @param checker TypeScript checker for its member types.
+   * @param scope Current source and diagnostic context.
+   * @param walk Bounded alias traversal state.
+   * @param collectionDepth Number of prior tuple or array containers.
+   * @returns Member schemas, or undefined for nested or variadic tuples.
+   */
+  fromCheckedTuple(
+    type: ts.Type,
+    checker: ts.TypeChecker,
+    scope: AnalyzerScope,
+    walk: TypeWalk,
+    collectionDepth: number,
+  ): readonly SchemaUse[] | undefined {
+    if (collectionDepth > 0) return undefined;
+    const tuple = type as ts.TupleTypeReference;
+    if (tuple.target.combinedFlags & ts.ElementFlags.Variable) return undefined;
+    return HandlerSources.checkedBranches(
+      checker.getTypeArguments(tuple),
+      checker,
+      scope,
+      walk,
+      true,
+      collectionDepth + 1,
+    );
   },
 
   /**
@@ -2174,6 +2206,7 @@ const HandlerSources = Object.freeze({
    * @param scope The current source, imports, program, and diagnostic collection.
    * @param types The checked type alternatives to inspect.
    * @param walk The bounded alias traversal state.
+   * @param collectionDepth Number of array or tuple containers already entered.
    * @returns The schema uses across all branches, or undefined when one cannot resolve.
    */
   checkedBranches(
@@ -2182,9 +2215,10 @@ const HandlerSources = Object.freeze({
     scope: AnalyzerScope,
     walk: TypeWalk,
     optional: boolean,
+    collectionDepth: number,
   ): readonly SchemaUse[] | undefined {
     const branches = types.map((type) =>
-      HandlerSources.fromCheckedType(type, checker, scope, walk, optional),
+      HandlerSources.fromCheckedType(type, checker, scope, walk, optional, collectionDepth),
     );
     return branches.some((branch) => branch === undefined)
       ? undefined
@@ -2298,24 +2332,20 @@ const HandlerSources = Object.freeze({
     walk: TypeWalk,
   ): readonly SchemaUse[] | undefined {
     const member = ts.isNamedTupleMember(typeNode) ? typeNode.type : typeNode;
-    if (ts.isUnionTypeNode(member)) {
-      const branches = member.types.map((branch) =>
+    if (ts.isNamedTupleMember(typeNode) && typeNode.dotDotDotToken !== undefined) return undefined;
+    if (ts.isRestTypeNode(member)) return undefined;
+    const candidate = HandlerSources.unwrapReadonly(
+      ts.isOptionalTypeNode(member) ? member.type : member,
+    );
+    if (ts.isUnionTypeNode(candidate)) {
+      const branches = candidate.types.map((branch) =>
         HandlerSources.schemaUseFromType(branch, imports, walk),
       );
       return branches.some((branch) => branch === undefined)
         ? undefined
         : branches.flatMap((branch) => (branch === undefined ? [] : [branch]));
     }
-    if (ts.isNamedTupleMember(typeNode)) {
-      return typeNode.dotDotDotToken === undefined
-        ? HandlerSources.singleSchema(typeNode.type, imports, walk)
-        : undefined;
-    }
-    if (ts.isRestTypeNode(typeNode)) return undefined;
-    if (ts.isOptionalTypeNode(typeNode))
-      return HandlerSources.singleSchema(typeNode.type, imports, walk);
-
-    return HandlerSources.singleSchema(typeNode, imports, walk);
+    return HandlerSources.singleSchema(candidate, imports, walk);
   },
 
   /**
@@ -2515,9 +2545,7 @@ const HandlerSources = Object.freeze({
     scope: AnalyzerScope,
     walk: TypeWalk = HandlerSources.newTypeWalk(),
   ): ts.TypeNode {
-    if (!HandlerSources.consumeTypeWalk(walk)) {
-      return typeNode;
-    }
+    if (!HandlerSources.consumeTypeWalk(walk)) return typeNode;
     const unwrapped = HandlerSources.unwrapReadonly(typeNode);
     if (!ts.isTypeReferenceNode(unwrapped) || !ts.isIdentifier(unwrapped.typeName)) {
       return typeNode;
@@ -2530,15 +2558,45 @@ const HandlerSources = Object.freeze({
         ) ?? typeNode
       );
     }
-    if (
-      unwrapped.typeName.text !== "Promise" ||
-      unwrapped.typeArguments?.length !== 1 ||
-      !HandlerSources.isBuiltInPromise(unwrapped, scope.program)
-    ) {
-      return typeNode;
+    const imported = HandlerSources.importedPromiseAlias(unwrapped, scope);
+    if (imported !== undefined) {
+      return (
+        HandlerSources.resolveAlias(unwrapped.typeName.text, imported, walk, (resolved) =>
+          HandlerSources.unwrapOuterPromise(resolved, scope, walk),
+        ) ?? typeNode
+      );
     }
-
+    if (unwrapped.typeName.text !== "Promise" || unwrapped.typeArguments?.length !== 1)
+      return typeNode;
+    if (!HandlerSources.isBuiltInPromise(unwrapped, scope.program)) return typeNode;
     return unwrapped.typeArguments[0] ?? typeNode;
+  },
+
+  /**
+   * Finds a concrete imported alias to the built-in Promise type.
+   *
+   * @param reference Imported type reference in a handler declaration.
+   * @param scope Current compiler program and source context.
+   * @returns The Promise alias body, or undefined for other references.
+   */
+  importedPromiseAlias(
+    reference: ts.TypeReferenceNode,
+    scope: AnalyzerScope,
+  ): ts.TypeNode | undefined {
+    if (reference.typeArguments?.length) return undefined;
+    const checker = scope.program.getTypeChecker();
+    const symbol = checker.getSymbolAtLocation(reference.typeName);
+    if (symbol === undefined || (symbol.flags & ts.SymbolFlags.Alias) === 0) return undefined;
+    const alias = checker.getAliasedSymbol(symbol);
+    const declaration = alias.declarations?.find(ts.isTypeAliasDeclaration);
+    if (declaration === undefined || declaration.typeParameters?.length) return undefined;
+    const body = HandlerSources.unwrapReadonly(declaration.type);
+    return ts.isTypeReferenceNode(body) &&
+      ts.isIdentifier(body.typeName) &&
+      body.typeName.text === "Promise" &&
+      HandlerSources.isBuiltInPromise(body, scope.program)
+      ? declaration.type
+      : undefined;
   },
 
   /**
@@ -3269,9 +3327,7 @@ const HandlerSources = Object.freeze({
     program: ts.Program,
   ): ts.SourceFile | undefined {
     const imported = HandlerSources.importedModuleSource(source, moduleSpecifier, program);
-    if (imported !== undefined) {
-      return imported;
-    }
+    if (imported !== undefined) return imported;
     const resolved = ts.resolveModuleName(
       moduleSpecifier,
       source.fileName,
@@ -3293,9 +3349,7 @@ const HandlerSources = Object.freeze({
 
     for (const candidate of candidates) {
       const sourceFile = sourceFiles.get(candidate);
-      if (sourceFile !== undefined) {
-        return sourceFile;
-      }
+      if (sourceFile !== undefined) return sourceFile;
     }
 
     return undefined;

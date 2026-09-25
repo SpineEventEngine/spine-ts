@@ -1,7 +1,7 @@
 # Entity and handler declarations: reviews
 
-Status: implementation complete; pre-review checks and consumer corrections in
-progress. No review result yet.
+Status: round 1 complete; eight corrections implemented, final focused checks
+in progress before the next round.
 
 Each of three rounds must use fresh reviewers with no inherited history and no
 saved memory. Review the full branch changeset against the human requirements
@@ -10,10 +10,10 @@ and their focused checks before starting the next round.
 
 ## Required concerns
 
-- Code style and maintainability: pending.
-- Documentation completeness: pending.
-- TypeScript and public API: pending.
-- Performance and reliability: pending.
+- Code style and maintainability: round 1 complete, two test corrections.
+- Documentation completeness: round 1 complete, one example correction.
+- TypeScript and public API: round 1 complete, three analyzer corrections.
+- Performance and reliability: round 1 complete, two ordering corrections.
 
 All four concerns apply: runtime behavior and persistence, public declarations
 and generated metadata, substantial source structure, and public documentation
@@ -37,7 +37,8 @@ waits for capacity. Each round collects all results before corrections begin.
 
 ## Rounds
 
-1. Pending.
+1. Reviewed `2c71dfffe462dbdbad663d43dd78c77322113ae5` against the master
+   baseline `2b27a430da213438d600aff8d4a6cdfb7c0cec98`; corrections in progress.
 2. Pending; starts only after round 1 corrections.
 3. Pending; starts only after round 2 corrections.
 
@@ -51,8 +52,68 @@ documentation typechecks exposed missed three-parameter Entity declarations
 in black-box tests and an API example; these are being migrated before review.
 Generator source fixtures are included in that scan. The complete ESLint scan
 also identified eleven local callback/import/test typing corrections.
-These are deterministic findings, not an independent review round.
+These deterministic findings were corrected in `2c71dfffe`, before review.
+The wider tooling typecheck, compiled documentation snippets, targeted ESLint,
+formatting, 431 focused behavior tests and 200 Proto-tools tests passed.
 
 The API documentation, audience, cleanup, TSDoc, Proto lint, generated-output,
 copyright, logging and production-dependency checks passed. The earlier cleanup
 failure was a check running during generation; rerunning after generation passed.
+
+### Round 1 assignments
+
+Explicit expected profiles and actual startup metadata agree:
+
+- Performance/reliability: Sol/medium, session
+  `01a0d7e7-767c-75b2-baa4-d9caa91fffcb`.
+- TypeScript/API: Sol/medium, session
+  `01a0d7e7-76a1-7530-8c97-7c42c2028e49`.
+- Documentation: Luna/medium, session
+  `01a0d7e7-788c-7871-89fc-2eac192f2246`.
+- Style/maintainability: Sol/medium, session
+  `01a0d7e8-60e4-7ec1-83e8-208f90014ef0`, started after documentation finished.
+
+All sessions are new, ephemeral and read-only, with memories and child agents
+explicitly disabled. Inputs contain requirements and concern-specific paths;
+prior review results and implementation logs are excluded.
+
+Documentation reported one confirmed omission: the new return-type example
+contains comments only, not an actual handler. Replace it with usable union
+and tuple handler examples.
+
+Reliability reported two confirmed ordering defects: Aggregate reactions commit
+before appending source diagnostics, and Process Manager Event handling packs
+Commands after committing and publishing Events. The first needs diagnostics in
+the existing atomic commit; the second needs all result packing before commit.
+Both require failure-path regression tests.
+
+Style reported two confirmed test gaps: the undeclared Event fixture returns an
+Entity state, and the ordering test compares identical type URLs instead of
+distinct payload IDs. Use a real undeclared Event and assert payload order.
+
+TypeScript/API reported three analyzer inconsistencies: optional tuple slots
+containing unions fail, imported aliases to an outer Promise fail, and aliased
+nested result arrays pass. The implementer must first reproduce these cases
+with focused tests, then correct them without weakening the other shape checks.
+
+All eight findings were returned as one batch to the original implementer.
+The reviewers performed read-only source/test inspection, not independent
+test execution. Mechanical evidence is recorded separately in the work log.
+
+### Round 1 correction evidence
+
+All three analyzer examples first failed as reported; the corrected analyzer
+passes all 63 tests. The Aggregate and Process Manager regressions also failed
+before correction, exposing state through Stand after failed handling. Both
+now pass: source diagnostics join the existing Aggregate atomic commit, and
+Process Manager Commands are packed before persistence or publication.
+
+The guide now contains compiled decorated handler examples using generated
+review-domain messages. The standalone fixture uses a real undeclared Event,
+and the ordered-output assertion checks unpacked IDs. All 17 standalone tests,
+the focused snippet compiler, ESLint and formatting passed. Main handled these
+three independent documentation/test corrections while the implementer handled
+the five runtime/analyzer findings; no production files had concurrent writers.
+
+No finding was dismissed. Combined checks and the pushed correction commit
+are recorded before round 2 starts.

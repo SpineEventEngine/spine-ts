@@ -37,7 +37,9 @@ import {
   type AssignReviewTask,
 } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
 import {
+  ReviewStartedSchema,
   ReviewTaskAssignedSchema,
+  type ReviewStarted,
   type ReviewTaskAssigned,
 } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 import { ReviewRejectedSchema } from "../../test-fixtures/generated/handler-registry/rejections_pb.js";
@@ -119,10 +121,10 @@ class OptionalTupleReactor extends AbstractEventReactor {
 }
 
 class InvalidLaterReactor extends AbstractEventReactor {
-  react(): readonly [ReviewTaskAssigned, ProjectState] {
+  react(): readonly [ReviewTaskAssigned, ReviewStarted] {
     return [
       create(ReviewTaskAssignedSchema, { id: "first", name: "First" }),
-      create(ProjectStateSchema, { id: "wrong", name: "Wrong" }),
+      create(ReviewStartedSchema, { id: "undeclared" }),
     ];
   }
 }
@@ -214,11 +216,12 @@ describe("StandaloneHandlerRuntime", () => {
         }),
       );
     }
-    expect(published.map((event) => event.message?.typeUrl)).toEqual([
-      TypeUrls.derive(ReviewTaskAssignedSchema),
-      TypeUrls.derive(ReviewTaskAssignedSchema),
-      TypeUrls.derive(ReviewTaskAssignedSchema),
-    ]);
+    expect(
+      published.map((event) => {
+        if (event.message === undefined) throw new Error("Expected Event message.");
+        return AnyMessages.unpack(event.message, ReviewTaskAssignedSchema)?.id;
+      }),
+    ).toEqual(["first", "first", "second"]);
   });
 
   it("rejects an invalid later result before publishing any standalone output", async () => {

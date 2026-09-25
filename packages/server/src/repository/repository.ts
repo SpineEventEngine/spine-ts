@@ -1679,17 +1679,19 @@ class AggregateExecutionSupport {
   }
 
   /**
-   * Stores the current Aggregate record before its diagnostic and delivery journals.
+   * Stores Aggregate state and diagnostic and delivery Events in one atomic commit.
    *
    * @param loaded Aggregate and commit storage to update.
    * @param entityId Aggregate identifier.
    * @param events Produced Events to retain.
+   * @param diagnostics Events to retain in the diagnostic history.
    * @returns `true` after a successful commit; conflicts throw.
    */
   async persistAggregateUpdate(
     loaded: LoadedAggregate,
     entityId: unknown,
     events: readonly Event[],
+    diagnostics: readonly Event[] = events,
   ): Promise<boolean> {
     const lifecycle = RepositoryEntities.repositoryLifecycle(loaded.entity);
     const state = RepositoryEntities.repositoryState(loaded.entity) as Message;
@@ -1708,19 +1710,31 @@ class AggregateExecutionSupport {
         versionMessage,
         lifecycle,
         events,
+        diagnostics,
       );
-      if (outcome !== "committed") {
-        throw new Error("Concurrent Aggregate state commit conflict.");
-      }
+      if (outcome !== "committed") throw new Error("Concurrent Aggregate state commit conflict.");
       entityStateHistoryCaches.get(loaded.entity)?.clear();
     } catch (error) {
       deferred.cancel();
       throw error;
     }
+    this.#notifyDeferredAggregate(deferred, events);
+    return true;
+  }
+
+  /**
+   * Notifies Stand for a committed Aggregate and reports delivery failure.
+   *
+   * @param deferred Deferred Stand update created before the commit.
+   * @param events Produced Events available for failure reporting.
+   */
+  #notifyDeferredAggregate(
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
+    events: readonly Event[],
+  ): void {
     this.#notifyAggregate(() => {
       deferred.notify();
     }, events);
-    return true;
   }
 
   /**
@@ -1747,6 +1761,7 @@ class AggregateExecutionSupport {
    * @param version Current Spine Version.
    * @param lifecycle Accepted lifecycle flags.
    * @param events Produced Events to retain and publish.
+   * @param diagnostics Events to retain in the diagnostic history.
    * @returns The storage commit outcome.
    */
   #commitAggregateRecord(
@@ -1756,6 +1771,7 @@ class AggregateExecutionSupport {
     version: Version,
     lifecycle: EntityLifecycleFlags,
     events: readonly Event[],
+    diagnostics: readonly Event[],
   ): Promise<"committed" | "conflict"> {
     const record = EntityRecords.pack(
       this.#repository.stateSchema,
@@ -1773,7 +1789,7 @@ class AggregateExecutionSupport {
       ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
         ? { states: [record] }
         : {}),
-      diagnostics: events.map((event) => clone(EventSchema, event)),
+      diagnostics: diagnostics.map((event) => clone(EventSchema, event)),
       events,
     });
   }
@@ -1802,6 +1818,7 @@ class AggregateExecutionSupport {
    * @param events Produced Events to persist and dispatch.
    * @param dispatch Publishes one committed Event.
    * @param onPersisted Runs after durable persistence.
+   * @param diagnostics Events to retain in diagnostic history with this commit.
    * @returns A deferred follow-up that dispatches the Events.
    */
   async persistAggregateAndDispatch(
@@ -1810,8 +1827,9 @@ class AggregateExecutionSupport {
     events: readonly Event[],
     dispatch: (event: Event) => Promise<void>,
     onPersisted: () => Promise<void> | void,
+    diagnostics: readonly Event[] = events,
   ): Promise<() => Promise<void>> {
-    const committed = await this.persistAggregateUpdate(loaded, entityId, events);
+    const committed = await this.persistAggregateUpdate(loaded, entityId, events, diagnostics);
     if (!committed) return () => Promise.resolve();
     await onPersisted();
     return async () => {
@@ -2304,12 +2322,8 @@ class AggregateEventExecution {
   ): Promise<void> {
     const loaded = await this.#support.loadAggregate(entityId);
     const produced = await this.#invokeHandlers(entityId, loaded, intake);
-    await this.#persistProducedEvents(loaded, entityId, produced);
-    await this.#support.appendDiagnosticEvent(
-      loaded,
-      entityId,
-      DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId),
-    );
+    const source = DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId);
+    await this.#persistProducedEvents(loaded, entityId, produced, source);
 
     return undefined;
   }
@@ -2320,14 +2334,19 @@ class AggregateEventExecution {
    * @param loaded Aggregate and commit storage.
    * @param entityId Target Aggregate identifier.
    * @param produced Events returned by reactors.
+   * @param source Source Event retained for diagnostic history.
    * @returns Completion after accepted state and Events are stored.
    */
   async #persistProducedEvents(
     loaded: LoadedAggregate,
     entityId: unknown,
     produced: readonly Event[],
+    source: Event,
   ): Promise<void> {
-    if (produced.length === 0 && !RepositoryEntities.repositoryChanged(loaded.entity)) return;
+    if (produced.length === 0 && !RepositoryEntities.repositoryChanged(loaded.entity)) {
+      await this.#support.appendDiagnosticEvent(loaded, entityId, source);
+      return;
+    }
     const dispatch = await this.#support.persistAggregateAndDispatch(
       loaded,
       entityId,
@@ -2336,6 +2355,7 @@ class AggregateEventExecution {
       () => {
         this.#publishStateChange(loaded, entityId);
       },
+      [source, ...produced],
     );
     void dispatch();
   }
@@ -3837,6 +3857,7 @@ class ProcessManagerEventExecution {
       entityId,
       RepositoryEntities.priorVersion(loaded.current),
     );
+    const commands = this.#bindProducedCommands(produced.commands);
     const diagnostics = [
       DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId),
       ...events,
@@ -3845,7 +3866,7 @@ class ProcessManagerEventExecution {
     if (!committed) return;
     this.#publishChangedState(loaded, entityId);
     this.#postEvents(events);
-    await this.#postCommands(this.#bindProducedCommands(produced.commands));
+    await this.#postCommands(commands);
   }
 
   /**
@@ -4308,9 +4329,7 @@ const RepositoryIdentity = {
     if (typeof entityType !== "function" || !RepositoryIdentity.isClassConstructor(entityType)) {
       return undefined;
     }
-
     const runtimeEntityType = entityType as RuntimeRepositoryEntityType;
-
     if (
       RepositoryIdentity.hasEntityFamilyInheritance(
         runtimeEntityType,
@@ -6689,42 +6708,51 @@ const RepositoryRoutes = {
     eventRoutes: ReadonlyMap<MessageSchema, EventRoute<Id>>,
   ): RepositoryEventRoute<Id> {
     const message = event.message;
-    if (message === undefined || message.typeUrl === "") {
+    if (message === undefined || message.typeUrl === "")
       throw new Error("Repository event routing requires event.message.typeUrl.");
-    }
-
     const schema = RepositoryRoutes.schemaForTypeUrl(schemas, message.typeUrl, "event");
-    const hasReceiver =
-      (commandReactions.get(schema.typeName)?.length ?? 0) > 0 ||
-      (readiness?.findEventSubscribers(schema.typeName).length ?? 0) > 0 ||
-      (readiness?.findEventReactors(schema.typeName).length ?? 0) > 0 ||
-      (readiness?.findEventApplications(schema.typeName).length ?? 0) > 0;
-    if (!hasReceiver) {
+    if (!RepositoryRoutes.hasEventReceiver(schema.typeName, commandReactions, readiness))
       throw new Error(`Repository event routing has no receiver for "${schema.typeName}".`);
-    }
-
     const customRoute = eventRoutes.get(schema);
-    if (customRoute !== undefined) {
-      return Object.freeze({
-        entityIds: RepositoryRoutes.callEventRoute(
-          customRoute,
-          message,
-          schema,
-          event.context,
-          targetIdField,
-        ),
-        messageFullTypeName: schema.typeName,
-        invocation: "deferred",
-      });
-    }
-
-    const targetId = RepositoryRoutes.readEventEntityId(event, message, schema, targetIdField);
-
+    const entityIds =
+      customRoute === undefined
+        ? [RepositoryRoutes.readEventEntityId(event, message, schema, targetIdField) as Id]
+        : RepositoryRoutes.callEventRoute(
+            customRoute,
+            message,
+            schema,
+            event.context,
+            targetIdField,
+          );
     return Object.freeze({
-      entityIds: Object.freeze([targetId as Id]),
+      entityIds: Object.freeze([...entityIds]),
       messageFullTypeName: schema.typeName,
       invocation: "deferred",
     });
+  },
+
+  /**
+   * Checks whether any registered Event receptor accepts a message type.
+   *
+   * @param typeName Full generated Event type name.
+   * @param reactions Command reactions registered by Event type.
+   * @param readiness Event receptor readiness lookup.
+   * @returns Whether at least one receptor accepts the type.
+   */
+  hasEventReceiver(
+    typeName: string,
+    reactions: ReadonlyMap<
+      string,
+      readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[]
+    >,
+    readiness: EventRegistrationReadinessLookup | undefined,
+  ): boolean {
+    return (
+      (reactions.get(typeName)?.length ?? 0) > 0 ||
+      (readiness?.findEventSubscribers(typeName).length ?? 0) > 0 ||
+      (readiness?.findEventReactors(typeName).length ?? 0) > 0 ||
+      (readiness?.findEventApplications(typeName).length ?? 0) > 0
+    );
   },
 
   /**
@@ -6837,15 +6865,8 @@ const RepositoryRoutes = {
       "Repository state-update routing",
     );
     const candidates = subscriptions.get(update?.schema.typeName ?? "") ?? [];
-    const interested = Object.freeze(
-      candidates.filter(
-        (subscriber) =>
-          (subscriber.handler.origin === "external") === (event.context?.external === true),
-      ),
-    );
-    if (update === undefined || interested.length === 0) {
-      return undefined;
-    }
+    const interested = RepositoryRoutes.originSubscribers(candidates, event);
+    if (update === undefined || interested.length === 0) return undefined;
     const { schema, state } = update;
     const custom = routes.get(schema);
     const candidateIds =
@@ -6859,6 +6880,25 @@ const RepositoryRoutes = {
       subscribers: interested,
       invocation: "deferred",
     });
+  },
+
+  /**
+   * Finds state subscribers whose origin declaration matches an Event.
+   *
+   * @param candidates Subscribers registered for one source state type.
+   * @param event State-update Event carrying the domestic or external origin.
+   * @returns Frozen matching subscriber list.
+   */
+  originSubscribers(
+    candidates: readonly RegisteredHandlerMetadata<StateSubscriptionHandlerMetadata>[],
+    event: Event,
+  ): readonly RegisteredHandlerMetadata<StateSubscriptionHandlerMetadata>[] {
+    return Object.freeze(
+      candidates.filter(
+        (subscriber) =>
+          (subscriber.handler.origin === "external") === (event.context?.external === true),
+      ),
+    );
   },
 
   /**
@@ -7124,9 +7164,8 @@ const RepositoryRoutes = {
       const schema = descriptor.message as MessageSchema;
       if (producerId.typeUrl !== TypeUrls.derive(schema)) return { compatible: false };
       const id = Identifiers.unpack(schema, producerId);
-      if (id === undefined) {
+      if (id === undefined)
         throw new Error("Repository event routing requires a readable compatible producer ID.");
-      }
       return { compatible: true, id };
     }
     if (descriptor.fieldKind !== "scalar") {
@@ -7146,9 +7185,8 @@ const RepositoryRoutes = {
         : type === "int32"
           ? Identifiers.unpack("int32", producerId)
           : Identifiers.unpack("int64", producerId);
-    if (id === undefined) {
+    if (id === undefined)
       throw new Error("Repository event routing requires a readable compatible producer ID.");
-    }
     return { compatible: true, id };
   },
 
@@ -8724,17 +8762,31 @@ const InboxReplay = {
       entityIds,
       messageFullTypeName: schema.typeName,
       state,
-      subscribers: Object.freeze(
-        (() => {
-          const candidates = routing.stateSubscriptions.get(schema.typeName) ?? [];
-          return candidates.filter(
-            (subscriber) =>
-              (subscriber.handler.origin === "external") === (event.context?.external === true),
-          );
-        })(),
-      ),
+      subscribers: InboxReplay.stateSubscribers(routing, schema, event),
       invocation: "deferred",
     });
+  },
+
+  /**
+   * Finds stored state subscribers matching the Event's origin.
+   *
+   * @param routing Registered state subscriptions.
+   * @param schema Decoded state schema.
+   * @param event Stored state-update Event.
+   * @returns Frozen origin-compatible subscriber list.
+   */
+  stateSubscribers(
+    routing: RepositoryRouting,
+    schema: DescriptorMessageSchema,
+    event: Event,
+  ): readonly RegisteredHandlerMetadata<StateSubscriptionHandlerMetadata>[] {
+    const candidates = routing.stateSubscriptions.get(schema.typeName) ?? [];
+    return Object.freeze(
+      candidates.filter(
+        (subscriber) =>
+          (subscriber.handler.origin === "external") === (event.context?.external === true),
+      ),
+    );
   },
 };
 Object.freeze(InboxReplay);

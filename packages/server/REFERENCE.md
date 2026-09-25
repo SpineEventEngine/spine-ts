@@ -262,11 +262,57 @@ in order, with the second optional. Either declaration may have one outer
 each result against the invoked handler's list. A whole result may be absent
 only for reactions that permit no output. `@Throws` stays separate and unchanged.
 
+These independent examples use generated review-workflow messages. The Commander
+chooses whether to start or schedule a review. The reactor example shows a
+different workflow: record a started review and optionally schedule a follow-up.
+They illustrate return declarations, not two handlers to register together.
+
+<!-- docs-snippet-path: packages/server/test/runtime/standalone-handler-runtime.test.ts -->
+
 ```ts
-// One invocation chooses exactly one generated Command message.
-// type ApprovalCommand = CreateAccessGrant | ExtendAccessGrant;
-// Both generated Events are ordered; completion may be omitted.
-// type ApprovalEvents = readonly [AccessGrantCreated, AccessRequestCompleted?];
+import { create } from "@bufbuild/protobuf";
+import {
+  AbstractCommander,
+  AbstractEventReactor,
+  Command,
+  React,
+} from "@spine-event-engine/server";
+import {
+  StartReviewSchema,
+  ScheduleReviewSchema,
+  type StartReview,
+  type ScheduleReview,
+} from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import {
+  ReviewStartedSchema,
+  ReviewFollowUpScheduledSchema,
+  type ReviewStarted,
+  type ReviewFollowUpScheduled,
+  type ReviewTaskAssigned,
+} from "../../test-fixtures/generated/handler-registry/events_pb.js";
+
+export class ReviewCommander extends AbstractCommander {
+  @Command
+  planReview(event: ReviewTaskAssigned): StartReview | ScheduleReview {
+    // Return one Command, choosing its type using the application's rules.
+    return event.name === "Security review"
+      ? create(ScheduleReviewSchema, { id: event.id })
+      : create(StartReviewSchema, { id: event.id });
+  }
+}
+
+export class ReviewReactor extends AbstractEventReactor {
+  @React
+  recordReview(event: ReviewTaskAssigned): readonly [ReviewStarted, ReviewFollowUpScheduled?] {
+    const started = create(ReviewStartedSchema, { id: event.id });
+    // A tuple returns ordered Events. Its optional second value may be absent.
+    if (event.name !== "Security review") return [started];
+    return [
+      started,
+      create(ReviewFollowUpScheduledSchema, { id: event.id, name: "Security follow-up" }),
+    ];
+  }
+}
 ```
 
 Produced commands retain the source actor, tenant, origin, and causal lineage.

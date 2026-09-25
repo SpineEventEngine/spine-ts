@@ -662,6 +662,14 @@ class ProjectRegistrationReactorAggregate extends Aggregate<string, typeof Proje
   }
 }
 
+class CountingReactorAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+  reactProjection(event: ProjectCreated): ProjectRegistered | undefined {
+    const count = Number(this.state.name || "0") + 1;
+    this.update((draft) => Object.assign(draft, { id: event.id, name: String(count) }));
+    return undefined;
+  }
+}
+
 class GuardedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static calls = 0;
 
@@ -1518,12 +1526,14 @@ class RoutingProcessManager extends ProcessManager<string, typeof ProjectQueueSt
   static eventCalls = 0;
   static commandReactionCalls = 0;
   static failure: Error | undefined;
+  static malformedProducedCommand = false;
 
   static reset(failure?: Error): void {
     this.commandCalls = 0;
     this.eventCalls = 0;
     this.commandReactionCalls = 0;
     this.failure = failure;
+    this.malformedProducedCommand = false;
   }
 
   createProject(command: CreateProject): ProjectCreated {
@@ -1581,10 +1591,13 @@ class RoutingProcessManager extends ProcessManager<string, typeof ProjectQueueSt
         }),
       ),
     );
-    return create(CreateProjectSchema, {
+    const command = create(CreateProjectSchema, {
       id: event.id,
       name: `${event.name} follow-up command`,
     });
+    if (RoutingProcessManager.malformedProducedCommand)
+      return malformedCreateProjectCommand(command.name);
+    return command;
   }
 
   reactTaskWithEvent(event: ProjectCreated): ProjectRegistered {
@@ -1604,6 +1617,16 @@ class RoutingProcessManager extends ProcessManager<string, typeof ProjectQueueSt
       priority: 1,
     });
   }
+}
+
+function malformedCreateProjectCommand(name: string): CreateProject {
+  return {
+    $typeName: CreateProjectSchema.typeName,
+    get id() {
+      throw new Error("malformed produced Command payload");
+    },
+    name,
+  } as unknown as CreateProject;
 }
 
 class CommandSubstitutingProcessManager extends ProcessManager<
@@ -2723,6 +2746,40 @@ describe("repository signal routing", () => {
     await waitForCondition(() => observed.length === 1);
     expect(observed).toHaveLength(1);
     expect(observed[0]).toMatch(/.+/);
+  });
+
+  it("retries a failed state-only Aggregate reaction without exposing or duplicating state", async () => {
+    const factory = new FailingSourceDiagnosticStorageFactory();
+    const repository = createCountingReactorRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    const source = createProjectCreated("event-count-retry", "task-count-retry");
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectStateSchema,
+      eventHistory: true,
+    });
+    if (dispatcher === undefined) throw new Error("Expected an Aggregate Event dispatcher.");
+
+    try {
+      await expect(dispatcher.dispatch(source)).rejects.toThrow(/forced.*failure/);
+      await expect(
+        context.stand().read(ProjectStateSchema, "task-count-retry"),
+      ).resolves.toBeUndefined();
+      await expect(storage.readCurrent("task-count-retry")).resolves.toBeUndefined();
+
+      await expect(dispatcher.dispatch(source)).resolves.toBeUndefined();
+      await expect(
+        context.stand().read(ProjectStateSchema, "task-count-retry"),
+      ).resolves.toMatchObject({ name: "1" });
+      await expect(storage.readEvents("task-count-retry")).resolves.toHaveLength(1);
+    } finally {
+      await context.close();
+    }
   });
 
   it("uses one committed version for every event and state from an aggregate event reaction", async () => {
@@ -7462,6 +7519,54 @@ describe("repository signal routing", () => {
     expect("storedEventDispatchFailures" in context).toBe(false);
   });
 
+  it("rejects a malformed later Process Manager Command before any Event or state persists", async () => {
+    RoutingProcessManager.reset();
+    RoutingProcessManager.malformedProducedCommand = true;
+    const factory = new InMemoryStorageFactory();
+    const emitted: SpineEvent[] = [];
+    const repository = createProcessManagerMixedEventRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .addEventDispatcher({
+        messageSchemas: () => [ProjectRegisteredSchema],
+        dispatch: (event) => {
+          emitted.push(event);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const stored = await storePmInboxEvent(
+      delivery,
+      createProjectCreated("event-pm-malformed-command", "pm-malformed-command"),
+      new Date("2026-08-11T04:55:00.000Z"),
+      1n,
+    );
+    expect(() =>
+      AnyMessages.pack(CreateProjectSchema, malformedCreateProjectCommand("invalid")),
+    ).toThrow("malformed produced Command payload");
+
+    try {
+      await expect(requireEntityInboxTarget(repository).replay(stored)).rejects.toThrow(
+        "malformed produced Command payload",
+      );
+      expect(RoutingProcessManager.commandReactionCalls).toBe(1);
+      await expect(
+        context.stand().read(ProjectQueueStateSchema, "pm-malformed-command"),
+      ).resolves.toBeUndefined();
+      await expect(eventStore.read()).resolves.toEqual([]);
+      expect(emitted).toEqual([]);
+    } finally {
+      RoutingProcessManager.reset();
+      await context.close();
+    }
+  });
+
   it("executes projection event subscribers and records latest state in Stand", async () => {
     ExecutingTaskProjection.reset();
     const context = BoundedContext.singleTenant("Tasks")
@@ -11289,6 +11394,33 @@ function createGeneratedReactorRepository(
   });
 }
 
+function createCountingReactorRepository(): Repository<typeof CountingReactorAggregate> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: CountingReactorAggregate,
+        stateSchema: ProjectStateSchema,
+        handlers: [
+          {
+            kind: "event-reaction",
+            methodName: "reactProjection",
+            input: { schema: ProjectCreatedSchema, origin: "domestic" },
+            outcomes: { returned: [ProjectRegisteredSchema], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<CountingReactorAggregate, typeof ProjectStateSchema>;
+  return new Repository({
+    entityType: CountingReactorAggregate,
+    schema: ProjectStateSchema,
+    handlers,
+    events: [ProjectRegisteredSchema],
+  });
+}
+
 function createGuardedAggregateRepository(
   eventRouting?: EventRouting<string>,
 ): Repository<typeof GuardedAggregate> {
@@ -12984,6 +13116,65 @@ class FailingEntityCommitStorageFactory extends InMemoryStorageFactory {
         if (this.#remainingFailures > 0) {
           this.#remainingFailures -= 1;
           throw new Error("forced Entity commit failure");
+        }
+        return await storage.commit(unit);
+      },
+      close: () => {
+        storage.close();
+      },
+    } satisfies EntityCommitStorage;
+  }
+}
+
+class FailingSourceDiagnosticStorageFactory extends InMemoryStorageFactory {
+  #failCommit = true;
+  #failAppend = true;
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as {
+      readonly current: unknown;
+      readonly states: unknown;
+      readonly events: {
+        append(record: unknown): Promise<void>;
+        backward(id: unknown, depth: number, starting?: bigint): Promise<readonly SpineEvent[]>;
+        close(): void;
+      };
+      close(): void;
+    };
+    return {
+      current: storage.current,
+      states: storage.states,
+      events: {
+        append: async (record: unknown) => {
+          if (this.#failAppend) {
+            this.#failAppend = false;
+            throw new Error("forced diagnostic append failure");
+          }
+          await storage.events.append(record);
+        },
+        backward: (id: unknown, depth: number, starting?: bigint) =>
+          storage.events.backward(id, depth, starting),
+        close: () => {
+          storage.events.close();
+        },
+      },
+      close: () => {
+        storage.close();
+      },
+    };
+  }
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const storage = super.createEntityCommitStorage(input);
+    return {
+      commit: async <I, S extends Message>(
+        unit: EntityCommitInput<I, S>,
+      ): Promise<EntityCommitResult> => {
+        if (this.#failCommit && (unit.diagnostics?.length ?? 0) > 0) {
+          this.#failCommit = false;
+          throw new Error("forced source diagnostic commit failure");
         }
         return await storage.commit(unit);
       },

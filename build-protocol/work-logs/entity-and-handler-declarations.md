@@ -93,8 +93,35 @@ packages/server-blackbox-tests/test/project-event-routing.test.ts
   passed on all pending task files, and the diff had no whitespace errors.
 - Full release verification follows three completed review-and-fix rounds.
 
+## Review round 1 corrections
+
+- Aggregate Event reaction now retains its source diagnostic in the same atomic
+  commit as changed state and produced Events; unchanged reactions keep the
+  existing diagnostic-only append path. A counter reactor test failed first
+  because the old path exposed state after diagnostic append failure, then
+  passed when a failed commit left no state and retry stored count one.
+- Process Manager Event execution packs declared Command and Event outputs
+  before any persistence or publication. A malformed later Command test failed
+  first because state was visible after rejection, then passed with no state or
+  produced Event persisted. The test awaits Inbox replay rather than merely
+  observing enqueue completion.
+- Analyzer red tests reproduced an optional union tuple member being rejected,
+  an imported outer Promise alias being rejected, and a nested array alias
+  being accepted. All three turned green while the complete analyzer file
+  remained green. The existing TypeScript checker resolves imported aliases;
+  no separate return type system was added.
+- Reference docs now show decorated native-return handlers. Standalone tests
+  use a real undeclared Event and assert result order by unpacked payload IDs.
+- Focused single-worker Vitest run of analyzer, repository routing, and
+  standalone runtime passed 355 tests. Root tooling and server TypeScript
+  checks, `pnpm lint:cleanup`, `pnpm lint:tsdoc`, targeted ESLint, and
+  `pnpm docs:snippets:check:generated` passed after corrections. The cleanup
+  rule required small behavior-preserving helper extractions in touched files.
+
 ## Integration
 
 Version checkpoint `ed692fbb9` and analyzer checkpoint `28450b3f7` are
-committed and pushed. Handler runtime checkpoint and review remain in progress.
+committed and pushed. Runtime checkpoint `2c71dfffe` is pushed; review round 1
+correction checkpoint is pending. Later review rounds and full release
+verification remain in progress.
 No PR creation is authorized yet; the request remains unanswered.
