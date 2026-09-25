@@ -3177,33 +3177,52 @@ function handlerParameterViolations(node, decoratorNames) {
   return violations;
 }
 
-function isVoidTypeNode(type, importState, seen = new Set(), promised = false) {
+function isVoidTypeNode(
+  type,
+  importState,
+  seen = new Set(),
+  promised = false,
+  bindings = new Map(),
+) {
   if (type === undefined) return false;
   if (ts.isParenthesizedTypeNode(type))
-    return isVoidTypeNode(type.type, importState, seen, promised);
+    return isVoidTypeNode(type.type, importState, seen, promised, bindings);
   if (type.kind === ts.SyntaxKind.VoidKeyword) return true;
   if (!ts.isTypeReferenceNode(type) || !ts.isIdentifier(type.typeName)) return false;
   const name = type.typeName.text;
-  const alias = importState.localTypeAliases.get(name);
-  if (alias !== undefined)
-    return voidAlias({ type: alias, imports: importState, name }, type, seen, promised);
+  const bound = bindings.get(name);
+  if (bound !== undefined)
+    return isVoidTypeNode(bound.type, bound.imports, seen, promised, bound.bindings);
+  const alias = localAlias(name, importState);
+  if (alias !== undefined) return voidAlias(alias, type, importState, seen, promised, bindings);
   if (importState.importedTypeAliases.has(name)) {
     const imported = importedAlias(name, importState);
-    return imported !== undefined && voidAlias(imported, type, seen, promised);
+    return (
+      imported !== undefined && voidAlias(imported, type, importState, seen, promised, bindings)
+    );
   }
   return (
     name === "Promise" &&
+    !importState.shadowedTypes.has(name) &&
     !promised &&
     type.typeArguments?.length === 1 &&
-    isVoidTypeNode(type.typeArguments[0], importState, seen, true)
+    isVoidTypeNode(type.typeArguments[0], importState, seen, true, bindings)
   );
 }
 
-function voidAlias(alias, reference, seen, promised) {
+function voidAlias(alias, reference, callerImports, seen, promised, bindings) {
   const key = `${alias.imports.file}:${alias.name}`;
-  if (seen.has(key) || (reference.typeArguments?.length ?? 0) !== 0) return false;
+  const parameters = alias.parameters ?? [];
+  if (seen.has(key) || (reference.typeArguments?.length ?? 0) !== parameters.length) return false;
+  const nextBindings = new Map();
+  for (const [index, param] of parameters.entries())
+    nextBindings.set(param.name.text, {
+      type: reference.typeArguments[index],
+      imports: callerImports,
+      bindings,
+    });
   seen.add(key);
-  const result = isVoidTypeNode(alias.type, alias.imports, seen, promised);
+  const result = isVoidTypeNode(alias.type, alias.imports, seen, promised, nextBindings);
   seen.delete(key);
   return result;
 }

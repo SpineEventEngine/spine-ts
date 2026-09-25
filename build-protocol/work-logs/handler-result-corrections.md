@@ -1,6 +1,9 @@
 # Handler result correction work log
 
-Started: 2026-09-25. Status: implementation in progress.
+Started: 2026-09-25. Status: implementation, reviews, and local release
+verification complete. The final task reply records the published commit and
+its CI result; [PR #10 checks](https://github.com/SpineEventEngine/spine-ts/pull/10/checks)
+provide the external verification record.
 
 Requirements and acceptance: [task brief](../planning/handler-result-corrections.md).
 Baseline: `bbdcd319441b3c6153cc8db63b0cbb309ad411b8` on
@@ -76,8 +79,8 @@ The proposed code checkpoint was held after `lint:tsdoc` failed. It reported
 missing documentation for new analyzer parameters and existing undocumented
 methods/interfaces/generics throughout the newly touched generated-registry
 file. The implementer is correcting those findings and running the cleanup
-gate before requesting another checkpoint. No failing code checkpoint was
-committed or pushed. Main formatted the eight code/test files during the
+gate before requesting another checkpoint. That checkpoint was not committed
+while those local checks were failing. Main formatted the eight code/test files during the
 implementer's agreed edit pause; the same implementer then resumed.
 
 Runtime checkpoint cleared: one single-worker Vitest run passed 387 tests across
@@ -149,3 +152,85 @@ selected runtime files are unchanged error/fallback paths. Narrow runs retain
 the global threshold configuration and are not substitutes for the full gate.
 Supplemental reports are under `/tmp/handler-result-corrections-checkpoint-coverage`
 and `/tmp/handler-result-corrections-state-subscriber-coverage`.
+
+Checkpoint `aaf67eaf2` was committed and pushed to official origin after the
+remaining normal-handler fixture was changed to return its domain Event.
+Its targeted tests passed. Three independent technical reviews started with
+the writer paused. CI run `36169912404` started for this checkpoint; its result
+is pending and is not yet final verification evidence.
+
+Independent review found two missed runtime filters that silently excluded
+undefined-only Aggregate and Command reactions, a generic subscriber alias
+disagreement between analyzer and cleanup, and placeholder metadata TSDoc.
+Main confirmed and accepted all four together, then resumed the same
+implementation context with regression requirements. No full release run has
+started locally; it remains after corrections and targeted re-review.
+
+Review regression tests reproduced all behavior findings before correction:
+zero-schema Aggregate dispatch resolved without invoking its reactor;
+zero-schema Process Manager Command reaction failed routing admission; analysis
+rejected `Async<void>`; cleanup rejected `Identity<void>` and `Async<void>`.
+These failures establish the concrete gaps independently of existing passing
+optional-output tests.
+
+Checkpoint CI run `36169912404` failed the native Process Manager command
+subscription test. Its fixture still returned `void` from an assignment, so
+the newly required nonempty-result check prevented that state commit. The test
+then observed only its unrelated flush Event update. This is an outdated
+fixture exposed by the corrected contract, not evidence of a delivery-order
+bug. The retained implementer is reproducing and migrating this fixture to a
+declared domain Event result, preserving proof of the actual Command commit.
+No runtime requirement or assertion will be weakened to accept the flush state.
+
+Review corrections now pass the focused cases. The native subscription fixture
+returns declared `TaskAssigned` using the Command actor, while its separate
+`TaskCreated` reaction returns undefined; the artificial flush was removed.
+The complete four-file affected run passed 503 tests with one worker. A prior
+run caught two accidental test metadata edits, which were restored and the
+full test diff checked before this passing rerun. The new rejection-input
+fixture is also being tied to a real `CompleteTask` cause before final review.
+Metadata TSDoc now explains restrictions and descriptor copying; main checked
+the corrected wording against implementation, including both Command handler
+kinds and the actual cloning depth.
+
+The targeted runtime re-review was clean. The API re-review found one
+declaration-scope alias-binding error in cleanup. Both opposing regression
+examples reproduced it; the one-line binding-scope correction then passed
+both, nested generic forwarding, and all 150 cleanup tests. Tooling typecheck,
+cleanup, script ESLint/formatting, and whitespace checks passed. Main inspected
+the resolver change and accepted the correction; all review findings are now
+resolved.
+
+Final verification is assigned to the existing orchestrator-dispatched
+mechanical function with explicit `gpt-6-luna` / `low`, no memory or children.
+The writer is paused. It runs `pnpm verify:release` once, then the package-consumer
+check, sequentially with complete logs in
+`/tmp/spine-handler-release-check.sU2Kvw`. No source fixes or Git writes are
+delegated to this function; failures return to the retained implementer.
+
+Final local verification passed on 25 September 2026:
+
+- `pnpm verify:release`: exit 0; 302 test files and 4,990 tests passed.
+- Coverage: statements 93.27%, branches 90.04%, functions 93.06%, lines 94.43%.
+  All existing 90% thresholds are unchanged and passed.
+- `node scripts/release-cli.mjs prepare --check`: exit 0; package-consumer
+  preparation passed using the same build output.
+- Startup metadata confirmed `gpt-6-luna` / `low`, session
+  `01a0d9d2-eb2b-7280-a3b4-c1dec5a39a5f`. Main read the command results and
+  test/coverage summaries directly from the saved logs. No generated tracked
+  files changed during verification.
+
+The result enforces nonempty successful Command-handling results before commit,
+allows undefined-only and optional Event/Command reactions to run and save
+state, restricts subscribers to void declarations and undefined actual values,
+and removes the retired handler API. Alias checks agree with TypeScript for the
+reviewed concrete forms. Current documentation and the Orders example reflect
+these rules. No new wrapper library, iterable support, wire/storage schema,
+or crash-recovery mechanism was added. The copied JVM Proto removal comment and
+deprecated wire enum remain unchanged, as do exact historical Git references.
+
+The same existing snapshot.15 version-only commit remains in place. No package
+publication, master change, new branch/worktree, or PR creation was performed.
+The remaining external acceptance step is the verify check on the published
+commit; its SHA and result are reported in the final task reply, avoiding a
+documentation-only commit that would invalidate that exact-SHA CI evidence.

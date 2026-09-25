@@ -2224,7 +2224,7 @@ class AggregateEventExecution {
   }
 
   /**
-   * Decodes the Event and selects reactors with declared output.
+   * Decodes the Event and selects reactors, including state-only handlers.
    *
    * @param acceptedRoute Route accepted before execution.
    * @returns Decoded message, route, and matching reactors.
@@ -2242,9 +2242,11 @@ class AggregateEventExecution {
     );
     const message = EntityInvocation.unpackRequired(eventMessage, eventSchema, "event");
     const route = acceptedRoute;
-    const reactors = this.#routing
-      .eventReactors(route.messageFullTypeName, message, this.#event.context?.external === true)
-      .filter((reactor) => RepositoryHandlers.handlerEmittedSchemas(reactor.handler).length > 0);
+    const reactors = this.#routing.eventReactors(
+      route.messageFullTypeName,
+      message,
+      this.#event.context?.external === true,
+    );
     return Object.freeze({
       message,
       route,
@@ -5878,9 +5880,6 @@ const RepositoryHandlers = {
     const registry = new HandlerMetadataRegistry(handlers);
 
     for (const entry of registry.findHandlersByKind("command-reaction")) {
-      if (RepositoryHandlers.handlerEmittedSchemas(entry.handler).length === 0) {
-        continue;
-      }
       RepositoryHandlers.pushMapValue(byEvent, entry.handler.messageFullTypeName, entry);
     }
 

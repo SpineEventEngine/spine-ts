@@ -2778,6 +2778,9 @@ describe("check-cleanup-rules", () => {
         "type CreatedResults = TaskCreated | TaskRenamed;",
         "type AsyncResults = Promise<CreatedResults>;",
         "type Identity<T> = T;",
+        "type Async<T> = Promise<T>;",
+        "type Forward<T> = Identity<T>;",
+        "type AsyncForward<T> = Async<T>;",
         "",
         "class DemoHandlers {",
         "  @Assign",
@@ -2820,6 +2823,14 @@ describe("check-cleanup-rules", () => {
         "  externalCommandNoOutput(event: ForeignSignal<TaskCreated>): Identity<undefined> { void event; return undefined; }",
         "  @Subscribe",
         "  async observe(event: TaskCreated): Promise<void> { void event; }",
+        "  @Subscribe",
+        "  observeIdentity(event: TaskCreated): Identity<void> { void event; }",
+        "  @Subscribe",
+        "  observeAsync(event: TaskCreated): Async<void> { void event; return Promise.resolve(); }",
+        "  @Subscribe",
+        "  observeForward(event: TaskCreated): Forward<void> { void event; }",
+        "  @Subscribe",
+        "  observeAsyncForward(event: TaskCreated): AsyncForward<void> { void event; return Promise.resolve(); }",
         "}",
         "",
       ].join("\n"),
@@ -2834,9 +2845,45 @@ describe("check-cleanup-rules", () => {
   });
 
   it.each([
+    ["rejects an unrelated undefined alias", "undefined", "void", false],
+    ["accepts an unrelated void alias", "void", "undefined", true],
+  ])("%s inside a generic subscriber return", (_label, fixedType, argumentType, accepted) => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import { Subscribe } from "@spine-event-engine/server";',
+        'import type { TaskCreated } from "../generated/example_pb.js";',
+        `type T = ${fixedType};`,
+        "type Fixed = T;",
+        "type Identity<T> = Fixed;",
+        "class DemoHandlers {",
+        "  @Subscribe",
+        `  observe(event: TaskCreated): Identity<${argumentType}> { void event; throw new Error(); }`,
+        "}",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "subscriber alias scope"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status, result.stderr).toBe(accepted ? 0 : 1);
+  });
+
+  it.each([
     ["void reactor", "React", "TaskCreated", "void", "generated domain event"],
     ["promised void reactor", "React", "TaskCreated", "Promise<void>", "generated domain event"],
     ["undefined subscriber", "Subscribe", "TaskCreated", "undefined", "return type void"],
+    [
+      "nested subscriber Promise",
+      "Subscribe",
+      "TaskCreated",
+      "Promise<Promise<void>>",
+      "return type void",
+    ],
+    ["subscriber thenable", "Subscribe", "TaskCreated", "PromiseLike<void>", "return type void"],
     [
       "command-input missing output",
       "Command",

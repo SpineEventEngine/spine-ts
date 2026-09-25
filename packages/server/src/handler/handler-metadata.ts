@@ -881,15 +881,15 @@ class EntityHandlersOwner {
   }
 
   /**
-   * Builds define metadata.
+   * Registers declared handlers, validates receiver restrictions, and freezes grouped metadata.
    *
-   * @typeParam Instance Instance type for this declaration.
-   * @typeParam StateSchema StateSchema type for this declaration.
-   * @param arities arities supplied to the metadata operation.
-   * @param define define supplied to the metadata operation.
-   * @param entityType entityType supplied to the metadata operation.
-   * @param stateSchema stateSchema supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @typeParam Instance Entity instance type.
+   * @typeParam StateSchema Generated Entity state schema type.
+   * @param entityType Entity constructor whose methods are registered.
+   * @param stateSchema Generated Entity state schema.
+   * @param define Callback declaring handlers through the guarded builder.
+   * @param arities Generated parameter counts, origins, and outcomes.
+   * @returns Frozen handler metadata grouped by handler kind.
    */
   #define<Instance extends object, StateSchema extends DescriptorMessageSchema>(
     entityType: EntityClass<Instance>,
@@ -920,13 +920,13 @@ class EntityHandlersOwner {
   }
 
   /**
-   * Builds builder metadata.
+   * Builds a guarded builder for Command, Event, and subscription registrations.
    *
-   * @typeParam Instance Instance type for this declaration.
-   * @param arities arities supplied to the metadata operation.
-   * @param built built supplied to the metadata operation.
-   * @param entityType entityType supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @typeParam Instance Entity instance type.
+   * @param entityType Entity constructor checked for declared methods.
+   * @param built Set tracking metadata created by this builder.
+   * @param arities Generated method metadata indexed by kind and method name.
+   * @returns Frozen registration builder for supported handler kinds.
    */
   #builder<Instance extends object>(
     entityType: EntityClass<Instance>,
@@ -1084,18 +1084,18 @@ class EntityHandlersOwner {
   }
 
   /**
-   * Builds handler metadata.
+   * Validates a declared method and binds its generated input and outcome metadata.
    *
-   * @typeParam Instance Instance type for this declaration.
-   * @typeParam Kind Kind type for this declaration.
-   * @typeParam Schema Schema type for this declaration.
-   * @param arities arities supplied to the metadata operation.
-   * @param built built supplied to the metadata operation.
-   * @param entityType entityType supplied to the metadata operation.
-   * @param kind kind supplied to the metadata operation.
-   * @param methodName methodName supplied to the metadata operation.
-   * @param schema schema supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @typeParam Instance Entity instance type.
+   * @typeParam Kind Handler role retained in the metadata.
+   * @typeParam Schema Generated input message schema type.
+   * @param entityType Entity constructor declaring the method.
+   * @param kind Role used to find generated method metadata.
+   * @param schema Input message schema accepted by the handler.
+   * @param methodName Declared instance method name.
+   * @param built Set tracking records made by the guarded builder.
+   * @param arities Generated parameter counts, origins, filters, and outcomes.
+   * @returns Frozen handler registration with generated metadata attached.
    */
   #handler<
     Instance extends object,
@@ -1129,10 +1129,10 @@ class EntityHandlersOwner {
   }
 
   /**
-   * Builds arityMap metadata.
+   * Builds an index of generated method metadata by handler kind and method name.
    *
-   * @param arities arities supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @param arities Generated records for declared handler methods.
+   * @returns Frozen per-method values indexed by a collision-free key.
    */
   #arityMap(arities: Iterable<HandlerArity>): ReadonlyMap<string, HandlerGeneratedData> {
     const result = new Map<string, HandlerGeneratedData>();
@@ -1153,10 +1153,10 @@ class EntityHandlersOwner {
   }
 
   /**
-   * Builds parameterCount metadata.
+   * Rejects generated handler arities other than one or two parameters.
    *
-   * @param value value supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @param value Generated parameter count to validate.
+   * @returns Supported parameter count of one or two.
    */
   #parameterCount(value: unknown): HandlerParameterCount {
     if (value === 1 || value === 2) {
@@ -1182,21 +1182,21 @@ class EntityHandlersOwner {
   }
 
   /**
-   * Builds arityKey metadata.
+   * Builds a handler key with a NUL delimiter between kind and method name.
    *
-   * @param kind kind supplied to the metadata operation.
-   * @param methodName methodName supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @param kind Handler role, allowing one method name in distinct roles.
+   * @param methodName Entity method name.
+   * @returns Collision-free lookup key for generated method metadata.
    */
   #arityKey(kind: HandlerKind, methodName: string): string {
     return `${kind}\u0000${methodName}`;
   }
 
   /**
-   * Checks validateCommandHandlers metadata.
+   * Rejects Assign on Projections and Command handlers outside Process Managers.
    *
-   * @param entityType entityType supplied to the metadata operation.
-   * @param handlers handlers supplied to the metadata operation.
+   * @param entityType Entity constructor determining supported handler roles.
+   * @param handlers Handler declarations to validate.
    */
   #validateCommandHandlers(entityType: EntityClass, handlers: readonly HandlerMetadata[]): void {
     if (
@@ -1222,10 +1222,10 @@ class EntityHandlersOwner {
   }
 
   /**
-   * Checks validateBuilt metadata.
+   * Rejects handler records not produced by the current registration builder.
    *
-   * @param built built supplied to the metadata operation.
-   * @param handlers handlers supplied to the metadata operation.
+   * @param handlers Declared records to authenticate.
+   * @param built Set of records created during this definition call.
    */
   #validateBuilt(handlers: readonly HandlerMetadata[], built: WeakSet<HandlerMetadata>): void {
     for (const handler of handlers) {
@@ -1239,11 +1239,11 @@ class EntityHandlersOwner {
   }
 
   /**
-   * Checks validateMethod metadata.
+   * Validates that a normal method is declared directly on the Entity prototype.
    *
-   * @typeParam Instance Instance type for this declaration.
-   * @param entityType entityType supplied to the metadata operation.
-   * @param methodName methodName supplied to the metadata operation.
+   * @typeParam Instance Entity instance type.
+   * @param entityType Entity constructor whose prototype is inspected.
+   * @param methodName Name that must identify an own prototype data method.
    */
   #validateMethod<Instance extends object>(
     entityType: EntityClass<Instance>,
@@ -1264,12 +1264,12 @@ class EntityHandlersOwner {
   }
 
   /**
-   * Builds ofKind metadata.
+   * Returns a frozen view of handlers for one role.
    *
-   * @typeParam Kind Kind type for this declaration.
-   * @param handlers handlers supplied to the metadata operation.
-   * @param kind kind supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @typeParam Kind Requested handler role.
+   * @param handlers Validated handler declarations.
+   * @param kind Role retained in the resulting list.
+   * @returns Frozen list of matching handler records.
    */
   #ofKind<Kind extends HandlerKind>(
     handlers: readonly HandlerMetadata[],

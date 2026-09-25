@@ -1746,11 +1746,7 @@ const HandlerSources = Object.freeze({
   ): boolean {
     if (
       node.type !== undefined &&
-      (scope.program
-        .getTypeChecker()
-        .getTypeFromTypeNode(HandlerSources.unwrapOuterPromise(node.type, scope)).flags &
-        ts.TypeFlags.Void) !==
-        0
+      HandlerSources.isSubscriberVoidReturn(node.type, scope.program)
     ) {
       return false;
     }
@@ -2895,6 +2891,31 @@ const HandlerSources = Object.freeze({
         program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
       ) === true
     );
+  },
+
+  /**
+   * Accepts void or one built-in Promise<void> after concrete alias instantiation.
+   *
+   * @param typeNode Subscriber's declared return type.
+   * @param program Compiler program resolving generic and imported aliases.
+   * @returns Whether the concrete result contains exactly the permitted void shape.
+   */
+  isSubscriberVoidReturn(typeNode: ts.TypeNode, program: ts.Program): boolean {
+    const checker = program.getTypeChecker();
+    const resolved = checker.getTypeFromTypeNode(typeNode);
+    if ((resolved.flags & ts.TypeFlags.Void) !== 0) return true;
+    if ((resolved.flags & ts.TypeFlags.Object) === 0) return false;
+    const reference = resolved as ts.TypeReference;
+    const symbol = reference.getSymbol();
+    if (
+      symbol?.getName() !== "Promise" ||
+      symbol.declarations?.some((declaration) =>
+        program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
+      ) !== true
+    )
+      return false;
+    const arguments_ = checker.getTypeArguments(reference);
+    return arguments_.length === 1 && ((arguments_[0]?.flags ?? 0) & ts.TypeFlags.Void) !== 0;
   },
 
   /**

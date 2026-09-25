@@ -50,6 +50,8 @@ describe("build-time handler analyzer", () => {
         type Pair<T> = [TaskCreated, T | undefined];
         type MaybeTuple = [TaskCreated?] | [TaskRenamed];
         type VoidAlias = void;
+        type Identity<T> = T;
+        type Async<T> = Promise<T>;
         export class ReturnShapes extends ProcessManager<string, typeof TaskSchema> {
           @React direct(event: TaskCreated): (TaskCreated | TaskRenamed | undefined)[] {
             throw Error(String(event));
@@ -66,6 +68,10 @@ describe("build-time handler analyzer", () => {
           @Assign missingAlias(command: CreateTask): MaybeTuple { throw Error(String(command)); }
           @Subscribe parenthesized(event: TaskCreated): (void) { void event; }
           @Subscribe aliased(event: TaskCreated): Promise<VoidAlias> { void event; return Promise.resolve(); }
+          @Subscribe genericVoid(event: TaskCreated): Identity<void> { void event; }
+          @Subscribe genericAsync(event: TaskCreated): Async<void> { void event; return Promise.resolve(); }
+          @Subscribe nestedAsync(event: TaskCreated): Async<Promise<void>> { throw Error(String(event)); }
+          @Subscribe thenable(event: TaskCreated): PromiseLike<void> { throw Error(String(event)); }
           @Subscribe invalid(event: TaskCreated): undefined { void event; return undefined; }
         }
       `,
@@ -88,6 +94,8 @@ describe("build-time handler analyzer", () => {
       ["MISSING_EMITTED_SCHEMAS", "missing"],
       ["MISSING_EMITTED_SCHEMAS", "missingUnion"],
       ["MISSING_EMITTED_SCHEMAS", "missingAlias"],
+      ["INVALID_SUBSCRIBE_RETURN", "nestedAsync"],
+      ["INVALID_SUBSCRIBE_RETURN", "thenable"],
       ["INVALID_SUBSCRIBE_RETURN", "invalid"],
     ]);
     expect(entityReceivers(result)[0]?.handlers.map(({ methodName }) => methodName)).toEqual([
@@ -99,6 +107,8 @@ describe("build-time handler analyzer", () => {
       "generic",
       "parenthesized",
       "aliased",
+      "genericVoid",
+      "genericAsync",
     ]);
   });
 

@@ -125,11 +125,11 @@ class ReadinessMetadataOwner {
   }
 
   /**
-   * Builds fields metadata.
+   * Groups one registration with its Entity and handler metadata for readiness checks.
    *
-   * @typeParam Handler Handler type for this declaration.
-   * @param registeredHandler registeredHandler supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @typeParam Handler Registered handler subtype.
+   * @param registeredHandler Registration supplying Entity and handler records.
+   * @returns Frozen fields used by readiness cloning or copying.
    */
   #fields<Handler extends HandlerMetadata>(
     registeredHandler: RegisteredHandlerMetadata<Handler>,
@@ -144,11 +144,11 @@ class ReadinessMetadataOwner {
   }
 
   /**
-   * Copies cloneRegistered metadata.
+   * Copies registration, Entity, and handler descriptors while reusing shared clones.
    *
-   * @typeParam Handler Handler type for this declaration.
-   * @param registeredHandler registeredHandler supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @typeParam Handler Registered handler subtype.
+   * @param registeredHandler Registration whose mutable descriptors are isolated.
+   * @returns Frozen registration referring to cloned metadata.
    */
   #cloneRegistered<Handler extends HandlerMetadata>(
     registeredHandler: RegisteredHandlerMetadata<Handler>,
@@ -173,11 +173,11 @@ class ReadinessMetadataOwner {
   }
 
   /**
-   * Copies copyRegistered metadata.
+   * Copies the registration shell without cloning its already immutable metadata.
    *
-   * @typeParam Handler Handler type for this declaration.
-   * @param registeredHandler registeredHandler supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @typeParam Handler Registered handler subtype.
+   * @param registeredHandler Registration containing immutable metadata references.
+   * @returns Frozen registration with the same nested references.
    */
   #copyRegistered<Handler extends HandlerMetadata>(
     registeredHandler: RegisteredHandlerMetadata<Handler>,
@@ -191,13 +191,13 @@ class ReadinessMetadataOwner {
   }
 
   /**
-   * Copies cloneEntityHandlers metadata.
+   * Builds every handler-kind list with shared cloned handler identities.
    *
-   * @param clonedHandlers clonedHandlers supplied to the metadata operation.
-   * @param clonedSchemas clonedSchemas supplied to the metadata operation.
-   * @param entity entity supplied to the metadata operation.
-   * @param entityHandlers entityHandlers supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @param entityHandlers Original grouped handler metadata.
+   * @param clonedHandlers Cache preserving identity across grouped lists.
+   * @param clonedSchemas Cache preserving shared descriptor identity.
+   * @param entity Cloned Entity metadata reused by the registration.
+   * @returns Frozen grouping with cloned handlers and Entity metadata.
    */
   #cloneEntityHandlers(
     entityHandlers: EntityHandlersMetadata,
@@ -243,13 +243,13 @@ class ReadinessMetadataOwner {
   }
 
   /**
-   * Copies cloneHandlers metadata.
+   * Copies a handler-kind list using the shared registration caches.
    *
-   * @typeParam Handler Handler type for this declaration.
-   * @param clonedHandlers clonedHandlers supplied to the metadata operation.
-   * @param clonedSchemas clonedSchemas supplied to the metadata operation.
-   * @param handlers handlers supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @typeParam Handler Handler subtype retained in the list.
+   * @param handlers Original handler-kind list.
+   * @param clonedHandlers Cache for handlers repeated in grouped lists.
+   * @param clonedSchemas Cache for descriptors shared by handlers.
+   * @returns Frozen list of cloned handler records.
    */
   #cloneHandlers<Handler extends HandlerMetadata>(
     handlers: readonly Handler[],
@@ -262,13 +262,13 @@ class ReadinessMetadataOwner {
   }
 
   /**
-   * Copies cloneHandler metadata.
+   * Copies one handler once and transfers its generated outcome schemas.
    *
-   * @typeParam Handler Handler type for this declaration.
-   * @param clonedHandlers clonedHandlers supplied to the metadata operation.
-   * @param clonedSchemas clonedSchemas supplied to the metadata operation.
-   * @param handler handler supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @typeParam Handler Handler subtype preserved by the clone.
+   * @param handler Original handler registration.
+   * @param clonedHandlers Cache preventing duplicate clones of one record.
+   * @param clonedSchemas Cache for shared input descriptors.
+   * @returns Frozen clone with its outcome schemas copied.
    */
   #cloneHandler<Handler extends HandlerMetadata>(
     handler: Handler,
@@ -290,12 +290,12 @@ class ReadinessMetadataOwner {
   }
 
   /**
-   * Copies cloneEntity metadata.
+   * Copies Entity descriptors and routing fields while retaining shared identities.
    *
-   * @param clonedFields clonedFields supplied to the metadata operation.
-   * @param clonedSchemas clonedSchemas supplied to the metadata operation.
-   * @param entity entity supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @param entity Original Entity schema and field metadata.
+   * @param clonedSchemas Cache for repeated schema descriptors.
+   * @param clonedFields Cache for fields repeated in routing and column metadata.
+   * @returns Frozen Entity metadata with isolated descriptors and fields.
    */
   #cloneEntity(
     entity: EntityMetadata,
@@ -319,12 +319,12 @@ class ReadinessMetadataOwner {
   }
 
   /**
-   * Copies cloneSchema metadata.
+   * Copies a schema descriptor once per registration.
    *
-   * @typeParam Schema Schema type for this declaration.
-   * @param clonedSchemas clonedSchemas supplied to the metadata operation.
-   * @param schema schema supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @typeParam Schema Generated schema descriptor type.
+   * @param schema Descriptor to isolate.
+   * @param clonedSchemas Cache preserving repeated descriptor identity.
+   * @returns Frozen descriptor clone.
    */
   #cloneSchema<Schema extends DescriptorMessageSchema>(
     schema: Schema,
@@ -340,12 +340,12 @@ class ReadinessMetadataOwner {
   }
 
   /**
-   * Copies cloneField metadata.
+   * Copies a field descriptor once per registration.
    *
-   * @typeParam Field Field type for this declaration.
-   * @param clonedFields clonedFields supplied to the metadata operation.
-   * @param field field supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @typeParam Field Field descriptor type.
+   * @param field Descriptor to isolate.
+   * @param clonedFields Cache preserving fields reused across Entity metadata.
+   * @returns Frozen field descriptor clone.
    */
   #cloneField<Field extends DescriptorFieldMetadata>(
     field: Field,
@@ -361,11 +361,11 @@ class ReadinessMetadataOwner {
   }
 
   /**
-   * Copies cloneFrozen metadata.
+   * Copies an object's own descriptors without changing its prototype.
    *
-   * @typeParam ObjectType ObjectType type for this declaration.
-   * @param value value supplied to the metadata operation.
-   * @returns The resulting metadata value.
+   * @typeParam ObjectType Descriptor object type preserved by the clone.
+   * @param value Descriptor whose prototype and own properties are copied.
+   * @returns Frozen copy retaining the source prototype.
    */
   #cloneFrozen<ObjectType extends object>(value: ObjectType): ObjectType {
     const clone = Object.create(Reflect.getPrototypeOf(value)) as ObjectType;

@@ -48,6 +48,7 @@ import {
   InternetDomainSchema,
   MessageIdSchema,
   OriginSchema,
+  RejectionEventContextSchema,
   TenantIdSchema,
   type TenantId,
   UserIdSchema,
@@ -57,6 +58,7 @@ import {
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { TaskListSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
 import {
+  CompleteTaskSchema,
   type CreateTask,
   CreateTaskSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
@@ -643,7 +645,7 @@ class ProjectRegistrationReactorAggregate extends Aggregate<string, typeof Proje
 }
 
 class CountingReactorAggregate extends Aggregate<string, typeof ProjectStateSchema> {
-  reactProjection(event: ProjectCreated): ProjectRegistered | undefined {
+  reactProjection(event: ProjectCreated): undefined {
     const count = Number(this.state.name || "0") + 1;
     this.update((draft) => Object.assign(draft, { id: event.id, name: String(count) }));
     return undefined;
@@ -1683,6 +1685,25 @@ class OptionalCommandProcessManager extends ProcessManager<string, typeof Projec
     return event.name === "both"
       ? [first, create(DraftProjectSchema, { id: event.id, name: event.name, priority: 1 })]
       : [first, undefined];
+  }
+}
+
+class SilentCommandProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
+  static calls = 0;
+  static rejectionCalls = 0;
+
+  commandSilently(event: ProjectCreated): undefined {
+    SilentCommandProcessManager.calls++;
+    this.update((draft) => Object.assign(draft, { id: event.id, queue: event.name }));
+    return undefined;
+  }
+
+  commandSilentlyOnRejection(rejection: TaskAlreadyDoneMessage): undefined {
+    SilentCommandProcessManager.rejectionCalls++;
+    const id = rejection.id?.value;
+    if (id === undefined) throw new Error("Expected a rejected task ID.");
+    this.update((draft) => Object.assign(draft, { id, queue: "rejected" }));
+    return undefined;
   }
 }
 
@@ -2753,7 +2774,13 @@ describe("repository signal routing", () => {
       await expect(
         context.stand().read(ProjectStateSchema, "task-count-retry"),
       ).resolves.toMatchObject({ name: "1" });
-      await expect(storage.readEvents("task-count-retry")).resolves.toHaveLength(1);
+      await expect(storage.readCurrent("task-count-retry")).resolves.toMatchObject({
+        version: 1n,
+        state: { id: "task-count-retry", name: "1" },
+      });
+      const history = await storage.readEvents("task-count-retry");
+      expect(history).toHaveLength(1);
+      expect(history[0]?.message?.typeUrl).toBe(TypeUrls.derive(ProjectCreatedSchema));
     } finally {
       await context.close();
     }
@@ -10094,6 +10121,79 @@ describe("repository signal routing", () => {
     ]);
   });
 
+  it("runs generated no-output Command reactions and persists Process Manager state", async () => {
+    SilentCommandProcessManager.calls = 0;
+    const commands: SpineCommand[] = [];
+    const repository = createSilentCommandProcessManagerRepository();
+    const context = BoundedContext.singleTenant("Silent commands")
+      .add(repository)
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateProjectSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context.eventBus().post(createProjectCreated("silent-command", "silent-target"));
+      expect(SilentCommandProcessManager.calls).toBe(1);
+      await expect(
+        context.stand().readVersioned(ProjectQueueStateSchema, "silent-target"),
+      ).resolves.toMatchObject({
+        state: { id: "silent-target", queue: "Task" },
+        version: { number: 1 },
+      });
+      expect(commands).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("runs a no-output Command reaction for a rejection without a child Command", async () => {
+    SilentCommandProcessManager.rejectionCalls = 0;
+    const commands: SpineCommand[] = [];
+    const rejection = create(TaskAlreadyDoneSchema, {
+      id: create(GeneratedTaskIdSchema, { value: "silent-rejection" }),
+    });
+    const source = createProjectCreated("silent-rejection-event", "silent-rejection");
+    source.message = AnyMessages.pack(TaskAlreadyDoneSchema, rejection);
+    if (source.context === undefined) throw new Error("Expected a source Event context.");
+    const cause = createAggregateCommand("silent-rejection-command", "silent-rejection");
+    cause.message = AnyMessages.pack(
+      CompleteTaskSchema,
+      create(CompleteTaskSchema, {
+        id: create(GeneratedTaskIdSchema, { value: "silent-rejection" }),
+      }),
+    );
+    source.context.rejection = create(RejectionEventContextSchema, {
+      command: cause,
+    });
+    const context = BoundedContext.singleTenant("Silent commands")
+      .add(createSilentCommandProcessManagerRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateProjectSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context.eventBus().post(source);
+      await waitForCondition(() => SilentCommandProcessManager.rejectionCalls === 1);
+      await expect(
+        context.stand().readVersioned(ProjectQueueStateSchema, "silent-rejection"),
+      ).resolves.toMatchObject({
+        state: { id: "silent-rejection", queue: "rejected" },
+        version: { number: 1 },
+      });
+      expect(commands).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("loads existing projection state before applying later delivered events", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createAccumulatingProjectionRepository())
@@ -10871,6 +10971,44 @@ function createOptionalCommandProcessManagerRepository(): Repository<
   });
 }
 
+function createSilentCommandProcessManagerRepository(): Repository<
+  typeof SilentCommandProcessManager
+> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: SilentCommandProcessManager,
+        stateSchema: ProjectQueueStateSchema,
+        handlers: [
+          {
+            kind: "command-reaction",
+            methodName: "commandSilently",
+            input: { schema: ProjectCreatedSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
+            parameterCount: 1,
+          },
+          {
+            kind: "command-reaction",
+            methodName: "commandSilentlyOnRejection",
+            input: { schema: TaskAlreadyDoneSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<SilentCommandProcessManager, typeof ProjectQueueStateSchema>;
+  return new Repository({
+    entityType: SilentCommandProcessManager,
+    schema: ProjectQueueStateSchema,
+    handlers,
+    eventRouting: EventRouting.create<string>().route(TaskAlreadyDoneSchema, (r) => [
+      r.id?.value ?? "",
+    ]),
+  });
+}
+
 function createSequencedProjectOverviewRepository(
   eventRouting: EventRouting<ProjectSequenceId>,
 ): Repository<typeof SequencedProjectOverview> {
@@ -11501,7 +11639,7 @@ function createCountingReactorRepository(): Repository<typeof CountingReactorAgg
             kind: "event-reaction",
             methodName: "reactProjection",
             input: { schema: ProjectCreatedSchema, origin: "domestic" },
-            outcomes: { returned: [ProjectRegisteredSchema], thrown: [] },
+            outcomes: { returned: [], thrown: [] },
             parameterCount: 1,
           },
         ],
