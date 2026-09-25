@@ -150,34 +150,26 @@ import { MessageIds, PrimitiveIds } from "./primitive-id.js";
 import { ImplicitRequiredIds } from "../entity/implicit-required-id.js";
 
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
-  | Aggregate<unknown, Schema, unknown>
-  | Projection<unknown, Schema, unknown>
-  | ProcessManager<unknown, Schema, unknown>;
+  Aggregate<unknown, Schema> | Projection<unknown, Schema> | ProcessManager<unknown, Schema>;
 
 /**
  * Generated Protobuf-ES state schema carried by a repository entity constructor.
  */
 export type RepositoryStateSchema<EntityType extends RepositoryEntityType> =
-  EntityType["prototype"] extends Aggregate<infer Id, infer Schema, infer Version>
-    ? [Id, Version] extends [unknown, unknown]
+  EntityType["prototype"] extends Aggregate<unknown, infer Schema>
+    ? Schema
+    : EntityType["prototype"] extends Projection<unknown, infer Schema>
       ? Schema
-      : never
-    : EntityType["prototype"] extends Projection<infer Id, infer Schema, infer Version>
-      ? [Id, Version] extends [unknown, unknown]
+      : EntityType["prototype"] extends ProcessManager<unknown, infer Schema>
         ? Schema
-        : never
-      : EntityType["prototype"] extends ProcessManager<infer Id, infer Schema, infer Version>
-        ? [Id, Version] extends [unknown, unknown]
-          ? Schema
-          : never
         : never;
 
 type RepositoryEntityId<EntityType extends RepositoryEntityType> =
-  EntityType["prototype"] extends Aggregate<infer Id, DescriptorMessageSchema, unknown>
+  EntityType["prototype"] extends Aggregate<infer Id, DescriptorMessageSchema>
     ? Id
-    : EntityType["prototype"] extends Projection<infer Id, DescriptorMessageSchema, unknown>
+    : EntityType["prototype"] extends Projection<infer Id, DescriptorMessageSchema>
       ? Id
-      : EntityType["prototype"] extends ProcessManager<infer Id, DescriptorMessageSchema, unknown>
+      : EntityType["prototype"] extends ProcessManager<infer Id, DescriptorMessageSchema>
         ? Id
         : never;
 
@@ -187,26 +179,10 @@ type RepositoryHandlers<EntityType extends RepositoryEntityType> =
     : never;
 
 type RepositoryHandlersOptionFor<EntityType extends RepositoryEntityType> =
-  EntityType["prototype"] extends Aggregate<unknown, DescriptorMessageSchema, infer Version>
-    ? [Version] extends [bigint]
-      ? RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[]
-      : never
-    : EntityType["prototype"] extends Projection<unknown, DescriptorMessageSchema, infer Version>
-      ? [Version] extends [number]
-        ? RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[]
-        : never
-      : EntityType["prototype"] extends ProcessManager<
-            unknown,
-            DescriptorMessageSchema,
-            infer Version
-          >
-        ? [Version] extends [number]
-          ? RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[]
-          : never
-        : never;
+  RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[];
 
 type StateRoutingOption<EntityType extends RepositoryEntityType> =
-  EntityType["prototype"] extends Projection<unknown, DescriptorMessageSchema, unknown>
+  EntityType["prototype"] extends Projection<unknown, DescriptorMessageSchema>
     ? StateUpdateRouting<RepositoryEntityId<EntityType>>
     : never;
 
@@ -253,7 +229,7 @@ export type RepositoryEntityType<
 > = (abstract new (...args: never[]) => Instance) &
   // `any` erases the Entity constructor parameters while preserving its protected static origin.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  typeof Entity<any, DescriptorMessageSchema, any> & {
+  typeof Entity<any, DescriptorMessageSchema> & {
     // prettier-ignore
 
     /**
@@ -1346,7 +1322,7 @@ interface LoadedAggregate {
 
 interface AggregateSnapshot {
   readonly state: unknown;
-  readonly version: bigint;
+  readonly versionMessage: Version;
   readonly archived: boolean;
   readonly deleted: boolean;
 }
@@ -1452,50 +1428,27 @@ class AggregateExecutionSupport {
   async persistAggregateUpdate(
     loaded: LoadedAggregate,
     entityId: unknown,
-    version: bigint,
     events: readonly Event[],
   ): Promise<boolean> {
     const lifecycle = RepositoryEntities.repositoryLifecycle(loaded.entity);
     const state = RepositoryEntities.repositoryState(loaded.entity) as Message;
+    const versionMessage = RepositoryEntities.repositoryVersion(loaded.entity);
     const deferred = await standAccess.deferUpdate(
       this.#runtime.stand,
       this.#repository.stateSchema,
       state,
-      RepositoryStand.standUpdateOptions(
-        this.#storageContext.tenantId,
-        create(VersionSchema, { number: RepositorySignals.eventVersionNumber(version) }),
-        lifecycle,
-      ),
+      RepositoryStand.standUpdateOptions(this.#storageContext.tenantId, versionMessage, lifecycle),
     );
     try {
-      const createdAt = events[events.length - 1]?.context?.timestamp ?? create(TimestampSchema);
-      const outcome = await loaded.commits.commit({
-        context: this.#storageContext,
-        entity: loaded.storageInput,
+      const outcome = await this.#commitAggregateRecord(
+        loaded,
         entityId,
-        ...(loaded.current === undefined ? {} : { expected: loaded.current }),
-        next: EntityRecords.pack(this.#repository.stateSchema, entityId, state, version, lifecycle),
-        ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
-          ? {
-              states: [
-                EntityRecords.pack(
-                  this.#repository.stateSchema,
-                  entityId,
-                  state,
-                  create(VersionSchema, {
-                    number: RepositorySignals.eventVersionNumber(version),
-                    timestamp: createdAt,
-                  }),
-                  lifecycle,
-                ),
-              ],
-            }
-          : {}),
-        diagnostics: events.map((event) => clone(EventSchema, event)),
+        state,
+        versionMessage,
+        lifecycle,
         events,
-      });
+      );
       if (outcome !== "committed") {
-        deferred.cancel();
         throw new Error("Concurrent Aggregate state commit conflict.");
       }
       entityStateHistoryCaches.get(loaded.entity)?.clear();
@@ -1503,13 +1456,63 @@ class AggregateExecutionSupport {
       deferred.cancel();
       throw error;
     }
+    this.#notifyAggregate(() => deferred.notify(), events);
+    return true;
+  }
+
+  /**
+   * Reports failed Aggregate Stand notifications without reversing committed storage.
+   *
+   * @param notify Delivers the deferred Stand update.
+   * @param events Produced Events available for failure reporting.
+   */
+  #notifyAggregate(onNotify: () => void, events: readonly Event[]): void {
     try {
-      deferred.notify();
+      onNotify();
     } catch (error) {
       const event = events[events.length - 1];
       if (event !== undefined) this.#runtime.publisher.reportFailure("event", event, error);
     }
-    return true;
+  }
+
+  /**
+   * Writes one Aggregate state and its optional history with the same Version.
+   *
+   * @param loaded Loaded Aggregate and commit storage.
+   * @param entityId Aggregate identifier.
+   * @param state Accepted Aggregate state.
+   * @param version Current Spine Version.
+   * @param lifecycle Accepted lifecycle flags.
+   * @param events Produced Events to retain and publish.
+   * @returns The storage commit outcome.
+   */
+  #commitAggregateRecord(
+    loaded: LoadedAggregate,
+    entityId: unknown,
+    state: Message,
+    version: Version,
+    lifecycle: EntityLifecycleFlags,
+    events: readonly Event[],
+  ): Promise<"committed" | "conflict"> {
+    const record = EntityRecords.pack(
+      this.#repository.stateSchema,
+      entityId,
+      state,
+      version,
+      lifecycle,
+    );
+    return loaded.commits.commit({
+      context: this.#storageContext,
+      entity: loaded.storageInput,
+      entityId,
+      ...(loaded.current === undefined ? {} : { expected: loaded.current }),
+      next: record,
+      ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
+        ? { states: [record] }
+        : {}),
+      diagnostics: events.map((event) => clone(EventSchema, event)),
+      events,
+    });
   }
 
   async appendDiagnosticEvent(
@@ -1526,12 +1529,11 @@ class AggregateExecutionSupport {
   async persistAggregateAndDispatch(
     loaded: LoadedAggregate,
     entityId: unknown,
-    version: bigint,
     events: readonly Event[],
     dispatch: (event: Event) => Promise<void>,
     onPersisted: () => Promise<void> | void,
   ): Promise<() => Promise<void>> {
-    const committed = await this.persistAggregateUpdate(loaded, entityId, version, events);
+    const committed = await this.persistAggregateUpdate(loaded, entityId, events);
     if (!committed) return () => Promise.resolve();
     await onPersisted();
     return async () => {
@@ -1555,7 +1557,7 @@ class AggregateExecutionSupport {
       id: entityId,
       schema: this.#repository.stateSchema,
       state: current?.state ?? this.#defaultState(entityId),
-      version: current?.version ?? 0n,
+      version: current?.versionMessage ?? create(VersionSchema),
     };
 
     if (current !== undefined) {
@@ -1685,7 +1687,6 @@ class AggregateCommandExecution {
     return this.#support.persistAggregateAndDispatch(
       loaded,
       entityId,
-      committedVersion,
       events,
       (event) => this.#runtime.publisher.publishCommittedEvent(event),
       () => {
@@ -1727,7 +1728,7 @@ class AggregateCommandExecution {
         context,
       );
       const commit = await commitFenced(entity, (current) =>
-        transactionalEntityAccess.commit(current),
+        transactionalEntityAccess.commit(current, true),
       );
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
@@ -1883,11 +1884,10 @@ class AggregateEventExecution {
     entityId: unknown,
     produced: readonly Event[],
   ): Promise<void> {
-    if (produced.length === 0) return;
+    if (produced.length === 0 && !RepositoryEntities.repositoryChanged(loaded.entity)) return;
     const dispatch = await this.#support.persistAggregateAndDispatch(
       loaded,
       entityId,
-      loaded.version + 1n,
       produced,
       (event) => this.#runtime.publisher.publishReactorEvent(event),
       () => {
@@ -1937,7 +1937,7 @@ class AggregateEventExecution {
     transactionalEntityAccess.start(loaded.entity);
     try {
       await this.#invokeReactors(entityId, loaded, intake, eventContext, events);
-      await this.#commitEntity(loaded.entity);
+      await this.#commitEntity(loaded.entity, events.length > 0);
       return Object.freeze(events);
     } catch (error) {
       transactionalEntityAccess.rollback(loaded.entity);
@@ -1975,9 +1975,9 @@ class AggregateEventExecution {
     }
   }
 
-  async #commitEntity(entity: object): Promise<void> {
+  async #commitEntity(entity: object, producedEvents: boolean): Promise<void> {
     const commit = await commitFenced(entity, (current) =>
-      transactionalEntityAccess.commit(current),
+      transactionalEntityAccess.commit(current, producedEvents),
     );
     if (commit.status === "rejected") throw new TransitionValidationError(commit.validation.error);
   }
@@ -2170,63 +2170,126 @@ class ProjectionEventExecution {
 
     const entityId = (loaded.entity as { readonly id: unknown }).id;
     const state = RepositoryEntities.repositoryState(loaded.entity) as Message;
-    const version = BigInt(this.#event.context?.version?.number ?? 0);
+    const version = RepositoryEntities.repositoryVersion(loaded.entity);
     const lifecycle = RepositoryEntities.repositoryLifecycle(loaded.entity);
     const deferred = await standAccess.deferUpdate(
       this.#runtime.stand,
       this.#repository.stateSchema,
       state,
-      RepositoryStand.standUpdateOptions(
-        tenantOptions.tenantId,
-        this.#event.context?.version,
-        lifecycle,
-      ),
+      RepositoryStand.standUpdateOptions(tenantOptions.tenantId, version, lifecycle),
     );
+    await this.#commitProjectionOrCancel(loaded, entityId, state, version, lifecycle, () =>
+      deferred.cancel(),
+    );
+    this.#notifyProjection(() => deferred.notify());
+    this.#publishProjectionChange(loaded, oldState, mode, state, lifecycle, version);
+  }
+
+  /**
+   * Cancels a deferred Stand update when Projection storage rejects its commit.
+   *
+   * @param loaded Loaded Projection and commit storage.
+   * @param entityId Projection identifier.
+   * @param state Accepted Projection state.
+   * @param version Current Spine Version.
+   * @param lifecycle Accepted lifecycle flags.
+   * @param onCancel Cancels the deferred Stand update.
+   */
+  async #commitProjectionOrCancel(
+    loaded: LoadedRepositoryEntity,
+    entityId: unknown,
+    state: Message,
+    version: Version,
+    lifecycle: EntityLifecycleFlags,
+    onCancel: () => void,
+  ): Promise<void> {
     try {
-      const outcome = await loaded.commits.commit({
-        context: loaded.storageInput.context,
-        entity: loaded.storageInput,
+      const outcome = await this.#commitProjectionRecord(
+        loaded,
         entityId,
-        ...(loaded.current === undefined ? {} : { expected: loaded.current }),
-        next: EntityRecords.pack(
-          this.#repository.stateSchema,
-          entityId,
-          state,
-          this.#event.context?.version ?? version,
-          lifecycle,
-        ),
-        ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
-          ? {
-              states: [
-                EntityRecords.pack(
-                  this.#repository.stateSchema,
-                  entityId,
-                  state,
-                  this.#event.context?.version ?? version,
-                  lifecycle,
-                ),
-              ],
-            }
-          : {}),
-      });
-      if (outcome !== "committed") {
-        deferred.cancel();
-        throw new Error("Concurrent Projection state commit conflict.");
-      }
+        state,
+        version,
+        lifecycle,
+      );
+      if (outcome !== "committed") throw new Error("Concurrent Projection state commit conflict.");
     } catch (error) {
-      deferred.cancel();
+      onCancel();
       throw error;
     }
+  }
+
+  /**
+   * Reports a failed Projection Stand notification after durable storage succeeds.
+   *
+   * @param notify Delivers the deferred Stand update.
+   */
+  #notifyProjection(onNotify: () => void): void {
     try {
-      deferred.notify();
+      onNotify();
     } catch (error) {
       this.#runtime.publisher.reportFailure("event", this.#event, error);
     }
+  }
+
+  /**
+   * Persists one Projection update with the same Version in current and history records.
+   *
+   * @param loaded Loaded Projection and commit storage.
+   * @param entityId Projection identifier.
+   * @param state Accepted Projection state.
+   * @param version Current Spine Version.
+   * @param lifecycle Accepted lifecycle flags.
+   * @returns The storage commit outcome.
+   */
+  #commitProjectionRecord(
+    loaded: LoadedRepositoryEntity,
+    entityId: unknown,
+    state: Message,
+    version: Version,
+    lifecycle: EntityLifecycleFlags,
+  ): Promise<"committed" | "conflict"> {
+    const record = EntityRecords.pack(
+      this.#repository.stateSchema,
+      entityId,
+      state,
+      version,
+      lifecycle,
+    );
+    return loaded.commits.commit({
+      context: loaded.storageInput.context,
+      entity: loaded.storageInput,
+      entityId,
+      ...(loaded.current === undefined ? {} : { expected: loaded.current }),
+      next: record,
+      ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
+        ? { states: [record] }
+        : {}),
+    });
+  }
+
+  /**
+   * Publishes a Projection state change with its committed Entity version.
+   *
+   * @param loaded Loaded Projection and prior record.
+   * @param oldState State before dispatch, when available.
+   * @param mode Normal or rebuilding delivery mode.
+   * @param state Accepted Projection state.
+   * @param lifecycle Accepted lifecycle flags.
+   * @param version Committed Spine Version.
+   */
+  #publishProjectionChange(
+    loaded: LoadedRepositoryEntity,
+    oldState: Message | undefined,
+    mode: EntityLoadMode,
+    state: Message,
+    lifecycle: EntityLifecycleFlags,
+    version: Version,
+  ): void {
     EntityStateChangePublisher.event(
       this.#runtime,
       this.#repository,
       this.#event,
-      entityId,
+      (loaded.entity as { readonly id: unknown }).id,
       oldState,
       mode === "rebuild"
         ? lifecycle
@@ -2238,7 +2301,7 @@ class ProjectionEventExecution {
             },
       state,
       lifecycle,
-      this.#event.context?.version?.number ?? 0,
+      version.number,
     );
   }
 
@@ -2315,66 +2378,27 @@ class ProjectionEventExecution {
       entityId,
       options,
     );
-    const entityType = this.#repository.entityType as unknown as new (options: {
-      readonly id: unknown;
-      readonly schema: DescriptorMessageSchema;
-      readonly state: unknown;
-      readonly version: unknown;
-      readonly lifecycle: EntityLifecycleFlags;
-    }) => object;
-
-    const entity = new entityType({
-      id: entityId,
-      schema: this.#repository.stateSchema,
-      state:
-        stored === undefined || (mode === "rebuild" && stored.deleted)
-          ? this.#defaultState(entityId)
-          : stored.state,
-      version:
-        mode === "rebuild" && stored?.deleted
-          ? 0
-          : RepositoryStand.projectionVersion(stored?.version),
-      lifecycle:
-        mode === "rebuild" && stored?.deleted
-          ? { archived: false, deleted: false }
-          : { archived: stored?.archived ?? false, deleted: stored?.deleted ?? false },
-    });
-    const storageInput = RepositoryStorage.entityStorageInput(
+    const entity = RepositoryEntities.instantiate(
       this.#repository,
-      RepositoryTenants.storageContextForTenant(this.#runtime.context, options.tenantId),
-    );
-    const storage = RepositoryStorage.openRepositoryEntityStorage(
-      this.#repository,
-      this.#runtime.storageFactory,
-      storageInput,
-    );
-    RepositoryHistoryInternals.bindEntityHistory(
-      entity,
-      storage,
       entityId,
-      this.#repository.stateSchema,
+      stored,
+      mode === "rebuild" && stored?.deleted === true,
     );
-    return Object.freeze({
-      commits: storage.commits,
-      current:
-        stored === undefined
-          ? undefined
-          : EntityRecords.pack(
-              this.#repository.stateSchema,
-              entityId,
-              stored.state,
-              stored.versionMessage,
-              { archived: stored.archived, deleted: stored.deleted },
-            ),
+    const { commits, storageInput } = RepositoryEntities.bindStorage(
+      this.#repository,
+      this.#runtime,
+      options.tenantId,
+      entityId,
       entity,
+    );
+    return RepositoryEntities.loaded(
+      entity,
+      stored,
+      commits,
       storageInput,
-    });
-  }
-
-  #defaultState(entityId: unknown): unknown {
-    return create(this.#repository.stateSchema, {
-      [this.#repository.idField.localName]: entityId,
-    });
+      this.#repository.stateSchema,
+      entityId,
+    );
   }
 }
 
@@ -2441,57 +2465,27 @@ class ProcessManagerExecutionSupport {
       entityId,
       options,
     );
-    const entityType = this.#repository.entityType as unknown as new (options: {
-      readonly id: unknown;
-      readonly schema: DescriptorMessageSchema;
-      readonly state: unknown;
-      readonly version: unknown;
-      readonly lifecycle: EntityLifecycleFlags;
-    }) => object;
-
-    const entity = new entityType({
-      id: entityId,
-      schema: this.#repository.stateSchema,
-      state: stored === undefined ? this.#defaultState(entityId) : stored.state,
-      version: RepositoryStand.projectionVersion(stored?.version),
-      lifecycle: { archived: stored?.archived ?? false, deleted: stored?.deleted ?? false },
-    });
-    const storageInput = RepositoryStorage.entityStorageInput(
+    const entity = RepositoryEntities.instantiate(this.#repository, entityId, stored, false);
+    const { commits, storageInput } = RepositoryEntities.bindStorage(
       this.#repository,
-      RepositoryTenants.storageContextForTenant(this.#runtime.context, options.tenantId),
-    );
-    const storage = RepositoryStorage.openRepositoryEntityStorage(
-      this.#repository,
-      this.#runtime.storageFactory,
-      storageInput,
-    );
-    RepositoryHistoryInternals.bindEntityHistory(
-      entity,
-      storage,
+      this.#runtime,
+      options.tenantId,
       entityId,
-      this.#repository.stateSchema,
-    );
-    return Object.freeze({
-      commits: storage.commits,
-      current:
-        stored === undefined
-          ? undefined
-          : EntityRecords.pack(
-              this.#repository.stateSchema,
-              entityId,
-              stored.state,
-              stored.versionMessage,
-              { archived: stored.archived, deleted: stored.deleted },
-            ),
       entity,
+    );
+    return RepositoryEntities.loaded(
+      entity,
+      stored,
+      commits,
       storageInput,
-    });
+      this.#repository.stateSchema,
+      entityId,
+    );
   }
 
   async commit(
     loaded: LoadedRepositoryEntity,
     options: { readonly tenantId?: TenantId },
-    createdAt: Timestamp,
     events: readonly Event[],
   ): Promise<boolean> {
     const changed = RepositoryEntities.repositoryChanged(loaded.entity);
@@ -2499,59 +2493,104 @@ class ProcessManagerExecutionSupport {
     const entityId = (loaded.entity as { readonly id: unknown }).id;
     const state = RepositoryEntities.repositoryState(loaded.entity) as Message;
     const lifecycle = RepositoryEntities.repositoryLifecycle(loaded.entity);
-    const version = changed
-      ? BigInt(RepositoryStand.processManagerVersion(loaded.entity))
-      : BigInt(loaded.current?.version?.number ?? 0);
-    const deferred = changed
-      ? await standAccess.deferUpdate(
-          this.#runtime.stand,
-          this.#repository.stateSchema,
-          state,
-          RepositoryStand.standUpdateOptions(
-            options.tenantId,
-            create(VersionSchema, { number: Number(version) }),
-            lifecycle,
-          ),
-        )
-      : undefined;
+    const version = RepositoryEntities.repositoryVersion(loaded.entity);
+    const deferred = await standAccess.deferUpdate(
+      this.#runtime.stand,
+      this.#repository.stateSchema,
+      state,
+      RepositoryStand.standUpdateOptions(options.tenantId, version, lifecycle),
+    );
+    await this.#storeProcessManagerRecord(
+      loaded,
+      entityId,
+      state,
+      version,
+      lifecycle,
+      events,
+      deferred,
+    );
+    this.#notifyProcessManager(() => deferred.notify(), events);
+    return true;
+  }
+
+  /** Stores the accepted Process Manager state and cancels the Stand update on failure. */
+  async #storeProcessManagerRecord(
+    loaded: LoadedRepositoryEntity,
+    entityId: unknown,
+    state: Message,
+    version: Version,
+    lifecycle: EntityLifecycleFlags,
+    events: readonly Event[],
+    deferred: { notify(): void; cancel(): void },
+  ): Promise<void> {
     try {
-      const history = RepositoryStorage.historyConfiguration(this.#repository);
-      const outcome = await loaded.commits.commit({
-        context: loaded.storageInput.context,
-        entity: loaded.storageInput,
+      const outcome = await this.#commitProcessManagerRecord(
+        loaded,
         entityId,
-        ...(loaded.current === undefined ? {} : { expected: loaded.current }),
-        next: EntityRecords.pack(this.#repository.stateSchema, entityId, state, version, lifecycle),
-        ...(changed && history.stateHistory
-          ? {
-              states: [
-                EntityRecords.pack(
-                  this.#repository.stateSchema,
-                  entityId,
-                  state,
-                  create(VersionSchema, { number: Number(version), timestamp: createdAt }),
-                  lifecycle,
-                ),
-              ],
-            }
-          : {}),
-        ...(history.processManagerEventHistory
-          ? {
-              diagnostics: events.map((event) => clone(EventSchema, event)),
-            }
-          : {}),
-      });
+        state,
+        version,
+        lifecycle,
+        events,
+      );
       if (outcome !== "committed") {
-        deferred?.cancel();
         throw new Error("Concurrent Process Manager state commit conflict.");
       }
       entityStateHistoryCaches.get(loaded.entity)?.clear();
     } catch (error) {
-      deferred?.cancel();
+      deferred.cancel();
       throw error;
     }
+  }
+
+  /**
+   * Stores one Process Manager version in current and optional history records.
+   *
+   * @param loaded Loaded Process Manager and commit storage.
+   * @param entityId Process Manager identifier.
+   * @param state Accepted Process Manager state.
+   * @param version Current Spine Version.
+   * @param lifecycle Accepted lifecycle flags.
+   * @param events Diagnostic Events to retain when configured.
+   * @returns The storage commit outcome.
+   */
+  #commitProcessManagerRecord(
+    loaded: LoadedRepositoryEntity,
+    entityId: unknown,
+    state: Message,
+    version: Version,
+    lifecycle: EntityLifecycleFlags,
+    events: readonly Event[],
+  ): Promise<"committed" | "conflict"> {
+    const history = RepositoryStorage.historyConfiguration(this.#repository);
+    const record = EntityRecords.pack(
+      this.#repository.stateSchema,
+      entityId,
+      state,
+      version,
+      lifecycle,
+    );
+    return loaded.commits.commit({
+      context: loaded.storageInput.context,
+      entity: loaded.storageInput,
+      entityId,
+      ...(loaded.current === undefined ? {} : { expected: loaded.current }),
+      next: record,
+      ...(history.stateHistory ? { states: [record] } : {}),
+      ...(history.processManagerEventHistory
+        ? { diagnostics: events.map((event) => clone(EventSchema, event)) }
+        : {}),
+    });
+  }
+
+  /**
+   * Reports a failed Process Manager Stand notification after storage commits.
+   *
+   * @param notify Delivers the deferred Stand update.
+   * @param events Produced or diagnostic Events available for failure reporting.
+   */
+  #notifyProcessManager(onNotify: () => void, events: readonly Event[]): void {
     try {
-      deferred?.notify();
+      onNotify();
     } catch (error) {
       this.#runtime.publisher.reportFailure(
         "event",
@@ -2559,13 +2598,6 @@ class ProcessManagerExecutionSupport {
         error,
       );
     }
-    return true;
-  }
-
-  #defaultState(entityId: unknown): unknown {
-    return create(this.#repository.stateSchema, {
-      [this.#repository.idField.localName]: entityId,
-    });
   }
 }
 
@@ -2659,12 +2691,7 @@ class ProcessManagerCommandExecution {
   ): Promise<EntityInboxFollowUp | undefined> {
     const commands = this.#commandOutputs(intake.assignee, producedSignals);
     const events = this.#eventOutputs(intake.assignee, producedSignals, intake.route.entityId);
-    const committed = await this.#support.commit(
-      loaded,
-      tenantOptions,
-      RepositorySignals.executionTimestamp(),
-      events,
-    );
+    const committed = await this.#support.commit(loaded, tenantOptions, events);
     if (!committed) return undefined;
     this.#publishChangedState(loaded, intake.route.entityId);
     this.#postEvents(events);
@@ -2720,7 +2747,7 @@ class ProcessManagerCommandExecution {
             },
         RepositoryEntities.repositoryState(loaded.entity) as Message,
         RepositoryEntities.repositoryLifecycle(loaded.entity),
-        RepositoryStand.processManagerVersion(loaded.entity),
+        RepositoryEntities.repositoryVersion(loaded.entity).number,
       );
     }
   }
@@ -2759,7 +2786,11 @@ class ProcessManagerCommandExecution {
         EntityInvocation.commandHandlerContext(this.#command),
       );
       const commit = await commitFenced(entity, (current) =>
-        transactionalEntityAccess.commit(current),
+        transactionalEntityAccess.commit(
+          current,
+          assignee.handler.kind === "command-assignment" &&
+            this.#support.normalizeProducedSignals(produced).length > 0,
+        ),
       );
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
@@ -2971,12 +3002,7 @@ class ProcessManagerEventExecution {
       DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId),
       ...events,
     ];
-    const committed = await this.#support.commit(
-      loaded,
-      tenantOptions,
-      this.#event.context?.timestamp ?? create(TimestampSchema),
-      diagnostics,
-    );
+    const committed = await this.#support.commit(loaded, tenantOptions, diagnostics);
     if (!committed) return;
     this.#publishChangedState(loaded, entityId);
     this.#postEvents(events);
@@ -3004,7 +3030,7 @@ class ProcessManagerEventExecution {
           },
       RepositoryEntities.repositoryState(loaded.entity) as Message,
       RepositoryEntities.repositoryLifecycle(loaded.entity),
-      RepositoryStand.processManagerVersion(loaded.entity),
+      RepositoryEntities.repositoryVersion(loaded.entity).number,
     );
   }
 
@@ -3046,7 +3072,7 @@ class ProcessManagerEventExecution {
     transactionalEntityAccess.start(entity);
     try {
       await this.#invokeEventHandlers(entityId, entity, intake, eventContext, events, commands);
-      await this.#commitEntity(entity);
+      await this.#commitEntity(entity, events.length > 0);
       return Object.freeze({
         commands: Object.freeze(commands),
         events: Object.freeze(events),
@@ -3098,9 +3124,9 @@ class ProcessManagerEventExecution {
     }
   }
 
-  async #commitEntity(entity: object): Promise<void> {
+  async #commitEntity(entity: object, producedEvents: boolean): Promise<void> {
     const commit = await commitFenced(entity, (current) =>
-      transactionalEntityAccess.commit(current),
+      transactionalEntityAccess.commit(current, producedEvents),
     );
     if (commit.status === "rejected") throw new TransitionValidationError(commit.validation.error);
   }
@@ -3503,8 +3529,128 @@ Object.freeze(EntityInvocation);
  * Internal repository entities operations.
  */
 const RepositoryEntities = {
+  /**
+   * Opens Entity storage and binds diagnostic history to the restored instance.
+   *
+   * @param repository Entity repository registration.
+   * @param runtime Storage factory and tenant mode.
+   * @param tenantId Tenant identifier when multitenant.
+   * @param entityId Entity identifier.
+   * @param entity Restored Entity instance.
+   * @returns Commit storage and its Entity storage specification.
+   */
+  bindStorage(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    entityId: unknown,
+    entity: object,
+  ): {
+    readonly commits: EntityCommitStorage;
+    readonly storageInput: EntityStorageInput<unknown, Message>;
+  } {
+    const storageInput = RepositoryStorage.entityStorageInput(
+      repository,
+      RepositoryTenants.storageContextForTenant(runtime.context, tenantId),
+    );
+    const storage = RepositoryStorage.openRepositoryEntityStorage(
+      repository,
+      runtime.storageFactory,
+      storageInput,
+    );
+    RepositoryHistoryInternals.bindEntityHistory(entity, storage, entityId, repository.stateSchema);
+    return { commits: storage.commits, storageInput };
+  },
+
+  /**
+   * Restores an Entity from Stand or creates a fresh instance at Version zero.
+   *
+   * @param repository Entity schema and constructor registration.
+   * @param entityId Entity identifier.
+   * @param stored Prior Stand snapshot, when present.
+   * @param resetDeleted Whether rebuild replaces a deleted Projection.
+   * @returns The Entity instance for one repository dispatch.
+   */
+  instantiate(
+    repository: RepositoryView,
+    entityId: unknown,
+    stored:
+      | {
+          readonly state: unknown;
+          readonly versionMessage: Version;
+          readonly archived: boolean;
+          readonly deleted: boolean;
+        }
+      | undefined,
+    resetDeleted: boolean,
+  ): object {
+    const entityType = repository.entityType as unknown as new (options: {
+      readonly id: unknown;
+      readonly schema: DescriptorMessageSchema;
+      readonly state: unknown;
+      readonly version: Version;
+      readonly lifecycle: EntityLifecycleFlags;
+    }) => object;
+    const fresh = stored === undefined || resetDeleted;
+    return new entityType({
+      id: entityId,
+      schema: repository.stateSchema,
+      state: fresh
+        ? create(repository.stateSchema, { [repository.idField.localName]: entityId })
+        : stored.state,
+      version: fresh ? create(VersionSchema) : stored.versionMessage,
+      lifecycle: resetDeleted
+        ? { archived: false, deleted: false }
+        : { archived: stored?.archived ?? false, deleted: stored?.deleted ?? false },
+    });
+  },
+
+  /**
+   * Builds the loaded repository Entity view from a Stand snapshot.
+   *
+   * @param entity Restored Entity instance.
+   * @param stored Prior Stand snapshot, when present.
+   * @param commits Durable commit storage.
+   * @param storageInput Entity storage specification.
+   * @param schema Entity state schema.
+   * @param entityId Entity identifier.
+   * @returns The loaded Entity and prior record.
+   */
+  loaded(
+    entity: object,
+    stored:
+      | {
+          readonly state: unknown;
+          readonly versionMessage: Version;
+          readonly archived: boolean;
+          readonly deleted: boolean;
+        }
+      | undefined,
+    commits: EntityCommitStorage,
+    storageInput: EntityStorageInput<unknown, Message>,
+    schema: DescriptorMessageSchema,
+    entityId: unknown,
+  ): LoadedRepositoryEntity {
+    return Object.freeze({
+      commits,
+      current:
+        stored === undefined
+          ? undefined
+          : EntityRecords.pack(schema, entityId, stored.state as Message, stored.versionMessage, {
+              archived: stored.archived,
+              deleted: stored.deleted,
+            }),
+      entity,
+      storageInput,
+    });
+  },
+
   repositoryState(entity: object): unknown {
     return (entity as { readonly state: unknown }).state;
+  },
+
+  repositoryVersion(entity: object): Version {
+    return (entity as { readonly version: Version }).version;
   },
 
   repositoryLifecycle(entity: object): {
@@ -4066,16 +4212,6 @@ const RepositoryStand = {
       ...(version === undefined ? {} : { version }),
       lifecycle,
     });
-  },
-
-  projectionVersion(version: Version | bigint | undefined): number {
-    return typeof version === "bigint" ? Number(version) : (version?.number ?? 0);
-  },
-
-  processManagerVersion(entity: object): number {
-    const version = (entity as { readonly version?: unknown }).version;
-
-    return typeof version === "number" ? version + 1 : 1;
   },
 
   processManagerProducedVersion(sequence: number): number {

@@ -12,7 +12,14 @@
  * the License.
  */
 
-import { clone, fromBinary, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
+import {
+  clone,
+  create,
+  fromBinary,
+  toBinary,
+  type Message,
+  type MessageShape,
+} from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   EntityQuery,
@@ -28,6 +35,8 @@ import type { EntityQueryPlan } from "@spine-event-engine/core/spi/entity-query-
 import {
   type ConstraintViolation,
   type Event,
+  type Version,
+  VersionSchema,
   ActorContextSchema,
   type ActorContext,
   ValidationErrorSchema,
@@ -47,26 +56,40 @@ import {
   type EntityTransactionRejectedCommit,
   type EntityTransactionRollbackResult,
   type EntityTransactionMutator,
-  type EntityTransactionVersionMetadata,
 } from "./entity-transaction.js";
 import type { StateTransitionResult } from "./entity-transition-validation.js";
 
-type RejectedCommitSnapshot = EntityTransactionRejectedCommit<
-  DescriptorMessageSchema,
-  EntityVersionMetadata
->;
+type RejectedCommitSnapshot = EntityTransactionRejectedCommit<DescriptorMessageSchema>;
 
+/**
+ * Descriptor-backed columns available to a Process Manager query.
+ *
+ * @typeParam Schema State schema containing the queried columns.
+ */
 type ProcessManagerQueryColumns<Schema extends DescriptorMessageSchema> = Readonly<
   Record<string, EntityColumn<Schema>>
 >;
 
+/**
+ * Reads states using the invoking handler's actor and tenant.
+ *
+ * @typeParam Schema State schema selected by the query.
+ * @param plan Compiled filters and ordering for the query.
+ * @param schema Generated schema used to decode matching states.
+ * @param query Query message carrying the actor and selected state fields.
+ * @returns Matching state snapshots from the read side.
+ */
+type ProcessManagerQueryExecutor = <Schema extends DescriptorMessageSchema>(
+  plan: EntityQueryPlan,
+  schema: Schema,
+  query: Query,
+) => Promise<readonly MessageShape<Schema>[]>;
+
 interface ProcessManagerQueryCapability {
   readonly actorContext: ActorContext;
-  readonly execute: <Schema extends DescriptorMessageSchema>(
-    plan: EntityQueryPlan,
-    schema: Schema,
-    query: Query,
-  ) => Promise<readonly MessageShape<Schema>[]>;
+
+  readonly execute: ProcessManagerQueryExecutor;
+
   active: boolean;
 }
 
@@ -85,6 +108,14 @@ export const processManagerQueryAccess: Readonly<{
   ): () => void;
   require(entity: object): ProcessManagerQueryCapability;
 }> = Object.freeze({
+  /**
+   * Enables read-side queries for the duration of one handler invocation.
+   *
+   * @param entity Process Manager receiving the query capability.
+   * @param execute Repository operation that runs queries.
+   * @param actorContext Actor and tenant of the incoming signal.
+   * @returns A function that disables and removes this capability.
+   */
   bind(
     entity: object,
     execute: ProcessManagerQueryCapability["execute"],
@@ -102,6 +133,12 @@ export const processManagerQueryAccess: Readonly<{
     };
   },
 
+  /**
+   * Gets the query capability of a currently executing Process Manager.
+   *
+   * @param entity Process Manager attempting a query.
+   * @returns The active repository query capability.
+   */
   require(entity: object): ProcessManagerQueryCapability {
     const capability = processManagerQueries.get(entity);
     if (capability?.active !== true) {
@@ -124,14 +161,16 @@ export class ProcessManagerQuery<
   Columns extends ProcessManagerQueryColumns<Schema>,
 > {
   readonly #entity: object;
+
   readonly #schema: Schema;
+
   readonly #builder: EntityQueryBuilder<Schema, Columns>;
 
   /**
    * Creates the repository-scoped query facade.
    *
    * @internal
-   * @param entity Process Manager that owns this query capability.
+   * @param entity Process Manager using this query capability.
    * @param schema State schema read by this query.
    * @param builder Typed query builder used to create the wire query.
    */
@@ -155,6 +194,7 @@ export class ProcessManagerQuery<
   /**
    * Adds a typed state predicate to the query.
    *
+   * @typeParam Predicate Comparison supported by the registered columns.
    * @param predicate Predicate evaluated against registered state columns.
    * @returns This query for fluent configuration.
    */
@@ -179,6 +219,7 @@ export class ProcessManagerQuery<
   /**
    * Sets the ordering for matching states by one registered column.
    *
+   * @typeParam Column Registered column supplying the ordered values.
    * @param column Registered orderable column used for sorting.
    * @param direction Optional sort direction, ascending by default.
    * @returns This query for fluent configuration.
@@ -276,15 +317,13 @@ export type TransactionalEntityScopeOperation =
   | "commitTransaction"
   | "currentDraft"
   | "draftLifecycleFlags"
-  | "draftVersionMetadata"
   | "markDraftDeleted"
   | "restoreDraft"
   | "rollbackTransaction"
   | "startTransaction"
   | "unarchiveDraft"
   | "tryUpdate"
-  | "update"
-  | "updateDraftVersionMetadata";
+  | "update";
 
 /**
  * Error thrown when a transactional entity draft helper is used outside its scope.
@@ -321,91 +360,17 @@ export class TransactionalEntityScopeError extends Error {
   }
 }
 
-type EntityVersionMetadataPrimitive =
-  string | number | boolean | bigint | symbol | null | undefined;
-
-/**
- * Plain snapshot data accepted as caller-owned entity version metadata.
- */
-export type EntityVersionMetadata =
-  EntityVersionMetadataPrimitive | readonly EntityVersionMetadata[] | object;
-
-type NonPlainVersion =
-  | Date
-  | RegExp
-  | Error
-  | Promise<unknown>
-  | Map<unknown, unknown>
-  | Set<unknown>
-  | WeakMap<object, unknown>
-  | WeakSet<object>
-  | ArrayBuffer
-  | SharedArrayBuffer
-  | DataView
-  | Int8Array
-  | Uint8Array
-  | Uint8ClampedArray
-  | Int16Array
-  | Uint16Array
-  | Int32Array
-  | Uint32Array
-  | Float32Array
-  | Float64Array
-  | BigInt64Array
-  | BigUint64Array;
-
-/**
- * Recursive type-level validator for caller-owned plain entity version metadata.
- */
-export type PlainEntityVersionMetadata<Version> = PlainVersionAtDepth<Version, []>;
-
-type PlainVersionAtDepth<Version, Depth extends readonly unknown[]> = Depth["length"] extends 20
-  ? EntityVersionMetadata
-  : Version extends EntityVersionMetadataPrimitive
-    ? Version
-    : Version extends (...args: never[]) => unknown
-      ? never
-      : Version extends NonPlainVersion
-        ? never
-        : Version extends readonly (infer Element)[]
-          ? readonly PlainVersionAtDepth<Element, readonly [unknown, ...Depth]>[]
-          : Version extends object
-            ? {
-                readonly [Key in keyof Version]: PlainVersionAtDepth<
-                  Version[Key],
-                  readonly [unknown, ...Depth]
-                >;
-              }
-            : never;
-
-type EntityVersionMetadataInput<Version> = [Version] extends [EntityVersionMetadata]
-  ? [EntityVersionMetadata] extends [Version]
-    ? Version
-    : PlainEntityVersionMetadata<Version>
-  : PlainEntityVersionMetadata<Version>;
-
-declare const process: {
-  readonly getBuiltinModule: (specifier: "node:util") => {
-    readonly types: {
-      readonly isProxy: (value: object) => boolean;
-    };
-  };
-};
-
-const isProxy = process.getBuiltinModule("node:util").types.isProxy;
-
 /**
  * Initial values for constructing an {@link Entity}.
+ *
+ * @typeParam Id Domain identifier type.
+ * @typeParam Schema Generated schema describing the Entity state.
  */
-export interface EntityOptions<
-  Id,
-  Schema extends DescriptorMessageSchema,
-  Version = EntityVersionMetadata,
-> {
+export interface EntityOptions<Id, Schema extends DescriptorMessageSchema> {
   // prettier-ignore
 
   /**
-   * Stable entity identifier owned by the caller/domain type.
+   * Stable domain identifier for the Entity.
    */
   readonly id: Id;
 
@@ -420,9 +385,9 @@ export interface EntityOptions<
   readonly state: MessageShape<Schema>;
 
   /**
-   * Caller-owned plain version metadata snapshot.
+   * Restored Spine Version; fresh Entities start at zero.
    */
-  readonly version: EntityVersionMetadataInput<Version>;
+  readonly version?: Version;
 
   /**
    * Initial lifecycle flags. Defaults to active, not deleted.
@@ -436,19 +401,18 @@ export interface EntityOptions<
 export type EntityFamily = "aggregate" | "projection" | "process-manager";
 
 /**
- * Common in-memory OOP shell for one server-side entity state.
+ * Identity, state, version, and lifecycle of one server-side Entity.
  *
  * The shell exposes identity, descriptor-derived metadata, cloned state
- * snapshots, caller-owned plain version metadata snapshots, and lifecycle flags. It does not
+ * snapshots, Spine Version snapshots, and lifecycle flags. It does not
  * invoke handlers, create transactions, write repositories or storage, dispatch
  * messages, increment versions, route IDs, query read models, start buses, or
  * mutate process-wide runtime state.
+ *
+ * @typeParam Id Domain identifier type.
+ * @typeParam Schema Generated schema describing the Entity state.
  */
-export abstract class Entity<
-  Id,
-  Schema extends DescriptorMessageSchema,
-  Version = EntityVersionMetadata,
-> {
+export abstract class Entity<Id, Schema extends DescriptorMessageSchema> {
   // prettier-ignore
 
   /**
@@ -457,11 +421,17 @@ export abstract class Entity<
   declare protected static readonly spineTsEntityConstructor: true;
 
   readonly #id: Id;
+
   readonly #schema: Schema;
+
   readonly #metadata: EntityMetadata<Schema>;
+
   #state: MessageShape<Schema>;
+
   #version: Version;
+
   #lifecycle: EntityLifecycleFlags;
+
   #lifecycleFlagsChanged = false;
 
   /**
@@ -469,12 +439,12 @@ export abstract class Entity<
    *
    * @param options Identity, schema, state, version, and lifecycle inputs.
    */
-  constructor(options: EntityOptions<Id, Schema, Version>) {
+  constructor(options: EntityOptions<Id, Schema>) {
     this.#id = options.id;
     this.#schema = options.schema;
     this.#metadata = describeEntityMetadata(options.schema);
     this.#state = EntitySnapshots.clone(options.schema, options.state);
-    this.#version = EntityVersions.clone(options.version) as Version;
+    this.#version = clone(VersionSchema, options.version ?? create(VersionSchema));
     this.#lifecycle = {
       archived: options.lifecycle?.archived ?? false,
       deleted: options.lifecycle?.deleted ?? false,
@@ -484,7 +454,7 @@ export abstract class Entity<
   /**
    * Gets the stable entity identifier.
    *
-   * @returns The caller-owned entity identifier.
+   * @returns The domain identifier supplied during construction.
    */
   get id(): Id {
     return this.#id;
@@ -518,12 +488,12 @@ export abstract class Entity<
   }
 
   /**
-   * Gets the caller-owned plain version metadata snapshot.
+   * Gets the current Spine Version without exposing the stored message.
    *
-   * @returns A validated clone of the version metadata.
+   * @returns A copy of the version number and timestamp.
    */
   get version(): Version {
-    return EntityVersions.clone(this.#version);
+    return clone(VersionSchema, this.#version);
   }
 
   /**
@@ -575,7 +545,7 @@ export abstract class Entity<
   }
 
   /**
-   * Replaces stored state from framework-owned subclass or runtime code.
+   * Replaces stored state when framework transaction code accepts a draft.
    *
    * @param state Next entity state snapshot.
    */
@@ -584,16 +554,16 @@ export abstract class Entity<
   }
 
   /**
-   * Replaces caller-owned version metadata from framework-owned subclass or runtime code.
+   * Applies the Version calculated by a framework transaction.
    *
-   * @param version Next caller-owned version metadata.
+   * @param version Accepted version number and timestamp.
    */
-  protected replaceVersionMetadata(version: EntityVersionMetadataInput<Version>): void {
-    this.#version = EntityVersions.clone(version) as Version;
+  protected replaceVersion(version: Version): void {
+    this.#version = clone(VersionSchema, version);
   }
 
   /**
-   * Replaces lifecycle flags from framework-owned subclass or runtime code.
+   * Applies lifecycle flags accepted by framework transaction code.
    *
    * @param lifecycle Lifecycle flag changes to apply.
    */
@@ -661,11 +631,55 @@ interface BoundEntityHistory {
 const boundEntityHistories = new WeakMap<object, BoundEntityHistory>();
 
 interface EntityHistoryAccess {
+  /**
+   * Attaches repository history access to an Entity instance.
+   *
+   * @param entity Instance whose retained history will be read.
+   * @param binding Repository operations for that Entity's history.
+   */
   bind(entity: object, binding: BoundEntityHistory): void;
+
+  /**
+   * Reads the latest retained state at or before a time.
+   *
+   * @param entity Entity whose state is requested.
+   * @param time Latest allowed state timestamp.
+   * @returns The retained state, or undefined if no state matches.
+   */
   stateAt(entity: object, time: Timestamp): Promise<unknown>;
+
+  /**
+   * Reads retained states in descending version order.
+   *
+   * @param entity Entity whose history is requested.
+   * @param depth Maximum number of states to read.
+   * @returns Retained state snapshots, newest first.
+   */
   states(entity: object, depth: number): Promise<readonly unknown[]>;
+
+  /**
+   * Reads retained diagnostic Events, newest producer version first.
+   *
+   * @param entity Entity that produced the Events.
+   * @param depth Maximum number of Events to read.
+   * @returns Retained diagnostic Events.
+   */
   events(entity: object, depth: number): Promise<readonly Readonly<Event>[]>;
+
+  /**
+   * Gets the repository's state-history storage for retention operations.
+   *
+   * @param entity Entity whose history is maintained.
+   * @returns The state-history storage bound to that Entity.
+   */
   stateMaintenance(entity: object): EntityStateHistoryStorage<unknown, Message>;
+
+  /**
+   * Gets the repository's diagnostic Event storage for retention operations.
+   *
+   * @param entity Entity whose diagnostic Events are maintained.
+   * @returns The Event-history storage bound to that Entity.
+   */
   eventMaintenance(entity: object): EntityEventStorage<unknown>;
 }
 
@@ -675,21 +689,60 @@ interface EntityHistoryAccess {
  * @internal
  */
 export const entityHistoryAccess: EntityHistoryAccess = Object.freeze({
+  /**
+   * Associates an Entity instance with its repository history operations.
+   *
+   * @param entity Entity instance loaded by the repository.
+   * @param binding Operations bound to that Entity's history.
+   */
   bind(entity: object, binding: BoundEntityHistory): void {
     boundEntityHistories.set(entity, binding);
   },
+  /**
+   * Reads the most recent retained state no later than the requested time.
+   *
+   * @param entity Entity whose state is requested.
+   * @param time Latest allowed state timestamp.
+   * @returns The retained state, or undefined when none matches.
+   */
   stateAt(entity: object, time: Timestamp): Promise<unknown> {
     return EntityHistory.require(entity).stateAt(time);
   },
+  /**
+   * Reads retained states after checking the history read limit.
+   *
+   * @param entity Entity whose history is requested.
+   * @param depth Maximum number of states to return.
+   * @returns Retained states in descending version order.
+   */
   states(entity: object, depth: number): Promise<readonly unknown[]> {
     return EntityHistory.require(entity).states(EntityHistory.depth(depth));
   },
+  /**
+   * Reads diagnostic Events after checking the history read limit.
+   *
+   * @param entity Entity that produced the Events.
+   * @param depth Maximum number of Events to return.
+   * @returns Retained Events in descending producer-version order.
+   */
   events(entity: object, depth: number): Promise<readonly Readonly<Event>[]> {
     return EntityHistory.require(entity).events(EntityHistory.depth(depth));
   },
+  /**
+   * Gets the state-history storage attached by the repository.
+   *
+   * @param entity Entity whose retained states are maintained.
+   * @returns Its state-history storage.
+   */
   stateMaintenance(entity: object): EntityStateHistoryStorage<unknown, Message> {
     return EntityHistory.require(entity).stateMaintenance;
   },
+  /**
+   * Gets diagnostic Event storage attached by the repository.
+   *
+   * @param entity Entity whose retained Events are maintained.
+   * @returns Its diagnostic Event storage.
+   */
   eventMaintenance(entity: object): EntityEventStorage<unknown> {
     return EntityHistory.require(entity).eventMaintenance;
   },
@@ -699,6 +752,12 @@ export const entityHistoryAccess: EntityHistoryAccess = Object.freeze({
  * Validates repository-bound history lookups.
  */
 const EntityHistory = Object.freeze({
+  /**
+   * Gets history operations installed during repository execution.
+   *
+   * @param entity Entity instance whose binding is required.
+   * @returns Its repository history operations.
+   */
   require(entity: object): BoundEntityHistory {
     const binding = boundEntityHistories.get(entity);
     if (binding === undefined) {
@@ -707,6 +766,12 @@ const EntityHistory = Object.freeze({
     return binding;
   },
 
+  /**
+   * Rejects history read limits that are not positive safe integers.
+   *
+   * @param depth Requested history read limit.
+   * @returns The validated limit.
+   */
   depth(depth: number): number {
     if (!Number.isSafeInteger(depth) || depth <= 0) {
       throw new RangeError("Entity history depth must be a positive safe integer.");
@@ -716,23 +781,26 @@ const EntityHistory = Object.freeze({
 });
 
 /**
- * Common in-memory entity shell with a protected scoped transaction draft.
+ * Entity base with one active transaction draft.
  *
  * The transaction scope is backed by {@link EntityTransaction}. Subclasses can
- * start one active draft, mutate draft state/version/lifecycle through protected
+ * start one active draft, mutate draft state and lifecycle through protected
  * helpers, and then commit or roll back the scope. Accepted commits replace this
- * entity's in-memory state, explicit version metadata, and lifecycle flags.
+ * Entity's state, framework-calculated Spine Version, and lifecycle flags.
  * Rejected commits leave the transaction active so subclass code can correct the
  * draft or roll it back explicitly. This base does not write repositories,
- * emit events, dispatch handlers, increment versions, or manage global
+ * emit events, dispatch handlers, or manage global
  * transaction state.
+ *
+ * @typeParam Id Domain identifier type.
+ * @typeParam Schema Generated schema describing the Entity state.
  */
 export abstract class TransactionalEntity<
   Id,
   Schema extends DescriptorMessageSchema,
-  Version = EntityVersionMetadata,
-> extends Entity<Id, Schema, Version> {
-  #transaction: EntityTransaction<Schema, Version> | undefined;
+> extends Entity<Id, Schema> {
+  #transaction: EntityTransaction<Schema> | undefined;
+
   #stateChanged = false;
 
   /**
@@ -769,7 +837,7 @@ export abstract class TransactionalEntity<
       previous: this.state,
       version: {
         previous: previousVersion,
-        draft: EntityVersions.clone(previousVersion),
+        draft: clone(VersionSchema, previousVersion),
       },
       lifecycle: this.lifecycle,
     });
@@ -783,21 +851,6 @@ export abstract class TransactionalEntity<
    */
   protected currentDraft(): MessageShape<Schema> {
     return this.#requireTransaction("currentDraft").currentDraft;
-  }
-
-  /**
-   * Gets the current draft version metadata snapshot.
-   *
-   * @returns Cloned previous and draft version metadata.
-   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
-   */
-  protected draftVersionMetadata(): EntityTransactionVersionMetadata<Version> {
-    const version = this.#requireTransaction("draftVersionMetadata").version;
-
-    return {
-      previous: EntityVersions.clone(version.previous),
-      draft: EntityVersions.clone(version.draft),
-    };
   }
 
   /**
@@ -833,23 +886,6 @@ export abstract class TransactionalEntity<
    */
   protected tryUpdate(mutator: EntityTransactionMutator<Schema>): readonly ConstraintViolation[] {
     return this.#requireTransaction("tryUpdate").tryUpdate(mutator);
-  }
-
-  /**
-   * Updates the buffered draft version metadata without computing version increments.
-   *
-   * @param draft Caller-owned version metadata for the active draft.
-   * @returns Cloned previous and draft version metadata.
-   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
-   */
-  protected updateDraftVersionMetadata(
-    draft: EntityVersionMetadataInput<Version>,
-  ): EntityTransactionVersionMetadata<Version> {
-    this.#requireTransaction("updateDraftVersionMetadata").updateVersionMetadata(
-      EntityVersions.clone(draft) as Version,
-    );
-
-    return this.draftVersionMetadata();
   }
 
   /**
@@ -895,16 +931,17 @@ export abstract class TransactionalEntity<
   /**
    * Commits the active draft transaction.
    *
-   * Accepted commits apply state, version metadata, and lifecycle flags to this
+   * Accepted commits apply state, Spine Version, and lifecycle flags to this
    * entity and close the transaction. Rejected commits do not apply anything and
    * keep the transaction active for correction or explicit rollback.
    *
+   * @param producedEvents Whether handling returned Events, requiring a version advance.
    * @returns A cloned accepted or rejected transaction result.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
-  protected commitTransaction(): EntityTransactionCommitResult<Schema, Version> {
+  protected commitTransaction(producedEvents = false): EntityTransactionCommitResult<Schema> {
     const transaction = this.#requireTransaction("commitTransaction");
-    const result = transaction.commit();
+    const result = transaction.commit(producedEvents);
 
     if (result.status === "accepted") {
       if (
@@ -914,7 +951,7 @@ export abstract class TransactionalEntity<
         this.#stateChanged = true;
       }
       this.replaceState(result.next);
-      this.replaceVersionMetadata(result.version.committed as EntityVersionMetadataInput<Version>);
+      this.replaceVersion(result.version.committed);
       this.replaceLifecycleFlags(result.lifecycle);
       this.#transaction = undefined;
       rejectedCommits.delete(this);
@@ -931,16 +968,20 @@ export abstract class TransactionalEntity<
    * @returns A cloned rollback result containing the discarded draft snapshots.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
-  protected rollbackTransaction(): EntityTransactionRollbackResult<Schema, Version> {
+  protected rollbackTransaction(): EntityTransactionRollbackResult<Schema> {
     const result = this.#requireTransaction("rollbackTransaction").rollback();
     this.#transaction = undefined;
 
     return result;
   }
 
-  #requireTransaction(
-    operation: TransactionalEntityScopeOperation,
-  ): EntityTransaction<Schema, Version> {
+  /**
+   * Gets the active transaction or rejects an out-of-scope operation.
+   *
+   * @param operation Draft operation being attempted.
+   * @returns The currently active transaction.
+   */
+  #requireTransaction(operation: TransactionalEntityScopeOperation): EntityTransaction<Schema> {
     const transaction = this.#transaction;
     if (transaction?.status !== "active") {
       throw new TransactionalEntityScopeError("missing", operation);
@@ -957,22 +998,26 @@ export interface TransactionalEntityAccess {
   // prettier-ignore
 
   /**
-   * Starts a framework-owned transaction scope for an entity.
+   * Starts a transaction scope for repository execution.
    *
    * @param entity Transactional entity object to start.
    */
   start(entity: object): void;
 
   /**
-   * Executes a framework-owned transaction commit for an entity.
+   * Commits the transaction after repository handler execution.
    *
    * @param entity Transactional entity object to commit.
+   * @param producedEvents Whether the handler returned Events.
    * @returns The transaction commit result.
    */
-  commit(entity: object): EntityTransactionCommitResult<DescriptorMessageSchema>;
+  commit(
+    entity: object,
+    producedEvents?: boolean,
+  ): EntityTransactionCommitResult<DescriptorMessageSchema>;
 
   /**
-   * Executes a framework-owned transaction rollback for an entity, if possible.
+   * Rolls back the Entity's active transaction, if one exists.
    *
    * @param entity Transactional entity object to roll back.
    */
@@ -995,17 +1040,38 @@ export interface TransactionalEntityAccess {
  * @internal
  */
 export const transactionalEntityAccess: TransactionalEntityAccess = Object.freeze({
+  /**
+   * Starts the Entity's protected transaction before invoking its handler.
+   *
+   * @param entity Entity about to handle a signal.
+   */
   start(entity: object): void {
     TransactionAccess.call(entity, "startTransaction");
   },
 
-  commit(entity: object): EntityTransactionCommitResult<DescriptorMessageSchema> {
+  /**
+   * Commits the handler's draft and records whether it returned Events.
+   *
+   * @param entity Entity whose handler has completed.
+   * @param producedEvents Whether handling returned domain Events.
+   * @returns The accepted or validation-rejected transaction result.
+   */
+  commit(
+    entity: object,
+    producedEvents = false,
+  ): EntityTransactionCommitResult<DescriptorMessageSchema> {
     return TransactionAccess.call(
       entity,
       "commitTransaction",
+      producedEvents,
     ) as EntityTransactionCommitResult<DescriptorMessageSchema>;
   },
 
+  /**
+   * Rolls back an active draft, ignoring a transaction that has already closed.
+   *
+   * @param entity Entity whose handling failed or was rejected.
+   */
   rollback(entity: object): void {
     try {
       TransactionAccess.call(entity, "rollbackTransaction");
@@ -1016,6 +1082,12 @@ export const transactionalEntityAccess: TransactionalEntityAccess = Object.freez
     }
   },
 
+  /**
+   * Reads the validation failure retained for the Entity's latest rejected commit.
+   *
+   * @param entity Entity whose rejected result is requested.
+   * @returns A copy of the rejected result, or undefined when none is retained.
+   */
   rejectedCommit(
     entity: object,
   ): EntityTransactionRejectedCommit<DescriptorMessageSchema> | undefined {
@@ -1030,16 +1102,30 @@ export const transactionalEntityAccess: TransactionalEntityAccess = Object.freez
  * Bridges repository code to protected transactional entity methods.
  */
 const TransactionAccess = Object.freeze({
-  call(entity: object, methodName: string): unknown {
+  /**
+   * Invokes a protected transaction method from repository code.
+   *
+   * @param entity Instance receiving the method call.
+   * @param methodName Transaction method to invoke.
+   * @param args Arguments passed to the transaction method.
+   * @returns The method's result.
+   */
+  call(entity: object, methodName: string, ...args: readonly unknown[]): unknown {
     const method = (entity as Record<string, unknown>)[methodName];
 
     if (typeof method !== "function") {
       throw new TypeError(`Transactional entity access requires "${methodName}".`);
     }
 
-    return Reflect.apply(method, entity, []);
+    return Reflect.apply(method, entity, args);
   },
 
+  /**
+   * Tests whether an operation failed because no transaction was active.
+   *
+   * @param error Failure returned by a transaction operation.
+   * @returns True only for a missing transaction scope.
+   */
   isMissing(error: unknown): boolean {
     return error instanceof TransactionalEntityScopeError && error.reason === "missing";
   },
@@ -1052,12 +1138,14 @@ const TransactionAccess = Object.freeze({
  * command dispatch, snapshots, repositories, idempotency guards, or handler
  * invocation. Repository-bound diagnostic event-history reads are declared
  * below for the Aggregate family.
+ *
+ * @typeParam Id Domain identifier type.
+ * @typeParam Schema Generated schema describing the Aggregate state.
  */
 export abstract class Aggregate<
   Id,
   Schema extends DescriptorMessageSchema,
-  Version = EntityVersionMetadata,
-> extends TransactionalEntity<Id, Schema, Version> {
+> extends TransactionalEntity<Id, Schema> {
   // prettier-ignore
 
   /**
@@ -1070,7 +1158,7 @@ export abstract class Aggregate<
    *
    * @param options Identity, schema, state, version, and lifecycle inputs.
    */
-  constructor(options: EntityOptions<Id, Schema, Version>) {
+  constructor(options: EntityOptions<Id, Schema>) {
     super(options);
     EntityFamilies.mark(this, "aggregate");
   }
@@ -1115,12 +1203,14 @@ export abstract class Aggregate<
  * This class intentionally adds only stable family identity. It does not add
  * event subscriptions, event playing, repositories, version columns, query
  * clients, or handler invocation.
+ *
+ * @typeParam Id Domain identifier type.
+ * @typeParam Schema Generated schema describing the Projection state.
  */
 export abstract class Projection<
   Id,
   Schema extends DescriptorMessageSchema,
-  Version = EntityVersionMetadata,
-> extends TransactionalEntity<Id, Schema, Version> {
+> extends TransactionalEntity<Id, Schema> {
   // prettier-ignore
 
   /**
@@ -1133,7 +1223,7 @@ export abstract class Projection<
    *
    * @param options Identity, schema, state, version, and lifecycle inputs.
    */
-  constructor(options: EntityOptions<Id, Schema, Version>) {
+  constructor(options: EntityOptions<Id, Schema>) {
     super(options);
     EntityFamilies.mark(this, "projection");
   }
@@ -1145,12 +1235,14 @@ export abstract class Projection<
  * This class adds a protected, handler-scoped, read-only Projection query
  * capability. It does not add command posting, repositories, bounded-context
  * injection, or handler invocation.
+ *
+ * @typeParam Id Domain identifier type.
+ * @typeParam Schema Generated schema describing the Process Manager state.
  */
 export abstract class ProcessManager<
   Id,
   Schema extends DescriptorMessageSchema,
-  Version = EntityVersionMetadata,
-> extends TransactionalEntity<Id, Schema, Version> {
+> extends TransactionalEntity<Id, Schema> {
   // prettier-ignore
 
   /**
@@ -1163,7 +1255,7 @@ export abstract class ProcessManager<
    *
    * @param options Identity, schema, state, version, and lifecycle inputs.
    */
-  constructor(options: EntityOptions<Id, Schema, Version>) {
+  constructor(options: EntityOptions<Id, Schema>) {
     super(options);
     EntityFamilies.mark(this, "process-manager");
   }
@@ -1208,6 +1300,8 @@ export abstract class ProcessManager<
    * handler. Reads use that signal's actor and tenant; they cannot mutate state
    * or select a different tenant.
    *
+   * @typeParam QuerySchema Generated Projection state schema to query.
+   * @typeParam Columns Descriptor-backed columns available for that schema.
    * @param schema Projection state schema to query.
    * @param columns Generated descriptor-backed columns for `schema`.
    * @returns A read-only Entity query.
@@ -1229,6 +1323,12 @@ export abstract class ProcessManager<
  * Marks immutable entity families.
  */
 const EntityFamilies = Object.freeze({
+  /**
+   * Sets an immutable family marker on an Entity instance.
+   *
+   * @param entity Instance being constructed.
+   * @param family Aggregate, Projection, or Process Manager family marker.
+   */
   mark(entity: object, family: EntityFamily): void {
     Object.defineProperty(entity, "entityFamily", {
       configurable: false,
@@ -1243,6 +1343,14 @@ const EntityFamilies = Object.freeze({
  * Creates entity-state snapshots and compares state bytes.
  */
 const EntitySnapshots = Object.freeze({
+  /**
+   * Copies state through its schema, discarding unknown wire fields.
+   *
+   * @typeParam Schema Generated schema describing the state.
+   * @param schema Schema used for encoding and decoding.
+   * @param state State snapshot to copy.
+   * @returns An independent state message containing known fields.
+   */
   clone<Schema extends DescriptorMessageSchema>(
     schema: Schema,
     state: MessageShape<Schema>,
@@ -1250,6 +1358,15 @@ const EntitySnapshots = Object.freeze({
     return fromBinary(schema, toBinary(schema, state, { writeUnknownFields: false }));
   },
 
+  /**
+   * Compares the encoded known fields of two state snapshots.
+   *
+   * @typeParam Schema Generated schema shared by both snapshots.
+   * @param schema Schema used to encode the states.
+   * @param previous State before handling.
+   * @param next State after handling.
+   * @returns True when their encoded known fields are identical.
+   */
   equal<Schema extends DescriptorMessageSchema>(
     schema: Schema,
     previous: MessageShape<Schema>,
@@ -1265,18 +1382,25 @@ const EntitySnapshots = Object.freeze({
 });
 
 /**
- * Creates immutable transaction-result snapshots.
+ * Copies transaction version, lifecycle, and validation snapshots.
  */
 const EntityCommits = Object.freeze({
-  clone<Schema extends DescriptorMessageSchema, Version>(
-    result: EntityTransactionCommitResult<Schema, Version>,
-  ): EntityTransactionCommitResult<Schema, Version> {
+  /**
+   * Copies version, lifecycle, and validation messages in a transaction result.
+   *
+   * @typeParam Schema Generated schema describing the transaction's state.
+   * @param result Accepted or rejected transaction result.
+   * @returns A result with independent version and validation metadata.
+   */
+  clone<Schema extends DescriptorMessageSchema>(
+    result: EntityTransactionCommitResult<Schema>,
+  ): EntityTransactionCommitResult<Schema> {
     if (result.status === "accepted") {
       return {
         ...result,
         version: {
-          previous: EntityVersions.clone(result.version.previous),
-          committed: EntityVersions.clone(result.version.committed),
+          previous: clone(VersionSchema, result.version.previous),
+          committed: clone(VersionSchema, result.version.committed),
         },
         lifecycle: { archived: result.lifecycle.archived, deleted: result.lifecycle.deleted },
         validation: this.validation(result.validation) as typeof result.validation,
@@ -1286,14 +1410,20 @@ const EntityCommits = Object.freeze({
     return {
       ...result,
       version: {
-        previous: EntityVersions.clone(result.version.previous),
-        draft: EntityVersions.clone(result.version.draft),
+        previous: clone(VersionSchema, result.version.previous),
+        draft: clone(VersionSchema, result.version.draft),
       },
       lifecycle: { archived: result.lifecycle.archived, deleted: result.lifecycle.deleted },
       validation: this.validation(result.validation) as typeof result.validation,
     };
   },
 
+  /**
+   * Copies validation errors without exposing the stored violation messages.
+   *
+   * @param validation State-transition validation result.
+   * @returns An independent valid result or cloned validation error.
+   */
   validation(validation: StateTransitionResult): StateTransitionResult {
     if (validation.valid) {
       return { valid: true, violations: [], error: undefined };
@@ -1304,159 +1434,5 @@ const EntityCommits = Object.freeze({
       violations: error.constraintViolation as [ConstraintViolation, ...ConstraintViolation[]],
       error,
     };
-  },
-});
-
-const maxVersionMetadataDepth = 1_000;
-
-/**
- * Validates and clones caller-provided plain version metadata.
- */
-const EntityVersions = Object.freeze({
-  clone<Version>(version: Version): Version {
-    return this.value(version, "$", new WeakSet(), 0) as Version;
-  },
-
-  value(
-    value: unknown,
-    path: string,
-    stack: WeakSet<object>,
-    depth: number,
-  ): EntityVersionMetadata {
-    if (depth > maxVersionMetadataDepth) {
-      throw this.error(path, "excessive nesting depth");
-    }
-    if (value === null) {
-      return value;
-    }
-    switch (typeof value) {
-      case "string":
-      case "number":
-      case "boolean":
-      case "bigint":
-      case "symbol":
-      case "undefined":
-        return value;
-      case "function":
-        throw this.error(path, "function");
-      case "object":
-        return this.object(value, path, stack, depth);
-    }
-  },
-
-  object(
-    value: object,
-    path: string,
-    stack: WeakSet<object>,
-    depth: number,
-  ): EntityVersionMetadata {
-    if (isProxy(value)) throw this.error(path, "Proxy");
-    if (ArrayBuffer.isView(value)) throw this.error(path, this.kind(value));
-    if (value instanceof ArrayBuffer || this.isSharedBuffer(value)) {
-      throw this.error(path, this.kind(value));
-    }
-    if (stack.has(value)) throw this.error(path, "cyclic object");
-
-    stack.add(value);
-    try {
-      if (Array.isArray(value)) return this.array(value, path, stack, depth);
-      if (!this.isPlainObject(value)) throw this.error(path, this.kind(value));
-
-      const clone = Object.create(this.prototype(value)) as Record<string, EntityVersionMetadata>;
-      const descriptors = Object.getOwnPropertyDescriptors(value);
-      const [symbolKey] = Object.getOwnPropertySymbols(descriptors);
-      if (symbolKey !== undefined) {
-        throw this.error(`${path}[${String(symbolKey)}]`, "symbol-keyed property");
-      }
-      for (const [key, descriptor] of Object.entries(descriptors)) {
-        const childPath = `${path}.${key}`;
-        if (!descriptor.enumerable) throw this.error(childPath, "non-enumerable property");
-        if (!("value" in descriptor)) throw this.error(childPath, "accessor property");
-        Object.defineProperty(clone, key, {
-          configurable: true,
-          enumerable: true,
-          value: this.value(descriptor.value, childPath, stack, depth + 1),
-          writable: true,
-        });
-      }
-      return clone;
-    } finally {
-      stack.delete(value);
-    }
-  },
-
-  array(
-    value: readonly unknown[],
-    path: string,
-    stack: WeakSet<object>,
-    depth: number,
-  ): readonly EntityVersionMetadata[] {
-    if (this.prototype(value) !== Array.prototype) throw this.error(path, "Array");
-    const descriptors: Record<string, PropertyDescriptor> = Object.getOwnPropertyDescriptors(value);
-    const [symbolKey] = Object.getOwnPropertySymbols(descriptors);
-    if (symbolKey !== undefined) {
-      throw this.error(`${path}[${String(symbolKey)}]`, "symbol-keyed property");
-    }
-    const lengthDescriptor = descriptors.length;
-    if (lengthDescriptor === undefined || !("value" in lengthDescriptor)) {
-      throw this.error(path, "array without data length");
-    }
-    const length = lengthDescriptor.value as number;
-    const clone = new Array<EntityVersionMetadata>(length);
-    for (const [key, descriptor] of Object.entries(descriptors)) {
-      if (key === "length") continue;
-      if (!this.isArrayKey(key, length))
-        throw this.error(`${path}.${key}`, "custom array property");
-      if (!descriptor.enumerable) throw this.error(`${path}[${key}]`, "non-enumerable property");
-      if (!("value" in descriptor)) throw this.error(`${path}[${key}]`, "accessor property");
-    }
-    for (let index = 0; index < length; index += 1) {
-      const key = String(index);
-      const descriptor = descriptors[key];
-      if (descriptor === undefined || !("value" in descriptor)) {
-        throw this.error(`${path}[${key}]`, "sparse array element");
-      }
-      Object.defineProperty(clone, index, {
-        configurable: true,
-        enumerable: true,
-        value: this.value(descriptor.value, `${path}[${key}]`, stack, depth + 1),
-        writable: true,
-      });
-    }
-    return clone;
-  },
-
-  isArrayKey(key: string, length: number): boolean {
-    const index = Number(key);
-    return Number.isInteger(index) && index >= 0 && index < length && String(index) === key;
-  },
-
-  isPlainObject(value: object): boolean {
-    const prototype = this.prototype(value);
-    return prototype === Object.prototype || prototype === null;
-  },
-
-  prototype(value: object): object | null {
-    return Object.getPrototypeOf(value) as object | null;
-  },
-
-  kind(value: object): string {
-    if (value instanceof Date) return "Date";
-    if (value instanceof Map) return "Map";
-    if (value instanceof Set) return "Set";
-    if (ArrayBuffer.isView(value)) return "typed array";
-    if (value instanceof ArrayBuffer) return "ArrayBuffer";
-    if (this.isSharedBuffer(value)) return "SharedArrayBuffer";
-    return "object";
-  },
-
-  isSharedBuffer(value: object): boolean {
-    return typeof SharedArrayBuffer !== "undefined" && value instanceof SharedArrayBuffer;
-  },
-
-  error(path: string, kind: string): TypeError {
-    return new TypeError(
-      `Entity version metadata must be plain snapshot data; ${path} contains ${kind}.`,
-    );
   },
 });

@@ -104,7 +104,7 @@ export interface TaskAssignmentEvent {
 /**
  * Task aggregate for the create-task example flow.
  */
-export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema> {
   // prettier-ignore
 
   /**
@@ -299,7 +299,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
 /**
  * Read-side task list projection for visible task queries.
  */
-export class TaskListProjection extends Projection<TaskListId, typeof TaskListSchema, number> {
+export class TaskListProjection extends Projection<TaskListId, typeof TaskListSchema> {
   // prettier-ignore
 
   /**
@@ -504,6 +504,13 @@ export class TaskListProjection extends Projection<TaskListId, typeof TaskListSc
     this.updateTaskAssignee(event.id, event.taskListId, undefined);
   }
 
+  /**
+   * Updates the assignee of one task in its task-list projection.
+   *
+   * @param id Task whose assignee changed.
+   * @param taskListId Task list containing the task.
+   * @param assignee New assignee, or undefined when the task was unassigned.
+   */
   private updateTaskAssignee(
     id: TaskId | undefined,
     taskListId: TaskListId | undefined,
@@ -537,7 +544,7 @@ export class TaskListProjection extends Projection<TaskListId, typeof TaskListSc
 /**
  * Tracks task identifiers currently assigned to one user.
  */
-export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssigneeSchema, number> {
+export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssigneeSchema> {
   // prettier-ignore
 
   /**
@@ -591,6 +598,11 @@ export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssign
     );
   }
 
+  /**
+   * Removes a task from this assignee's task list.
+   *
+   * @param id Task no longer assigned to this user.
+   */
   private remove(id: TaskId | undefined): void {
     const taskId = taskIds.require(id);
     this.update((draft) =>
@@ -666,6 +678,12 @@ export async function createTodoContext(
 }
 
 const taskIds = {
+  /**
+   * Copies a task ID, rejecting a missing routing value.
+   *
+   * @param id Task ID supplied by the framework or an Event.
+   * @returns An independent task ID message.
+   */
   require(id: TaskId | undefined): TaskId {
     if (id === undefined) {
       throw new Error("Framework-provided task ID is missing.");
@@ -676,11 +694,23 @@ const taskIds = {
 };
 
 const taskListIds = {
+  /**
+   * Copies the task-list ID required by a projection update.
+   *
+   * @param id Task-list ID from the incoming Event.
+   * @returns An independent task-list ID message.
+   */
   require(id: TaskListId | undefined): TaskListId {
     if (id === undefined) throw new Error("Task list ID is missing.");
     return clone(TaskListIdSchema, id);
   },
 
+  /**
+   * Routes an Event to the task list sharing its task ID value.
+   *
+   * @param id Task ID from the Event being routed.
+   * @returns One matching task-list ID, or no route when the task ID is absent.
+   */
   fromTaskId(id: TaskId | undefined): readonly TaskListId[] {
     if (id === undefined) return [];
     return [create(TaskListIdSchema, { value: id.value })];
@@ -688,6 +718,12 @@ const taskListIds = {
 };
 
 const assignees = {
+  /**
+   * Copies the user ID required by an assignment change.
+   *
+   * @param id User ID from the assignment Event.
+   * @returns An independent assignee ID message.
+   */
   require(id: UserId | undefined): UserId {
     if (id === undefined) throw new Error("Task assignee is missing.");
     return clone(UserIdSchema, id);

@@ -149,7 +149,7 @@ type TaskId = Message<"spine.examples.todo.TaskId"> & {
 
 type TenantInput = string | TenantId;
 
-class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   subscribeTask(event: TaskCreated): void {
     const id = event.id?.value ?? "";
     this.update((draft) =>
@@ -165,7 +165,7 @@ class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchem
   }
 }
 
-class RejectingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class RejectingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignTask(): never {
     throw TaskAlreadyDone.create({
       id: create(GeneratedTaskIdSchema, { value: this.id }),
@@ -173,7 +173,7 @@ class RejectingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema
   }
 }
 
-class ValidatingTaskAggregate extends Aggregate<string, typeof ReviewProjectStateSchema, bigint> {
+class ValidatingTaskAggregate extends Aggregate<string, typeof ReviewProjectStateSchema> {
   assignTask(command: CreateReviewProject) {
     return createValidatedEvent(`event-${command.id}`, command.id, command.name);
   }
@@ -193,11 +193,7 @@ class ValidatingTaskAggregate extends Aggregate<string, typeof ReviewProjectStat
   }
 }
 
-class TransitionViolatingTaskAggregate extends Aggregate<
-  string,
-  typeof ProjectStateSchema,
-  bigint
-> {
+class TransitionViolatingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignTask(command: ProjectState) {
     this.update((draft) =>
       Object.assign(
@@ -229,7 +225,7 @@ class RollingBackTransitionTaskAggregate extends TransitionViolatingTaskAggregat
   }
 }
 
-class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {}
+class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema> {}
 
 describe("SpineServices", () => {
   it("rejects foreign package-private logger access", () => {

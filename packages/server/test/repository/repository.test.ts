@@ -65,43 +65,11 @@ function expectRepositoryIdentityError(
   }
 }
 
-class TaskAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {}
-class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {}
-class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
-class RuntimeCheckedAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {}
-class HandlerBackedNumberAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {
-  assignTask(command: CreateProject): void {
-    void command;
-  }
-}
-class HandlerBackedBigintAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
-  assignTask(command: CreateProject): void {
-    void command;
-  }
-}
-class HandlerBackedNumberProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
-  subscribeTask(event: ProjectCreated): void {
-    void event;
-  }
-}
-class HandlerBackedBigintProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  bigint
-> {
-  subscribeTask(event: ProjectCreated): void {
-    void event;
-  }
-}
-class CommandTransformingProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class TaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
+class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {}
+class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {}
+class RuntimeCheckedAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
+class CommandTransformingProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   transformTask(command: CreateReviewProject): CreateReviewProject {
     return command;
   }
@@ -110,7 +78,7 @@ class CommandTransformingProjection extends Projection<
     return command;
   }
 }
-class CommandTransformingAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {
+class CommandTransformingAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   transformTask(command: CreateReviewProject): CreateReviewProject {
     return command;
   }
@@ -123,7 +91,7 @@ const DomainEntityBase = {
   Aggregate,
 };
 const AggregateAlias = Aggregate;
-abstract class DomainAggregateBase extends Aggregate<string, typeof ProjectStateSchema, number> {}
+abstract class DomainAggregateBase extends Aggregate<string, typeof ProjectStateSchema> {}
 class OtherRepositoryEntityBase {
   otherBase(): string {
     return "other";
@@ -207,12 +175,8 @@ describe("repository identity", () => {
   });
 
   it("accepts valid same-realm subclass chains through aliases, members, and domain bases", () => {
-    class AliasedAggregate extends AggregateAlias<string, typeof ProjectStateSchema, number> {}
-    class MemberAggregate extends DomainEntityBase.Aggregate<
-      string,
-      typeof ProjectStateSchema,
-      number
-    > {}
+    class AliasedAggregate extends AggregateAlias<string, typeof ProjectStateSchema> {}
+    class MemberAggregate extends DomainEntityBase.Aggregate<string, typeof ProjectStateSchema> {}
     class DomainAggregate extends DomainAggregateBase {}
 
     for (const entityType of [AliasedAggregate, MemberAggregate, DomainAggregate]) {
@@ -527,7 +491,7 @@ describe("repository identity", () => {
   });
 
   it("rejects hostile entity inheritance chains with simple errors", () => {
-    class HostileAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {}
+    class HostileAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
     class StaticParent {
       marker(): string {
         return "static-parent";
@@ -684,48 +648,6 @@ describe("repository identity", () => {
         entityType: TaskAggregate,
         schema: ProjectStateSchema,
       });
-      const numberAggregateHandlers = EntityHandlers.define(
-        HandlerBackedNumberAggregate,
-        ProjectStateSchema,
-        (builder) => [builder.assign(CreateProjectSchema, "assignTask")],
-      );
-      const bigintAggregateHandlers = EntityHandlers.define(
-        HandlerBackedBigintAggregate,
-        ProjectStateSchema,
-        (builder) => [builder.assign(CreateProjectSchema, "assignTask")],
-      );
-      const numberProjectionHandlers = EntityHandlers.define(
-        HandlerBackedNumberProjection,
-        ProjectOverviewStateSchema,
-        (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeTask")],
-      );
-      const bigintProjectionHandlers = EntityHandlers.define(
-        HandlerBackedBigintProjection,
-        ProjectOverviewStateSchema,
-        (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeTask")],
-      );
-      new Repository({
-        entityType: HandlerBackedBigintAggregate,
-        schema: ProjectStateSchema,
-        handlers: bigintAggregateHandlers,
-      });
-      new Repository({
-        entityType: HandlerBackedNumberAggregate,
-        schema: ProjectStateSchema,
-        // @ts-expect-error executable aggregate repositories require bigint version metadata.
-        handlers: numberAggregateHandlers,
-      });
-      new Repository({
-        entityType: HandlerBackedNumberProjection,
-        schema: ProjectOverviewStateSchema,
-        handlers: numberProjectionHandlers,
-      });
-      new Repository({
-        entityType: HandlerBackedBigintProjection,
-        schema: ProjectOverviewStateSchema,
-        // @ts-expect-error executable projection repositories require number version metadata.
-        handlers: bigintProjectionHandlers,
-      });
       new Repository({
         entityType: TaskProjection,
         schema: ProjectOverviewStateSchema,
@@ -777,7 +699,7 @@ describe("repository identity", () => {
       };
       void broadAnnotatedOptions;
       type BroadAggregateEntityType = RepositoryEntityType<
-        Aggregate<unknown, DescriptorMessageSchema, number>
+        Aggregate<unknown, DescriptorMessageSchema>
       >;
       // @ts-expect-error family-broad repository options must not erase extracted state schemas.
       const familyBroadAnnotatedOptions: RepositoryOptions<BroadAggregateEntityType> = {
@@ -786,7 +708,7 @@ describe("repository identity", () => {
       };
       void familyBroadAnnotatedOptions;
       type ConcreteSchemaFamilyBroadAggregateEntityType = RepositoryEntityType<
-        Aggregate<unknown, typeof ProjectStateSchema, number>
+        Aggregate<unknown, typeof ProjectStateSchema>
       >;
       // @ts-expect-error family-broad repository options must not erase a concrete state schema.
       const concreteSchemaFamilyBroadAnnotatedOptions: RepositoryOptions<ConcreteSchemaFamilyBroadAggregateEntityType> =
@@ -797,11 +719,10 @@ describe("repository identity", () => {
       void concreteSchemaFamilyBroadAnnotatedOptions;
       type ManuallySpelledFamilyBroadAggregateInstance = Aggregate<
         string,
-        typeof ProjectStateSchema,
-        number
+        typeof ProjectStateSchema
       >;
       type ManuallySpelledFamilyBroadAggregateEntityType = (abstract new (
-        options: EntityOptions<string, typeof ProjectStateSchema, number>,
+        options: EntityOptions<string, typeof ProjectStateSchema>,
       ) => ManuallySpelledFamilyBroadAggregateInstance) & {
         readonly name: string;
         readonly prototype: ManuallySpelledFamilyBroadAggregateInstance;
@@ -825,7 +746,7 @@ describe("repository identity", () => {
         };
       void publicStringBrandFamilyBroadOptions;
       type SchemaUnionAggregateEntityType = RepositoryEntityType<
-        Aggregate<unknown, typeof ProjectStateSchema | typeof ProjectOverviewStateSchema, number>
+        Aggregate<unknown, typeof ProjectStateSchema | typeof ProjectOverviewStateSchema>
       >;
       // @ts-expect-error schema-union repository options must not erase the concrete state schema.
       const schemaUnionAnnotatedOptions: RepositoryOptions<SchemaUnionAggregateEntityType> = {

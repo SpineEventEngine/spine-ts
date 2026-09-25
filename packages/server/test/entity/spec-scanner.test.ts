@@ -39,13 +39,9 @@ type ProjectOverviewId = Message<"ProjectOverviewId"> & { value: string };
 
 const MessageIdStateSchema = ProjectPortfolioStateSchema;
 
-class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {}
-class AlternateAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {}
-class MessageIdProjection extends Projection<
-  ProjectOverviewId,
-  typeof MessageIdStateSchema,
-  number
-> {}
+class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {}
+class AlternateAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
+class MessageIdProjection extends Projection<ProjectOverviewId, typeof MessageIdStateSchema> {}
 class DerivedTaskProjection extends TaskProjection {}
 
 function register(entityType: unknown, schema: GenMessage<Message>): void {

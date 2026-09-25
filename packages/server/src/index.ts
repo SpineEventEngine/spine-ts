@@ -142,8 +142,6 @@ export {
   type EntityLifecycleFlags,
   type EntityOptions,
   type EntityScopeReason,
-  type EntityVersionMetadata,
-  type PlainEntityVersionMetadata,
   ProcessManager,
   Projection,
   TransactionalEntity,

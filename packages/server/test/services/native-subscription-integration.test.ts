@@ -64,7 +64,7 @@ import {
   TaskListIdSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
-class NativeAggregate extends Aggregate<string, typeof NativeProjectStateSchema, bigint> {
+class NativeAggregate extends Aggregate<string, typeof NativeProjectStateSchema> {
   assign(command: AssignReviewTask): TaskCreated {
     this.update((draft) =>
       Object.assign(
@@ -84,7 +84,7 @@ class NativeAggregate extends Aggregate<string, typeof NativeProjectStateSchema,
   }
 }
 
-class NativeProjection extends Projection<string, typeof NativeProjectOverviewStateSchema, number> {
+class NativeProjection extends Projection<string, typeof NativeProjectOverviewStateSchema> {
   project(event: TaskCreated): void {
     const id = event.id?.value ?? "";
     this.update((draft) =>
@@ -100,11 +100,7 @@ class NativeProjection extends Projection<string, typeof NativeProjectOverviewSt
   }
 }
 
-class NativeProcessManager extends ProcessManager<
-  string,
-  typeof NativeProcessManagerStateSchema,
-  number
-> {
+class NativeProcessManager extends ProcessManager<string, typeof NativeProcessManagerStateSchema> {
   assign(command: AssignReviewTask): void {
     this.update((draft) =>
       Object.assign(

@@ -60,11 +60,9 @@ import {
   AbstractCommander,
   AbstractEventReactor,
   AbstractEventSubscriber,
-  type EntityVersionMetadata,
   Inbox,
   type InboxMessage,
   InboxStorage,
-  type PlainEntityVersionMetadata,
   type PrimitiveId,
   Repository,
   ShardIndex,
@@ -117,17 +115,6 @@ import {
   ProcessManagerStateSchema,
 } from "../test-fixtures/generated/entity-metadata/visibility_pb.js";
 
-interface ExportedRevisionMetadata {
-  readonly revision: number;
-  readonly source: "server";
-  readonly labels?: readonly string[];
-}
-
-interface ExportedSizedMetadata {
-  readonly revision: number;
-  readonly size: number;
-}
-
 it("exports nominal standalone handler base classes", () => {
   class Assignee extends AbstractAssignee {}
   class Commander extends AbstractCommander {}
@@ -139,7 +126,7 @@ it("exports nominal standalone handler base classes", () => {
   expect(new Subscriber()).toBeInstanceOf(AbstractEventSubscriber);
 });
 
-class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignCommand(command: CreateProject): void {
     void command;
   }
@@ -238,18 +225,6 @@ describe("@spine-event-engine/server", () => {
       ].sort(),
     );
 
-    expectTypeOf<{
-      readonly revision: number;
-      readonly source: string;
-      readonly checkpoints: readonly (string | null)[];
-    }>().toExtend<EntityVersionMetadata>();
-    expectTypeOf<
-      PlainEntityVersionMetadata<ExportedRevisionMetadata>
-    >().toEqualTypeOf<ExportedRevisionMetadata>();
-    expectTypeOf<
-      PlainEntityVersionMetadata<ExportedSizedMetadata>
-    >().toEqualTypeOf<ExportedSizedMetadata>();
-    expectTypeOf<PlainEntityVersionMetadata<Date>>().toBeNever();
     expectTypeOf<BoundedContextName>().toEqualTypeOf<{ readonly value: string }>();
     expectTypeOf<TenantMode>().toEqualTypeOf<"single-tenant" | "multitenant">();
     expectTypeOf(

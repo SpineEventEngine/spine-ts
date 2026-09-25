@@ -52,6 +52,7 @@ import {
   type TenantId,
   UserIdSchema,
   VersionSchema,
+  type Version,
 } from "@spine-event-engine/proto";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { TaskListSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
@@ -250,7 +251,7 @@ const TaskSchema = TodoTaskSchema;
 const TaskCreatedSchema = TodoEvents.TaskCreatedSchema;
 const ProjectSubmissionIdStateSchema = AcceptedProjectSubmissionStateSchema;
 
-class ProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class ProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): void {
     void command;
   }
@@ -260,33 +261,25 @@ class ProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigi
   }
 }
 
-class CreateProjectRoutingAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class CreateProjectRoutingAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): void {
     void command;
   }
 }
 
-class IdlessCommandProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class IdlessCommandProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   createProject(command: CreateProject): void {
     void command;
   }
 }
 
-class IdlessCommandProjectionAggregate extends Aggregate<
-  string,
-  typeof ProjectStateSchema,
-  bigint
-> {
+class IdlessCommandProjectionAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): void {
     void command;
   }
 }
 
-class DraftProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class DraftProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static calls = 0;
 
   static reset(): void {
@@ -299,7 +292,7 @@ class DraftProjectAggregate extends Aggregate<string, typeof ProjectStateSchema,
   }
 }
 
-class BlankStateIdAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class BlankStateIdAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static calls = 0;
 
   assign(command: CreateProject): void {
@@ -308,11 +301,7 @@ class BlankStateIdAggregate extends Aggregate<string, typeof ProjectStateSchema,
   }
 }
 
-class BlankStateIdProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class BlankStateIdProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static calls = 0;
 
   assign(command: CreateProject): void {
@@ -324,7 +313,7 @@ class BlankStateIdProcessManager extends ProcessManager<
   }
 }
 
-class BlankStateIdProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class BlankStateIdProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static calls = 0;
 
   subscribe(event: ProjectCreated): void {
@@ -338,8 +327,7 @@ class BlankStateIdProjection extends Projection<string, typeof ProjectOverviewSt
 
 class SequencedProjectOverview extends Projection<
   ProjectSequenceId,
-  typeof SequencedProjectOverviewStateSchema,
-  number
+  typeof SequencedProjectOverviewStateSchema
 > {
   static calls = 0;
 
@@ -351,8 +339,7 @@ class SequencedProjectOverview extends Projection<
 
 class RegisteredProjectAggregate extends Aggregate<
   RepositoryProjectId,
-  typeof RegisteredProjectStateSchema,
-  bigint
+  typeof RegisteredProjectStateSchema
 > {
   assign(command: RegisterProject): void {
     this.update((draft) => Object.assign(draft, command));
@@ -361,8 +348,7 @@ class RegisteredProjectAggregate extends Aggregate<
 
 class ProjectMilestoneProjection extends Projection<
   ProjectMilestoneId,
-  typeof ProjectMilestoneOverviewStateSchema,
-  number
+  typeof ProjectMilestoneOverviewStateSchema
 > {
   subscribe(event: ProjectMilestoneAdded | ProjectMilestoneSourceState): void {
     this.update((draft) => Object.assign(draft, event));
@@ -371,8 +357,7 @@ class ProjectMilestoneProjection extends Projection<
 
 class ProjectMilestoneAggregate extends Aggregate<
   ProjectMilestoneId,
-  typeof ProjectMilestoneStateSchema,
-  bigint
+  typeof ProjectMilestoneStateSchema
 > {
   assign(command: AddProjectMilestone): void {
     this.update((draft) => Object.assign(draft, command));
@@ -381,8 +366,7 @@ class ProjectMilestoneAggregate extends Aggregate<
 
 class ProjectMilestoneProcessManager extends ProcessManager<
   ProjectMilestoneId,
-  typeof ProjectMilestoneWorkflowStateSchema,
-  number
+  typeof ProjectMilestoneWorkflowStateSchema
 > {
   static calls = 0;
   static ids: ProjectMilestoneId[] = [];
@@ -423,11 +407,7 @@ class ProjectMilestoneProcessManager extends ProcessManager<
   }
 }
 
-class NumberedProjectAggregate extends Aggregate<
-  number,
-  typeof NumberedProjectStateSchema,
-  bigint
-> {
+class NumberedProjectAggregate extends Aggregate<number, typeof NumberedProjectStateSchema> {
   assign(command: CreateNumberedProject): NumberedProjectCreated {
     this.update((draft) => {
       draft.id = command.id;
@@ -441,7 +421,7 @@ class NumberedProjectAggregate extends Aggregate<
   }
 }
 
-class ProjectWorkflow extends ProcessManager<bigint, typeof ProjectWorkflowStateSchema, number> {
+class ProjectWorkflow extends ProcessManager<bigint, typeof ProjectWorkflowStateSchema> {
   assign(command: ScheduleProjectWorkflow): void {
     this.update((draft) => {
       draft.id = command.id;
@@ -454,7 +434,7 @@ class ProjectWorkflow extends ProcessManager<bigint, typeof ProjectWorkflowState
   }
 }
 
-class MalformedFirstFieldAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class MalformedFirstFieldAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignRepeated(command: InviteProjectMembers): void {
     void command;
   }
@@ -464,7 +444,7 @@ class MalformedFirstFieldAggregate extends Aggregate<string, typeof ProjectState
   }
 }
 
-class ExecutingProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class ExecutingProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static assigneeCalls = 0;
   static directUpdateCalls = 0;
   static failure: Error | undefined;
@@ -537,7 +517,7 @@ class ExecutingProjectAggregate extends Aggregate<string, typeof ProjectStateSch
   }
 }
 
-class ManagedProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class ManagedProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static assigneeCalls = 0;
   static failure: Error | undefined;
 
@@ -568,7 +548,7 @@ class ManagedProjectAggregate extends Aggregate<string, typeof ProjectStateSchem
   }
 }
 
-class ProjectIdRejectingAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+class ProjectIdRejectingAggregate extends Aggregate<TaskId, typeof TaskSchema> {
   static failure: unknown;
 
   createProject(): never {
@@ -576,7 +556,7 @@ class ProjectIdRejectingAggregate extends Aggregate<TaskId, typeof TaskSchema, b
   }
 }
 
-class GeneratedTwoArgAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class GeneratedTwoArgAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static argumentCounts: number[] = [];
   static contexts: CommandContext[] = [];
   static observedStateNames: string[] = [];
@@ -642,11 +622,7 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof ProjectStateSche
   }
 }
 
-class ProjectRegistrationReactorAggregate extends Aggregate<
-  string,
-  typeof ProjectStateSchema,
-  bigint
-> {
+class ProjectRegistrationReactorAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static argumentCounts: number[] = [];
   static contexts: EventContext[] = [];
   static failure: Error | undefined;
@@ -686,7 +662,7 @@ class ProjectRegistrationReactorAggregate extends Aggregate<
   }
 }
 
-class GuardedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class GuardedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static calls = 0;
 
   static reset(): void {
@@ -695,6 +671,7 @@ class GuardedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigi
 
   reactProjection(event: ProjectCreated): void {
     GuardedAggregate.calls++;
+    if (event.name === "no-op") return;
     this.update((draft) =>
       Object.assign(
         draft,
@@ -708,7 +685,7 @@ class GuardedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigi
   }
 }
 
-class ProducingGuardedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class ProducingGuardedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static calls = 0;
 
   static reset(): void {
@@ -737,8 +714,7 @@ class ProducingGuardedAggregate extends Aggregate<string, typeof ProjectStateSch
 
 class GeneratedCommandingProcessManager extends ProcessManager<
   string,
-  typeof ProjectQueueStateSchema,
-  number
+  typeof ProjectQueueStateSchema
 > {
   static argumentCounts: number[] = [];
   static contexts: EventContext[] = [];
@@ -781,7 +757,7 @@ class GeneratedCommandingProcessManager extends ProcessManager<
   }
 }
 
-class MultiManagedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class MultiManagedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): readonly ProjectCreated[] {
     this.update((draft) =>
       Object.assign(
@@ -808,7 +784,7 @@ class MultiManagedAggregate extends Aggregate<string, typeof ProjectStateSchema,
   }
 }
 
-class EmptyManagedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class EmptyManagedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): undefined {
     this.update((draft) =>
       Object.assign(
@@ -824,7 +800,7 @@ class EmptyManagedAggregate extends Aggregate<string, typeof ProjectStateSchema,
   }
 }
 
-class EnvelopeManagedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class EnvelopeManagedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): SpineEvent {
     this.update((draft) =>
       Object.assign(
@@ -840,11 +816,7 @@ class EnvelopeManagedAggregate extends Aggregate<string, typeof ProjectStateSche
   }
 }
 
-class ValidatingProjectAggregate extends Aggregate<
-  string,
-  typeof ProjectSubmissionStateSchema,
-  bigint
-> {
+class ValidatingProjectAggregate extends Aggregate<string, typeof ProjectSubmissionStateSchema> {
   static assigneeCalls = 0;
   static applierCalls = 0;
 
@@ -876,8 +848,7 @@ class ValidatingProjectAggregate extends Aggregate<
 
 class ProjectSubmissionIdRouteAggregate extends Aggregate<
   ProjectSubmissionId,
-  typeof ProjectSubmissionIdStateSchema,
-  bigint
+  typeof ProjectSubmissionIdStateSchema
 > {
   static calls = 0;
 
@@ -890,11 +861,7 @@ class ProjectSubmissionIdRouteAggregate extends Aggregate<
   }
 }
 
-class ValidatingProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class ValidatingProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static commandCalls = 0;
 
   static reset(): void {
@@ -920,7 +887,7 @@ class ValidatingProcessManager extends ProcessManager<
   }
 }
 
-class TransitionViolatingAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class TransitionViolatingAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject) {
     this.update((draft) =>
       Object.assign(
@@ -952,7 +919,7 @@ class RecoveringTransitionAggregate extends TransitionViolatingAggregate {
   }
 }
 
-class AsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class AsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static resolveCommand: ((eventName: string) => void) | undefined;
 
   createProject(command: CreateProject): Promise<SpineEvent> {
@@ -974,7 +941,7 @@ class AsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema
   }
 }
 
-class RejectedAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class RejectedAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static rejectCommand: ((error: Error) => void) | undefined;
 
   static reset(): void {
@@ -998,7 +965,7 @@ class RejectedAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectSta
   }
 }
 
-class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static readonly started: string[] = [];
   static readonly releases: (() => void)[] = [];
 
@@ -1033,7 +1000,7 @@ class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectState
   }
 }
 
-class NoApplierAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class NoApplierAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): ProjectCreated {
     this.update((draft) =>
       Object.assign(
@@ -1056,7 +1023,7 @@ class NoApplierAggregate extends Aggregate<string, typeof ProjectStateSchema, bi
   }
 }
 
-class MalformedEventAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class MalformedEventAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(): unknown {
     return create(EventSchema, {
       id: create(EventIdSchema, { value: "event-malformed" }),
@@ -1069,7 +1036,7 @@ class MalformedEventAggregate extends Aggregate<string, typeof ProjectStateSchem
   }
 }
 
-class BigintVersionAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class BigintVersionAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static observedVersions: unknown[] = [];
 
   static reset(): void {
@@ -1097,7 +1064,7 @@ class BigintVersionAggregate extends Aggregate<string, typeof ProjectStateSchema
   }
 }
 
-class ProjectionProducingAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class ProjectionProducingAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject) {
     return createProjectCreated(
       `event-${command.name}`,
@@ -1126,8 +1093,7 @@ class ProjectionProducingAggregate extends Aggregate<string, typeof ProjectState
 
 class CommandTenantProjectionProducingAggregate extends Aggregate<
   string,
-  typeof ProjectStateSchema,
-  bigint
+  typeof ProjectStateSchema
 > {
   createProject(command: CreateProject) {
     return createProjectCreated(`event-${command.name}`, command.id);
@@ -1149,11 +1115,7 @@ class CommandTenantProjectionProducingAggregate extends Aggregate<
   }
 }
 
-class ExecutingTaskProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class ExecutingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static subscriberCalls = 0;
 
   static reset(): void {
@@ -1182,7 +1144,7 @@ class ExecutingTaskProjection extends Projection<
   }
 }
 
-class FilteredTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class FilteredTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static calls: string[] = [];
 
   static reset(): void {
@@ -1198,7 +1160,7 @@ class FilteredTaskProjection extends Projection<string, typeof ProjectOverviewSt
   }
 }
 
-class FilteredEventAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class FilteredEventAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static calls: string[] = [];
 
   static reset(): void {
@@ -1224,7 +1186,7 @@ class FilteredEventAggregate extends Aggregate<string, typeof ProjectStateSchema
   }
 }
 
-class ManagedTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class ManagedTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static subscriberCalls = 0;
 
   static reset(): void {
@@ -1246,7 +1208,7 @@ class ManagedTaskProjection extends Projection<string, typeof ProjectOverviewSta
   }
 }
 
-class AlternateCatchUpProjection extends Projection<TaskListId, typeof TaskListSchema, number> {
+class AlternateCatchUpProjection extends Projection<TaskListId, typeof TaskListSchema> {
   static subscriberCalls = 0;
 
   static reset(): void {
@@ -1267,11 +1229,7 @@ class AlternateCatchUpProjection extends Projection<TaskListId, typeof TaskListS
   }
 }
 
-class BlockingCatchUpProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class BlockingCatchUpProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static startedCalls = 0;
   static completedCalls = 0;
   static block = false;
@@ -1320,11 +1278,7 @@ class BlockingCatchUpProjection extends Projection<
   }
 }
 
-class GeneratedTwoArgProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class GeneratedTwoArgProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static argumentCounts: number[] = [];
   static contexts: EventContext[] = [];
 
@@ -1349,11 +1303,7 @@ class GeneratedTwoArgProjection extends Projection<
   }
 }
 
-class RejectionObservingProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class RejectionObservingProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static messages: TaskAlreadyDoneMessage[] = [];
   static contexts: EventContext[] = [];
   static argumentCounts: number[] = [];
@@ -1384,8 +1334,7 @@ class RejectionObservingProjection extends Projection<
 
 class ContextMutatingGeneratedProjection extends Projection<
   string,
-  typeof ProjectOverviewStateSchema,
-  number
+  typeof ProjectOverviewStateSchema
 > {
   static firstContext: EventContext | undefined;
   static observerSawSameContext = false;
@@ -1420,7 +1369,7 @@ class ContextMutatingGeneratedProjection extends Projection<
   }
 }
 
-class PassiveTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class PassiveTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static subscriberCalls = 0;
 
   static reset(): void {
@@ -1438,11 +1387,7 @@ class PassiveTaskProjection extends Projection<string, typeof ProjectOverviewSta
   }
 }
 
-class AccumulatingTaskProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class AccumulatingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   subscribeTask(event: ProjectCreated): void {
     this.update((draft) => {
       draft.name = event.name;
@@ -1451,11 +1396,7 @@ class AccumulatingTaskProjection extends Projection<
   }
 }
 
-class StateObservingProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class StateObservingProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static subscriberCalls = 0;
 
   static reset(): void {
@@ -1471,7 +1412,7 @@ class StateObservingProjection extends Projection<
   }
 }
 
-class OriginStateProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class OriginStateProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static calls: string[] = [];
 
   static reset(): void {
@@ -1487,39 +1428,31 @@ class OriginStateProjection extends Projection<string, typeof ProjectOverviewSta
   }
 }
 
-class ProjectBacklogProjection extends Projection<
-  string,
-  typeof ProjectBacklogStateSchema,
-  number
-> {
+class ProjectBacklogProjection extends Projection<string, typeof ProjectBacklogStateSchema> {
   subscribeState(state: ProjectOverviewState): void {
     void state;
   }
 }
 
-class ReactingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class ReactingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   reactTask(event: ProjectCreated): void {
     void event;
   }
 }
 
-class UserIdProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class UserIdProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   subscribeUser(event: ProjectCreated): void {
     void event;
   }
 }
 
-class NonFiniteRouteProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class NonFiniteRouteProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   subscribeNumber(event: ProjectPriorityChanged): void {
     void event;
   }
 }
 
-class ProjectIdProjectAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+class ProjectIdProjectAggregate extends Aggregate<TaskId, typeof TaskSchema> {
   applyTaskCreated(event: TaskCreated): void {
     void event;
   }
@@ -1529,7 +1462,7 @@ class ProjectIdProjectAggregate extends Aggregate<TaskId, typeof TaskSchema, big
   }
 }
 
-class ProjectIdProducingAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+class ProjectIdProducingAggregate extends Aggregate<TaskId, typeof TaskSchema> {
   assignTask(command: CreateTask): TaskCreated {
     this.update((draft) =>
       Object.assign(draft, {
@@ -1546,17 +1479,13 @@ class ProjectIdProducingAggregate extends Aggregate<TaskId, typeof TaskSchema, b
   }
 }
 
-class TaskCreatedScalarProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class TaskCreatedScalarProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   subscribeTaskCreated(event: TaskCreated): void {
     void event;
   }
 }
 
-class CreateTaskScalarAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class CreateTaskScalarAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignCreateTask(command: CreateTask): void {
     void command;
   }
@@ -1564,15 +1493,14 @@ class CreateTaskScalarAggregate extends Aggregate<string, typeof ProjectStateSch
 
 class MissingSubscriberMethodProjection extends Projection<
   string,
-  typeof ProjectOverviewStateSchema,
-  number
+  typeof ProjectOverviewStateSchema
 > {
   missingSubscriber(event: ProjectCreated): void {
     void event;
   }
 }
 
-class ThrowingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class ThrowingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static failure: unknown = new Error("projection subscriber failed");
 
   static reset(failure: unknown = new Error("projection subscriber failed")): void {
@@ -1585,7 +1513,7 @@ class ThrowingTaskProjection extends Projection<string, typeof ProjectOverviewSt
   }
 }
 
-class RoutingProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema, number> {
+class RoutingProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static commandCalls = 0;
   static eventCalls = 0;
   static commandReactionCalls = 0;
@@ -1680,8 +1608,7 @@ class RoutingProcessManager extends ProcessManager<string, typeof ProjectQueueSt
 
 class CommandSubstitutingProcessManager extends ProcessManager<
   string,
-  typeof ProjectQueueStateSchema,
-  number
+  typeof ProjectQueueStateSchema
 > {
   static siblingOutputs = false;
 
@@ -1712,11 +1639,7 @@ class CommandSubstitutingProcessManager extends ProcessManager<
   }
 }
 
-class FilteredProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class FilteredProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static calls: string[] = [];
 
   static reset(): void {
@@ -1742,11 +1665,7 @@ class FilteredProcessManager extends ProcessManager<
   }
 }
 
-class DiagnosticOnlyProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class DiagnosticOnlyProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static calls = 0;
 
   createProject(command: CreateProject): ProjectCreated {
@@ -1759,11 +1678,7 @@ class DiagnosticOnlyProcessManager extends ProcessManager<
   }
 }
 
-class InboxCheckingProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class InboxCheckingProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static delivery: Delivery | undefined;
   static sawPendingRow = false;
   static eventCalls = 0;
@@ -1804,11 +1719,7 @@ class InboxCheckingProcessManager extends ProcessManager<
   }
 }
 
-class BlockingProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class BlockingProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static startedCalls = 0;
   static completedCalls = 0;
   static blockingId: string | undefined;
@@ -1846,11 +1757,7 @@ class BlockingProcessManager extends ProcessManager<
   }
 }
 
-class SplitRouteProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class SplitRouteProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static startedIds: string[] = [];
   static completedIds: string[] = [];
 
@@ -2193,7 +2100,9 @@ describe("repository signal routing", () => {
       await projectionContext
         .eventBus()
         .post(createProjectCreated("event-history-disabled-projection", "history-projection"));
-      await expect(projectionStorage.readStates("history-projection")).resolves.toEqual([]);
+      await expect(projectionStorage.readStates("history-projection")).resolves.toMatchObject([
+        { version: 1n, state: { name: "Task (projected)" } },
+      ]);
     } finally {
       await projectionContext.close();
     }
@@ -3536,7 +3445,7 @@ describe("repository signal routing", () => {
     ).rejects.toThrow(/tenantId/);
   });
 
-  it("rehydrates repository-executed aggregates with bigint version metadata", async () => {
+  it("rehydrates repository-executed aggregates with Spine Versions", async () => {
     BigintVersionAggregate.reset();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createBigintVersionRepository())
@@ -3550,7 +3459,7 @@ describe("repository signal routing", () => {
       .commandBus()
       .post(createAggregateCommand("command-bigint-2", "task-bigint", "Two"));
 
-    expect(BigintVersionAggregate.observedVersions).toEqual([0n, 1n]);
+    expect(BigintVersionAggregate.observedVersions).toMatchObject([{ number: 0 }, { number: 1 }]);
   });
 
   it("rejects produced aggregate versions outside the protobuf int32 range", async () => {
@@ -4611,6 +4520,15 @@ describe("repository signal routing", () => {
 
       expect(routeCalls).toBe(1);
       expect(GuardedAggregate.calls).toBe(2);
+      await expect(
+        context.stand().readVersioned(ProjectStateSchema, "aggregate-one"),
+      ).resolves.toMatchObject({ version: { number: 1 }, state: { name: "Task (guarded)" } });
+      await context.eventBus().post(
+        createProjectCreated("event-aggregate-no-op", "ignored", { name: "no-op" }),
+      );
+      await expect(
+        context.stand().readVersioned(ProjectStateSchema, "aggregate-one"),
+      ).resolves.toMatchObject({ version: { number: 1 }, state: { name: "Task (guarded)" } });
     } finally {
       await context.close();
     }
@@ -6213,12 +6131,12 @@ describe("repository signal routing", () => {
       .readVersioned(ProjectQueueStateSchema, "pm-rejected");
     const eventsBeforeRejection = await eventStore.read();
 
-    expect(stateBeforeRejection).toEqual({
+    expect(stateBeforeRejection).toMatchObject({
       state: create(ProjectQueueStateSchema, {
         id: "pm-rejected",
         queue: "Persisted assigned",
       }),
-      version: create(VersionSchema, { number: 1 }),
+      version: { number: 1 },
     });
     expect(eventsBeforeRejection).toHaveLength(1);
 
@@ -8533,13 +8451,13 @@ describe("repository signal routing", () => {
     });
     await expect(
       context.stand().readVersioned(ProjectOverviewStateSchema, "task-catch-up"),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       state: create(ProjectOverviewStateSchema, {
         id: "task-catch-up",
         name: "Task (projected)",
         priority: 2,
       }),
-      version: create(VersionSchema, { number: 1 }),
+      version: { number: 1 },
     });
     await expect(
       context.stand().read(ProjectOverviewStateSchema, "task-stale"),
@@ -9728,6 +9646,9 @@ describe("repository signal routing", () => {
       await expect(context.stand().read(ProjectQueueStateSchema, "pm-diagnostic")).resolves.toEqual(
         existing,
       );
+      await expect(
+        context.stand().readVersioned(ProjectQueueStateSchema, "pm-diagnostic"),
+      ).resolves.toMatchObject({ version: { number: 2 } });
       await expect(storage.readEvents("pm-diagnostic")).resolves.toMatchObject([
         { message: { typeUrl: TypeUrls.derive(ProjectCreatedSchema) } },
       ]);
@@ -9751,14 +9672,25 @@ describe("repository signal routing", () => {
       name: "Task",
       priority: 2,
     });
+    await expect(
+      context.stand().readVersioned(ProjectOverviewStateSchema, "task-accumulated"),
+    ).resolves.toMatchObject({ version: { number: 2 } });
   });
 
   it("atomically updates a timestamped current Version after repository read-modify-write", async () => {
     const factory = new InMemoryStorageFactory();
+    const repository = createExecutingProjectionRepository();
+    repository.setStateHistoryEnabled(true);
     const context = BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
+      .add(repository)
       .withStorageFactory(factory)
       .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectOverviewStateSchema,
+      stateHistory: true,
+    });
     const initialVersion = create(VersionSchema, {
       number: 1,
       timestamp: create(TimestampSchema, { seconds: 41n, nanos: 7 }),
@@ -9789,14 +9721,20 @@ describe("repository signal routing", () => {
 
       await expect(
         context.stand().readVersioned(ProjectOverviewStateSchema, "timestamped-cas"),
-      ).resolves.toEqual({
+      ).resolves.toMatchObject({
         state: create(ProjectOverviewStateSchema, {
           id: "timestamped-cas",
           name: "Task (projected)",
           priority: 2,
         }),
-        version: nextVersion,
+        version: { number: 2, timestamp: expect.any(Object) },
       });
+      const standVersion = (
+        await context.stand().readVersioned(ProjectOverviewStateSchema, "timestamped-cas")
+      )?.version;
+      const storedVersions = await storage.readVersionMessages("timestamped-cas");
+      expect(storedVersions.current).toEqual(standVersion);
+      expect(storedVersions.history).toEqual([standVersion]);
     } finally {
       await context.close();
     }
@@ -10024,7 +9962,7 @@ describe("repository signal routing", () => {
     expect("storedEventDispatchFailures" in context).toBe(false);
   });
 
-  it("records projection updates without version metadata when the delivered event has none", async () => {
+  it("advances a Projection version when the delivered Event has no producer version", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingProjectionRepository())
       .build();
@@ -10042,7 +9980,7 @@ describe("repository signal routing", () => {
     });
     await expect(
       context.stand().readVersioned(ProjectOverviewStateSchema, "task-without-version"),
-    ).resolves.not.toHaveProperty("version");
+    ).resolves.toMatchObject({ version: { number: 1 } });
   });
 
   it("rejects a default-routed Event without a producer ID", () => {
@@ -12392,6 +12330,23 @@ class CurrentRecordTestStorage<S extends Message = Message> {
         lifecycle: { archived: unpacked.archived, deleted: unpacked.deleted },
         state: unpacked.state as S,
         version: unpacked.version,
+      };
+    } finally {
+      storage.close();
+    }
+  }
+
+  async readVersionMessages(id: unknown): Promise<{
+    readonly current: Version | undefined;
+    readonly history: readonly Version[];
+  }> {
+    const storage = this.#open();
+    try {
+      const current = await storage.current.read(id);
+      const states = await storage.states.backward(id, 10);
+      return {
+        current: current?.version,
+        history: states.flatMap((record) => record.version ?? []),
       };
     } finally {
       storage.close();

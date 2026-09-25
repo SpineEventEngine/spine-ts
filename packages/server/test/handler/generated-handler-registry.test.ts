@@ -45,17 +45,17 @@ import type {
   StandaloneReceiverConstructor,
 } from "../../src/handler/generated-handler-registry.js";
 
-class Manager extends ProcessManager<string, typeof StateSchema, number> {
+class Manager extends ProcessManager<string, typeof StateSchema> {
   substitute(command: Message<"spine.server.testing.StartReview">) {
     return command;
   }
 }
-class AggregateReceiver extends Aggregate<string, typeof StateSchema, number> {
+class AggregateReceiver extends Aggregate<string, typeof StateSchema> {
   substitute(command: Message<"spine.server.testing.StartReview">) {
     return command;
   }
 }
-class ProjectionReceiver extends Projection<string, typeof StateSchema, number> {
+class ProjectionReceiver extends Projection<string, typeof StateSchema> {
   handle(command: Message<"spine.server.testing.StartReview">) {
     return command;
   }

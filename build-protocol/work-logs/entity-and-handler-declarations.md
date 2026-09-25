@@ -20,12 +20,29 @@ Human-Imposed Requirements Ledger. No unresolved human questions.
 - Official origin fetched; master remains `2b27a430d`. Existing branch preserved.
 - Planning and JVM source comparison complete; no architecture replanning needed.
 - Implementation dispatched after recording requirements and skill selection.
+- Version slice implemented: Entity families now expose the generated Spine
+  `Version` with a zero default and defensive snapshot copying. A successful
+  state/lifecycle change or produced Events advances it once per dispatch;
+  pure no-ops, including a fresh incomplete state, skip validation and storage.
+  Repository current/history/Stand records share the committed Version;
+  Projection and Process Manager versions no longer copy producer versions.
+- Focused regressions cover state-only and Event-only changes, multiple input
+  Events, same-timestamp Version parity, unchanged reactions, and no-op new
+  Entities. Legacy third generic arguments and custom metadata helpers were
+  removed from package sources, examples, and affected test declarations.
 
 ## Verification
 
-Pending focused tests and preflight. Full release verification follows three
-completed review-and-fix rounds.
+- `pnpm exec vitest run packages/server/test/entity/entity.test.ts packages/server/test/entity/entity-transaction.test.ts packages/server/test/repository/repository-routing.test.ts packages/server/test/repository/repository.test.ts --maxWorkers=1`: 4 files, 340 tests passed.
+- `pnpm exec tsc --noEmit --pretty false -p packages/server/tsconfig.json`:
+  passed. `pnpm exec tsc --noEmit --pretty false -p tsconfig.eslint.json`: passed.
+- `pnpm lint:cleanup`: passed. Version work used failing focused regressions
+  before the relevant runtime changes. The broad TSDoc checker found baseline
+  missing declarations in affected files; narrow comment correction is being
+  coordinated while production behavior stabilizes, without weakening rules.
+- Full release verification follows three completed review-and-fix rounds.
 
 ## Integration
 
-Pending implementation commits and immediate pushes. No PR creation authorized.
+Version checkpoint pending. Handler returns follow sequentially. No PR creation
+authorized.

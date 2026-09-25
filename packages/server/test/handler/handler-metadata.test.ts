@@ -85,7 +85,7 @@ class TaskProjection {
   }
 }
 
-class AssignedProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class AssignedProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   assignCreate(command: CreateProject): void {
     void command;
   }

@@ -66,7 +66,7 @@ export { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
 /**
  * Applies commands to one message identified by `MessageId`.
  */
-export class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMessageSchema, bigint> {
+export class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMessageSchema> {
   // prettier-ignore
 
   /**
@@ -111,11 +111,7 @@ export class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMess
 /**
  * Builds the messages displayed on a board.
  */
-export class BoardViewProjection extends Projection<
-  MessageId,
-  typeof BoardMessageViewSchema,
-  number
-> {
+export class BoardViewProjection extends Projection<MessageId, typeof BoardMessageViewSchema> {
   // prettier-ignore
 
   /**
@@ -146,8 +142,7 @@ export class BoardViewProjection extends Projection<
  */
 export class AnnouncementBoardProjection extends Projection<
   BoardId,
-  typeof AnnouncementBoardViewSchema,
-  number
+  typeof AnnouncementBoardViewSchema
 > {
   // prettier-ignore
 
