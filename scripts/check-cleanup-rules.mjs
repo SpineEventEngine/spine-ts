@@ -1667,92 +1667,93 @@ function firstForbiddenTypeLabel(typeNodes, importState, state) {
   return undefined;
 }
 
-function returnIssue(typeNode, importState, expectedKind) {
+function returnIssue(typeNode, importState, expectedKind, allowMissing = false) {
   if (forbiddenTypeLabel(typeNode, importState) !== undefined) {
     return undefined;
   }
 
-  return isMessageReturn(typeNode, importState, expectedKind)
+  return isMessageReturn(typeNode, importState, expectedKind, allowMissing)
     ? undefined
     : `handler return type generated domain ${expectedKind}`;
 }
 
-function isMessageReturn(typeNode, importState, expectedKind) {
+function isMessageReturn(typeNode, importState, expectedKind, allowMissing) {
   const state = { remaining: maxTypeReferenceVisits, seen: new Set() };
 
-  return checkMessageReturn(typeNode, importState, state, expectedKind);
-}
-
-function checkMessageReturn(typeNode, importState, state, expectedKind) {
-  state.remaining -= 1;
-  if (state.remaining < 0) {
-    return false;
-  }
-
-  if (ts.isParenthesizedTypeNode(typeNode)) {
-    return checkMessageReturn(typeNode.type, importState, state, expectedKind);
-  }
-
-  if (ts.isTypeOperatorNode(typeNode)) {
-    return checkMessageReturn(typeNode.type, importState, state, expectedKind);
-  }
-
-  if (ts.isTupleTypeNode(typeNode)) {
-    return (
-      hasRequiredHead(typeNode, importState, state, expectedKind) &&
-      typeNode.elements.every((element) =>
-        checkTupleElement(element, importState, state, expectedKind),
-      )
-    );
-  }
-
-  if (ts.isTypeReferenceNode(typeNode)) {
-    return checkTypeReturn(typeNode, importState, state, expectedKind);
-  }
-
-  return false;
-}
-
-function hasRequiredHead(typeNode, importState, state, expectedKind) {
-  const first = typeNode.elements[0];
-
   return (
-    first !== undefined &&
-    !ts.isRestTypeNode(first) &&
-    !ts.isOptionalTypeNode(first) &&
-    checkTupleElement(first, importState, state, expectedKind)
+    (checkMessageReturn(typeNode, importState, state, expectedKind, {
+      allowMissing,
+      collectionDepth: 0,
+      promiseDepth: 0,
+    }) ?? 0) > 0
   );
 }
 
-function checkTupleElement(typeNode, importState, state, expectedKind) {
-  if (ts.isRestTypeNode(typeNode)) {
-    return (
-      ts.isArrayTypeNode(typeNode.type) &&
-      checkMessageReturn(typeNode.type.elementType, importState, state, expectedKind)
-    );
-  }
-
-  if (ts.isNamedTupleMember(typeNode)) {
-    if (typeNode.dotDotDotToken !== undefined) {
-      return (
-        ts.isArrayTypeNode(typeNode.type) &&
-        checkMessageReturn(typeNode.type.elementType, importState, state, expectedKind)
-      );
-    }
-
-    return (
-      !typeNode.questionToken && checkTupleElement(typeNode.type, importState, state, expectedKind)
-    );
-  }
-
-  if (ts.isOptionalTypeNode(typeNode)) {
-    return false;
-  }
-
-  return checkMessageReturn(typeNode, importState, state, expectedKind);
+function checkMessageReturn(typeNode, importState, state, expectedKind, options) {
+  state.remaining -= 1;
+  if (state.remaining < 0) return undefined;
+  if (ts.isParenthesizedTypeNode(typeNode))
+    return checkMessageReturn(typeNode.type, importState, state, expectedKind, options);
+  if (ts.isTypeOperatorNode(typeNode))
+    return typeNode.operator === ts.SyntaxKind.ReadonlyKeyword
+      ? checkMessageReturn(typeNode.type, importState, state, expectedKind, options)
+      : undefined;
+  if (typeNode.kind === ts.SyntaxKind.UndefinedKeyword)
+    return options.allowMissing && options.collectionDepth === 0 ? 0 : undefined;
+  if (ts.isUnionTypeNode(typeNode))
+    return sumMessageReturns(typeNode.types, importState, state, expectedKind, options);
+  if (ts.isArrayTypeNode(typeNode))
+    return options.collectionDepth === 0
+      ? checkMessageReturn(typeNode.elementType, importState, state, expectedKind, {
+          ...options,
+          allowMissing: false,
+          collectionDepth: 1,
+        })
+      : undefined;
+  if (ts.isTupleTypeNode(typeNode))
+    return checkTupleReturn(typeNode, importState, state, expectedKind, options);
+  return ts.isTypeReferenceNode(typeNode)
+    ? checkTypeReturn(typeNode, importState, state, expectedKind, options)
+    : undefined;
 }
 
-function checkTypeReturn(typeNode, importState, state, expectedKind) {
+function sumMessageReturns(types, importState, state, expectedKind, options) {
+  let count = 0;
+  for (const type of types) {
+    const branch = checkMessageReturn(type, importState, state, expectedKind, options);
+    if (branch === undefined) return undefined;
+    count += branch;
+  }
+  return count;
+}
+
+function checkTupleReturn(typeNode, importState, state, expectedKind, options) {
+  if (options.collectionDepth !== 0 || typeNode.elements.length === 0) return undefined;
+  let count = 0;
+  for (const [index, element] of typeNode.elements.entries()) {
+    const member = ts.isNamedTupleMember(element) ? element.type : element;
+    const optional =
+      ts.isOptionalTypeNode(member) ||
+      (ts.isNamedTupleMember(element) && element.questionToken !== undefined);
+    if (index === 0 && optional && !options.allowMissing) return undefined;
+    if (
+      ts.isRestTypeNode(member) ||
+      (ts.isNamedTupleMember(element) && element.dotDotDotToken !== undefined)
+    )
+      return undefined;
+    const value = ts.isOptionalTypeNode(member) ? member.type : member;
+    const branch = checkMessageReturn(value, importState, state, expectedKind, {
+      ...options,
+      allowMissing: false,
+      collectionDepth: 1,
+    });
+    if (branch === undefined || branch === 0) return undefined;
+    count += branch;
+  }
+  return count;
+}
+
+function checkTypeReturn(typeNode, importState, state, expectedKind, options) {
   const { typeName } = typeNode;
 
   if (ts.isIdentifier(typeName)) {
@@ -1762,33 +1763,53 @@ function checkTypeReturn(typeNode, importState, state, expectedKind) {
       importState,
       state,
       expectedKind,
+      options,
     );
   }
 
   if (ts.isQualifiedName(typeName)) {
-    return isGeneratedQualified(typeName, importState, expectedKind);
+    return typeNode.typeArguments?.length === 0 || typeNode.typeArguments === undefined
+      ? isGeneratedQualified(typeName, importState, expectedKind)
+        ? 1
+        : undefined
+      : undefined;
   }
 
-  return false;
+  return undefined;
 }
 
-function checkNamedReturn(name, typeArguments, importState, state, expectedKind) {
-  if (typeArguments.length > 0 || isContainerName(name)) {
-    return false;
-  }
-
+function checkNamedReturn(name, typeArguments, importState, state, expectedKind, options) {
   const aliasedType = importState.localTypeAliases.get(name);
   if (aliasedType !== undefined) {
-    if (state.seen.has(name)) {
-      return false;
-    }
+    if (state.seen.has(name) || typeArguments.length > 0) return undefined;
     state.seen.add(name);
-    const matches = checkMessageReturn(aliasedType, importState, state, expectedKind);
+    const matches = checkMessageReturn(aliasedType, importState, state, expectedKind, options);
     state.seen.delete(name);
     return matches;
   }
-
-  return importState.generatedTypes.get(name) === expectedKind;
+  if (
+    name === "Promise" &&
+    typeArguments.length === 1 &&
+    options.promiseDepth === 0 &&
+    options.collectionDepth === 0
+  )
+    return checkMessageReturn(typeArguments[0], importState, state, expectedKind, {
+      ...options,
+      promiseDepth: 1,
+    });
+  if (
+    (name === "Array" || name === "ReadonlyArray") &&
+    typeArguments.length === 1 &&
+    options.collectionDepth === 0
+  )
+    return checkMessageReturn(typeArguments[0], importState, state, expectedKind, {
+      ...options,
+      allowMissing: false,
+      collectionDepth: 1,
+    });
+  return typeArguments.length === 0 && importState.generatedTypes.get(name) === expectedKind
+    ? 1
+    : undefined;
 }
 
 function isGeneratedQualified(typeName, importState, expectedKind) {
@@ -1876,10 +1897,6 @@ function isEventName(name) {
 
 function isNonSignalName(name) {
   return /(State|View|Details|Detail|Id|ID|Status|Priority|Pointer|Projection|Result)$/.test(name);
-}
-
-function isContainerName(name) {
-  return name === "Array" || name === "ReadonlyArray" || name === "Promise";
 }
 
 function commandFieldName(node, commandNames) {
@@ -2907,13 +2924,16 @@ function handlerReturnViolations(node, decoratorNames, importState) {
         violations.push(`@${name} handler return type annotation`);
       } else {
         const expectedKind = name === "Command" ? "command" : "event";
-        const issue = returnIssue(node.type, importState, expectedKind);
+        const issue =
+          name === "React" && isVoidTypeNode(node.type, importState)
+            ? undefined
+            : returnIssue(node.type, importState, expectedKind, name === "React");
         if (issue !== undefined) {
           violations.push(issue);
         }
       }
     }
-    if (name === "Subscribe" && !isVoidTypeNode(node.type)) {
+    if (name === "Subscribe" && !isVoidTypeNode(node.type, importState)) {
       violations.push("@Subscribe handler return type void");
     }
   }
@@ -2936,8 +2956,27 @@ function handlerParameterViolations(node, decoratorNames) {
   return violations;
 }
 
-function isVoidTypeNode(type) {
-  return type?.kind === ts.SyntaxKind.VoidKeyword;
+function isVoidTypeNode(type, importState, seen = new Set(), promised = false) {
+  if (type === undefined) return false;
+  if (ts.isParenthesizedTypeNode(type))
+    return isVoidTypeNode(type.type, importState, seen, promised);
+  if (type.kind === ts.SyntaxKind.VoidKeyword) return true;
+  if (!ts.isTypeReferenceNode(type) || !ts.isIdentifier(type.typeName)) return false;
+  const name = type.typeName.text;
+  const alias = importState.localTypeAliases.get(name);
+  if (alias !== undefined) {
+    if (seen.has(name) || (type.typeArguments?.length ?? 0) !== 0) return false;
+    seen.add(name);
+    const result = isVoidTypeNode(alias, importState, seen, promised);
+    seen.delete(name);
+    return result;
+  }
+  return (
+    name === "Promise" &&
+    !promised &&
+    type.typeArguments?.length === 1 &&
+    isVoidTypeNode(type.typeArguments[0], importState, seen, true)
+  );
 }
 
 function groupExampleViolations(violations) {

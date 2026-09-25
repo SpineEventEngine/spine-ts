@@ -76,6 +76,15 @@ sufficient because `TypeRegistry.from()` follows declared dependencies.
 `handlers` must run after a decorated handler or its generated command, event,
 or state types change. Compile the generated registry with the application.
 
+Explicit handler return annotations may resolve to one generated message, a
+union, a flat array, or a fixed tuple (including readonly, named, optional, and
+union-valued entries), optionally wrapped in one built-in `Promise`. Local and
+imported aliases must resolve to concrete generated schemas. The analyzer records
+all possible schemas in that handler's `outcomes.returned`; it does not serialize
+tuple positions or union branches. Handler-specific result rules and unsupported
+shapes are documented in the
+[server reference](../server/REFERENCE.md#handler-return-types).
+
 ## Safety and atomicity
 
 All package-relative paths must remain inside the package and may not use unsafe

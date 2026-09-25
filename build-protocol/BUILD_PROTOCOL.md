@@ -712,7 +712,8 @@ Additional end-user API gates:
   return types as allowed by `TECHNICAL_SPEC.md`: `@Assign` emits generated
   events, `@Command` emits generated commands, and `@React` emits generated
   events or explicit `void` for no emission;
-- end-user `@Subscribe` handlers must declare explicit `void` return types;
+- end-user `@Subscribe` handlers must declare explicit `void` or `Promise<void>`
+  return types;
 - end-user application code must not use schema-bearing decorators such as
   `@Assign(SomeSchema)` unless a task records a temporary legacy/testing
   exception;
@@ -745,7 +746,7 @@ automated checks that reject:
   `commitTransaction()` inside ordinary end-user/example code;
 - direct internal event ID construction such as `EventIdSchema` usage inside
   ordinary end-user/example code;
-- `@Subscribe` handlers without explicit `void` return types;
+- `@Subscribe` handlers without explicit `void` or `Promise<void>` return types;
 - default-route ID extraction helpers in end-user handlers;
 - handler materialization helpers in examples, including
   `materializeDecoratedEntityHandlers`, whether imported from the framework or

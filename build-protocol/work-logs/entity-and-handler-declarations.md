@@ -2,8 +2,9 @@
 
 Task: entity-and-handler-declarations.
 Branch and checkout: `entity-and-signal-handler-declarations`, existing checkout.
-Start: 25 September 2026. Status: implementation, all three review/fix rounds,
-full release verification, and package archive checks complete.
+Start: 25 September 2026. Status: original implementation, all three review/fix
+rounds, full release verification, and package archive checks complete.
+Documentation and runnable-example follow-up is in progress for draft PR #10.
 
 Requirements and acceptance are in
 [the plan](../planning/entity-and-handler-declarations.md), including its complete
@@ -221,5 +222,69 @@ files, shared BlackBox Node contract 16/16, testing/server/tooling TypeScript
 checks, targeted ESLint, cleanup, TSDoc, generated API/audience/snippet docs,
 changed-file Prettier, and `git diff --check`.
 
-The branch has no open PR. Build runs only on PRs to master; permission to
-create one remains unanswered. Local checks cannot be reported as GitHub CI.
+The human subsequently opened draft PR #10. Build verification is running on
+`d766f60b0`; follow-up pushes must establish fresh CI results on their final SHA.
+
+## Documentation and runnable-example follow-up
+
+The four new human requirements and acceptance criteria are recorded in the
+plan. Main reread the protocol. The existing implementer, explicitly configured
+Sol/medium, is assigned only example sources, their tests, and app documentation.
+Main handles framework documentation/TSDoc and records in separate files.
+A fresh `declaration_docs_audit` documentation reviewer was dispatched with
+explicit Luna/medium, no inherited history or memory, no edits, and no children.
+It checks current documentation for outdated Entity and handler declarations;
+historical records remain historical. Desktop accepted the explicit dispatch.
+Self-reported runtime identity is not available beyond configured dispatch.
+
+The original full release evidence remains applicable to unchanged framework
+runtime. Follow-up verification will exercise real examples, generated handler
+metadata, documentation snippets, and the full branch's required task gates.
+PR #10 is attached to this task. No PR creation or merge was performed.
+
+The independent documentation audit found the stale synchronous-only example
+comment, missing return-form TSDoc, and missing user-guide coverage. All were
+accepted. Main also removed outdated architecture wording that called Entity
+families marker-only and described their implemented collaborators as absent.
+Current documentation scans found no remaining third Entity generic example.
+
+The decorator file's newly enforced private-helper documentation is now complete.
+Three internal callbacks reuse the existing contextual HandlerMethodDecorator
+type rather than repeating its generic parameters. TypeScript output with
+comments removed is byte-identical to the baseline; server typechecks, ESLint,
+TSDoc, and all 14 decorator tests pass. No framework runtime behavior changed.
+The user-installed skill entrypoints were confirmed with bounded `rg --files -L`
+filtering and the local `.agents/.skill-lock.json` source manifest was readable.
+
+The real To-Do example now uses a readonly optional tuple at task creation and
+a two-Event-type union for assignment. Both new behavior tests first failed on
+the baseline. Generation, scoped compilation, and all 45 To-Do black-box tests
+pass after implementation. Remaining preflight and independent review follow.
+The selected final profile is now `verify:release`, because `verify:task`
+requires the complete branch's tests too; only one final profile will run.
+
+Preflight exposed an outdated example-code checker: it rejected the newly valid
+union and optional tuple declarations and still accepted a variadic tuple that
+the actual handler analyzer rejects. The same Sol/medium implementer now also
+handles `scripts/check-cleanup-rules.mjs` and its tests. Correct its native-form
+checks with positive and negative regressions, preserving generated-message
+roles and required outputs; do not add another full compiler analyzer.
+The estimate is revised to 0.8–1.2 hours. This shared-checker correction makes
+full release verification mandatory independently of branch classification.
+
+Follow-up implementation and cheap preflight are complete. The checker regression
+matrix failed on the old implementation and passed after correction. Its full
+125-test file passed, followed by the affected positive/negative matrix after
+the final React optional-only tuple and shadowed-Promise checks. The cleanup
+gate, TSDoc, root tooling/server typechecks, targeted ESLint, changed-file
+formatting, whitespace checks, compiled documentation snippets, audience checks,
+and API documentation/export checks passed. The new example branches are covered
+by initial/replacement/duplicate assignment and present/absent initial-assignee
+cases; global coverage will be checked in the final release run.
+
+The To-Do command adds only optional field 4; existing requests still decode and
+create unassigned tasks. Existing message types are reused with correct roles.
+The revised AssignTask semantics are documented beside the unchanged strict
+ReassignTask. An inline context-options type was named privately to keep the
+touched context factory within the method-length rule. Generated changes are
+limited to To-Do's normal manifest/marker; no generated TypeScript was added.

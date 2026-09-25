@@ -82,6 +82,11 @@ source imports the Server handler-registry contract as a type from
 runtime dependency. Run both after the related model or handler changes.
 The handler analyzer records `@Throws(...)` declarations as rejection outcomes;
 the generated rejection companion supplies the schema used by that metadata.
+Handler results can use native message unions, flat arrays, fixed tuples with
+optional entries, and one outer `Promise`. Concrete local/imported aliases are
+resolved too. The [handler return guide](../../docs/USER_GUIDE.md#choose-what-a-handler-returns)
+shows the allowed forms and the rules for each decorator. Regenerate handlers
+after changing a return declaration so every possible result schema is registered.
 
 The public CLI is `spine-proto`. Programmatic config and manifest readers are
 for build tooling that needs the same validated package contracts; application

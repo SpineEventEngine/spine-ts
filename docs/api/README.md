@@ -400,7 +400,7 @@ validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
 target type URL, and routed target ID.
 State is stored in tenant-scoped `Stand` records with Spine `Version`
 messages, returned commands are wrapped and posted after state storage, and
-returned event messages are wrapped with process-manager-emitted event schemas
+returned event messages are wrapped using the invoked handler's declared Event schemas
 and appended through the event store before produced-event dispatch. The repository
 surface still does not expose direct entity lookup/storage APIs, inboxes,
 caches, catch-up, or transport startup. Built bounded contexts use repository
@@ -661,8 +661,8 @@ transactions or active drafts already marked archived/deleted without including
 state payloads. `commit()` validates the buffered draft and closes the
 transaction only for accepted commits; rejected commits return violations and
 leave the transaction active. `rollback()` closes the transaction and returns
-the discarded draft evidence. Handlers rely on the framework to advance versions;
-the former custom version types and `updateVersionMetadata()` operation are removed.
+the discarded draft evidence. Handlers rely on the framework to advance Spine
+Versions; application code does not set or increment them.
 Server handler metadata exports include
 `EntityHandlers.define()`, `HandlerRegistrationBuilder`, the seven handler
 metadata roles for command assignment, command substitution, command
@@ -727,6 +727,18 @@ records may return generated event messages
 or explicit `void` with no emitted schemas. `@Subscribe` records return
 explicit `void` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
+
+Producing handlers can declare native message unions, flat arrays, and fixed
+tuples, including readonly tuples, named entries, union-valued entries, and
+optional entries. Concrete local/imported aliases and one outer built-in
+`Promise` are supported. `@Subscribe` may use `Promise<void>`. `@React` may use
+an Event type unioned with `undefined`; an Event-input `@Command` can instead
+return an empty typed Command array. `@Assign` and Command-input `@Command`
+must produce at least one message on success. The generator records every
+possible message schema for that handler. TypeScript checks tuple structure;
+runtime validates actual message types and preserves output order.
+See the [return-type guide](../USER_GUIDE.md#choose-what-a-handler-returns)
+for the complete supported-form table and unsupported shapes.
 
 A generated Process Manager command-input handler uses distinct domain Command
 types and can receive `CommandContext`. This self-contained example explicitly

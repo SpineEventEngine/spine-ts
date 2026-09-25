@@ -44,7 +44,7 @@ interface HandlerDecoratorContext {
 /**
  * Describes the standard TypeScript method decorator accepted by Spine handler declarations.
  *
- * @typeParam This - Entity instance that owns the decorated method.
+ * @typeParam This Receiver instance on which the decorated method runs.
  * @typeParam Parameters - Parameters accepted by the decorated method.
  * @typeParam Return - Result returned by the decorated method.
  * @param value Decorated method implementation.
@@ -62,7 +62,7 @@ export type HandlerMethodDecorator = <
 /**
  * Describes an instance method shape accepted by public handler decorators.
  *
- * @typeParam This - Entity instance that owns the method.
+ * @typeParam This Receiver instance on which the method runs.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
  * @param this Entity instance that receives the invocation.
@@ -90,10 +90,15 @@ export interface RejectionDeclaration {
 const handlerDecoratorMetadataKey = Symbol("@spine-event-engine/server.handlerDecorators");
 
 /**
- * Records the generated domain rejections a command-accepting handler may throw.
+ * Validates declared domain rejections for build-time handler discovery.
+ *
+ * Put `@Assign` or `@Command` first and `@Throws` last for readability; either
+ * order is accepted. The generated registry registers these rejection types
+ * even when no server handler consumes them. Rejections are thrown, not normal
+ * return values, and do not belong in the handler's return union or tuple.
  *
  * @param declarations Generated rejection companions.
- * @returns A method decorator that records the declared rejection schemas.
+ * @returns A method decorator that validates the annotated instance method.
  */
 export function Throws(...declarations: readonly RejectionDeclaration[]): HandlerMethodDecorator {
   if (declarations.length === 0) {
@@ -118,10 +123,7 @@ export function Throws(...declarations: readonly RejectionDeclaration[]): Handle
   if (new Set(typeNames).size !== typeNames.length) {
     throw new TypeError("@Throws cannot declare the same rejection more than once.");
   }
-  return <This extends object, Parameters extends readonly unknown[], Return>(
-    _value: HandlerMethodValue<This, Parameters, Return>,
-    context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
-  ): void => {
+  return (_value, context): void => {
     DecoratorMetadata.methodName(context);
   };
 }
@@ -135,7 +137,21 @@ export function Throws(...declarations: readonly RejectionDeclaration[]): Handle
  * throwable. The decorator records metadata only; it does not register the
  * handler, instantiate the entity, or invoke the method.
  *
- * @typeParam This - Entity instance that owns the method.
+ * Declare a generated Event type, a union such as `TaskAssigned | TaskReassigned`,
+ * a flat Event array (`T[]`, `readonly T[]`, `Array<T>`, or `ReadonlyArray<T>`),
+ * or a fixed tuple such as `readonly [TaskCreated, TaskAssigned?]`. Tuples may
+ * have named entries and union alternatives. Concrete local/imported aliases
+ * and exactly one outer built-in `Promise` are supported. A successful command
+ * must produce at least one Event; `void`, whole-result `undefined`, and
+ * optional-only tuples are not valid assignment declarations.
+ *
+ * Return domain messages, not framework envelopes or rejections. Nested
+ * collections, rest tuples, nested promises, custom thenables, `any`, and
+ * `unknown` are unsupported. TypeScript checks tuple structure; Spine validates
+ * each returned message against this handler's declarations and keeps its order.
+ * Declare thrown domain rejections separately with {@link Throws}.
+ *
+ * @typeParam This Receiver instance on which the method runs.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
  * @param value Decorated method implementation or command schema.
@@ -165,12 +181,28 @@ export function Assign(
  *
  * Bare `@Command` accepts a generated Command, Event, or rejection input.
  * A Command input is the unique command-substitution receptor for its type and
- * substitutes it with one or more Commands. `@Command` handlers are supported only by Process
- * Manager repositories; Aggregate and Projection repositories reject them.
+ * substitutes it with one or more Commands. Among Entity repositories, only
+ * Process Managers support `@Command`; Aggregates and Projections reject it.
+ * Standalone receivers use `AbstractCommander`.
  * Event and rejection inputs are Event Bus reactions that may return Commands.
  * Rejections are thrown, not returned.
  *
- * @typeParam This - Entity instance that owns the method.
+ * Declare a generated Command, a union such as
+ * `CreateAccessGrant | ExtendAccessGrant`, a flat Command array, or a fixed
+ * tuple. Arrays support `T[]`, `readonly T[]`, `Array<T>`, and `ReadonlyArray<T>`;
+ * tuples support readonly, named, optional, and union-valued entries. Concrete
+ * local/imported aliases and one outer built-in `Promise` are supported.
+ * A Command-input handler must return at least one Command. An Event/rejection
+ * reaction may return an empty typed Command array, but its declaration must
+ * still name a Command schema: neither `void` nor `CommandType | undefined`
+ * is a supported declaration. Optional-only tuples are also rejected.
+ *
+ * Every result must be a declared domain Command, not a framework envelope.
+ * Nested collections, rest tuples, nested promises, custom thenables, `any`,
+ * and `unknown` are unsupported. TypeScript checks tuple structure; Spine
+ * validates returned message types and preserves their order.
+ *
+ * @typeParam This Receiver instance on which the method runs.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
  * @param value Decorated method implementation or command schema.
@@ -185,7 +217,7 @@ export function Command<This extends object, Parameters extends readonly unknown
  * Creates command-handler decorator metadata or a schema-bearing decorator.
  * Command input declares a Process Manager command substitution; Event or rejection
  * input declares an Event Bus command reaction. Schema-bearing metadata cannot
- * provide generated emitted schemas and is rejected during materialization.
+ * provide declared returned schemas and is rejected during materialization.
  *
  * @param schemaOrValue Generated Command, Event, or rejection schema, or
  * decorated method implementation.
@@ -203,12 +235,15 @@ export function Command(
  * Creates an Event/rejection or Entity-state subscriber declaration.
  *
  * Bare `@Subscribe` accepts generated Event/rejection or descriptor-marked
- * Entity-state inputs and returns `void`. Event/rejection inputs produce
+ * Entity-state inputs and declares `void` or one built-in `Promise<void>`.
+ * It does not return signals; unions, arrays, and tuples of messages belong in
+ * producing handlers such as {@link React}, not subscribers. Nested promises
+ * and custom thenables are unsupported. Event/rejection inputs produce
  * event-subscription metadata; Entity state inputs produce state-subscription
  * metadata. Subscribers are metadata-only declarations bridged by generated
  * registry and runtime metadata.
  *
- * @typeParam This - Entity instance that owns the method.
+ * @typeParam This Receiver instance on which the method runs.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
  * @param value Decorated method implementation.
@@ -237,12 +272,22 @@ export function Subscribe(
 /**
  * Creates an event-reactor declaration.
  *
- * Bare `@React` accepts generated event or rejection inputs and returns normal
- * events or explicit `void`; rejections are thrown, not returned. Reactors are
- * collected as class-owned metadata and may fan out through the caller-owned
- * handler registry.
+ * Bare `@React` accepts generated Event or rejection inputs and returns domain
+ * Events, not rejections or framework envelopes. Declare one Event, a union of
+ * Event types, a flat array, or a fixed tuple. Arrays support `T[]`, `readonly T[]`,
+ * `Array<T>`, and `ReadonlyArray<T>`; tuples support readonly, named, optional,
+ * and union-valued entries. Concrete local/imported aliases are supported.
  *
- * @typeParam This - Entity instance that owns the method.
+ * Declare explicit `void` for no output, or a type such as
+ * `TaskRenamed | undefined` when a reaction sometimes emits an Event. Empty
+ * arrays and absent optional tuple entries produce no signals. Any supported
+ * result may have exactly one outer built-in `Promise`, including `Promise<void>`.
+ * Nested collections, rest tuples, nested promises, custom thenables, `any`,
+ * and `unknown` are unsupported. TypeScript checks tuple structure; Spine checks
+ * each actual Event against this handler's declarations and preserves order.
+ * Generated registry metadata connects the declaration to runtime dispatch.
+ *
+ * @typeParam This Receiver instance on which the method runs.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
  * @param value Decorated method implementation or event schema.
@@ -280,10 +325,7 @@ export function React(
 export function Where(options: WhereOptions): HandlerMethodDecorator {
   const snapshot = WhereValues.snapshot(options);
 
-  return <This extends object, Parameters extends readonly unknown[], Return>(
-    _value: HandlerMethodValue<This, Parameters, Return>,
-    context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
-  ): void => {
+  return (_value, context): void => {
     void snapshot;
     DecoratorMetadata.methodName(context);
   };
@@ -293,7 +335,7 @@ export function Where(options: WhereOptions): HandlerMethodDecorator {
  * Creates legacy framework event-application metadata.
  *
  * New application aggregates must not use `@Apply`; managed aggregates are no
- * longer event-sourced and the framework owns state transactions. This
+ * longer event-sourced and the framework manages state transactions. This
  * decorator is kept only for compatibility code that still needs explicit
  * schema-bearing event application metadata. The optional `allowImport` flag
  * is preserved only as part of that legacy metadata shape.
@@ -316,14 +358,14 @@ export function Apply(
  * produced by `EntityHandlers.define()` and accepted by
  * `HandlerMetadataRegistry`. Only own prototype methods of `entityType` are
  * inspected; inherited decorated methods are intentionally not materialized by
- * this class-owned adapter.
+ * this per-class adapter.
  *
  * Application code must not call this function and must not provide its own
  * handler discovery/materialization. Generated framework registries own schema
  * inference for bare decorators; this adapter only supports legacy
  * schema-bearing decorator metadata.
  *
- * @typeParam Instance - Entity instance that owns the handlers.
+ * @typeParam Instance Entity instance on which the handlers run.
  * @typeParam StateSchema - Schema that describes the entity state.
  * @param entityType Entity class whose own decorated methods are read.
  * @param stateSchema Schema that describes the entity state.
@@ -370,6 +412,12 @@ export function materializeDecoratedEntityHandlers<
 }
 
 const DecoratorMetadata = Object.freeze({
+  /**
+   * Validates a public instance method and reads its string name.
+   *
+   * @param context TypeScript decorator context identifying the method.
+   * @returns The method name used in handler metadata.
+   */
   methodName(context: HandlerDecoratorContext): string {
     if (context.static || context.private) {
       throw new TypeError("Spine handler decorators must be applied to public instance methods.");
@@ -381,6 +429,14 @@ const DecoratorMetadata = Object.freeze({
     return context.name;
   },
 
+  /**
+   * Applies a bare decorator or creates the internal schema-bearing form.
+   *
+   * @param kind Handler role recorded for the method.
+   * @param schemaOrValue Decorated method, or schema for the internal form.
+   * @param context Present when TypeScript invokes a bare decorator.
+   * @returns The internal decorator, or undefined after bare decoration.
+   */
   decorateOrCreate(
     kind: DecoratedHandlerKind,
     schemaOrValue: DescriptorMessageSchema | HandlerMethodValue,
@@ -394,15 +450,20 @@ const DecoratorMetadata = Object.freeze({
     return DecoratorMetadata.create(kind, schemaOrValue as DescriptorMessageSchema);
   },
 
+  /**
+   * Creates a decorator that appends immutable metadata for one method.
+   *
+   * @param kind Handler role recorded for the method.
+   * @param schema Optional schema supplied by internal compatibility tooling.
+   * @param options Import policy for a legacy Event application method.
+   * @returns A standard TypeScript method decorator.
+   */
   create(
     kind: DecoratedHandlerKind,
     schema?: DescriptorMessageSchema,
     options: EventApplicationOptions = {},
   ): HandlerMethodDecorator {
-    return <This extends object, Parameters extends readonly unknown[], Return>(
-      _value: HandlerMethodValue<This, Parameters, Return>,
-      context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
-    ): void => {
+    return (_value, context): void => {
       const methodName = DecoratorMetadata.methodName(context);
 
       const record: DecoratedHandlerRecord = Object.freeze({
@@ -424,6 +485,12 @@ const DecoratorMetadata = Object.freeze({
     };
   },
 
+  /**
+   * Reads a legacy declaration's schema, rejecting bare declarations.
+   *
+   * @param handler Decorator record being materialized.
+   * @returns Its explicitly supplied message schema.
+   */
   schema(handler: DecoratedHandlerRecord): DescriptorMessageSchema {
     if (handler.schema === undefined) {
       throw new TypeError(
@@ -435,6 +502,13 @@ const DecoratorMetadata = Object.freeze({
     return handler.schema;
   },
 
+  /**
+   * Reads handler declarations for methods defined on this class prototype.
+   *
+   * @typeParam Instance Entity instance represented by the constructor.
+   * @param entityType Constructor whose declared handlers are collected.
+   * @returns A frozen list of matching decorator records.
+   */
   collect<Instance extends object>(
     entityType: EntityClass<Instance>,
   ): readonly DecoratedHandlerRecord[] {
@@ -453,6 +527,11 @@ const DecoratorMetadata = Object.freeze({
     return Object.freeze(records);
   },
 
+  /**
+   * Initializes Symbol.metadata when the runtime does not yet supply it.
+   *
+   * @returns The existing or newly installed decorator metadata symbol.
+   */
   installSymbol(): symbol {
     const existingMetadata = Reflect.get(Symbol, "metadata");
 
@@ -472,6 +551,12 @@ const DecoratorMetadata = Object.freeze({
     return metadata;
   },
 
+  /**
+   * Reads TypeScript's class metadata object, rejecting missing support.
+   *
+   * @param context Decorator context with optional runtime metadata support.
+   * @returns The writable class metadata object.
+   */
   require(context: {
     readonly metadata: Record<PropertyKey, unknown> | undefined;
   }): Record<PropertyKey, unknown> {
@@ -482,6 +567,13 @@ const DecoratorMetadata = Object.freeze({
     return context.metadata;
   },
 
+  /**
+   * Reads metadata defined directly on the Entity constructor.
+   *
+   * @typeParam Instance Entity instance represented by the constructor.
+   * @param entityType Constructor whose metadata is inspected.
+   * @returns Its metadata object, or undefined when none is present.
+   */
   classMetadata<Instance extends object>(
     entityType: EntityClass<Instance>,
   ): Record<PropertyKey, unknown> | undefined {
@@ -495,6 +587,12 @@ const DecoratorMetadata = Object.freeze({
     return metadata as Record<PropertyKey, unknown>;
   },
 
+  /**
+   * Reads Spine handler records without inheriting a parent metadata array.
+   *
+   * @param metadata Class metadata object to inspect.
+   * @returns Stored handler records, or an empty list when absent.
+   */
   read(metadata: Record<PropertyKey, unknown>): readonly DecoratedHandlerRecord[] {
     if (!Object.hasOwn(metadata, handlerDecoratorMetadataKey)) {
       return [];
@@ -507,6 +605,12 @@ const DecoratorMetadata = Object.freeze({
 });
 
 const WhereValues = Object.freeze({
+  /**
+   * Validates and copies the supported single-field Event filter.
+   *
+   * @param options Field name and comparison value supplied to the decorator.
+   * @returns A frozen filter independent of the caller's object.
+   */
   snapshot(options: WhereOptions): WhereOptions {
     const value: unknown = options;
     if (value === null || typeof value !== "object" || Array.isArray(value)) {

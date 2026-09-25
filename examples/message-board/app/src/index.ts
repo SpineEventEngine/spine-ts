@@ -78,8 +78,7 @@ export class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMess
   @Assign
   @Throws(MessageAlreadyPosted)
   postMessage(command: PostMessage): MessagePosted {
-    // The handler generator accepts synchronous `@Assign` methods only. The
-    // aggregate's visible state is the only application-level existence fact.
+    // The aggregate's visible state is the application-level existence fact.
     if (this.state.board !== undefined) {
       throw MessageAlreadyPosted.create({ id: this.id });
     }

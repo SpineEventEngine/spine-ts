@@ -1,10 +1,62 @@
 # Entity and signal-handler declarations
 
-Status: implementation, three independent review/fix rounds, full release
-verification, and package archive checks complete. GitHub CI requires a pull
-request; permission to create one remains unanswered.
+Status: original implementation, three independent review/fix rounds, full
+release verification, and package archive checks complete. The human opened
+draft PR #10. Documentation and runnable-example follow-up is in progress.
 
 Branch: `entity-and-signal-handler-declarations`
+
+## Documentation and example follow-up
+
+Baseline: `d766f60b057689ae5e8f6ef4343247bf6da44153`.
+Classification: standard, bounded documentation and example changes; no new
+framework contract or library. Estimate: 0.6–1.0 hours including implementation,
+focused checks, independent review, task verification, and CI waiting.
+
+### Human-Imposed Requirements Ledger
+
+- Explain both changes in beginner-friendly words with useful examples.
+- Review current project documentation and remove outdated Entity declarations
+  and handler-result guidance. Keep historical records clearly historical.
+- Document supported return shapes and handler-specific restrictions in human
+  guides and corresponding TSDoc, based on implemented behavior.
+- Demonstrate new native return variations in real example-app handlers with
+  meaningful domain behavior, explanatory comments, and executable tests.
+- Preserve all original requirements below, including JVM-familiar Entity
+  versions, native TS types, proper domain messages, and simple wording.
+- Continue this branch and checkout; update PR #10 through normal pushes.
+
+One existing implementer, explicitly Sol/medium, handles example code/tests and
+its application docs. Main handles framework docs/TSDoc and task records in
+disjoint files. Independent read-only reviewers use the existing documentation
+(Luna/medium), API/types, style, and reliability (Sol/medium) concerns as relevant.
+No child may create children. The desktop supports explicit dispatch; use the
+previously verified app CLI if its child limit prevents fresh review sessions.
+
+Selected skills from the exposed catalog and local expected-skills manifest:
+implement, subagent-driven-development, test-driven-development,
+doc-coauthoring, requesting-code-review, and verification-before-completion.
+Their task-scoped instructions are read before governed actions. Existing task
+records replace a separate skill ledger. The protocol's retained implementer,
+model assignments, concern-specific review, and autonomous execution take
+precedence over skill suggestions for new roles or repeated human interviews.
+No library selection, new architecture, or additional checkout is needed.
+
+Acceptance: current guides and TSDoc agree with code; examples demonstrate both
+either/or and multi-result returns; generated registry/compiler and behavioral
+checks pass; stale-code scan and documentation checks pass; independent review
+findings resolved; required PR checks pass on the final pushed SHA.
+Verification selection: the task script classifies the complete branch and
+therefore requires the whole test suite, even for this bounded follow-up.
+Run `verify:release` once after cheap preflight and review convergence to obtain
+global coverage too, with its single-worker limit; do not run both profiles.
+Framework runtime JavaScript remains unchanged. Example behavior adds optional
+initial task assignment and allows AssignTask to select initial assignment or
+reassignment; the separate ReassignTask still requires an existing assignee.
+The additive optional CreateTask field uses a new field number and preserves
+existing requests. Focused tests must cover both tuple lengths, Event order,
+both union alternatives, duplicate/completed-task protections, and both affected
+assignee Projections.
 
 ## Human requirements
 

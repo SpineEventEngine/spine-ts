@@ -392,18 +392,16 @@ lifecycle events, Java builders, transaction
 listeners, recent history, async-local/global transaction state, and
 entity-family-specific aggregate/projection/process-manager behavior.
 
-`Aggregate`, `Projection`, and `ProcessManager` are public abstract entity
-family markers. Each extends `TransactionalEntity<Id, Schema>` and
-adds only a stable readonly `entityFamily` property typed by the exported
-`EntityFamily` union. This follows the JVM family shape only as far as the
-TypeScript runtime supports safely: JVM `Projection` directly
-extends `TransactionalEntity`, while JVM aggregate and process-manager behavior
-is mostly supplied by assignee, dispatch, event-history, repository, querying,
-and bounded-context collaborators that this implementation has not implemented. The
-TypeScript family classes therefore do not expose public transaction mutators,
-repository hooks, dispatch APIs, command posting, query clients, aggregate event
-history, snapshots, process workflow execution, idempotency guards, lifecycle
-events, handler invocation, or async-local/global transaction state.
+`Aggregate`, `Projection`, and `ProcessManager` are public abstract Entity
+families. Each extends `TransactionalEntity<Id, Schema>` and exposes a stable
+readonly `entityFamily` property typed by `EntityFamily`. Every family uses
+the generated Spine `Version`; application code supplies no third version type.
+Repository and bounded-context collaborators perform handler dispatch,
+transactions, persistence, Event publication, and produced-Command delivery.
+Process Managers also expose protected `select()` reads of Projections.
+These classes do not give application code public transaction controls.
+Aggregates update state directly rather than rebuilding it through application
+`@Apply` handlers.
 
 `Repository` connects entity behavior to context registration.
 It accepts one entity constructor and one

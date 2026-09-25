@@ -2599,8 +2599,8 @@ describe("check-cleanup-rules", () => {
         "  }",
         "",
         "  @Command",
-        "  routeTask(command: TaskCommand): readonly [Notify, ...Notify[]] {",
-        "    return [command.notify];",
+        "  routeTask(command: TaskCommand): readonly [Notify, Notify] {",
+        "    return [command.notify, command.notify];",
         "  }",
         "}",
         "",
@@ -2727,8 +2727,8 @@ describe("check-cleanup-rules", () => {
         "",
         "class DemoAggregate {",
         "  @Assign",
-        "  assignTask(command: TaskCommand): readonly [first: TaskCreated, ...rest: TaskCreated[]] {",
-        "    return [command.created, ...command.items];",
+        "  assignTask(command: TaskCommand): readonly [first: TaskCreated, second?: TaskCreated] {",
+        "    return [command.created];",
         "  }",
         "}",
         "",
@@ -2767,6 +2767,100 @@ describe("check-cleanup-rules", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("handler return type generated domain");
+  });
+
+  it("accepts native Event and Command unions, arrays, optional tuples, and one Promise", () => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import { Assign, Command, React, Subscribe } from "@spine-event-engine/server";',
+        'import type { CreateTask, NotifyOwner, TaskCreated, TaskRenamed } from "../generated/example_pb.js";',
+        "",
+        "type CreatedPair = readonly [TaskCreated, (TaskRenamed | TaskCreated)?];",
+        "type CreatedResults = TaskCreated | TaskRenamed;",
+        "type AsyncResults = Promise<CreatedResults>;",
+        "",
+        "class DemoHandlers {",
+        "  @Assign",
+        "  create(command: CreateTask): CreatedPair { return [command.created]; }",
+        "  @Assign",
+        "  rename(command: CreateTask): CreatedResults { return command.renamed; }",
+        "  @Assign",
+        "  many(command: CreateTask): readonly TaskCreated[] { return [command.created]; }",
+        "  @Assign",
+        "  mutableMany(command: CreateTask): Array<TaskCreated> { return [command.created]; }",
+        "  @Assign",
+        "  immutableMany(command: CreateTask): ReadonlyArray<TaskCreated> { return [command.created]; }",
+        "  @Assign",
+        "  asyncChoice(command: CreateTask): AsyncResults { return Promise.resolve(command.created); }",
+        "  @Command",
+        "  route(event: TaskCreated): Promise<NotifyOwner | CreateTask> { return Promise.resolve(event.command); }",
+        "  @React",
+        "  react(event: TaskCreated): Promise<TaskCreated | undefined> { return Promise.resolve(event); }",
+        "  @React",
+        "  reactDirect(event: TaskCreated): TaskCreated | undefined { return event; }",
+        "  @React",
+        "  optionalTuple(event: TaskCreated): readonly [TaskCreated?] { return [event]; }",
+        "  @React",
+        "  noOutput(event: TaskCreated): void { void event; }",
+        "  @Subscribe",
+        "  async observe(event: TaskCreated): Promise<void> { void event; }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "native return shapes"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Cleanup enforcement checks passed.");
+  });
+
+  it("rejects empty-capable command tuples, rest, nested arrays, and wrong-role branches", () => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import { Assign, Command } from "@spine-event-engine/server";',
+        'import type { CreateTask, TaskCreated } from "../generated/example_pb.js";',
+        "",
+        "class DemoHandlers {",
+        "  @Assign",
+        "  optional(command: CreateTask): readonly [TaskCreated?] { return []; }",
+        "  @Assign",
+        "  rest(command: CreateTask): readonly [TaskCreated, ...TaskCreated[]] { return [command.created]; }",
+        "  @Assign",
+        "  nested(command: CreateTask): TaskCreated[][] { return [[command.created]]; }",
+        "  @Assign",
+        "  mixed(command: CreateTask): TaskCreated | CreateTask { return command.created; }",
+        "  @Command",
+        "  missing(event: TaskCreated): CreateTask | undefined { return undefined; }",
+        "  @Command",
+        "  optionalCommand(event: TaskCreated): readonly [CreateTask?] { return []; }",
+        "  @Assign",
+        "  missingEvent(command: CreateTask): TaskCreated | undefined { return undefined; }",
+        "  @Assign",
+        "  nestedPromise(command: CreateTask): Promise<Promise<TaskCreated>> { return Promise.resolve(Promise.resolve(command.created)); }",
+        "  @Assign",
+        "  anyResult(command: CreateTask): any { return command.created; }",
+        "  @Assign",
+        "  unknownResult(command: CreateTask): unknown { return command.created; }",
+        "  @Assign",
+        "  keyResult(command: CreateTask): keyof TaskCreated { return 'id'; }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "invalid native return shapes"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr.match(/handler return type generated domain/gu)).toHaveLength(11);
   });
 
   it("rejects non-domain types from the Spine proto namespace", () => {

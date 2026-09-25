@@ -70,7 +70,7 @@ constructor of an instance registered through the builder. Each handler record
 names the method, inferred first-parameter signal schema, allowed public arity
 `handler(signal)` or `handler(signal, context)`, and emitted schemas inferred
 from the return type. `@Subscribe` records have no emitted schemas because the
-required return type is explicit `void`. The generated registry intentionally
+required return type is explicit `void` or `Promise<void>`. The generated registry intentionally
 excludes `@Apply`; new aggregate behavior is transactional rather than
 event-sourced.
 
@@ -81,6 +81,15 @@ Readonly tuples, optional tuple positions, named aliases, and an outer `Promise`
 use the same schema inference. No Pair or Either wrapper classes are needed.
 The invoked handler's returned-schema list limits the messages it may return;
 another handler's declarations do not widen that list.
+
+`@Assign` and Command-input `@Command` require a nonempty successful result.
+An Event/rejection-input `@Command` may return an empty typed Command array,
+but its declaration must still resolve to a Command schema; `void` and a
+whole-result `undefined` branch are unsupported for `@Command`. `@React` may
+declare `void`, or an Event type unioned with `undefined`. TypeScript enforces
+tuple structure, while runtime checks actual message types and return order.
+See the [handler return guide](../docs/USER_GUIDE.md#choose-what-a-handler-returns)
+for supported forms and restrictions.
 
 Generated registry ingestion preserves each handler record's public arity in
 canonical metadata. Existing explicit/schema-bearing handler registration

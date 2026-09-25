@@ -1,6 +1,7 @@
 # Entity and handler declarations: reviews
 
-Status: all three fresh review/fix rounds complete; all findings addressed.
+Status: original three fresh review/fix rounds complete; all findings addressed.
+The subsequent documentation/example follow-up is awaiting its focused review.
 
 Each of three rounds must use fresh reviewers with no inherited history and no
 saved memory. Review the full branch changeset against the human requirements
@@ -247,6 +248,18 @@ affected tests and repeated cheap preflight. The subsequent full release run
 passed all 4,956 tests and global coverage; package archive/consumer verification
 also passed. No production change followed the third review correction.
 
-The combined focused run passed 437 tests in six files with one Vitest worker.
-Root tooling and server TypeScript checks, targeted ESLint, cleanup, and TSDoc
-passed. The correction checkpoint will be pushed before release verification.
+## Documentation/example follow-up review
+
+Scope begins after `d766f60b057689ae5e8f6ef4343247bf6da44153`. All four concerns
+apply: human documentation, public type claims, example domain behavior, and
+the cleanup checker's handling of valid/invalid declarations. No security
+boundary changes or new dependency requires the final security role.
+
+Fresh read-only sessions will use the existing documentation reviewer with
+explicit Luna/medium and API/types, performance/reliability, and style reviewers
+with explicit Sol/medium. Memory use/generation and child spawning are disabled.
+Each gets the complete human requirements and its concerned changes, not prior
+review findings or implementation logs. Collect the complete wave before fixes.
+Expected profiles and actual startup metadata will be checked before accepting
+their results. The original three-round request was completed; this bounded
+follow-up uses the protocol's focused review wave.

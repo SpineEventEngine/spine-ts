@@ -254,13 +254,31 @@ repository construction.
 Event- and rejection-input `@Command` methods remain Event- or
 rejection-to-command reactions on Event Bus.
 
+### Handler return types
+
 Use a TypeScript union such as `CreateAccessGrant | ExtendAccessGrant` to return
 one of several Commands. A tuple such as
 `readonly [AccessGrantCreated, AccessRequestCompleted?]` returns multiple Events
 in order, with the second optional. Either declaration may have one outer
 `Promise` layer. Generated metadata lists every possible schema; runtime checks
 each result against the invoked handler's list. A whole result may be absent
-only for reactions that permit no output. `@Throws` stays separate and unchanged.
+for `@React`, using a generated Event type unioned with `undefined`, or explicit
+`void` when the method never emits. `@Command` reactions may return an empty
+typed Command array; their declarations must still identify at least one Command
+schema. Command-input `@Command` and `@Assign` require nonempty results.
+`@Subscribe` declares `void` or `Promise<void>` and produces no signals.
+`@Throws` declares thrown rejections separately from normal results.
+
+Other supported forms are `T[]`, `readonly T[]`, `Array<T>`, `ReadonlyArray<T>`,
+named tuple entries, union alternatives inside tuple entries, and local or
+imported aliases resolving to concrete generated messages. Only one flat
+collection level is supported. Rest tuples, nested collections, nested promises,
+custom thenables, framework envelopes, and unresolved/`any`/`unknown` result
+branches are rejected. TypeScript enforces tuple structure; the runtime checks
+declared message types, required nonempty results, and result order, not tuple
+arity or positional schema constraints. See the
+[user guide](../../docs/USER_GUIDE.md#choose-what-a-handler-returns) for a compact
+return-type table and examples.
 
 These independent examples use generated review-workflow messages. The Commander
 chooses whether to start or schedule a review. The reactor example shows a

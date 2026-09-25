@@ -108,15 +108,16 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema> {
   // prettier-ignore
 
   /**
-   * Creates a task and produces its stored domain event.
+   * Creates a task and optionally records its first assignee after creation.
    *
    * @param command The command that supplies the task title.
-   * @returns The event that records the created task.
+   * @returns The creation Event followed by an assignment Event when requested.
    */
   @Assign
-  createTask(command: CreateTask): TaskCreated {
+  createTask(command: CreateTask): readonly [TaskCreated, TaskAssignedEvent?] {
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(command.taskListId);
+    const assignee = command.assignee === undefined ? undefined : assignees.require(command.assignee);
 
     this.update((draft) =>
       Object.assign(
@@ -126,14 +127,19 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema> {
           title: command.title,
           completed: false,
           taskListId,
+          assignee,
         }),
       ),
     );
-    return create(TaskCreatedSchema, {
+    const created = create(TaskCreatedSchema, {
       id,
       taskListId,
       title: command.title,
     });
+    // The optional second slot exists only when the new task starts assigned.
+    return assignee === undefined
+      ? [created]
+      : [created, create(TaskAssignedSchema, { id, taskListId, assignee })];
   }
 
   /**
@@ -229,25 +235,29 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema> {
   }
 
   /**
-   * Records a task assignment and its assignee.
+   * Records an initial assignment or a change to a different assignee.
    *
    * @param command The command that selects the assignee.
-   * @returns The event that records the assignment.
+   * @returns The initial-assignment or reassignment Event, as appropriate.
    */
   @Assign
   @Throws(TaskAlreadyDone, TaskAlreadyAssigned)
-  assignTask(command: AssignTask): TaskAssignedEvent {
+  assignTask(command: AssignTask): TaskAssignedEvent | TaskReassignedEvent {
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(this.state.taskListId);
     const assignee = assignees.require(command.assignee);
     if (this.state.completed) throw TaskAlreadyDone.create({ id });
-    if (this.state.assignee !== undefined) {
-      throw TaskAlreadyAssigned.create({ id, assignee: this.state.assignee, taskListId });
+    const previousAssignee = this.state.assignee;
+    if (previousAssignee?.value === assignee.value) {
+      throw TaskAlreadyAssigned.create({ id, assignee: previousAssignee, taskListId });
     }
     this.update((draft) =>
       Object.assign(draft, create(TaskSchema, { ...draft, id, taskListId, assignee })),
     );
-    return create(TaskAssignedSchema, { id, taskListId, assignee });
+    // The union names the two Events this command may actually produce.
+    return previousAssignee === undefined
+      ? create(TaskAssignedSchema, { id, taskListId, assignee })
+      : create(TaskReassignedSchema, { id, taskListId, previousAssignee, assignee });
   }
 
   /**
@@ -618,41 +628,40 @@ export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssign
 }
 
 /**
+ * Selects optional facilities for the single-tenant Tasks context.
+ */
+interface TodoContextOptions {
+  // prettier-ignore
+
+  /**
+   * Selects the Delivery shard strategy used by the Tasks context.
+   */
+  readonly deliveryStrategy?: DeliveryStrategy;
+
+  // prettier-ignore
+
+  /**
+   * Transfers the subscription registry to the Tasks context.
+   * The context closes the supplied registry during shutdown.
+   */
+  readonly subscriptionRegistry?: import("@spine-event-engine/server").StandSubscriptionRegistry;
+
+  // prettier-ignore
+
+  /**
+   * Supplies the storage factory used by the Tasks context.
+   * The caller closes it after all dependent contexts and servers finish.
+   */
+  readonly storageFactory?: StorageFactory;
+}
+
+/**
  * Creates the single-tenant Tasks bounded context with in-memory defaults.
  *
- * @param options Supplies application-owned bounded-context facilities.
+ * @param options Supplies optional context facilities.
  * @returns The assembled Tasks bounded context.
  */
-export async function createTodoContext(
-  options: {
-    // prettier-ignore
-
-    /**
-     *
-     * Selects the Delivery shard strategy used by the Tasks context.
-     */
-    readonly deliveryStrategy?: DeliveryStrategy;
-
-    // prettier-ignore
-
-    /**
-     *
-     * Transfers the subscription registry to the Tasks context.
-     *
-     * The context owns and closes the supplied registry during shutdown.
-     */
-    readonly subscriptionRegistry?: import("@spine-event-engine/server").StandSubscriptionRegistry;
-
-    // prettier-ignore
-
-    /**
-     *
-     * Supplies the caller-owned storage factory used by the Tasks context.
-     * The caller closes it after all dependent contexts and servers finish.
-     */
-    readonly storageFactory?: StorageFactory;
-  } = {},
-): Promise<BoundedContext> {
+export async function createTodoContext(options: TodoContextOptions = {}): Promise<BoundedContext> {
   const taskListRouting = EventRouting.create<TaskListId>()
     .route(TaskEvent, (event) => [taskListIds.require(event.taskListId)])
     .route(TaskAlreadyDoneSchema, (event) => taskListIds.fromTaskId(event.id))

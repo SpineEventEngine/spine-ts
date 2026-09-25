@@ -109,7 +109,9 @@ blocking requirements for all framework and example work.
 - `@Command` handlers return generated domain command messages, as a single
   message, a union selecting one message, an array, or a tuple. Command-accepting
   handlers require a result. Event reactions may decline to issue a command,
-  following Spine JVM's reaction signature rules.
+  following Spine JVM's reaction signature rules, by returning an empty typed
+  Command array. Their declaration must still name a Command schema; explicit
+  `void` and a whole-result `undefined` branch are not supported for `@Command`.
 - Generated domain message return provenance must resolve to generated
   Protobuf-ES imports, generated namespace/value imports, or local/imported aliases
   proven back to those generated imports.
@@ -122,7 +124,7 @@ blocking requirements for all framework and example work.
 - TypeScript checks tuple shape and union assignments. Runtime checks each
   actual returned message against the invoked handler's declared schemas and
   preserves return order. Absent optional results are not dispatched.
-- `@Subscribe` handlers must declare an explicit `void` return type.
+- `@Subscribe` handlers must declare an explicit `void` or `Promise<void>` return type.
 - New aggregate behavior must not introduce or depend on `@Apply`; aggregates
   are non-event-sourced, matching current Spine JVM behavior.
 - End-user application code must not start, commit, roll back, or otherwise

@@ -49,13 +49,47 @@ Proto messages → spine-proto generate → generated schemas and registry
       → Aggregate command handler → stored event → Projection state → read
 ```
 
-`CreateTask` produces `TaskCreated`; the projection observes it and makes a
-`TaskList` readable. The framework validates generated message constraints
-before accepting a command. A business rule instead throws its generated
+`CreateTask` produces `TaskCreated`, optionally followed by `TaskAssigned` when
+the command names an initial assignee. The projections observe these Events
+and make a `TaskList` and any initial assignment readable. The framework
+validates generated message constraints before accepting a command. A business
+rule instead throws its generated
 rejection: completing a completed task throws `TaskAlreadyDone`. Validation and
 technical failures are non-OK acknowledgements; a domain rejection is accepted
 command processing with no state transition and is published separately on a
 best-effort rejection-event path.
+
+## Return one Event or an ordered pair
+
+The actual [`TaskAggregate`](src/todo-app.ts) handlers show two native
+TypeScript return forms. `assignTask()` declares
+`TaskAssigned | TaskReassigned`. The `|` means **one of these**: an unassigned
+task produces `TaskAssigned`, while assigning a task to a different person
+produces `TaskReassigned`. Both alternatives are real Events in the To-Do
+model. Repeating the current assignee is still rejected.
+
+`createTask()` declares `readonly [TaskCreated, TaskAssigned?]`. The brackets
+describe an **ordered pair**, and `?` means the second Event may be absent.
+With no initial assignee, it returns only `TaskCreated`. With an assignee in
+`CreateTask`, it returns `TaskCreated` first and `TaskAssigned` second. The
+Aggregate stores that assignee in its state, and the Task Assignee Projection
+receives the second Event. The framework records the returned Events; the
+handler does not build an Event envelope or choose Event IDs itself.
+
+The runnable [black-box tests](test/black-box.test.ts) exercise both choices,
+both tuple lengths, Event order, and the old and new assignee read models through
+the generated handler registry. Generate and build the example first, then run
+the two focused journeys from the repository root:
+
+```bash
+pnpm proto:generate
+pnpm exec tsc -b examples/todo
+pnpm exec vitest run examples/todo/test/black-box.test.ts --maxWorkers=1 \
+  -t "assigns an open task or changes its assignee|creates a task with an optional initial assignment"
+```
+
+For the other supported return forms and which decorators allow them, see the
+[framework handler guide](../../docs/USER_GUIDE.md#choose-what-a-handler-returns).
 
 ## Give events a shared TypeScript interface
 
@@ -230,9 +264,11 @@ Use generated schemas and public clients. The checked-in `pnpm --filter
 uses an `Http2SessionManager`, bounds the command and eventual query, checks an
 OK acknowledgement, and aborts its session in `finally`.
 
-`CreateTask` needs a task ID and non-empty title. `AssignTask` selects an
-assignee, `ReassignTask` changes it and emits `TaskReassigned`, and
-`UnassignTask` removes it. `RenameTask` changes the title; `CompleteTask` marks
+`CreateTask` needs a task ID, task-list ID, and non-empty title; an initial assignee is
+optional. `AssignTask` selects an assignee, emitting `TaskAssigned` initially
+or `TaskReassigned` when changing to a different person. `ReassignTask` requires
+an existing assignee and emits `TaskReassigned`; `UnassignTask` removes the
+assignee. `RenameTask` changes the title; `CompleteTask` marks
 it done; `ReopenTask` marks it open. All use the same
 `CommandService.Post` envelope shape as the smoke program, replacing only the
 generated command schema/message.
@@ -258,7 +294,7 @@ Technical failures remain non-OK acknowledgements.
 | Attempt                       | Current state                              | Rejection             |
 | ----------------------------- | ------------------------------------------ | --------------------- |
 | Assign, reassign, or unassign | Completed task                             | `TaskAlreadyDone`     |
-| Assign                        | An assignee already exists                 | `TaskAlreadyAssigned` |
+| Assign                        | Requested assignee is the current assignee | `TaskAlreadyAssigned` |
 | Reassign                      | No current assignee                        | `TaskNotAssigned`     |
 | Reassign                      | Requested assignee is the current assignee | `TaskAlreadyAssigned` |
 | Unassign                      | No current assignee                        | `TaskNotAssigned`     |
