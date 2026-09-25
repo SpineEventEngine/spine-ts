@@ -13,6 +13,7 @@
  */
 
 import { Buffer } from "node:buffer";
+import { resolve, sep } from "node:path";
 
 import { create, setExtension, toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorProtoSchema, MessageOptionsSchema } from "@bufbuild/protobuf/wkt";
@@ -21,6 +22,7 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import { BuildHandlerAnalyzer } from "../src/generation/build-time-handler-analyzer.js";
+import { GeneratedRegistryWriter } from "../src/generation/generated-registry-writer.js";
 
 const analyzeBuildHandlers = (...args: Parameters<typeof BuildHandlerAnalyzer.analyze>) =>
   BuildHandlerAnalyzer.analyze(...args);
@@ -35,6 +37,148 @@ function entityReceivers(analysis: ReturnType<typeof BuildHandlerAnalyzer.analyz
 }
 
 describe("build-time handler analyzer", () => {
+  it("generates the exact access-approval @Command union declaration", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/access-approvals.ts", {
+        "src/access-approvals.ts": `
+        import { ProcessManager, Command } from "@spine-event-engine/server";
+        import { AccessRequestStateSchema } from "../generated/access_state_pb.js";
+        import { type AccessRequestApproved } from "../generated/access_events_pb.js";
+        import { type CreateAccessGrant, type ExtendAccessGrant } from "../generated/access_commands_pb.js";
+        export class AccessRequests extends ProcessManager<string, typeof AccessRequestStateSchema> {
+          @Command
+          issueOnApproval(event: AccessRequestApproved): CreateAccessGrant | ExtendAccessGrant {
+            throw new Error(String(event));
+          }
+        }
+      `,
+        "generated/access_state_pb.ts": generatedModule(
+          "spine/examples/access/state.proto",
+          "AccessRequestState",
+        ),
+        "generated/access_events_pb.ts": generatedModule(
+          "spine/examples/access/events.proto",
+          "AccessRequestApproved",
+        ),
+        "generated/access_commands_pb.ts": generatedModule(
+          "spine/examples/access/commands.proto",
+          "CreateAccessGrant",
+          "ExtendAccessGrant",
+        ),
+      }),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers[0]?.outcomes.returned).toEqual([
+      schema("../generated/access_commands_pb.js", "CreateAccessGrantSchema"),
+      schema("../generated/access_commands_pb.js", "ExtendAccessGrantSchema"),
+    ]);
+    const generated = new GeneratedRegistryWriter().render(result, {
+      outputFile: "src/generated/handler/generated-handler-registry.ts",
+    });
+    expect(generated).toContain("CreateAccessGrantSchema");
+    expect(generated).toContain("ExtendAccessGrantSchema");
+  });
+  it("resolves native unions, optional tuples, and imported concrete generic aliases", () => {
+    const program = programWithSources("src/native-returns.ts", {
+      "src/native-returns.ts": `
+        import { ProcessManager, Command } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type CommandChoices, type OptionalEvents } from "./return-aliases.js";
+        export class NativeReturns extends ProcessManager<string, typeof TaskSchema> {
+          @Command
+          choose(command: CreateTask): Promise<CommandChoices> { throw new Error(String(command)); }
+          @Command
+          optional(command: CreateTask): OptionalEvents { throw new Error(String(command)); }
+        }
+      `,
+      "src/return-aliases.ts": `
+        import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+        type Either<T, U> = T | U;
+        export type CommandChoices = Either<CreateTask, RenameTask>;
+        export type OptionalEvents = readonly [first: CreateTask, second?: RenameTask];
+      `,
+      "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+      "generated/commands_pb.ts": generatedModule(
+        "spine/examples/todo/task_commands.proto",
+        "CreateTask",
+        "RenameTask",
+      ),
+    });
+    const result = analyzeBuildHandlers(program);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(
+      entityReceivers(result)[0]?.handlers.map((handler) => handler.outcomes.returned),
+    ).toEqual([
+      [
+        schema("../generated/commands_pb.js", "CreateTaskSchema"),
+        schema("../generated/commands_pb.js", "RenameTaskSchema"),
+      ],
+      [
+        schema("../generated/commands_pb.js", "CreateTaskSchema"),
+        schema("../generated/commands_pb.js", "RenameTaskSchema"),
+      ],
+    ]);
+    const generated = new GeneratedRegistryWriter().render(result, {
+      outputFile: "src/generated/handler/generated-handler-registry.ts",
+    });
+    expect(generated).toContain("CreateTaskSchema");
+    expect(generated).toContain("RenameTaskSchema");
+  });
+
+  it("keeps order and repeated schemas for unions inside named readonly tuples", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/tuple-union.ts",
+        `
+      import { Aggregate, Assign } from "@spine-event-engine/server";
+      import { TaskSchema } from "../generated/task_pb.js";
+      import { type CreateTask } from "../generated/commands_pb.js";
+      import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+      export class TupleUnion extends Aggregate<string, typeof TaskSchema> {
+        @Assign
+        produce(command: CreateTask): readonly [first: TaskCreated | TaskRenamed,
+          second: TaskCreated, third?: TaskCreated] { throw new Error(String(command)); }
+      }
+    `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers[0]?.outcomes.returned).toEqual([
+      schema("../generated/events_pb.js", "TaskCreatedSchema"),
+      schema("../generated/events_pb.js", "TaskRenamedSchema"),
+      schema("../generated/events_pb.js", "TaskCreatedSchema"),
+      schema("../generated/events_pb.js", "TaskCreatedSchema"),
+    ]);
+  });
+
+  it("rejects invalid branches of unions rather than omitting them", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/invalid-unions.ts",
+        `
+      import { ProcessManager, Command } from "@spine-event-engine/server";
+      import { TaskSchema } from "../generated/task_pb.js";
+      import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+      import { type TaskCreated } from "../generated/events_pb.js";
+      export class InvalidUnions extends ProcessManager<string, typeof TaskSchema> {
+        @Command mixed(command: CreateTask): RenameTask | TaskCreated { throw new Error(String(command)); }
+        @Command anyBranch(command: CreateTask): RenameTask | any { throw new Error(String(command)); }
+        @Command unknownBranch(command: CreateTask): RenameTask | unknown { throw new Error(String(command)); }
+      }
+    `,
+      ),
+    );
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_EMITTED_SCHEMA",
+      "UNSUPPORTED_RETURN_TYPE",
+      "UNSUPPORTED_RETURN_TYPE",
+    ]);
+  });
   it("records declared rejections with either decorator order", () => {
     const result = analyzeBuildHandlers(
       programWithSource(
@@ -1608,7 +1752,7 @@ describe("build-time handler analyzer", () => {
     ]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_HANDLER_NAME",
-      "UNSUPPORTED_RETURN_TYPE",
+      "MISSING_EMITTED_SCHEMAS",
       "UNSUPPORTED_RETURN_TYPE",
       "UNSUPPORTED_RETURN_TYPE",
       "INVALID_SIGNAL_TYPE",
@@ -1715,10 +1859,18 @@ function programWithSources(rootFileName: string, sources: Record<string, string
   const host = ts.createCompilerHost(options);
   const originalReadFile = host.readFile.bind(host);
   const originalFileExists = host.fileExists.bind(host);
+  const originalDirectoryExists = host.directoryExists?.bind(host);
+  const virtualSources = new Map(
+    Object.entries(sources).map(([name, text]) => [resolve(name), text]),
+  );
 
-  host.readFile = (requested) => sources[requested] ?? originalReadFile(requested);
+  host.readFile = (requested) =>
+    virtualSources.get(resolve(requested)) ?? originalReadFile(requested);
   host.fileExists = (requested) =>
-    sources[requested] !== undefined || originalFileExists(requested);
+    virtualSources.has(resolve(requested)) || originalFileExists(requested);
+  host.directoryExists = (requested) =>
+    [...virtualSources.keys()].some((file) => file.startsWith(`${resolve(requested)}${sep}`)) ||
+    originalDirectoryExists?.(requested) === true;
 
   return ts.createProgram([rootFileName, ...Object.keys(sources)], options, host);
 }
