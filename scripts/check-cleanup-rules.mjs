@@ -746,8 +746,8 @@ function nodeDecorators(node) {
   return ts.canHaveDecorators(node) ? (ts.getDecorators(node) ?? []) : [];
 }
 
-function buildImportState(source) {
-  const state = createImportState();
+function buildImportState(source, context) {
+  const state = createImportState(context);
 
   for (const statement of source.statements) {
     recordImportStatement(statement, state);
@@ -770,11 +770,17 @@ function cloneState(state) {
     generatedTypes: new Map(state.generatedTypes),
     generatedNamespaces: new Map(state.generatedNamespaces),
     localTypeAliases: new Map(state.localTypeAliases),
+    localAliasDeclarations: new Map(state.localAliasDeclarations),
+    importedTypeAliases: new Map(state.importedTypeAliases),
+    shadowedTypes: new Set(state.shadowedTypes),
+    repoRoot: state.repoRoot,
+    file: state.file,
+    moduleCache: state.moduleCache,
     importEqualsAliases: state.importEqualsAliases,
   };
 }
 
-function createImportState() {
+function createImportState(context) {
   return {
     serverDecoratorAliases: new Map(),
     forbiddenApiAliases: new Map(),
@@ -786,6 +792,12 @@ function createImportState() {
     generatedTypes: new Map(),
     generatedNamespaces: new Map(),
     localTypeAliases: new Map(),
+    localAliasDeclarations: new Map(),
+    importedTypeAliases: new Map(),
+    shadowedTypes: new Set(),
+    repoRoot: context.repoRoot,
+    file: context.file,
+    moduleCache: context.moduleCache,
     importEqualsAliases: [],
   };
 }
@@ -799,7 +811,10 @@ function recordImportStatement(statement, state) {
   }
   if (ts.isTypeAliasDeclaration(statement)) {
     state.localTypeAliases.set(statement.name.text, statement.type);
+    state.localAliasDeclarations.set(statement.name.text, statement);
   }
+  if (ts.isInterfaceDeclaration(statement) || ts.isClassDeclaration(statement))
+    state.shadowedTypes.add(statement.name.text);
 }
 
 function recordImportDeclaration(statement, state) {
@@ -808,6 +823,10 @@ function recordImportDeclaration(statement, state) {
 
   if (clause?.namedBindings === undefined) {
     return;
+  }
+
+  if (ts.isNamedImports(clause.namedBindings)) {
+    for (const element of clause.namedBindings.elements) state.shadowedTypes.add(element.name.text);
   }
 
   if (moduleName === "@spine-event-engine/core") {
@@ -821,6 +840,19 @@ function recordImportDeclaration(statement, state) {
   }
   if (isGeneratedModule(moduleName)) {
     recordGeneratedImport(clause, state, moduleName);
+  }
+  if (moduleName.startsWith(".") && !isGeneratedModule(moduleName)) {
+    recordRelativeTypeImports(clause, state, moduleName);
+  }
+}
+
+function recordRelativeTypeImports(clause, state, moduleName) {
+  if (!ts.isNamedImports(clause.namedBindings)) return;
+  for (const element of clause.namedBindings.elements) {
+    state.importedTypeAliases.set(element.name.text, {
+      moduleName,
+      importedName: element.propertyName?.text ?? element.name.text,
+    });
   }
 }
 
@@ -1067,7 +1099,10 @@ function stateForScope(node, baseState) {
   for (const statement of scopeStatements(node)) {
     if (ts.isTypeAliasDeclaration(statement)) {
       state.localTypeAliases.set(statement.name.text, statement.type);
+      state.localAliasDeclarations.set(statement.name.text, statement);
     }
+    if (ts.isInterfaceDeclaration(statement) || ts.isClassDeclaration(statement))
+      state.shadowedTypes.add(statement.name.text);
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
         recordValueAlias(declaration, state, aliasNames);
@@ -1685,6 +1720,7 @@ function isMessageReturn(typeNode, importState, expectedKind, allowMissing) {
       allowMissing,
       collectionDepth: 0,
       promiseDepth: 0,
+      wholeResult: true,
     }) ?? 0) > 0
   );
 }
@@ -1708,6 +1744,7 @@ function checkMessageReturn(typeNode, importState, state, expectedKind, options)
           ...options,
           allowMissing: false,
           collectionDepth: 1,
+          wholeResult: false,
         })
       : undefined;
   if (ts.isTupleTypeNode(typeNode))
@@ -1720,7 +1757,10 @@ function checkMessageReturn(typeNode, importState, state, expectedKind, options)
 function sumMessageReturns(types, importState, state, expectedKind, options) {
   let count = 0;
   for (const type of types) {
-    const branch = checkMessageReturn(type, importState, state, expectedKind, options);
+    const branch = checkMessageReturn(type, importState, state, expectedKind, {
+      ...options,
+      wholeResult: false,
+    });
     if (branch === undefined) return undefined;
     count += branch;
   }
@@ -1746,6 +1786,7 @@ function checkTupleReturn(typeNode, importState, state, expectedKind, options) {
       ...options,
       allowMissing: false,
       collectionDepth: 1,
+      wholeResult: false,
     });
     if (branch === undefined || branch === 0) return undefined;
     count += branch;
@@ -1779,23 +1820,60 @@ function checkTypeReturn(typeNode, importState, state, expectedKind, options) {
 }
 
 function checkNamedReturn(name, typeArguments, importState, state, expectedKind, options) {
-  const aliasedType = importState.localTypeAliases.get(name);
-  if (aliasedType !== undefined) {
-    if (state.seen.has(name) || typeArguments.length > 0) return undefined;
-    state.seen.add(name);
-    const matches = checkMessageReturn(aliasedType, importState, state, expectedKind, options);
-    state.seen.delete(name);
-    return matches;
+  const bound = options.typeBindings?.get(name);
+  if (bound !== undefined) {
+    if (typeArguments.length > 0) return undefined;
+    return checkMessageReturn(bound.type, bound.imports, state, expectedKind, {
+      ...options,
+      typeBindings: bound.bindings,
+    });
   }
+  const local = localAlias(name, importState);
+  if (
+    (name === "Promise" || name === "Array" || name === "ReadonlyArray") &&
+    (local !== undefined || importState.importedTypeAliases.has(name))
+  )
+    return undefined;
+  if (local !== undefined)
+    return aliasReturn(local, typeArguments, importState, state, expectedKind, options);
+  if (importState.importedTypeAliases.has(name)) {
+    const imported = importedAlias(name, importState);
+    return imported === undefined
+      ? undefined
+      : aliasReturn(imported, typeArguments, importState, state, expectedKind, options);
+  }
+  if (name === "Promise" || name === "Array" || name === "ReadonlyArray")
+    return checkNamedContainer(name, typeArguments, importState, state, expectedKind, options);
+  return typeArguments.length === 0 && importState.generatedTypes.get(name) === expectedKind
+    ? 1
+    : undefined;
+}
+
+function localAlias(name, importState) {
+  const type = importState.localTypeAliases.get(name);
+  return type === undefined
+    ? undefined
+    : {
+        type,
+        imports: importState,
+        name,
+        parameters: importState.localAliasDeclarations.get(name)?.typeParameters,
+      };
+}
+
+function checkNamedContainer(name, typeArguments, importState, state, expectedKind, options) {
+  if (importState.shadowedTypes.has(name)) return undefined;
   if (
     name === "Promise" &&
     typeArguments.length === 1 &&
     options.promiseDepth === 0 &&
-    options.collectionDepth === 0
+    options.collectionDepth === 0 &&
+    options.wholeResult
   )
     return checkMessageReturn(typeArguments[0], importState, state, expectedKind, {
       ...options,
       promiseDepth: 1,
+      wholeResult: false,
     });
   if (
     (name === "Array" || name === "ReadonlyArray") &&
@@ -1806,10 +1884,69 @@ function checkNamedReturn(name, typeArguments, importState, state, expectedKind,
       ...options,
       allowMissing: false,
       collectionDepth: 1,
+      wholeResult: false,
     });
-  return typeArguments.length === 0 && importState.generatedTypes.get(name) === expectedKind
-    ? 1
-    : undefined;
+  return undefined;
+}
+
+function aliasReturn(alias, typeArguments, callerImports, state, expectedKind, options) {
+  const key = `${alias.imports.file}:${alias.name}`;
+  const parameters = alias.parameters ?? [];
+  if (
+    state.seen.has(key) ||
+    typeArguments.length !== parameters.length ||
+    parameters.some((param) => param.constraint !== undefined || param.default !== undefined)
+  )
+    return undefined;
+  const typeBindings = new Map(options.typeBindings);
+  for (const [index, param] of parameters.entries())
+    typeBindings.set(param.name.text, {
+      type: typeArguments[index],
+      imports: callerImports,
+      bindings: options.typeBindings,
+    });
+  state.seen.add(key);
+  const matches = checkMessageReturn(alias.type, alias.imports, state, expectedKind, {
+    ...options,
+    typeBindings,
+  });
+  state.seen.delete(key);
+  return matches;
+}
+
+function importedAlias(name, importState) {
+  const binding = importState.importedTypeAliases.get(name);
+  if (binding === undefined) return undefined;
+  const moduleName = binding.moduleName.replace(/\.js$/u, ".ts");
+  const path = resolve(dirname(join(importState.repoRoot, importState.file)), moduleName);
+  const file = relative(importState.repoRoot, path);
+  if (file.split(sep)[0] !== "examples" || !file.endsWith(".ts")) return undefined;
+  let module = importState.moduleCache.get(file);
+  if (module === undefined) {
+    const read = readExampleSource(importState.repoRoot, realpathSync(importState.repoRoot), file);
+    if (read.kind !== "source") return undefined;
+    const imports = buildImportState(read.source, {
+      repoRoot: importState.repoRoot,
+      file,
+      moduleCache: importState.moduleCache,
+    });
+    module = { source: read.source, imports };
+    importState.moduleCache.set(file, module);
+  }
+  const alias = module.source.statements.find(
+    (statement) =>
+      ts.isTypeAliasDeclaration(statement) &&
+      statement.name.text === binding.importedName &&
+      (ts.getCombinedModifierFlags(statement) & ts.ModifierFlags.Export) !== 0,
+  );
+  return alias === undefined
+    ? undefined
+    : {
+        type: alias.type,
+        imports: module.imports,
+        name: binding.importedName,
+        parameters: alias.typeParameters,
+      };
 }
 
 function isGeneratedQualified(typeName, importState, expectedKind) {
@@ -2723,7 +2860,7 @@ function collectExampleFileViolations(repoRoot, resolvedRepoRoot, file) {
     return [source];
   }
 
-  return collectExampleApiViolations(source.file, source.source);
+  return collectExampleApiViolations(repoRoot, source.file, source.source);
 }
 
 function readExampleSource(repoRoot, resolvedRepoRoot, file) {
@@ -2767,11 +2904,15 @@ function resolvesOutsideRoot(resolvedRepoRoot, resolvedFile) {
   );
 }
 
-function collectExampleApiViolations(file, source) {
+function collectExampleApiViolations(repoRoot, file, source) {
   const violations = [];
   const schemaDecorators = ["Assign", "Command", "React", "Subscribe"];
   const handlerDecorators = new Set(["Apply", ...schemaDecorators]);
-  const importState = buildImportState(source);
+  const importState = buildImportState(source, {
+    repoRoot,
+    file,
+    moduleCache: new Map(),
+  });
 
   function visit(node, state = importState, shadowedNames = new Set()) {
     const scope = stateForScope(node, state);
@@ -2964,12 +3105,11 @@ function isVoidTypeNode(type, importState, seen = new Set(), promised = false) {
   if (!ts.isTypeReferenceNode(type) || !ts.isIdentifier(type.typeName)) return false;
   const name = type.typeName.text;
   const alias = importState.localTypeAliases.get(name);
-  if (alias !== undefined) {
-    if (seen.has(name) || (type.typeArguments?.length ?? 0) !== 0) return false;
-    seen.add(name);
-    const result = isVoidTypeNode(alias, importState, seen, promised);
-    seen.delete(name);
-    return result;
+  if (alias !== undefined)
+    return voidAlias({ type: alias, imports: importState, name }, type, seen, promised);
+  if (importState.importedTypeAliases.has(name)) {
+    const imported = importedAlias(name, importState);
+    return imported !== undefined && voidAlias(imported, type, seen, promised);
   }
   return (
     name === "Promise" &&
@@ -2977,6 +3117,15 @@ function isVoidTypeNode(type, importState, seen = new Set(), promised = false) {
     type.typeArguments?.length === 1 &&
     isVoidTypeNode(type.typeArguments[0], importState, seen, true)
   );
+}
+
+function voidAlias(alias, reference, seen, promised) {
+  const key = `${alias.imports.file}:${alias.name}`;
+  if (seen.has(key) || (reference.typeArguments?.length ?? 0) !== 0) return false;
+  seen.add(key);
+  const result = isVoidTypeNode(alias.type, alias.imports, seen, promised);
+  seen.delete(key);
+  return result;
 }
 
 function groupExampleViolations(violations) {

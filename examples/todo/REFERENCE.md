@@ -13,10 +13,12 @@ regenerate it through package/workspace scripts rather than editing it.
 The example covers `CreateTask`, `AssignTask`, `ReassignTask`, `UnassignTask`,
 `RenameTask`, `CompleteTask`, and `ReopenTask`.
 In `TaskAggregate`, `createTask()` returns
-`readonly [TaskCreated, TaskAssigned?]`: the second Event is present only when
+`readonly [TaskCreated, TaskAssignedEvent?]`: the second Event is present only when
 `CreateTask.assignee` is supplied, and its order follows creation.
-`assignTask()` returns `TaskAssigned | TaskReassigned`: it selects the first
+`assignTask()` returns `TaskAssignedEvent | TaskReassignedEvent`: it selects the first
 type for an unassigned task and the second for a different existing assignee.
+These local names alias the generated `TaskAssigned` and `TaskReassigned` message
+types; no new Event types are introduced.
 `ReassignTask` remains strict: it requires a current assignee.
 Validation failures produce non-OK responses. Domain rejections remain
 OK-acknowledged command admission results and are published separately as typed

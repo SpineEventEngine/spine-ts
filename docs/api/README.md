@@ -349,14 +349,14 @@ lifecycle flags, not the version. Accepted commits update state, version, and
 lifecycle together. Rejected commits apply nothing. The `changed` property
 reports accepted state or lifecycle changes; repository handling also considers
 returned Events when deciding whether to advance the version.
-`Aggregate`, `Projection`, and `ProcessManager` are thin abstract family marker
+`Aggregate`, `Projection`, and `ProcessManager` are abstract Entity family
 classes over `TransactionalEntity` with the same `<Id, Schema>` generic
 shape and a stable readonly `entityFamily` property typed by `EntityFamily`.
-They do not add public transaction mutators, repositories, dispatch, aggregate
-event-history access, snapshots, subscriptions, command posting, query clients,
-storage, buses, or lifecycle events. Aggregates and Process Managers do add the
-protected, repository-bound event-history methods documented below;
-Projections intentionally do not.
+Repositories and bounded contexts handle dispatch, persistence, and message
+publication; these classes do not expose public transaction controls.
+Aggregates and Process Managers provide the protected, repository-bound
+event-history methods documented below; Projections intentionally do not.
+Process Managers also provide protected `select()` reads of Projections.
 `Repository`, `RepositoryOptions`, `RepositoryEntityType`,
 `ConcreteRepositoryEntityType`, `RepositoryStateSchema`,
 `RepositoryIdentitySnapshot`, `RepositoryIdentityError`,
@@ -725,7 +725,7 @@ reject command-input substitutions and event- or rejection-input command
 reactions during generated ingestion and repository construction. `@React`
 records may return generated event messages
 or explicit `void` with no emitted schemas. `@Subscribe` records return
-explicit `void` and declare no emitted schemas. They are generated build
+explicit `void` or `Promise<void>` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
 
 Producing handlers can declare native message unions, flat arrays, and fixed

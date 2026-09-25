@@ -275,8 +275,8 @@ that run the workflow.
 `@spine-event-engine/server` provides descriptor-derived entity metadata,
 explicit handler metadata, a handler registry supplied by the caller, a
 standard decorator adapter, and built-in set-once transition validation. It
-also provides thin entity-family marker
-classes over the transactional entity shell. The package consumes curated
+also provides Aggregate, Projection, and Process Manager base classes with
+transactional state and family-specific helpers. The package consumes curated
 option exports from `@spine-event-engine/proto` and delegates transition result shaping
 to `@spine-event-engine/core`.
 
@@ -387,7 +387,7 @@ current `EntityTransaction.commit()` behavior. The `changed` signal records
 accepted state changes or committed lifecycle flag changes without making
 repository storage decisions. Scope errors are deterministic
 `TransactionalEntityScopeError` instances for missing or duplicate active
-transactions. The layer still avoids handler invocation, repositories, storage,
+transactions. This shared base class does not implement handler invocation, repositories, storage,
 lifecycle events, Java builders, transaction
 listeners, recent history, async-local/global transaction state, and
 entity-family-specific aggregate/projection/process-manager behavior.
@@ -399,6 +399,8 @@ the generated Spine `Version`; application code supplies no third version type.
 Repository and bounded-context collaborators perform handler dispatch,
 transactions, persistence, Event publication, and produced-Command delivery.
 Process Managers also expose protected `select()` reads of Projections.
+Aggregates and Process Managers provide protected Event-history reads backed
+by their repositories.
 These classes do not give application code public transaction controls.
 Aggregates update state directly rather than rebuilding it through application
 `@Apply` handlers.

@@ -60,7 +60,7 @@ possibly a second Event. Each actual result must be declared by that handler.
 Arrays and local/imported aliases of these concrete message types are supported
 too. `@Assign` returns Events, `@Command` returns Commands, `@React` returns
 Events or no output, and `@Subscribe` returns `void` or `Promise<void>`.
-See the [return-type guide](../../docs/USER_GUIDE.md#choose-what-a-handler-returns)
+See the [return-type guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/USER_GUIDE.md#choose-what-a-handler-returns)
 for examples, optional results, and the restrictions for each decorator.
 
 Every Entity's `version` is the generated Spine `Version`; the framework

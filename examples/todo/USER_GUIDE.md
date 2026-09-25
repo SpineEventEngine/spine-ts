@@ -63,12 +63,14 @@ best-effort rejection-event path.
 
 The actual [`TaskAggregate`](src/todo-app.ts) handlers show two native
 TypeScript return forms. `assignTask()` declares
-`TaskAssigned | TaskReassigned`. The `|` means **one of these**: an unassigned
+`TaskAssignedEvent | TaskReassignedEvent`. The two local names alias the
+generated `TaskAssigned` and `TaskReassigned` message types; they are not new
+Event types. The `|` means **one of these**: an unassigned
 task produces `TaskAssigned`, while assigning a task to a different person
 produces `TaskReassigned`. Both alternatives are real Events in the To-Do
 model. Repeating the current assignee is still rejected.
 
-`createTask()` declares `readonly [TaskCreated, TaskAssigned?]`. The brackets
+`createTask()` declares `readonly [TaskCreated, TaskAssignedEvent?]`. The brackets
 describe an **ordered pair**, and `?` means the second Event may be absent.
 With no initial assignee, it returns only `TaskCreated`. With an assignee in
 `CreateTask`, it returns `TaskCreated` first and `TaskAssigned` second. The

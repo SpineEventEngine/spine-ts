@@ -2,7 +2,9 @@
 
 Status: original implementation, three independent review/fix rounds, full
 release verification, and package archive checks complete. The human opened
-draft PR #10. Documentation and runnable-example follow-up is in progress.
+draft PR #10. Documentation and runnable-example follow-up, its independent
+review corrections, and local verification are complete. Required CI on the
+final pushed commit is the remaining acceptance check.
 
 Branch: `entity-and-signal-handler-declarations`
 

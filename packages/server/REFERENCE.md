@@ -277,7 +277,7 @@ custom thenables, framework envelopes, and unresolved/`any`/`unknown` result
 branches are rejected. TypeScript enforces tuple structure; the runtime checks
 declared message types, required nonempty results, and result order, not tuple
 arity or positional schema constraints. See the
-[user guide](../../docs/USER_GUIDE.md#choose-what-a-handler-returns) for a compact
+[user guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/USER_GUIDE.md#choose-what-a-handler-returns) for a compact
 return-type table and examples.
 
 These independent examples use generated review-workflow messages. The Commander

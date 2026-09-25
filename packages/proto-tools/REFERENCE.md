@@ -83,7 +83,7 @@ imported aliases must resolve to concrete generated schemas. The analyzer record
 all possible schemas in that handler's `outcomes.returned`; it does not serialize
 tuple positions or union branches. Handler-specific result rules and unsupported
 shapes are documented in the
-[server reference](../server/REFERENCE.md#handler-return-types).
+[server reference](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/REFERENCE.md#handler-return-types).
 
 ## Safety and atomicity
 

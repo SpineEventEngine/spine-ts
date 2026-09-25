@@ -664,6 +664,11 @@ describe("@spine-event-engine/example-todo", () => {
     try {
       await scope.post(CreateTaskSchema, createTask("task-unassigned-create", "Solo"));
       expect(fixture.assertEvents()).toHaveLength(1);
+      const unassignedMessage = fixture.assertEvents()[0]?.message;
+      if (unassignedMessage === undefined) throw new Error("Expected the TaskCreated Event.");
+      expect(AnyMessages.unpack(unassignedMessage, TaskCreatedSchema)?.id?.value).toBe(
+        "task-unassigned-create",
+      );
 
       await scope.post(
         CreateTaskSchema,

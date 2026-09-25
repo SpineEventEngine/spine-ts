@@ -2819,7 +2819,20 @@ describe("check-cleanup-rules", () => {
     expect(result.stdout).toContain("Cleanup enforcement checks passed.");
   });
 
-  it("rejects empty-capable command tuples, rest, nested arrays, and wrong-role branches", () => {
+  it.each([
+    ["optional assignment tuple", "Assign", "readonly [TaskCreated?]", "event"],
+    ["rest assignment tuple", "Assign", "readonly [TaskCreated, ...TaskCreated[]]", "event"],
+    ["nested Event arrays", "Assign", "TaskCreated[][]", "event"],
+    ["mixed Event and Command", "Assign", "TaskCreated | CreateTask", "event"],
+    ["missing Command branch", "Command", "CreateTask | undefined", "command"],
+    ["optional Command tuple", "Command", "readonly [CreateTask?]", "command"],
+    ["missing Event branch", "Assign", "TaskCreated | undefined", "event"],
+    ["nested Promise", "Assign", "Promise<Promise<TaskCreated>>", "event"],
+    ["any result", "Assign", "any", "event"],
+    ["unknown result", "Assign", "unknown", "event"],
+    ["keyof result", "Assign", "keyof TaskCreated", "event"],
+    ["Promise inside union", "Assign", "TaskCreated | Promise<TaskCreated>", "event"],
+  ])("rejects %s", (_name, decorator, returnType, expectedKind) => {
     const repoRoot = createFixture();
     writeExampleSource(
       repoRoot,
@@ -2828,28 +2841,8 @@ describe("check-cleanup-rules", () => {
         'import type { CreateTask, TaskCreated } from "../generated/example_pb.js";',
         "",
         "class DemoHandlers {",
-        "  @Assign",
-        "  optional(command: CreateTask): readonly [TaskCreated?] { return []; }",
-        "  @Assign",
-        "  rest(command: CreateTask): readonly [TaskCreated, ...TaskCreated[]] { return [command.created]; }",
-        "  @Assign",
-        "  nested(command: CreateTask): TaskCreated[][] { return [[command.created]]; }",
-        "  @Assign",
-        "  mixed(command: CreateTask): TaskCreated | CreateTask { return command.created; }",
-        "  @Command",
-        "  missing(event: TaskCreated): CreateTask | undefined { return undefined; }",
-        "  @Command",
-        "  optionalCommand(event: TaskCreated): readonly [CreateTask?] { return []; }",
-        "  @Assign",
-        "  missingEvent(command: CreateTask): TaskCreated | undefined { return undefined; }",
-        "  @Assign",
-        "  nestedPromise(command: CreateTask): Promise<Promise<TaskCreated>> { return Promise.resolve(Promise.resolve(command.created)); }",
-        "  @Assign",
-        "  anyResult(command: CreateTask): any { return command.created; }",
-        "  @Assign",
-        "  unknownResult(command: CreateTask): unknown { return command.created; }",
-        "  @Assign",
-        "  keyResult(command: CreateTask): keyof TaskCreated { return 'id'; }",
+        `  @${decorator}`,
+        `  handle(input: CreateTask): ${returnType} { throw new Error(String(input)); }`,
         "}",
         "",
       ].join("\n"),
@@ -2860,8 +2853,143 @@ describe("check-cleanup-rules", () => {
     const result = runChecker(repoRoot);
 
     expect(result.status).toBe(1);
-    expect(result.stderr.match(/handler return type generated domain/gu)).toHaveLength(11);
+    expect(result.stderr).toContain(`handler return type generated domain ${expectedKind}`);
   });
+
+  it("rejects a mixed Event and Promise branch through a local alias", () => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import { Assign } from "@spine-event-engine/server";',
+        'import type { CreateTask, TaskCreated } from "../generated/example_pb.js";',
+        "type Mixed = TaskCreated | Promise<TaskCreated>;",
+        "class DemoHandlers {",
+        "  @Assign",
+        "  handle(input: CreateTask): Mixed { throw new Error(String(input)); }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "mixed Promise alias"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("handler return type generated domain event");
+  });
+
+  it("accepts imported concrete Event aliases and one outer Promise alias", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "examples/todo/src"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "examples/todo/src/outcomes.ts"),
+      [
+        'import type { TaskCreated, TaskRenamed } from "../generated/events_pb.js";',
+        "export type Choices = TaskCreated | TaskRenamed;",
+        "export type AsyncChoices = Promise<Choices>;",
+        "export type AsyncResult<T> = Promise<T>;",
+        "export type AsyncVoid = Promise<void>;",
+        "",
+      ].join("\n"),
+    );
+    writeExampleSource(
+      repoRoot,
+      [
+        'import { Assign, React, Subscribe } from "@spine-event-engine/server";',
+        'import type { CreateTask } from "../generated/commands_pb.js";',
+        'import type { TaskCreated } from "../generated/events_pb.js";',
+        'import type { Choices, AsyncChoices, AsyncResult, AsyncVoid } from "./outcomes.js";',
+        "type LocalAsync<T> = Promise<T>;",
+        "type LocalResult = AsyncResult<TaskCreated>;",
+        "class DemoHandlers {",
+        "  @Assign",
+        "  choose(input: CreateTask): Choices { throw new Error(String(input)); }",
+        "  @Assign",
+        "  asyncChoose(input: CreateTask): AsyncChoices { throw new Error(String(input)); }",
+        "  @Assign",
+        "  generic(input: CreateTask): AsyncResult<TaskCreated> { throw new Error(String(input)); }",
+        "  @Assign",
+        "  localGeneric(input: CreateTask): LocalAsync<TaskCreated> { throw new Error(String(input)); }",
+        "  @Assign",
+        "  localResult(input: CreateTask): LocalResult { throw new Error(String(input)); }",
+        "  @React",
+        "  react(input: TaskCreated): AsyncVoid { throw new Error(String(input)); }",
+        "  @Subscribe",
+        "  observe(input: TaskCreated): AsyncVoid { throw new Error(String(input)); }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "imported concrete aliases"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Cleanup enforcement checks passed.");
+  });
+
+  it("rejects an imported alias with a generated Command in an Event result", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "examples/todo/src"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "examples/todo/src/outcomes.ts"),
+      [
+        'import type { TaskCreated, CreateTask } from "../generated/example_pb.js";',
+        "export type Mixed = TaskCreated | CreateTask;",
+        "",
+      ].join("\n"),
+    );
+    writeExampleSource(
+      repoRoot,
+      [
+        'import { Assign } from "@spine-event-engine/server";',
+        'import type { CreateTask } from "../generated/example_pb.js";',
+        'import type { Mixed } from "./outcomes.js";',
+        "class DemoHandlers {",
+        "  @Assign",
+        "  handle(input: CreateTask): Mixed { throw new Error(String(input)); }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "imported mixed alias"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("handler return type generated domain event");
+  });
+
+  it.each(["interface Promise<Value> { readonly value: Value; }", "type Promise<Value> = Value;"])(
+    "rejects a local Promise lookalike: %s",
+    (declaration) => {
+      const repoRoot = createFixture();
+      writeExampleSource(
+        repoRoot,
+        [
+          'import { Assign } from "@spine-event-engine/server";',
+          'import type { CreateTask, TaskCreated } from "../generated/example_pb.js";',
+          declaration,
+          "class DemoHandlers {",
+          "  @Assign",
+          "  handle(input: CreateTask): Promise<TaskCreated> { throw new Error(String(input)); }",
+          "}",
+          "",
+        ].join("\n"),
+      );
+      run("git", ["add", "."], repoRoot);
+      run("git", ["commit", "-m", "local Promise lookalike"], repoRoot);
+
+      const result = runChecker(repoRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("handler return type generated domain event");
+    },
+  );
 
   it("rejects non-domain types from the Spine proto namespace", () => {
     const repoRoot = createFixture();

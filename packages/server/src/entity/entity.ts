@@ -1137,12 +1137,11 @@ const TransactionAccess = Object.freeze({
 });
 
 /**
- * Abstract aggregate family marker over the common transactional entity shell.
+ * Base class for Aggregates with transactional state and Event-history access.
  *
- * This class intentionally adds only stable family identity. It does not add
- * command dispatch, snapshots, repositories, idempotency guards, or handler
- * invocation. Repository-bound diagnostic event-history reads are declared
- * below for the Aggregate family.
+ * Provides Aggregate family identity and protected repository-backed history
+ * methods. Repositories and bounded contexts handle dispatch, persistence, and
+ * Event publication; application handlers change state through draft helpers.
  *
  * @typeParam Id Domain identifier type.
  * @typeParam Schema Generated schema describing the Aggregate state.
@@ -1159,7 +1158,7 @@ export abstract class Aggregate<
   declare readonly entityFamily: "aggregate";
 
   /**
-   * Creates an aggregate family shell from caller-provided state and metadata inputs.
+   * Creates an Aggregate from its identity, state, and metadata.
    *
    * @param options Identity, schema, state, version, and lifecycle inputs.
    */
@@ -1203,11 +1202,11 @@ export abstract class Aggregate<
 }
 
 /**
- * Abstract projection family marker over the common transactional entity shell.
+ * Base class for Projections with transactional state.
  *
- * This class intentionally adds only stable family identity. It does not add
- * event subscriptions, event playing, repositories, version columns, query
- * clients, or handler invocation.
+ * Provides Projection family identity. Repositories and bounded contexts invoke
+ * Event handlers and persist their state changes with the Projection's Version.
+ * Projections do not expose the diagnostic history methods of other families.
  *
  * @typeParam Id Domain identifier type.
  * @typeParam Schema Generated schema describing the Projection state.
@@ -1224,7 +1223,7 @@ export abstract class Projection<
   declare readonly entityFamily: "projection";
 
   /**
-   * Creates a projection family shell from caller-provided state and metadata inputs.
+   * Creates a Projection from its identity, state, and metadata.
    *
    * @param options Identity, schema, state, version, and lifecycle inputs.
    */
@@ -1235,11 +1234,11 @@ export abstract class Projection<
 }
 
 /**
- * Abstract process manager family marker over the common transactional entity shell.
+ * Base class for Process Managers coordinating a workflow through signals.
  *
- * This class adds a protected, handler-scoped, read-only Projection query
- * capability. It does not add command posting, repositories, bounded-context
- * injection, or handler invocation.
+ * Provides transactional state, protected Event-history access, and
+ * handler-scoped Projection reads through `select()`. Repositories and bounded
+ * contexts invoke handlers, persist changes, and deliver returned signals.
  *
  * @typeParam Id Domain identifier type.
  * @typeParam Schema Generated schema describing the Process Manager state.
@@ -1256,7 +1255,7 @@ export abstract class ProcessManager<
   declare readonly entityFamily: "process-manager";
 
   /**
-   * Creates a process manager family shell from caller-provided state and metadata inputs.
+   * Creates a Process Manager from its identity, state, and metadata.
    *
    * @param options Identity, schema, state, version, and lifecycle inputs.
    */

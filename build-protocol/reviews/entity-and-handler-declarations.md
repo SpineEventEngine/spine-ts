@@ -263,3 +263,57 @@ review findings or implementation logs. Collect the complete wave before fixes.
 Expected profiles and actual startup metadata will be checked before accepting
 their results. The original three-round request was completed; this bounded
 follow-up uses the protocol's focused review wave.
+
+The frozen follow-up checkpoint is `755eb9abd`, pushed to PR #10. Startup
+metadata confirms the explicitly requested models and medium reasoning:
+
+- Documentation: Luna/medium, `01a0d8bf-8069-79b0-9fd7-8ac13736dfbf`.
+- TypeScript/API: Sol/medium, `01a0d8bf-84e3-7941-9532-e08a5280e0af`.
+- Performance/reliability: Sol/medium, `01a0d8bf-8974-7550-b084-c9f298a73258`.
+- Style/maintainability: Sol/medium, `01a0d8c1-9f73-79b0-9dc9-6dab9ddee99e`.
+
+### Follow-up findings and correction batch
+
+All four fresh review results were collected before corrections. Documentation
+found contradictory Subscribe return guidance and obsolete family-marker
+wording. API review found that the beginner version example skipped the create
+transition and that the To-Do guide did not use the source's local Event aliases.
+Both API and reliability found missing imported-alias support and an incorrectly
+accepted Promise inside a union in the cleanup checker. Style review requested
+individually identifiable negative checker cases and a TaskCreated assertion
+for the unassigned tuple branch. These seven distinct findings are accepted.
+
+The related architecture passage describes TransactionalEntity, not its
+subclasses, so its absence of family-specific behavior is correct. Clarify that
+distinction and describe protected family history methods without changing the
+runtime. This part of the documentation finding is accepted as clarification,
+not evidence of a conflicting implementation.
+
+Main corrects general documentation; the retained Sol/medium implementer
+corrects the checker, its regressions, and the To-Do test and documentation.
+No overlapping writer, new role, or additional broad review wave is needed.
+
+Correction inspection also checks imported void aliases and concrete generic
+aliases against existing analyzer regressions. The analyzer already accepts
+`AsyncResult<TaskCreated>` when `AsyncResult<T>` aliases `Promise<T>`; the
+cleanup checker must not reject that supported example syntax. Built-in Promise
+recognition must not accept a locally declared interface with that name.
+These are related cases of the accepted alias/provenance findings, not new
+framework return forms.
+
+### Follow-up correction evidence
+
+All seven review findings are corrected. Checker tests reproduced the Promise
+position and imported-alias failures before correction. Separate cases now
+cover invalid shapes; valid imported/local aliases, concrete generic Promise
+aliases, and imported void aliases pass while wrong-role messages and Promise
+lookalikes remain rejected. All 141 checker tests and 45 To-Do black-box tests
+pass. The unassigned creation assertion unpacks TaskCreated, and both example
+guides quote the source's exact local type names.
+
+Documentation now counts creation in the version example, permits Subscribe's
+Promise<void>, and describes the Entity families' actual protected helpers.
+The related Entity TSDoc correction changes no runtime behavior. Tooling
+typechecks, targeted ESLint, formatting, cleanup, audience, compiled snippet,
+and whitespace checks pass. The remaining release and exact-head CI evidence
+is recorded in the work log. No review finding remains unresolved.

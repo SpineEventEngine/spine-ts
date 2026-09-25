@@ -210,8 +210,9 @@ Entity classes take two type parameters: their identifier and state schema.
 There is no application-defined version parameter. Every Entity has the same
 Spine `Version`, containing a number and a timestamp.
 
-A new task starts at version zero. A successful rename saves version one;
-completing it saves version two. Spine advances the version once when a handler
+A fresh Entity starts at version zero before its first handler runs. Creating
+the task saves version one; renaming it saves version two; completing it saves
+version three. Spine advances the version once when a handler
 produces Events or changes Entity state or lifecycle. It does not advance for
 a failed operation or a no-op. Application code does not increment it manually.
 The Entity, its stored record, and notifications of its state carry the same

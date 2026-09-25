@@ -288,3 +288,53 @@ The revised AssignTask semantics are documented beside the unchanged strict
 ReassignTask. An inline context-options type was named privately to keep the
 touched context factory within the method-length rule. Generated changes are
 limited to To-Do's normal manifest/marker; no generated TypeScript was added.
+
+All four fresh follow-up reviews are complete. The seven deduplicated findings
+are recorded in the review log and returned as one correction batch to the
+existing implementation context. Main handles separate general documentation.
+The corrected version story counts creation: zero before dispatch, one after
+creation, two after rename, three after completion. Family documentation now
+describes protected history and Projection reads rather than marker-only classes.
+Remaining estimate: 0.6–0.9 hours, including 15–25 minutes of corrections and
+focused verification, then full release verification and exact-head CI waiting.
+
+The same obsolete family-marker wording also appeared in Entity class TSDoc and
+the architecture metadata introduction. These descriptions now state what the
+base classes provide and what their repository/context collaborators perform.
+Only comments change in the Entity source; its runtime implementation is unchanged.
+
+Checkpoint CI `36141018123` failed four packaging/consumer tests because the new
+server and proto-tools README links pointed outside their npm package archives.
+The existing packed-README checker reproduced both violations directly. Replace
+those links, and the related new reference links, with the repository's existing
+absolute GitHub documentation-link convention. Do not weaken package checks.
+This is a documentation correction; include package-link validation in preflight.
+
+Final mechanical verification is dispatched as an orchestrator function with
+explicit Luna/low, after the correction preflight is clean. Run `verify:release`
+once with its single-worker configuration, then the CI package-consumer command
+`node scripts/release-cli.mjs prepare --check`. Save command output under
+`/tmp/spine-declarations-final.8Vgx7n`. Do not edit code or start another test run
+while this verification is active. Main will record the results, push the final
+commit, and wait for required CI on that exact SHA.
+
+The mechanical function ran with the explicitly configured Luna/low profile;
+the Desktop dispatch confirms those fields, but exposes no independent runtime
+self-inspection. Local verification produced 302 passing test files and 4,976
+passing tests. Coverage: statements 93.28%, branches 90.07%, functions 93.06%,
+lines 94.45%, all above the configured thresholds. Generation, build, lint,
+documentation, generated cleanliness, and release-readiness gates completed.
+
+The wrapper mistakenly assigned zsh's read-only `status` after the release
+command finished, so that wrapper failed to record the command's numeric exit
+status. The complete green test/coverage output is retained; no expensive
+verification rerun was made for this bookkeeping error. The separate exact
+archive/consumer check completed with captured exit 0. Final-SHA GitHub CI must
+independently confirm the release command and package check before acceptance.
+
+All review findings are resolved. No generated source was added and no further
+runtime changes followed verification. The final commit contains the reviewed
+corrections and this evidence; its required Build result is retained on
+[PR #10](https://github.com/SpineEventEngine/spine-ts/pull/10). Main checks that
+result against the exact pushed SHA before reporting completion. No merge or
+publication is performed by this task.
