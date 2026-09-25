@@ -74,6 +74,22 @@ line.
 12. Production code may import generated code directly. Do not add generated
     facades unless a later task records a concrete reason.
 
+## Entity Version Contract
+
+Entity, TransactionalEntity, Aggregate, Projection, and ProcessManager use two
+generic parameters: ID and state schema. Their version is always the generated
+Spine `Version`, never an application-selected type. New Entities start at zero;
+restoration preserves the stored number and timestamp.
+
+The framework advances an Entity's version once when successful handling
+produces Events or changes state or lifecycle flags. A true no-op, rejection,
+or failed operation does not advance the committed version. A Projection's
+counter is independent of the producer versions on its incoming Events.
+Current records, history, Entity snapshots, and read updates describe the same
+committed version. Emitted Events carry the producer's pre-dispatch version,
+matching current Spine JVM behavior. Applications do not set or increment
+Entity versions manually.
+
 ## End-User Handler API Invariants
 
 These invariants come from human clarification on `2026-07-07` and are
@@ -87,18 +103,25 @@ blocking requirements for all framework and example work.
 - `@Assign`, `@Command`, and `@React` handlers must declare explicit return
   types.
 - `@Assign` handlers return at least one generated domain event message, either
-  as one event message, an array type, or a tuple type.
+  as a single message, a union selecting one message, an array, or a tuple.
 - `@React` handlers return generated domain event messages or explicit `void`
   for a no-emission reaction.
-- `@Command` handlers return at least one generated domain command message,
-  either as one command message, an array type, or a tuple type.
+- `@Command` handlers return generated domain command messages, as a single
+  message, a union selecting one message, an array, or a tuple. Command-accepting
+  handlers require a result. Event reactions may decline to issue a command,
+  following Spine JVM's reaction signature rules.
 - Generated domain message return provenance must resolve to generated
-  Protobuf-ES imports, generated namespace/value imports, or local aliases
+  Protobuf-ES imports, generated namespace/value imports, or local/imported aliases
   proven back to those generated imports.
 - Public TypeScript signatures may use singular message types, `T[]`,
   `readonly T[]`, `Array<T>`, `ReadonlyArray<T>`, or tuple/readonly tuple
-  notation for emitted messages. `@Assign` and `@Command` still require at
+  notation for emitted messages. Tuples may contain union alternatives and
+  optional positions. An outer `Promise` denotes an asynchronous result.
+  `@Assign` and `@Command` still require at
   least one emitted schema in the declared return type; `@React` may emit none.
+- TypeScript checks tuple shape and union assignments. Runtime checks each
+  actual returned message against the invoked handler's declared schemas and
+  preserves return order. Absent optional results are not dispatched.
 - `@Subscribe` handlers must declare an explicit `void` return type.
 - New aggregate behavior must not introduce or depend on `@Apply`; aggregates
   are non-event-sourced, matching current Spine JVM behavior.

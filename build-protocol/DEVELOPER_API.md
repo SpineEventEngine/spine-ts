@@ -24,6 +24,12 @@ expose Java builder types. The design should still preserve:
 - typed command/event handler parameters;
 - typed returned events/commands/rejections where possible.
 
+In the TypeScript implementation, the state parameter is the generated schema
+type, such as `typeof TaskSchema`. There is no third version parameter.
+`entity.version` is always the generated Spine `Version`, returned as a copy.
+The framework initializes, advances, and stores that version; application
+handlers do not update it manually.
+
 ## Decorator-Based Handler Declaration
 
 The preferred end-user mechanism is standard TypeScript decorators:
@@ -67,6 +73,14 @@ from the return type. `@Subscribe` records have no emitted schemas because the
 required return type is explicit `void`. The generated registry intentionally
 excludes `@Apply`; new aggregate behavior is transactional rather than
 event-sourced.
+
+Native unions describe one selected result, for example
+`CreateAccessGrant | ExtendAccessGrant`. Native tuples describe multiple results
+in order, for example `[AccessGrantCreated, AccessRequestCompleted]`.
+Readonly tuples, optional tuple positions, named aliases, and an outer `Promise`
+use the same schema inference. No Pair or Either wrapper classes are needed.
+The invoked handler's returned-schema list limits the messages it may return;
+another handler's declarations do not widen that list.
 
 Generated registry ingestion preserves each handler record's public arity in
 canonical metadata. Existing explicit/schema-bearing handler registration

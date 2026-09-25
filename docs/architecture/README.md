@@ -363,10 +363,10 @@ set-once rule remains private; callers receive the core
 `TransitionValidationResult` shape with repo-local `spine.validation.*`
 messages, field paths, and no raw previous/next values.
 
-`Entity` is the common OOP entity state shell. It binds a caller-supplied
+`Entity` is the common OOP entity base. It binds an
 ID to one descriptor-backed Protobuf-ES state schema, derives and caches
 `EntityMetadata`, snapshots state on construction and read access, snapshots
-plain version metadata supplied by the caller without computing increments, and exposes
+the generated Spine `Version`, and exposes
 lifecycle flags plus `isActive`, `isArchived`, `isDeleted`, and sticky
 `lifecycleFlagsChanged` accessors. Protected replacement hooks give
 framework subclasses a narrow place to apply accepted state/version or
@@ -377,10 +377,10 @@ state.
 
 `TransactionalEntity` is the protected OOP draft layer over `EntityTransaction`.
 It adds one active transaction slot per entity instance, scoped helpers for
-reading and updating draft state, draft version metadata, and draft lifecycle
+reading and updating draft state and draft lifecycle
 flags, and commit/rollback helpers that close over the existing transaction
-kernel. Accepted commits apply only the accepted state, explicit version
-metadata, and lifecycle flags back through the `Entity` replacement hooks.
+kernel. Accepted commits apply the accepted state, framework-calculated version,
+and lifecycle flags back through the `Entity` replacement hooks.
 Rejected commits apply nothing and intentionally keep the transaction active so
 subclass code can correct the draft or roll it back explicitly, matching the
 current `EntityTransaction.commit()` behavior. The `changed` signal records
@@ -388,12 +388,12 @@ accepted state changes or committed lifecycle flag changes without making
 repository storage decisions. Scope errors are deterministic
 `TransactionalEntityScopeError` instances for missing or duplicate active
 transactions. The layer still avoids handler invocation, repositories, storage,
-lifecycle events, Java builders, automatic version increments, transaction
+lifecycle events, Java builders, transaction
 listeners, recent history, async-local/global transaction state, and
 entity-family-specific aggregate/projection/process-manager behavior.
 
 `Aggregate`, `Projection`, and `ProcessManager` are public abstract entity
-family markers. Each extends `TransactionalEntity<Id, Schema, Version>` and
+family markers. Each extends `TransactionalEntity<Id, Schema>` and
 adds only a stable readonly `entityFamily` property typed by the exported
 `EntityFamily` union. This follows the JVM family shape only as far as the
 TypeScript runtime supports safely: JVM `Projection` directly
@@ -439,8 +439,8 @@ entity storage/cache/catch-up, inbox/delivery, lifecycle monitors, gRPC server
 lifecycle, and transport.
 
 `EntityTransaction` is the server's draft/result commit boundary over
-one entity state. It buffers a draft state, explicit previous/draft version
-metadata, lifecycle flags, and visible status (`active`, `committed`, or
+one entity state. It buffers a draft state, previous/draft Spine `Version`
+values, lifecycle flags, and visible status (`active`, `committed`, or
 `rolled-back`). The compatibility contract is intentionally small and
 JVM-familiar: this API records only in-memory transaction evidence for
 framework-controlled entity bases, not repository storage, database
@@ -451,10 +451,11 @@ validates it, and applies it only when valid; it returns an immutable violations
 array and propagates unrelated mutator errors without changing the live draft.
 The `previous` and `currentDraft` accessors return snapshots so callers do not
 mutate the transaction's stored previous state by accident. `archive()`, `unarchive()`,
-`markDeleted()`, and `restore()` replace only buffered lifecycle flags, and
-`updateVersionMetadata()` replaces only draft version metadata supplied by the caller.
-These helpers deliberately do not compute automatic version increments, emit
-lifecycle events, write storage, or filter read-side queries. `requireActive()`
+`markDeleted()`, and `restore()` replace only buffered lifecycle flags.
+Application code cannot replace the version. The framework advances it once
+when successful handling produces Events or changes state or lifecycle flags.
+A true no-op leaves it unchanged. These draft helpers do not emit lifecycle
+events, write storage, or filter read-side queries. `requireActive()`
 is the local active-state guard: it rejects committed/rolled-back transactions
 and active drafts already marked archived or deleted with deterministic errors
 that do not include entity state payloads. `commit()` validates the

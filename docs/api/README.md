@@ -333,31 +333,24 @@ Projection repository, entity IDs, or a starting time. It does not return a
 catch-up operation ID or implement durable progress, overlap admission, live
 event coordination, delivery jobs, schedulers, inbox lifecycle, retries,
 restart, resumption, or transport topology.
-Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
+Server exports also include the abstract `Entity`, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `EntityScopeReason`,
-`TransactionalEntityScopeOperation`, `EntityOptions`, `EntityVersionMetadata`,
-`PlainEntityVersionMetadata`, and `EntityLifecycleFlags` for local OOP entity
-state with identity, descriptor-derived metadata, cloned Protobuf-ES state
-snapshots, plain version metadata supplied by the caller, lifecycle flags, and
-active/archive/delete accessors.
-`PlainEntityVersionMetadata<T>` is the compile-time plain-shape helper used by
-entity inputs so ordinary metadata interfaces can be accepted while non-plain
-types such as `Date` are rejected. The shell has protected hooks used by
-framework subclasses and repository/runtime seams, but no public state
-setters, Java builders, transaction execution, repository/storage writes,
-handler invocation, dispatch, lifecycle events, automatic version increments,
-routing, query APIs, buses, transports, or global runtime state.
-`TransactionalEntity` adds only protected, scoped draft helpers over
-`EntityTransaction`: one active transaction can read/update draft state, replace
-draft version metadata, update draft lifecycle flags, commit accepted results
-back into the entity, or roll back without applying state. Accepted commits
-close the scope and update state/version/lifecycle; rejected commits keep the
-scope active for correction or explicit rollback and apply nothing. The
-`changed` signal reports accepted state changes or committed lifecycle flag
-changes, not repository storage policy.
+`TransactionalEntityScopeOperation`, `EntityOptions`, and `EntityLifecycleFlags`.
+An Entity has an ID, a descriptor-backed state schema, cloned state snapshots,
+a Spine `Version`, and lifecycle flags. Its version is not an application-defined
+type. A new Entity starts at version zero; a restored Entity receives its stored
+number and timestamp. Reading `entity.version` returns a copy, so changing that
+copy cannot alter the Entity.
+`TransactionalEntity` provides protected draft helpers over `EntityTransaction`.
+The framework opens the transaction, invokes the handler, validates the result,
+and commits or rolls back. Application handlers update their draft state and
+lifecycle flags, not the version. Accepted commits update state, version, and
+lifecycle together. Rejected commits apply nothing. The `changed` property
+reports accepted state or lifecycle changes; repository handling also considers
+returned Events when deciding whether to advance the version.
 `Aggregate`, `Projection`, and `ProcessManager` are thin abstract family marker
-classes over `TransactionalEntity` with the same `<Id, Schema, Version>` generic
+classes over `TransactionalEntity` with the same `<Id, Schema>` generic
 shape and a stable readonly `entityFamily` property typed by `EntityFamily`.
 They do not add public transaction mutators, repositories, dispatch, aggregate
 event-history access, snapshots, subscriptions, command posting, query clients,
@@ -405,8 +398,8 @@ durable inbox handoff with `REACT_UPON_EVENT` rows, original `Event`
 envelopes, and exact-row target replay. Before handler code runs, replay
 validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
 target type URL, and routed target ID.
-State is stored in tenant-scoped `Stand` records with numeric
-versions, returned commands are wrapped and posted after state storage, and
+State is stored in tenant-scoped `Stand` records with Spine `Version`
+messages, returned commands are wrapped and posted after state storage, and
 returned event messages are wrapped with process-manager-emitted event schemas
 and appended through the event store before produced-event dispatch. The repository
 surface still does not expose direct entity lookup/storage APIs, inboxes,
@@ -418,7 +411,7 @@ metadata to register known state types with their direct read-side `Stand`.
 direct read-side entity-state API. A stand registers known generated state
 schemas, rejects unknown state types on read/update/subscribe, stores latest
 states through `StorageFactory`/`RecordStorage`, reads latest state by schema
-and entity ID, can return caller-supplied version metadata through
+and entity ID, can return the stored Spine `Version` through
 `readVersioned()`, can return storage-backed query results through
 `queryVersioned()`, can return storage-order list results through
 `readAllVersioned()`, can clear one registered state type through
@@ -654,7 +647,7 @@ facade. Repeated, map-valued, and explicit optional `(set_once)` fields are
 unsupported here and fail closed with field-specific validation
 violations. The transaction kernel exports `EntityTransaction`,
 `createEntityTransaction()`, typed draft/commit/rollback result contracts,
-version metadata contracts, lifecycle flags, status/mutator/helper operation
+Spine `Version` result contracts, lifecycle flags, status/mutator/helper operation
 types, `EntityTransactionStateError`, and
 `DraftStateError`. This public surface is an in-memory,
 framework draft/result boundary over one entity state. It is intentionally
@@ -663,13 +656,13 @@ transaction context, dispatch step, or lifecycle-event emitter. It is a
 framework compatibility seam, not an end-user manual-transaction API.
 Application handlers must not start, commit, roll back, or otherwise control
 transactions manually. Lifecycle
-helpers mutate only buffered draft flags, `updateVersionMetadata()` replaces
-only draft version metadata supplied by the caller, and `requireActive()` rejects closed
+helpers mutate only buffered draft flags, and `requireActive()` rejects closed
 transactions or active drafts already marked archived/deleted without including
 state payloads. `commit()` validates the buffered draft and closes the
 transaction only for accepted commits; rejected commits return violations and
 leave the transaction active. `rollback()` closes the transaction and returns
-the discarded draft evidence.
+the discarded draft evidence. Version advancement is framework-controlled;
+there is no application version setter or `updateVersionMetadata()` operation.
 Server handler metadata exports include
 `EntityHandlers.define()`, `HandlerRegistrationBuilder`, the seven handler
 metadata roles for command assignment, command substitution, command
