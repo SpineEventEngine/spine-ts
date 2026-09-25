@@ -37,11 +37,12 @@ waits for capacity. Each round collects all results before corrections begin.
 ## Rounds
 
 1. Reviewed `2c71dfffe462dbdbad663d43dd78c77322113ae5` against the master
-   baseline `2b27a430da213438d600aff8d4a6cdfb7c0cec98`; corrections in progress.
-2. Reviewing `f4746b8b7f41db9e916658f0085b4265bc63cd92` against the same
-   master baseline, after round 1 corrections passed and were pushed.
-3. Reviewing `c01966b2958fee434914c01fb79a5c787e4a66ad` against the same
-   master baseline, after round 2 corrections passed and were pushed.
+   baseline `2b27a430da213438d600aff8d4a6cdfb7c0cec98`; eight findings
+   corrected, checked, and pushed in `f4746b8b7`.
+2. Reviewed `f4746b8b7f41db9e916658f0085b4265bc63cd92` against the same
+   master baseline; five findings corrected, checked, and pushed in `c01966b29`.
+3. Reviewed `c01966b2958fee434914c01fb79a5c787e4a66ad` against the same
+   master baseline; four findings corrected, checked, and pushed in `97ea44d0c`.
 
 Record reviewer identity, explicit model/reasoning, checked commit, findings,
 decisions, correction evidence, and completion here at each round boundary.
@@ -238,6 +239,13 @@ tooling/server typechecks, ESLint, cleanup, TSDoc, formatting and diff checks
 passed. All seventeen reviewer findings across the three rounds were addressed;
 the related generic Promise-alias case found by main was corrected with the
 same checker-based change. No review used memory or earlier review results.
+
+After review convergence, full integration testing identified two older manual
+handler fixtures missing their returned Event declarations. Fixture-only
+correction `bee9c9305` preserves the reviewed runtime contract and passes the
+affected tests and repeated cheap preflight. The subsequent full release run
+passed all 4,956 tests and global coverage; package archive/consumer verification
+also passed. No production change followed the third review correction.
 
 The combined focused run passed 437 tests in six files with one Vitest worker.
 Root tooling and server TypeScript checks, targeted ESLint, cleanup, and TSDoc

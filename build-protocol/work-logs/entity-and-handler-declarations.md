@@ -2,8 +2,8 @@
 
 Task: entity-and-handler-declarations.
 Branch and checkout: `entity-and-signal-handler-declarations`, existing checkout.
-Start: 25 September 2026. Status: implementation and all three review/fix rounds
-complete; final release verification in progress.
+Start: 25 September 2026. Status: implementation, all three review/fix rounds,
+full release verification, and package archive checks complete.
 
 Requirements and acceptance are in
 [the plan](../planning/entity-and-handler-declarations.md), including its complete
@@ -121,10 +121,10 @@ packages/server-blackbox-tests/test/project-event-routing.test.ts
 
 ## Integration
 
-Version checkpoint `ed692fbb9` and analyzer checkpoint `28450b3f7` are
-committed and pushed. Runtime checkpoint `2c71dfffe` and review round 1
-correction checkpoint `f4746b8b7` are pushed. Later review rounds and full
-release verification remain in progress.
+Version checkpoint `ed692fbb9`, analyzer checkpoint `28450b3f7`, runtime
+checkpoint `2c71dfffe`, all three review corrections, and final integration
+fixture correction `bee9c9305` are committed and pushed. Full release
+verification passed on `bee9c9305`.
 No PR creation is authorized yet; the request remains unanswered.
 
 ## Review round 2 corrections
@@ -198,7 +198,21 @@ The run did not establish a passing global coverage result.
 The correction adds explicit output metadata to those two fixtures without
 changing runtime validation or timeouts. The two affected Vitest files pass
 20 tests, and the shared BlackBox Node contract passes 16 tests. The complete
-cheap preflight will be repeated before the second full release attempt.
+cheap preflight was repeated before the second full release attempt.
+
+The second `pnpm verify:release` run passed with exit 0 on `bee9c9305`:
+302 test files and all 4,956 tests passed. Global coverage passed without
+threshold changes: statements 93.29%, branches 90.11%, functions 93.06%, and
+lines 94.46%. Its test phase took 714.03 seconds with one worker. Generation,
+build, tooling typechecks, lint, cleanup, TSDoc, formatting, compiled
+documentation, Proto, logging, dependency, and release-readiness checks also
+passed. The working tree remained clean after verification.
+
+`node scripts/release-cli.mjs prepare --check` then passed with exit 0. It
+packed the release archives and checked their use in a separate consumer
+project. No package was published. The final follow-up changes only these
+planning, work-log, and review records; runtime and test source remain exactly
+as verified at `bee9c9305`.
 No production source or branch changed in this correction. The earlier scoped
 coverage inspection of Entity, transaction, repository, and standalone output
 branches remains applicable; the full gate must still establish global coverage.
