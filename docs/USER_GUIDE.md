@@ -176,24 +176,37 @@ generator can resolve every alternative to a concrete generated message.
 
 The decorator determines which messages are allowed:
 
-| Handler      | Normal result                                                                                                                     |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `@Assign`    | Domain Events, with at least one Event returned on success.                                                                       |
-| `@Command`   | Domain Commands. A Command-input handler must return at least one; an Event/rejection reaction may return an empty Command array. |
-| `@React`     | Domain Events, or explicit `void` for no output. `TaskRenamed \| undefined` can express a reaction that sometimes emits an Event. |
-| `@Subscribe` | `void`, or `Promise<void>` for asynchronous work. It does not produce signals.                                                    |
+| Handler      | Normal result                                                                                                                                  |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@Assign`    | Domain Events, with at least one Event returned on success.                                                                                    |
+| `@Command`   | Domain Commands. A Command-input handler must return at least one. An Event/rejection reaction may return `undefined` or an empty typed array. |
+| `@React`     | Domain Events, `undefined`, or an empty typed array. `void` is not a valid declaration.                                                        |
+| `@Subscribe` | `void`, or `Promise<void>` for asynchronous work. It does not produce signals.                                                                 |
 
 For example, a Command reaction can declare
 `CreateAccessGrant | ExtendAccessGrant`: approve a new request by creating a
 grant, or approve an existing one by extending it. The handler returns one
 generated Command; Spine creates its envelope and delivers it.
 
+If approval sometimes needs no further action, declare
+`CreateAccessGrant | ExtendAccessGrant | undefined`. Return a Command when a
+grant needs creating or extending, and `undefined` when nothing needs doing.
+The position of `undefined` in the union does not matter. The same choice is
+available to `@React`, for example `TaskRenamed | undefined`.
+
+A reaction that only changes its Entity state can declare `undefined` alone,
+or `Promise<undefined>` when asynchronous. Its state changes are still saved;
+no signal is produced. This applies to `@React` and Event/rejection-input
+`@Command`, not to handlers receiving Commands or to `@Subscribe`.
+
 Use explicit return annotations. Rejections are **thrown**, not returned;
 declare a Command handler's possible rejections with `@Throws`. Do not return
 framework Command/Event envelopes, arbitrary objects, `any`, or `unknown`.
 Nested collections, tuple rest entries, nested promises, and custom thenables
-are not supported. In particular, use an empty typed Command array for a
-no-output `@Command` reaction, not `void` or `CommandType | undefined`.
+are not supported. Use `undefined`, not `null`, for an absent result or tuple
+entry. Only `@Subscribe` accepts `void` or `Promise<void>`; it must not return
+any value at runtime. A required result that is empty, or an invalid returned
+value, fails before the framework commits the Entity changes or publishes outputs.
 
 TypeScript checks tuple positions and lengths. Spine checks each actual
 message against that handler's declared message types and keeps result order;

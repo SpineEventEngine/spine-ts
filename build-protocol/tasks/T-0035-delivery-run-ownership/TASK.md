@@ -31,8 +31,8 @@ smallest independently reviewable implementation successors.
 - Do not touch or rely on `human-review-1-jul.md`.
 - Preserve Protobuf contracts and keep generated Protobuf output out of VCS.
 - Keep end-user code free of framework `Event` envelopes, manual transactions,
-  `@Apply`, schema-bearing decorators, and app-owned handler materialization.
-- Aggregate import/importers, `ImportBus`, and aggregate `@Apply` delivery stay
+  retired event-replay handlers, schema-bearing decorators, and app-owned handler materialization.
+- Aggregate import/importers, `ImportBus`, and aggregate retired event-replay handlers delivery stay
   removed from the active roadmap.
 - `IMPORT_EVENT` remains unsupported for new inbox writes; legacy rows fail
   closed. `CATCH_UP` remains pending/skipped in this slice.

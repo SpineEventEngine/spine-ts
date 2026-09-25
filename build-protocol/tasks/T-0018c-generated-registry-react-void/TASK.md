@@ -42,7 +42,7 @@ by accepting explicit `void` `@React` handlers as no-emission reactions with
 - No change may be made without updating the relevant durable log.
 - Use installed skills where applicable.
 - Preserve end-user handler invariants: handlers return generated domain
-  messages, not framework `Event` envelopes; no `@Apply`; no manual end-user
+  messages, not framework `Event` envelopes; no retired event-replay handlers; no manual end-user
   transactions; no application-owned handler materialization.
 - Keep changes simple and JVM-familiar; avoid new abstractions unless they make
   the caller clearly easier to read.
@@ -56,7 +56,7 @@ by accepting explicit `void` `@React` handlers as no-emission reactions with
   emitted schemas.
 - `@Subscribe` behavior remains unchanged.
 - No generated files are committed.
-- Human constraints remain preserved: no `@Apply`, no schema-bearing
+- Human constraints remain preserved: no retired event-replay handlers, no schema-bearing
   decorators, no framework envelopes in end-user handlers, no manual
   transactions, no application-owned materialization.
 

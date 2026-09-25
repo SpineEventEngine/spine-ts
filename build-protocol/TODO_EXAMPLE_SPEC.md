@@ -73,10 +73,10 @@ make the example pass.
   message, array, or tuple return types.
 - `@Command` handlers return generated domain command messages, using singular
   message, array, or tuple return types.
-- `@React` handlers return generated domain event messages or explicit `void`
-  for no emission.
-- `@Subscribe` handlers declare explicit `void` return types.
-- The example must not define or use aggregate `@Apply` handlers.
+- Event/rejection-input `@Command` and `@React` may declare `undefined` alone
+  or alongside concrete signal types to produce no output.
+- `@Subscribe` handlers declare explicit `void` or `Promise<void>` return types.
+- Aggregate handlers update state directly in framework-controlled transactions.
 - The example must not call transaction-control methods such as
   `startTransaction()` or `commitTransaction()`. The framework manages entity
   transactions.

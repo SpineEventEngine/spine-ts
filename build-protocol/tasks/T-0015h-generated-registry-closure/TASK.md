@@ -26,7 +26,7 @@ event-sourced aggregate guidance.
   schema-bearing decorators.
 - Ordinary handlers return generated domain messages, not framework
   `Event`/`Command` envelopes.
-- Ordinary aggregate code must not use `@Apply`, create framework event IDs, or
+- Ordinary aggregate code must not use retired event-replay handlers, create framework event IDs, or
   manage framework transactions directly.
 - Generated output under `generated/` is ignored, regenerated, and uncommitted.
 - Docs and APIs stay small and JVM-familiar. Avoid broad new concepts or
@@ -43,10 +43,10 @@ event-sourced aggregate guidance.
 ## Findings And Fixes
 
 - Active example source scan found no committed example use of
-  `defineEntityHandlers()`, `materializeDecoratedEntityHandlers()`, `@Apply`,
+  `defineEntityHandlers()`, `materializeDecoratedEntityHandlers()`, retired event-replay handlers,
   `packEvent()`, `EventIdSchema`, or app-owned transaction calls.
 - Cleanup enforcement already rejected schema-bearing decorators, framework
-  envelopes, event IDs, manual materialization, `@Apply`, and app-owned
+  envelopes, event IDs, manual materialization, retired event-replay handlers, and app-owned
   transaction calls in end-user example source.
 - Cleanup enforcement did not reject direct `defineEntityHandlers()` use in
   end-user example source. Added that guard and focused coverage for direct and

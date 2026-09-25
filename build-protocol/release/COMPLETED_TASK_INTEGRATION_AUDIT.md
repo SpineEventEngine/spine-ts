@@ -107,7 +107,7 @@ implementation rather than merging obsolete branch topology.
 | T-0013.5 aggregate cutover                                              | `e8e4ff177c32a3f7266a376ecf0f441d80f303c0`, `fd932c200045b0520f54163866709c88a60b7983` | `packages/server/src/repository/repository.ts`, `packages/storage/src/entity/entity-history-storage.ts`                                                 |
 | T-0013.6 reactors/subscribers                                           | `52e287f9e623c6dc6adadc68aa9e3d07478c3704`, `f3ebd21e49cbfe0c3570811b3f3a0d873f8c821a` | `packages/server/src/bus/event-dispatcher-registry.ts`, `packages/server/src/bus/command-bus.ts`                                                        |
 
-The legacy `@Apply`/event-replay design is intentionally superseded. Its
+The legacy event-replay design is intentionally superseded. Its
 absence is not a missing capability.
 
 ## Historical legacy branches and post-pruning tag preservation

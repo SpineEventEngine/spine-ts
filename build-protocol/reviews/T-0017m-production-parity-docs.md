@@ -28,7 +28,7 @@ runtime-gap implementation slices.
   and broader production verification.
 - End-user code constraints remain visible in public docs: bare decorators,
   generated registry ownership, no application-owned framework envelopes,
-  transactions, `@Apply`, schema-bearing decorators, or handler materialization.
+  transactions, retired event-replay handlers, schema-bearing decorators, or handler materialization.
 
 Verification evidence is recorded in
 `build-protocol/work-logs/T-0017m.md`.

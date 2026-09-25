@@ -52,7 +52,7 @@ unreadable generated modules.
 - No change may be made without updating the relevant durable log.
 - Use installed skills where applicable.
 - Preserve end-user handler invariants: handlers return generated domain
-  messages, not framework `Event` envelopes; no `@Apply`; no manual end-user
+  messages, not framework `Event` envelopes; no retired event-replay handlers; no manual end-user
   transactions; no application-owned handler materialization.
 - Keep changes simple and JVM-familiar; avoid new abstractions unless they make
   the caller clearly easier to read.
@@ -66,7 +66,7 @@ unreadable generated modules.
 - Neutral generated modules continue to produce `undefined` role and are
   rejected for handler signal/emitted command/event positions.
 - Existing handler invariants hold: no framework envelopes in ordinary
-  handlers, no `@Apply`, no schema-bearing decorators, no manual transactions,
+  handlers, no retired event-replay handlers, no schema-bearing decorators, no manual transactions,
   no app-owned materialization.
 - No generated files are committed.
 - Durable docs reflect that role discovery is descriptor-based, not

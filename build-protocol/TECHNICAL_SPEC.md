@@ -104,14 +104,14 @@ blocking requirements for all framework and example work.
   types.
 - `@Assign` handlers return at least one generated domain event message, either
   as a single message, a union selecting one message, an array, or a tuple.
-- `@React` handlers return generated domain event messages or explicit `void`
-  for a no-emission reaction.
+- `@React` handlers return generated domain event messages or `undefined`
+  for a no-output reaction. `void` is invalid.
 - `@Command` handlers return generated domain command messages, as a single
   message, a union selecting one message, an array, or a tuple. Command-accepting
   handlers require a result. Event reactions may decline to issue a command,
-  following Spine JVM's reaction signature rules, by returning an empty typed
-  Command array. Their declaration must still name a Command schema; explicit
-  `void` and a whole-result `undefined` branch are not supported for `@Command`.
+  by returning `undefined` or an empty typed Command array. Their declarations
+  may use `undefined` alone or alongside concrete Command types in any union
+  position. `void` is invalid.
 - Generated domain message return provenance must resolve to generated
   Protobuf-ES imports, generated namespace/value imports, or local/imported aliases
   proven back to those generated imports.
@@ -119,14 +119,19 @@ blocking requirements for all framework and example work.
   `readonly T[]`, `Array<T>`, `ReadonlyArray<T>`, or tuple/readonly tuple
   notation for emitted messages. Tuples may contain union alternatives and
   optional positions. An outer `Promise` denotes an asynchronous result.
-  `@Assign` and `@Command` still require at
-  least one emitted schema in the declared return type; `@React` may emit none.
+  `@Assign` and Command-input `@Command` require at least one returned schema
+  in the declared return type; Event/rejection reactions may declare none.
 - TypeScript checks tuple shape and union assignments. Runtime checks each
   actual returned message against the invoked handler's declared schemas and
   preserves return order. Absent optional results are not dispatched.
 - `@Subscribe` handlers must declare an explicit `void` or `Promise<void>` return type.
-- New aggregate behavior must not introduce or depend on `@Apply`; aggregates
-  are non-event-sourced, matching current Spine JVM behavior.
+- Aggregates update state directly in framework-controlled transactions;
+  they are not event-sourced, matching current Spine JVM behavior.
+- Validate required nonempty results and every returned message before
+  committing Entity changes or publishing outputs. Subscriber results must be
+  exactly `undefined` at runtime, even though their declaration is `void`.
+  Reject `null` results and entries; use `undefined` for absence. A valid
+  no-output reaction still commits legitimate state and lifecycle changes.
 - End-user application code must not start, commit, roll back, or otherwise
   control framework entity transactions. Entity transactions are opened,
   validated, committed, and rolled back by the framework runtime.
@@ -171,13 +176,14 @@ from TypeScript signatures:
   a signal schema source;
 - `@Assign` must have an explicit generated domain event return type with at
   least one emitted event schema;
-- `@Command` must have an explicit generated domain command return type with at
-  least one emitted command schema;
-- `@React` must have an explicit generated domain event return type or explicit
-  `void`; it may emit generated event schemas or nothing;
-- `@Subscribe` must have an explicit `void` return type and no emitted schemas;
+- Command-input `@Command` must declare at least one generated Command schema;
+- Event/rejection-input `@Command` may declare concrete generated Commands,
+  `undefined`, or their union;
+- `@React` may declare concrete generated Events, `undefined`, or their union;
+- `@Subscribe` must declare `void` and no returned schemas;
+- one outer built-in `Promise` may wrap any permitted return declaration;
 - framework `Command`/`Event` envelopes, schema-bearing decorators,
-  application-defined materialization helpers, and `@Apply` are invalid in ordinary app code.
+  and application-defined materialization helpers are invalid in ordinary app code.
 
 T-0015c verifies imported generated message names and companion schema runtime
 value exports by inspecting generated module source. Command/event role
@@ -188,41 +194,43 @@ file names have no handler signal/emitted role. Neutral schemas remain usable
 for entity state, and neutral, missing, malformed, or unrelated descriptor data
 fails closed for handler signal and emitted-schema roles.
 
-The generated module must export a registry value with this logical shape:
+The generated module exports an unversioned `GeneratedHandlerRegistry`.
+Its `receivers` array contains Entity or standalone declarations. An Entity
+record has `receiverKind: "entity"`, `receiverType`, `stateSchema`, and `handlers`.
+A standalone record has `receiverKind: "standalone"`, `receiverType`, and
+`handlers`. Each handler has this logical shape:
 
 ```typescript
-interface GeneratedHandlerRegistry {
-  readonly version: 1;
-  readonly entities: readonly GeneratedEntityHandlers[];
-}
-
-interface GeneratedEntityHandlers {
-  readonly entityType: EntityClass;
-  readonly stateSchema: DescriptorMessageSchema;
-  readonly handlers: readonly GeneratedHandlerMetadata[];
-}
-
-interface GeneratedHandlerMetadata {
+interface GeneratedHandlerRecordInput {
   readonly kind:
     | "command-assignment"
+    | "command-substitution"
     | "command-reaction"
     | "event-subscription"
+    | "state-subscription"
     | "event-reaction";
   readonly methodName: string;
-  readonly signalSchema: DescriptorMessageSchema;
-  readonly emittedSchemas: readonly DescriptorMessageSchema[];
+  readonly input: {
+    readonly schema: DescriptorMessageSchema;
+    readonly origin: HandlerOrigin;
+    readonly where?: WhereOptions;
+  };
+  readonly outcomes: {
+    readonly returned: readonly DescriptorMessageSchema[];
+    readonly thrown: readonly DescriptorMessageSchema[];
+  };
   readonly parameterCount: 1 | 2;
 }
 ```
 
-`emittedSchemas` is non-empty for `@Assign` and `@Command`, contains generated
-event schemas or is empty for `@React`, and is empty for `@Subscribe`. The
+`outcomes.returned` is nonempty for `@Assign` and Command-input `@Command`,
+may be empty for Event/rejection reactions, and is empty for `@Subscribe`.
+`outcomes.thrown` records declared rejections separately. The
 generated registry must preserve source declaration order and `parameterCount`
 within each entity. Ingested records become canonical handler metadata with the
 same public arity; explicit/schema-bearing registrations default to
 `parameterCount: 1` unless framework-generated ingestion supplies a
-different value. It must not include `event-application` records for new
-aggregate behavior.
+different value.
 
 Runtime invocation follows canonical metadata. One-argument handlers are called
 as `handler(signal)`. Generated two-argument command assignees are called as
@@ -231,12 +239,12 @@ incoming command envelope, or an empty generated `CommandContext` when the
 envelope has none. Generated two-argument event subscribers are called as
 `handler(event, context)` with the generated `EventContext` from the incoming
 event envelope, or an empty generated `EventContext` when the envelope has
-none. `@Apply`/event-application handlers remain one-argument only.
+none.
 
 Generated registry files belong under ignored generated output locations such
 as `packages/<package>/generated/`; they are regenerated build artifacts and
 must not be committed. T-0015d adds a deterministic build-time writer that
-renders the version-1 registry source from analyzer output and writes it only
+renders registry source from analyzer output and writes it only
 when explicitly invoked, after validating analyzer diagnostics, generated-root
 ownership, Git-ignore coverage, and symlink safety. T-0015e adds the first
 runtime discovery anchor: framework code may load one or more explicit

@@ -39,7 +39,7 @@ service concern separate from write-side buses and durable inbox delivery.
   proves the current `RecordStorage` seam is insufficient.
 - Application-owned handler materialization, schema-bearing decorators,
   framework envelopes in end-user code, manual end-user transactions, or
-  `@Apply`.
+  retired event-replay handlers.
 
 ## Human-Imposed Requirements Ledger
 
@@ -65,7 +65,7 @@ service concern separate from write-side buses and durable inbox delivery.
 - Keep strict read-side/write-side segregation. Query and subscription APIs are
   read-side services, not command/event bus dispatch or inbox delivery.
 - End-user code must not use framework `Event` envelopes, manual transactions,
-  schema-bearing decorators, `@Apply`, default-route target-ID extraction, or
+  schema-bearing decorators, retired event-replay handlers, default-route target-ID extraction, or
   application-owned handler materialization.
 - Commands handled through the default command route must be rejected by the
   default route before handler invocation when the first-field target ID is

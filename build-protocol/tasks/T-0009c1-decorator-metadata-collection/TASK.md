@@ -103,7 +103,7 @@ Skipped relevant-looking skills:
 
 In scope:
 
-- Public `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply`
+- Public `@Assign`, `@Command`, `@Subscribe`, `@React`, and retired event-replay handlers
   standard method decorators.
 - Explicit schema arguments for every decorator; no `emitDecoratorMetadata`,
   reflect-metadata, parameter decorators, or inferred message types.

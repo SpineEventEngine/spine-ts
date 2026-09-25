@@ -312,13 +312,10 @@ remains public for framework tests, generated-registry ingestion, and legacy
 non-decorator migration tooling. Ordinary application code should use bare
 decorators plus generated registry assembly instead. The explicit constructor
 accepts an entity class, a state schema, and a builder callback whose methods
-record command assignment, command reaction, event subscription, event
-reaction, and event application metadata. Each handler record keeps the
+record command assignment, command substitution, command reaction, event
+subscription, state subscription, and event reaction metadata. Each handler record keeps the
 generated Protobuf-ES schema, message full type name, handler kind, and entity
-method name. Event application metadata also records `allowImport` only for
-legacy `@Apply` compatibility metadata. It is retained only so
-unsupported legacy metadata can be detected; event import is removed from the
-active runtime plan by upstream ADR 0001 D1.
+method name. Aggregates update state directly within the handler transaction.
 
 Handler metadata is deterministic and frozen. The all-handlers array preserves
 the user declaration order, and role-specific arrays preserve the same relative
@@ -332,9 +329,8 @@ layer over explicit `EntityHandlersMetadata`. It registers existing metadata
 objects, keeps deterministic frozen listing/lookup arrays in registration and
 handler declaration order, and indexes handlers by entity state full type name,
 handler kind, and command/event message full type name. Its duplicate
-policy rejects one ambiguous command assignment per command message full type
-name and one ambiguous event application per entity state full type name plus
-event message full type name. Command reactions, event subscriptions, and event
+policy rejects ambiguous command assignment or substitution for the same Command
+type. Command reactions, event subscriptions, and event
 reactions intentionally allow multiple handlers for the same message type so
 runtime fan-out remains possible.
 
@@ -344,8 +340,8 @@ ordinary application syntax collected from public instance methods into
 standard per-class decorator metadata. They are the only public decorator
 signatures. Schema-bearing handler metadata is generated/internal tooling input
 and framework materialization state, not an application decorator form.
-`@Apply` and `materializeDecoratedEntityHandlers()` remain framework-only
-compatibility. Generated registry tooling performs ordinary schema inference from
+`materializeDecoratedEntityHandlers()` remains a framework-only helper.
+Generated registry tooling performs ordinary schema inference from
 handler parameter and return types, keeps decorated classes compatible with
 `HandlerMetadataRegistry`, and leaves `EntityHandlers.define()` available only
 for framework tests, generated-registry ingestion, and legacy non-decorator
@@ -402,8 +398,7 @@ Process Managers also expose protected `select()` reads of Projections.
 Aggregates and Process Managers provide protected Event-history reads backed
 by their repositories.
 These classes do not give application code public transaction controls.
-Aggregates update state directly rather than rebuilding it through application
-`@Apply` handlers.
+Aggregates update state directly rather than rebuilding it by replaying Events.
 
 `Repository` connects entity behavior to context registration.
 It accepts one entity constructor and one
@@ -698,7 +693,7 @@ context, event origin chains, primitive producer IDs, and validated int32
 version metadata. IDs are generated through Node secure UUIDs; tests use fixed
 source envelopes and `Clock` rather than mutating process-global state. This seam is still metadata-only: end-user
 handlers continue to accept generated domain messages instead of framework
-`Event` envelopes, `@Apply` remains absent, manual transaction controls are
+`Event` envelopes, manual transaction controls are
 not introduced, and the seam does not discover handlers, load generated
 registries, materialize application handlers, or widen into transport,
 storage, tracing, or application handler APIs.

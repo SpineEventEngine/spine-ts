@@ -262,12 +262,18 @@ one of several Commands. A tuple such as
 in order, with the second optional. Either declaration may have one outer
 `Promise` layer. Generated metadata lists every possible schema; runtime checks
 each result against the invoked handler's list. A whole result may be absent
-for `@React`, using a generated Event type unioned with `undefined`, or explicit
-`void` when the method never emits. `@Command` reactions may return an empty
-typed Command array; their declarations must still identify at least one Command
-schema. Command-input `@Command` and `@Assign` require nonempty results.
+for `@React` and Event/rejection-input `@Command`, using a generated signal type
+unioned with `undefined`. A reaction that never emits can declare `undefined`
+alone or `Promise<undefined>`. Either reaction kind may also return an empty
+typed array. Command-input `@Command` and `@Assign` require nonempty results.
 `@Subscribe` declares `void` or `Promise<void>` and produces no signals.
 `@Throws` declares thrown rejections separately from normal results.
+
+Only subscriptions accept `void`. An absent reaction result or optional tuple
+entry uses `undefined`, never `null`. The framework validates all returned
+values before committing Entity changes or publishing outputs. An invalid
+subscription result fails even if it is an empty array. A valid no-output
+reaction still saves its Entity state changes.
 
 Other supported forms are `T[]`, `readonly T[]`, `Array<T>`, `ReadonlyArray<T>`,
 named tuple entries, union alternatives inside tuple entries, and local or
@@ -529,7 +535,7 @@ record-storage handle, while the context closes the registry.
 
 `Entity` is the state base class. `Aggregate`, `Projection`, and
 `ProcessManager` identify the three entity families. Handler decorators are
-`@Assign`, `@Command`, `@React`, `@Subscribe`, and `@Apply`. A command-accepting
+`@Assign`, `@Command`, `@React`, and `@Subscribe`. A command-accepting
 handler uses `@Throws(GeneratedRejection)` to declare its possible domain
 rejections. Write the primary handler decorator first and `@Throws` immediately
 below it; declaration order does not affect behavior. Generated metadata records

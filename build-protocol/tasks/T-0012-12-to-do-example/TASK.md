@@ -395,7 +395,7 @@ Goal:
 Acceptance criteria:
 
 - `TaskAggregate` uses decorated `@Assign(CreateTaskSchema)` and
-  `@Apply(TaskCreatedSchema)` methods materialized through the existing
+  retired event-replay handlers methods materialized through the existing
   handler metadata contract.
 - A task-list projection subscribes to `TaskCreated` and updates read-side
   projection state through the built context.

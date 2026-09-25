@@ -24,7 +24,7 @@ Extend the existing cleanup guard rather than adding a second scanner.
 The guard must inspect end-user example source files under `examples/**/src`
 and fail on:
 
-- `@Apply`
+- retired event-replay handlers
 - schema-bearing decorators: `@Assign(...)`, `@Command(...)`, `@React(...)`,
   and `@Subscribe(...)`
 - `startTransaction`

@@ -17,7 +17,7 @@ Reviewer: implementation sub-agent self-audit
 ### P1: End-user example cleanup guard did not reject `defineEntityHandlers()`
 
 `scripts/check-cleanup-rules.mjs` rejected framework envelope packing,
-schema-bearing decorators, `@Apply`, framework event IDs, manual transactions,
+schema-bearing decorators, retired event-replay handlers, framework event IDs, manual transactions,
 and `materializeDecoratedEntityHandlers()` in example source, but an ordinary
 example could still call `defineEntityHandlers()` directly. That would let the
 accepted generated-registry workflow regress without committing generated

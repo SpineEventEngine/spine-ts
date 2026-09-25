@@ -664,9 +664,9 @@ leave the transaction active. `rollback()` closes the transaction and returns
 the discarded draft evidence. Handlers rely on the framework to advance Spine
 Versions; application code does not set or increment them.
 Server handler metadata exports include
-`EntityHandlers.define()`, `HandlerRegistrationBuilder`, the seven handler
+`EntityHandlers.define()`, `HandlerRegistrationBuilder`, the six handler
 metadata roles for command assignment, command substitution, command
-reaction, event subscription, state subscription, event reaction, and legacy event application,
+reaction, event subscription, state subscription, and event reaction,
 `HandlerParameterCount` for
 canonical arity metadata, and `HandlerMetadataError` for registration-time
 structural failures. Handler names must refer to prototype data methods
@@ -674,17 +674,16 @@ declared with normal class method syntax. `EntityHandlers.define()` remains
 public for framework tests, generated-registry ingestion, and legacy
 non-decorator migration tooling; ordinary application code should use bare
 decorators plus generated registry assembly instead. Decorator adapter exports
-include `@Assign`, `@Command`, `@Subscribe`, `@React`, `@Throws`, legacy/framework-only
-`@Apply`, framework-only `materializeDecoratedEntityHandlers()`,
+include `@Assign`, `@Command`, `@Subscribe`, `@React`, `@Throws`,
+framework-only `materializeDecoratedEntityHandlers()`,
 `HandlerMethodDecorator`, `HandlerMethodValue`, and `RejectionDeclaration`.
 Bare `@Assign`, `@Command`, `@Subscribe`, and `@React` are the primary public
 handler decorators. A command-accepting handler uses `@Throws` below its primary
 decorator to declare generated domain rejections. Generated handler registries
 perform ordinary schema inference. Schema-bearing handler metadata is internal/tooling input for
 generated registry assembly and framework materialization; it is not a
-public decorator form. `@Apply` and `materializeDecoratedEntityHandlers()`
-remain framework-only compatibility paths; new application code must not use
-them.
+public decorator form. `materializeDecoratedEntityHandlers()` remains a
+framework-only helper; application code must not call it.
 Ordinary generated assembly uses
 `await BoundedContext.singleTenant(name).add(EntityClass).withGeneratedRegistryRoot(compiledPackageRoot).buildAsync()`.
 `withGeneratedRegistryRoot(root)` accepts a trusted compiled package/app root as
@@ -724,19 +723,25 @@ only. Aggregate and Projection repositories
 reject command-input substitutions and event- or rejection-input command
 reactions during generated ingestion and repository construction. `@React`
 records may return generated event messages
-or explicit `void` with no emitted schemas. `@Subscribe` records return
+or `undefined` with no returned schemas. Event/rejection-input `@Command`
+records may likewise declare `undefined` with no returned schemas.
+`@Subscribe` records return
 explicit `void` or `Promise<void>` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
 
 Producing handlers can declare native message unions, flat arrays, and fixed
 tuples, including readonly tuples, named entries, union-valued entries, and
 optional entries. Concrete local/imported aliases and one outer built-in
-`Promise` are supported. `@Subscribe` may use `Promise<void>`. `@React` may use
-an Event type unioned with `undefined`; an Event-input `@Command` can instead
-return an empty typed Command array. `@Assign` and Command-input `@Command`
+`Promise` are supported. `@Subscribe` may use `Promise<void>`. `@React` and
+Event/rejection-input `@Command` may use `undefined` alone or alongside concrete
+signal types in any union position, or return an empty typed array. Neither
+reaction kind accepts `void`. `@Assign` and Command-input `@Command`
 must produce at least one message on success. The generator records every
 possible message schema for that handler. TypeScript checks tuple structure;
-runtime validates actual message types and preserves output order.
+runtime validates actual message types and preserves output order. Required
+empty results, `null`, returned envelopes, and unexpected subscriber values
+fail before committing Entity changes or publishing outputs. Valid no-output
+reactions still commit their state changes.
 See the [return-type guide](../USER_GUIDE.md#choose-what-a-handler-returns)
 for the complete supported-form table and unsupported shapes.
 
@@ -955,8 +960,8 @@ or end-user envelope APIs.
 Existing Command and Event envelopes retain their supplied IDs without UUID-format
 validation; the UUID guarantee applies to newly generated IDs, not to decoding,
 transport, or retransmission of an existing envelope.
-It does not broaden end-user APIs into framework `Command`/`Event` envelopes,
-does not reintroduce `@Apply`, and does not expose manual transaction-control
+It does not broaden end-user APIs into framework `Command`/`Event` envelopes
+and does not expose manual transaction-control
 APIs.
 Copied Proto semantic-tag options are wire metadata only. They are not
 TypeScript `TypeRegistry` or entity metadata, repository-routing input, or

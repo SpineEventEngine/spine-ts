@@ -42,7 +42,7 @@ Spine JVM establishes:
 - `CommandBus` as a unicast bus with duplicate dispatcher rejection;
 - `EventBus` as a multicast bus that appends events to `EventStore` before
   dispatch;
-- `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` as the familiar
+- `@Assign`, `@Command`, `@Subscribe`, `@React`, and retired event-replay handlers as the familiar
   handler vocabulary.
 
 This task should keep that conceptual shape without implementing later

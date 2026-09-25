@@ -711,13 +711,15 @@ Additional end-user API gates:
 - end-user `@Assign`, `@Command`, and `@React` handlers must declare explicit
   return types as allowed by `TECHNICAL_SPEC.md`: `@Assign` emits generated
   events, `@Command` emits generated commands, and `@React` emits generated
-  events or explicit `void` for no emission;
+  events or `undefined` for no output. Event/rejection-input `@Command` may also
+  return `undefined`, alone or in any union position. Command-input handlers
+  must produce at least one signal on success;
 - end-user `@Subscribe` handlers must declare explicit `void` or `Promise<void>`
   return types;
 - end-user application code must not use schema-bearing decorators such as
   `@Assign(SomeSchema)` unless a task records a temporary legacy/testing
   exception;
-- end-user application code must not define or call aggregate `@Apply` handlers;
+- aggregates must update state directly in framework-controlled transactions;
 - end-user application code must not call transaction-control methods such as
   `startTransaction()` or `commitTransaction()`;
 - end-user application code must not construct internal `Event` IDs or use
@@ -741,7 +743,7 @@ automated checks that reject:
   `examples/**/src`;
 - `packCommand(` or `packEvent(` inside ordinary end-user handler methods;
 - schema-bearing decorators in ordinary end-user/example code;
-- aggregate `@Apply` handlers in ordinary end-user/example code;
+- unsupported handler decorators in ordinary end-user/example code;
 - transaction-control calls such as `startTransaction()` and
   `commitTransaction()` inside ordinary end-user/example code;
 - direct internal event ID construction such as `EventIdSchema` usage inside

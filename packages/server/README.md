@@ -59,7 +59,10 @@ or fixed tuples for several ordered results. For example,
 possibly a second Event. Each actual result must be declared by that handler.
 Arrays and local/imported aliases of these concrete message types are supported
 too. `@Assign` returns Events, `@Command` returns Commands, `@React` returns
-Events or no output, and `@Subscribe` returns `void` or `Promise<void>`.
+Events or `undefined`, and `@Subscribe` declares `void` or `Promise<void>`.
+Event/rejection-input `@Command` also permits `undefined`, alone or alongside
+concrete Command types. Only subscriptions accept `void`; required empty
+results and unexpected returned values fail before Entity commit or publication.
 See the [return-type guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/USER_GUIDE.md#choose-what-a-handler-returns)
 for examples, optional results, and the restrictions for each decorator.
 

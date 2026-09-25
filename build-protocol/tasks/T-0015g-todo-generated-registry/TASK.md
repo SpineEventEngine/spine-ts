@@ -18,7 +18,7 @@ framework-owned generated handler registry discovery.
 
 The example must not materialize decorated handlers, call
 `defineEntityHandlers()` for decorated methods, return framework `Event`
-envelopes from command handlers, create framework event IDs, use `@Apply`, or
+envelopes from command handlers, create framework event IDs, use retired event-replay handlers, or
 manage framework transactions directly.
 
 ## Human-Imposed Requirements Ledger
@@ -28,7 +28,7 @@ manage framework transactions directly.
   schema-bearing decorators or explicit schema metadata beside each decorator.
 - Command handlers return generated domain event messages, singular or array.
 - `@Subscribe` handlers return `void`.
-- `@Apply` is not supported for new aggregate code; aggregates are moving away
+- retired event-replay handlers is not supported for new aggregate code; aggregates are moving away
   from event sourcing.
 - Framework-internal `Event` envelopes and event IDs are not part of ordinary
   end-user handler code.
@@ -58,7 +58,7 @@ manage framework transactions directly.
 
 - Rewriting repository storage, bus, delivery, Stand, or gRPC service internals
   beyond what this migration requires.
-- Adding `@Apply` compatibility.
+- Adding retired event-replay handlers compatibility.
 - Introducing global service locators, broad facades, or speculative registry
   containers.
 - Committing generated registry or Protobuf output.
@@ -70,7 +70,7 @@ manage framework transactions directly.
   `defineEntityHandlers()` or `materializeDecoratedEntityHandlers()`.
 - To-do command handlers return generated domain event messages, not framework
   `Event`.
-- To-do aggregate code contains no `@Apply`, app-managed transaction calls, or
+- To-do aggregate code contains no retired event-replay handlers, app-managed transaction calls, or
   app-created framework event IDs.
 - The generated handler registry is produced during the build/test workflow and
   loaded by framework-owned discovery.

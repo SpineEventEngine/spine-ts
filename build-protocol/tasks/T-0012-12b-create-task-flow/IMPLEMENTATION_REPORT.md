@@ -19,7 +19,7 @@ branches 90.48%, functions 97.63%, and lines 95.20%.
 ## Current State
 
 - `TaskAggregate` uses `@Assign(CreateTaskSchema)` and
-  `@Apply(TaskCreatedSchema)` and materializes those decorators through
+  retired event-replay handlers and materializes those decorators through
   `materializeDecoratedEntityHandlers()`.
 - `TaskListProjection` subscribes to `TaskCreated` and writes one visible
   task-list projection row for each created task.

@@ -31,7 +31,7 @@ surface and accepted initial-release exclusions.
   exclusions without promising future retry, monitor, supervision, topology,
   health, catch-up, or legacy import policy.
 - Public examples use package imports only and keep end-user code free of
-  framework envelopes, manual transactions, `@Apply`, schema-bearing
+  framework envelopes, manual transactions, retired event-replay handlers, schema-bearing
   decorators, and handler materialization.
 - Use focused checks in inner loops and reserve full `pnpm verify` for final
   task and post-merge gates.
@@ -54,7 +54,7 @@ surface and accepted initial-release exclusions.
   `ServerEnvironment` behavior, including startup recovery, listener ordering,
   shared/owned environment semantics, retry-safe close, and explicit exclusions.
 - Legacy compatibility symbols retain narrow accepted wording; docs do not
-  recommend new `@Apply`, import, raw callback-delivery, or manual-transaction use.
+  recommend new retired event-replay handlers, import, raw callback-delivery, or manual-transaction use.
 - Links, commands, package imports, code snippets, formatting, API export checks,
   generated cleanliness, and all relevant review concerns are clean.
 
@@ -136,7 +136,7 @@ surface and accepted initial-release exclusions.
   `RunningServer`, and `ServerEnvironment` startup/close/ownership behavior;
   ZeroMQ remains adapter-scoped, trusted same-host IPC with no exactly-once,
   durable-redelivery, retry, restart, or remote-delivery guarantee; release
-  exclusions make no future-policy commitment; legacy `IMPORT_EVENT`, `@Apply`,
+  exclusions make no future-policy commitment; legacy `IMPORT_EVENT`, retired event-replay handlers,
   and transaction wording is compatibility/framework-only and does not direct
   applications to use it.
 - Evidence: `pnpm docs:check` reported the expected TypeDoc export counts

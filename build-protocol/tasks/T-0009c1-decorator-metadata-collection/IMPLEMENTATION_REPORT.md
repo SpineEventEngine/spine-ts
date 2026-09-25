@@ -22,7 +22,7 @@ Public additions:
 - `@Command(schema)`
 - `@Subscribe(schema)`
 - `@React(schema)`
-- `@Apply(schema, options?)`
+- retired event-replay handlers
 - `HandlerMethodDecorator`
 - `HandlerMethodValue`
 - `materializeDecoratedEntityHandlers(entityType, stateSchema)`
@@ -77,7 +77,7 @@ Covered behavior:
 
 - deterministic declaration order;
 - all five decorator kinds;
-- `@Apply(..., { allowImport: true })`;
+- retired event-replay handlers;
 - materialization into `EntityHandlersMetadata`;
 - registration and lookup through `HandlerMetadataRegistry`;
 - class-owned isolation/no default registry leakage;

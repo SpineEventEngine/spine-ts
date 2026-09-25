@@ -72,7 +72,7 @@ or remediation without turning a real finding into partial completion.
    checkout at `origin/master` `461a8281` uses `DefaultCommandRoute` backed by
    `ByFirstField`, which reads descriptor field index zero.
 5. Reword non-event-sourced aggregate framing as current parity; the same pinned
-   JVM `Aggregate.kt` says event sourcing and `@Apply` were removed.
+   JVM `Aggregate.kt` says event sourcing and retired event-replay handlers were removed.
 6. Remove every public/framework claim that `catchUpReadSide()` is Projection
    catch-up. Describe it only as a legacy-named local reset/replay helper until
    Wave 16 decides whether it survives under a truthful name.

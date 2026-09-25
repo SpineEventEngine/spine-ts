@@ -4,6 +4,14 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+The approved [handler-result corrections](planning/handler-result-corrections.md)
+extend D-0127. They supersede older decisions permitting void reactors or
+retaining event-replay handler compatibility. Only subscriptions declare void;
+Event/rejection reactions may declare undefined, alone or in a concrete signal
+union. Required results are checked before Entity commit. No compatibility
+implementation of the retired handler remains. Older entries below are
+historical decisions, not permission to restore removed behavior.
+
 ## D-0127: Use Spine Version and native handler return types
 
 Status: Accepted; implementation in progress.
@@ -310,7 +318,7 @@ explicit public arity of one or two parameters, and emitted schemas inferred
 from explicit return types. `@Assign` emits non-empty generated event schemas,
 `@Command` emits non-empty generated command schemas, `@React` emits generated
 event schemas or nothing, and `@Subscribe` emits none because it must return
-explicit `void`. New generated registry records do not include `@Apply`.
+explicit `void`. New generated registry records do not include retired event-replay handlers.
 
 Generated registry modules are ignored build artifacts under `generated/`
 output directories and must not be committed. T-0015a deliberately does not
@@ -1449,7 +1457,7 @@ during metadata declaration.
 
 Decision: Implement decorator support as syntax over the explicit handler
 metadata contract. Public `@Assign`, `@Command`, `@Subscribe`, `@React`, and
-`@Apply` method decorators must require explicit Protobuf-ES schemas, collect
+retired event-replay handlers method decorators must require explicit Protobuf-ES schemas, collect
 class-owned deterministic metadata, and expose a materialization function that
 returns the same `EntityHandlersMetadata` shape accepted by
 `HandlerMetadataRegistry`. The explicit `defineEntityHandlers()` API remains the
@@ -1801,7 +1809,7 @@ server-module work.
 
 Decision: T-0010.5 adds only a metadata/readiness surface that reports
 registered event message types and fan-out handler metadata for event
-subscriptions and event reactions, plus event-application metadata grouped by
+subscriptions and event reactions, plus retired event-replay metadata grouped by
 event type. It must reuse `HandlerMetadataRegistry` for event-application
 uniqueness and must not reject duplicate subscribers or reactors. Because the
 current TS handler metadata does not yet model external event interests,
@@ -2018,7 +2026,7 @@ Decision:
 - End-user application code must not discover or materialize decorated handler
   metadata. Handler discovery/materialization belongs to the framework and
   generated registry tooling.
-- Aggregates must not use `@Apply`; aggregate state changes happen in
+- Aggregates must not use retired event-replay handlers; aggregate state changes happen in
   framework-owned transactions for non-event-sourced aggregates.
 - End-user application code must not call entity transaction-control methods such
   as `startTransaction()` or `commitTransaction()`.
@@ -2045,7 +2053,7 @@ Consequences:
   leak schema arguments into ordinary app handlers.
 - Automated checks should be added where practical to reject envelope returns,
   `packEvent()`/`packCommand()` in ordinary handlers, schema-bearing
-  decorators, aggregate `@Apply` handlers, transaction-control calls, direct
+  decorators, aggregate retired event-replay handlers, transaction-control calls, direct
   internal event ID construction, missing `void` subscriber returns, and
   default-route ID extraction in examples, plus handler materialization helpers
   in end-user app code.
@@ -2616,9 +2624,9 @@ Context: Upstream Spine JVM ADR 0001 is accepted and D1 was revised on
 2026-07-05 to drop event import. It removes `@Import`, `ImportBus`, import
 endpoints/routing, and related test API, while retaining
 `InboxLabel.IMPORT_EVENT` only as deprecated wire compatibility surface. D2
-makes aggregate and aggregate-part `@Apply` a model-building error retained
+makes aggregate and aggregate-part retired event-replay handlers a model-building error retained
 only for detection. Local JVM notes still document the old path as
-`ImportBus` routing to aggregate `@Apply(allowImport = true)` appliers and an
+`ImportBus` routing to aggregate retired event-replay handlers and an
 aggregate `IMPORT_EVENT` inbox endpoint, confirming the import path is tied to
 the event-sourced aggregate applier model.
 
@@ -2639,7 +2647,7 @@ Alternatives considered:
 
 - Treat aggregate importers as future runtime work. Rejected because upstream
   ADR 0001 D1 removes event import and the old JVM import path depends on
-  aggregate `@Apply` appliers.
+  aggregate retired event-replay handlers.
 - Remove `IMPORT_EVENT` compatibility surfaces now. Rejected because the
   upstream ADR retains the label for wire compatibility, and TS compatibility
   behavior needs its own delivery-label contract task.
@@ -2684,7 +2692,7 @@ Decision:
 - Keep `CATCH_UP` out of worker execution unless the existing code already has
   a supported endpoint; do not invent projection catch-up semantics here.
 - Keep end-user code free of framework envelopes, manual transactions,
-  `@Apply`, schema-bearing decorators, and materialization helpers.
+  retired event-replay handlers, schema-bearing decorators, and materialization helpers.
 
 Alternatives considered:
 
@@ -2826,7 +2834,7 @@ Decision:
 - Use the continuation only for durable inbox pending-row scans in
   `Delivery`/`DeliveryLoop`.
 - Keep production database adapters, broad query optimization, retry policy,
-  durable catch-up storage, import work, and aggregate `@Apply` delivery out of
+  durable catch-up storage, import work, and aggregate retired event-replay handlers delivery out of
   scope.
 
 Alternatives considered:

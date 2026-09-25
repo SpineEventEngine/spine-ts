@@ -1,6 +1,8 @@
 # Entity and signal-handler declarations
 
-Status: original implementation, three independent review/fix rounds, full
+Status: additional human-requested [handler-result corrections](handler-result-corrections.md)
+are in progress. The following completion statement describes the earlier slice:
+original implementation, three independent review/fix rounds, full
 release verification, and package archive checks complete. The human opened
 draft PR #10. Documentation and runnable-example follow-up, its independent
 review corrections, and local verification are complete. Required CI on the

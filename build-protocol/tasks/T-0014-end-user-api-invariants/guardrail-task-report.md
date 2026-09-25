@@ -379,7 +379,7 @@ latest changes:
   wrapped command objects in target-validation helpers.
 - Made conflicting import-equals aliases terminate deterministically.
 - The to-do example no longer uses framework `Event` returns, schema-bearing
-  decorators, aggregate `@Apply`, transaction-control calls, internal event ID
+  decorators, aggregate retired event-replay handlers, transaction-control calls, internal event ID
   construction, default-route ID validation helpers, or local handler
   materialization.
 - Framework repository execution now owns aggregate/projection transactions for

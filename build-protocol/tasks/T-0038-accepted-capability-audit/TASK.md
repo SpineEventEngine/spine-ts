@@ -36,7 +36,7 @@ security-owned gap, or mandatory framework defect.
 - Preserve accepted DDD, Protobuf, type-URL, public API, generated-output,
   end-user API, review, logging, worktree, and verification requirements.
 - Do not add or expose framework lifecycle internals, `Event` envelopes,
-  manual transactions, `@Apply`, schema-bearing decorators, or app-owned
+  manual transactions, retired event-replay handlers, schema-bearing decorators, or app-owned
   handler materialization in end-user examples or guide snippets.
 - Keep generated Protobuf and handler-registry outputs out of VCS.
 - Use focused inner checks; reserve full `pnpm verify` for final task acceptance

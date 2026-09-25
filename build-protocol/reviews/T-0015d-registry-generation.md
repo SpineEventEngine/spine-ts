@@ -21,7 +21,7 @@ Required review lanes:
 
 - Generated registry source is framework-owned build-time output.
 - End-user apps must not supply `...Schema` decorators or materialize handlers.
-- Generated registry records exclude `@Apply`.
+- Generated registry records exclude retired event-replay handlers.
 - Generated output lives under package `generated` directories and is ignored by
   Git.
 - No runtime discovery, to-do migration, or handler invocation in T-0015d.

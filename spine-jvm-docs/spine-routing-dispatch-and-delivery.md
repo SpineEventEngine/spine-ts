@@ -2,7 +2,10 @@
 
 Navigation: [README](README.md) | Previous: [Entities, repositories, and state](spine-entities-repositories-and-state.md) | Next: [Client APIs, queries, subscriptions, and tests](spine-client-api-queries-subscriptions-and-tests.md) | Related: [Server runtime and bounded context](spine-server-runtime-and-bounded-context.md)
 
-Source baseline: `/private/tmp/spine-research/core-jvm` 2.0.0-SNAPSHOT.381, with runtime/support repos consulted where relevant. This document describes behavior to preserve in a TypeScript/Node.js implementation. It is not a Java API guide.
+Historical research only. Source baseline: Spine JVM 2.0.0-SNAPSHOT.381.
+The import and event-replay sections below do not describe current Spine TS
+support. Use the latest official JVM source and the current
+[TypeScript API requirements](../build-protocol/DEVELOPER_API.md) for new work.
 
 ## Scope
 
@@ -110,7 +113,7 @@ TypeScript implication: event dispatcher lookup must include both message type a
 
 ### ImportBus
 
-`ImportBus` is a unicast bus for aggregate event import. It dispatches domestic events to aggregate repositories that declare the event importable via `@Apply(allowImport = true)`. External events cannot be imported by this path.
+`ImportBus` is a unicast bus for aggregate event import. It dispatches domestic events to aggregate repositories that declare the event importable via retired event-replay handlers. External events cannot be imported by this path.
 
 Sources:
 
@@ -180,7 +183,7 @@ It may return event, optional event, iterable, tuple, either, or `NoReaction`. `
 
 Source: `server/src/main/java/io/spine/server/event/React.java`.
 
-### `@Apply`
+### Retired event-replay handlers
 
 An event applier mutates aggregate state from an event. It is private, void, and accepts one event message. `allowImport = true` marks the event type as importable through `ImportBus`.
 
@@ -257,7 +260,7 @@ Repositories do not normally call entity handlers immediately. They route and wr
 
 - `HANDLE_COMMAND` endpoint for `@Assign`/`@Command` command handling;
 - `REACT_UPON_EVENT` endpoint for `@React`/event-commanding reactions;
-- `IMPORT_EVENT` endpoint for `@Apply(allowImport = true)`.
+- `IMPORT_EVENT` endpoint for retired event-replay handlers.
 
 Dispatch behavior:
 

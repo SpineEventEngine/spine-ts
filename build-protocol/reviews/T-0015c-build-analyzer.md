@@ -21,7 +21,7 @@ Required review lanes:
 
 - Generated registry analysis is framework-owned build-time work.
 - End-user apps must not supply `...Schema` decorators or materialize handlers.
-- Analyzer rejects generated `@Apply` records.
+- Analyzer rejects generated retired event-replay handlers records.
 - Analyzer feeds the existing T-0015b generated registry contract rather than a
   parallel runtime registry.
 - No package generator, runtime discovery, to-do migration, or handler

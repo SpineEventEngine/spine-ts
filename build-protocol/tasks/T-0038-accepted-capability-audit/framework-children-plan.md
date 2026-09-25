@@ -539,6 +539,6 @@ sandbox denies IPC/listen permissions.
 - No new Protobuf messages, generated output in VCS, public internals, raw
   delivery callbacks, handler materialization in application code, framework
   envelopes in ordinary handlers, manual transactions, schema-bearing
-  decorators, aggregate `@Apply`, or example edits.
+  decorators, aggregate retired event-replay handlers, or example edits.
 - No duplicate `Server`, `ServerEnvironment`, `RunningServer`, runtime binding,
   or delivery lifecycle abstraction.

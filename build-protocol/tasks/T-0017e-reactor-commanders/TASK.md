@@ -44,14 +44,14 @@ messages while the framework wraps produced messages internally.
 - Preserve generated registry contracts and framework-owned handler
   materialization.
 - Keep end-user code free of framework `Event` envelopes, manual transactions,
-  schema-bearing decorators, `@Apply`, and application-owned handler
+  schema-bearing decorators, retired event-replay handlers, and application-owned handler
   materialization.
 - Command handlers that emit events must return at least one domain event
   message, either singular or array/readonly array.
 - `@Command` and `@React` handlers that emit commands or events require
   explicit first-parameter and return types so generated registry tooling can
   map messages to schemas.
-- `@Subscribe` handlers must return `void`; `@Apply` is not supported.
+- `@Subscribe` handlers must return `void`; retired event-replay handlers is not supported.
 - Server-module implementation requires close inspection of local Spine JVM
   docs and corresponding `core-jvm/server` sources before design or code
   changes.

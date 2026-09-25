@@ -39,7 +39,7 @@ preserving the existing convenient local `Server` API.
 - New storage adapters or production persistence implementations.
 - Public exposure of raw internal system contexts.
 - Any end-user requirement to use framework `Event` envelopes, manual
-  transactions, schema-bearing decorators, `@Apply`, or application-owned
+  transactions, schema-bearing decorators, retired event-replay handlers, or application-owned
   handler materialization.
 
 ## Human-Imposed Requirements Ledger

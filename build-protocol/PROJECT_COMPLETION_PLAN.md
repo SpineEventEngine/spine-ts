@@ -550,7 +550,7 @@ Do not create tasks for these unless a new human decision changes scope:
 - production transport topology or adapter policy;
 - projection `CATCH_UP` delivery through the inbox worker;
 - legacy `IMPORT_EVENT` support;
-- aggregate import/importers, `ImportBus`, or aggregate `@Apply` delivery;
+- aggregate import/importers, `ImportBus`, or aggregate retired event-replay handlers delivery;
 - JVM source-level compatibility;
 - production persistence, authentication, deployment, tracing, or health checks
   in the to-do example.
@@ -1161,7 +1161,7 @@ build and run a server application without reading internal source.
     complete-replica deployment boundaries, and supported limitations.
 
 **Prohibitions:** no framework envelopes in ordinary handlers, no schema-bearing
-decorators, no `@Apply`, no manual transactions, no internal IDs, no default
+decorators, no retired event-replay handlers, no manual transactions, no internal IDs, no default
 target extraction, no handler materialization, no internal lifecycle APIs.
 
 **Gate:** compile or test all practical snippets, end-user API scan, docs check,
@@ -1230,7 +1230,7 @@ public behavior after the final environment lifecycle lands.
   fixtures that are not presented as application code.
 
 **Static audit:** reject framework envelopes, `packCommand`/`packEvent` in
-handlers, schema-bearing decorators, aggregate `@Apply`, transaction controls,
+handlers, schema-bearing decorators, aggregate retired event-replay handlers, transaction controls,
 `EventIdSchema`, default-route extraction helpers, and handler materializers.
 
 **Gate:** example build and focused suite, native loopback and managed-process

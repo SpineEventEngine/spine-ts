@@ -21,7 +21,7 @@ Required review lanes:
 
 - Generated registry discovery is framework-owned.
 - End-user apps must not materialize decorated handlers themselves.
-- No schema-bearing decorators, `@Apply`, app-owned transactions, or framework
+- No schema-bearing decorators, retired event-replay handlers, app-owned transactions, or framework
   envelopes in ordinary handler code.
 - T-0015e must not implement to-do example migration or two-argument handler
   invocation changes.
@@ -67,7 +67,7 @@ Required review lanes:
   - Performance/reliability findings: snapshot `options.modules` before async
     imports and reject duplicate normalized module refs deterministically.
   - JVM alignment/ADR 0001 findings: same unsupported-version issue; otherwise
-    no new `@Apply`, event-sourcing, end-user envelope, broad scanning, global
+    no new retired event-replay handlers, event-sourcing, end-user envelope, broad scanning, global
     registration, or invented server concept concerns.
 - `2026-07-07 23:25 WEST` — Codex implementation sub-agent — Applied round-1
   fixes.

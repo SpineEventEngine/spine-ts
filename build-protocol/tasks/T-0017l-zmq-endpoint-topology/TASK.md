@@ -35,7 +35,7 @@ framework APIs.
 - Command-log repositories, tracing backends, full system event taxonomy, or
   new storage adapters.
 - Any end-user requirement to use framework `Event` envelopes, manual
-  transactions, schema-bearing decorators, `@Apply`, or application-owned
+  transactions, schema-bearing decorators, retired event-replay handlers, or application-owned
   handler materialization.
 
 ## Human-Imposed Requirements Ledger

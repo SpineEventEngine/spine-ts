@@ -171,11 +171,11 @@ packages/server/test/index.test.ts`: passed (`3` files, `130` tests).
 - Documentation completeness:
   - `packages/server/README.md` must restate near the `SignalMetadata` section
     that handlers still return generated domain messages, end-user code must
-    not use framework `Event` envelopes, `@Apply` remains absent, and the seam
+    not use framework `Event` envelopes, retired event-replay handlers remains absent, and the seam
     does not introduce manual transaction control.
   - `docs/api/README.md` must mirror that `SignalMetadata` keeps the metadata
     seam small and does not broaden public APIs into framework envelopes,
-    `@Apply`, or manual transaction APIs.
+    retired event-replay handlers, or manual transaction APIs.
 - TypeScript/API docs:
   - `SignalIds.event()` / `SignalMetadata.eventId()` must reject empty event ID
     values immediately.
@@ -211,7 +211,7 @@ packages/server/test/index.test.ts`: passed (`3` files, `130` tests).
 - Tighten repository command-ID validation to reject blank/trim-empty UUIDs
   before durable writes or handler-driven state changes.
 - Refresh the README/API wording so the metadata seam explicitly preserves the
-  generated-domain-message boundary, keeps `@Apply` absent, and does not add
+  generated-domain-message boundary, keeps retired event-replay handlers absent, and does not add
   manual transaction control.
 
 ## Round 2 Evidence
@@ -231,7 +231,7 @@ packages/server/test/index.test.ts`: passed (`3` files, `130` tests).
   process-manager tests cover bus dispatch and process-manager inbox replay.
 - The `SignalMetadata` README/API summaries now restate that handlers still
   return generated domain messages, end-user code must not use framework
-  envelopes, `@Apply` remains absent, and the seam does not add manual
+  envelopes, retired event-replay handlers remains absent, and the seam does not add manual
   transaction-control APIs.
 
 ## Round 2 Verification
@@ -256,7 +256,7 @@ packages/server/test/repository/repository-routing.test.ts`: passed (`2`
   - Reviewer `019f4772-1912-7951-8406-e9527e449196` flagged that the
     `docs/architecture/README.md` `SignalMetadata` paragraph still needs to
     restate the public handler/API boundary explicitly: end-user handlers do
-    not accept framework `Event` envelopes, `@Apply` remains absent, and the
+    not accept framework `Event` envelopes, retired event-replay handlers remains absent, and the
     seam does not add manual transaction controls.
 - TypeScript/API docs:
   - Reviewer `019f4772-38fc-73d2-a992-6e14261f17c7` reported no additional
@@ -319,7 +319,7 @@ packages/server/test/repository/repository-routing.test.ts`: passed (`2`
 - `docs/architecture/README.md` now states the same README/API boundary
   guarantees:
   end-user handlers still accept generated domain messages, not framework
-  `Event` envelopes; `@Apply` remains absent; and the seam does not introduce
+  `Event` envelopes; retired event-replay handlers remains absent; and the seam does not introduce
   manual transaction controls.
 
 ## Round 3 Verification
@@ -410,7 +410,7 @@ packages/server/test/repository/repository-routing.test.ts`: passed (`2`
 - Confirm deterministic test seams do not introduce process-wide mutable
   global state.
 - Confirm end-user handler APIs still avoid framework `Event` envelopes,
-  `@Apply`, and manual transactions.
+  retired event-replay handlers, and manual transactions.
 - Confirm produced metadata follows the selected policy and preserves tenant
   and origin behavior.
 - Confirm docs and durable logs match the actual implementation and

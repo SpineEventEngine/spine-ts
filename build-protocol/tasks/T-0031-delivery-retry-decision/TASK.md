@@ -30,8 +30,8 @@ make bounded per-message retry decisions without global retained-attempt scans.
 - Preserve Spine Protobuf contracts, type URLs, options, and modeling
   conventions.
 - Keep end-user code free of framework `Event` envelopes, manual transactions,
-  `@Apply`, schema-bearing decorators, and app-owned handler materialization.
-- Aggregate import/importers, `ImportBus`, and aggregate `@Apply` delivery are
+  retired event-replay handlers, schema-bearing decorators, and app-owned handler materialization.
+- Aggregate import/importers, `ImportBus`, and aggregate retired event-replay handlers delivery are
   removed from the active roadmap.
 - `IMPORT_EVENT` is not a supported public delivery label for new inbox writes;
   legacy stored rows are deprecated compatibility data that fail closed.

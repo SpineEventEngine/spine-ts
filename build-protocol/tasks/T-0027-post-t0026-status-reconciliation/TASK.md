@@ -30,8 +30,8 @@ runtime behavior.
 - Preserve Spine Protobuf contracts, type URLs, options, and modeling
   conventions.
 - Keep end-user code free of framework `Event` envelopes, manual transactions,
-  `@Apply`, schema-bearing decorators, and app-owned handler materialization.
-- Aggregate import/importers, `ImportBus`, and aggregate `@Apply` delivery are
+  retired event-replay handlers, schema-bearing decorators, and app-owned handler materialization.
+- Aggregate import/importers, `ImportBus`, and aggregate retired event-replay handlers delivery are
   removed from the active roadmap.
 - `IMPORT_EVENT` is not a supported public delivery label for new inbox writes;
   legacy stored rows are deprecated compatibility data that fail closed.
@@ -87,7 +87,7 @@ for this task.
 - Retry monitors, retained delivery attempts, and production retry policy.
 - ZeroMQ endpoint topology and broker supervision.
 - Catch-up semantics beyond existing `BoundedContext.catchUpReadSide()`.
-- `ImportBus`, aggregate importers, aggregate `@Apply`, or event import.
+- `ImportBus`, aggregate importers, aggregate retired event-replay handlers, or event import.
 - Generated API reference hand edits.
 
 ## Likely Files
@@ -151,7 +151,7 @@ If delivery-parity wording must change, inspect:
 - `IMPORT_EVENT` remains unsupported for new writes and legacy stored rows fail
   closed.
 - Active roadmap language does not resurrect aggregate import/importers,
-  `ImportBus`, or aggregate `@Apply` delivery.
+  `ImportBus`, or aggregate retired event-replay handlers delivery.
 - No source, test, generated output, or `human-review-1-jul.md` changes.
 
 ## Verification Plan
@@ -159,7 +159,7 @@ If delivery-parity wording must change, inspect:
 - Targeted `rg` checks for stale phrases:
   - supported delivery workers wholly missing;
   - overbroad transport-backed worker gaps;
-  - `aggregate import`, `ImportBus`, and aggregate `@Apply` active-roadmap
+  - `aggregate import`, `ImportBus`, and aggregate retired event-replay handlers active-roadmap
     regressions.
 - `pnpm --config.verify-deps-before-run=false docs:check`.
 - `pnpm --config.verify-deps-before-run=false format:check`.
@@ -184,7 +184,7 @@ If delivery-parity wording must change, inspect:
 
 - `rg -n "supported delivery workers|worker execution missing|supported catch-up work|process-wide transport-backed delivery workers|production transport-backed worker execution|wholly missing" docs/architecture/README.md docs/USER_GUIDE.md packages/server/README.md build-protocol/RUNTIME_ARCHITECTURE.md build-protocol/DEVELOPER_API.md`
   exited `1` with no matches.
-- `rg -n "ImportBus.*pending runtime work|aggregate importers? .*future runtime work|aggregate @Apply.*active|@Apply delivery.*active roadmap|aggregate import/importers.*active roadmap" docs/architecture/README.md docs/USER_GUIDE.md packages/server/README.md build-protocol/RUNTIME_ARCHITECTURE.md build-protocol/DEVELOPER_API.md`
+- `rg -n "ImportBus.*pending runtime work|aggregate importers? .*future runtime work|aggregate retired event-replay handler.*active|retired event-replay handler delivery.*active roadmap|aggregate import/importers.*active roadmap" docs/architecture/README.md docs/USER_GUIDE.md packages/server/README.md build-protocol/RUNTIME_ARCHITECTURE.md build-protocol/DEVELOPER_API.md`
   exited `1` with no matches.
 - `rg -n 'CATCH_UP.*(remain|stays) pending|IMPORT_EVENT.*(rejected|fail closed|unsupported|corruption)' docs/architecture/README.md docs/USER_GUIDE.md packages/server/README.md build-protocol/RUNTIME_ARCHITECTURE.md build-protocol/DEVELOPER_API.md`
   exited `0` with expected confirming matches.
@@ -233,7 +233,7 @@ style/maintainability, documentation, TypeScript/API docs, security, and
 performance/reliability lanes. Reviewers confirmed the Round 1 wording fix,
 docs/status-only scope, local worker/loop boundary, production gap wording,
 `CATCH_UP` pending/skipped contract, `IMPORT_EVENT` rejected/fail-closed
-contract, and no active import/`@Apply` roadmap regression. All five Round 2
+contract, and no active import/retired event-replay handlers roadmap regression. All five Round 2
 reviewers were closed.
 
 Final T-0027 verification on `2026-07-11T05:22:44Z`: `docs:check` passed with

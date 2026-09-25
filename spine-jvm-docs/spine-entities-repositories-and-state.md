@@ -2,7 +2,11 @@
 
 Navigation: [README](README.md) | Previous: [Server runtime and bounded context](spine-server-runtime-and-bounded-context.md) | Next: [Routing, dispatch, and delivery](spine-routing-dispatch-and-delivery.md) | Related: [Domain model and signals](spine-domain-model-and-signals.md), [Validation and support](spine-validation-storage-observability-and-support.md)
 
-This document describes the developer-facing entity and repository model in Spine 2.0.x, based on the JVM implementation. It is a functional specification for a future TypeScript/Node.js implementation, not a Java API guide.
+Historical research only. This document describes an older Spine JVM revision;
+its event-sourced Aggregate model is not the current Spine TS contract. Consult
+the latest official JVM source and the current
+[TypeScript API requirements](../build-protocol/DEVELOPER_API.md), not these
+notes, when implementing Entity behavior.
 
 ## Source Map
 
@@ -205,7 +209,7 @@ Sources: `Aggregate.java`; `AggregateRepository.java`.
 
 Aggregate rules:
 
-- State changes happen in `@Apply` event appliers via the transaction builder.
+- State changes happen in retired event-replay handlers via the transaction builder.
 - Command handlers do not mutate state directly; they emit events.
 - Calling `state()` inside an applier is prohibited because the builder contains pending changes.
 - Every produced event type must have an applier.

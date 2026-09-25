@@ -3386,7 +3386,7 @@ profiles; no Spine JVM project command may run.
   performance/reliability, and the immutable `gpt-5.6-luna` / `medium` for
   documentation. Runtime metadata will be recorded before acceptance.
 - Pre-review lint confirms no forbidden end-user envelopes, `packCommand`,
-  `packEvent`, schema-bearing decorators, `@Apply`, manual transactions,
+  `packEvent`, schema-bearing decorators, retired event-replay handlers, manual transactions,
   internal event IDs, default-route ID extraction, or handler materialization
   in the changed Chat application source/docs. Chat ESLint and Prettier pass.
   The repository-wide cleanup script exits nonzero only on already committed

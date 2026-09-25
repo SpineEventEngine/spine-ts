@@ -36,7 +36,7 @@ It only defines the ingestion-side API that later generated modules can call.
 - `@Subscribe` handlers require explicit `void` return types.
 - `handler(signal)` and `handler(signal, context)` must be represented in the
   registry contract for later invocation support.
-- `@Apply` is not supported for new generated registry records.
+- retired event-replay handlers is not supported for new generated registry records.
 - Ordinary end-user handlers return generated domain messages, not framework
   `Command` or `Event` envelopes.
 - Generated output remains ignored and uncommitted.
@@ -53,7 +53,7 @@ T-0015a accepted `D-0059` and documented the logical registry shape:
   public arity `1 | 2`;
 - supported kinds are command assignment, command reaction, event subscription,
   and event reaction;
-- `event-application`/`@Apply` is excluded.
+- retired event-replay metadata/retired event-replay handlers is excluded.
 
 ## Acceptance Criteria
 
@@ -62,7 +62,7 @@ T-0015a accepted `D-0059` and documented the logical registry shape:
 - Provide an ingestion function/class that validates generated registry records
   and returns/folds into existing `EntityHandlersMetadata`.
 - Preserve existing `defineEntityHandlers()` compatibility.
-- Reject unsupported registry versions, `event-application` records, invalid
+- Reject unsupported registry versions, retired event-replay metadata records, invalid
   arity, empty emitted schemas for command assignees/reactors, emitted schemas
   on subscribers, and duplicate/invalid records through existing metadata
   validation where possible. Event reactors may declare zero emitted schemas for

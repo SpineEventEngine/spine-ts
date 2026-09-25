@@ -23,7 +23,7 @@ catch-up honesty, docs/API updates, and verification evidence.
   conveyor/station architecture or invent durable catch-up storage in this
   slice.
 - Reviewers must check that end-user code remains free of framework `Event`
-  envelopes, manual transactions, `@Apply`, schema-bearing decorators, and
+  envelopes, manual transactions, retired event-replay handlers, schema-bearing decorators, and
   application-owned handler materialization.
 - Reviewers must check that native verification is used where local timers,
   IPC, or listener behavior participates.

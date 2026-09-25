@@ -2,7 +2,15 @@
 
 This folder defines the technical specification and autonomous build procedure for a TypeScript/Node.js framework inspired by Spine JVM.
 
-The JVM research corpus lives in `../spine-jvm-docs`. This specification treats that corpus as the behavioral reference while making TypeScript-native design choices where Node.js, Protobuf-ES, decorators, process topology, and IPC require them.
+Spine JVM behavior must be checked against the latest official GitHub source,
+including source documentation and tests. The notes in `../spine-jvm-docs` are
+historical research, not the current behavioral authority. TypeScript-native
+choices must preserve the approved behavior.
+
+Completed task, review, and work logs describe the code at the time they were
+written. They do not override current requirements. The
+[handler-result correction brief](planning/handler-result-corrections.md)
+supersedes older no-output reaction and event-replay handler contracts.
 
 ## Documents
 
@@ -34,8 +42,8 @@ New task logs use the canonical directory-style path `build-protocol/tasks/<task
 
 ## Source Baseline
 
-- Spine JVM reference: `../spine-jvm-docs`.
+- Spine JVM reference: latest official GitHub source, including its Javadocs and tests.
 - Protobuf runtime: Buf `@bufbuild/protobuf` / `@bufbuild/protoc-gen-es` generated TypeScript.
-- Validation runtime: `@spine-event-engine/validation` `2.0.0-snapshot.7`.
+- Validation runtime: the current workspace `@spine-event-engine/validation` package.
 - Decorator baseline: TypeScript 5+ standard decorators. Legacy `experimentalDecorators` semantics and `emitDecoratorMetadata` must not be assumed unless explicitly isolated behind a compatibility adapter.
 - Local integration baseline: process-local typed message channels owned by the environment.

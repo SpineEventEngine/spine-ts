@@ -36,9 +36,9 @@ separate later work.
 - Process signals asynchronously.
 - Hide ZeroMQ/local IPC details behind transport abstractions.
 - Keep end-user code free of framework `Event` envelopes, manual transactions,
-  `@Apply`, schema-bearing decorators, and application-owned handler
+  retired event-replay handlers, schema-bearing decorators, and application-owned handler
   materialization.
-- Aggregate import/importers, `ImportBus`, and aggregate `@Apply` delivery are
+- Aggregate import/importers, `ImportBus`, and aggregate retired event-replay handlers delivery are
   removed from the active roadmap by D-0075/T-0024.
 - `IMPORT_EVENT` is not a supported public delivery label for new inbox writes;
   legacy stored rows are deprecated compatibility data that fail closed.
@@ -166,7 +166,7 @@ Out of scope:
 - Production storage adapters.
 - Retry monitors, retained attempt-history storage, conveyor/station hierarchy,
   or production retry policy.
-- Event import, `ImportBus`, aggregate importers, aggregate `@Apply`, or new
+- Event import, `ImportBus`, aggregate importers, aggregate retired event-replay handlers, or new
   `IMPORT_EVENT` writes.
 - New end-user APIs or framework-internal envelopes in application code.
 
@@ -227,7 +227,7 @@ Design constraints from inspection:
   finalization, but it cannot uninvoke a callback that already ran.
 - Local immediate handoff behavior remains compatible.
 - No application code sees framework `Event` envelopes, manual transactions,
-  `@Apply`, schema-bearing decorators, or materialization helpers.
+  retired event-replay handlers, schema-bearing decorators, or materialization helpers.
 - Docs distinguish this worker slice from full production worker supervision
   and retry-monitor policy.
 

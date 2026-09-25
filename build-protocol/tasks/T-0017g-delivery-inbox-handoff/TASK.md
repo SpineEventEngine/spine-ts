@@ -35,7 +35,7 @@ runtime behavior that is not yet handed to delivery.
 - New public end-user handler APIs.
 - Application-owned handler materialization, schema-bearing decorators,
   framework envelopes in end-user code, manual end-user transactions, or
-  `@Apply`.
+  retired event-replay handlers.
 
 ## Human-Imposed Requirements Ledger
 
@@ -56,7 +56,7 @@ runtime behavior that is not yet handed to delivery.
   changes.
 - Prefer simpler JVM-familiar behavior over new abstractions.
 - End-user code must not use framework `Event` envelopes, manual transactions,
-  schema-bearing decorators, `@Apply`, default-route target-ID extraction, or
+  schema-bearing decorators, retired event-replay handlers, default-route target-ID extraction, or
   application-owned handler materialization.
 - Commands handled through the default command route must be rejected by the
   default route before handler invocation when the first-field target ID is
