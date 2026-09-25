@@ -1972,9 +1972,8 @@ class AggregateCommandExecution {
     } catch (error) {
       return this.#postAssigneeRejection(intake, error);
     }
-    const events = this.#requiredEvents(
-      produced,
-      intake.assignee.handler,
+    const events = this.#bindProducedEvents(
+      this.#support.normalizeProducedSignals(produced),
       intake.route.entityId,
       RepositoryEntities.priorVersion(loaded.current),
     );
@@ -2013,32 +2012,6 @@ class AggregateCommandExecution {
    */
   #publishCommandDispatch(entityId: unknown): void {
     HandlerDispatchPublisher.command(this.#runtime, this.#repository, this.#command, entityId);
-  }
-
-  /**
-   * Binds the assignee result to Events and rejects an empty result.
-   *
-   * @param produced Raw assignee result.
-   * @param handler Assignee declaration associated with the result.
-   * @param entityId Target Aggregate identifier.
-   * @param version Producer version before Command handling.
-   * @returns At least one bound Event.
-   */
-  #requiredEvents(
-    produced: unknown,
-    handler: RepositoryCommandAssignee["handler"],
-    entityId: unknown,
-    version: Version,
-  ): readonly Event[] {
-    const events = this.#bindProducedEvents(
-      this.#support.normalizeProducedSignals(produced),
-      entityId,
-      version,
-      true,
-    );
-    if (events.length === 0)
-      throw new Error("Repository aggregate command handlers must return at least one event.");
-    return events;
   }
 
   /**
@@ -2130,46 +2103,33 @@ class AggregateCommandExecution {
    * @param produced Handler results to bind.
    * @param entityId Target Aggregate identifier.
    * @param lastVersion Producer version before this dispatch.
-   * @param allowEnvelopes Whether existing Event envelopes are accepted.
    * @returns Frozen bound Event list.
    */
   #bindProducedEvents(
     produced: readonly unknown[],
     entityId: unknown,
     lastVersion: Version,
-    allowEnvelopes: boolean,
   ): readonly Event[] {
     const dispatchVersion = lastVersion;
 
     return Object.freeze(
-      produced.map((signal) =>
-        this.#bindProducedEvent(signal, entityId, dispatchVersion, allowEnvelopes),
-      ),
+      produced.map((signal) => this.#bindProducedEvent(signal, entityId, dispatchVersion)),
     );
   }
 
   /**
-   * Packs a domain Event or copies an allowed envelope with producer context.
+   * Packs a domain Event with producer context.
    *
    * @param signal One handler result.
    * @param entityId Target Aggregate identifier.
    * @param version Producer version before dispatch.
-   * @param allowEnvelopes Whether a supplied Event envelope may pass through.
    * @returns Event bound to this Aggregate.
    */
-  #bindProducedEvent(
-    signal: unknown,
-    entityId: unknown,
-    version: Version,
-    allowEnvelopes: boolean,
-  ): Event {
+  #bindProducedEvent(signal: unknown, entityId: unknown, version: Version): Event {
     const metadata = this.#runtime.signalMetadata.eventFromCommand(this.#command, {
       version: version.number,
     });
-    const bound =
-      allowEnvelopes && EntityInvocation.isEventEnvelope(signal)
-        ? clone(EventSchema, signal)
-        : this.#packDomainEvent(signal, metadata);
+    const bound = this.#packDomainEvent(signal, metadata);
     bound.context = RepositorySignals.eventContextWithProducer(
       metadata.context,
       this.#repository,
@@ -4513,20 +4473,6 @@ Object.freeze(RepositoryIdentity);
  */
 const EntityInvocation = {
   /**
-   * Checks whether a handler result is an Event envelope.
-   *
-   * @param signal Handler result to inspect.
-   * @returns Whether it carries the generated Event type name.
-   */
-  isEventEnvelope(signal: unknown): signal is Event {
-    return (
-      typeof signal === "object" &&
-      signal !== null &&
-      (signal as { readonly $typeName?: unknown }).$typeName === EventSchema.typeName
-    );
-  },
-
-  /**
    * Reads a generated message's type name or rejects malformed output.
    *
    * @param message Handler result to inspect.
@@ -5890,19 +5836,10 @@ const RepositoryHandlers = {
    *
    * @param handler Invoked handler declaration.
    * @param signals Returned domain messages to validate.
-   * @param allowEnvelopes Whether Event envelopes may pass through.
    */
-  requireDeclaredOutputs(
-    handler: HandlerMetadata,
-    signals: readonly unknown[],
-    allowEnvelopes = false,
-  ): void {
+  requireDeclaredOutputs(handler: HandlerMetadata, signals: readonly unknown[]): void {
     const schemas = HandlerMetadataValues.returnedSchemas(handler);
     for (const signal of signals) {
-      if (allowEnvelopes && EntityInvocation.isEventEnvelope(signal)) {
-        RepositoryHandlers.requireDeclaredEnvelope(handler, signal, schemas);
-        continue;
-      }
       const typeName = EntityInvocation.messageTypeName(signal);
       if (!schemas.some((schema) => schema.typeName === typeName)) {
         throw new Error(
@@ -5910,32 +5847,6 @@ const RepositoryHandlers = {
         );
       }
     }
-  },
-
-  /**
-   * Validates a returned Event envelope against the invoked handler's declared schemas.
-   *
-   * @param handler Invoked handler declaration.
-   * @param event Returned Event envelope.
-   * @param schemas Event schemas declared by this handler.
-   */
-  requireDeclaredEnvelope(
-    handler: HandlerMetadata,
-    event: Event,
-    schemas: readonly MessageSchema[],
-  ): void {
-    const packed = EntityInvocation.requireSignalMessage(event.message, "event");
-    const schema = schemas.find((candidate) => TypeUrls.derive(candidate) === packed.typeUrl);
-    if (schema === undefined) {
-      throw new Error(
-        `Handler "${handler.methodName}" returned undeclared message "${packed.typeUrl}".`,
-      );
-    }
-    const payload = AnyMessages.unpack(packed, schema);
-    if (payload === undefined) {
-      throw new Error(`Handler "${handler.methodName}" returned invalid event payload.`);
-    }
-    Validate.check(schema, payload);
   },
 
   /**
@@ -6289,7 +6200,6 @@ const RepositoryRoutes = {
         ...handler.commandReactions.map((reaction) => reaction.schema),
         ...handler.eventSubscriptions.map((subscription) => subscription.schema),
         ...handler.eventReactions.map((reaction) => reaction.schema),
-        ...handler.eventApplications.map((application) => application.schema),
       ]),
     );
     const state = RepositoryHandlers.uniqueSchemas(
@@ -6789,8 +6699,7 @@ const RepositoryRoutes = {
     return (
       (reactions.get(typeName)?.length ?? 0) > 0 ||
       (readiness?.findEventSubscribers(typeName).length ?? 0) > 0 ||
-      (readiness?.findEventReactors(typeName).length ?? 0) > 0 ||
-      (readiness?.findEventApplications(typeName).length ?? 0) > 0
+      (readiness?.findEventReactors(typeName).length ?? 0) > 0
     );
   },
 

@@ -580,7 +580,6 @@ const expectedTestingExports = [
 ];
 const expectedServerExports = [
   "Aggregate",
-  "Apply",
   "AbstractAssignee",
   "AbstractCommander",
   "AbstractEventReactor",
@@ -780,9 +779,6 @@ const expectedServerExports = [
   "EntityKind",
   "EntityMetadata",
   "EntityVisibility",
-  "EventApplicationHandlerMetadata",
-  "EventApplicationOptions",
-  "EventRegistrationApplicationMetadata",
   "EventRegistrationReadiness",
   "EventRegistrationReadinessLookup",
   "EventRegistrationReactorMetadata",

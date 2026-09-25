@@ -17,7 +17,6 @@ import {
   EntityHandlers,
   type EntityClass,
   type EntityHandlersMetadata,
-  type EventApplicationOptions,
   type HandlerKind,
   type HandlerMethodName,
   type HandlerMetadata,
@@ -33,7 +32,6 @@ interface DecoratedHandlerRecord {
   readonly kind: DecoratedHandlerKind;
   readonly schema?: DescriptorMessageSchema;
   readonly methodName: string;
-  readonly allowImport?: boolean;
 }
 
 interface HandlerDecoratorContext {
@@ -336,26 +334,6 @@ export function Where(options: WhereOptions): HandlerMethodDecorator {
 }
 
 /**
- * Creates legacy framework event-application metadata.
- *
- * New application aggregates must not use `@Apply`; managed aggregates are no
- * longer event-sourced and the framework manages state transactions. This
- * decorator is kept only for compatibility code that still needs explicit
- * schema-bearing event application metadata. The optional `allowImport` flag
- * is preserved only as part of that legacy metadata shape.
- *
- * @param schema Event schema accepted by the decorated method.
- * @param options Legacy event-application metadata options.
- * @returns Decorator that records the application metadata.
- */
-export function Apply(
-  schema: DescriptorMessageSchema,
-  options: EventApplicationOptions = {},
-): HandlerMethodDecorator {
-  return DecoratorMetadata.create("event-application", schema, options);
-}
-
-/**
  * Builds schema-bearing decorator declarations for framework compatibility.
  *
  * The returned object is the same frozen `EntityHandlersMetadata` contract
@@ -420,10 +398,6 @@ const DecoratorMetadata = Object.freeze({
         return builder.subscribe(DecoratorMetadata.schema(handler), methodName);
       case "event-reaction":
         return builder.react(DecoratorMetadata.schema(handler), methodName);
-      case "event-application":
-        return builder.apply(DecoratorMetadata.schema(handler), methodName, {
-          allowImport: handler.allowImport ?? false,
-        });
     }
   },
 
@@ -470,14 +444,9 @@ const DecoratorMetadata = Object.freeze({
    *
    * @param kind Handler role recorded for the method.
    * @param schema Optional schema supplied by internal compatibility tooling.
-   * @param options Import policy for a legacy Event application method.
    * @returns A standard TypeScript method decorator.
    */
-  create(
-    kind: DecoratedHandlerKind,
-    schema?: DescriptorMessageSchema,
-    options: EventApplicationOptions = {},
-  ): HandlerMethodDecorator {
+  create(kind: DecoratedHandlerKind, schema?: DescriptorMessageSchema): HandlerMethodDecorator {
     return (_value, context): void => {
       const methodName = DecoratorMetadata.methodName(context);
 
@@ -485,7 +454,6 @@ const DecoratorMetadata = Object.freeze({
         kind,
         ...(schema === undefined ? {} : { schema }),
         methodName,
-        ...(kind === "event-application" ? { allowImport: options.allowImport ?? false } : {}),
       });
 
       const metadata = DecoratorMetadata.require(context);

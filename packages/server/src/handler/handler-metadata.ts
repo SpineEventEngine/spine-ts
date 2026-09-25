@@ -18,6 +18,7 @@ import { ProcessManager, Projection } from "../entity/entity.js";
 
 /**
  * Entity class value accepted by explicit handler metadata registration.
+ * @typeParam Instance Entity receiver type.
  */
 export interface EntityClass<Instance extends object = object> {
   // prettier-ignore
@@ -40,8 +41,7 @@ export type HandlerKind =
   | "command-reaction"
   | "event-subscription"
   | "state-subscription"
-  | "event-reaction"
-  | "event-application";
+  | "event-reaction";
 
 /**
  * Public handler method arity recorded in canonical metadata.
@@ -60,6 +60,7 @@ export type HandlerOrigin = "domestic" | "external";
  * that return functions or other callable instance properties. Runtime
  * registration therefore applies the narrower public contract: handler names
  * must be own prototype data methods declared with normal class method syntax.
+ * @typeParam Instance Entity receiver type.
  */
 export type HandlerMethodName<Instance extends object> = Extract<
   {
@@ -106,6 +107,9 @@ export class HandlerMetadataError extends Error {
 
 /**
  * Common fields shared by every explicit handler metadata record.
+ * @typeParam Kind Handler role type.
+ * @typeParam MethodName Type parameter for this declaration.
+ * @typeParam Schema Generated message schema type.
  */
 export interface BaseHandlerMetadata<
   Kind extends HandlerKind = HandlerKind,
@@ -174,6 +178,8 @@ export interface WhereOptions {
 
 /**
  * Metadata for a command assignee method.
+ * @typeParam MethodName Type parameter for this declaration.
+ * @typeParam Schema Generated message schema type.
  */
 export type CommandAssignmentHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
@@ -182,6 +188,8 @@ export type CommandAssignmentHandlerMetadata<
 
 /**
  * Metadata for a command-reacting method.
+ * @typeParam MethodName Type parameter for this declaration.
+ * @typeParam Schema Generated message schema type.
  */
 export type CommandReactionHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
@@ -190,6 +198,8 @@ export type CommandReactionHandlerMetadata<
 
 /**
  * Command-input `@Command` metadata that produces Commands after commit.
+ * @typeParam MethodName Type parameter for this declaration.
+ * @typeParam Schema Generated message schema type.
  */
 export type CommandSubstitutionHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
@@ -198,6 +208,8 @@ export type CommandSubstitutionHandlerMetadata<
 
 /**
  * Metadata for an event subscription method.
+ * @typeParam MethodName Type parameter for this declaration.
+ * @typeParam Schema Generated message schema type.
  */
 export type EventSubscriptionHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
@@ -206,6 +218,8 @@ export type EventSubscriptionHandlerMetadata<
 
 /**
  * Metadata for an Entity-state subscription method.
+ * @typeParam MethodName Type parameter for this declaration.
+ * @typeParam Schema Generated message schema type.
  */
 export type StateSubscriptionHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
@@ -214,6 +228,8 @@ export type StateSubscriptionHandlerMetadata<
 
 /**
  * Metadata for an event reactor method.
+ * @typeParam MethodName Type parameter for this declaration.
+ * @typeParam Schema Generated message schema type.
  */
 export type EventReactionHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
@@ -221,34 +237,9 @@ export type EventReactionHandlerMetadata<
 > = BaseHandlerMetadata<"event-reaction", Schema, MethodName>;
 
 /**
- * Options accepted by event applier registration.
- */
-export interface EventApplicationOptions {
-  // prettier-ignore
-
-  /**
-   * Legacy compatibility flag preserved on schema-bearing event appliers.
-   */
-  readonly allowImport?: boolean;
-}
-
-/**
- * Metadata for an event applier method.
- */
-export interface EventApplicationHandlerMetadata<
-  Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
-  MethodName extends string = string,
-> extends BaseHandlerMetadata<"event-application", Schema, MethodName> {
-  // prettier-ignore
-
-  /**
-   * Legacy compatibility flag preserved on schema-bearing event appliers.
-   */
-  readonly allowImport: boolean;
-}
-
-/**
  * Union of all explicit handler metadata records.
+ * @typeParam MethodName Type parameter for this declaration.
+ * @typeParam Schema Generated message schema type.
  */
 export type HandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
@@ -259,14 +250,14 @@ export type HandlerMetadata<
   | CommandReactionHandlerMetadata<Schema, MethodName>
   | EventSubscriptionHandlerMetadata<Schema, MethodName>
   | StateSubscriptionHandlerMetadata<Schema, MethodName>
-  | EventReactionHandlerMetadata<Schema, MethodName>
-  | EventApplicationHandlerMetadata<Schema, MethodName>;
+  | EventReactionHandlerMetadata<Schema, MethodName>;
 
 /**
  * Builder passed to `EntityHandlers.define()` for typed method-name registration.
  *
  * Builder methods accept the compile-time callable-name approximation, then
  * validate that the selected name is an own prototype data method.
+ * @typeParam Instance Entity receiver type.
  */
 export interface HandlerRegistrationBuilder<Instance extends object> {
   // prettier-ignore
@@ -277,6 +268,7 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
    * @param schema Command schema accepted by the method.
    * @param methodName Entity method name.
    * @returns The registered command-assignment metadata.
+   * @typeParam Schema Generated message schema type.
    */
   assign<Schema extends DescriptorMessageSchema>(
     schema: Schema,
@@ -291,6 +283,7 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
    * @param methodName Entity method name.
    * @returns Event-subscription metadata for signals, or state-subscription
    * metadata for descriptor-marked Entity state schemas.
+   * @typeParam Schema Generated message schema type.
    */
   subscribe<Schema extends DescriptorMessageSchema>(
     schema: Schema,
@@ -305,31 +298,19 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
    * @param schema Event schema accepted by the method.
    * @param methodName Entity method name.
    * @returns The registered event-reaction metadata.
+   * @typeParam Schema Generated message schema type.
    */
   react<Schema extends DescriptorMessageSchema>(
     schema: Schema,
     methodName: HandlerMethodName<Instance>,
   ): EventReactionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
-
-  /**
-   * Registers an event applier method.
-   *
-   * @param schema Event schema accepted by the method.
-   * @param methodName Entity method name.
-   * @param options Legacy event-application options.
-   * @returns The registered event-application metadata.
-   */
-  apply<Schema extends DescriptorMessageSchema>(
-    schema: Schema,
-    methodName: HandlerMethodName<Instance>,
-    options?: EventApplicationOptions,
-  ): EventApplicationHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 }
 
 /**
  * Registers generated command substitution metadata during registry ingestion.
  *
  * @internal
+ * @typeParam Instance Entity receiver type.
  */
 export interface GeneratedHandlerRegistrationBuilder<
   Instance extends object,
@@ -342,6 +323,7 @@ export interface GeneratedHandlerRegistrationBuilder<
    * @param schema Generated command input schema.
    * @param methodName Process Manager method selected by generated metadata.
    * @returns Generated command-substitution handler metadata.
+   * @typeParam Schema Generated message schema type.
    */
   substitute<Schema extends DescriptorMessageSchema>(
     schema: Schema,
@@ -354,6 +336,7 @@ export interface GeneratedHandlerRegistrationBuilder<
    * @param schema Generated Event or rejection input schema.
    * @param methodName Process Manager method selected by generated metadata.
    * @returns Generated command-reaction handler metadata.
+   * @typeParam Schema Generated message schema type.
    */
   command<Schema extends DescriptorMessageSchema>(
     schema: Schema,
@@ -363,6 +346,8 @@ export interface GeneratedHandlerRegistrationBuilder<
 
 /**
  * Frozen handler metadata for one explicitly registered entity class.
+ * @typeParam Instance Entity receiver type.
+ * @typeParam StateSchema Generated message schema type.
  */
 export interface EntityHandlersMetadata<
   Instance extends object = object,
@@ -414,18 +399,12 @@ export interface EntityHandlersMetadata<
    * Event reactors in declaration order.
    */
   readonly eventReactions: readonly EventReactionHandlerMetadata[];
-
-  /**
-   * Event appliers in declaration order.
-   */
-  readonly eventApplications: readonly EventApplicationHandlerMetadata[];
 }
 
 /**
  * Error code for handler metadata registry validation failures.
  */
-export type HandlerRegistryErrorCode =
-  "DUPLICATE_COMMAND_ASSIGNMENT" | "DUPLICATE_EVENT_APPLICATION";
+export type HandlerRegistryErrorCode = "DUPLICATE_COMMAND_ASSIGNMENT";
 
 /**
  * Error thrown when a caller-owned handler metadata registry rejects metadata.
@@ -454,6 +433,7 @@ export class HandlerMetadataRegistryError extends Error {
 
 /**
  * A handler metadata record paired with the entity metadata that declared it.
+ * @typeParam Handler Handler metadata type.
  */
 export interface RegisteredHandlerMetadata<Handler extends HandlerMetadata = HandlerMetadata> {
   // prettier-ignore
@@ -512,6 +492,7 @@ export interface HandlerMetadataRegistryLookup {
    *
    * @param kind Handler role.
    * @returns Matching entries in registration and declaration order.
+   * @typeParam Kind Handler role type.
    */
   findHandlersByKind<Kind extends HandlerKind>(
     kind: Kind,
@@ -534,18 +515,6 @@ export interface HandlerMetadataRegistryLookup {
   findCommandAssignment(
     commandTypeName: string,
   ): RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined;
-
-  /**
-   * Finds the unique event applier for a state and event type.
-   *
-   * @param stateTypeName Fully qualified entity state type name.
-   * @param eventTypeName Fully qualified event type name.
-   * @returns The applier when registered.
-   */
-  findEventApplication(
-    stateTypeName: string,
-    eventTypeName: string,
-  ): RegisteredHandlerMetadata<EventApplicationHandlerMetadata> | undefined;
 }
 
 /**
@@ -553,27 +522,30 @@ export interface HandlerMetadataRegistryLookup {
  */
 export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   readonly #entityHandlers: EntityHandlersMetadata[] = [];
+
   readonly #handlerEntries: RegisteredHandlerMetadata[] = [];
+
   readonly #byEntityState = new Map<string, EntityHandlersMetadata[]>();
+
   readonly #byKind = new Map<HandlerKind, RegisteredHandlerMetadata[]>();
+
   readonly #byMessage = new Map<string, RegisteredHandlerMetadata[]>();
+
   readonly #commandAssignments = new Map<
     string,
     RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>
   >();
+
   readonly #commandReceptors = new Map<
     string,
     RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata>
-  >();
-  readonly #eventApplications = new Map<
-    string,
-    RegisteredHandlerMetadata<EventApplicationHandlerMetadata>
   >();
 
   /**
    * Creates a caller-owned registry and optionally registers metadata.
    *
    * @param entityHandlers Entity metadata to register in iteration order.
+   * @typeParam Metadata Type parameter for this declaration.
    */
   constructor(entityHandlers: Iterable<EntityHandlersMetadata> = []) {
     for (const metadata of entityHandlers) {
@@ -584,6 +556,7 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   /**
    * Registers one entity handler metadata object.
    *
+   * @typeParam Metadata Concrete Entity handler metadata type.
    * @param metadata Entity handler metadata to register.
    * @returns The registered metadata unchanged.
    */
@@ -594,10 +567,6 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
       RegisteredHandlerMetadata<
         CommandAssignmentHandlerMetadata | CommandSubstitutionHandlerMetadata
       >
-    >();
-    const eventApplications = new Map<
-      string,
-      RegisteredHandlerMetadata<EventApplicationHandlerMetadata>
     >();
 
     for (const entry of entries) {
@@ -614,20 +583,6 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
             commandReceptors.get(entry.handler.messageFullTypeName),
         );
         commandReceptors.set(entry.handler.messageFullTypeName, commandEntry);
-      }
-
-      if (entry.handler.kind === "event-application") {
-        const eventEntry = entry as RegisteredHandlerMetadata<EventApplicationHandlerMetadata>;
-        const key = this.#applicationKey(
-          entry.entity.fullTypeName,
-          entry.handler.messageFullTypeName,
-        );
-
-        this.#validateApplication(
-          eventEntry,
-          this.#eventApplications.get(key) ?? eventApplications.get(key),
-        );
-        eventApplications.set(key, eventEntry);
       }
     }
 
@@ -648,10 +603,6 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
           entry as RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>,
         );
       }
-    }
-
-    for (const [key, entry] of eventApplications) {
-      this.#eventApplications.set(key, entry);
     }
 
     return metadata;
@@ -688,6 +639,7 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   /**
    * Finds handler entries by handler role.
    *
+   * @typeParam Kind Handler role being selected.
    * @param kind Handler role.
    * @returns Matching entries in registration and declaration order.
    */
@@ -739,20 +691,6 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     return this.#commandReceptors.get(commandTypeName);
   }
 
-  /**
-   * Finds the unique event applier for a state and event type.
-   *
-   * @param stateTypeName Fully qualified entity state type name.
-   * @param eventTypeName Fully qualified event type name.
-   * @returns The applier when registered.
-   */
-  findEventApplication(
-    stateTypeName: string,
-    eventTypeName: string,
-  ): RegisteredHandlerMetadata<EventApplicationHandlerMetadata> | undefined {
-    return this.#eventApplications.get(this.#applicationKey(stateTypeName, eventTypeName));
-  }
-
   #entry(
     entityHandlers: EntityHandlersMetadata,
     handler: HandlerMetadata,
@@ -785,24 +723,15 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     }
   }
 
-  #validateApplication(
-    entry: RegisteredHandlerMetadata<EventApplicationHandlerMetadata>,
-    duplicate: RegisteredHandlerMetadata<EventApplicationHandlerMetadata> | undefined,
-  ): void {
-    if (duplicate !== undefined) {
-      throw new HandlerMetadataRegistryError(
-        "DUPLICATE_EVENT_APPLICATION",
-        `Duplicate event application for entity "${entry.entity.fullTypeName}" and event ` +
-          `"${entry.handler.messageFullTypeName}"; already declared by method ` +
-          `"${duplicate.handler.methodName}".`,
-      );
-    }
-  }
-
-  #applicationKey(stateTypeName: string, eventTypeName: string): string {
-    return `${stateTypeName}\u0000${eventTypeName}`;
-  }
-
+  /**
+   * Adds one value to a grouped lookup map.
+   *
+   * @typeParam Key Lookup key type.
+   * @typeParam Value Stored value type.
+   * @param map Grouped lookup map.
+   * @param key Key selecting the group.
+   * @param value Value to add.
+   */
   #push<Key, Value>(map: Map<Key, Value[]>, key: Key, value: Value): void {
     const values = map.get(key);
     if (values === undefined) {
@@ -823,7 +752,7 @@ export interface HandlerArity {
   /**
    * Handler role whose public arity is being preserved.
    */
-  readonly kind: Exclude<HandlerKind, "event-application">;
+  readonly kind: HandlerKind;
 
   /**
    * Entity instance method name selected by generated metadata.
@@ -856,6 +785,7 @@ export interface HandlerArity {
  */
 class EntityHandlersOwner {
   readonly #authentic = new WeakSet<EntityHandlersMetadata>();
+
   readonly #outcomes = new WeakMap<HandlerMetadata, HandlerOutcomeSchemas>();
 
   /**
@@ -865,6 +795,8 @@ class EntityHandlersOwner {
    * @param stateSchema Generated schema for the entity state.
    * @param define Callback that registers handlers with the builder.
    * @returns Frozen metadata for the entity class.
+   * @typeParam Instance Entity receiver type.
+   * @typeParam StateSchema Generated message schema type.
    */
   define<Instance extends object, StateSchema extends DescriptorMessageSchema>(
     entityType: EntityClass<Instance>,
@@ -915,6 +847,8 @@ class EntityHandlersOwner {
    * @param source Source handler metadata.
    * @param target Cloned target handler metadata.
    * @internal
+   * @typeParam Instance Entity receiver type.
+   * @typeParam StateSchema Generated message schema type.
    */
   copyOutcomes(source: HandlerMetadata, target: HandlerMetadata): void {
     const outcomes = this.#outcomes.get(source);
@@ -932,6 +866,8 @@ class EntityHandlersOwner {
    * @param arities Generated arity metadata.
    * @returns Frozen metadata for the entity class.
    * @internal
+   * @typeParam Instance Entity receiver type.
+   * @typeParam StateSchema Generated message schema type.
    */
   defineArity<Instance extends object, StateSchema extends DescriptorMessageSchema>(
     entityType: EntityClass<Instance>,
@@ -944,6 +880,17 @@ class EntityHandlersOwner {
     return this.#define(entityType, stateSchema, define, arities);
   }
 
+  /**
+   * Builds define metadata.
+   *
+   * @typeParam Instance Instance type for this declaration.
+   * @typeParam StateSchema StateSchema type for this declaration.
+   * @param arities arities supplied to the metadata operation.
+   * @param define define supplied to the metadata operation.
+   * @param entityType entityType supplied to the metadata operation.
+   * @param stateSchema stateSchema supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #define<Instance extends object, StateSchema extends DescriptorMessageSchema>(
     entityType: EntityClass<Instance>,
     stateSchema: StateSchema,
@@ -967,30 +914,160 @@ class EntityHandlersOwner {
       eventSubscriptions: this.#ofKind(handlers, "event-subscription"),
       stateSubscriptions: this.#ofKind(handlers, "state-subscription"),
       eventReactions: this.#ofKind(handlers, "event-reaction"),
-      eventApplications: this.#ofKind(handlers, "event-application"),
     };
     this.#authentic.add(metadata);
     return Object.freeze(metadata);
   }
 
+  /**
+   * Builds builder metadata.
+   *
+   * @typeParam Instance Instance type for this declaration.
+   * @param arities arities supplied to the metadata operation.
+   * @param built built supplied to the metadata operation.
+   * @param entityType entityType supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #builder<Instance extends object>(
     entityType: EntityClass<Instance>,
     built: WeakSet<HandlerMetadata>,
     arities: ReadonlyMap<string, HandlerGeneratedData>,
   ): GeneratedHandlerRegistrationBuilder<Instance> {
     return Object.freeze({
+      ...this.#commandBuilder(entityType, built, arities),
+      ...this.#eventBuilder(entityType, built, arities),
+    });
+  }
+
+  /**
+   * Builds generated Command receptor registrations.
+   *
+   * @typeParam Instance Entity receiver type.
+   * @param entityType Entity constructor.
+   * @param built Set of accepted handler metadata.
+   * @param arities Generated method arity metadata.
+   * @returns Command assignment and substitution registrations.
+   */
+  #commandBuilder<Instance extends object>(
+    entityType: EntityClass<Instance>,
+    built: WeakSet<HandlerMetadata>,
+    arities: ReadonlyMap<string, HandlerGeneratedData>,
+  ): Pick<GeneratedHandlerRegistrationBuilder<Instance>, "assign" | "substitute"> {
+    return {
+      /**
+       * Builds command assignment metadata.
+       *
+       * @typeParam Schema Command input schema type.
+       * @param schema Command input schema.
+       * @param methodName Entity method name.
+       * @returns Assignment metadata.
+       */
       assign: <Schema extends DescriptorMessageSchema>(
         schema: Schema,
         methodName: HandlerMethodName<Instance>,
       ) => this.#handler(entityType, "command-assignment", schema, methodName, built, arities),
+
+      /**
+       * Builds command substitution metadata.
+       *
+       * @typeParam Schema Command input schema type.
+       * @param schema Command input schema.
+       * @param methodName Process Manager method name.
+       * @returns Substitution metadata.
+       */
       substitute: <Schema extends DescriptorMessageSchema>(
         schema: Schema,
         methodName: HandlerMethodName<Instance>,
       ) => this.#handler(entityType, "command-substitution", schema, methodName, built, arities),
+    };
+  }
+
+  /**
+   * Builds generated Event and state receiver registrations.
+   *
+   * @typeParam Instance Entity receiver type.
+   * @param entityType Entity constructor.
+   * @param built Set of accepted handler metadata.
+   * @param arities Generated method arity metadata.
+   * @returns Reaction and subscription registrations.
+   */
+  #eventBuilder<Instance extends object>(
+    entityType: EntityClass<Instance>,
+    built: WeakSet<HandlerMetadata>,
+    arities: ReadonlyMap<string, HandlerGeneratedData>,
+  ): Pick<GeneratedHandlerRegistrationBuilder<Instance>, "command" | "subscribe" | "react"> {
+    return {
+      ...this.#reactorBuilder(entityType, built, arities),
+      ...this.#subscriberBuilder(entityType, built, arities),
+    };
+  }
+
+  /**
+   * Builds generated Event and rejection reaction registrations.
+   *
+   * @typeParam Instance Entity receiver type.
+   * @param entityType Entity constructor.
+   * @param built Set of accepted handler metadata.
+   * @param arities Generated method arity metadata.
+   * @returns Event and Command reaction registrations.
+   */
+  #reactorBuilder<Instance extends object>(
+    entityType: EntityClass<Instance>,
+    built: WeakSet<HandlerMetadata>,
+    arities: ReadonlyMap<string, HandlerGeneratedData>,
+  ): Pick<GeneratedHandlerRegistrationBuilder<Instance>, "command" | "react"> {
+    return {
+      /**
+       * Builds command reaction metadata.
+       *
+       * @typeParam Schema Event or rejection input schema type.
+       * @param schema Event or rejection input schema.
+       * @param methodName Process Manager method name.
+       * @returns Command reaction metadata.
+       */
       command: <Schema extends DescriptorMessageSchema>(
         schema: Schema,
         methodName: HandlerMethodName<Instance>,
       ) => this.#handler(entityType, "command-reaction", schema, methodName, built, arities),
+
+      /**
+       * Builds event reaction metadata.
+       *
+       * @typeParam Schema Event input schema type.
+       * @param schema Event input schema.
+       * @param methodName Entity method name.
+       * @returns Event reaction metadata.
+       */
+      react: <Schema extends DescriptorMessageSchema>(
+        schema: Schema,
+        methodName: HandlerMethodName<Instance>,
+      ) => this.#handler(entityType, "event-reaction", schema, methodName, built, arities),
+    };
+  }
+
+  /**
+   * Builds generated Event and state subscription registrations.
+   *
+   * @typeParam Instance Entity receiver type.
+   * @param entityType Entity constructor.
+   * @param built Set of accepted handler metadata.
+   * @param arities Generated method arity metadata.
+   * @returns Subscription registration.
+   */
+  #subscriberBuilder<Instance extends object>(
+    entityType: EntityClass<Instance>,
+    built: WeakSet<HandlerMetadata>,
+    arities: ReadonlyMap<string, HandlerGeneratedData>,
+  ): Pick<GeneratedHandlerRegistrationBuilder<Instance>, "subscribe"> {
+    return {
+      /**
+       * Builds subscription metadata.
+       *
+       * @typeParam Schema Event or Entity state schema type.
+       * @param schema Event or Entity state input schema.
+       * @param methodName Entity method name.
+       * @returns Subscription metadata.
+       */
       subscribe: <Schema extends DescriptorMessageSchema>(
         schema: Schema,
         methodName: HandlerMethodName<Instance>,
@@ -1003,28 +1080,23 @@ class EntityHandlersOwner {
           built,
           arities,
         ),
-      react: <Schema extends DescriptorMessageSchema>(
-        schema: Schema,
-        methodName: HandlerMethodName<Instance>,
-      ) => this.#handler(entityType, "event-reaction", schema, methodName, built, arities),
-      apply: <Schema extends DescriptorMessageSchema>(
-        schema: Schema,
-        methodName: HandlerMethodName<Instance>,
-        options: EventApplicationOptions = {},
-      ) => {
-        const handler: EventApplicationHandlerMetadata<
-          Schema,
-          HandlerMethodName<Instance>
-        > = Object.freeze({
-          ...this.#handler(entityType, "event-application", schema, methodName, built),
-          allowImport: options.allowImport ?? false,
-        });
-        built.add(handler);
-        return handler;
-      },
-    });
+    };
   }
 
+  /**
+   * Builds handler metadata.
+   *
+   * @typeParam Instance Instance type for this declaration.
+   * @typeParam Kind Kind type for this declaration.
+   * @typeParam Schema Schema type for this declaration.
+   * @param arities arities supplied to the metadata operation.
+   * @param built built supplied to the metadata operation.
+   * @param entityType entityType supplied to the metadata operation.
+   * @param kind kind supplied to the metadata operation.
+   * @param methodName methodName supplied to the metadata operation.
+   * @param schema schema supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #handler<
     Instance extends object,
     Kind extends HandlerKind,
@@ -1056,6 +1128,12 @@ class EntityHandlersOwner {
     return handler;
   }
 
+  /**
+   * Builds arityMap metadata.
+   *
+   * @param arities arities supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #arityMap(arities: Iterable<HandlerArity>): ReadonlyMap<string, HandlerGeneratedData> {
     const result = new Map<string, HandlerGeneratedData>();
     for (const arity of arities) {
@@ -1074,6 +1152,12 @@ class EntityHandlersOwner {
     return result;
   }
 
+  /**
+   * Builds parameterCount metadata.
+   *
+   * @param value value supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #parameterCount(value: unknown): HandlerParameterCount {
     if (value === 1 || value === 2) {
       return value;
@@ -1084,6 +1168,12 @@ class EntityHandlersOwner {
     );
   }
 
+  /**
+   * Builds a frozen copy of generated outcome schemas.
+   *
+   * @param outcomes Outcome schemas to copy.
+   * @returns Frozen outcome schemas.
+   */
   static freezeOutcomes(outcomes: HandlerOutcomeSchemas): HandlerOutcomeSchemas {
     return Object.freeze({
       returned: Object.freeze([...outcomes.returned]),
@@ -1091,10 +1181,23 @@ class EntityHandlersOwner {
     });
   }
 
+  /**
+   * Builds arityKey metadata.
+   *
+   * @param kind kind supplied to the metadata operation.
+   * @param methodName methodName supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #arityKey(kind: HandlerKind, methodName: string): string {
     return `${kind}\u0000${methodName}`;
   }
 
+  /**
+   * Checks validateCommandHandlers metadata.
+   *
+   * @param entityType entityType supplied to the metadata operation.
+   * @param handlers handlers supplied to the metadata operation.
+   */
   #validateCommandHandlers(entityType: EntityClass, handlers: readonly HandlerMetadata[]): void {
     if (
       entityType.prototype instanceof Projection &&
@@ -1118,6 +1221,12 @@ class EntityHandlersOwner {
     }
   }
 
+  /**
+   * Checks validateBuilt metadata.
+   *
+   * @param built built supplied to the metadata operation.
+   * @param handlers handlers supplied to the metadata operation.
+   */
   #validateBuilt(handlers: readonly HandlerMetadata[], built: WeakSet<HandlerMetadata>): void {
     for (const handler of handlers) {
       if (!built.has(handler)) {
@@ -1129,6 +1238,13 @@ class EntityHandlersOwner {
     }
   }
 
+  /**
+   * Checks validateMethod metadata.
+   *
+   * @typeParam Instance Instance type for this declaration.
+   * @param entityType entityType supplied to the metadata operation.
+   * @param methodName methodName supplied to the metadata operation.
+   */
   #validateMethod<Instance extends object>(
     entityType: EntityClass<Instance>,
     methodName: HandlerMethodName<Instance>,
@@ -1147,6 +1263,14 @@ class EntityHandlersOwner {
     }
   }
 
+  /**
+   * Builds ofKind metadata.
+   *
+   * @typeParam Kind Kind type for this declaration.
+   * @param handlers handlers supplied to the metadata operation.
+   * @param kind kind supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #ofKind<Kind extends HandlerKind>(
     handlers: readonly HandlerMetadata[],
     kind: Kind,
@@ -1177,6 +1301,8 @@ interface EntityHandlerDefinitions {
   /**
    * Creates handler metadata without invoking entity methods.
    *
+   * @typeParam Instance Entity receiver type.
+   * @typeParam StateSchema Generated Entity state schema type.
    * @param entityType Entity class whose prototype owns the methods.
    * @param stateSchema Generated schema for the entity state.
    * @param define Callback that registers handlers with the builder.
@@ -1193,8 +1319,20 @@ interface EntityHandlerDefinitions {
 
 /**
  * Defines metadata for explicitly registered entity handlers.
+ * @typeParam Instance Entity receiver type.
+ * @typeParam StateSchema Generated message schema type.
  */
 export const EntityHandlers: Readonly<EntityHandlerDefinitions> = Object.freeze({
+  /**
+   * Builds explicit Entity handler metadata.
+   *
+   * @typeParam Instance Entity receiver type.
+   * @typeParam StateSchema Generated Entity state schema type.
+   * @param entityType Entity constructor.
+   * @param stateSchema Generated Entity state schema.
+   * @param define Callback registering handlers.
+   * @returns Frozen Entity handler metadata.
+   */
   define<Instance extends object, StateSchema extends DescriptorMessageSchema>(
     entityType: EntityClass<Instance>,
     stateSchema: StateSchema,

@@ -3,13 +3,8 @@
 import { BoundedContext } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
-import {
-  EventContextSchema,
-  EventIdSchema,
-  TenantIdSchema,
-  ZoneIdSchema,
-} from "@spine-event-engine/proto";
+import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TenantIdSchema, ZoneIdSchema } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
   QuerySchema,
@@ -37,23 +32,14 @@ import {
 
 class ProjectAggregate extends Aggregate {
   registerProject(command) {
-    return SignalEnvelopes.event({
-      id: create(EventIdSchema, { value: `event-${command.id}` }),
-      context: create(EventContextSchema),
-      schema: ProjectCreatedSchema,
-      message: create(ProjectCreatedSchema, {
-        id: command.id,
-        name: command.name,
-        priority: 1,
-      }),
-    });
-  }
-  applyProjectCreated(event) {
-    this.startTransaction();
     this.update((draft) =>
-      Object.assign(draft, create(ProjectSchema, { id: event.id, name: event.name })),
+      Object.assign(draft, create(ProjectSchema, { id: command.id, name: command.name })),
     );
-    this.commitTransaction();
+    return create(ProjectCreatedSchema, {
+      id: command.id,
+      name: command.name,
+      priority: 1,
+    });
   }
 }
 class ProjectOverview extends Projection {
@@ -570,12 +556,7 @@ function projectContext() {
       new Repository({
         entityType: ProjectAggregate,
         schema: ProjectSchema,
-        handlers: [
-          projectAggregateHandlers(),
-          EntityHandlers.define(ProjectAggregate, ProjectSchema, (builder) => [
-            builder.apply(ProjectCreatedSchema, "applyProjectCreated"),
-          ]),
-        ],
+        handlers: projectAggregateHandlers(),
       }),
     )
     .add(

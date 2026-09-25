@@ -32,7 +32,6 @@ import {
   type EventDispatcher,
   type EventContextInput,
   EventRegistrationReadiness,
-  type EventRegistrationApplicationMetadata,
   type EventRegistrationReadinessLookup,
   type EventRegistrationReactorMetadata,
   type EventRegistrationSubscriberMetadata,
@@ -146,7 +145,6 @@ describe("@spine-event-engine/server", () => {
         "AbstractEventSubscriber",
         "Aggregate",
         "AlreadyPickedUp",
-        "Apply",
         "Assign",
         "BoundedContext",
         "BoundedContextBuilder",
@@ -359,10 +357,6 @@ describe("@spine-event-engine/server", () => {
     expectTypeOf<EventRegistrationReactorMetadata>().toExtend<{
       readonly eventFullTypeName: string;
     }>();
-    expectTypeOf<EventRegistrationApplicationMetadata>().toExtend<{
-      readonly eventFullTypeName: string;
-      readonly stateTypeName: string;
-    }>();
     expect(
       CommandRegistrationReadiness.fromRegistry({
         listEntityHandlers: () => [],
@@ -371,7 +365,6 @@ describe("@spine-event-engine/server", () => {
         findHandlersByKind: () => [],
         findByMessage: () => [],
         findCommandAssignment: () => undefined,
-        findEventApplication: () => undefined,
       }).commandTypeNames(),
     ).toEqual([]);
     expect(
@@ -382,7 +375,6 @@ describe("@spine-event-engine/server", () => {
         findHandlersByKind: () => [],
         findByMessage: () => [],
         findCommandAssignment: () => undefined,
-        findEventApplication: () => undefined,
       }).eventTypeNames(),
     ).toEqual([]);
     expect(() => new SingleProcessServerRuntime().enqueue(() => undefined)).toThrow(
@@ -418,7 +410,7 @@ describe("@spine-event-engine/server", () => {
       ProjectStateSchema,
       (builder) => [
         builder.assign(CreateProjectSchema, "assignCommand"),
-        builder.apply(ProjectCreatedSchema, "onAggregateChanged", { allowImport: true }),
+        builder.subscribe(ProjectCreatedSchema, "onAggregateChanged"),
       ],
     );
     const registry = new HandlerMetadataRegistry([handlers]);

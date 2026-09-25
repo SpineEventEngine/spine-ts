@@ -1948,7 +1948,6 @@ describe("build-time handler analyzer", () => {
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_ENTITY_STATE_SCHEMA",
       "SCHEMA_BEARING_DECORATOR",
-      "APPLY_DECORATOR",
       "INVALID_HANDLER_VISIBILITY",
       "MISSING_SIGNAL_TYPE",
       "INVALID_PARAMETER_COUNT",
@@ -1959,7 +1958,6 @@ describe("build-time handler analyzer", () => {
     expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
       "create",
       "schemaDecorator",
-      "apply",
       "hidden",
       "missingSignal",
       "tooMany",
@@ -2985,7 +2983,7 @@ const stringNameSource = `
 `;
 
 const invalidSource = `
-  import { Apply, Assign, Command, ProcessManager, Subscribe } from "@spine-event-engine/server";
+  import { Assign, Command, ProcessManager, Subscribe } from "@spine-event-engine/server";
   import { type Event } from "@spine-event-engine/proto";
   import { TaskSchema } from "../generated/task_pb.js";
   import { CreateTaskSchema, type CreateTask } from "../generated/commands_pb.js";
@@ -3002,11 +3000,6 @@ const invalidSource = `
     @Assign(CreateTaskSchema)
     schemaDecorator(command: CreateTask): TaskCreated {
       throw new Error(String(command));
-    }
-
-    @Apply
-    apply(event: TaskCreated): void {
-      void event;
     }
 
     @Assign

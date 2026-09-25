@@ -169,7 +169,7 @@ describe("check-cleanup-rules", () => {
 
     const result = runChecker(repoRoot);
 
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("Cleanup enforcement checks passed.");
   });
 
@@ -1171,7 +1171,7 @@ describe("check-cleanup-rules", () => {
       [
         'import { SignalEnvelopes } from "@spine-event-engine/core";',
         'import { EventIdSchema, type Command, type Event } from "@spine-event-engine/proto";',
-        "import { Apply, Assign, Command, React, Subscribe,",
+        "import { Assign, Command, React, Subscribe,",
         '  materializeDecoratedEntityHandlers } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
@@ -1198,8 +1198,6 @@ describe("check-cleanup-rules", () => {
         "  @Subscribe(TaskCreated)",
         "  onTask(event: TaskCreated): void {}",
         "",
-        "  @Apply",
-        "  applyTask(event: TaskCreated): void {}",
         "}",
         "",
         "materializeDecoratedEntityHandlers(DemoAggregate);",
@@ -1217,7 +1215,6 @@ describe("check-cleanup-rules", () => {
     expect(result.stderr).toContain("@Command(...)");
     expect(result.stderr).toContain("@React(...)");
     expect(result.stderr).toContain("@Subscribe(...)");
-    expect(result.stderr).toContain("@Apply");
     expect(result.stderr).toContain("startTransaction");
     expect(result.stderr).toContain("commitTransaction");
     expect(result.stderr).toContain("rollbackTransaction");
@@ -2774,16 +2771,21 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign, Command, React, Subscribe } from "@spine-event-engine/server";',
+        'import { Assign, Command, React, Subscribe, type External as ForeignSignal } from "@spine-event-engine/server";',
         'import type { CreateTask, NotifyOwner, TaskCreated, TaskRenamed } from "../generated/example_pb.js";',
         "",
         "type CreatedPair = readonly [TaskCreated, (TaskRenamed | TaskCreated)?];",
         "type CreatedResults = TaskCreated | TaskRenamed;",
         "type AsyncResults = Promise<CreatedResults>;",
+        "type Identity<T> = T;",
         "",
         "class DemoHandlers {",
         "  @Assign",
         "  create(command: CreateTask): CreatedPair { return [command.created]; }",
+        "  @Assign",
+        "  withAbsentSlot(command: CreateTask): [TaskCreated, undefined] { return [command.created, undefined]; }",
+        "  @Assign",
+        "  withOptionalUnion(command: CreateTask): [TaskCreated, TaskRenamed | undefined] { return [command.created, undefined]; }",
         "  @Assign",
         "  rename(command: CreateTask): CreatedResults { return command.renamed; }",
         "  @Assign",
@@ -2801,9 +2803,21 @@ describe("check-cleanup-rules", () => {
         "  @React",
         "  reactDirect(event: TaskCreated): TaskCreated | undefined { return event; }",
         "  @React",
+        "  reactArray(event: TaskCreated): (TaskCreated | undefined)[] { return [event, undefined]; }",
+        "  @React",
         "  optionalTuple(event: TaskCreated): readonly [TaskCreated?] { return [event]; }",
         "  @React",
-        "  noOutput(event: TaskCreated): void { void event; }",
+        "  noOutput(event: TaskCreated): undefined { void event; return undefined; }",
+        "  @React",
+        "  genericNoOutput(event: TaskCreated): Identity<undefined> { void event; return undefined; }",
+        "  @React",
+        "  asyncGenericNoOutput(event: TaskCreated): Promise<Identity<undefined>> { return Promise.resolve(undefined); }",
+        "  @Command",
+        "  commandNoOutput(event: TaskCreated): Identity<undefined> { void event; return undefined; }",
+        "  @Command",
+        "  asyncCommandNoOutput(event: TaskCreated): Promise<Identity<undefined>> { return Promise.resolve(undefined); }",
+        "  @Command",
+        "  externalCommandNoOutput(event: ForeignSignal<TaskCreated>): Identity<undefined> { void event; return undefined; }",
         "  @Subscribe",
         "  async observe(event: TaskCreated): Promise<void> { void event; }",
         "}",
@@ -2815,8 +2829,48 @@ describe("check-cleanup-rules", () => {
 
     const result = runChecker(repoRoot);
 
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("Cleanup enforcement checks passed.");
+  });
+
+  it.each([
+    ["void reactor", "React", "TaskCreated", "void", "generated domain event"],
+    ["promised void reactor", "React", "TaskCreated", "Promise<void>", "generated domain event"],
+    ["undefined subscriber", "Subscribe", "TaskCreated", "undefined", "return type void"],
+    [
+      "command-input missing output",
+      "Command",
+      "CreateTask",
+      "undefined",
+      "generated domain command",
+    ],
+    [
+      "all-optional assignment union",
+      "Assign",
+      "CreateTask",
+      "[TaskCreated?] | [TaskCreated]",
+      "generated domain event",
+    ],
+  ])("rejects %s", (_name, decorator, inputType, returnType, diagnostic) => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import { Assign, Command, React, Subscribe } from "@spine-event-engine/server";',
+        'import type { CreateTask } from "../generated/commands_pb.js";',
+        'import type { TaskCreated } from "../generated/events_pb.js";',
+        "class DemoHandlers {",
+        `  @${decorator}`,
+        `  handle(input: ${inputType}): ${returnType} { throw new Error(String(input)); }`,
+        "}",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "invalid handler return"], repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(diagnostic);
   });
 
   it.each([
@@ -2915,7 +2969,7 @@ describe("check-cleanup-rules", () => {
         "  @Assign",
         "  localResult(input: CreateTask): LocalResult { throw new Error(String(input)); }",
         "  @React",
-        "  react(input: TaskCreated): AsyncVoid { throw new Error(String(input)); }",
+        "  react(input: TaskCreated): AsyncResult<TaskCreated | undefined> { throw new Error(String(input)); }",
         "  @Subscribe",
         "  observe(input: TaskCreated): AsyncVoid { throw new Error(String(input)); }",
         "}",
@@ -3934,10 +3988,10 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       join(repoRoot, "examples/todo/src/route.mts"),
       [
-        'import { Apply } from "@spine-event-engine/server";',
+        'import { Subscribe } from "@spine-event-engine/server";',
         'import type { TaskCreated } from "../generated/example_pb.js";',
         "class RouteAggregate {",
-        "  @Apply",
+        "  @Subscribe(TaskCreated)",
         "  applyTask(event: TaskCreated): void {",
         "    void event;",
         "  }",
@@ -3966,7 +4020,7 @@ describe("check-cleanup-rules", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("examples/todo/src/view.tsx:4 @Assign(...)");
-    expect(result.stderr).toContain("examples/todo/src/route.mts:4 @Apply");
+    expect(result.stderr).toContain("examples/todo/src/route.mts:4 @Subscribe(...)");
     expect(result.stderr).toContain("examples/todo/src/state.cts:4 @Command(...)");
   });
 

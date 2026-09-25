@@ -19,6 +19,7 @@ import {
   BoundedContext,
   ProcessManager,
   Projection,
+  React,
   Server,
   Subscribe,
   type RunningServer,
@@ -286,7 +287,7 @@ export class OrderSalesManager extends ProcessManager<string, typeof OrderSalesM
    *
    * @param event The order-created event that triggers the update.
    */
-  @Subscribe onOrderCreated(event: OrderCreated): void {
+  @React onOrderCreated(event: OrderCreated): undefined {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -294,6 +295,7 @@ export class OrderSalesManager extends ProcessManager<string, typeof OrderSalesM
       ),
     );
     void event;
+    return undefined;
   }
 }
 

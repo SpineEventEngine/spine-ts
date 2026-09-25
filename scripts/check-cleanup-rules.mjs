@@ -761,6 +761,7 @@ function buildImportState(source, context) {
 function cloneState(state) {
   return {
     serverDecoratorAliases: new Map(state.serverDecoratorAliases),
+    externalTypeAliases: new Set(state.externalTypeAliases),
     forbiddenApiAliases: new Map(state.forbiddenApiAliases),
     coreNamespaces: new Set(state.coreNamespaces),
     coreSignalEnvelopeOwners: new Set(state.coreSignalEnvelopeOwners),
@@ -783,6 +784,7 @@ function cloneState(state) {
 function createImportState(context) {
   return {
     serverDecoratorAliases: new Map(),
+    externalTypeAliases: new Set(),
     forbiddenApiAliases: new Map(),
     coreNamespaces: new Set(),
     coreSignalEnvelopeOwners: new Set(),
@@ -899,6 +901,7 @@ function recordServerImport(clause, state) {
     if (valueElement) {
       state.serverDecoratorAliases.set(element.name.text, importedName);
     }
+    if (importedName === "External") state.externalTypeAliases.add(element.name.text);
     if (isForbiddenEndUserServerApi(importedName)) {
       state.forbiddenApiAliases.set(element.name.text, importedName);
     }
@@ -950,7 +953,7 @@ function generatedModuleKind(moduleName) {
   if (/(^|\/)commands?_pb(\.js)?$/.test(moduleName)) {
     return "command";
   }
-  if (/(^|\/)events?_pb(\.js)?$/.test(moduleName)) {
+  if (/(^|\/)(events?|rejections?)_pb(\.js)?$/.test(moduleName)) {
     return "event";
   }
 
@@ -1707,7 +1710,8 @@ function returnIssue(typeNode, importState, expectedKind, allowMissing = false) 
     return undefined;
   }
 
-  return isMessageReturn(typeNode, importState, expectedKind, allowMissing)
+  return (allowMissing && isUndefinedTypeNode(typeNode, importState)) ||
+    isMessageReturn(typeNode, importState, expectedKind, allowMissing)
     ? undefined
     : `handler return type generated domain ${expectedKind}`;
 }
@@ -1725,6 +1729,85 @@ function isMessageReturn(typeNode, importState, expectedKind, allowMissing) {
   );
 }
 
+function isUndefinedTypeNode(
+  typeNode,
+  imports,
+  seen = new Set(),
+  promised = false,
+  bindings = new Map(),
+) {
+  if (ts.isParenthesizedTypeNode(typeNode))
+    return isUndefinedTypeNode(typeNode.type, imports, seen, promised, bindings);
+  if (typeNode.kind === ts.SyntaxKind.UndefinedKeyword) return true;
+  if (!ts.isTypeReferenceNode(typeNode) || !ts.isIdentifier(typeNode.typeName)) return false;
+  const name = typeNode.typeName.text;
+  const bound = bindings.get(name);
+  if (bound !== undefined)
+    return isUndefinedTypeNode(bound.type, bound.imports, seen, promised, bound.bindings);
+  const alias =
+    localAlias(name, imports) ??
+    (imports.importedTypeAliases.has(name) ? importedAlias(name, imports) : undefined);
+  if (alias === undefined)
+    return (
+      name === "Promise" &&
+      !promised &&
+      typeNode.typeArguments?.length === 1 &&
+      !imports.shadowedTypes.has(name) &&
+      isUndefinedTypeNode(typeNode.typeArguments[0], imports, seen, true, bindings)
+    );
+  if ((alias.parameters?.length ?? 0) !== (typeNode.typeArguments?.length ?? 0)) return false;
+  const key = `${alias.imports.file}:${alias.name}`;
+  if (seen.has(key)) return false;
+  const nextBindings = new Map(bindings);
+  for (const [index, param] of (alias.parameters ?? []).entries())
+    nextBindings.set(param.name.text, { type: typeNode.typeArguments[index], imports, bindings });
+  seen.add(key);
+  const result = isUndefinedTypeNode(alias.type, alias.imports, seen, promised, nextBindings);
+  seen.delete(key);
+  return result;
+}
+
+function containsUndefinedReturn(typeNode, imports, options, seen = new Set()) {
+  if (ts.isParenthesizedTypeNode(typeNode))
+    return containsUndefinedReturn(typeNode.type, imports, options, seen);
+  if (typeNode.kind === ts.SyntaxKind.UndefinedKeyword) return true;
+  if (ts.isUnionTypeNode(typeNode))
+    return typeNode.types.some((branch) => containsUndefinedReturn(branch, imports, options, seen));
+  if (!ts.isTypeReferenceNode(typeNode) || !ts.isIdentifier(typeNode.typeName)) return false;
+  const name = typeNode.typeName.text;
+  const bound = options.typeBindings?.get(name);
+  if (bound !== undefined)
+    return containsUndefinedReturn(
+      bound.type,
+      bound.imports,
+      { ...options, typeBindings: bound.bindings },
+      seen,
+    );
+  const alias =
+    localAlias(name, imports) ??
+    (imports.importedTypeAliases.has(name) ? importedAlias(name, imports) : undefined);
+  if (alias === undefined) return false;
+  const key = `${alias.imports.file}:${alias.name}`;
+  if (seen.has(key) || (alias.parameters?.length ?? 0) !== (typeNode.typeArguments?.length ?? 0))
+    return false;
+  const typeBindings = new Map(options.typeBindings);
+  for (const [index, param] of (alias.parameters ?? []).entries())
+    typeBindings.set(param.name.text, {
+      type: typeNode.typeArguments[index],
+      imports,
+      bindings: options.typeBindings,
+    });
+  seen.add(key);
+  const result = containsUndefinedReturn(
+    alias.type,
+    alias.imports,
+    { ...options, typeBindings },
+    seen,
+  );
+  seen.delete(key);
+  return result;
+}
+
 function checkMessageReturn(typeNode, importState, state, expectedKind, options) {
   state.remaining -= 1;
   if (state.remaining < 0) return undefined;
@@ -1734,15 +1817,14 @@ function checkMessageReturn(typeNode, importState, state, expectedKind, options)
     return typeNode.operator === ts.SyntaxKind.ReadonlyKeyword
       ? checkMessageReturn(typeNode.type, importState, state, expectedKind, options)
       : undefined;
-  if (typeNode.kind === ts.SyntaxKind.UndefinedKeyword)
-    return options.allowMissing && options.collectionDepth === 0 ? 0 : undefined;
+  if (typeNode.kind === ts.SyntaxKind.UndefinedKeyword) return options.allowMissing ? 0 : undefined;
   if (ts.isUnionTypeNode(typeNode))
     return sumMessageReturns(typeNode.types, importState, state, expectedKind, options);
   if (ts.isArrayTypeNode(typeNode))
     return options.collectionDepth === 0
       ? checkMessageReturn(typeNode.elementType, importState, state, expectedKind, {
           ...options,
-          allowMissing: false,
+          allowMissing: options.allowMissing,
           collectionDepth: 1,
           wholeResult: false,
         })
@@ -1770,28 +1852,29 @@ function sumMessageReturns(types, importState, state, expectedKind, options) {
 function checkTupleReturn(typeNode, importState, state, expectedKind, options) {
   if (options.collectionDepth !== 0 || typeNode.elements.length === 0) return undefined;
   let count = 0;
-  for (const [index, element] of typeNode.elements.entries()) {
+  let guaranteed = false;
+  for (const element of typeNode.elements) {
     const member = ts.isNamedTupleMember(element) ? element.type : element;
     const optional =
       ts.isOptionalTypeNode(member) ||
       (ts.isNamedTupleMember(element) && element.questionToken !== undefined);
-    if (index === 0 && optional && !options.allowMissing) return undefined;
     if (
       ts.isRestTypeNode(member) ||
       (ts.isNamedTupleMember(element) && element.dotDotDotToken !== undefined)
     )
       return undefined;
     const value = ts.isOptionalTypeNode(member) ? member.type : member;
+    if (!optional && !containsUndefinedReturn(value, importState, options)) guaranteed = true;
     const branch = checkMessageReturn(value, importState, state, expectedKind, {
       ...options,
-      allowMissing: false,
+      allowMissing: true,
       collectionDepth: 1,
       wholeResult: false,
     });
-    if (branch === undefined || branch === 0) return undefined;
+    if (branch === undefined) return undefined;
     count += branch;
   }
-  return count;
+  return options.allowMissing || guaranteed ? count : undefined;
 }
 
 function checkTypeReturn(typeNode, importState, state, expectedKind, options) {
@@ -1882,7 +1965,7 @@ function checkNamedContainer(name, typeArguments, importState, state, expectedKi
   )
     return checkMessageReturn(typeArguments[0], importState, state, expectedKind, {
       ...options,
-      allowMissing: false,
+      allowMissing: options.allowMissing,
       collectionDepth: 1,
       wholeResult: false,
     });
@@ -1992,6 +2075,8 @@ function readSignalKind(typeNode, importState, state) {
 
   const { typeName } = typeNode;
   if (ts.isIdentifier(typeName)) {
+    if (importState.externalTypeAliases.has(typeName.text) && typeNode.typeArguments?.length === 1)
+      return readSignalKind(typeNode.typeArguments[0], importState, state);
     const aliasedType = importState.localTypeAliases.get(typeName.text);
     if (aliasedType !== undefined) {
       if (state.seen.has(typeName.text)) {
@@ -2907,7 +2992,7 @@ function resolvesOutsideRoot(resolvedRepoRoot, resolvedFile) {
 function collectExampleApiViolations(repoRoot, file, source) {
   const violations = [];
   const schemaDecorators = ["Assign", "Command", "React", "Subscribe"];
-  const handlerDecorators = new Set(["Apply", ...schemaDecorators]);
+  const handlerDecorators = new Set(schemaDecorators);
   const importState = buildImportState(source, {
     repoRoot,
     file,
@@ -2931,13 +3016,6 @@ function collectExampleApiViolations(repoRoot, file, source) {
         .filter(Boolean);
 
       for (const decorator of decorators) {
-        if (serverDecoratorName(decorator, scopedState, scopedShadowedNames) === "Apply") {
-          violations.push({
-            kind: "api",
-            detail: lineDetail(source, file, decorator, "@Apply"),
-          });
-        }
-
         for (const name of schemaDecorators) {
           if (isSchemaBearingDecorator(decorator, name, scopedState, scopedShadowedNames)) {
             violations.push({
@@ -3065,10 +3143,12 @@ function handlerReturnViolations(node, decoratorNames, importState) {
         violations.push(`@${name} handler return type annotation`);
       } else {
         const expectedKind = name === "Command" ? "command" : "event";
-        const issue =
-          name === "React" && isVoidTypeNode(node.type, importState)
+        const inputKind =
+          node.parameters[0]?.type === undefined
             ? undefined
-            : returnIssue(node.type, importState, expectedKind, name === "React");
+            : typeNodeSignalKind(node.parameters[0].type, importState);
+        const optionalReaction = name === "React" || (name === "Command" && inputKind === "event");
+        const issue = returnIssue(node.type, importState, expectedKind, optionalReaction);
         if (issue !== undefined) {
           violations.push(issue);
         }

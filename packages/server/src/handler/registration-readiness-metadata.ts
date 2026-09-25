@@ -27,6 +27,7 @@ import { HandlerMetadataValues } from "./handler-metadata.js";
 
 /**
  * Frozen fields shared by a readiness entry and its registered handler.
+ * @typeParam Handler Handler metadata type.
  */
 export interface ReadinessMetadataFields<Handler extends HandlerMetadata> {
   // prettier-ignore
@@ -85,6 +86,7 @@ class ReadinessMetadataOwner {
    *
    * @param registeredHandler Registered handler to clone.
    * @returns Frozen fields with cloned metadata.
+   * @typeParam Handler Handler metadata type.
    */
   create<Handler extends HandlerMetadata>(
     registeredHandler: RegisteredHandlerMetadata<Handler>,
@@ -97,6 +99,7 @@ class ReadinessMetadataOwner {
    *
    * @param registeredHandler Registered handler to retain.
    * @returns Frozen fields sharing the registered metadata.
+   * @typeParam Handler Handler metadata type.
    */
   copy<Handler extends HandlerMetadata>(
     registeredHandler: RegisteredHandlerMetadata<Handler>,
@@ -109,6 +112,7 @@ class ReadinessMetadataOwner {
    *
    * @param map Metadata arrays to copy.
    * @returns A map containing fresh frozen arrays.
+   * @typeParam Value Value stored in each metadata array.
    */
   copyMap<Value>(
     map: ReadonlyMap<string, readonly Value[]>,
@@ -120,6 +124,13 @@ class ReadinessMetadataOwner {
     return copy;
   }
 
+  /**
+   * Builds fields metadata.
+   *
+   * @typeParam Handler Handler type for this declaration.
+   * @param registeredHandler registeredHandler supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #fields<Handler extends HandlerMetadata>(
     registeredHandler: RegisteredHandlerMetadata<Handler>,
   ): ReadinessMetadataFields<Handler> {
@@ -132,6 +143,13 @@ class ReadinessMetadataOwner {
     });
   }
 
+  /**
+   * Copies cloneRegistered metadata.
+   *
+   * @typeParam Handler Handler type for this declaration.
+   * @param registeredHandler registeredHandler supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #cloneRegistered<Handler extends HandlerMetadata>(
     registeredHandler: RegisteredHandlerMetadata<Handler>,
   ): RegisteredHandlerMetadata<Handler> {
@@ -154,6 +172,13 @@ class ReadinessMetadataOwner {
     });
   }
 
+  /**
+   * Copies copyRegistered metadata.
+   *
+   * @typeParam Handler Handler type for this declaration.
+   * @param registeredHandler registeredHandler supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #copyRegistered<Handler extends HandlerMetadata>(
     registeredHandler: RegisteredHandlerMetadata<Handler>,
   ): RegisteredHandlerMetadata<Handler> {
@@ -165,6 +190,15 @@ class ReadinessMetadataOwner {
     });
   }
 
+  /**
+   * Copies cloneEntityHandlers metadata.
+   *
+   * @param clonedHandlers clonedHandlers supplied to the metadata operation.
+   * @param clonedSchemas clonedSchemas supplied to the metadata operation.
+   * @param entity entity supplied to the metadata operation.
+   * @param entityHandlers entityHandlers supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #cloneEntityHandlers(
     entityHandlers: EntityHandlersMetadata,
     clonedHandlers: Map<HandlerMetadata, HandlerMetadata>,
@@ -205,14 +239,18 @@ class ReadinessMetadataOwner {
         clonedHandlers,
         clonedSchemas,
       ),
-      eventApplications: this.#cloneHandlers(
-        entityHandlers.eventApplications,
-        clonedHandlers,
-        clonedSchemas,
-      ),
     });
   }
 
+  /**
+   * Copies cloneHandlers metadata.
+   *
+   * @typeParam Handler Handler type for this declaration.
+   * @param clonedHandlers clonedHandlers supplied to the metadata operation.
+   * @param clonedSchemas clonedSchemas supplied to the metadata operation.
+   * @param handlers handlers supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #cloneHandlers<Handler extends HandlerMetadata>(
     handlers: readonly Handler[],
     clonedHandlers: Map<HandlerMetadata, HandlerMetadata>,
@@ -223,6 +261,15 @@ class ReadinessMetadataOwner {
     );
   }
 
+  /**
+   * Copies cloneHandler metadata.
+   *
+   * @typeParam Handler Handler type for this declaration.
+   * @param clonedHandlers clonedHandlers supplied to the metadata operation.
+   * @param clonedSchemas clonedSchemas supplied to the metadata operation.
+   * @param handler handler supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #cloneHandler<Handler extends HandlerMetadata>(
     handler: Handler,
     clonedHandlers: Map<HandlerMetadata, HandlerMetadata>,
@@ -242,6 +289,14 @@ class ReadinessMetadataOwner {
     return clone;
   }
 
+  /**
+   * Copies cloneEntity metadata.
+   *
+   * @param clonedFields clonedFields supplied to the metadata operation.
+   * @param clonedSchemas clonedSchemas supplied to the metadata operation.
+   * @param entity entity supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #cloneEntity(
     entity: EntityMetadata,
     clonedSchemas: WeakMap<object, object>,
@@ -263,6 +318,14 @@ class ReadinessMetadataOwner {
     });
   }
 
+  /**
+   * Copies cloneSchema metadata.
+   *
+   * @typeParam Schema Schema type for this declaration.
+   * @param clonedSchemas clonedSchemas supplied to the metadata operation.
+   * @param schema schema supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #cloneSchema<Schema extends DescriptorMessageSchema>(
     schema: Schema,
     clonedSchemas: WeakMap<object, object>,
@@ -276,6 +339,14 @@ class ReadinessMetadataOwner {
     return clone;
   }
 
+  /**
+   * Copies cloneField metadata.
+   *
+   * @typeParam Field Field type for this declaration.
+   * @param clonedFields clonedFields supplied to the metadata operation.
+   * @param field field supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #cloneField<Field extends DescriptorFieldMetadata>(
     field: Field,
     clonedFields: Map<DescriptorFieldMetadata, DescriptorFieldMetadata>,
@@ -289,6 +360,13 @@ class ReadinessMetadataOwner {
     return clone;
   }
 
+  /**
+   * Copies cloneFrozen metadata.
+   *
+   * @typeParam ObjectType ObjectType type for this declaration.
+   * @param value value supplied to the metadata operation.
+   * @returns The resulting metadata value.
+   */
   #cloneFrozen<ObjectType extends object>(value: ObjectType): ObjectType {
     const clone = Object.create(Reflect.getPrototypeOf(value)) as ObjectType;
     Object.defineProperties(clone, Object.getOwnPropertyDescriptors(value));

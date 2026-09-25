@@ -204,6 +204,7 @@ import {
   type CreateProjectSubmission,
   CreateProjectSubmissionSchema,
 } from "../../test-fixtures/generated/repository-routing/project_validation_commands_pb.js";
+// prettier-ignore
 import {
   type ProjectSubmissionCreated,
   ProjectSubmissionCreatedSchema,
@@ -820,31 +821,23 @@ class EnvelopeManagedAggregate extends Aggregate<string, typeof ProjectStateSche
 
 class ValidatingProjectAggregate extends Aggregate<string, typeof ProjectSubmissionStateSchema> {
   static assigneeCalls = 0;
-  static applierCalls = 0;
 
   static reset(): void {
     this.assigneeCalls = 0;
-    this.applierCalls = 0;
   }
 
-  createProject(command: CreateProjectSubmission) {
+  createProject(command: CreateProjectSubmission): ProjectSubmissionCreated {
     ValidatingProjectAggregate.assigneeCalls++;
-    return createValidatedEvent(`event-${command.id}`, command.id, command.name);
-  }
-
-  applyTask(event: ProjectSubmissionCreated): void {
-    ValidatingProjectAggregate.applierCalls++;
-    this.startTransaction();
     this.update((draft) =>
       Object.assign(
         draft,
         create(ProjectSubmissionStateSchema, {
-          id: event.id,
-          name: event.name,
+          id: command.id,
+          name: command.name,
         }),
       ),
     );
-    this.commitTransaction();
+    return create(ProjectSubmissionCreatedSchema, { id: command.id, name: command.name });
   }
 }
 
@@ -1002,7 +995,7 @@ class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectState
   }
 }
 
-class NoApplierAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+class ReactionMetadataAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): ProjectCreated {
     this.update((draft) =>
       Object.assign(
@@ -1020,8 +1013,9 @@ class NoApplierAggregate extends Aggregate<string, typeof ProjectStateSchema> {
     });
   }
 
-  reactTask(event: ProjectCreated): void {
+  reactTask(event: ProjectCreated): undefined {
     void event;
+    return undefined;
   }
 }
 
@@ -1031,10 +1025,6 @@ class MalformedEventAggregate extends Aggregate<string, typeof ProjectStateSchem
       id: create(EventIdSchema, { value: "event-malformed" }),
       context: create(EventContextSchema),
     });
-  }
-
-  applyTask(event: ProjectCreated): void {
-    void event;
   }
 }
 
@@ -1382,17 +1372,20 @@ class AccumulatingTaskProjection extends Projection<string, typeof ProjectOvervi
 
 class StateObservingProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static subscriberCalls = 0;
+  static result: unknown = undefined;
 
   static reset(): void {
     this.subscriberCalls = 0;
+    this.result = undefined;
   }
 
-  subscribeState(state: ProjectState): void {
+  subscribeState(state: ProjectState): unknown {
     StateObservingProjection.subscriberCalls++;
     this.update((draft) => {
       draft.name = `${state.name} (projected)`;
       draft.priority = state.archived ? 2 : 1;
     });
+    return StateObservingProjection.result;
   }
 }
 
@@ -1437,11 +1430,11 @@ class NonFiniteRouteProjection extends Projection<string, typeof ProjectOverview
 }
 
 class ProjectIdProjectAggregate extends Aggregate<TaskId, typeof TaskSchema> {
-  applyTaskCreated(event: TaskCreated): void {
+  subscribeTaskCreated(event: TaskCreated): void {
     void event;
   }
 
-  applyWrongId(event: ProjectMemberChanged): void {
+  subscribeWrongId(event: ProjectMemberChanged): void {
     void event;
   }
 }
@@ -1991,12 +1984,12 @@ describe("repository signal routing", () => {
         state: { id: "subscriber-id", name: "Task (applied)", archived: true },
       });
       await expect(storage.readStates("subscriber-id")).resolves.toMatchObject([{ version: 1n }]);
-      await expect(storage.readEvents("subscriber-id")).resolves.toMatchObject([
-        { id: { value: expect.stringMatching(UUID_PATTERN) } },
-      ]);
-      await expect(eventStore.read()).resolves.toMatchObject([
-        { id: { value: expect.stringMatching(UUID_PATTERN) } },
-      ]);
+      const storedEvents = await storage.readEvents("subscriber-id");
+      expect(storedEvents).toHaveLength(1);
+      expect(storedEvents[0]?.id?.value).toMatch(UUID_PATTERN);
+      const publishedEvents = await eventStore.read();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.id?.value).toMatch(UUID_PATTERN);
       expect("storedEventDispatchFailures" in context).toBe(false);
     } finally {
       eventStore.close();
@@ -2334,7 +2327,7 @@ describe("repository signal routing", () => {
 
   it("posts a rejected aggregate command without directly updating or persisting output", async () => {
     const rejection = TaskAlreadyDone.create({
-      id: create(GeneratedTaskIdSchema, { value: "task-applier-rejected" }),
+      id: create(GeneratedTaskIdSchema, { value: "task-direct-update-rejected" }),
     });
     ExecutingProjectAggregate.reset(rejection);
     const factory = new InMemoryStorageFactory();
@@ -2352,13 +2345,15 @@ describe("repository signal routing", () => {
     await expect(
       context
         .commandBus()
-        .post(createAggregateCommand("command-applier-rejected", "task-applier-rejected")),
+        .post(
+          createAggregateCommand("command-direct-update-rejected", "task-direct-update-rejected"),
+        ),
     ).resolves.toBeUndefined();
 
     expect(ExecutingProjectAggregate.directUpdateCalls).toBe(0);
     const [stored] = await waitForStoredEvents(eventStore, 1);
     expect(stored?.id?.value).toMatch(UUID_PATTERN);
-    await expect(storage.readCurrent("task-applier-rejected")).resolves.toBeUndefined();
+    await expect(storage.readCurrent("task-direct-update-rejected")).resolves.toBeUndefined();
     ExecutingProjectAggregate.reset();
   });
 
@@ -3310,10 +3305,10 @@ describe("repository signal routing", () => {
 
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
-    await expect(eventStore.read()).resolves.toMatchObject([
-      { id: { value: expect.stringMatching(UUID_PATTERN) }, context: { version: { number: 0 } } },
-      { id: { value: expect.stringMatching(UUID_PATTERN) }, context: { version: { number: 0 } } },
-    ]);
+    const events = await eventStore.read();
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.context?.version?.number)).toEqual([0, 0]);
+    for (const event of events) expect(event.id?.value).toMatch(UUID_PATTERN);
     await expect(storage.readCurrent("task-multi")).resolves.toMatchObject({
       entityId: "task-multi",
       version: 1n,
@@ -3409,10 +3404,10 @@ describe("repository signal routing", () => {
     SerialAsyncAssigneeAggregate.releaseNext();
     await Promise.all([first, second]);
 
-    await expect(eventStore.read()).resolves.toMatchObject([
-      { id: { value: expect.stringMatching(UUID_PATTERN) }, context: { version: { number: 0 } } },
-      { id: { value: expect.stringMatching(UUID_PATTERN) }, context: { version: { number: 1 } } },
-    ]);
+    const events = await eventStore.read();
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.context?.version?.number).sort()).toEqual([0, 1]);
+    for (const event of events) expect(event.id?.value).toMatch(UUID_PATTERN);
   });
 
   it("resolves aggregate command execution after commit when stored-event dispatch later throws", async () => {
@@ -3443,9 +3438,9 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("command-dispatch-failure", "task-dispatch")),
     ).resolves.toBeUndefined();
 
-    await expect(eventStore.read()).resolves.toMatchObject([
-      { id: { value: expect.stringMatching(UUID_PATTERN) } },
-    ]);
+    const events = await eventStore.read();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.id?.value).toMatch(UUID_PATTERN);
     await expect(storage.readCurrent("task-dispatch")).resolves.toMatchObject({
       entityId: "task-dispatch",
       version: 1n,
@@ -3518,13 +3513,15 @@ describe("repository signal routing", () => {
   it("executes managed aggregate commands when only event reaction metadata is registered", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
-      .add(createNoApplierRepository())
+      .add(createReactionMetadataRepository())
       .withStorageFactory(factory)
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(
-      context.commandBus().post(createAggregateCommand("command-no-applier", "task-no-applier")),
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-reaction-metadata", "task-reaction-metadata")),
     ).resolves.toBeUndefined();
     await expect(eventStore.read()).resolves.toMatchObject([
       {
@@ -3560,7 +3557,6 @@ describe("repository signal routing", () => {
     ).rejects.toThrow(/validation/i);
 
     expect(ValidatingProjectAggregate.assigneeCalls).toBe(0);
-    expect(ValidatingProjectAggregate.applierCalls).toBe(0);
   });
 
   it("rejects state-transition validation failures before storing aggregate output", async () => {
@@ -11182,8 +11178,8 @@ function createNonFiniteRouteRepository(): Repository<typeof NonFiniteRouteProje
 
 function createProjectIdTaskRepository(): Repository<typeof ProjectIdProjectAggregate> {
   const handlers = EntityHandlers.define(ProjectIdProjectAggregate, TaskSchema, (builder) => [
-    builder.apply(TaskCreatedSchema, "applyTaskCreated"),
-    builder.apply(ProjectMemberChangedSchema, "applyWrongId"),
+    builder.subscribe(TaskCreatedSchema, "subscribeTaskCreated"),
+    builder.subscribe(ProjectMemberChangedSchema, "subscribeWrongId"),
   ]);
 
   return new Repository({
@@ -11681,10 +11677,7 @@ function createValidatingRepository(): Repository<typeof ValidatingProjectAggreg
   const handlers = EntityHandlers.define(
     ValidatingProjectAggregate,
     ProjectSubmissionStateSchema,
-    (builder) => [
-      builder.assign(CreateProjectSubmissionSchema, "createProject"),
-      builder.apply(ProjectSubmissionCreatedSchema, "applyTask"),
-    ],
+    (builder) => [builder.assign(CreateProjectSubmissionSchema, "createProject")],
   );
 
   return new Repository({
@@ -12328,9 +12321,9 @@ function createThrowingProjectionRepository(): Repository<typeof ThrowingTaskPro
   });
 }
 
-function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
+function createReactionMetadataRepository(): Repository<typeof ReactionMetadataAggregate> {
   const handlers = HandlerMetadataValues.defineArity(
-    NoApplierAggregate,
+    ReactionMetadataAggregate,
     ProjectStateSchema,
     (builder) => [
       builder.assign(CreateProjectSchema, "createProject"),
@@ -12348,7 +12341,7 @@ function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
   );
 
   return new Repository({
-    entityType: NoApplierAggregate,
+    entityType: ReactionMetadataAggregate,
     schema: ProjectStateSchema,
     handlers,
     events: [ProjectCreatedSchema],
@@ -12358,7 +12351,6 @@ function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
 function createMalformedEventRepository(): Repository<typeof MalformedEventAggregate> {
   const handlers = EntityHandlers.define(MalformedEventAggregate, ProjectStateSchema, (builder) => [
     builder.assign(CreateProjectSchema, "createProject"),
-    builder.apply(ProjectCreatedSchema, "applyTask"),
   ]);
 
   return new Repository({
@@ -12694,27 +12686,6 @@ function readProjectOverviewId(event: SpineEvent): string {
   }
 
   return message.id;
-}
-
-function createValidatedEvent(id: string, aggregateId: string, name: string): SpineEvent {
-  return create(EventSchema, {
-    id: create(EventIdSchema, { value: id }),
-    context: create(EventContextSchema, {
-      producerId: AnyMessages.pack(
-        StringValueSchema,
-        create(StringValueSchema, { value: aggregateId }),
-      ),
-      timestamp: create(TimestampSchema, { seconds: 1n }),
-      version: create(VersionSchema, { number: 1 }),
-    }),
-    message: AnyMessages.pack(
-      ProjectSubmissionCreatedSchema,
-      create(ProjectSubmissionCreatedSchema, {
-        id: aggregateId,
-        name,
-      }),
-    ),
-  });
 }
 
 function createProjectCreated(
@@ -13835,6 +13806,43 @@ describe("Projection state-update routing", () => {
         priority: 1,
       });
     } finally {
+      await context.close();
+    }
+  });
+
+  it("does not commit a state subscriber that returns a concrete value", async () => {
+    StateObservingProjection.reset();
+    StateObservingProjection.result = null;
+    const factory = new InMemoryStorageFactory();
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
+    );
+    const repository = new Repository({
+      entityType: StateObservingProjection,
+      schema: ProjectOverviewStateSchema,
+      handlers,
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectStateSchema, () => [
+        "target",
+      ]),
+    });
+    const context = BoundedContext.singleTenant("State updates")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "State updates", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectOverviewStateSchema,
+    });
+    try {
+      await boundedContextAccess.postSystemEvent(context, createStateChangedEvent("source"));
+      await waitForCondition(() => StateObservingProjection.subscriberCalls === 1);
+      await expect(storage.readCurrent("target")).resolves.toBeUndefined();
+      await expect(storage.readStates("target")).resolves.toEqual([]);
+    } finally {
+      StateObservingProjection.reset();
       await context.close();
     }
   });

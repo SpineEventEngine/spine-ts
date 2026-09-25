@@ -130,8 +130,8 @@ import {
   type ProjectState,
   ProjectStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+// prettier-ignore
 import {
-  type ProjectSubmissionCreated,
   ProjectSubmissionCreatedSchema,
 } from "../../test-fixtures/generated/repository-routing/project_validation_events_pb.js";
 import {
@@ -175,21 +175,16 @@ class RejectingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema
 
 class ValidatingTaskAggregate extends Aggregate<string, typeof ReviewProjectStateSchema> {
   assignTask(command: CreateReviewProject) {
-    return createValidatedEvent(`event-${command.id}`, command.id, command.name);
-  }
-
-  applyTask(event: ProjectSubmissionCreated): void {
-    this.startTransaction();
     this.update((draft) =>
       Object.assign(
         draft,
         create(ReviewProjectStateSchema, {
-          id: event.id,
-          name: event.name,
+          id: command.id,
+          name: command.name,
         }),
       ),
     );
-    this.commitTransaction();
+    return createValidatedEvent(`event-${command.id}`, command.id, command.name);
   }
 }
 
@@ -4330,10 +4325,7 @@ function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate
   const handlers = EntityHandlers.define(
     ValidatingTaskAggregate,
     ReviewProjectStateSchema,
-    (builder) => [
-      builder.assign(CreateReviewProjectSchema, "assignTask"),
-      builder.apply(ProjectSubmissionCreatedSchema, "applyTask"),
-    ],
+    (builder) => [builder.assign(CreateReviewProjectSchema, "assignTask")],
   );
 
   return new Repository({

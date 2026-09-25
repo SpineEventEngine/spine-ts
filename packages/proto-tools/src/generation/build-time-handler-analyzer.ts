@@ -240,7 +240,6 @@ interface AnalyzedMethodInput {
  * Stable diagnostic codes emitted by build-time handler analysis.
  */
 export type BuildHandlerDiagnosticCode =
-  | "APPLY_DECORATOR"
   | "FRAMEWORK_ENVELOPE_RETURN"
   | "INVALID_EMITTED_SCHEMA"
   | "INVALID_HANDLER_NAME"
@@ -463,7 +462,7 @@ interface TypeWalk {
 }
 
 type HandlerDecorator = "Assign" | "Command" | "React" | "Subscribe";
-type ServerDecorator = HandlerDecorator | "Apply" | "Where" | "Throws";
+type ServerDecorator = HandlerDecorator | "Where" | "Throws";
 type SignalKind = "command" | "event" | "rejection" | "state";
 
 interface DecoratorUse {
@@ -648,14 +647,12 @@ const HandlerSources = Object.freeze({
     scope: AnalyzerScope,
   ): BuildHandlerRecord | undefined {
     const decorators = HandlerSources.methodDecorators(node, scope.imports);
-    const apply = decorators.find((decorator) => decorator.name === "Apply");
     const handler = decorators.find(HandlerSources.isHandlerUse);
     const whereUses = decorators.filter((decorator) => decorator.name === "Where");
     const throwsUses = decorators.filter((decorator) => decorator.name === "Throws");
     const method = HandlerTypes.methodName(node);
     const use = {
       node,
-      apply,
       handler,
       whereUses,
       throwsUses,
@@ -806,7 +803,6 @@ const HandlerSources = Object.freeze({
    */
   validMethodUse(input: {
     readonly node: ts.MethodDeclaration;
-    readonly apply: DecoratorUse | undefined;
     readonly handler: HandlerDecoratorUse | undefined;
     readonly whereUses: readonly DecoratorUse[];
     readonly throwsUses: readonly DecoratorUse[];
@@ -817,7 +813,6 @@ const HandlerSources = Object.freeze({
     readonly scope: AnalyzerScope;
     readonly method: string | undefined;
   }): input is typeof input & { readonly handler: HandlerDecoratorUse } {
-    HandlerSources.reportUnsupportedApply(input);
     if (input.handler === undefined) return HandlerSources.reportMissingHandler(input);
     const { className, handler, method, node, scope } = input;
     if (!HandlerSources.validHandlerKind({ ...input, handler })) return false;
@@ -993,28 +988,6 @@ const HandlerSources = Object.freeze({
     return namespace?.exports.schemaRoles.get(schemaName) !== "rejection"
       ? undefined
       : { moduleSpecifier: namespace.moduleSpecifier, exportName: schemaName };
-  },
-
-  /**
-   * Records an unsupported Apply decorator on a method.
-   *
-   * @param input The collected method or validation input.
-   */
-  reportUnsupportedApply(input: {
-    readonly apply: DecoratorUse | undefined;
-    readonly scope: AnalyzerScope;
-    readonly className: string;
-    readonly method: string | undefined;
-  }): void {
-    if (input.apply === undefined) return;
-    HandlerTypes.pushDiagnostic(
-      input.scope,
-      "APPLY_DECORATOR",
-      input.apply.node,
-      "Generated registries do not support @Apply.",
-      input.className,
-      input.method,
-    );
   },
 
   /**
@@ -1215,9 +1188,8 @@ const HandlerSources = Object.freeze({
       (signalKind !== "event" && signalKind !== "rejection") ||
       use === undefined
     ) {
-      HandlerTypes.pushDiagnostic(
+      HandlerSources.invalidWhere(
         scope,
-        "INVALID_WHERE",
         use?.node ?? handler.node,
         "@Where is allowed once on an Event-consuming @Subscribe, @React, or @Command handler.",
         className,
@@ -1225,11 +1197,28 @@ const HandlerSources = Object.freeze({
       );
       return undefined;
     }
+    return HandlerSources.whereOptions(use, scope, className, methodName);
+  },
+
+  /**
+   * Reads the object literal from one Where decorator.
+   *
+   * @param use Where decorator to inspect.
+   * @param scope Current analysis context.
+   * @param className Receiver class name.
+   * @param methodName Handler method name.
+   * @returns Parsed filter, or undefined when invalid.
+   */
+  whereOptions(
+    use: DecoratorUse,
+    scope: AnalyzerScope,
+    className: string,
+    methodName: string,
+  ): BuildWhereOptions | undefined {
     const expression = use.node.expression;
     if (!ts.isCallExpression(expression) || expression.arguments.length !== 1) {
-      HandlerTypes.pushDiagnostic(
+      HandlerSources.invalidWhere(
         scope,
-        "INVALID_WHERE",
         use.node,
         "@Where requires one object literal.",
         className,
@@ -1239,9 +1228,8 @@ const HandlerSources = Object.freeze({
     }
     const options = expression.arguments[0];
     if (options === undefined || !ts.isObjectLiteralExpression(options)) {
-      HandlerTypes.pushDiagnostic(
+      HandlerSources.invalidWhere(
         scope,
-        "INVALID_WHERE",
         expression,
         "@Where options must be an object literal.",
         className,
@@ -1249,44 +1237,34 @@ const HandlerSources = Object.freeze({
       );
       return undefined;
     }
+    return HandlerSources.whereProperties(options, scope, className, methodName);
+  },
+
+  /**
+   * Validates string-valued Where filter properties.
+   *
+   * @param options Object literal supplied to Where.
+   * @param scope Current analysis context.
+   * @param className Receiver class name.
+   * @param methodName Handler method name.
+   * @returns Parsed filter, or undefined when invalid.
+   */
+  whereProperties(
+    options: ts.ObjectLiteralExpression,
+    scope: AnalyzerScope,
+    className: string,
+    methodName: string,
+  ): BuildWhereOptions | undefined {
     const values = new Map<string, string>();
     for (const property of options.properties) {
-      if (
-        !ts.isPropertyAssignment(property) ||
-        (property.name.kind !== ts.SyntaxKind.Identifier &&
-          !ts.isStringLiteralLike(property.name)) ||
-        !ts.isStringLiteralLike(property.initializer)
-      ) {
-        HandlerTypes.pushDiagnostic(
-          scope,
-          "INVALID_WHERE",
-          property,
-          "@Where accepts only eventField and equals string literals.",
-          className,
-          methodName,
-        );
+      if (!HandlerSources.readWhereProperty(property, values, scope, className, methodName))
         return undefined;
-      }
-      const name = property.name.text;
-      if ((name !== "eventField" && name !== "equals") || values.has(name)) {
-        HandlerTypes.pushDiagnostic(
-          scope,
-          "INVALID_WHERE",
-          property,
-          "@Where accepts each of eventField and equals exactly once.",
-          className,
-          methodName,
-        );
-        return undefined;
-      }
-      values.set(name, property.initializer.text);
     }
-    const eventField = values.get("eventField");
-    const equals = values.get("equals");
+    const eventField = values.get("eventField"),
+      equals = values.get("equals");
     if (eventField === undefined || eventField.trim().length === 0 || equals === undefined) {
-      HandlerTypes.pushDiagnostic(
+      HandlerSources.invalidWhere(
         scope,
-        "INVALID_WHERE",
         options,
         "@Where requires non-empty eventField and string equals.",
         className,
@@ -1295,6 +1273,71 @@ const HandlerSources = Object.freeze({
       return undefined;
     }
     return Object.freeze({ eventField, equals });
+  },
+
+  /**
+   * Reads one literal Where filter property.
+   *
+   * @param property Object-literal member to inspect.
+   * @param values Parsed filter entries.
+   * @param scope Current analysis context.
+   * @param className Receiver class name.
+   * @param methodName Handler method name.
+   * @returns Whether the property was accepted.
+   */
+  readWhereProperty(
+    property: ts.ObjectLiteralElementLike,
+    values: Map<string, string>,
+    scope: AnalyzerScope,
+    className: string,
+    methodName: string,
+  ): boolean {
+    if (
+      !ts.isPropertyAssignment(property) ||
+      (property.name.kind !== ts.SyntaxKind.Identifier && !ts.isStringLiteralLike(property.name)) ||
+      !ts.isStringLiteralLike(property.initializer)
+    ) {
+      HandlerSources.invalidWhere(
+        scope,
+        property,
+        "@Where accepts only eventField and equals string literals.",
+        className,
+        methodName,
+      );
+      return false;
+    }
+    const name = property.name.text;
+    if ((name !== "eventField" && name !== "equals") || values.has(name)) {
+      HandlerSources.invalidWhere(
+        scope,
+        property,
+        "@Where accepts each of eventField and equals exactly once.",
+        className,
+        methodName,
+      );
+      return false;
+    }
+    values.set(name, property.initializer.text);
+    return true;
+  },
+
+  /**
+   * Checks an invalid Where declaration and records its diagnostic.
+   *
+   * @param scope Current analysis context.
+   * @param node Invalid syntax node.
+   * @param message Diagnostic message.
+   * @param className Receiver class name.
+   * @param methodName Handler method name.
+   */
+  invalidWhere(
+    scope: AnalyzerScope,
+    node: ts.Node,
+    message: string,
+    className: string,
+    methodName: string,
+  ): void {
+    HandlerTypes.pushDiagnostic(scope, "INVALID_WHERE", node, message, className, methodName);
   },
 
   /**
@@ -1517,6 +1560,52 @@ const HandlerSources = Object.freeze({
     className: string,
     method: string | undefined,
   ): boolean {
+    if (HandlerSources.parameterShapeIssue(node, decorator, scope, className, method)) return true;
+    const origin = HandlerSources.externalOrigin(node.parameters, scope, className, method);
+    if (origin === undefined) return true;
+    const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
+    if (signal !== undefined && HandlerSources.acceptsSignalKind(decorator, signal.kind)) {
+      if (origin.value === "external" && signal.kind === "command") {
+        HandlerTypes.pushDiagnostic(
+          scope,
+          "EXTERNAL_COMMAND_RECEIVER",
+          node.parameters[0]?.type ?? node,
+          "Command receivers cannot declare External<Command>.",
+          className,
+          method,
+        );
+        return true;
+      }
+      return false;
+    }
+    HandlerTypes.pushDiagnostic(
+      scope,
+      "INVALID_SIGNAL_TYPE",
+      node.parameters[0]?.type ?? node,
+      `@${decorator} first parameter must be ${HandlerSources.signalMessage(decorator)}.`,
+      className,
+      method,
+    );
+    return true;
+  },
+
+  /**
+   * Checks handler parameter count and explicit input annotation.
+   *
+   * @param node Handler method declaration.
+   * @param decorator Handler decorator.
+   * @param scope Current analysis context.
+   * @param className Receiver class name.
+   * @param method Handler method name.
+   * @returns Whether a parameter-shape issue was reported.
+   */
+  parameterShapeIssue(
+    node: ts.MethodDeclaration,
+    decorator: HandlerDecorator,
+    scope: AnalyzerScope,
+    className: string,
+    method: string | undefined,
+  ): boolean {
     if (node.parameters.length !== 1 && node.parameters.length !== 2) {
       HandlerTypes.pushDiagnostic(
         scope,
@@ -1539,34 +1628,7 @@ const HandlerSources = Object.freeze({
       );
       return true;
     }
-
-    const origin = HandlerSources.externalOrigin(node.parameters, scope, className, method);
-    if (origin === undefined) return true;
-    const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
-    if (signal !== undefined && HandlerSources.acceptsSignalKind(decorator, signal.kind)) {
-      if (origin.value === "external" && signal.kind === "command") {
-        HandlerTypes.pushDiagnostic(
-          scope,
-          "EXTERNAL_COMMAND_RECEIVER",
-          node.parameters[0].type,
-          "Command receivers cannot declare External<Command>.",
-          className,
-          method,
-        );
-        return true;
-      }
-      return false;
-    }
-
-    HandlerTypes.pushDiagnostic(
-      scope,
-      "INVALID_SIGNAL_TYPE",
-      node.parameters[0].type,
-      `@${decorator} first parameter must be ${HandlerSources.signalMessage(decorator)}.`,
-      className,
-      method,
-    );
-    return true;
+    return false;
   },
 
   /**
@@ -4046,7 +4108,6 @@ const HandlerTypes = Object.freeze({
       name === "Command" ||
       name === "React" ||
       name === "Subscribe" ||
-      name === "Apply" ||
       name === "Where" ||
       name === "Throws"
       ? name
