@@ -45,7 +45,7 @@ cleanup.
   acceptance surface; do not duplicate or weaken it.
 - Ordinary end-user handlers remain free of framework `Command`/`Event`
   envelopes, `packCommand()`/`packEvent()`, schema-bearing decorators,
-  aggregate retired event-replay handlers, manual transactions, internal IDs/default-target
+  aggregate event replay, manual transactions, internal IDs/default-target
   extraction, handler materializers, and internal lifecycle APIs.
 - Use behavior-focused TDD for every new behavior or defect. Record RED before
   GREEN. Prefer focused native loopback/IPC checks during inner loops and reserve

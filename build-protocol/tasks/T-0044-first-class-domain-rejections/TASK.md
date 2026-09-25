@@ -42,7 +42,7 @@ presenting it as JVM-equivalent rejection behavior.
 - Preserve Spine Protobuf contracts, type URLs, options, and modelling
   conventions.
 - Keep end-user handler code free of framework `Event` envelopes, manual
-  transactions, retired event-replay handlers, schema-bearing decorators, and app-owned handler
+  transactions, event replay, schema-bearing decorators, and app-owned handler
   materialization.
 - Prefer the smallest JVM-familiar concept and avoid TypeScript-specific
   abstraction layers without corresponding framework value.

@@ -37,7 +37,7 @@
   subscription, validation, asynchronous delivery, generated registry, gRPC,
   and local multi-process behavior rather than framework internals or mocks.
 - End-user audit rules are explicit and automatable: no framework envelopes,
-  schema-bearing decorators, retired event-replay handlers, manual transactions, internal event-ID
+  schema-bearing decorators, event replay, manual transactions, internal event-ID
   construction, default-route ID extraction, or app-owned handler
   materialization in examples/docs.
 - The initial compatibility target is behavioral and Protobuf-level, including

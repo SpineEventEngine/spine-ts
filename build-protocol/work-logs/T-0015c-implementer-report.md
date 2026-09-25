@@ -17,7 +17,7 @@ Supported behavior:
 - Discovers bare `@Assign`, `@Command`, `@React`, and `@Subscribe` method
   decorators imported from `@spine-ts/server`, including named aliases and
   namespace imports.
-- Rejects schema-bearing handler decorators and retired event-replay handlers.
+- Rejects schema-bearing handler decorators and event replay.
 - Requires public instance string-named methods on entity classes with inferred
   state schema references.
 - Infers state schema references from `Aggregate`, `Projection`, and

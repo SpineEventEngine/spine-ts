@@ -87,7 +87,7 @@ Reason not run:
 ## Notes
 
 - No app-side handler materialization, schema-bearing decorator changes,
-  retired event-replay handlers additions, manual app transactions, Delivery catch-up storage, retry
+  event replay additions, manual app transactions, Delivery catch-up storage, retry
   loops, schedulers, inbox lifecycle, or topology work were introduced.
 - No event-store mutation occurs during catch-up beyond ordinary read access.
 

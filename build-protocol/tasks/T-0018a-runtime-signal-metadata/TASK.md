@@ -20,7 +20,7 @@ producer ID, and version metadata.
 - Keep low-level `packCommand()` and `packEvent()` available for framework and
   advanced callers.
 - Preserve end-user handler invariants: handlers return generated domain
-  messages, not framework `Event` envelopes; no retired event-replay handlers; no manual end-user
+  messages, not framework `Event` envelopes; no event replay; no manual end-user
   transactions; no application-owned handler materialization.
 - Prefer small OOP-style objects/classes over scattered utility functions.
 - Do not add production storage, tracing, health, auth, or multi-host transport

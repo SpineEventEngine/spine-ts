@@ -36,7 +36,7 @@ It only defines the ingestion-side API that later generated modules can call.
 - `@Subscribe` handlers require explicit `void` return types.
 - `handler(signal)` and `handler(signal, context)` must be represented in the
   registry contract for later invocation support.
-- retired event-replay handlers is not supported for new generated registry records.
+- event replay is not supported for new generated registry records.
 - Ordinary end-user handlers return generated domain messages, not framework
   `Command` or `Event` envelopes.
 - Generated output remains ignored and uncommitted.
@@ -53,7 +53,7 @@ T-0015a accepted `D-0059` and documented the logical registry shape:
   public arity `1 | 2`;
 - supported kinds are command assignment, command reaction, event subscription,
   and event reaction;
-- retired event-replay metadata/retired event-replay handlers is excluded.
+- retired event-replay metadata/event replay is excluded.
 
 ## Acceptance Criteria
 

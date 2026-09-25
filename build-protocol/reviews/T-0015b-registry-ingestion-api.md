@@ -21,7 +21,7 @@ Required review lanes:
 
 - Generated registry ingestion is framework-owned.
 - End-user apps must not materialize/discover handlers themselves.
-- Generated registry records exclude retired event-replay handlers.
+- Generated registry records exclude event replay.
 - Generated records convert into existing canonical handler metadata rather than
   a broad parallel registry.
 - No analyzer, generator, runtime discovery, two-argument invocation, or to-do

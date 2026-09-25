@@ -113,7 +113,7 @@ TypeScript implication: event dispatcher lookup must include both message type a
 
 ### ImportBus
 
-`ImportBus` is a unicast bus for aggregate event import. It dispatches domestic events to aggregate repositories that declare the event importable via retired event-replay handlers. External events cannot be imported by this path.
+`ImportBus` is a unicast bus for aggregate event import. It dispatches domestic events to aggregate repositories that declare the event importable via event replay. External events cannot be imported by this path.
 
 Sources:
 
@@ -260,7 +260,7 @@ Repositories do not normally call entity handlers immediately. They route and wr
 
 - `HANDLE_COMMAND` endpoint for `@Assign`/`@Command` command handling;
 - `REACT_UPON_EVENT` endpoint for `@React`/event-commanding reactions;
-- `IMPORT_EVENT` endpoint for retired event-replay handlers.
+- `IMPORT_EVENT` endpoint for event replay.
 
 Dispatch behavior:
 

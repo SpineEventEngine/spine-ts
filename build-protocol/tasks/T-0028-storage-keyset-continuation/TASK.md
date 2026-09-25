@@ -30,8 +30,8 @@ delivery scans no longer depend on moving absolute pending-row offsets.
 - Preserve Spine Protobuf contracts, type URLs, options, and modeling
   conventions.
 - Keep end-user code free of framework `Event` envelopes, manual transactions,
-  retired event-replay handlers, schema-bearing decorators, and app-owned handler materialization.
-- Aggregate import/importers, `ImportBus`, and aggregate retired event-replay handlers delivery are
+  event replay, schema-bearing decorators, and app-owned handler materialization.
+- Aggregate import/importers, `ImportBus`, and aggregate event replay delivery are
   removed from the active roadmap.
 - `IMPORT_EVENT` is not a supported public delivery label for new inbox writes;
   legacy stored rows are deprecated compatibility data that fail closed.
@@ -86,7 +86,7 @@ not production storage adapters, retry policy, or worker topology.
 - ZeroMQ endpoint topology, broker/process supervision, or deployment
   hardening.
 - Durable catch-up storage or projection catch-up through inbox storage.
-- `ImportBus`, aggregate import/importers, aggregate retired event-replay handlers, or new
+- `ImportBus`, aggregate import/importers, aggregate event replay, or new
   `IMPORT_EVENT` writes.
 - Removing existing `RecordQuery.offset`.
 - Broad automatic storage capability negotiation.

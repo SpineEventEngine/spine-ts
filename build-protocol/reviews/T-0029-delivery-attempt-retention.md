@@ -33,7 +33,7 @@ Branch: `task/T-0029-delivery-attempt-retention`
   `IMPORT_EVENT` rows fail closed without retained attempts.
 - Verify docs accurately name retained attempt history as present while keeping
   retry monitors, production supervision, topology, durable catch-up storage,
-  production storage adapters, import work, and aggregate retired event-replay handlers delivery out
+  production storage adapters, import work, and aggregate event replay delivery out
   of scope.
 
 ## Rounds
@@ -389,7 +389,7 @@ Branch: `task/T-0029-delivery-attempt-retention`
 - Documentation (Boyle the 5th): clean. Public and protocol docs accurately
   describe internal sanitized retained attempt history while keeping retry
   monitors, scheduler/backoff policy, production supervision/topology, durable
-  catch-up, production storage adapters, import work, aggregate retired event-replay handlers
+  catch-up, production storage adapters, import work, aggregate event replay
   delivery, and public end-user delivery APIs out of scope.
 - TypeScript/API docs (Copernicus the 5th): clean. No accidental public retry
   API or public attempt API appears; callback-visible snapshots keep supported
@@ -453,7 +453,7 @@ Branch: `task/T-0029-delivery-attempt-retention`
 - Documentation (Kant the 5th): clean. Public and protocol docs state
   sanitized internal retained attempt history exists while keeping retry
   monitors, scheduler/backoff, production supervision/topology, durable
-  catch-up, production storage adapters, import work, aggregate retired event-replay handlers
+  catch-up, production storage adapters, import work, aggregate event replay
   delivery, and public end-user delivery APIs out of scope. Durable logs record
   `c385d25c` and pending re-review state.
 - TypeScript/API docs (Euler the 5th): clean. The corruption propagation fix

@@ -105,7 +105,7 @@ FINDINGS
 - No schema-decorator or end-user `Event` envelope regression found in the
   reviewed delivery-loop/API-doc changes. The new public API surface is limited
   to framework delivery loop exports and does not introduce end-user handler
-  materialization, schema-bearing decorators, retired event-replay handlers, manual transactions, or
+  materialization, schema-bearing decorators, event replay, manual transactions, or
   framework event envelopes.
 - No new type-safety problem found in the reviewed production or test code.
 

@@ -24,7 +24,7 @@ example-readiness gap proves the framework is missing a required behavior.
   assembly.
 - The example must not import or call handler discovery/materialization,
   `HandlerMetadataRegistry`, `EntityHandlersMetadata`, or `new Repository`.
-- The example must not use schema-bearing decorators, retired event-replay handlers, framework
+- The example must not use schema-bearing decorators, event replay, framework
   `Event` returns, manual transactions, internal event ID generation, or
   end-user default-route ID validation.
 - The example must start through the framework `Server` lifecycle API and

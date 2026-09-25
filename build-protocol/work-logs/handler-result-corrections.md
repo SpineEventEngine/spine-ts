@@ -46,3 +46,12 @@ historical Git ref names remain exact so the audit still identifies real refs.
 Old JVM research is explicitly marked historical, not implementation authority.
 Changed Markdown was formatted, `docs:audience:check` passed, and
 `git diff --check` passed. Runtime implementation and review remain pending.
+
+Documentation checkpoint `6d6342ef1` was pushed to official origin. GitHub CLI
+returned HTTP 401 for its configured credentials. Public GitHub REST reads work
+without credentials, so CI can still be inspected; no authentication settings
+were changed. The checkpoint Build check was in progress when inspected.
+
+Standalone runtime regression tests reproduced acceptance of invalid null and
+empty-array subscriber results. After raw-result validation, all 19 focused
+runtime tests passed. Repository transaction checks are being implemented next.

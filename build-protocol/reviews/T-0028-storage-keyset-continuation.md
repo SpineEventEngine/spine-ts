@@ -37,7 +37,7 @@ Branch: `task/T-0028-storage-keyset-continuation`
 - Reject production storage adapters, broad query planners, retry monitors,
   retained attempt history, worker supervision, ZeroMQ topology, durable
   catch-up storage, `ImportBus`, aggregate import/importers, and aggregate
-  retired event-replay handlers work.
+  event replay work.
 
 ## Rounds
 

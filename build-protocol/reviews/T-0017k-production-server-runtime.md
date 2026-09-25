@@ -29,7 +29,7 @@ docs/API updates, and verification evidence.
 - Reviewers must check that ZeroMQ worker topology remains deferred to
   `T-0017l`.
 - Reviewers must check that no end-user API requires framework `Event`
-  envelopes, manual transactions, schema-bearing decorators, retired event-replay handlers, or
+  envelopes, manual transactions, schema-bearing decorators, event replay, or
   application-owned handler materialization.
 
 ## Initial Findings To Inspect

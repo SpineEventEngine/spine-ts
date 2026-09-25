@@ -20,7 +20,7 @@ Completed: `2026-07-08T17:51:36Z`
   validation acknowledgements.
 - Extended the example-source cleanup guard to forbid end-user `Repository`
   access, covering the T-0016h `new Repository` requirement alongside the
-  existing generated-discovery, schema-bearing-decorator, retired event-replay handlers,
+  existing generated-discovery, schema-bearing-decorator, event replay,
   framework-envelope, event-ID, transaction, handler-return, subscriber-return,
   and target-validation checks.
 - Addressed the documentation review finding that `examples/todo/README.md`

@@ -32,7 +32,7 @@ file rendering that later app/package build scripts can invoke.
 - Generated registry/build-time tooling owns schema inference and schema imports.
 - Generated output must live under a package `generated` directory and be ignored
   by Git.
-- Generated registry records exclude retired event-replay handlers.
+- Generated registry records exclude event replay.
 - `@Assign` emits events, `@Command` emits commands, `@React` emits events or
   nothing, and `@Subscribe` emits nothing.
 - `handler(signal)` and `handler(signal, context)` arity must be preserved in

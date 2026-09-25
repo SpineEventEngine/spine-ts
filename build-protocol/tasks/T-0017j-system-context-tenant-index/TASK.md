@@ -55,7 +55,7 @@ and JVM-familiar.
   concepts and keep this slice deliberately smaller than full JVM machinery.
 - Keep strict read-side/write-side segregation.
 - End-user code must not use framework `Event` envelopes, manual
-  transactions, schema-bearing decorators, retired event-replay handlers, default-route target-ID
+  transactions, schema-bearing decorators, event replay, default-route target-ID
   extraction, or application-owned handler materialization.
 - Native execution is explicitly allowed for `corepack`, `pnpm install`,
   `pnpm --config.verify-deps-before-run=false verify`, and local IPC/loopback

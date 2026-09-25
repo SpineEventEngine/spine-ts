@@ -32,7 +32,7 @@ and dropped event import.
   import, removes `@Import`, `ImportBus`, import routing/endpoints, and related
   test API, and keeps `InboxLabel.IMPORT_EVENT` only as deprecated wire
   compatibility surface.
-- Upstream ADR 0001 D2 makes aggregate/aggregate-part retired event-replay handlers a
+- Upstream ADR 0001 D2 makes aggregate/aggregate-part event replay a
   model-building error; it is retained only so the model can detect and fail
   unsupported aggregate appliers.
 - Upstream ADR 0001 shifts aggregates to load latest persisted state and mutate
@@ -40,7 +40,7 @@ and dropped event import.
   journal records, not replay input for aggregate state.
 - Local JVM notes in
   `spine-jvm-docs/spine-routing-dispatch-and-delivery.md` describe the old
-  `ImportBus` path as tied to aggregate retired event-replay handlers
+  `ImportBus` path as tied to aggregate event replay
   and an aggregate `IMPORT_EVENT` inbox endpoint. This confirms the old import
   path is not a separate TS runtime gap once ADR 0001 removes aggregate
   appliers/import.

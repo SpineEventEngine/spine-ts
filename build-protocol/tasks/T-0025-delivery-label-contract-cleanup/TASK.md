@@ -26,7 +26,7 @@ compatibility data.
 
 ## Out Of Scope
 
-- Implementing event import, `ImportBus`, aggregate importers, or retired event-replay handlers
+- Implementing event import, `ImportBus`, aggregate importers, or event replay
   delivery.
 - Removing wire/proto compatibility references to `IMPORT_EVENT`.
 - Narrowing `CATCH_UP` or `TO_CATCH_UP`.

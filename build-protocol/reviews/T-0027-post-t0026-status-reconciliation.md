@@ -28,7 +28,7 @@ Branch: `task/T-0027-post-t0026-status-reconciliation`
 - Verify `IMPORT_EVENT` remains unsupported for new writes and legacy stored
   rows fail closed.
 - Reject any wording that reopens aggregate import/importers, `ImportBus`, or
-  aggregate retired event-replay handlers delivery as active roadmap work.
+  aggregate event replay delivery as active roadmap work.
 
 ## Rounds
 
@@ -75,7 +75,7 @@ Branch: `task/T-0027-post-t0026-status-reconciliation`
   fixed and the branch remains docs/status-only.
 - Documentation (Kepler the 4th): clean. Production-qualified worker gap
   wording, local worker/loop boundary, `CATCH_UP`, `IMPORT_EVENT`, and
-  import/retired event-replay handlers removal wording are consistent.
+  import/event replay removal wording are consistent.
 - TypeScript/API docs (Kuhn the 4th): clean. API-doc export checks, generated
   build typecheck, format check, and whitespace checks passed.
 - Security (Hume the 4th): clean. IPC, local-only server, worker replay,

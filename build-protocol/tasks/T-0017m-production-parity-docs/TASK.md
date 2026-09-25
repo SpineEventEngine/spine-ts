@@ -48,7 +48,7 @@ framework state after `T-0017a` through `T-0017l` landed.
 - Close every participating sub-agent once its role is complete.
 - No change may be made without updating the relevant durable log.
 - Keep end-user code constraints visible: no framework `Event` envelopes, no
-  manual transactions, no retired event-replay handlers, no schema-bearing decorators, and no
+  manual transactions, no event replay, no schema-bearing decorators, and no
   application-owned handler materialization.
 - Avoid over-claiming production parity. The docs must distinguish verified
   local/example readiness from remaining production hardening.

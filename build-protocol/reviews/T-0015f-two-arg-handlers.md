@@ -23,7 +23,7 @@ Required review lanes:
   `@Assign`, `@Command`, `@React`, and `@Subscribe` metadata.
 - The second argument is the generated Protobuf context message from the
   incoming signal envelope, not a TS-only framework helper.
-- retired event-replay handlers does not get two-argument support.
+- event replay does not get two-argument support.
 - End-user handlers return domain messages, not framework envelopes.
 - Handler materialization remains framework-owned.
 - Keep the API small and avoid overengineered runtime concepts.
@@ -39,7 +39,7 @@ Required review lanes:
     `parameterCount`; generated registry ingestion preserves it; repository
     aggregate command assignees and projection event subscribers pass generated
     `CommandContext`/`EventContext` only for two-argument metadata.
-  - retired event-replay handlers remains one-argument only, and the to-do example/runtime reactors
+  - event replay remains one-argument only, and the to-do example/runtime reactors
     were not expanded.
   - Focused verification passed:
     `corepack pnpm typecheck:build`;

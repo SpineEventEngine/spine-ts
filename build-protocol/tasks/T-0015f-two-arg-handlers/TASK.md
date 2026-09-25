@@ -25,7 +25,7 @@ T-0015f should preserve generated handler `parameterCount` in canonical handler
 metadata and pass the generated Protobuf context from the incoming framework
 envelope when the handler declared two parameters. The slice must stay focused
 on invocation behavior and must not migrate the to-do example, add broad
-runtime routing, revive event sourcing, or add retired event-replay handlers support.
+runtime routing, revive event sourcing, or add event replay support.
 
 ## Human-Imposed Requirements Ledger
 
@@ -34,7 +34,7 @@ runtime routing, revive event sourcing, or add retired event-replay handlers sup
 - The second parameter is a generated context message from the incoming signal
   envelope, such as `CommandContext` or `EventContext`, not a TypeScript-only
   helper type.
-- retired event-replay handlers must not get two-argument support.
+- event replay must not get two-argument support.
 - Ordinary handler return values remain generated domain messages, not
   framework `Command` or `Event` envelopes.
 - Handler discovery/materialization remains framework-owned.
@@ -59,7 +59,7 @@ runtime routing, revive event sourcing, or add retired event-replay handlers sup
   repository runtime.
 - New generated registry writer or analyzer behavior unless needed to preserve
   existing `parameterCount` data.
-- retired event-replay handlers two-argument support.
+- event replay two-argument support.
 - Event-sourced aggregate behavior.
 - gRPC, Stand, delivery, transport, or broader runtime redesign.
 

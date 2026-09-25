@@ -37,7 +37,7 @@ tests for the next subtasks.
 - `@Subscribe` handlers require explicit `void` return types.
 - `handler(signal)` and `handler(signal, context)` must be supported for
   `@Assign`, `@Command`, `@React`, and `@Subscribe`.
-- retired event-replay handlers is not supported for new aggregate behavior.
+- event replay is not supported for new aggregate behavior.
 - Ordinary end-user handlers return generated domain messages, not framework
   `Command` or `Event` envelopes.
 - Generated Protobuf output remains under ignored `generated` directories and
@@ -69,7 +69,7 @@ T-0015a is the first non-blocked implementable subtask.
 - Tests or checker fixtures cover required explicit first parameter type,
   explicit emitter return type, `@Subscribe: void`, non-empty emitter returns,
   framework-envelope rejection, schema-bearing decorator rejection, and
-  retired event-replay handlers rejection.
+  event replay rejection.
 - No generated output is committed.
 - No full analyzer, package generator, automatic discovery, or to-do migration
   is introduced in this slice.

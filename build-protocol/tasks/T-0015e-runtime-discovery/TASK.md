@@ -35,7 +35,7 @@ package scanning.
   directories.
 - Runtime discovery must remain small and explicit; no speculative global
   scanning or hidden process-wide registry mutation.
-- Generated registries exclude retired event-replay handlers.
+- Generated registries exclude event replay.
 - Ordinary handlers return domain messages, not framework `Command` or `Event`
   envelopes.
 

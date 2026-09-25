@@ -34,7 +34,7 @@ machinery.
 - Public process-manager query client injection.
 - Application-owned handler materialization.
 - Schema-bearing public decorators, framework `Event` envelopes in end-user
-  code, manual end-user transactions, or retired event-replay handlers.
+  code, manual end-user transactions, or event replay.
 
 ## Human-Imposed Requirements Ledger
 

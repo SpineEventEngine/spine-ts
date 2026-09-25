@@ -49,7 +49,7 @@ using the existing public runtime composition and ZeroMQ transport adapter.
   health, or remote-host support.
 - Ordinary application handlers remain free of framework `Command`/`Event`
   envelopes, `packCommand()`/`packEvent()`, schema-bearing decorators,
-  aggregate retired event-replay handlers, manual transactions, internal IDs/default-target
+  aggregate event replay, manual transactions, internal IDs/default-target
   extraction, handler materializers, and internal lifecycle APIs.
 - Use behavior-focused TDD. Record the failing RED command and expected failure
   before production implementation, then the GREEN and regression evidence.

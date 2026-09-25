@@ -71,7 +71,7 @@ No commits were made. `human-review-1-jul.md` was left untouched.
 - Dispatch produced commands/events only after handler transaction and storage
   work succeeds.
 - Do not add process-manager execution, durable inbox handoff, scheduler loops,
-  transport-backed workers, schema-bearing decorator APIs, retired event-replay handlers, app-owned
+  transport-backed workers, schema-bearing decorator APIs, event replay, app-owned
   materialization, framework envelopes in user handler APIs, or manual
   transactions in end-user code.
 

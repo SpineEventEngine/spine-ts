@@ -26,7 +26,7 @@ Required review lanes:
   parameter and return types.
 - `handler(signal)` and `handler(signal, context)` are both supported for
   supported.
-- No retired event-replay handlers for new aggregate behavior.
+- No event replay for new aggregate behavior.
 - No framework `Command`/`Event` envelope returns in ordinary end-user handlers.
 - Generated output is ignored and regenerated, not committed.
 - Keep the contract small; no broad analyzer/generator/runtime discovery in

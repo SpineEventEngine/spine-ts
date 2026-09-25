@@ -209,7 +209,7 @@ Sources: `Aggregate.java`; `AggregateRepository.java`.
 
 Aggregate rules:
 
-- State changes happen in retired event-replay handlers via the transaction builder.
+- State changes happen in event replay via the transaction builder.
 - Command handlers do not mutate state directly; they emit events.
 - Calling `state()` inside an applier is prohibited because the builder contains pending changes.
 - Every produced event type must have an applier.

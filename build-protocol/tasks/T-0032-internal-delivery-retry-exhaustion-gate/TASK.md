@@ -38,8 +38,8 @@ bounded retry budget, while leaving public monitor/action policy for later.
 - Preserve Spine Protobuf contracts, type URLs, options, and modeling
   conventions.
 - Keep end-user code free of framework `Event` envelopes, manual transactions,
-  retired event-replay handlers, schema-bearing decorators, and app-owned handler materialization.
-- Aggregate import/importers, `ImportBus`, and aggregate retired event-replay handlers delivery are
+  event replay, schema-bearing decorators, and app-owned handler materialization.
+- Aggregate import/importers, `ImportBus`, and aggregate event replay delivery are
   removed from the active roadmap.
 - Supported worker labels are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
   `REACT_UPON_EVENT`.
