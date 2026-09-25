@@ -743,7 +743,7 @@ describe("spine proto model tooling", () => {
         'import { type PostMessage } from "@acme/handler-model/generated/chat/v1/commands_pb.js";',
         'import { type MessagePosted } from "@acme/handler-model/generated/chat/v1/events_pb.js";',
         "",
-        "export class Chat extends Aggregate<string, typeof MessageSchema, bigint> {",
+        "export class Chat extends Aggregate<string, typeof MessageSchema> {",
         "  @Assign post(command: PostMessage): MessagePosted { return {} as MessagePosted; }",
         "}",
         "",

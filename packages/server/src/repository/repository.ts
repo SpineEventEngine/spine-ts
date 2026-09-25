@@ -149,11 +149,18 @@ import { TransitionValidationError } from "./command-errors.js";
 import { MessageIds, PrimitiveIds } from "./primitive-id.js";
 import { ImplicitRequiredIds } from "../entity/implicit-required-id.js";
 
+/**
+ * Represents an Aggregate, Projection, or Process Manager with a state schema.
+ *
+ * @typeParam Schema Generated state schema of the Entity instance.
+ */
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
   Aggregate<unknown, Schema> | Projection<unknown, Schema> | ProcessManager<unknown, Schema>;
 
 /**
  * Generated Protobuf-ES state schema carried by a repository entity constructor.
+ *
+ * @typeParam EntityType Entity constructor whose state schema is selected.
  */
 export type RepositoryStateSchema<EntityType extends RepositoryEntityType> =
   EntityType["prototype"] extends Aggregate<unknown, infer Schema>
@@ -164,6 +171,11 @@ export type RepositoryStateSchema<EntityType extends RepositoryEntityType> =
         ? Schema
         : never;
 
+/**
+ * Selects the ID type declared by a repository Entity constructor.
+ *
+ * @typeParam EntityType Entity constructor whose ID type is selected.
+ */
 type RepositoryEntityId<EntityType extends RepositoryEntityType> =
   EntityType["prototype"] extends Aggregate<infer Id, DescriptorMessageSchema>
     ? Id
@@ -173,19 +185,40 @@ type RepositoryEntityId<EntityType extends RepositoryEntityType> =
         ? Id
         : never;
 
+/**
+ * Describes handler metadata compatible with an Entity constructor.
+ *
+ * @typeParam EntityType Entity constructor represented by the handlers.
+ */
 type RepositoryHandlers<EntityType extends RepositoryEntityType> =
   EntityType["prototype"] extends infer Instance extends object
     ? EntityHandlersMetadata<Instance, RepositoryStateSchema<EntityType>>
     : never;
 
+/**
+ * Accepts one or several handler metadata blocks for an Entity constructor.
+ *
+ * @typeParam EntityType Entity constructor represented by the handlers.
+ */
 type RepositoryHandlersOptionFor<EntityType extends RepositoryEntityType> =
   RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[];
 
+/**
+ * Allows state-update routing only for Projection constructors.
+ *
+ * @typeParam EntityType Entity constructor being configured.
+ */
 type StateRoutingOption<EntityType extends RepositoryEntityType> =
   EntityType["prototype"] extends Projection<unknown, DescriptorMessageSchema>
     ? StateUpdateRouting<RepositoryEntityId<EntityType>>
     : never;
 
+/**
+ * Detects a TypeScript union while preserving the complete input type.
+ *
+ * @typeParam Type Candidate type to test.
+ * @typeParam Union Original unsplit candidate type.
+ */
 type IsUnion<Type, Union = Type> = Type extends unknown
   ? [Union] extends [Type]
     ? false
@@ -198,6 +231,8 @@ type IsUnion<Type, Union = Type> = Type extends unknown
  * Concrete aggregate, projection, and process-manager classes satisfy this type naturally. Broad
  * constructor aliases, constructor unions, broad state schemas, and state-schema unions are
  * rejected so repository identities cannot erase which state schema the entity owns.
+ *
+ * @typeParam EntityType Candidate concrete Entity constructor.
  */
 export type ConcreteRepositoryEntityType<EntityType extends RepositoryEntityType> =
   IsUnion<EntityType> extends true
@@ -220,7 +255,7 @@ interface RuntimeRepositoryEntityType {
 /**
  * Describes an entity constructor accepted by repository identity metadata.
  *
- * @typeParam Instance - The aggregate, projection, or process-manager instance type.
+ * @typeParam Instance The aggregate, projection, or process-manager instance type.
  * @param args The constructor arguments accepted by the entity class.
  * @returns An entity instance.
  */
@@ -246,7 +281,7 @@ export type RepositoryEntityType<
 /**
  * Options for constructing repository identity and context-owned registration.
  *
- * @typeParam EntityType - A single concrete aggregate, projection, or process-manager constructor.
+ * @typeParam EntityType A single concrete aggregate, projection, or process-manager constructor.
  * The constructor's prototype must carry one concrete generated state schema; broad constructor,
  * constructor-union, broad-schema, and schema-union bindings are rejected at compile time.
  */
@@ -267,13 +302,7 @@ export interface RepositoryOptions<
 
   /**
    * Explicit handler metadata used to register repository command and event routing.
-   *
-   * Aggregate repositories with handlers can be executed by built bounded contexts and therefore
-   * must use `bigint` version metadata, matching the persisted aggregate history version type.
-   * Projection repositories with handlers can be executed by built bounded contexts and therefore
-   * must use `number` version metadata, matching the protobuf event version carried into Stand.
-   * Process-manager repositories with handlers also execute through Stand-backed state and must
-   * use `number` version metadata, matching the Stand version shape used by the local runtime.
+   * The metadata must describe this repository's Entity constructor and state schema.
    */
   readonly handlers?: RepositoryHandlersOptionFor<EntityType>;
 
@@ -329,7 +358,7 @@ export interface RepositoryOptions<
 /**
  * Immutable copy-safe repository identity snapshot.
  *
- * @typeParam EntityType - The concrete entity constructor owned by the repository. The snapshot's
+ * @typeParam EntityType The concrete entity constructor represented by the repository. The snapshot's
  * state schema and metadata are derived from this constructor so callers cannot spell an impossible
  * entity/schema snapshot pair.
  */
@@ -412,6 +441,36 @@ export interface RepositoryView {
 }
 
 /**
+ * Repository view with Command routing available to execution and Inbox delivery.
+ */
+interface CommandRoutingRepository extends RepositoryView {
+  // prettier-ignore
+
+  /**
+   * Resolves the target Entity and registered message type for a Command.
+   *
+   * @param command Command envelope to route.
+   * @returns The target identifier and handler message type.
+   */
+  routeCommand(command: Command): RepositoryCommandRoute;
+}
+
+/**
+ * Repository view with Event routing available to execution and Inbox delivery.
+ */
+interface EventRoutingRepository extends RepositoryView {
+  // prettier-ignore
+
+  /**
+   * Resolves target Entities and the registered message type for an Event.
+   *
+   * @param event Event envelope to route.
+   * @returns The target identifiers and handler message type.
+   */
+  routeEvent(event: Event): RepositoryEventRoute;
+}
+
+/**
  * Machine-readable codes for repository identity failures.
  */
 export type RepositoryIdentityErrorCode = "ENTITY_SCHEMA_KIND_MISMATCH" | "UNSUPPORTED_ENTITY_TYPE";
@@ -471,8 +530,11 @@ export class Repository<
   EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
 > implements RepositoryView {
   readonly #entityType: EntityType;
+
   readonly #entityFamily: EntityFamily;
+
   readonly #metadata: EntityMetadata<RepositoryStateSchema<EntityType>>;
+
   readonly #routing: RepositoryRouting<RepositoryEntityId<EntityType>>;
 
   /**
@@ -718,6 +780,8 @@ export type RepositoryRouteInvocation = "deferred";
 
 /**
  * Command route calculated by a repository.
+ *
+ * @typeParam Id Target Entity identifier type.
  */
 export interface RepositoryCommandRoute<Id = unknown> {
   // prettier-ignore
@@ -740,6 +804,8 @@ export interface RepositoryCommandRoute<Id = unknown> {
 
 /**
  * Event route calculated by a repository.
+ *
+ * @typeParam Id Target Entity identifier type.
  */
 export interface RepositoryEventRoute<Id = unknown> {
   // prettier-ignore
@@ -763,6 +829,7 @@ export interface RepositoryEventRoute<Id = unknown> {
 /**
  * Route calculated for one unpacked Entity state update.
  *
+ * @typeParam Id Target Projection identifier type.
  * @internal Framework delivery metadata.
  */
 interface RepositoryStateUpdateRoute<Id = unknown> extends RepositoryEventRoute<Id> {
@@ -786,8 +853,27 @@ const repositoryProjectionDirect = new WeakMap<
   (event: Event, rebuild?: boolean) => Promise<void>
 >();
 const repositoryRuntimes = new WeakMap<RepositoryView, RepositoryRuntime>();
-const repositoryEntityHandles = new WeakMap<RepositoryView, Map<string, { close(): void }>>();
-const entityStateHistoryCaches = new WeakMap<object, { clear(): void }>();
+const repositoryEntityHandles = new WeakMap<
+  RepositoryView,
+  Map<
+    string,
+    {
+      /**
+       * Closes the retained Entity storage handle.
+       */
+      close(): void;
+    }
+  >
+>();
+const entityStateHistoryCaches = new WeakMap<
+  object,
+  {
+    /**
+     * Clears cached state history after the Entity commits.
+     */
+    clear(): void;
+  }
+>();
 interface RepositoryHistoryConfiguration {
   stateHistory: boolean;
   readonly processManagerEventHistory: boolean;
@@ -1100,10 +1186,22 @@ export interface RepositoryAccess {
  * @internal
  */
 export const repositoryAccess: RepositoryAccess = Object.freeze({
+  /**
+   * Checks whether a value has registered repository identity metadata.
+   *
+   * @param repository Value to inspect.
+   * @returns Whether the value is a repository view.
+   */
   hasInstance(repository: unknown): repository is RepositoryView {
     return repositorySnapshots.has(repository as RepositoryView);
   },
 
+  /**
+   * Copies a repository's immutable identity metadata.
+   *
+   * @param repository Repository to inspect.
+   * @returns A copy-safe identity snapshot.
+   */
   snapshot(repository: RepositoryView): RepositoryIdentitySnapshot {
     const snapshot = repositorySnapshots.get(repository);
 
@@ -1114,6 +1212,12 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     return RepositoryIdentity.cloneRepositorySnapshot(snapshot);
   },
 
+  /**
+   * Reads schemas for Events this repository can emit.
+   *
+   * @param repository Repository to inspect.
+   * @returns Registered produced Event schemas.
+   */
   producedEventSchemas(repository: RepositoryView): readonly MessageSchema[] {
     const schemas = repositoryProducedEventSchemas.get(repository);
 
@@ -1124,18 +1228,42 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     return schemas;
   },
 
+  /**
+   * Looks up command dispatch for the repository.
+   *
+   * @param repository Repository to inspect.
+   * @returns A dispatcher when command routes are registered.
+   */
   commandDispatcher(repository: RepositoryView): CommandDispatcher | undefined {
     return repositoryDispatchers.get(repository)?.command;
   },
 
+  /**
+   * Looks up Event dispatch for the repository.
+   *
+   * @param repository Repository to inspect.
+   * @returns A dispatcher when Event routes are registered.
+   */
   eventDispatcher(repository: RepositoryView): EventDispatcher | undefined {
     return repositoryDispatchers.get(repository)?.event;
   },
 
+  /**
+   * Looks up state-update System Event dispatch for the repository.
+   *
+   * @param repository Repository to inspect.
+   * @returns A dispatcher when state subscriptions are registered.
+   */
   systemEventDispatcher(repository: RepositoryView): EventDispatcher | undefined {
     return repositoryDispatchers.get(repository)?.systemEvent;
   },
 
+  /**
+   * Lists Entity state types subscribed by this repository.
+   *
+   * @param repository Repository to inspect.
+   * @returns A frozen list of state type names.
+   */
   stateSubscriptionTypes(repository: RepositoryView): readonly string[] {
     const routing = repositoryRoutings.get(repository);
     if (routing === undefined) {
@@ -1144,6 +1272,13 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     return Object.freeze(routing.stateSchemas.map((schema) => schema.typeName));
   },
 
+  /**
+   * Resolves an Entity state-change route for a Projection repository.
+   *
+   * @param repository Repository to route through.
+   * @param event Entity state-change System Event.
+   * @returns The matching route, or `undefined` for an unrelated state.
+   */
   routeStateUpdate(
     repository: RepositoryView,
     event: Event,
@@ -1155,14 +1290,34 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     return routing.routeStateUpdate(event);
   },
 
+  /**
+   * Looks up the Aggregate or Process Manager inbox replay target.
+   *
+   * @param repository Repository to inspect.
+   * @returns Its replay target, when registered.
+   */
   entityInboxTarget(repository: RepositoryView): EntityInboxTarget | undefined {
     return repositoryEntityInboxTargets.get(repository);
   },
 
+  /**
+   * Looks up the Projection inbox replay target.
+   *
+   * @param repository Repository to inspect.
+   * @returns Its replay target, when registered.
+   */
   projectionInboxTarget(repository: RepositoryView): ProjectionInboxTarget | undefined {
     return repositoryProjectionInboxTargets.get(repository);
   },
 
+  /**
+   * Dispatches an Event directly to a registered Projection.
+   *
+   * @param repository Projection repository to dispatch through.
+   * @param event Event to deliver.
+   * @param rebuild Whether to load deleted state for rebuilding.
+   * @returns Completion after the Projection receives the Event.
+   */
   dispatchProjectionDirect(
     repository: RepositoryView,
     event: Event,
@@ -1177,10 +1332,21 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     return dispatch(event, rebuild);
   },
 
+  /**
+   * Stores a built context runtime for repository dispatch.
+   *
+   * @param repository Repository receiving runtime services.
+   * @param runtime Context runtime to bind.
+   */
   bindRuntime(repository: RepositoryView, runtime: RepositoryRuntime): void {
     repositoryRuntimes.set(repository, Object.freeze(runtime));
   },
 
+  /**
+   * Removes runtime dispatch state and closes tracked storage handles.
+   *
+   * @param repository Repository to detach.
+   */
   clearRuntime(repository: RepositoryView): void {
     repositoryRuntimes.delete(repository);
     repositoryDispatchGuards.delete(repository);
@@ -1198,6 +1364,11 @@ interface RepositoryDispatchers {
   readonly systemEvent: EventDispatcher | undefined;
 }
 
+/**
+ * Holds immutable message schemas, handler selectors, and route operations.
+ *
+ * @typeParam Id Repository Entity identifier type.
+ */
 interface RepositoryRouting<Id = unknown> {
   readonly commandSchemas: readonly MessageSchema[];
   readonly eventSchemas: readonly MessageSchema[];
@@ -1212,23 +1383,71 @@ interface RepositoryRouting<Id = unknown> {
     string,
     readonly RegisteredHandlerMetadata<StateSubscriptionHandlerMetadata>[]
   >;
+
+  /**
+   * Finds Command reactions matching an Event type, fields, and origin.
+   *
+   * @param eventFullTypeName Source Event type name.
+   * @param message Decoded Event message.
+   * @param external Whether the Event has external origin.
+   * @returns Matching Command reaction handlers.
+   */
   commandReactions(
     eventFullTypeName: string,
     message: unknown,
     external: boolean,
   ): readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
+
+  /**
+   * Finds Event reactors matching an Event type, fields, and origin.
+   *
+   * @param eventFullTypeName Source Event type name.
+   * @param message Decoded Event message.
+   * @param external Whether the Event has external origin.
+   * @returns Matching Event reactor handlers.
+   */
   eventReactors(
     eventFullTypeName: string,
     message: unknown,
     external: boolean,
   ): readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
+
+  /**
+   * Finds Event subscribers matching an Event type, fields, and origin.
+   *
+   * @param eventFullTypeName Source Event type name.
+   * @param message Decoded Event message.
+   * @param external Whether the Event has external origin.
+   * @returns Matching Event subscribers.
+   */
   eventSubscribers(
     eventFullTypeName: string,
     message: unknown,
     external: boolean,
   ): RepositoryEventSubscribers;
+
+  /**
+   * Routes a Command to its target Entity without invoking its handler.
+   *
+   * @param command Command envelope to route.
+   * @returns Accepted Command route.
+   */
   routeCommand(command: Command): RepositoryCommandRoute<Id>;
+
+  /**
+   * Routes an Event to target Entities without invoking handlers.
+   *
+   * @param event Event envelope to route.
+   * @returns Accepted Event route.
+   */
   routeEvent(event: Event): RepositoryEventRoute<Id>;
+
+  /**
+   * Routes an Entity state-change Event to subscribed Projections.
+   *
+   * @param event State-change System Event to route.
+   * @returns Accepted state-update route, or `undefined`.
+   */
   routeStateUpdate(event: Event): RepositoryStateUpdateRoute<Id> | undefined;
 }
 
@@ -1266,12 +1485,22 @@ interface RoutingFilters {
   >;
 }
 
+/**
+ * Maps registered schemas to custom signal routing declarations.
+ *
+ * @typeParam Id Repository Entity identifier type.
+ */
 interface RoutingMaps<Id> {
   readonly command: ReadonlyMap<MessageSchema, CommandRoute<Id>>;
   readonly event: ReadonlyMap<MessageSchema, EventRoute<Id>>;
   readonly state: ReadonlyMap<DescriptorMessageSchema, StateUpdateRoute<Id>>;
 }
 
+/**
+ * Collects repository declarations used while building immutable routing.
+ *
+ * @typeParam Id Repository Entity identifier type.
+ */
 interface RoutingInput<Id> {
   readonly entityType: RepositoryEntityType;
   readonly entityFamily: EntityFamily;
@@ -1331,7 +1560,7 @@ interface AggregateConstructorOptions {
   id: unknown;
   schema: DescriptorMessageSchema;
   state: unknown;
-  version: unknown;
+  version: Version;
   lifecycle?: {
     readonly archived: boolean;
     readonly deleted: boolean;
@@ -1342,14 +1571,27 @@ interface LoadedRepositoryEntity {
   readonly commits: EntityCommitStorage;
   readonly current: EntityRecord | undefined;
   readonly entity: object;
+  readonly events: EntityEventHistoryPort<unknown>;
   readonly storageInput: EntityStorageInput<unknown, Message>;
 }
 
+/**
+ * Loads and persists Aggregate state within one tenant storage context.
+ */
 class AggregateExecutionSupport {
   readonly #repository: RepositoryView;
+
   readonly #runtime: RepositoryRuntime;
+
   readonly #storageContext: StorageContext;
 
+  /**
+   * Binds an Aggregate repository to runtime and tenant storage services.
+   *
+   * @param repository Aggregate repository being executed.
+   * @param runtime Built context services.
+   * @param storageContext Tenant-aware storage location.
+   */
   constructor(
     repository: RepositoryView,
     runtime: RepositoryRuntime,
@@ -1360,6 +1602,12 @@ class AggregateExecutionSupport {
     this.#storageContext = storageContext;
   }
 
+  /**
+   * Restores an Aggregate from Stand or creates its initial state and binds history.
+   *
+   * @param entityId Aggregate identifier to load.
+   * @returns Aggregate instance, current record, history ports, and version.
+   */
   async loadAggregate(entityId: unknown): Promise<LoadedAggregate> {
     const storageInput = RepositoryStorage.entityStorageInput(
       this.#repository,
@@ -1410,20 +1658,33 @@ class AggregateExecutionSupport {
     });
   }
 
+  /**
+   * Normalizes a handler result to a frozen signal list.
+   *
+   * @param produced Raw handler result.
+   * @returns No signals, one signal, or the copied result array.
+   */
   normalizeProducedSignals(produced: unknown): readonly unknown[] {
     if (produced === undefined) {
       return Object.freeze([]);
     }
 
     if (Array.isArray(produced)) {
-      return Object.freeze(Array.from(produced as readonly unknown[]));
+      return Object.freeze(
+        Array.from(produced as readonly unknown[]).filter((item) => item !== undefined),
+      );
     }
 
     return Object.freeze([produced]);
   }
 
   /**
-   * Store the current aggregate record before its diagnostic and delivery journals.
+   * Stores the current Aggregate record before its diagnostic and delivery journals.
+   *
+   * @param loaded Aggregate and commit storage to update.
+   * @param entityId Aggregate identifier.
+   * @param events Produced Events to retain.
+   * @returns `true` after a successful commit; conflicts throw.
    */
   async persistAggregateUpdate(
     loaded: LoadedAggregate,
@@ -1456,14 +1717,16 @@ class AggregateExecutionSupport {
       deferred.cancel();
       throw error;
     }
-    this.#notifyAggregate(() => deferred.notify(), events);
+    this.#notifyAggregate(() => {
+      deferred.notify();
+    }, events);
     return true;
   }
 
   /**
-   * Reports failed Aggregate Stand notifications without reversing committed storage.
+   * Notifies Stand after an Aggregate commit and reports delivery failure.
    *
-   * @param notify Delivers the deferred Stand update.
+   * @param onNotify Delivers the deferred Stand update.
    * @param events Produced Events available for failure reporting.
    */
   #notifyAggregate(onNotify: () => void, events: readonly Event[]): void {
@@ -1515,6 +1778,14 @@ class AggregateExecutionSupport {
     });
   }
 
+  /**
+   * Writes a copied Event to the Aggregate diagnostic history.
+   *
+   * @param loaded Aggregate with its history port.
+   * @param entityId Aggregate identifier retained for the caller contract.
+   * @param event Event to append.
+   * @returns Completion after the history append.
+   */
   async appendDiagnosticEvent(
     loaded: LoadedAggregate,
     entityId: unknown,
@@ -1524,7 +1795,14 @@ class AggregateExecutionSupport {
   }
 
   /**
-   * Complete persistence before scheduling best-effort stored-event dispatch.
+   * Completes persistence before scheduling best-effort stored-Event dispatch.
+   *
+   * @param loaded Aggregate and commit storage to update.
+   * @param entityId Aggregate identifier.
+   * @param events Produced Events to persist and dispatch.
+   * @param dispatch Publishes one committed Event.
+   * @param onPersisted Runs after durable persistence.
+   * @returns A deferred follow-up that dispatches the Events.
    */
   async persistAggregateAndDispatch(
     loaded: LoadedAggregate,
@@ -1549,6 +1827,13 @@ class AggregateExecutionSupport {
     };
   }
 
+  /**
+   * Restores an Aggregate or creates one with initial state and version zero.
+   *
+   * @param entityId Aggregate identifier.
+   * @param current Stored state and lifecycle, when present.
+   * @returns The constructed Aggregate instance.
+   */
   #instantiateAggregate(entityId: unknown, current: AggregateSnapshot | undefined): object {
     const entityType = this.#repository.entityType as unknown as new (
       options: AggregateConstructorOptions,
@@ -1567,6 +1852,12 @@ class AggregateExecutionSupport {
     return new entityType(options);
   }
 
+  /**
+   * Creates generated initial state with its canonical identifier field set.
+   *
+   * @param entityId Identifier to place in the state.
+   * @returns A new state message.
+   */
   #defaultState(entityId: unknown): unknown {
     return create(this.#repository.stateSchema, {
       [this.#repository.idField.localName]: entityId,
@@ -1574,19 +1865,30 @@ class AggregateExecutionSupport {
   }
 }
 
+/**
+ * Executes one routed Aggregate Command and stores its resulting Events.
+ */
 class AggregateCommandExecution {
-  readonly #repository: RepositoryView & {
-    routeCommand(command: Command): RepositoryCommandRoute;
-  };
+  readonly #repository: CommandRoutingRepository;
+
   readonly #routing: RepositoryRouting;
+
   readonly #runtime: RepositoryRuntime;
+
   readonly #command: Command;
+
   readonly #support: AggregateExecutionSupport;
 
+  /**
+   * Captures routing, runtime, Command, and tenant-scoped persistence services.
+   *
+   * @param repository Aggregate repository receiving the Command.
+   * @param routing Registered Command routes and schemas.
+   * @param runtime Built context services.
+   * @param command Command to execute.
+   */
   constructor(
-    repository: RepositoryView & {
-      routeCommand(command: Command): RepositoryCommandRoute;
-    },
+    repository: CommandRoutingRepository,
     routing: RepositoryRouting,
     runtime: RepositoryRuntime,
     command: Command,
@@ -1602,6 +1904,12 @@ class AggregateCommandExecution {
     );
   }
 
+  /**
+   * Validates the Command and executes its assignee when registered.
+   *
+   * @param replayedRoute Accepted route from durable inbox replay, when present.
+   * @returns A deferred dispatch follow-up, or `undefined` without an assignee.
+   */
   async run(replayedRoute?: RepositoryCommandRoute): Promise<EntityInboxFollowUp | undefined> {
     void RepositorySignals.requireCommandId(this.#command);
     const intake = this.#readIntake(replayedRoute);
@@ -1609,6 +1917,12 @@ class AggregateCommandExecution {
     return this.#runAssignee(intake);
   }
 
+  /**
+   * Decodes the Command and selects its registered assignee.
+   *
+   * @param replayedRoute Accepted inbox route, when present.
+   * @returns Decoded message and route with an assignee, or `undefined`.
+   */
   #readIntake(replayedRoute?: RepositoryCommandRoute):
     | {
         readonly message: unknown;
@@ -1628,6 +1942,12 @@ class AggregateCommandExecution {
     return assignee === undefined ? undefined : Object.freeze({ message, route, assignee });
   }
 
+  /**
+   * Invokes the assignee, persists its Events, or publishes a declared rejection.
+   *
+   * @param intake Decoded Command, target route, and assignee.
+   * @returns A deferred Event follow-up or a rejection follow-up.
+   */
   async #runAssignee(intake: {
     readonly message: unknown;
     readonly route: RepositoryCommandRoute;
@@ -1635,38 +1955,75 @@ class AggregateCommandExecution {
   }): Promise<EntityInboxFollowUp | undefined> {
     const loaded = await this.#support.loadAggregate(intake.route.entityId);
     this.#publishCommandDispatch(intake.route.entityId);
-    const commandContext = EntityInvocation.commandHandlerContext(this.#command);
     let produced: unknown;
     try {
       produced = await this.#invokeAssignee(
         loaded.entity,
-        intake.assignee.handler.methodName,
+        intake.assignee.handler,
         intake.message,
-        intake.assignee.handler.parameterCount,
-        commandContext,
+        EntityInvocation.commandHandlerContext(this.#command),
       );
     } catch (error) {
-      if (!RejectionThrowable.is(error)) {
-        throw error;
-      }
-      RepositorySignals.requireDeclaredRejection(intake.assignee.handler, error);
-      return RepositorySignals.postRejectionEvent(
-        this.#runtime,
-        this.#repository,
-        this.#command,
-        intake.route.entityId,
-        error,
-      );
+      return this.#postAssigneeRejection(intake, error);
     }
-    const events = this.#requiredEvents(produced, intake.route.entityId, loaded.version);
+    const events = this.#requiredEvents(
+      produced,
+      intake.assignee.handler,
+      intake.route.entityId,
+      RepositoryEntities.priorVersion(loaded.current),
+    );
     return this.#persistAssigneeResult(loaded, intake.route.entityId, events);
   }
 
+  /**
+   * Publishes a declared rejection from the invoked Aggregate assignee.
+   *
+   * @param intake Assignee and target route for the rejected Command.
+   * @param error Handler failure to classify and publish.
+   * @returns A rejection follow-up when one is created.
+   */
+  #postAssigneeRejection(
+    intake: {
+      readonly assignee: RepositoryCommandAssignee;
+      readonly route: RepositoryCommandRoute;
+    },
+    error: unknown,
+  ): EntityInboxFollowUp | undefined {
+    if (!RejectionThrowable.is(error)) throw error;
+    RepositorySignals.requireDeclaredRejection(intake.assignee.handler, error);
+    return RepositorySignals.postRejectionEvent(
+      this.#runtime,
+      this.#repository,
+      this.#command,
+      intake.route.entityId,
+      error,
+    );
+  }
+
+  /**
+   * Publishes a best-effort Command dispatch diagnostic.
+   *
+   * @param entityId Target Aggregate identifier.
+   */
   #publishCommandDispatch(entityId: unknown): void {
     HandlerDispatchPublisher.command(this.#runtime, this.#repository, this.#command, entityId);
   }
 
-  #requiredEvents(produced: unknown, entityId: unknown, version: bigint): readonly Event[] {
+  /**
+   * Binds the assignee result to Events and rejects an empty result.
+   *
+   * @param produced Raw assignee result.
+   * @param handler Assignee declaration associated with the result.
+   * @param entityId Target Aggregate identifier.
+   * @param version Producer version before Command handling.
+   * @returns At least one bound Event.
+   */
+  #requiredEvents(
+    produced: unknown,
+    handler: RepositoryCommandAssignee["handler"],
+    entityId: unknown,
+    version: Version,
+  ): readonly Event[] {
     const events = this.#bindProducedEvents(
       this.#support.normalizeProducedSignals(produced),
       entityId,
@@ -1678,6 +2035,14 @@ class AggregateCommandExecution {
     return events;
   }
 
+  /**
+   * Stores accepted Aggregate changes and publishes a state-change diagnostic.
+   *
+   * @param loaded Aggregate and commit storage.
+   * @param entityId Target Aggregate identifier.
+   * @param events Bound Events from the assignee.
+   * @returns A deferred committed-Event dispatch follow-up.
+   */
   #persistAssigneeResult(
     loaded: LoadedAggregate,
     entityId: unknown,
@@ -1711,21 +2076,34 @@ class AggregateCommandExecution {
     );
   }
 
+  /**
+   * Invokes an assignee in a fenced Entity transaction with output validation.
+   *
+   * @param entity Aggregate instance to mutate.
+   * @param handler Assignee declaration to invoke.
+   * @param message Decoded Command message.
+   * @param context Copied Command context for the handler.
+   * @returns The handler's raw result after a successful commit.
+   */
   async #invokeAssignee(
     entity: object,
-    methodName: string,
+    handler: RepositoryCommandAssignee["handler"],
     message: unknown,
-    parameterCount: HandlerParameterCount,
     context: unknown,
   ): Promise<unknown> {
     transactionalEntityAccess.start(entity);
     try {
       const produced = await EntityInvocation.invokeEntityMethod(
         entity,
-        methodName,
+        handler.methodName,
         message,
-        parameterCount,
+        handler.parameterCount,
         context,
+      );
+      RepositoryHandlers.requireDeclaredOutputs(
+        handler,
+        this.#support.normalizeProducedSignals(produced),
+        true,
       );
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(current, true),
@@ -1741,10 +2119,19 @@ class AggregateCommandExecution {
     }
   }
 
+  /**
+   * Binds each produced result to the target and pre-dispatch version.
+   *
+   * @param produced Handler results to bind.
+   * @param entityId Target Aggregate identifier.
+   * @param lastVersion Producer version before this dispatch.
+   * @param allowEnvelopes Whether existing Event envelopes are accepted.
+   * @returns Frozen bound Event list.
+   */
   #bindProducedEvents(
     produced: readonly unknown[],
     entityId: unknown,
-    lastVersion: bigint,
+    lastVersion: Version,
     allowEnvelopes: boolean,
   ): readonly Event[] {
     const dispatchVersion = lastVersion;
@@ -1756,14 +2143,23 @@ class AggregateCommandExecution {
     );
   }
 
+  /**
+   * Packs a domain Event or copies an allowed envelope with producer context.
+   *
+   * @param signal One handler result.
+   * @param entityId Target Aggregate identifier.
+   * @param version Producer version before dispatch.
+   * @param allowEnvelopes Whether a supplied Event envelope may pass through.
+   * @returns Event bound to this Aggregate.
+   */
   #bindProducedEvent(
     signal: unknown,
     entityId: unknown,
-    version: bigint,
+    version: Version,
     allowEnvelopes: boolean,
   ): Event {
     const metadata = this.#runtime.signalMetadata.eventFromCommand(this.#command, {
-      version: RepositorySignals.eventVersionNumber(version),
+      version: version.number,
     });
     const bound =
       allowEnvelopes && EntityInvocation.isEventEnvelope(signal)
@@ -1773,10 +2169,18 @@ class AggregateCommandExecution {
       metadata.context,
       this.#repository,
       entityId,
+      version,
     );
     return bound;
   }
 
+  /**
+   * Packs a declared domain Event message into an Event envelope.
+   *
+   * @param message Generated Event message from the handler.
+   * @param metadata ID and context derived from the source Command.
+   * @returns Packed Event envelope.
+   */
   #packDomainEvent(
     message: unknown,
     metadata: ReturnType<SignalMetadata["eventFromCommand"]>,
@@ -1798,19 +2202,30 @@ class AggregateCommandExecution {
   }
 }
 
+/**
+ * Runs Aggregate Event reactors and persists their state and Event results.
+ */
 class AggregateEventExecution {
-  readonly #repository: RepositoryView & {
-    routeEvent(event: Event): RepositoryEventRoute;
-  };
+  readonly #repository: EventRoutingRepository;
+
   readonly #routing: RepositoryRouting;
+
   readonly #runtime: RepositoryRuntime;
+
   readonly #event: Event;
+
   readonly #support: AggregateExecutionSupport;
 
+  /**
+   * Captures Event routing and tenant-scoped Aggregate storage services.
+   *
+   * @param repository Aggregate repository receiving the Event.
+   * @param routing Registered Event routes and schemas.
+   * @param runtime Built context services.
+   * @param event Source Event to react to.
+   */
   constructor(
-    repository: RepositoryView & {
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
+    repository: EventRoutingRepository,
     routing: RepositoryRouting,
     runtime: RepositoryRuntime,
     event: Event,
@@ -1826,6 +2241,13 @@ class AggregateEventExecution {
     );
   }
 
+  /**
+   * Executes matching reactors for one routed Aggregate target.
+   *
+   * @param entityId Target Aggregate identifier.
+   * @param acceptedRoute Route accepted before execution.
+   * @returns Completion after matching reactors run.
+   */
   async runTarget(entityId: unknown, acceptedRoute: RepositoryEventRoute): Promise<void> {
     const intake = this.#readIntake(acceptedRoute);
 
@@ -1836,6 +2258,12 @@ class AggregateEventExecution {
     await this.#executeEntity(entityId, intake);
   }
 
+  /**
+   * Decodes the Event and selects reactors with declared output.
+   *
+   * @param acceptedRoute Route accepted before execution.
+   * @returns Decoded message, route, and matching reactors.
+   */
   #readIntake(acceptedRoute: RepositoryEventRoute): {
     readonly message: unknown;
     readonly route: RepositoryEventRoute;
@@ -1859,6 +2287,13 @@ class AggregateEventExecution {
     });
   }
 
+  /**
+   * Invokes reactors, persists their result, and journals the source Event.
+   *
+   * @param entityId Target Aggregate identifier.
+   * @param intake Decoded Event and matching reactors.
+   * @returns Completion after persistence and journaling.
+   */
   async #executeEntity(
     entityId: unknown,
     intake: {
@@ -1879,6 +2314,14 @@ class AggregateEventExecution {
     return undefined;
   }
 
+  /**
+   * Stores changed state or produced Events and schedules reactor publication.
+   *
+   * @param loaded Aggregate and commit storage.
+   * @param entityId Target Aggregate identifier.
+   * @param produced Events returned by reactors.
+   * @returns Completion after accepted state and Events are stored.
+   */
   async #persistProducedEvents(
     loaded: LoadedAggregate,
     entityId: unknown,
@@ -1897,6 +2340,12 @@ class AggregateEventExecution {
     void dispatch();
   }
 
+  /**
+   * Publishes an Entity state-change System Event when the Aggregate changed.
+   *
+   * @param loaded Aggregate before and after handling.
+   * @param entityId Target Aggregate identifier.
+   */
   #publishStateChange(loaded: LoadedAggregate, entityId: unknown): void {
     if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
     EntityStateChangePublisher.event(
@@ -1912,6 +2361,12 @@ class AggregateEventExecution {
     );
   }
 
+  /**
+   * Reads lifecycle flags from the prior stored Aggregate record.
+   *
+   * @param loaded Aggregate with its optional prior record.
+   * @returns Prior flags, or `undefined` for a new Aggregate.
+   */
   #lifecycleSnapshot(
     loaded: LoadedAggregate,
   ): { readonly archived: boolean; readonly deleted: boolean } | undefined {
@@ -1923,6 +2378,14 @@ class AggregateEventExecution {
         };
   }
 
+  /**
+   * Invokes matching reactors in one Entity transaction and commits their changes.
+   *
+   * @param entityId Target Aggregate identifier.
+   * @param loaded Restored Aggregate and version.
+   * @param intake Decoded Event and matching reactors.
+   * @returns Frozen list of produced Events.
+   */
   async #invokeHandlers(
     entityId: unknown,
     loaded: LoadedAggregate,
@@ -1945,6 +2408,16 @@ class AggregateEventExecution {
     }
   }
 
+  /**
+   * Invokes each reactor, checks its declared output, and collects bound Events.
+   *
+   * @param entityId Target Aggregate identifier.
+   * @param loaded Restored Aggregate and producer version.
+   * @param intake Decoded Event and matching reactors.
+   * @param eventContext Copied source Event context.
+   * @param events Output list to append to.
+   * @returns Completion after all reactors run.
+   */
   async #invokeReactors(
     entityId: unknown,
     loaded: LoadedAggregate,
@@ -1965,16 +2438,27 @@ class AggregateEventExecution {
         reactor.handler.parameterCount,
         eventContext,
       );
+      RepositoryHandlers.requireDeclaredOutputs(
+        reactor.handler,
+        this.#support.normalizeProducedSignals(produced),
+      );
       events.push(
         ...this.#bindProducedEvents(
           this.#support.normalizeProducedSignals(produced),
           entityId,
-          loaded.version,
+          RepositoryEntities.priorVersion(loaded.current),
         ),
       );
     }
   }
 
+  /**
+   * Applies a fenced Entity commit and raises transition rejection.
+   *
+   * @param entity Aggregate instance to commit.
+   * @param producedEvents Whether reactors produced Events.
+   * @returns Completion after a successful fenced commit.
+   */
   async #commitEntity(entity: object, producedEvents: boolean): Promise<void> {
     const commit = await commitFenced(entity, (current) =>
       transactionalEntityAccess.commit(current, producedEvents),
@@ -1982,10 +2466,18 @@ class AggregateEventExecution {
     if (commit.status === "rejected") throw new TransitionValidationError(commit.validation.error);
   }
 
+  /**
+   * Binds reactor results using the pre-dispatch Aggregate version.
+   *
+   * @param produced Domain Event messages from reactors.
+   * @param entityId Target Aggregate identifier.
+   * @param lastVersion Producer version before this Event.
+   * @returns Frozen Event envelope list.
+   */
   #bindProducedEvents(
     produced: readonly unknown[],
     entityId: unknown,
-    lastVersion: bigint,
+    lastVersion: Version,
   ): readonly Event[] {
     const version = lastVersion;
     return Object.freeze(
@@ -1993,7 +2485,15 @@ class AggregateEventExecution {
     );
   }
 
-  #bindProducedEvent(signal: unknown, entityId: unknown, version: bigint): Event {
+  /**
+   * Packs a declared reactor result with source and producer context.
+   *
+   * @param signal One domain Event message.
+   * @param entityId Target Aggregate identifier.
+   * @param version Producer version before dispatch.
+   * @returns Bound Event envelope.
+   */
+  #bindProducedEvent(signal: unknown, entityId: unknown, version: Version): Event {
     const typeName = EntityInvocation.messageTypeName(signal);
     const schema = this.#routing.producedEventSchemas.find(
       (candidate) => candidate.typeName === typeName,
@@ -2004,7 +2504,7 @@ class AggregateEventExecution {
     }
 
     const metadata = this.#runtime.signalMetadata.eventFromEvent(this.#event, {
-      version: RepositorySignals.eventVersionNumber(version),
+      version: version.number,
     });
 
     return create(EventSchema, {
@@ -2014,6 +2514,7 @@ class AggregateEventExecution {
         metadata.context,
         this.#repository,
         entityId,
+        version,
       ),
     });
   }
@@ -2021,19 +2522,31 @@ class AggregateEventExecution {
 
 type EntityLoadMode = "stored" | "rebuild";
 
+/**
+ * Routes subscribed Events and state updates to a Projection.
+ */
 class ProjectionEventExecution {
-  readonly #repository: RepositoryView & {
-    routeEvent(event: Event): RepositoryEventRoute;
-  };
+  readonly #repository: EventRoutingRepository;
+
   readonly #routing: RepositoryRouting;
+
   readonly #runtime: RepositoryRuntime;
+
   readonly #event: Event;
+
   readonly #rebuild: boolean;
 
+  /**
+   * Captures Projection routing, runtime, source Event, and loading mode.
+   *
+   * @param repository Projection repository receiving the Event.
+   * @param routing Registered Event and state routes.
+   * @param runtime Built context services.
+   * @param event Source Event to deliver.
+   * @param rebuild Whether to restore deleted state for rebuilding.
+   */
   constructor(
-    repository: RepositoryView & {
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
+    repository: EventRoutingRepository,
     routing: RepositoryRouting,
     runtime: RepositoryRuntime,
     event: Event,
@@ -2046,8 +2559,20 @@ class ProjectionEventExecution {
     this.#rebuild = rebuild;
   }
 
+  /**
+   * Delivers a decoded Entity state update to one Projection target.
+   *
+   * @param repository Projection repository receiving the update.
+   * @param routing Registered state-update routes.
+   * @param runtime Built context services.
+   * @param event Source state-change System Event.
+   * @param entityId Target Projection identifier.
+   * @param route Accepted state-update route.
+   * @param subscribers State subscribers to invoke.
+   * @returns Completion after the target receives the state.
+   */
   static async runStateTarget(
-    repository: RepositoryView & { routeEvent(event: Event): RepositoryEventRoute },
+    repository: EventRoutingRepository,
     routing: RepositoryRouting,
     runtime: RepositoryRuntime,
     event: Event,
@@ -2059,6 +2584,12 @@ class ProjectionEventExecution {
     await execution.#executeStateTarget(entityId, route.state, subscribers);
   }
 
+  /**
+   * Delivers an accepted Event to the durable Projection inbox.
+   *
+   * @param acceptedRoute Route accepted before dispatch.
+   * @returns Completion after inbox handoff.
+   */
   async run(acceptedRoute: RepositoryEventRoute): Promise<void> {
     const intake = this.#readIntake(acceptedRoute);
 
@@ -2076,6 +2607,13 @@ class ProjectionEventExecution {
     }
   }
 
+  /**
+   * Delivers an accepted Event for one Projection target.
+   *
+   * @param entityId Target Projection identifier.
+   * @param acceptedRoute Route accepted before replay.
+   * @returns Completion after target delivery.
+   */
   async runTarget(entityId: unknown, acceptedRoute: RepositoryEventRoute): Promise<void> {
     const intake = this.#readIntake(acceptedRoute);
 
@@ -2086,6 +2624,12 @@ class ProjectionEventExecution {
     await this.#executeTarget(entityId, intake.subscribers);
   }
 
+  /**
+   * Dispatches directly to all routed Projection targets.
+   *
+   * @param acceptedRoute Route accepted before direct dispatch, when present.
+   * @returns Completion after all targets receive the Event.
+   */
   async runDirect(acceptedRoute?: RepositoryEventRoute): Promise<void> {
     const intake = this.#readIntake(acceptedRoute);
 
@@ -2098,6 +2642,13 @@ class ProjectionEventExecution {
     }
   }
 
+  /**
+   * Invokes Event subscribers and stores a changed Projection state.
+   *
+   * @param entityId Target Projection identifier.
+   * @param subscribers Selected Event subscribers.
+   * @returns Completion after handling and any state commit.
+   */
   async #executeTarget(entityId: unknown, subscribers: RepositoryEventSubscribers): Promise<void> {
     const packedMessage = EntityInvocation.requireSignalMessage(this.#event.message, "event");
     const tenantOptions = RepositoryTenants.standTenantOptions(this.#runtime.context, this.#event);
@@ -2116,6 +2667,14 @@ class ProjectionEventExecution {
     );
   }
 
+  /**
+   * Invokes state subscribers and stores a changed Projection state.
+   *
+   * @param entityId Target Projection identifier.
+   * @param state Decoded source Entity state.
+   * @param subscribers Selected state subscribers.
+   * @returns Completion after handling and any state commit.
+   */
   async #executeStateTarget(
     entityId: unknown,
     state: Message,
@@ -2134,6 +2693,12 @@ class ProjectionEventExecution {
     );
   }
 
+  /**
+   * Resolves the route, decodes the Event, and filters its subscribers.
+   *
+   * @param acceptedRoute Route accepted before delivery, when present.
+   * @returns Route and matching subscribers.
+   */
   #readIntake(acceptedRoute?: RepositoryEventRoute): {
     readonly route: RepositoryEventRoute;
     readonly subscribers: RepositoryEventSubscribers;
@@ -2158,6 +2723,15 @@ class ProjectionEventExecution {
     });
   }
 
+  /**
+   * Persists changed Projection state, notifies Stand, and publishes the change.
+   *
+   * @param loaded Projection and commit storage.
+   * @param tenantOptions Stand tenant selection.
+   * @param oldState State before delivery, when present.
+   * @param mode Stored or rebuild loading mode.
+   * @returns Completion after a changed state is stored and published.
+   */
   async #storeIfChanged(
     loaded: LoadedRepositoryEntity,
     tenantOptions: { readonly tenantId?: TenantId },
@@ -2178,10 +2752,12 @@ class ProjectionEventExecution {
       state,
       RepositoryStand.standUpdateOptions(tenantOptions.tenantId, version, lifecycle),
     );
-    await this.#commitProjectionOrCancel(loaded, entityId, state, version, lifecycle, () =>
-      deferred.cancel(),
-    );
-    this.#notifyProjection(() => deferred.notify());
+    await this.#commitProjectionOrCancel(loaded, entityId, state, version, lifecycle, () => {
+      deferred.cancel();
+    });
+    this.#notifyProjection(() => {
+      deferred.notify();
+    });
     this.#publishProjectionChange(loaded, oldState, mode, state, lifecycle, version);
   }
 
@@ -2194,6 +2770,7 @@ class ProjectionEventExecution {
    * @param version Current Spine Version.
    * @param lifecycle Accepted lifecycle flags.
    * @param onCancel Cancels the deferred Stand update.
+   * @returns Completion after a successful storage commit.
    */
   async #commitProjectionOrCancel(
     loaded: LoadedRepositoryEntity,
@@ -2219,9 +2796,9 @@ class ProjectionEventExecution {
   }
 
   /**
-   * Reports a failed Projection Stand notification after durable storage succeeds.
+   * Notifies Stand after a Projection commit and reports delivery failure.
    *
-   * @param notify Delivers the deferred Stand update.
+   * @param onNotify Delivers the deferred Stand update.
    */
   #notifyProjection(onNotify: () => void): void {
     try {
@@ -2305,6 +2882,14 @@ class ProjectionEventExecution {
     );
   }
 
+  /**
+   * Invokes Event subscribers in one Entity transaction.
+   *
+   * @param entity Projection instance to update.
+   * @param subscribers Selected Event subscribers.
+   * @param packedMessage Packed source Event message.
+   * @returns Completion after the subscriber transaction commits.
+   */
   async #invokeSubscribers(
     entity: object,
     subscribers: RepositoryEventSubscribers,
@@ -2339,6 +2924,14 @@ class ProjectionEventExecution {
     }
   }
 
+  /**
+   * Invokes state subscribers in one Entity transaction.
+   *
+   * @param entity Projection instance to update.
+   * @param subscribers Selected state subscribers.
+   * @param state Decoded source Entity state.
+   * @returns Completion after the subscriber transaction commits.
+   */
   async #invokeStateSubscribers(
     entity: object,
     subscribers: RepositoryStateSubscribers,
@@ -2367,6 +2960,14 @@ class ProjectionEventExecution {
     }
   }
 
+  /**
+   * Restores or creates a Projection and binds its storage history.
+   *
+   * @param entityId Target Projection identifier.
+   * @param options Stand tenant selection.
+   * @param mode Stored or rebuild loading mode.
+   * @returns Loaded Projection, current record, and commit storage.
+   */
   async #loadProjection(
     entityId: unknown,
     options: { readonly tenantId?: TenantId },
@@ -2384,7 +2985,7 @@ class ProjectionEventExecution {
       stored,
       mode === "rebuild" && stored?.deleted === true,
     );
-    const { commits, storageInput } = RepositoryEntities.bindStorage(
+    const { commits, events, storageInput } = RepositoryEntities.bindStorage(
       this.#repository,
       this.#runtime,
       options.tenantId,
@@ -2395,6 +2996,7 @@ class ProjectionEventExecution {
       entity,
       stored,
       commits,
+      events,
       storageInput,
       this.#repository.stateSchema,
       entityId,
@@ -2402,7 +3004,19 @@ class ProjectionEventExecution {
   }
 }
 
+/**
+ * Binds Process Manager query access to Stand for one handler invocation.
+ */
 const ProcessManagerQueries = Object.freeze({
+  /**
+   * Binds tenant-aware query reads and returns a release callback.
+   *
+   * @param entity Process Manager receiving query access.
+   * @param runtime Context Stand and query services.
+   * @param actorContext Actor metadata from the source signal.
+   * @param tenantId Tenant for query reads, when present.
+   * @returns Callback that removes the query binding.
+   */
   bind(
     entity: object,
     runtime: RepositoryRuntime,
@@ -2434,27 +3048,52 @@ const ProcessManagerQueries = Object.freeze({
   },
 });
 
+/**
+ * Loads and commits Process Manager state and optional diagnostic history.
+ */
 class ProcessManagerExecutionSupport {
   readonly #repository: RepositoryView;
+
   readonly #runtime: RepositoryRuntime;
 
+  /**
+   * Binds a Process Manager repository to its runtime services.
+   *
+   * @param repository Process Manager repository being executed.
+   * @param runtime Built context services.
+   */
   constructor(repository: RepositoryView, runtime: RepositoryRuntime) {
     this.#repository = repository;
     this.#runtime = runtime;
   }
 
+  /**
+   * Normalizes a handler result to a frozen signal list.
+   *
+   * @param produced Raw handler result.
+   * @returns No signals, one signal, or the copied result array.
+   */
   normalizeProducedSignals(produced: unknown): readonly unknown[] {
     if (produced === undefined) {
       return Object.freeze([]);
     }
 
     if (Array.isArray(produced)) {
-      return Object.freeze(Array.from(produced as readonly unknown[]));
+      return Object.freeze(
+        Array.from(produced as readonly unknown[]).filter((item) => item !== undefined),
+      );
     }
 
     return Object.freeze([produced]);
   }
 
+  /**
+   * Restores or creates a Process Manager and binds its history storage.
+   *
+   * @param entityId Process Manager identifier to load.
+   * @param options Stand tenant selection.
+   * @returns Loaded instance, current record, and commit storage.
+   */
   async load(
     entityId: unknown,
     options: { readonly tenantId?: TenantId },
@@ -2466,7 +3105,7 @@ class ProcessManagerExecutionSupport {
       options,
     );
     const entity = RepositoryEntities.instantiate(this.#repository, entityId, stored, false);
-    const { commits, storageInput } = RepositoryEntities.bindStorage(
+    const { commits, events, storageInput } = RepositoryEntities.bindStorage(
       this.#repository,
       this.#runtime,
       options.tenantId,
@@ -2477,23 +3116,35 @@ class ProcessManagerExecutionSupport {
       entity,
       stored,
       commits,
+      events,
       storageInput,
       this.#repository.stateSchema,
       entityId,
     );
   }
 
+  /**
+   * Stores changed Process Manager state or produced Events under one Version.
+   *
+   * @param loaded Process Manager and commit storage.
+   * @param options Stand tenant selection.
+   * @param events Produced or diagnostic Events to retain when configured.
+   * @returns `true` after a successful commit or unchanged no-op.
+   */
   async commit(
     loaded: LoadedRepositoryEntity,
     options: { readonly tenantId?: TenantId },
     events: readonly Event[],
   ): Promise<boolean> {
-    const changed = RepositoryEntities.repositoryChanged(loaded.entity);
-    if (!changed && events.length === 0) return true;
+    const version = RepositoryEntities.repositoryVersion(loaded.entity);
+    const priorNumber = loaded.current?.version?.number ?? 0;
+    if (version.number === priorNumber) {
+      await this.#appendUnchangedDiagnostics(loaded, events);
+      return true;
+    }
     const entityId = (loaded.entity as { readonly id: unknown }).id;
     const state = RepositoryEntities.repositoryState(loaded.entity) as Message;
     const lifecycle = RepositoryEntities.repositoryLifecycle(loaded.entity);
-    const version = RepositoryEntities.repositoryVersion(loaded.entity);
     const deferred = await standAccess.deferUpdate(
       this.#runtime.stand,
       this.#repository.stateSchema,
@@ -2509,11 +3160,40 @@ class ProcessManagerExecutionSupport {
       events,
       deferred,
     );
-    this.#notifyProcessManager(() => deferred.notify(), events);
+    this.#notifyProcessManager(() => {
+      deferred.notify();
+    }, events);
     return true;
   }
 
-  /** Stores the accepted Process Manager state and cancels the Stand update on failure. */
+  /**
+   * Writes configured Process Manager diagnostics without storing unchanged state.
+   *
+   * @param loaded Process Manager and its diagnostic Event history.
+   * @param events Input and produced Events to retain when history is configured.
+   * @returns Completion after all configured diagnostic Events are appended.
+   */
+  async #appendUnchangedDiagnostics(
+    loaded: LoadedRepositoryEntity,
+    events: readonly Event[],
+  ): Promise<void> {
+    if (!RepositoryStorage.historyConfiguration(this.#repository).processManagerEventHistory)
+      return;
+    for (const event of events) await loaded.events.append(clone(EventSchema, event));
+  }
+
+  /**
+   * Stores accepted Process Manager state and cancels Stand notification on failure.
+   *
+   * @param loaded Process Manager and commit storage.
+   * @param entityId Process Manager identifier.
+   * @param state Accepted Process Manager state.
+   * @param version Current Spine Version.
+   * @param lifecycle Accepted lifecycle flags.
+   * @param events Diagnostic Events to retain when configured.
+   * @param deferred Stand update to notify or cancel.
+   * @returns Completion after durable persistence.
+   */
   async #storeProcessManagerRecord(
     loaded: LoadedRepositoryEntity,
     entityId: unknown,
@@ -2521,7 +3201,7 @@ class ProcessManagerExecutionSupport {
     version: Version,
     lifecycle: EntityLifecycleFlags,
     events: readonly Event[],
-    deferred: { notify(): void; cancel(): void },
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
   ): Promise<void> {
     try {
       const outcome = await this.#commitProcessManagerRecord(
@@ -2583,9 +3263,9 @@ class ProcessManagerExecutionSupport {
   }
 
   /**
-   * Reports a failed Process Manager Stand notification after storage commits.
+   * Notifies Stand after a Process Manager commit and reports delivery failure.
    *
-   * @param notify Delivers the deferred Stand update.
+   * @param onNotify Delivers the deferred Stand update.
    * @param events Produced or diagnostic Events available for failure reporting.
    */
   #notifyProcessManager(onNotify: () => void, events: readonly Event[]): void {
@@ -2601,19 +3281,30 @@ class ProcessManagerExecutionSupport {
   }
 }
 
+/**
+ * Executes a routed Process Manager Command and publishes its results.
+ */
 class ProcessManagerCommandExecution {
-  readonly #repository: RepositoryView & {
-    routeCommand(command: Command): RepositoryCommandRoute;
-  };
+  readonly #repository: CommandRoutingRepository;
+
   readonly #routing: RepositoryRouting;
+
   readonly #runtime: RepositoryRuntime;
+
   readonly #command: Command;
+
   readonly #support: ProcessManagerExecutionSupport;
 
+  /**
+   * Captures Process Manager routing, runtime, and source Command.
+   *
+   * @param repository Process Manager repository receiving the Command.
+   * @param routing Registered Command routes and schemas.
+   * @param runtime Built context services.
+   * @param command Source Command to execute.
+   */
   constructor(
-    repository: RepositoryView & {
-      routeCommand(command: Command): RepositoryCommandRoute;
-    },
+    repository: CommandRoutingRepository,
     routing: RepositoryRouting,
     runtime: RepositoryRuntime,
     command: Command,
@@ -2625,6 +3316,12 @@ class ProcessManagerCommandExecution {
     this.#support = new ProcessManagerExecutionSupport(repository, runtime);
   }
 
+  /**
+   * Invokes the registered Command handler and commits its results.
+   *
+   * @param replayedRoute Accepted route from durable inbox replay, when present.
+   * @returns A deferred Command follow-up, rejection follow-up, or `undefined`.
+   */
   async run(replayedRoute?: RepositoryCommandRoute): Promise<EntityInboxFollowUp | undefined> {
     RepositorySignals.requireCommandId(this.#command);
     const intake = this.#readIntake(replayedRoute);
@@ -2657,10 +3354,21 @@ class ProcessManagerCommandExecution {
     }
   }
 
+  /**
+   * Publishes a best-effort Command dispatch diagnostic.
+   *
+   * @param entityId Target Process Manager identifier.
+   */
   #publishDispatch(entityId: unknown): void {
     HandlerDispatchPublisher.command(this.#runtime, this.#repository, this.#command, entityId);
   }
 
+  /**
+   * Decodes a registered Command and finds its assignee.
+   *
+   * @param replayedRoute Accepted inbox route, when present.
+   * @returns Decoded Command, route, and assignee, or `undefined`.
+   */
   #readIntake(replayedRoute?: RepositoryCommandRoute):
     | {
         readonly assignee: RepositoryCommandAssignee;
@@ -2680,6 +3388,15 @@ class ProcessManagerCommandExecution {
     return assignee === undefined ? undefined : Object.freeze({ assignee, message, route });
   }
 
+  /**
+   * Commits Process Manager changes and publishes produced Events and Commands.
+   *
+   * @param loaded Process Manager and commit storage.
+   * @param tenantOptions Stand tenant selection.
+   * @param intake Assignee and target route.
+   * @param producedSignals Validated handler results.
+   * @returns Deferred Command publication when Commands were produced.
+   */
   async #commitAndPublish(
     loaded: Awaited<ReturnType<ProcessManagerExecutionSupport["load"]>>,
     tenantOptions: ReturnType<typeof RepositoryTenants.commandStandOptions>,
@@ -2690,7 +3407,12 @@ class ProcessManagerCommandExecution {
     producedSignals: readonly unknown[],
   ): Promise<EntityInboxFollowUp | undefined> {
     const commands = this.#commandOutputs(intake.assignee, producedSignals);
-    const events = this.#eventOutputs(intake.assignee, producedSignals, intake.route.entityId);
+    const events = this.#eventOutputs(
+      intake.assignee,
+      producedSignals,
+      intake.route.entityId,
+      RepositoryEntities.priorVersion(loaded.current),
+    );
     const committed = await this.#support.commit(loaded, tenantOptions, events);
     if (!committed) return undefined;
     this.#publishChangedState(loaded, intake.route.entityId);
@@ -2702,6 +3424,13 @@ class ProcessManagerCommandExecution {
         };
   }
 
+  /**
+   * Binds substitution results as Commands and requires nonempty output.
+   *
+   * @param assignee Invoked Command handler declaration.
+   * @param produced Validated handler results.
+   * @returns Bound Commands, or an empty list for assignment handlers.
+   */
   #commandOutputs(
     assignee: RepositoryCommandAssignee,
     produced: readonly unknown[],
@@ -2716,16 +3445,32 @@ class ProcessManagerCommandExecution {
     return commands;
   }
 
+  /**
+   * Binds assignment results as Events.
+   *
+   * @param assignee Invoked Command handler declaration.
+   * @param produced Validated handler results.
+   * @param entityId Target Process Manager identifier.
+   * @param version Process Manager Version before this dispatch.
+   * @returns Bound Events, or an empty list for substitution handlers.
+   */
   #eventOutputs(
     assignee: RepositoryCommandAssignee,
     produced: readonly unknown[],
     entityId: unknown,
+    version: Version,
   ): readonly Event[] {
     return assignee.handler.kind === "command-assignment"
-      ? this.#bindProducedEvents(produced, entityId)
+      ? this.#bindProducedEvents(produced, entityId, version)
       : Object.freeze([]);
   }
 
+  /**
+   * Publishes a state-change System Event when the Process Manager changed.
+   *
+   * @param loaded Process Manager before and after handling.
+   * @param entityId Target Process Manager identifier.
+   */
   #publishChangedState(
     loaded: Awaited<ReturnType<ProcessManagerExecutionSupport["load"]>>,
     entityId: unknown,
@@ -2752,6 +3497,15 @@ class ProcessManagerCommandExecution {
     }
   }
 
+  /**
+   * Binds query access for one Command handler invocation.
+   *
+   * @param entity Process Manager instance.
+   * @param assignee Registered Command handler.
+   * @param message Decoded Command message.
+   * @param tenantId Tenant for query reads, when present.
+   * @returns Validated handler signals.
+   */
   async #invoke(
     entity: object,
     assignee: RepositoryCommandAssignee,
@@ -2771,6 +3525,14 @@ class ProcessManagerCommandExecution {
     }
   }
 
+  /**
+   * Invokes the Command handler in a fenced Entity transaction.
+   *
+   * @param entity Process Manager instance to mutate.
+   * @param assignee Registered Command handler.
+   * @param message Decoded Command message.
+   * @returns Validated handler signals after commit.
+   */
   async #invokeCommandHandler(
     entity: object,
     assignee: RepositoryCommandAssignee,
@@ -2785,35 +3547,52 @@ class ProcessManagerCommandExecution {
         assignee.handler.parameterCount,
         EntityInvocation.commandHandlerContext(this.#command),
       );
+      const signals = this.#support.normalizeProducedSignals(produced);
+      RepositoryHandlers.requireDeclaredOutputs(assignee.handler, signals);
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(
           current,
-          assignee.handler.kind === "command-assignment" &&
-            this.#support.normalizeProducedSignals(produced).length > 0,
+          assignee.handler.kind === "command-assignment" && signals.length > 0,
         ),
       );
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
       }
 
-      return this.#support.normalizeProducedSignals(produced);
+      return signals;
     } catch (error) {
       transactionalEntityAccess.rollback(entity);
       throw error;
     }
   }
 
-  #bindProducedEvents(produced: readonly unknown[], entityId: unknown): readonly Event[] {
-    let sequence = 0;
+  /**
+   * Binds assignment results as Process Manager Events.
+   *
+   * @param produced Domain Event messages from the handler.
+   * @param entityId Target Process Manager identifier.
+   * @param version Process Manager Version before this dispatch.
+   * @returns Frozen Event envelope list.
+   */
+  #bindProducedEvents(
+    produced: readonly unknown[],
+    entityId: unknown,
+    version: Version,
+  ): readonly Event[] {
     return Object.freeze(
-      produced.map((signal) => {
-        sequence += 1;
-        return this.#bindProducedEvent(signal, entityId, sequence);
-      }),
+      produced.map((signal) => this.#bindProducedEvent(signal, entityId, version)),
     );
   }
 
-  #bindProducedEvent(signal: unknown, entityId: unknown, sequence: number): Event {
+  /**
+   * Packs one declared Event with source and producer context.
+   *
+   * @param signal Domain Event message to pack.
+   * @param entityId Target Process Manager identifier.
+   * @param version Process Manager Version before this dispatch.
+   * @returns Bound Event envelope.
+   */
+  #bindProducedEvent(signal: unknown, entityId: unknown, version: Version): Event {
     const typeName = EntityInvocation.messageTypeName(signal);
     const schema = this.#routing.producedEventSchemas.find(
       (candidate) => candidate.typeName === typeName,
@@ -2826,7 +3605,7 @@ class ProcessManagerCommandExecution {
     }
 
     const metadata = this.#runtime.signalMetadata.eventFromCommand(this.#command, {
-      version: RepositoryStand.processManagerProducedVersion(sequence),
+      version: version.number,
     });
 
     return create(EventSchema, {
@@ -2836,10 +3615,17 @@ class ProcessManagerCommandExecution {
         metadata.context,
         this.#repository,
         entityId,
+        version,
       ),
     });
   }
 
+  /**
+   * Packs declared substitution results as Commands from the source Command.
+   *
+   * @param produced Domain Command messages from the handler.
+   * @returns Frozen Command envelope list.
+   */
   #bindProducedCommands(produced: readonly unknown[]): readonly Command[] {
     return Object.freeze(
       produced.map((signal) => {
@@ -2862,6 +3648,13 @@ class ProcessManagerCommandExecution {
     );
   }
 
+  /**
+   * Publishes each produced Command in handler order.
+   *
+   * @param commands Bound Commands to publish.
+   * @param source Source Command retained for the caller contract.
+   * @returns Completion after all Commands are published.
+   */
   async #postCommands(commands: readonly Command[], source: Command): Promise<void> {
     void source;
     for (const command of commands) {
@@ -2869,6 +3662,11 @@ class ProcessManagerCommandExecution {
     }
   }
 
+  /**
+   * Schedules publication of produced Events.
+   *
+   * @param events Bound Events to publish.
+   */
   #postEvents(events: readonly Event[]): void {
     for (const event of events) {
       // spine-log-boundary: server.repository_event_follow_up
@@ -2877,19 +3675,30 @@ class ProcessManagerCommandExecution {
   }
 }
 
+/**
+ * Runs Process Manager Event handlers and persists their results.
+ */
 class ProcessManagerEventExecution {
-  readonly #repository: RepositoryView & {
-    routeEvent(event: Event): RepositoryEventRoute;
-  };
+  readonly #repository: EventRoutingRepository;
+
   readonly #routing: RepositoryRouting;
+
   readonly #runtime: RepositoryRuntime;
+
   readonly #event: Event;
+
   readonly #support: ProcessManagerExecutionSupport;
 
+  /**
+   * Captures Process Manager routing, runtime, and source Event.
+   *
+   * @param repository Process Manager repository receiving the Event.
+   * @param routing Registered Event routes and schemas.
+   * @param runtime Built context services.
+   * @param event Source Event to execute.
+   */
   constructor(
-    repository: RepositoryView & {
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
+    repository: EventRoutingRepository,
     routing: RepositoryRouting,
     runtime: RepositoryRuntime,
     event: Event,
@@ -2901,6 +3710,12 @@ class ProcessManagerEventExecution {
     this.#support = new ProcessManagerExecutionSupport(repository, runtime);
   }
 
+  /**
+   * Delivers a routed Event to the durable Process Manager inbox.
+   *
+   * @param acceptedRoute Route accepted before dispatch.
+   * @returns Completion after inbox handoff.
+   */
   async run(acceptedRoute: RepositoryEventRoute): Promise<void> {
     const intake = this.#readIntake(acceptedRoute);
 
@@ -2928,6 +3743,13 @@ class ProcessManagerEventExecution {
     );
   }
 
+  /**
+   * Delivers a routed Event for one target under the duplicate-dispatch guard.
+   *
+   * @param entityId Target Process Manager identifier.
+   * @param acceptedRoute Route accepted before replay.
+   * @returns Completion after guarded target execution.
+   */
   async runTarget(entityId: unknown, acceptedRoute: RepositoryEventRoute): Promise<void> {
     const intake = this.#readIntake(acceptedRoute);
 
@@ -2947,6 +3769,12 @@ class ProcessManagerEventExecution {
     );
   }
 
+  /**
+   * Decodes the Event and selects matching reactors and Command producers.
+   *
+   * @param acceptedRoute Route accepted before execution.
+   * @returns Decoded message, route, reactors, and Command producers.
+   */
   #readIntake(acceptedRoute: RepositoryEventRoute): {
     readonly message: unknown;
     readonly route: RepositoryEventRoute;
@@ -2980,6 +3808,13 @@ class ProcessManagerEventExecution {
     });
   }
 
+  /**
+   * Invokes handlers, commits state, and publishes resulting Events and Commands.
+   *
+   * @param entityId Target Process Manager identifier.
+   * @param intake Decoded Event and matching handlers.
+   * @returns Completion after accepted results are published.
+   */
   async #executeEntity(
     entityId: unknown,
     intake: {
@@ -2997,7 +3832,11 @@ class ProcessManagerEventExecution {
       tenantOptions.tenantId,
     );
 
-    const events = this.#bindProducedEvents(produced.events, entityId);
+    const events = this.#bindProducedEvents(
+      produced.events,
+      entityId,
+      RepositoryEntities.priorVersion(loaded.current),
+    );
     const diagnostics = [
       DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId),
       ...events,
@@ -3009,6 +3848,12 @@ class ProcessManagerEventExecution {
     await this.#postCommands(this.#bindProducedCommands(produced.commands));
   }
 
+  /**
+   * Publishes a state-change System Event when the Process Manager changed.
+   *
+   * @param loaded Process Manager before and after handling.
+   * @param entityId Target Process Manager identifier.
+   */
   #publishChangedState(
     loaded: Awaited<ReturnType<ProcessManagerExecutionSupport["load"]>>,
     entityId: unknown,
@@ -3034,6 +3879,11 @@ class ProcessManagerEventExecution {
     );
   }
 
+  /**
+   * Validates source Event metadata when handlers can produce follow-ups.
+   *
+   * @param intake Matching reactors and Command producers.
+   */
   #validateSourceEventIdForFollowUps(intake: {
     readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
     readonly commanders: readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
@@ -3049,6 +3899,15 @@ class ProcessManagerEventExecution {
     void this.#runtime.signalMetadata.originFromEvent(this.#event);
   }
 
+  /**
+   * Invokes Event handlers in one transaction with temporary query access.
+   *
+   * @param entityId Target Process Manager identifier.
+   * @param entity Process Manager instance.
+   * @param intake Decoded Event and matching handlers.
+   * @param tenantId Tenant for query reads, when present.
+   * @returns Validated Command and Event message lists.
+   */
   async #invokeHandlers(
     entityId: unknown,
     entity: object,
@@ -3085,6 +3944,17 @@ class ProcessManagerEventExecution {
     }
   }
 
+  /**
+   * Invokes reactors and Command producers, collecting their separate outputs.
+   *
+   * @param entityId Target Process Manager identifier.
+   * @param entity Process Manager instance.
+   * @param intake Decoded Event and matching handlers.
+   * @param context Copied source Event context.
+   * @param events Output list for Event messages.
+   * @param commands Output list for Command messages.
+   * @returns Completion after matching handlers run.
+   */
   async #invokeEventHandlers(
     entityId: unknown,
     entity: object,
@@ -3103,6 +3973,16 @@ class ProcessManagerEventExecution {
     await this.#invokeHandlersInto(entity, intake.commanders, intake.message, context, commands);
   }
 
+  /**
+   * Invokes each selected handler and appends its declared results.
+   *
+   * @param entity Process Manager instance.
+   * @param handlers Handler registrations to invoke.
+   * @param message Decoded source Event message.
+   * @param context Copied source Event context.
+   * @param output Result list to append to.
+   * @returns Completion after all selected handlers run.
+   */
   async #invokeHandlersInto(
     entity: object,
     handlers: readonly RegisteredHandlerMetadata<
@@ -3120,10 +4000,19 @@ class ProcessManagerEventExecution {
         handler.handler.parameterCount,
         context,
       );
-      output.push(...this.#support.normalizeProducedSignals(produced));
+      const signals = this.#support.normalizeProducedSignals(produced);
+      RepositoryHandlers.requireDeclaredOutputs(handler.handler, signals);
+      output.push(...signals);
     }
   }
 
+  /**
+   * Applies a fenced Entity commit and raises transition rejection.
+   *
+   * @param entity Process Manager instance to commit.
+   * @param producedEvents Whether handlers produced Events.
+   * @returns Completion after a successful fenced commit.
+   */
   async #commitEntity(entity: object, producedEvents: boolean): Promise<void> {
     const commit = await commitFenced(entity, (current) =>
       transactionalEntityAccess.commit(current, producedEvents),
@@ -3131,17 +4020,33 @@ class ProcessManagerEventExecution {
     if (commit.status === "rejected") throw new TransitionValidationError(commit.validation.error);
   }
 
-  #bindProducedEvents(produced: readonly unknown[], entityId: unknown): readonly Event[] {
-    let sequence = 0;
+  /**
+   * Binds reactor results as Process Manager Events.
+   *
+   * @param produced Domain Event messages from handlers.
+   * @param entityId Target Process Manager identifier.
+   * @param version Process Manager Version before this dispatch.
+   * @returns Frozen Event envelope list.
+   */
+  #bindProducedEvents(
+    produced: readonly unknown[],
+    entityId: unknown,
+    version: Version,
+  ): readonly Event[] {
     return Object.freeze(
-      produced.map((signal) => {
-        sequence += 1;
-        return this.#bindProducedEvent(signal, entityId, sequence);
-      }),
+      produced.map((signal) => this.#bindProducedEvent(signal, entityId, version)),
     );
   }
 
-  #bindProducedEvent(signal: unknown, entityId: unknown, sequence: number): Event {
+  /**
+   * Packs one declared Event with source and producer context.
+   *
+   * @param signal Domain Event message to pack.
+   * @param entityId Target Process Manager identifier.
+   * @param version Process Manager Version before this dispatch.
+   * @returns Bound Event envelope.
+   */
+  #bindProducedEvent(signal: unknown, entityId: unknown, version: Version): Event {
     const typeName = EntityInvocation.messageTypeName(signal);
     const schema = this.#routing.producedEventSchemas.find(
       (candidate) => candidate.typeName === typeName,
@@ -3154,7 +4059,7 @@ class ProcessManagerEventExecution {
     }
 
     const metadata = this.#runtime.signalMetadata.eventFromEvent(this.#event, {
-      version: RepositoryStand.processManagerProducedVersion(sequence),
+      version: version.number,
     });
 
     return create(EventSchema, {
@@ -3164,10 +4069,17 @@ class ProcessManagerEventExecution {
         metadata.context,
         this.#repository,
         entityId,
+        version,
       ),
     });
   }
 
+  /**
+   * Packs Command reactions using metadata from the source Event.
+   *
+   * @param produced Domain Command messages from handlers.
+   * @returns Frozen Command envelope list.
+   */
   #bindProducedCommands(produced: readonly unknown[]): readonly Command[] {
     return Object.freeze(
       produced.map((signal) => {
@@ -3193,12 +4105,23 @@ class ProcessManagerEventExecution {
     );
   }
 
+  /**
+   * Publishes each produced Command in handler order.
+   *
+   * @param commands Bound Commands to publish.
+   * @returns Completion after all Commands are published.
+   */
   async #postCommands(commands: readonly Command[]): Promise<void> {
     for (const command of commands) {
       await this.#runtime.publisher.publishCommand(command);
     }
   }
 
+  /**
+   * Schedules publication of produced Events.
+   *
+   * @param events Bound Events to publish.
+   */
   #postEvents(events: readonly Event[]): void {
     for (const event of events) {
       // spine-log-boundary: server.process_manager_event_follow_up
@@ -3211,21 +4134,43 @@ class ProcessManagerEventExecution {
  * Internal structural provider seam shared by the memory, Datastore, and MySQL factories.
  */
 interface EntityStorageFactory {
+  /**
+   * Opens current, state-history, and Event-history storage for one Entity type.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Generated Entity state message type.
+   * @param input Entity storage location and schema.
+   * @returns Open storage ports and a close operation.
+   */
   createEntityStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
   ): {
     readonly current: EntityRecordStorage<I>;
     readonly states: EntityStateHistoryPort<I, S>;
     readonly events: EntityEventHistoryPort<I>;
+
+    /**
+     * Closes the storage ports opened for this Entity.
+     */
     close(): void;
   };
 }
 
+/**
+ * Groups open Entity storage ports with their atomic commit port.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Generated Entity state message type.
+ */
 interface RepositoryEntityStorage<I, S extends Message> {
   readonly current: EntityRecordStorage<I>;
   readonly states: EntityStateHistoryPort<I, S>;
   readonly events: EntityEventHistoryPort<I>;
   readonly commits: EntityCommitStorage;
+
+  /**
+   * Closes the Entity history and commit storage handles.
+   */
   close(): void;
 }
 
@@ -3233,6 +4178,15 @@ interface RepositoryEntityStorage<I, S extends Message> {
  * Internal repository identity operations.
  */
 const RepositoryIdentity = {
+  /**
+   * Creates a frozen identity snapshot from validated Entity metadata.
+   *
+   * @typeParam EntityType Concrete Entity constructor represented by the snapshot.
+   * @param entityType Entity constructor.
+   * @param entityFamily Aggregate, Projection, or Process Manager family.
+   * @param metadata Descriptor-derived state metadata.
+   * @returns Copy-safe repository identity snapshot.
+   */
   createRepositorySnapshot<EntityType extends RepositoryEntityType>(
     entityType: EntityType,
     entityFamily: EntityFamily,
@@ -3250,6 +4204,13 @@ const RepositoryIdentity = {
     });
   },
 
+  /**
+   * Copies a repository identity snapshot and its mutable metadata fields.
+   *
+   * @typeParam EntityType Concrete Entity constructor in the snapshot.
+   * @param snapshot Identity snapshot to copy.
+   * @returns Frozen copy of the snapshot.
+   */
   cloneRepositorySnapshot<EntityType extends RepositoryEntityType>(
     snapshot: RepositoryIdentitySnapshot<EntityType>,
   ): RepositoryIdentitySnapshot<EntityType> {
@@ -3265,10 +4226,22 @@ const RepositoryIdentity = {
     });
   },
 
+  /**
+   * Checks that repository options are a non-null object.
+   *
+   * @param options Value supplied as repository options.
+   * @returns Whether the value can expose option properties.
+   */
   isRepositoryOptionsObject(options: unknown): options is object {
     return typeof options === "object" && options !== null;
   },
 
+  /**
+   * Reads the Entity constructor option and reports inaccessible properties.
+   *
+   * @param options Repository options object.
+   * @returns Supplied Entity constructor value.
+   */
   readEntityTypeOption(options: object): unknown {
     try {
       return (options as { readonly entityType: unknown }).entityType;
@@ -3281,6 +4254,14 @@ const RepositoryIdentity = {
     }
   },
 
+  /**
+   * Reads the state schema option and reports inaccessible properties.
+   *
+   * @param options Repository options object.
+   * @param entityTypeDisplayName Constructor name for diagnostics.
+   * @param entityFamily Resolved Entity family for diagnostics.
+   * @returns Supplied state schema value.
+   */
   readRepositorySchemaOption(
     options: object,
     entityTypeDisplayName: string,
@@ -3297,6 +4278,12 @@ const RepositoryIdentity = {
     }
   },
 
+  /**
+   * Checks whether a value is a native class constructor.
+   *
+   * @param entityType Candidate Entity constructor.
+   * @returns Whether the value has class syntax.
+   */
   isClassConstructor(entityType: unknown): boolean {
     if (typeof entityType !== "function") {
       return false;
@@ -3311,11 +4298,12 @@ const RepositoryIdentity = {
   },
 
   /**
-   * Resolves the runtime family of a repository-owned entity constructor.
+   * Resolves the runtime family of a repository Entity constructor.
    *
+   * @param entityType Candidate Entity constructor.
+   * @returns Its supported family, or `undefined`.
    * @internal
    */
-
   resolveRepositoryEntityFamily(entityType: unknown): EntityFamily | undefined {
     if (typeof entityType !== "function" || !RepositoryIdentity.isClassConstructor(entityType)) {
       return undefined;
@@ -3354,6 +4342,14 @@ const RepositoryIdentity = {
     return undefined;
   },
 
+  /**
+   * Checks constructor and prototype inheritance against an Entity family.
+   *
+   * @param entityType Candidate constructor.
+   * @param familyConstructor Aggregate, Projection, or Process Manager constructor.
+   * @param familyPrototype Prototype for the same family.
+   * @returns Whether both inheritance paths match.
+   */
   hasEntityFamilyInheritance(
     entityType: RuntimeRepositoryEntityType,
     familyConstructor: object,
@@ -3369,6 +4365,12 @@ const RepositoryIdentity = {
     }
   },
 
+  /**
+   * Reads a safe diagnostic name from an Entity constructor.
+   *
+   * @param entityType Constructor value to describe.
+   * @returns Its name, or an anonymous placeholder.
+   */
   entityTypeName(entityType: unknown): string {
     if (
       (typeof entityType !== "object" && typeof entityType !== "function") ||
@@ -3381,6 +4383,13 @@ const RepositoryIdentity = {
     return typeof name === "string" && name.length > 0 ? name : "(anonymous)";
   },
 
+  /**
+   * Reads one string property without propagating accessor errors.
+   *
+   * @param value Object to inspect.
+   * @param propertyName Property to read.
+   * @returns String value when readable, otherwise `undefined`.
+   */
   safeStringProperty(value: object, propertyName: "name" | "typeName"): string | undefined {
     try {
       const property = (value as Record<typeof propertyName, unknown>)[propertyName];
@@ -3390,6 +4399,15 @@ const RepositoryIdentity = {
     }
   },
 
+  /**
+   * Describes a generated state schema and wraps invalid metadata errors.
+   *
+   * @typeParam Schema Concrete generated state schema.
+   * @param entityTypeDisplayName Constructor name for diagnostics.
+   * @param entityFamily Resolved Entity family for diagnostics.
+   * @param schema Generated state schema to inspect.
+   * @returns Descriptor-derived Entity metadata.
+   */
   describeRepositoryEntityMetadata<Schema extends DescriptorMessageSchema>(
     entityTypeDisplayName: string,
     entityFamily: EntityFamily,
@@ -3406,6 +4424,13 @@ const RepositoryIdentity = {
     }
   },
 
+  /**
+   * Copies descriptor-derived Entity metadata and nested field descriptions.
+   *
+   * @typeParam Schema Generated state schema represented by the metadata.
+   * @param metadata Entity metadata to copy.
+   * @returns Frozen metadata copy.
+   */
   cloneEntityMetadata<Schema extends DescriptorMessageSchema>(
     metadata: EntityMetadata<Schema>,
   ): EntityMetadata<Schema> {
@@ -3436,6 +4461,12 @@ const RepositoryIdentity = {
     });
   },
 
+  /**
+   * Copies one descriptor field description for an identity snapshot.
+   *
+   * @param field Descriptor field to copy.
+   * @returns Frozen field description.
+   */
   cloneFieldMetadata(field: DescriptorFieldMetadata): DescriptorFieldMetadata {
     return Object.freeze({
       descriptor: field.descriptor,
@@ -3452,6 +4483,12 @@ Object.freeze(RepositoryIdentity);
  * Internal entity invocation operations.
  */
 const EntityInvocation = {
+  /**
+   * Checks whether a handler result is an Event envelope.
+   *
+   * @param signal Handler result to inspect.
+   * @returns Whether it carries the generated Event type name.
+   */
   isEventEnvelope(signal: unknown): signal is Event {
     return (
       typeof signal === "object" &&
@@ -3460,6 +4497,12 @@ const EntityInvocation = {
     );
   },
 
+  /**
+   * Reads a generated message's type name or rejects malformed output.
+   *
+   * @param message Handler result to inspect.
+   * @returns Its generated message type name.
+   */
   messageTypeName(message: unknown): string {
     const typeName = (message as { readonly $typeName?: unknown }).$typeName;
 
@@ -3470,6 +4513,16 @@ const EntityInvocation = {
     return typeName;
   },
 
+  /**
+   * Invokes a registered Entity handler with its declared argument count.
+   *
+   * @param entity Entity instance containing the method.
+   * @param methodName Registered handler method name.
+   * @param message Decoded Command or Event message.
+   * @param parameterCount One message parameter or message plus context.
+   * @param context Handler context when declared.
+   * @returns Raw handler result.
+   */
   invokeEntityMethod(
     entity: object,
     methodName: string,
@@ -3486,18 +4539,38 @@ const EntityInvocation = {
     return Reflect.apply(method, entity, parameterCount === 2 ? [message, context] : [message]);
   },
 
+  /**
+   * Copies a Command context or creates an empty context when absent.
+   *
+   * @param command Source Command envelope.
+   * @returns Context isolated from the source envelope.
+   */
   commandHandlerContext(command: Command): NonNullable<Command["context"]> {
     return command.context === undefined
       ? create(CommandContextSchema)
       : clone(CommandContextSchema, command.context);
   },
 
+  /**
+   * Copies an Event context or creates an empty context when absent.
+   *
+   * @param event Source Event envelope.
+   * @returns Context isolated from the source envelope.
+   */
   eventHandlerContext(event: Event): NonNullable<Event["context"]> {
     return event.context === undefined
       ? create(EventContextSchema)
       : clone(EventContextSchema, event.context);
   },
 
+  /**
+   * Unpacks a required signal message with its registered schema.
+   *
+   * @param message Packed signal payload.
+   * @param schema Registered generated message schema.
+   * @param signalKind Signal name for failure diagnostics.
+   * @returns Decoded generated message.
+   */
   unpackRequired(
     message: NonNullable<Command["message"]>,
     schema: MessageSchema,
@@ -3512,6 +4585,13 @@ const EntityInvocation = {
     return unpacked;
   },
 
+  /**
+   * Validates that a signal carries a typed message payload.
+   *
+   * @param message Optional packed signal payload.
+   * @param signalKind Signal name for failure diagnostics.
+   * @returns Payload with a nonempty type URL.
+   */
   requireSignalMessage(
     message: Command["message"],
     signalKind: "command" | "event" | "state update",
@@ -3547,6 +4627,7 @@ const RepositoryEntities = {
     entity: object,
   ): {
     readonly commits: EntityCommitStorage;
+    readonly events: EntityEventHistoryPort<unknown>;
     readonly storageInput: EntityStorageInput<unknown, Message>;
   } {
     const storageInput = RepositoryStorage.entityStorageInput(
@@ -3559,7 +4640,7 @@ const RepositoryEntities = {
       storageInput,
     );
     RepositoryHistoryInternals.bindEntityHistory(entity, storage, entityId, repository.stateSchema);
-    return { commits: storage.commits, storageInput };
+    return { commits: storage.commits, events: storage.events, storageInput };
   },
 
   /**
@@ -3611,6 +4692,7 @@ const RepositoryEntities = {
    * @param entity Restored Entity instance.
    * @param stored Prior Stand snapshot, when present.
    * @param commits Durable commit storage.
+   * @param events Durable diagnostic Event history.
    * @param storageInput Entity storage specification.
    * @param schema Entity state schema.
    * @param entityId Entity identifier.
@@ -3627,12 +4709,14 @@ const RepositoryEntities = {
         }
       | undefined,
     commits: EntityCommitStorage,
+    events: EntityEventHistoryPort<unknown>,
     storageInput: EntityStorageInput<unknown, Message>,
     schema: DescriptorMessageSchema,
     entityId: unknown,
   ): LoadedRepositoryEntity {
     return Object.freeze({
       commits,
+      events,
       current:
         stored === undefined
           ? undefined
@@ -3645,14 +4729,44 @@ const RepositoryEntities = {
     });
   },
 
+  /**
+   * Returns a defensive copy of the Version before this repository dispatch.
+   *
+   * @param current Prior stored Entity record, when one exists.
+   * @returns Prior Version, or the initial zero Version for a fresh Entity.
+   */
+  priorVersion(current: EntityRecord | undefined): Version {
+    return current?.version === undefined
+      ? create(VersionSchema)
+      : clone(VersionSchema, current.version);
+  },
+
+  /**
+   * Reads the current state snapshot from a repository Entity.
+   *
+   * @param entity Entity instance to inspect.
+   * @returns Its current state message.
+   */
   repositoryState(entity: object): unknown {
     return (entity as { readonly state: unknown }).state;
   },
 
+  /**
+   * Reads the current Spine Version from a repository Entity.
+   *
+   * @param entity Entity instance to inspect.
+   * @returns Its current Version snapshot.
+   */
   repositoryVersion(entity: object): Version {
     return (entity as { readonly version: Version }).version;
   },
 
+  /**
+   * Reads archived and deleted flags from a repository Entity.
+   *
+   * @param entity Entity instance to inspect.
+   * @returns Its current lifecycle flags.
+   */
   repositoryLifecycle(entity: object): {
     readonly archived: boolean;
     readonly deleted: boolean;
@@ -3662,6 +4776,12 @@ const RepositoryEntities = {
     ).lifecycle;
   },
 
+  /**
+   * Checks whether the Entity transaction changed state or lifecycle.
+   *
+   * @param entity Entity instance to inspect.
+   * @returns Whether the Entity reports a change.
+   */
   repositoryChanged(entity: object): boolean {
     return (entity as { readonly changed?: unknown }).changed === true;
   },
@@ -3672,6 +4792,12 @@ Object.freeze(RepositoryEntities);
  * Internal repository signals operations.
  */
 const RepositorySignals = {
+  /**
+   * Validates that a rejection type was declared by the invoked handler.
+   *
+   * @param handler Handler declaration that raised the rejection.
+   * @param rejection Rejection to validate.
+   */
   requireDeclaredRejection(handler: HandlerMetadata, rejection: RejectionThrowable): void {
     DeclaredRejections.require(
       handler.methodName,
@@ -3680,6 +4806,12 @@ const RepositorySignals = {
     );
   },
 
+  /**
+   * Reads the producer version from an Event context.
+   *
+   * @param event Event carrying producer metadata.
+   * @returns Version number as a bigint.
+   */
   readEventVersion(event: Event): bigint {
     const number = event.context?.version?.number;
 
@@ -3690,6 +4822,12 @@ const RepositorySignals = {
     return BigInt(number);
   },
 
+  /**
+   * Converts an Aggregate version into the Event context int32 range.
+   *
+   * @param version Aggregate version number.
+   * @returns Version number suitable for a Protobuf Event context.
+   */
   eventVersionNumber(version: bigint): number {
     if (version > 2_147_483_647n || version < -2_147_483_648n) {
       throw new Error(
@@ -3700,15 +4838,39 @@ const RepositorySignals = {
     return Number(version);
   },
 
+  /**
+   * Copies an Event context with the producing Entity identifier.
+   *
+   * @param context Event context to extend.
+   * @param repository Producing Entity repository.
+   * @param entityId Producing Entity identifier.
+   * @param version Full pre-dispatch producer Version, when supplied.
+   * @returns New Event context with producer metadata.
+   */
   eventContextWithProducer(
     context: NonNullable<Event["context"]>,
     repository: RepositoryView,
     entityId: unknown,
+    version?: Version,
   ): NonNullable<Event["context"]> {
     const producerId = EntityIds.pack(repository.stateSchema, entityId);
-    return create(EventContextSchema, { ...context, producerId });
+    return create(EventContextSchema, {
+      ...context,
+      producerId,
+      ...(version === undefined ? {} : { version: clone(VersionSchema, version) }),
+    });
   },
 
+  /**
+   * Builds a rejection Event and returns a best-effort publication follow-up.
+   *
+   * @param runtime Context signal and publication services.
+   * @param repository Repository of the rejected Command.
+   * @param command Command rejected by its handler.
+   * @param entityId Target Entity identifier.
+   * @param rejection Declared handler rejection.
+   * @returns Deferred rejection Event publication.
+   */
   postRejectionEvent(
     runtime: RepositoryRuntime,
     repository: RepositoryView,
@@ -3739,6 +4901,12 @@ const RepositorySignals = {
     };
   },
 
+  /**
+   * Validates a nonempty Command ID for Event origin metadata.
+   *
+   * @param command Source Command envelope.
+   * @returns Its nonempty ID.
+   */
   requireCommandId(command: Command): NonNullable<Command["id"]> {
     if (command.id === undefined || command.id.uuid.trim().length === 0) {
       throw new Error("Repository aggregate execution requires command.id to bind event origins.");
@@ -3747,6 +4915,12 @@ const RepositorySignals = {
     return command.id;
   },
 
+  /**
+   * Validates a nonempty Event ID for inbox deduplication.
+   *
+   * @param event Source Event envelope.
+   * @returns Its nonempty ID.
+   */
   requireEventId(event: Event): NonNullable<Event["id"]> {
     if (event.id === undefined || event.id.value.trim().length === 0) {
       throw new Error("Repository projection inbox handoff requires event.id.");
@@ -3755,6 +4929,11 @@ const RepositorySignals = {
     return event.id;
   },
 
+  /**
+   * Creates a Protobuf timestamp for this execution instant.
+   *
+   * @returns Timestamp derived from the current clock.
+   */
   executionTimestamp(): Timestamp {
     const milliseconds = Date.now();
     return create(TimestampSchema, {
@@ -3807,6 +4986,19 @@ interface SystemEventDraft {
  * Builds and best-effort dispatches committed entity state notifications.
  */
 class EntityStateChangePublishing {
+  /**
+   * Publishes System Events for an Entity change caused by a Command.
+   *
+   * @param runtime Context signal and publication services.
+   * @param repository Repository of the changed Entity.
+   * @param command Source Command.
+   * @param entityId Changed Entity identifier.
+   * @param oldState State before handling, when present.
+   * @param oldLifecycle Lifecycle before handling, when present.
+   * @param newState Accepted Entity state.
+   * @param lifecycle Accepted lifecycle flags.
+   * @param version Committed Entity version number.
+   */
   command(
     runtime: RepositoryRuntime,
     repository: RepositoryView,
@@ -3832,6 +5024,19 @@ class EntityStateChangePublishing {
     );
   }
 
+  /**
+   * Publishes System Events for an Entity change caused by an Event.
+   *
+   * @param runtime Context signal and publication services.
+   * @param repository Repository of the changed Entity.
+   * @param source Source Event.
+   * @param entityId Changed Entity identifier.
+   * @param oldState State before handling, when present.
+   * @param oldLifecycle Lifecycle before handling, when present.
+   * @param newState Accepted Entity state.
+   * @param lifecycle Accepted lifecycle flags.
+   * @param version Committed Entity version number.
+   */
   event(
     runtime: RepositoryRuntime,
     repository: RepositoryView,
@@ -3857,6 +5062,14 @@ class EntityStateChangePublishing {
     );
   }
 
+  /**
+   * Packs and publishes each System Event describing the accepted change.
+   *
+   * @param runtime Context signal and publication services.
+   * @param metadataFor Creates Event metadata from the source signal.
+   * @param origin Source signal identifier and type URL.
+   * @param change Accepted Entity transition.
+   */
   #publish(
     runtime: RepositoryRuntime,
     metadataFor: () => ReturnType<SignalMetadata["eventFromCommand"]>,
@@ -3883,6 +5096,13 @@ class EntityStateChangePublishing {
     });
   }
 
+  /**
+   * Creates state and lifecycle System Events for a committed change.
+   *
+   * @param origin Source signal identifier and type URL.
+   * @param change Accepted Entity transition.
+   * @returns Event drafts for the changed state or lifecycle.
+   */
   #drafts(origin: EventOrigin, change: EntityCommitChange): readonly SystemEventDraft[] {
     const fields = this.#fields(origin, change);
     const archive = this.#archiveDraft(fields, change);
@@ -3892,6 +5112,13 @@ class EntityStateChangePublishing {
     );
   }
 
+  /**
+   * Packs fields shared by Entity state and lifecycle diagnostics.
+   *
+   * @param origin Source signal identifier and type URL.
+   * @param change Accepted Entity transition.
+   * @returns Shared Entity, signal, state, and version fields.
+   */
   #fields(origin: EventOrigin, change: EntityCommitChange): SystemEventFields {
     const entity = create(MessageIdSchema, {
       id: this.#packEntityId(change.repository, change.entityId),
@@ -3905,6 +5132,13 @@ class EntityStateChangePublishing {
     };
   }
 
+  /**
+   * Creates state Event drafts from prior and next state.
+   *
+   * @param fields Shared System Event fields.
+   * @param change Accepted Entity transition.
+   * @returns Zero, one, or two state Event drafts.
+   */
   #stateDrafts(fields: SystemEventFields, change: EntityCommitChange): readonly SystemEventDraft[] {
     const drafts: SystemEventDraft[] = [];
     if (change.oldState === undefined) {
@@ -3926,6 +5160,13 @@ class EntityStateChangePublishing {
     return drafts;
   }
 
+  /**
+   * Builds an EntityStateChanged payload draft.
+   *
+   * @param fields Shared System Event fields.
+   * @param change Accepted Entity transition.
+   * @returns Draft that receives the envelope timestamp later.
+   */
   #stateChangedDraft(fields: SystemEventFields, change: EntityCommitChange): SystemEventDraft {
     return {
       schema: EntityLog.EntityStateChangedSchema,
@@ -3945,6 +5186,13 @@ class EntityStateChangePublishing {
     };
   }
 
+  /**
+   * Creates an archive or unarchive Event when that flag changed.
+   *
+   * @param fields Shared System Event fields.
+   * @param change Accepted Entity transition.
+   * @returns Lifecycle Event draft, or `undefined`.
+   */
   #archiveDraft(
     fields: SystemEventFields,
     change: EntityCommitChange,
@@ -3976,6 +5224,13 @@ class EntityStateChangePublishing {
         };
   }
 
+  /**
+   * Creates a deletion or restoration Event when that flag changed.
+   *
+   * @param fields Shared System Event fields.
+   * @param change Accepted Entity transition.
+   * @returns Lifecycle Event draft, or `undefined`.
+   */
   #deleteDraft(
     fields: SystemEventFields,
     change: EntityCommitChange,
@@ -4008,6 +5263,12 @@ class EntityStateChangePublishing {
         };
   }
 
+  /**
+   * Schedules best-effort System Event publication and reports failure.
+   *
+   * @param runtime Context publication services.
+   * @param event Packed System Event to publish.
+   */
   #post(runtime: RepositoryRuntime, event: Event): void {
     try {
       // spine-log-boundary: server.repository_system_follow_up
@@ -4017,6 +5278,14 @@ class EntityStateChangePublishing {
     }
   }
 
+  /**
+   * Compares serialized state messages for a meaningful state change.
+   *
+   * @param schema Generated state schema.
+   * @param left State before handling.
+   * @param right State after handling.
+   * @returns Whether their serialized bytes match.
+   */
   #sameState(schema: MessageSchema, left: Message, right: Message): boolean {
     const leftBytes = toBinary(schema, left as never);
     const rightBytes = toBinary(schema, right as never);
@@ -4026,6 +5295,12 @@ class EntityStateChangePublishing {
     );
   }
 
+  /**
+   * Maps a repository Entity family to the System Event kind enum.
+   *
+   * @param kind Repository Entity family.
+   * @returns Matching Protobuf Entity kind.
+   */
   #kind(kind: EntityMetadata["kind"]): number {
     return kind === "aggregate"
       ? EntityOption_Kind.AGGREGATE
@@ -4034,6 +5309,13 @@ class EntityStateChangePublishing {
         : EntityOption_Kind.PROCESS_MANAGER;
   }
 
+  /**
+   * Packs an Entity identifier for System Event metadata.
+   *
+   * @param repository Repository carrying the ID schema.
+   * @param entityId Changed Entity identifier.
+   * @returns Packed identifier.
+   */
   #packEntityId(repository: RepositoryView, entityId: unknown) {
     return EntityIds.pack(repository.stateSchema, entityId);
   }
@@ -4044,6 +5326,14 @@ const EntityStateChangePublisher = Object.freeze(new EntityStateChangePublishing
  * Builds and best-effort dispatches accepted handler diagnostics.
  */
 class HandlerDispatchPublishing {
+  /**
+   * Publishes a best-effort CommandDispatchedToHandler diagnostic.
+   *
+   * @param runtime Context signal and publication services.
+   * @param repository Repository receiving the Command.
+   * @param command Source Command.
+   * @param entityId Target Entity identifier.
+   */
   command(
     runtime: RepositoryRuntime,
     repository: RepositoryView,
@@ -4068,6 +5358,14 @@ class HandlerDispatchPublishing {
     }
   }
 
+  /**
+   * Publishes a best-effort EventDispatchedToSubscriber diagnostic.
+   *
+   * @param runtime Context signal and publication services.
+   * @param repository Repository receiving the Event.
+   * @param event Source Event.
+   * @param entityId Target Entity identifier.
+   */
   subscriber(
     runtime: RepositoryRuntime,
     repository: RepositoryView,
@@ -4083,6 +5381,14 @@ class HandlerDispatchPublishing {
     );
   }
 
+  /**
+   * Publishes a best-effort EventDispatchedToReactor diagnostic.
+   *
+   * @param runtime Context signal and publication services.
+   * @param repository Repository receiving the Event.
+   * @param event Source Event.
+   * @param entityId Target Entity identifier.
+   */
   reactor(
     runtime: RepositoryRuntime,
     repository: RepositoryView,
@@ -4098,6 +5404,15 @@ class HandlerDispatchPublishing {
     );
   }
 
+  /**
+   * Builds and publishes one subscriber or reactor dispatch diagnostic.
+   *
+   * @param runtime Context signal and publication services.
+   * @param repository Repository receiving the Event.
+   * @param event Source Event.
+   * @param entityId Target Entity identifier.
+   * @param schema Diagnostic message schema to emit.
+   */
   #publishEvent(
     runtime: RepositoryRuntime,
     repository: RepositoryView,
@@ -4125,6 +5440,15 @@ class HandlerDispatchPublishing {
     }
   }
 
+  /**
+   * Packs a Command dispatch diagnostic with target and source metadata.
+   *
+   * @param repository Repository receiving the Command.
+   * @param command Source Command.
+   * @param entityId Target Entity identifier.
+   * @param whenDispatched Dispatch timestamp, when available.
+   * @returns Command dispatch diagnostic message.
+   */
   #message(
     repository: RepositoryView,
     command: Command,
@@ -4144,6 +5468,13 @@ class HandlerDispatchPublishing {
     });
   }
 
+  /**
+   * Registers and schedules a System Event diagnostic for publication.
+   *
+   * @param runtime Context publication services.
+   * @param schema Diagnostic message schema.
+   * @param event Packed diagnostic Event.
+   */
   #post(
     runtime: RepositoryRuntime,
     schema:
@@ -4161,10 +5492,27 @@ class HandlerDispatchPublishing {
     }
   }
 
+  /**
+   * Packs a target Entity identifier for dispatch diagnostics.
+   *
+   * @param repository Repository carrying the ID schema.
+   * @param entityId Target Entity identifier.
+   * @returns Packed identifier.
+   */
   #packEntityId(repository: RepositoryView, entityId: unknown): Any {
     return EntityIds.pack(repository.stateSchema, entityId);
   }
 
+  /**
+   * Packs a subscriber or reactor dispatch diagnostic message.
+   *
+   * @param schema Diagnostic message schema to emit.
+   * @param repository Repository receiving the Event.
+   * @param event Source Event.
+   * @param entityId Target Entity identifier.
+   * @param whenDispatched Dispatch timestamp, when available.
+   * @returns Matching subscriber or reactor diagnostic message.
+   */
   #eventMessage(
     schema:
       | typeof EntityLog.EventDispatchedToSubscriberSchema
@@ -4198,6 +5546,14 @@ Object.freeze(RepositorySignals);
  * Internal repository stand operations.
  */
 const RepositoryStand = {
+  /**
+   * Builds tenant, Version, and lifecycle options for a Stand update.
+   *
+   * @param tenantId Tenant receiving the update, when present.
+   * @param version Committed Spine Version, when present.
+   * @param lifecycle Accepted archived and deleted flags.
+   * @returns Frozen Stand update options.
+   */
   standUpdateOptions(
     tenantId: TenantId | undefined,
     version: Version | undefined,
@@ -4214,9 +5570,12 @@ const RepositoryStand = {
     });
   },
 
-  processManagerProducedVersion(sequence: number): number {
-    return sequence;
-  },
+  /**
+   * Maps one Event position to its Process Manager producer version.
+   *
+   * @param sequence One-based position among produced Events.
+   * @returns Producer sequence number for Event metadata.
+   */
 };
 Object.freeze(RepositoryStand);
 
@@ -4224,6 +5583,13 @@ Object.freeze(RepositoryStand);
  * Internal repository tenants operations.
  */
 const RepositoryTenants = {
+  /**
+   * Builds tenant-aware storage context for Entity inbox delivery.
+   *
+   * @param context Bounded context storage mode.
+   * @param tenantId Delivery tenant when multitenant.
+   * @returns Storage context for durable Entity inbox rows.
+   */
   entityInboxDeliveryContext(context: StorageMode, tenantId: TenantId | undefined): StorageContext {
     if (!context.multitenant) {
       return Object.freeze({ name: context.name, multitenant: false });
@@ -4241,6 +5607,13 @@ const RepositoryTenants = {
     });
   },
 
+  /**
+   * Builds tenant-aware storage context for Projection inbox delivery.
+   *
+   * @param context Bounded context storage mode.
+   * @param tenantId Delivery tenant when multitenant.
+   * @returns Storage context for durable Projection inbox rows.
+   */
   projectionDeliveryContext(context: StorageMode, tenantId: TenantId | undefined): StorageContext {
     if (!context.multitenant) {
       return Object.freeze({ name: context.name, multitenant: false });
@@ -4260,6 +5633,13 @@ const RepositoryTenants = {
     });
   },
 
+  /**
+   * Validates an Event tenant before Projection inbox handoff.
+   *
+   * @param context Bounded context storage mode.
+   * @param event Event entering Projection delivery.
+   * @returns Validated tenant, or `undefined` for single-tenant contexts.
+   */
   requireProjectionTenant(context: StorageMode, event: Event): TenantId | undefined {
     if (!context.multitenant) {
       return undefined;
@@ -4276,6 +5656,13 @@ const RepositoryTenants = {
     return RepositoryTenants.require(tenantId);
   },
 
+  /**
+   * Validates an Event tenant before Process Manager inbox handoff.
+   *
+   * @param context Bounded context storage mode.
+   * @param event Event entering Process Manager delivery.
+   * @returns Validated tenant, or `undefined` for single-tenant contexts.
+   */
   requirePmEventTenant(context: StorageMode, event: Event): TenantId | undefined {
     if (!context.multitenant) {
       return undefined;
@@ -4290,6 +5677,13 @@ const RepositoryTenants = {
     return RepositoryTenants.require(tenantId);
   },
 
+  /**
+   * Validates a Command tenant before Entity inbox handoff.
+   *
+   * @param context Bounded context storage mode.
+   * @param command Command entering Entity delivery.
+   * @returns Validated tenant, or `undefined` for single-tenant contexts.
+   */
   requireCommandTenant(context: StorageMode, command: Command): TenantId | undefined {
     if (!context.multitenant) {
       return undefined;
@@ -4304,6 +5698,13 @@ const RepositoryTenants = {
     return RepositoryTenants.require(tenantId);
   },
 
+  /**
+   * Builds storage context from a Command actor tenant.
+   *
+   * @param context Bounded context storage mode.
+   * @param command Command entering repository execution.
+   * @returns Tenant-aware storage context.
+   */
   storageContextForCommand(context: StorageMode, command: Command): StorageContext {
     if (!context.multitenant) {
       return Object.freeze({ name: context.name, multitenant: false });
@@ -4319,6 +5720,13 @@ const RepositoryTenants = {
     });
   },
 
+  /**
+   * Builds storage context from an Event origin tenant.
+   *
+   * @param context Bounded context storage mode.
+   * @param event Event entering repository execution.
+   * @returns Tenant-aware storage context.
+   */
   storageContextForEvent(context: StorageMode, event: Event): StorageContext {
     if (!context.multitenant) {
       return Object.freeze({ name: context.name, multitenant: false });
@@ -4334,6 +5742,13 @@ const RepositoryTenants = {
     });
   },
 
+  /**
+   * Builds storage context from an explicit tenant value.
+   *
+   * @param context Bounded context storage mode.
+   * @param tenantId Tenant to select when multitenant.
+   * @returns Tenant-aware storage context.
+   */
   storageContextForTenant(context: StorageMode, tenantId: TenantId | undefined): StorageContext {
     if (!context.multitenant) return Object.freeze({ name: context.name, multitenant: false });
     if (tenantId === undefined)
@@ -4345,10 +5760,23 @@ const RepositoryTenants = {
     });
   },
 
+  /**
+   * Reads a copied tenant identifier from Command actor metadata.
+   *
+   * @param command Source Command.
+   * @returns Tenant identifier when present.
+   */
   readCommandTenant(command: Command): TenantId | undefined {
     return RepositoryTenants.tenantValue(command.context?.actorContext?.tenantId);
   },
 
+  /**
+   * Reads a tenant for a Stand Event update when available.
+   *
+   * @param context Bounded context storage mode.
+   * @param event Source Event.
+   * @returns Stand tenant options.
+   */
   standTenantOptions(context: StorageMode, event: Event): { readonly tenantId?: TenantId } {
     if (!context.multitenant) {
       return {};
@@ -4358,6 +5786,13 @@ const RepositoryTenants = {
     return tenantId === undefined ? {} : { tenantId };
   },
 
+  /**
+   * Reads a tenant for a Stand Command update when available.
+   *
+   * @param context Bounded context storage mode.
+   * @param command Source Command.
+   * @returns Stand tenant options.
+   */
   commandStandOptions(context: StorageMode, command: Command): { readonly tenantId?: TenantId } {
     if (!context.multitenant) {
       return {};
@@ -4367,6 +5802,12 @@ const RepositoryTenants = {
     return tenantId === undefined ? {} : { tenantId };
   },
 
+  /**
+   * Reads a copied tenant identifier from Event origin metadata.
+   *
+   * @param event Source Event.
+   * @returns Tenant identifier when present.
+   */
   readEventTenant(event: Event): TenantId | undefined {
     switch (event.context?.origin.case) {
       case "importContext":
@@ -4378,14 +5819,33 @@ const RepositoryTenants = {
     }
   },
 
+  /**
+   * Copies a tenant identifier when provided.
+   *
+   * @param tenantId Tenant identifier to isolate from its source.
+   * @returns Copied tenant, or `undefined`.
+   */
   tenantValue(tenantId: TenantId | undefined): TenantId | undefined {
     return tenantId === undefined ? undefined : clone(TenantIdSchema, tenantId);
   },
 
+  /**
+   * Validates and copies a tenant identifier through the storage boundary.
+   *
+   * @param tenantId Tenant identifier to validate.
+   * @returns Validated tenant identifier.
+   */
   require(tenantId: TenantId): TenantId {
     return TenantBoundary.from(tenantId).tenantId;
   },
 
+  /**
+   * Compares normalized tenant storage keys.
+   *
+   * @param left First tenant identifier.
+   * @param right Second tenant identifier.
+   * @returns Whether both identifiers select the same tenant.
+   */
   equal(left: TenantId, right: TenantId): boolean {
     return TenantBoundary.from(left).key === TenantBoundary.from(right).key;
   },
@@ -4396,6 +5856,36 @@ Object.freeze(RepositoryTenants);
  * Internal repository handlers operations.
  */
 const RepositoryHandlers = {
+  /**
+   * Rejects outputs not declared by the invoked handler, even if a sibling declares them.
+   *
+   * @param handler Invoked handler declaration.
+   * @param signals Returned domain messages to validate.
+   * @param allowEnvelopes Whether Event envelopes may pass through.
+   */
+  requireDeclaredOutputs(
+    handler: HandlerMetadata,
+    signals: readonly unknown[],
+    allowEnvelopes = false,
+  ): void {
+    const schemas = HandlerMetadataValues.returnedSchemas(handler);
+    for (const signal of signals) {
+      if (allowEnvelopes && EntityInvocation.isEventEnvelope(signal)) continue;
+      const typeName = EntityInvocation.messageTypeName(signal);
+      if (!schemas.some((schema) => schema.typeName === typeName)) {
+        throw new Error(
+          `Handler "${handler.methodName}" returned undeclared message "${typeName}".`,
+        );
+      }
+    }
+  },
+
+  /**
+   * Normalizes one or many handler metadata blocks to a frozen list.
+   *
+   * @param handlersOption Configured handler metadata.
+   * @returns Frozen handler metadata list.
+   */
   normalizeHandlers(handlersOption: RepositoryHandlersOption): readonly EntityHandlersMetadata[] {
     if (handlersOption === undefined) {
       return Object.freeze([]);
@@ -4406,6 +5896,12 @@ const RepositoryHandlers = {
     return Object.freeze([handlersOption]);
   },
 
+  /**
+   * Groups Event-to-Command reactions by source Event type.
+   *
+   * @param handlers Entity handler metadata blocks.
+   * @returns Reactions indexed by Event type name.
+   */
   createCommandReactionMap(
     handlers: readonly EntityHandlersMetadata[],
   ): ReadonlyMap<string, readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[]> {
@@ -4422,6 +5918,14 @@ const RepositoryHandlers = {
     return byEvent;
   },
 
+  /**
+   * Builds Event field filters for handlers grouped by Event type.
+   *
+   * @typeParam Value Handler registration carrying schema and filter metadata.
+   * @param byEvent Handler registrations indexed by Event type.
+   * @param stringifiers Field conversion registry for message-valued filters.
+   * @returns Compiled filter plans by Event type.
+   */
   createEventFilterPlans<
     Value extends {
       readonly handler: {
@@ -4450,6 +5954,14 @@ const RepositoryHandlers = {
     return plans;
   },
 
+  /**
+   * Finds handlers for domestic or external Event origin.
+   *
+   * @typeParam Value Handler registration with origin metadata.
+   * @param values Candidate handler registrations.
+   * @param external Whether the source Event is external.
+   * @returns Frozen matching registration list.
+   */
   forOrigin<Value extends { readonly handler: { readonly origin: "domestic" | "external" } }>(
     values: readonly Value[],
     external: boolean,
@@ -4459,6 +5971,14 @@ const RepositoryHandlers = {
     );
   },
 
+  /**
+   * Maps readiness-selected handlers by registered message type.
+   *
+   * @typeParam Value Handler registration returned by readiness lookup.
+   * @param schemas Registered message schemas.
+   * @param find Selects handlers for one type name.
+   * @returns Handler lists indexed by message type name.
+   */
   readinessMap<Value>(
     schemas: readonly MessageSchema[],
     find: (typeName: string) => readonly Value[],
@@ -4466,6 +5986,12 @@ const RepositoryHandlers = {
     return new Map(schemas.map((schema) => [schema.typeName, find(schema.typeName)]));
   },
 
+  /**
+   * Reads the declared output schemas for one handler.
+   *
+   * @param handler Command or Event handler declaration.
+   * @returns Generated schemas the handler may emit.
+   */
   handlerEmittedSchemas(
     handler:
       | CommandAssignmentHandlerMetadata
@@ -4476,6 +6002,12 @@ const RepositoryHandlers = {
     return HandlerMetadataValues.returnedSchemas(handler);
   },
 
+  /**
+   * Reads the declared rejection schemas for a Command handler.
+   *
+   * @param handler Assignment or substitution declaration.
+   * @returns Generated rejection schemas the handler may throw.
+   */
   handlerThrownSchemas(
     handler:
       | CommandAssignmentHandlerMetadata
@@ -4484,10 +6016,23 @@ const RepositoryHandlers = {
     return HandlerMetadataValues.thrownSchemas(handler);
   },
 
+  /**
+   * Checks whether handler metadata was supplied as a list.
+   *
+   * @param value Configured handler metadata.
+   * @returns Whether it is a handler list.
+   */
   isHandlersArray(value: RepositoryHandlersOption): value is readonly EntityHandlersMetadata[] {
     return Array.isArray(value);
   },
 
+  /**
+   * Validates handler metadata against the Entity constructor and family.
+   *
+   * @param entityType Repository Entity constructor.
+   * @param metadata Descriptor-derived state metadata.
+   * @param handlers Handler metadata blocks to validate.
+   */
   validateHandlers(
     entityType: RepositoryEntityType,
     metadata: EntityMetadata,
@@ -4518,6 +6063,12 @@ const RepositoryHandlers = {
     }
   },
 
+  /**
+   * Returns unique generated schemas by type URL.
+   *
+   * @param schemas Candidate message schemas.
+   * @returns Frozen list retaining the last schema for each type URL.
+   */
   uniqueSchemas(schemas: readonly MessageSchema[]): readonly MessageSchema[] {
     const byTypeUrl = new Map<string, MessageSchema>();
     for (const schema of schemas) {
@@ -4526,6 +6077,15 @@ const RepositoryHandlers = {
     return Object.freeze([...byTypeUrl.values()]);
   },
 
+  /**
+   * Adds a value to a map entry, creating its list when absent.
+   *
+   * @typeParam Key Map key type.
+   * @typeParam Value Map value type.
+   * @param map Mutable map of value lists.
+   * @param key Entry key to update.
+   * @param value Value to append.
+   */
   pushMapValue<Key, Value>(map: Map<Key, Value[]>, key: Key, value: Value): void {
     const values = map.get(key);
 
@@ -4543,6 +6103,21 @@ Object.freeze(RepositoryHandlers);
  * Internal repository routes operations.
  */
 const RepositoryRoutes = {
+  /**
+   * Builds immutable routing from an Entity constructor and its declarations.
+   *
+   * @typeParam EntityType Concrete repository Entity constructor.
+   * @param entityType Entity constructor receiving signals.
+   * @param entityFamily Aggregate, Projection, or Process Manager family.
+   * @param metadata Descriptor-derived state metadata.
+   * @param handlersOption Registered Entity handler metadata.
+   * @param producedEvents Additional Event schemas this repository may emit.
+   * @param commandRouting Captured Command route declarations.
+   * @param eventRouting Captured Event route declarations.
+   * @param stateUpdateRouting Captured state-update route declarations.
+   * @param stringifiers Field conversion registry for Event filters.
+   * @returns Immutable routing and handler selection operations.
+   */
   createRepositoryRouting<EntityType extends RepositoryEntityType>(
     entityType: EntityType,
     entityFamily: EntityFamily,
@@ -4569,6 +6144,13 @@ const RepositoryRoutes = {
     });
   },
 
+  /**
+   * Validates handler declarations and assembles routing schemas and selectors.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param input Entity metadata, handlers, and captured routes.
+   * @returns Immutable repository routing.
+   */
   prepareRouting<Id>(input: RoutingInput<Id>): RepositoryRouting<Id> {
     const handlers = RepositoryHandlers.normalizeHandlers(input.handlersOption);
     RepositoryHandlers.validateHandlers(input.entityType, input.metadata, handlers);
@@ -4599,6 +6181,12 @@ const RepositoryRoutes = {
     );
   },
 
+  /**
+   * Builds Command and Event handler readiness lookups when handlers exist.
+   *
+   * @param handlers Registered Entity handler metadata.
+   * @returns Readiness lookups, or absent lookups for no handlers.
+   */
   readiness(handlers: readonly EntityHandlersMetadata[]): RoutingReadiness {
     return handlers.length === 0
       ? { command: undefined, event: undefined }
@@ -4608,6 +6196,13 @@ const RepositoryRoutes = {
         };
   },
 
+  /**
+   * Collects accepted, produced, and origin-specific message schemas.
+   *
+   * @param handlers Registered Entity handler metadata.
+   * @param producedEvents Additional Event schemas this repository may emit.
+   * @returns Schema groups used to build routes.
+   */
   routingSchemas(
     handlers: readonly EntityHandlersMetadata[],
     producedEvents: readonly MessageSchema[],
@@ -4618,6 +6213,12 @@ const RepositoryRoutes = {
     return { ...accepted, ...origins, ...produced };
   },
 
+  /**
+   * Collects Command, Event, and state schemas accepted by handlers.
+   *
+   * @param handlers Registered Entity handler metadata.
+   * @returns Deduplicated accepted schema groups.
+   */
   acceptedSchemas(handlers: readonly EntityHandlersMetadata[]) {
     const command = RepositoryHandlers.uniqueSchemas(
       handlers.flatMap((handler) => [
@@ -4641,6 +6242,12 @@ const RepositoryRoutes = {
     return { command, event, state };
   },
 
+  /**
+   * Groups domestic and external Event schemas declared by handlers.
+   *
+   * @param handlers Registered Entity handler metadata.
+   * @returns Origin-specific Event schema groups.
+   */
   originSchemas(handlers: readonly EntityHandlersMetadata[]) {
     const schemas = (origin: "domestic" | "external") =>
       RepositoryHandlers.uniqueSchemas(
@@ -4659,6 +6266,13 @@ const RepositoryRoutes = {
     return { domesticEvent: schemas("domestic"), externalEvent: schemas("external") };
   },
 
+  /**
+   * Collects schemas for Events and Commands handlers may produce.
+   *
+   * @param handlers Registered Entity handler metadata.
+   * @param explicitEvents Additional Event schemas configured on the repository.
+   * @returns Deduplicated produced Event and Command schema groups.
+   */
   producedSchemas(
     handlers: readonly EntityHandlersMetadata[],
     explicitEvents: readonly MessageSchema[],
@@ -4693,6 +6307,13 @@ const RepositoryRoutes = {
     return { producedEvent, producedCommand };
   },
 
+  /**
+   * Rejects state subscriptions outside Projections or to the same state type.
+   *
+   * @param entityFamily Repository Entity family.
+   * @param metadata Descriptor-derived state metadata.
+   * @param schemas Subscribed Entity state schemas.
+   */
   validateStateSchemas(
     entityFamily: EntityFamily,
     metadata: EntityMetadata,
@@ -4709,6 +6330,15 @@ const RepositoryRoutes = {
     }
   },
 
+  /**
+   * Builds Event filters for reactors, subscribers, and Command reactions.
+   *
+   * @param handlers Registered Entity handler metadata.
+   * @param eventSchemas Accepted Event schemas.
+   * @param readiness Event handler readiness lookup, when present.
+   * @param stringifiers Field conversion registry for filters.
+   * @returns Compiled Event filter groups.
+   */
   routingFilters(
     handlers: readonly EntityHandlersMetadata[],
     eventSchemas: readonly MessageSchema[],
@@ -4732,6 +6362,17 @@ const RepositoryRoutes = {
     };
   },
 
+  /**
+   * Resolves captured custom routes for each accepted signal schema.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param schemas Accepted signal and state schemas.
+   * @param command Captured Command route declarations.
+   * @param event Captured Event route declarations.
+   * @param state Captured state-update route declarations.
+   * @param idField Canonical target Entity ID field.
+   * @returns Custom route maps by schema.
+   */
   routingMaps<Id>(
     schemas: RoutingSchemas,
     command: RoutingDeclarationSnapshot<CommandRoute<Id>>,
@@ -4746,6 +6387,18 @@ const RepositoryRoutes = {
     };
   },
 
+  /**
+   * Creates immutable schema sets, handler selectors, and signal route operations.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param schemas Accepted and produced schema groups.
+   * @param readiness Handler readiness lookups.
+   * @param stateSubscriptions State subscribers by source type.
+   * @param filters Compiled Event filter groups.
+   * @param routes Custom route maps by schema.
+   * @param idField Canonical target Entity ID field.
+   * @returns Immutable repository routing.
+   */
   freezeRouting<Id>(
     schemas: RoutingSchemas,
     readiness: RoutingReadiness,
@@ -4777,6 +6430,12 @@ const RepositoryRoutes = {
     });
   },
 
+  /**
+   * Builds filter-aware selectors for Command reactions and Event handlers.
+   *
+   * @param filters Compiled Event filter groups.
+   * @returns Functions that select matching handler registrations.
+   */
   handlerSelectors(
     filters: RoutingFilters,
   ): Pick<RepositoryRouting, "commandReactions" | "eventReactors" | "eventSubscribers"> {
@@ -4790,6 +6449,16 @@ const RepositoryRoutes = {
     };
   },
 
+  /**
+   * Finds handlers matching message fields and Event origin.
+   *
+   * @typeParam Value Handler registration with origin metadata.
+   * @param filters Compiled filter plans indexed by Event type.
+   * @param typeName Source Event type name.
+   * @param message Decoded Event message.
+   * @param external Whether the Event has external origin.
+   * @returns Matching handler registrations.
+   */
   selectHandlers<Value extends { readonly handler: { readonly origin: "domestic" | "external" } }>(
     filters: ReadonlyMap<string, EventHandlerFilterPlan<Value>>,
     typeName: string,
@@ -4802,6 +6471,18 @@ const RepositoryRoutes = {
     );
   },
 
+  /**
+   * Builds Command, Event, and state-update route functions.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param schemas Accepted signal and state schemas.
+   * @param readiness Handler readiness lookups.
+   * @param stateSubscriptions State subscribers by source type.
+   * @param filters Compiled Event filter groups.
+   * @param routes Custom route maps by schema.
+   * @param idField Canonical target Entity ID field.
+   * @returns Route functions for repository dispatch.
+   */
   routeSelectors<Id>(
     schemas: RoutingSchemas,
     readiness: RoutingReadiness,
@@ -4822,6 +6503,16 @@ const RepositoryRoutes = {
     };
   },
 
+  /**
+   * Builds a Command route function from readiness and custom declarations.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param schemas Accepted Command schemas.
+   * @param readiness Command handler readiness lookup.
+   * @param routes Custom route maps by schema.
+   * @param idField Canonical target Entity ID field.
+   * @returns Function that routes one Command.
+   */
   commandSelector<Id>(
     schemas: RoutingSchemas,
     readiness: RoutingReadiness,
@@ -4838,6 +6529,17 @@ const RepositoryRoutes = {
       );
   },
 
+  /**
+   * Builds an Event route function from readiness and custom declarations.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param schemas Accepted Event schemas.
+   * @param readiness Event handler readiness lookup.
+   * @param filters Compiled Event filter groups.
+   * @param routes Custom route maps by schema.
+   * @param idField Canonical target Entity ID field.
+   * @returns Function that routes one Event.
+   */
   eventSelector<Id>(
     schemas: RoutingSchemas,
     readiness: RoutingReadiness,
@@ -4856,6 +6558,16 @@ const RepositoryRoutes = {
       );
   },
 
+  /**
+   * Builds a state-update route function for Projection subscriptions.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param schemas Subscribed state schemas.
+   * @param subscriptions State subscribers by source type.
+   * @param routes Custom state-update routes by schema.
+   * @param idField Canonical target Entity ID field.
+   * @returns Function that routes one state-change Event.
+   */
   stateSelector<Id>(
     schemas: RoutingSchemas,
     subscriptions: ReadonlyMap<string, RepositoryStateSubscribers>,
@@ -4866,6 +6578,17 @@ const RepositoryRoutes = {
       RepositoryRoutes.routeStateUpdate(event, schemas.state, subscriptions, idField, routes.state);
   },
 
+  /**
+   * Routes a Command to its registered assignee and target Entity ID.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param command Command envelope to route.
+   * @param readiness Command handler readiness lookup.
+   * @param schemas Accepted Command schemas.
+   * @param targetIdField Canonical target Entity ID field.
+   * @param commandRoutes Custom Command routes by schema.
+   * @returns Deferred Command route for one target.
+   */
   routeCommand<Id>(
     command: Command,
     readiness: CommandRegistrationReadinessLookup | undefined,
@@ -4897,6 +6620,14 @@ const RepositoryRoutes = {
     });
   },
 
+  /**
+   * Resolves custom Command routes for registered schemas.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param schemas Accepted Command schemas.
+   * @param routing Captured Command route declarations.
+   * @returns Custom Command routes by schema.
+   */
   resolveCommandRoutes<Id>(
     schemas: readonly MessageSchema[],
     routing: RoutingDeclarationSnapshot<CommandRoute<Id>>,
@@ -4911,6 +6642,16 @@ const RepositoryRoutes = {
     return routes;
   },
 
+  /**
+   * Calls a custom Command route with a decoded message and context.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param route Registered custom route.
+   * @param message Packed Command payload.
+   * @param schema Registered Command schema.
+   * @param context Source Command context, when present.
+   * @returns Candidate target Entity ID.
+   */
   callCommandRoute<Id>(
     route: CommandRoute<Id>,
     message: NonNullable<Command["message"]>,
@@ -4924,6 +6665,18 @@ const RepositoryRoutes = {
     return route(unpacked, context ?? create(CommandContextSchema));
   },
 
+  /**
+   * Routes an Event to interested Entity IDs using custom or default routing.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param event Event envelope to route.
+   * @param readiness Event handler readiness lookup.
+   * @param commandReactions Command reactions by Event type.
+   * @param schemas Accepted Event schemas.
+   * @param targetIdField Canonical target Entity ID field.
+   * @param eventRoutes Custom Event routes by schema.
+   * @returns Deferred Event route with target IDs.
+   */
   routeEvent<Id>(
     event: Event,
     readiness: EventRegistrationReadinessLookup | undefined,
@@ -4974,6 +6727,14 @@ const RepositoryRoutes = {
     });
   },
 
+  /**
+   * Resolves custom Event routes for registered schemas.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param schemas Accepted Event schemas.
+   * @param routing Captured Event route declarations.
+   * @returns Custom Event routes by schema.
+   */
   resolveEventRoutes<Id>(
     schemas: readonly MessageSchema[],
     routing: RoutingDeclarationSnapshot<EventRoute<Id>>,
@@ -4988,6 +6749,12 @@ const RepositoryRoutes = {
     return routes;
   },
 
+  /**
+   * Groups state subscribers by source Entity type name.
+   *
+   * @param handlers Registered Entity handler metadata.
+   * @returns Frozen subscriber lists indexed by state type.
+   */
   stateSubscriptions(
     handlers: readonly EntityHandlersMetadata[],
   ): ReadonlyMap<string, readonly RegisteredHandlerMetadata<StateSubscriptionHandlerMetadata>[]> {
@@ -5011,6 +6778,15 @@ const RepositoryRoutes = {
     );
   },
 
+  /**
+   * Resolves state-update routes and checks default ID compatibility.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param schemas Subscribed source Entity state schemas.
+   * @param routing Captured state-update route declarations.
+   * @param targetIdField Canonical Projection ID field.
+   * @returns Custom state-update routes by schema.
+   */
   resolveStateRoutes<Id>(
     schemas: readonly DescriptorMessageSchema[],
     routing: RoutingDeclarationSnapshot<StateUpdateRoute<Id>>,
@@ -5034,6 +6810,17 @@ const RepositoryRoutes = {
     return routes;
   },
 
+  /**
+   * Routes a System Event state update to interested Projections.
+   *
+   * @typeParam Id Projection identifier type.
+   * @param event Entity state-change System Event.
+   * @param schemas Subscribed source state schemas.
+   * @param subscriptions State subscribers by source type.
+   * @param targetIdField Canonical Projection ID field.
+   * @param routes Custom state-update routes by schema.
+   * @returns Route and decoded state, or `undefined` when uninterested.
+   */
   routeStateUpdate<Id>(
     event: Event,
     schemas: readonly DescriptorMessageSchema[],
@@ -5074,6 +6861,14 @@ const RepositoryRoutes = {
     });
   },
 
+  /**
+   * Decodes the new Entity state carried by a state-change System Event.
+   *
+   * @param event Candidate System Event.
+   * @param schemas Subscribed source state schemas.
+   * @param operation Operation name for diagnostics.
+   * @returns Decoded schema and state, or `undefined` for unrelated Events.
+   */
   decodeStateUpdate(
     event: Event,
     schemas: readonly DescriptorMessageSchema[],
@@ -5095,6 +6890,16 @@ const RepositoryRoutes = {
     return Object.freeze({ schema, state });
   },
 
+  /**
+   * Calls a custom state-update route and validates its target IDs.
+   *
+   * @typeParam Id Projection identifier type.
+   * @param route Registered state-update route.
+   * @param state Decoded source Entity state.
+   * @param context Source Event context, when present.
+   * @param targetIdField Canonical Projection ID field.
+   * @returns Validated Projection target IDs.
+   */
   callStateUpdateRoute<Id>(
     route: StateUpdateRoute<Id>,
     state: Message,
@@ -5115,6 +6920,17 @@ const RepositoryRoutes = {
     return Object.freeze([...unique.values()]);
   },
 
+  /**
+   * Calls a custom Event route and validates its target IDs.
+   *
+   * @typeParam Id Repository Entity identifier type.
+   * @param route Registered custom Event route.
+   * @param message Packed Event payload.
+   * @param schema Registered Event schema.
+   * @param context Source Event context, when present.
+   * @param targetIdField Canonical target Entity ID field.
+   * @returns Validated target Entity IDs.
+   */
   callEventRoute<Id>(
     route: EventRoute<Id>,
     message: NonNullable<Event["message"]>,
@@ -5143,6 +6959,14 @@ const RepositoryRoutes = {
     return Object.freeze([...unique.values()]);
   },
 
+  /**
+   * Finds a registered message schema by its type URL.
+   *
+   * @param schemas Accepted message schemas.
+   * @param typeUrl Packed message type URL.
+   * @param signalKind Signal name for diagnostics.
+   * @returns Matching generated schema.
+   */
   schemaForTypeUrl(
     schemas: readonly MessageSchema[],
     typeUrl: string,
@@ -5157,6 +6981,14 @@ const RepositoryRoutes = {
     return schema;
   },
 
+  /**
+   * Reads the default target ID from a decoded signal's first field.
+   *
+   * @param message Packed Command or Event payload.
+   * @param schema Generated payload schema.
+   * @param signalKind Signal name for validation.
+   * @returns Nonempty first-field value.
+   */
   readFirstFieldId(
     message: NonNullable<Command["message"]>,
     schema: MessageSchema,
@@ -5184,6 +7016,15 @@ const RepositoryRoutes = {
     return value;
   },
 
+  /**
+   * Reads the first state field compatible with a Projection target ID.
+   *
+   * @param state Decoded source Entity state.
+   * @param schema Source state schema.
+   * @param targetIdField Canonical Projection ID field.
+   * @param signalKind State-update name for validation.
+   * @returns Validated Projection target ID.
+   */
   firstCompatibleId(
     state: Message,
     schema: MessageSchema,
@@ -5199,6 +7040,13 @@ const RepositoryRoutes = {
     return RepositoryRoutes.readRouteId(value, targetIdField, signalKind);
   },
 
+  /**
+   * Checks whether a source state field can route to the target ID type.
+   *
+   * @param field Candidate source state field.
+   * @param targetIdField Canonical target Entity ID field.
+   * @returns Whether message or primitive ID types match.
+   */
   compatibleStateIdField(
     field: MessageSchema["fields"][number],
     targetIdField: DescriptorFieldMetadata,
@@ -5218,12 +7066,27 @@ const RepositoryRoutes = {
     }
   },
 
+  /**
+   * Checks whether a candidate route ID is blank text.
+   *
+   * @param value Candidate identifier value.
+   * @returns Whether the value is an empty or whitespace string.
+   */
   isBlankRouteId(value: unknown): boolean {
     const id = PrimitiveIds.readFinite(value);
 
     return typeof id === "string" && id.trim().length === 0;
   },
 
+  /**
+   * Reads a compatible producer ID or the Event payload's first-field ID.
+   *
+   * @param event Source Event envelope.
+   * @param message Packed Event payload.
+   * @param schema Generated Event schema.
+   * @param targetIdField Canonical target Entity ID field.
+   * @returns Validated target Entity ID.
+   */
   readEventEntityId(
     event: Event,
     message: NonNullable<Event["message"]>,
@@ -5245,6 +7108,13 @@ const RepositoryRoutes = {
     );
   },
 
+  /**
+   * Unpacks a producer ID when its type matches the target ID field.
+   *
+   * @param producerId Packed source producer identifier.
+   * @param targetIdField Canonical target Entity ID field.
+   * @returns Compatible decoded ID, or an incompatible marker.
+   */
   compatibleProducerId(
     producerId: Any,
     targetIdField: DescriptorFieldMetadata,
@@ -5282,6 +7152,12 @@ const RepositoryRoutes = {
     return { compatible: true, id };
   },
 
+  /**
+   * Maps a supported Protobuf scalar to its primitive identifier family.
+   *
+   * @param type Protobuf scalar field type.
+   * @returns String, 32-bit integer, or 64-bit integer ID family.
+   */
   primitiveIdentifierType(type: ScalarType): "string" | "int32" | "int64" {
     switch (type) {
       case ScalarType.STRING:
@@ -5299,6 +7175,14 @@ const RepositoryRoutes = {
     }
   },
 
+  /**
+   * Validates a candidate target ID against the Entity state ID field.
+   *
+   * @param value Candidate identifier.
+   * @param targetIdField Canonical target Entity ID field.
+   * @param signalKind Signal name for diagnostics.
+   * @returns Validated message or primitive identifier.
+   */
   readRouteId(
     value: unknown,
     targetIdField: DescriptorFieldMetadata,
@@ -5318,6 +7202,14 @@ const RepositoryRoutes = {
     throw new Error(`Repository ${signalKind} routing requires a scalar or message-valued ID.`);
   },
 
+  /**
+   * Validates a generated message-valued target ID.
+   *
+   * @param value Candidate identifier.
+   * @param targetSchema Generated target ID schema.
+   * @param signalKind Signal name for diagnostics.
+   * @returns Validated and encodable ID message.
+   */
   readMessageRouteId(
     value: unknown,
     targetSchema: MessageSchema,
@@ -5350,6 +7242,14 @@ const RepositoryRoutes = {
     return id;
   },
 
+  /**
+   * Validates a primitive target ID against a Protobuf scalar type.
+   *
+   * @param value Candidate identifier.
+   * @param targetType Canonical ID field scalar type.
+   * @param signalKind Signal name for diagnostics.
+   * @returns Compatible string, number, or bigint ID.
+   */
   readPrimitiveRouteId(
     value: unknown,
     targetType: ScalarType,
@@ -5365,6 +7265,13 @@ const RepositoryRoutes = {
     return id;
   },
 
+  /**
+   * Reads a nonblank primitive ID within the target scalar's range.
+   *
+   * @param value Candidate identifier.
+   * @param targetType Canonical ID field scalar type.
+   * @returns Compatible primitive ID, or `undefined`.
+   */
   readCompatiblePrimitiveId(
     value: unknown,
     targetType: ScalarType,
@@ -5398,6 +7305,15 @@ Object.freeze(RepositoryRoutes);
  * Internal repository storage operations.
  */
 const RepositoryStorage = {
+  /**
+   * Opens Entity storage and an atomic commit port from a storage factory.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Generated Entity state type.
+   * @param factory Provider storage factory.
+   * @param input Entity storage location and schema.
+   * @returns Storage ports closed together by one handle.
+   */
   openEntityStorage<I, S extends Message>(
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,
@@ -5420,6 +7336,16 @@ const RepositoryStorage = {
     };
   },
 
+  /**
+   * Returns one shared Entity storage handle per context and state type.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Generated Entity state type.
+   * @param repository Repository tracking open handles.
+   * @param factory Provider storage factory.
+   * @param input Entity storage location and schema.
+   * @returns Shared Entity storage handle.
+   */
   openRepositoryEntityStorage<I, S extends Message>(
     repository: RepositoryView,
     factory: StorageFactory,
@@ -5441,6 +7367,13 @@ const RepositoryStorage = {
     return handle;
   },
 
+  /**
+   * Builds Entity storage input with configured state and Event history flags.
+   *
+   * @param repository Repository Entity registration.
+   * @param context Tenant-aware storage context.
+   * @returns Entity storage description for the provider.
+   */
   entityStorageInput(
     repository: RepositoryView,
     context: StorageContext,
@@ -5457,6 +7390,13 @@ const RepositoryStorage = {
     };
   },
 
+  /**
+   * Validates history and duplicate-dispatch options for an Entity family.
+   *
+   * @param options Repository history and guard settings.
+   * @param family Aggregate, Projection, or Process Manager family.
+   * @returns Normalized history and guard configuration.
+   */
   readHistoryConfiguration(
     options: {
       readonly stateHistory?: boolean;
@@ -5492,17 +7432,18 @@ const RepositoryStorage = {
     };
   },
 
+  /**
+   * Reads history and guard settings captured for a repository.
+   *
+   * @param repository Repository to inspect.
+   * @returns Its validated configuration.
+   */
   historyConfiguration(repository: RepositoryView): RepositoryHistoryConfiguration {
     const configuration = repositoryHistoryConfigurations.get(repository);
     if (configuration === undefined)
       throw new Error("Repository history configuration is unavailable.");
     return configuration;
   },
-
-  /**
-   * In-process bounded duplicate guard. Completion is recorded only after a successful execution;
-   * therefore provider/journal failures may be retried and separate machines remain independent.
-   */
 };
 Object.freeze(RepositoryStorage);
 
@@ -5510,6 +7451,14 @@ Object.freeze(RepositoryStorage);
  * Internal repository history internals operations.
  */
 const RepositoryHistoryInternals = {
+  /**
+   * Binds state and Event history readers to one restored Entity instance.
+   *
+   * @param entity Instance receiving the history accessors.
+   * @param storage Entity storage used for reads and maintenance.
+   * @param entityId Identifier used to select history records.
+   * @param schema Schema used to unpack state records.
+   */
   bindEntityHistory(
     entity: object,
     storage: ReturnType<EntityStorageFactory["createEntityStorage"]>,
@@ -5544,11 +7493,15 @@ const RepositoryHistoryInternals = {
   },
 
   /**
-   * Creates a per-live-entity continuation cache that serializes a larger request behind a prior read.
+   * Creates a history cache that serializes reads and extends prior results.
    *
+   * @typeParam T State-record or Event type retained by the cache.
+   * @param load Reads a backward page, optionally continuing from a version.
+   * @param versionOf Reads the version used to continue a page.
+   * @param options State ordering and complete Event-group cache rules.
+   * @returns Read and clear operations for the new cache.
    * @internal Shared repository history-cache implementation, exercised by repository tests.
    */
-
   createHistoryCache<T>(
     load: (depth: number, startingFromVersion?: bigint) => Promise<readonly T[]>,
     versionOf: (entry: T) => bigint | undefined,
@@ -5563,32 +7516,71 @@ const RepositoryHistoryInternals = {
     return new RepositoryHistoryCache(load, versionOf, options).api();
   },
 
+  /**
+   * Copies a historical state and freezes the returned message object.
+   *
+   * @param state Historical state, absent when no record matched.
+   * @returns An independent state copy, or undefined.
+   */
   cloneHistoryState(state: Message | undefined): Message | undefined {
     return state === undefined ? undefined : Object.freeze(structuredClone(state));
   },
 
+  /**
+   * Copies historical states and freezes their outer objects and list.
+   *
+   * @param states Historical states read from storage.
+   * @returns A frozen list of independent state copies.
+   */
   freezeHistoryStates(states: readonly Message[]): readonly Message[] {
     return Object.freeze(states.map((state) => Object.freeze(structuredClone(state))));
   },
 
+  /**
+   * Copies historical Events and freezes their outer objects and list.
+   *
+   * @param events Historical Events read from storage.
+   * @returns A frozen list of independent Event copies.
+   */
   freezeHistoryEvents(events: readonly Event[]): readonly Event[] {
     return Object.freeze(events.map((event) => Object.freeze(clone(EventSchema, event))));
   },
 };
 Object.freeze(RepositoryHistoryInternals);
 
+/**
+ * Reuses backward history pages during the lifetime of a restored Entity.
+ *
+ * @typeParam T State-record or Event type returned by the history reader.
+ */
 class RepositoryHistoryCache<T> {
   readonly #load: (depth: number, startingFromVersion?: bigint) => Promise<readonly T[]>;
+
   readonly #versionOf: (entry: T) => bigint | undefined;
+
   readonly #requireDescendingVersions: boolean;
+
   readonly #cacheCompleteVersionGroups: boolean;
+
   #entries: readonly T[] = Object.freeze([]);
+
   #exhausted = false;
+
   #continuation = Promise.resolve();
+
   #nextVersion: bigint | undefined;
+
   #newestVersion: bigint | undefined;
+
   #generation = 0;
 
+  /**
+   * Creates an empty cache with the supplied history paging rules.
+   *
+   * @param load Reads a backward page, optionally continuing from a version.
+   * @param versionOf Extracts the continuation version from a history entry.
+   * @param options State ordering and complete Event-group cache rules.
+   */
   constructor(
     load: (depth: number, startingFromVersion?: bigint) => Promise<readonly T[]>,
     versionOf: (entry: T) => bigint | undefined,
@@ -5603,6 +7595,11 @@ class RepositoryHistoryCache<T> {
     this.#cacheCompleteVersionGroups = options.cacheCompleteVersionGroups ?? false;
   }
 
+  /**
+   * Exposes bound read and clear callbacks without exposing cache fields.
+   *
+   * @returns The operations used by Entity history accessors.
+   */
   api(): { readonly read: (depth: number) => Promise<readonly T[]>; readonly clear: () => void } {
     return Object.freeze({
       read: (depth) => this.read(depth),
@@ -5612,6 +7609,9 @@ class RepositoryHistoryCache<T> {
     });
   }
 
+  /**
+   * Clears cached entries and prevents pending reads from restoring stale pages.
+   */
   clear(): void {
     this.#generation += 1;
     this.#entries = Object.freeze([]);
@@ -5620,6 +7620,12 @@ class RepositoryHistoryCache<T> {
     this.#newestVersion = undefined;
   }
 
+  /**
+   * Reads up to the requested number of entries, extending cached history as needed.
+   *
+   * @param depth Maximum number of entries to return, newest first.
+   * @returns Cached and newly loaded entries, limited to the requested depth.
+   */
   async read(depth: number): Promise<readonly T[]> {
     await this.#continuation;
     if (this.#isSatisfied(depth)) return this.#entries.slice(0, depth);
@@ -5634,10 +7640,22 @@ class RepositoryHistoryCache<T> {
     return result ?? this.#entries.slice(0, depth);
   }
 
+  /**
+   * Checks whether cached entries or known exhaustion satisfy a read.
+   *
+   * @param depth Requested number of entries.
+   * @returns True when another storage read is unnecessary.
+   */
   #isSatisfied(depth: number): boolean {
     return this.#entries.length >= depth || this.#exhausted;
   }
 
+  /**
+   * Loads the missing entries using the configured continuation rule.
+   *
+   * @param depth Total number of entries requested by the caller.
+   * @returns A result containing uncached partial groups, or undefined to use the cache.
+   */
   async #extend(depth: number): Promise<readonly T[] | undefined> {
     const generation = this.#generation;
     const requested = Math.max(1, depth - this.#entries.length);
@@ -5646,6 +7664,14 @@ class RepositoryHistoryCache<T> {
       : this.#extendVersioned(depth, requested, generation);
   }
 
+  /**
+   * Loads an extra entry so a partial terminal version group is not cached.
+   *
+   * @param depth Total number of entries requested by the caller.
+   * @param requested Number of missing entries, excluding the look-ahead entry.
+   * @param generation Cache generation at the start of this read.
+   * @returns Requested entries, or undefined if the cache was cleared during loading.
+   */
   async #extendCompleteGroups(
     depth: number,
     requested: number,
@@ -5660,6 +7686,13 @@ class RepositoryHistoryCache<T> {
     return Object.freeze(combined.slice(0, depth));
   }
 
+  /**
+   * Removes a terminal version group when the page may contain only part of it.
+   *
+   * @param loaded Page including the look-ahead entry when available.
+   * @param requested Number requested before adding the look-ahead entry.
+   * @returns Entries whose version groups are complete in this page.
+   */
   #completeGroups(loaded: readonly T[], requested: number): readonly T[] {
     const terminal = loaded.at(-1);
     const terminalVersion = terminal === undefined ? undefined : this.#versionOf(terminal);
@@ -5670,6 +7703,14 @@ class RepositoryHistoryCache<T> {
     return loaded.slice(0, Math.max(0, length));
   }
 
+  /**
+   * Loads more version-ordered history, refreshing or clearing invalid continuations.
+   *
+   * @param depth Total number of entries requested by the caller.
+   * @param requested Number of missing entries to load.
+   * @param generation Cache generation at the start of this read.
+   * @returns Undefined because accepted entries are read from the updated cache.
+   */
   async #extendVersioned(depth: number, requested: number, generation: number): Promise<undefined> {
     const loaded = await this.#load(requested, this.#nextVersion);
     if (generation !== this.#generation) return undefined;
@@ -5689,6 +7730,12 @@ class RepositoryHistoryCache<T> {
     return undefined;
   }
 
+  /**
+   * Checks strict descending versions when required for state history.
+   *
+   * @param loaded Page to inspect for repeated or increasing versions.
+   * @returns True when two readable adjacent versions violate the ordering rule.
+   */
   #hasInvalidPage(loaded: readonly T[]): boolean {
     if (!this.#requireDescendingVersions) return false;
     for (let index = 1; index < loaded.length; index += 1) {
@@ -5699,6 +7746,12 @@ class RepositoryHistoryCache<T> {
     return false;
   }
 
+  /**
+   * Checks whether a continuation page is newer than the newest cached entry.
+   *
+   * @param latest First version in the loaded page, if readable.
+   * @returns True when the cache must restart from the newest history.
+   */
   #hasNewerPage(latest: bigint | undefined): boolean {
     return (
       this.#newestVersion !== undefined &&
@@ -5708,6 +7761,12 @@ class RepositoryHistoryCache<T> {
     );
   }
 
+  /**
+   * Checks that a state-history continuation starts below the oldest cached version.
+   *
+   * @param latest First version in the loaded page, if readable.
+   * @returns True when the continuation overlaps or precedes the cached boundary.
+   */
   #hasInvalidContinuation(latest: bigint | undefined): boolean {
     const oldest = this.#entries.at(-1);
     const oldestVersion = oldest === undefined ? undefined : this.#versionOf(oldest);
@@ -5719,6 +7778,13 @@ class RepositoryHistoryCache<T> {
     );
   }
 
+  /**
+   * Reads history again from the newest entry after detecting a newer page.
+   *
+   * @param depth Maximum number of entries to reload.
+   * @param generation Cache generation before this refresh clears the cache.
+   * @returns Undefined because accepted entries are stored in the cache.
+   */
   async #refresh(depth: number, generation: number): Promise<undefined> {
     this.clear();
     const refreshed = await this.#load(depth);
@@ -5730,6 +7796,11 @@ class RepositoryHistoryCache<T> {
     return undefined;
   }
 
+  /**
+   * Adds an accepted page and records its oldest readable version.
+   *
+   * @param loaded Entries to add in storage order.
+   */
   #append(loaded: readonly T[]): void {
     this.#entries = Object.freeze([...this.#entries, ...loaded]);
     const last = loaded.at(-1);
@@ -5738,9 +7809,19 @@ class RepositoryHistoryCache<T> {
 }
 
 /**
- * Internal dispatch guards operations.
+ * Serializes guarded Event delivery and remembers recent completed dispatches.
  */
 const DispatchGuards = {
+  /**
+   * Dispatches an Event with duplicate checks when the repository enables them.
+   *
+   * @param repository Repository receiving the Event.
+   * @param runtime Storage and tenant context for the dispatch.
+   * @param event Event being delivered.
+   * @param entityId Target Entity identifier.
+   * @param dispatch Operation to run unless a completed delivery is found.
+   * @returns Completion of the dispatch or duplicate check.
+   */
   async guardedEntityEventDispatch(
     repository: RepositoryView,
     runtime: RepositoryRuntime,
@@ -5771,6 +7852,21 @@ const DispatchGuards = {
     );
   },
 
+  /**
+   * Queues a guarded dispatch after earlier work for the same Entity.
+   *
+   * @param repository Repository receiving the Event.
+   * @param runtime Storage and tenant context for the dispatch.
+   * @param event Event being delivered.
+   * @param entityId Target Entity identifier.
+   * @param eventId Original Event identifier used by the in-memory check.
+   * @param journalEventId Target-specific identifier used by stored diagnostic Events.
+   * @param depth Maximum completed identifiers and inactive Entity queues to retain.
+   * @param guard Queue and recent completion records for this Entity.
+   * @param guards Repository's collection of Entity queues.
+   * @param dispatch Operation to run unless a completed delivery is found.
+   * @returns Completion of this queued operation, retaining its failure for the caller.
+   */
   scheduleDispatch(
     repository: RepositoryView,
     runtime: RepositoryRuntime,
@@ -5806,6 +7902,13 @@ const DispatchGuards = {
     return next;
   },
 
+  /**
+   * Gets or creates the serialized dispatch queue for one Entity key.
+   *
+   * @param repository Repository whose queues are being accessed.
+   * @param key Canonical target Entity key.
+   * @returns The Entity queue and the repository collection containing it.
+   */
   guardLane(
     repository: RepositoryView,
     key: string,
@@ -5823,6 +7926,20 @@ const DispatchGuards = {
     return { guard, guards };
   },
 
+  /**
+   * Dispatches an Event unless memory or retained diagnostic Events show completion.
+   *
+   * @param repository Repository receiving the Event.
+   * @param runtime Storage and tenant context for the dispatch.
+   * @param event Event being delivered.
+   * @param entityId Target Entity identifier.
+   * @param eventId Original identifier used for recent in-memory completions.
+   * @param journalEventId Target-specific identifier to find in storage.
+   * @param depth Maximum retained Events to inspect and completions to remember.
+   * @param guard Recent completion records for this Entity.
+   * @param dispatch Operation to run when neither check finds a completed delivery.
+   * @returns Completion of the duplicate check and any required dispatch.
+   */
   async dispatchOnce(
     repository: RepositoryView,
     runtime: RepositoryRuntime,
@@ -5856,6 +7973,13 @@ const DispatchGuards = {
     DispatchGuards.rememberGuardCompletion(guard, eventId, depth);
   },
 
+  /**
+   * Records a successful delivery and discards the oldest excess identifiers.
+   *
+   * @param guard Recent completion records for this Entity.
+   * @param eventId Identifier of the completed Event.
+   * @param depth Maximum number of identifiers to retain.
+   */
   rememberGuardCompletion(guard: DispatchGuard, eventId: string, depth: number): void {
     if (!guard.completed.has(eventId)) {
       guard.completed.add(eventId);
@@ -5867,12 +7991,24 @@ const DispatchGuards = {
     }
   },
 
+  /**
+   * Updates the queue list to place this Entity at its most recently used end.
+   *
+   * @param guards Repository collection of Entity queues.
+   * @param key Canonical key of the queue being used.
+   */
   touchGuardLane(guards: RepositoryDispatchGuards, key: string): void {
     const index = guards.order.indexOf(key);
     if (index >= 0) guards.order.splice(index, 1);
     guards.order.push(key);
   },
 
+  /**
+   * Removes least-recently-used inactive queues beyond the configured limit.
+   *
+   * @param guards Repository collection of Entity queues.
+   * @param depth Maximum queue count when enough queues are inactive.
+   */
   trimGuardLanes(guards: RepositoryDispatchGuards, depth: number): void {
     while (guards.order.length > depth) {
       const index = guards.order.findIndex((key) => guards.lanes.get(key)?.active === 0);
@@ -5883,6 +8019,14 @@ const DispatchGuards = {
     }
   },
 
+  /**
+   * Copies an Event with a target-specific identifier for duplicate checking.
+   *
+   * @param repository Repository supplying the target identifier descriptor.
+   * @param event Source Event, returned unchanged if it has no identifier.
+   * @param entityId Target Entity identifier.
+   * @returns An Event suitable for this target's diagnostic history.
+   */
   guardedJournalEvent(repository: RepositoryView, event: Event, entityId: unknown): Event {
     const sourceId = event.id?.value;
     if (sourceId === undefined) return event;
@@ -5897,10 +8041,24 @@ const DispatchGuards = {
     });
   },
 
+  /**
+   * Creates an identifier from the original Event identifier and encoded target key.
+   *
+   * @param sourceId Original Event identifier.
+   * @param entityKey Canonical target Entity key.
+   * @returns The target-specific diagnostic Event identifier.
+   */
   guardedJournalEventId(sourceId: string, entityKey: string): string {
     return `${sourceId}.guard.${encodeURIComponent(entityKey)}`;
   },
 
+  /**
+   * Encodes an Entity identifier using its repository descriptor and Inbox key format.
+   *
+   * @param repository Repository supplying the identifier descriptor.
+   * @param id Entity identifier to encode.
+   * @returns A stable key for dispatch queues and diagnostic Event identifiers.
+   */
   canonicalEntityIdKey(repository: RepositoryView, id: unknown): string {
     return InboxTargets.key(InboxMessages.inboxTargetId(id, repository.idField));
   },
@@ -5908,9 +8066,16 @@ const DispatchGuards = {
 Object.freeze(DispatchGuards);
 
 /**
- * Internal inbox messages operations.
+ * Packs target identifiers and reads typed signals from stored Inbox messages.
  */
 const InboxMessages = {
+  /**
+   * Packs an Entity identifier into the Inbox target representation.
+   *
+   * @param entityId Message, string, or integer Entity identifier.
+   * @param idField Descriptor identifying the Entity's ID field.
+   * @returns The packed target identifier.
+   */
   inboxTargetId(entityId: unknown, idField: DescriptorFieldMetadata): Any {
     if (idField.descriptor.fieldKind === "message") {
       return Identifiers.pack(idField.descriptor.message as MessageSchema, entityId as never);
@@ -5921,6 +8086,13 @@ const InboxMessages = {
     throw new Error("Repository Entity Inbox handoff requires a supported target ID.");
   },
 
+  /**
+   * Unpacks and validates a stored Inbox target against the repository's ID field.
+   *
+   * @param targetId Packed target identifier stored with the Inbox message.
+   * @param idField Descriptor identifying the expected ID type.
+   * @returns The identifier used to restore the target Entity.
+   */
   targetEntityId(targetId: Any, idField: DescriptorFieldMetadata): unknown {
     const descriptor = idField.descriptor;
     let entityId: unknown;
@@ -5949,6 +8121,12 @@ const InboxMessages = {
     return RepositoryRoutes.readRouteId(entityId, idField, "command");
   },
 
+  /**
+   * Reads a Command from an Inbox message labeled for command handling.
+   *
+   * @param message Stored Inbox message to validate and unpack.
+   * @returns The stored Command envelope.
+   */
   readInboxCommand(message: InboxMessage): Command {
     if (message.label !== "HANDLE_COMMAND") {
       throw new Error(`Entity Inbox replay does not handle "${message.label}" messages.`);
@@ -5964,6 +8142,12 @@ const InboxMessages = {
     return command;
   },
 
+  /**
+   * Reads an Event labeled for a Process Manager reaction.
+   *
+   * @param message Stored Inbox message to validate and unpack.
+   * @returns The stored Event envelope.
+   */
   readPmInboxEvent(message: InboxMessage): Event {
     return InboxMessages.readStoredEvent(
       message,
@@ -5973,6 +8157,12 @@ const InboxMessages = {
     );
   },
 
+  /**
+   * Reads an Event labeled for a Projection update.
+   *
+   * @param message Stored Inbox message to validate and unpack.
+   * @returns The stored Event envelope.
+   */
   readProjectionInboxEvent(message: InboxMessage): Event {
     return InboxMessages.readStoredEvent(
       message,
@@ -5982,6 +8172,15 @@ const InboxMessages = {
     );
   },
 
+  /**
+   * Validates an Inbox operation label and decodes its stored Event bytes.
+   *
+   * @param message Stored Inbox message to inspect.
+   * @param expectedLabel Operation label required by the caller.
+   * @param replayName Human-readable operation name used in label errors.
+   * @param unreadableMessage Error text used when Event decoding fails.
+   * @returns The stored Event envelope.
+   */
   readStoredEvent(
     message: InboxMessage,
     expectedLabel: InboxMessage["label"],
@@ -6011,13 +8210,20 @@ const InboxMessages = {
 Object.freeze(InboxMessages);
 
 /**
- * Internal inbox replay operations.
+ * Validates and dispatches stored Inbox signals to their recorded Entity targets.
  */
 const InboxReplay = {
+  /**
+   * Dispatches a stored Aggregate Command after checking its tenant and payload.
+   *
+   * @param repository Aggregate repository receiving the Command.
+   * @param routing Registered handlers and message schemas.
+   * @param message Stored Inbox message with the recorded target.
+   * @param deliveryTenantId Tenant selected by delivery in a multitenant context.
+   * @returns Any follow-up work that must wait for Inbox completion.
+   */
   async replayAggregateCommand(
-    repository: RepositoryView & {
-      routeCommand(command: Command): RepositoryCommandRoute;
-    },
+    repository: CommandRoutingRepository,
     routing: RepositoryRouting,
     message: InboxMessage,
     deliveryTenantId?: TenantId,
@@ -6039,11 +8245,17 @@ const InboxReplay = {
     return await new AggregateCommandExecution(repository, routing, runtime, command).run(route);
   },
 
+  /**
+   * Routes Process Manager Command or Event replay by its stored operation label.
+   *
+   * @param repository Process Manager repository receiving the signal.
+   * @param routing Registered handlers and message schemas.
+   * @param message Stored Inbox message with the recorded target.
+   * @param deliveryTenantId Tenant selected by delivery in a multitenant context.
+   * @returns Any Command follow-up work that must wait for Inbox completion.
+   */
   async replayPmInbox(
-    repository: RepositoryView & {
-      routeCommand(command: Command): RepositoryCommandRoute;
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
+    repository: CommandRoutingRepository & EventRoutingRepository,
     routing: RepositoryRouting,
     message: InboxMessage,
     deliveryTenantId?: TenantId,
@@ -6064,10 +8276,17 @@ const InboxReplay = {
     throw new Error(`Entity Inbox replay does not handle "${message.label}" messages.`);
   },
 
+  /**
+   * Dispatches a stored Process Manager Command after tenant and payload validation.
+   *
+   * @param repository Process Manager repository receiving the Command.
+   * @param routing Registered handlers and message schemas.
+   * @param message Stored Inbox message with the recorded target.
+   * @param deliveryTenantId Tenant selected by delivery in a multitenant context.
+   * @returns Any follow-up work that must wait for Inbox completion.
+   */
   async replayProcessManagerCommand(
-    repository: RepositoryView & {
-      routeCommand(command: Command): RepositoryCommandRoute;
-    },
+    repository: CommandRoutingRepository,
     routing: RepositoryRouting,
     message: InboxMessage,
     deliveryTenantId?: TenantId,
@@ -6089,10 +8308,17 @@ const InboxReplay = {
     );
   },
 
+  /**
+   * Dispatches a validated Event to the Process Manager target recorded in its Inbox.
+   *
+   * @param repository Process Manager repository receiving the Event.
+   * @param routing Registered handlers and message schemas.
+   * @param message Stored Inbox message with the recorded target.
+   * @param deliveryTenantId Tenant selected by delivery in a multitenant context.
+   * @returns Completion of dispatch to the recorded target.
+   */
   async replayProcessManagerEvent(
-    repository: RepositoryView & {
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
+    repository: EventRoutingRepository,
     routing: RepositoryRouting,
     message: InboxMessage,
     deliveryTenantId?: TenantId,
@@ -6127,10 +8353,17 @@ const InboxReplay = {
     );
   },
 
+  /**
+   * Dispatches a validated Event to the Projection target recorded in its Inbox.
+   *
+   * @param repository Projection repository receiving the Event.
+   * @param routing Registered subscribers and message schemas.
+   * @param message Stored Inbox message with the recorded target.
+   * @param deliveryTenantId Tenant selected by delivery in a multitenant context.
+   * @returns Completion of dispatch to the recorded target.
+   */
   async replayProjectionEvent(
-    repository: RepositoryView & {
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
+    repository: EventRoutingRepository,
     routing: RepositoryRouting,
     message: InboxMessage,
     deliveryTenantId?: TenantId,
@@ -6161,10 +8394,17 @@ const InboxReplay = {
     );
   },
 
+  /**
+   * Routes a Projection Inbox message to domain Event or Entity-state update replay.
+   *
+   * @param repository Projection repository receiving the update.
+   * @param routing Registered subscribers and message schemas.
+   * @param message Stored Projection Inbox message.
+   * @param deliveryTenantId Tenant selected by delivery in a multitenant context.
+   * @returns Completion of the selected replay operation.
+   */
   async replayProjectionMessage(
-    repository: RepositoryView & {
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
+    repository: EventRoutingRepository,
     routing: RepositoryRouting,
     message: ProjectionInboxMessage,
     deliveryTenantId?: TenantId,
@@ -6183,8 +8423,18 @@ const InboxReplay = {
     await InboxReplay.replayProjectionEvent(repository, routing, message, deliveryTenantId);
   },
 
+  /**
+   * Dispatches an Entity-state update to the Projection target recorded in its Inbox.
+   *
+   * @param repository Projection repository receiving the state update.
+   * @param routing Registered state subscribers and schemas.
+   * @param message Stored Inbox message with the recorded target.
+   * @param event Event envelope carrying the Entity-state update.
+   * @param deliveryTenantId Tenant selected by delivery in a multitenant context.
+   * @returns Completion of state-subscriber dispatch to the recorded target.
+   */
   async replayProjectionStateUpdate(
-    repository: RepositoryView & { routeEvent(event: Event): RepositoryEventRoute },
+    repository: EventRoutingRepository,
     routing: RepositoryRouting,
     message: ProjectionInboxMessage,
     event: Event,
@@ -6208,6 +8458,12 @@ const InboxReplay = {
     );
   },
 
+  /**
+   * Validates a stored Command against its schema and implicit identifier requirements.
+   *
+   * @param routing Registered Command schemas.
+   * @param command Envelope whose payload must remain valid on replay.
+   */
   validateReplayedCommandPayload(routing: RepositoryRouting, command: Command): void {
     const commandMessage = EntityInvocation.requireSignalMessage(command.message, "command");
     const commandSchema = RepositoryRoutes.schemaForTypeUrl(
@@ -6235,6 +8491,13 @@ const InboxReplay = {
     }
   },
 
+  /**
+   * Unpacks and validates a stored Event against its registered schema.
+   *
+   * @param routing Registered Event schemas.
+   * @param event Envelope whose payload must remain valid on replay.
+   * @param invalidPayloadMessage Error text used when the payload cannot be unpacked.
+   */
   validateReplayedEventPayload(
     routing: RepositoryRouting,
     event: Event,
@@ -6255,6 +8518,13 @@ const InboxReplay = {
     Validate.check(eventSchema, payload);
   },
 
+  /**
+   * Checks that a replayed Command's tenant matches its delivery tenant.
+   *
+   * @param context Context name and tenant mode; single-tenant contexts need no check.
+   * @param deliveryTenantId Tenant selected by Inbox delivery.
+   * @param command Stored Command containing the original actor context.
+   */
   validateReplayTenant(
     context: StorageMode,
     deliveryTenantId: TenantId | undefined,
@@ -6278,6 +8548,13 @@ const InboxReplay = {
     }
   },
 
+  /**
+   * Checks that a replayed Projection Event's tenant matches its delivery tenant.
+   *
+   * @param context Context name and tenant mode; single-tenant contexts need no check.
+   * @param deliveryTenantId Tenant selected by Inbox delivery.
+   * @param event Stored Event containing the original tenant metadata.
+   */
   validateProjectionReplayTenant(
     context: StorageMode,
     deliveryTenantId: TenantId | undefined,
@@ -6303,6 +8580,13 @@ const InboxReplay = {
     }
   },
 
+  /**
+   * Checks that a replayed Process Manager Event's tenant matches its delivery tenant.
+   *
+   * @param context Context name and tenant mode; single-tenant contexts need no check.
+   * @param deliveryTenantId Tenant selected by Inbox delivery.
+   * @param event Stored Event containing the original tenant metadata.
+   */
   validatePmReplayTenant(
     context: StorageMode,
     deliveryTenantId: TenantId | undefined,
@@ -6326,6 +8610,15 @@ const InboxReplay = {
     }
   },
 
+  /**
+   * Restores a Command route from the stored target instead of running routing again.
+   *
+   * @param repository Repository whose Entity type must match the stored target.
+   * @param routing Registered Command schemas.
+   * @param message Inbox message recording the target type and identifier.
+   * @param command Stored Command used to identify the registered handler schema.
+   * @returns A deferred route to the recorded Entity identifier.
+   */
   replayCommandRoute(
     repository: RepositoryView,
     routing: RepositoryRouting,
@@ -6354,6 +8647,16 @@ const InboxReplay = {
     });
   },
 
+  /**
+   * Restores a single-target Event route from a stored Inbox message.
+   *
+   * @param repository Repository whose Entity type must match the stored target.
+   * @param routing Registered Event schemas.
+   * @param message Inbox message recording the target type and identifier.
+   * @param event Stored Event used to identify the registered handler schema.
+   * @param replayName Operation name used when reporting a target-type mismatch.
+   * @returns A deferred route containing exactly the recorded target identifier.
+   */
   replayEventRoute(
     repository: RepositoryView,
     routing: RepositoryRouting,
@@ -6382,6 +8685,15 @@ const InboxReplay = {
     });
   },
 
+  /**
+   * Restores a Projection state-update route and its origin-compatible subscribers.
+   *
+   * @param repository Repository whose Entity type must match the stored target.
+   * @param routing Registered state schemas and subscribers.
+   * @param message Inbox message recording the Projection target.
+   * @param event Stored Entity-state update envelope.
+   * @returns A deferred route with the unpacked state and matching subscribers.
+   */
   replayStateUpdateRoute(
     repository: RepositoryView,
     routing: RepositoryRouting,
@@ -6428,13 +8740,19 @@ const InboxReplay = {
 Object.freeze(InboxReplay);
 
 /**
- * Internal inbox handoff operations.
+ * Records routed signals in the appropriate Entity or Projection Inbox.
  */
 const InboxHandoff = {
+  /**
+   * Routes a Command and submits it to the target Entity's Inbox.
+   *
+   * @param repository Repository supplying the Command route and Entity type.
+   * @param runtime Inbox, storage, tenant mode, and delivery strategy.
+   * @param command Command envelope to retain and deliver.
+   * @returns Completion of Inbox receipt and its selected delivery operation.
+   */
   async handoffEntityCommand(
-    repository: RepositoryView & {
-      routeCommand(command: Command): RepositoryCommandRoute;
-    },
+    repository: CommandRoutingRepository,
     runtime: RepositoryRuntime,
     command: Command,
   ): Promise<void> {
@@ -6466,6 +8784,15 @@ const InboxHandoff = {
     );
   },
 
+  /**
+   * Delivers an Event to one Projection target with the duplicate-retention deadline.
+   *
+   * @param repository Repository supplying the Projection type and ID descriptor.
+   * @param runtime Projection Inbox, storage, and tenant mode.
+   * @param event Event envelope to retain and deliver.
+   * @param entityId Routed Projection identifier.
+   * @returns Completion of Inbox receipt and delivery.
+   */
   async handoffProjectionEvent(
     repository: RepositoryView,
     runtime: RepositoryRuntime,
@@ -6499,6 +8826,15 @@ const InboxHandoff = {
     );
   },
 
+  /**
+   * Delivers an Event to one Process Manager target using its Entity Inbox.
+   *
+   * @param repository Repository supplying the Process Manager type and ID descriptor.
+   * @param runtime Entity Inbox, storage, tenant mode, and delivery strategy.
+   * @param event Event envelope to retain and deliver.
+   * @param entityId Routed Process Manager identifier.
+   * @returns Completion of Inbox receipt and its selected delivery operation.
+   */
   async handoffPmEvent(
     repository: RepositoryView,
     runtime: RepositoryRuntime,
@@ -6522,6 +8858,15 @@ const InboxHandoff = {
     );
   },
 
+  /**
+   * Delivers an Event to all routed Process Manager targets through batch receipt.
+   *
+   * @param repository Repository supplying the Process Manager type and ID descriptor.
+   * @param runtime Entity Inbox, storage, tenant mode, and delivery strategy.
+   * @param event Event envelope shared by the target deliveries.
+   * @param entityIds Routed Process Manager identifiers.
+   * @returns Completion of batch receipt and its selected delivery operation.
+   */
   async handoffPmEvents(
     repository: RepositoryView,
     runtime: RepositoryRuntime,
@@ -6544,6 +8889,16 @@ const InboxHandoff = {
     await runtime.entityInbox.receiveAll(delivery, inputs, deliveryTenantId);
   },
 
+  /**
+   * Builds a pending Process Manager Event delivery for a single target.
+   *
+   * @param repository Repository supplying the target type and ID descriptor.
+   * @param signalId Identifier of the original Event.
+   * @param event Event envelope to pack without repeating validation.
+   * @param entityId Routed Process Manager identifier.
+   * @param keepUntil Duplicate-retention deadline for this receipt.
+   * @returns Input for Entity Inbox receipt.
+   */
   pmEventInboxInput(
     repository: RepositoryView,
     signalId: string,
@@ -6567,14 +8922,18 @@ const InboxHandoff = {
 Object.freeze(InboxHandoff);
 
 /**
- * Internal repository dispatch operations.
+ * Connects bus dispatchers and Inbox replay to repository execution.
  */
 const RepositoryDispatch = {
+  /**
+   * Creates the bus dispatchers supported by the repository's registered handlers.
+   *
+   * @param repository Repository providing Command and Event routes.
+   * @param routing Registered handlers, schemas, and state-update routes.
+   * @returns Command, Event, and system-Event dispatchers where applicable.
+   */
   createRepositoryDispatchers(
-    repository: RepositoryView & {
-      routeCommand(command: Command): RepositoryCommandRoute;
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
+    repository: CommandRoutingRepository & EventRoutingRepository,
     routing: RepositoryRouting,
   ): RepositoryDispatchers {
     const acceptedEventRoutes = new WeakMap<Event, RepositoryEventRoute>();
@@ -6586,8 +8945,15 @@ const RepositoryDispatch = {
     });
   },
 
+  /**
+   * Creates a Command dispatcher when the repository accepts Commands.
+   *
+   * @param repository Repository providing Command routes.
+   * @param routing Registered Command handlers and schemas.
+   * @returns The dispatcher, or undefined when no Command schema is registered.
+   */
   commandDispatcher(
-    repository: RepositoryView & { routeCommand(command: Command): RepositoryCommandRoute },
+    repository: CommandRoutingRepository,
     routing: RepositoryRouting,
   ): CommandDispatcher | undefined {
     return routing.commandSchemas.length === 0
@@ -6599,8 +8965,16 @@ const RepositoryDispatch = {
         });
   },
 
+  /**
+   * Creates an Event dispatcher that preserves routes computed during acceptance.
+   *
+   * @param repository Repository providing Event routes.
+   * @param routing Registered domestic and external Event handlers and schemas.
+   * @param accepted Cache of routes between Event acceptance and dispatch.
+   * @returns The dispatcher, or undefined when no Event schema is registered.
+   */
   eventDispatcher(
-    repository: RepositoryView & { routeEvent(event: Event): RepositoryEventRoute },
+    repository: EventRoutingRepository,
     routing: RepositoryRouting,
     accepted: WeakMap<Event, RepositoryEventRoute>,
   ): EventDispatcher | undefined {
@@ -6625,6 +8999,14 @@ const RepositoryDispatch = {
     );
   },
 
+  /**
+   * Creates a system-Event dispatcher for registered Entity-state subscriptions.
+   *
+   * @param repository Repository receiving state updates.
+   * @param routing State schemas, subscribers, and origin-aware routing.
+   * @param accepted Cached accepted routes; null records an ignored update.
+   * @returns The dispatcher, or undefined when no state schema is registered.
+   */
   stateDispatcher(
     repository: RepositoryView,
     routing: RepositoryRouting,
@@ -6653,6 +9035,15 @@ const RepositoryDispatch = {
     );
   },
 
+  /**
+   * Dispatches a cached state-update route unless acceptance ignored the update.
+   *
+   * @param repository Repository receiving the state update.
+   * @param routing State-update routes and subscribers.
+   * @param event System Event carrying the state update.
+   * @param accepted Cache populated during acceptance and cleared for this Event.
+   * @returns Completion of dispatch, or immediate completion for an ignored update.
+   */
   dispatchAcceptedState(
     repository: RepositoryView,
     routing: RepositoryRouting,
@@ -6666,11 +9057,15 @@ const RepositoryDispatch = {
       : RepositoryDispatch.dispatchRepositoryStateUpdate(repository, routing, event, route);
   },
 
+  /**
+   * Creates replay access for an Aggregate or Process Manager with signal handlers.
+   *
+   * @param repository Repository providing signal routes and Entity identity.
+   * @param routing Registered handlers and message schemas.
+   * @returns The Inbox target and supported operation labels, when applicable.
+   */
   createEntityInboxTarget(
-    repository: RepositoryView & {
-      routeCommand(command: Command): RepositoryCommandRoute;
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
+    repository: CommandRoutingRepository & EventRoutingRepository,
     routing: RepositoryRouting,
   ): EntityInboxTarget | undefined {
     if (
@@ -6695,10 +9090,15 @@ const RepositoryDispatch = {
     });
   },
 
+  /**
+   * Creates replay access for a Projection with Event or state subscribers.
+   *
+   * @param repository Repository providing Projection identity and Event routes.
+   * @param routing Registered Event and state subscribers.
+   * @returns The Projection Inbox target, when applicable.
+   */
   createProjectionInboxTarget(
-    repository: RepositoryView & {
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
+    repository: EventRoutingRepository,
     routing: RepositoryRouting,
   ): ProjectionInboxTarget | undefined {
     if (
@@ -6715,10 +9115,15 @@ const RepositoryDispatch = {
     });
   },
 
+  /**
+   * Creates direct Projection dispatch for ordinary delivery or rebuilding.
+   *
+   * @param repository Repository providing Projection identity and Event routes.
+   * @param routing Registered Projection subscribers and schemas.
+   * @returns A callback that validates routing only when no runtime is bound.
+   */
   createProjectionDirectDispatch(
-    repository: RepositoryView & {
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
+    repository: EventRoutingRepository,
     routing: RepositoryRouting,
   ): (event: Event, rebuild?: boolean) => Promise<void> {
     return (event: Event, rebuild?: boolean): Promise<void> => {
@@ -6733,10 +9138,17 @@ const RepositoryDispatch = {
     };
   },
 
+  /**
+   * Routes an Event to the execution path for the repository's Entity family.
+   *
+   * @param repository Repository providing Entity identity and Event routes.
+   * @param routing Registered Event handlers and schemas.
+   * @param event Event envelope to dispatch.
+   * @param acceptedRoute Previously accepted route, if available.
+   * @returns Completion of routing or runtime dispatch when a runtime is bound.
+   */
   async dispatchRepositoryEvent(
-    repository: RepositoryView & {
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
+    repository: EventRoutingRepository,
     routing: RepositoryRouting,
     event: Event,
     acceptedRoute?: RepositoryEventRoute,
@@ -6763,8 +9175,18 @@ const RepositoryDispatch = {
     }
   },
 
+  /**
+   * Dispatches an Event to each routed Aggregate with its configured duplicate guard.
+   *
+   * @param repository Aggregate repository receiving the Event.
+   * @param routing Registered Aggregate Event handlers and schemas.
+   * @param runtime Bound storage, publisher, and tenant context.
+   * @param event Event envelope to dispatch.
+   * @param route Accepted route listing target Aggregate identifiers.
+   * @returns Completion of all target dispatches in route order.
+   */
   async dispatchAggregateEvent(
-    repository: RepositoryView & { routeEvent(event: Event): RepositoryEventRoute },
+    repository: EventRoutingRepository,
     routing: RepositoryRouting,
     runtime: RepositoryRuntime,
     event: Event,
@@ -6778,6 +9200,15 @@ const RepositoryDispatch = {
     }
   },
 
+  /**
+   * Delivers a routed Entity-state update to each target Projection Inbox.
+   *
+   * @param repository Projection repository receiving the update.
+   * @param routing Registered state schemas and subscribers.
+   * @param event System Event carrying the state update.
+   * @param acceptedRoute Previously accepted state-update route, if available.
+   * @returns Completion of routing and any required Inbox receipts.
+   */
   async dispatchRepositoryStateUpdate(
     repository: RepositoryView,
     routing: RepositoryRouting,
@@ -6796,10 +9227,16 @@ const RepositoryDispatch = {
     }
   },
 
+  /**
+   * Delivers Commands for Aggregates and Process Managers through their Entity Inboxes.
+   *
+   * @param repository Repository providing Command routes and Entity identity.
+   * @param routing Registered Command handler metadata.
+   * @param command Command envelope to dispatch.
+   * @returns Completion of Inbox receipt, or routing validation without a bound runtime.
+   */
   async dispatchRepositoryCommand(
-    repository: RepositoryView & {
-      routeCommand(command: Command): RepositoryCommandRoute;
-    },
+    repository: CommandRoutingRepository,
     routing: RepositoryRouting,
     command: Command,
   ): Promise<void> {
@@ -6834,7 +9271,7 @@ const repositoryHistory = {
   /**
    * Creates a cache that extends a repository history only when a caller requests more entries.
    *
-   * @typeParam Entry - The history entry type.
+   * @typeParam Entry The history entry type.
    * @param load Loads entries before an optional continuation version.
    * @param versionOf Reads the optional version carried by an entry.
    * @param options Selects strictly descending-version and complete-group behavior.

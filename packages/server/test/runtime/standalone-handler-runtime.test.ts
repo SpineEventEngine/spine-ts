@@ -107,6 +107,41 @@ class ProducingReactor extends AbstractEventReactor {
   }
 }
 
+class OptionalTupleReactor extends AbstractEventReactor {
+  react(
+    event: ReviewTaskAssigned,
+  ): readonly [ReviewTaskAssigned, (ReviewTaskAssigned | undefined)?] {
+    const first = create(ReviewTaskAssignedSchema, { id: "first", name: event.name });
+    return event.name === "both"
+      ? [first, create(ReviewTaskAssignedSchema, { id: "second", name: event.name })]
+      : [first, undefined];
+  }
+}
+
+class InvalidLaterReactor extends AbstractEventReactor {
+  react(): readonly [ReviewTaskAssigned, ProjectState] {
+    return [
+      create(ReviewTaskAssignedSchema, { id: "first", name: "First" }),
+      create(ProjectStateSchema, { id: "wrong", name: "Wrong" }),
+    ];
+  }
+}
+
+class InvalidPackedLaterReactor extends AbstractEventReactor {
+  react(): readonly unknown[] {
+    return [
+      create(ReviewTaskAssignedSchema, { id: "first", name: "First" }),
+      {
+        $typeName: ReviewTaskAssignedSchema.typeName,
+        get id() {
+          throw new Error("invalid declared payload");
+        },
+        name: "Invalid payload",
+      },
+    ];
+  }
+}
+
 class RejectionCommander extends AbstractCommander {
   calls = 0;
   react(): AssignReviewTask {
@@ -140,6 +175,135 @@ class ContextCommander extends AbstractCommander {
 }
 
 describe("StandaloneHandlerRuntime", () => {
+  it("omits absent optional tuple Events and keeps present results in order", async () => {
+    const published: Event[] = [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: OptionalTupleReactor,
+      handlers: [
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: new OptionalTupleReactor(),
+        publisher: {
+          publishEvent: (event: Event) => {
+            published.push(event);
+            return Promise.resolve();
+          },
+        } as never,
+      },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+    for (const name of ["one", "both"]) {
+      await dispatcher.dispatch(
+        create(EventSchema, {
+          id: { value: name },
+          message: AnyMessages.pack(
+            ReviewTaskAssignedSchema,
+            create(ReviewTaskAssignedSchema, { id: name, name }),
+          ),
+        }),
+      );
+    }
+    expect(published.map((event) => event.message?.typeUrl)).toEqual([
+      TypeUrls.derive(ReviewTaskAssignedSchema),
+      TypeUrls.derive(ReviewTaskAssignedSchema),
+      TypeUrls.derive(ReviewTaskAssignedSchema),
+    ]);
+  });
+
+  it("rejects an invalid later result before publishing any standalone output", async () => {
+    const published: Event[] = [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: InvalidLaterReactor,
+      handlers: [
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: new InvalidLaterReactor(),
+        publisher: {
+          publishEvent: (event: Event) => {
+            published.push(event);
+            return Promise.resolve();
+          },
+        } as never,
+      },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+    await expect(
+      dispatcher.dispatch(
+        create(EventSchema, {
+          id: { value: "invalid-later" },
+          message: AnyMessages.pack(
+            ReviewTaskAssignedSchema,
+            create(ReviewTaskAssignedSchema, { id: "source" }),
+          ),
+        }),
+      ),
+    ).rejects.toThrow(/undeclared signal/);
+    expect(published).toEqual([]);
+  });
+
+  it("packs all declared outputs before publishing any standalone result", async () => {
+    const published: Event[] = [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: InvalidPackedLaterReactor,
+      handlers: [
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: new InvalidPackedLaterReactor(),
+        publisher: {
+          publishEvent: (event: Event) => {
+            published.push(event);
+            return Promise.resolve();
+          },
+        } as never,
+      },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+    await expect(
+      dispatcher.dispatch(
+        create(EventSchema, {
+          id: { value: "invalid-payload" },
+          message: AnyMessages.pack(
+            ReviewTaskAssignedSchema,
+            create(ReviewTaskAssignedSchema, { id: "source" }),
+          ),
+        }),
+      ),
+    ).rejects.toThrow("invalid declared payload");
+    expect(published).toEqual([]);
+  });
   it("routes same-schema domestic and external handlers only on their matching origin", async () => {
     const domestic = new FilteredSubscriber();
     const external = new FilteredSubscriber();

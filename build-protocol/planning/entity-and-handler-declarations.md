@@ -13,7 +13,8 @@ Branch: `entity-and-signal-handler-declarations`
 - Prefer native language types; any proposed library must be maintained and
   focused on the required functionality. Inspect existing dependencies first.
 - Explain findings and plans with simple words and concrete examples.
-- This stage is analysis and planning only. Do not run broad builds or tests.
+- The initial stage was analysis only. Implementation and three sequential
+  independent review/fix rounds were approved afterward, on 25 September 2026.
 
 ## Investigation
 
@@ -337,6 +338,55 @@ Release preparation: registry lookup found snapshot.15 absent for all 19 public
 packages. Commit `6dccc8fc1` updates only the top-level version in all 31 workspace
 manifests. Pins, source manifests, lockfile, and related expectations follow in
 a separate commit. Frozen install succeeded without lifecycle scripts.
+
+Version checkpoint `ed692fbb9` is pushed: 340 focused tests, source/tooling
+typechecks, and cleanup checks passed. The main agent completed Entity and Todo
+TSDoc corrections. At that checkpoint repository documentation was pending: the checker found
+about 350 missing method summaries plus parameter/return descriptions across
+the touched files. This adds an estimated 0.5–1 hour; no check is weakened.
+
+Repository comment assignment: existing implementer function, explicitly
+`gpt-6-sol` / `medium`, limited to semantic TSDoc and declaration spacing in
+`packages/server/src/repository/repository.ts`. Sol is used because the comments
+require understanding transaction, dispatch, and persistence behavior across
+the large module. Preparation is read-only until the runtime implementer releases
+the file; then generator work and repository comments can proceed independently.
+No overlapping writers are permitted. Main retains task/review records.
+
+Analyzer comment work is limited to semantic TSDoc and declaration spacing in
+`packages/proto-tools/src/generation/build-time-handler-analyzer.ts`. An explicit
+Sol/medium implementer dispatch was refused by the desktop's thread limit, so no
+child was created through that surface. After the runtime implementer released
+the file, main attempted a fresh CLI session with the existing implementer
+instructions, explicit `gpt-6-sol` / `medium`, disabled memory and child spawning.
+That session failed before work: the CLI login rejected the requested model.
+It produced no accepted work. The scoped checker found 533 diagnostics in the
+analyzer; no rule will be weakened.
+The app's installed CLI (`0.155.0-alpha.16.3`) then started successfully with
+the same explicit Sol/medium assignment. Its startup metadata confirms both
+fields; memory and child agents are disabled. Session:
+`01a0d7ca-25d7-7503-aa51-cfe5256fba45`. No application configuration was changed.
+That assignment completed: scoped TSDoc diagnostics fell from 565 to zero;
+formatting and diff whitespace checks passed. It reported comment/layout changes
+only, and the file was returned to the runtime implementer.
+Repository comments were split at `RepositoryHistoryInternals`: main documented
+that declaration through EOF, while the existing comment writer handled earlier
+declarations. After both finished, repeated inline routing declarations were
+replaced with two equivalent private interfaces. Formatting and the full scoped
+TSDoc check passed, and the file returned to the runtime implementer.
+
+Additional applicable skills read: typescript-advanced-types for native return
+declarations; requesting-code-review, review, code-review-excellence, and
+verification-before-completion for the upcoming fresh reviews and final checks.
+The receiving-code-review and systematic-debugging skills govern checking
+review findings against evidence and tracing failures before changing code.
+The OpenAI Docs skill was used to verify a fallback for the desktop thread
+limit: the installed CLI supports fresh ephemeral sessions, explicit model and
+reasoning, and disabled memory. If needed, reviews use those sessions with the
+existing role instructions, read-only access, and no child spawning. No review
+may resume a prior session or read its memory or previous review conclusions.
+Project reviewer roles/model profiles and the human's three-round requirement
+take precedence over different role/model or review-count suggestions in skills.
 
 GitHub access: saved CLI login works after removing stale GH_TOKEN/GITHUB_TOKEN
 overrides from the individual command environment. Build runs only on PRs; none

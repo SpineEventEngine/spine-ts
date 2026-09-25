@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { VersionSchema } from "@spine-event-engine/proto";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   ProjectOverviewStateSchema,
   ProjectProfileSchema,

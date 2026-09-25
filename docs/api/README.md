@@ -661,8 +661,8 @@ transactions or active drafts already marked archived/deleted without including
 state payloads. `commit()` validates the buffered draft and closes the
 transaction only for accepted commits; rejected commits return violations and
 leave the transaction active. `rollback()` closes the transaction and returns
-the discarded draft evidence. Version advancement is framework-controlled;
-there is no application version setter or `updateVersionMetadata()` operation.
+the discarded draft evidence. Handlers rely on the framework to advance versions;
+the former custom version types and `updateVersionMetadata()` operation are removed.
 Server handler metadata exports include
 `EntityHandlers.define()`, `HandlerRegistrationBuilder`, the seven handler
 metadata roles for command assignment, command substitution, command
@@ -767,11 +767,7 @@ import {
   type ProjectId,
 } from "../generated/spine/server/testing/project_workflow_pb.js";
 
-class ApprovalCoordinator extends ProcessManager<
-  ProjectId,
-  typeof CoordinationStateSchema,
-  number
-> {
+class ApprovalCoordinator extends ProcessManager<ProjectId, typeof CoordinationStateSchema> {
   @Command
   approve(command: ApproveProject, context: CommandContext): ScheduleProject {
     this.update((draft) => Object.assign(draft, { id: this.id, projectName: command.status }));

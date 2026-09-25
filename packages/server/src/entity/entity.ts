@@ -698,6 +698,7 @@ export const entityHistoryAccess: EntityHistoryAccess = Object.freeze({
   bind(entity: object, binding: BoundEntityHistory): void {
     boundEntityHistories.set(entity, binding);
   },
+
   /**
    * Reads the most recent retained state no later than the requested time.
    *
@@ -708,6 +709,7 @@ export const entityHistoryAccess: EntityHistoryAccess = Object.freeze({
   stateAt(entity: object, time: Timestamp): Promise<unknown> {
     return EntityHistory.require(entity).stateAt(time);
   },
+
   /**
    * Reads retained states after checking the history read limit.
    *
@@ -718,6 +720,7 @@ export const entityHistoryAccess: EntityHistoryAccess = Object.freeze({
   states(entity: object, depth: number): Promise<readonly unknown[]> {
     return EntityHistory.require(entity).states(EntityHistory.depth(depth));
   },
+
   /**
    * Reads diagnostic Events after checking the history read limit.
    *
@@ -728,6 +731,7 @@ export const entityHistoryAccess: EntityHistoryAccess = Object.freeze({
   events(entity: object, depth: number): Promise<readonly Readonly<Event>[]> {
     return EntityHistory.require(entity).events(EntityHistory.depth(depth));
   },
+
   /**
    * Gets the state-history storage attached by the repository.
    *
@@ -737,6 +741,7 @@ export const entityHistoryAccess: EntityHistoryAccess = Object.freeze({
   stateMaintenance(entity: object): EntityStateHistoryStorage<unknown, Message> {
     return EntityHistory.require(entity).stateMaintenance;
   },
+
   /**
    * Gets diagnostic Event storage attached by the repository.
    *

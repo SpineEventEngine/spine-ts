@@ -53,15 +53,15 @@ describe("build-time handler analyzer", () => {
         }
       `,
         "generated/access_state_pb.ts": generatedModule(
-          "spine/examples/access/state.proto",
+          "spine/examples/access/access_requests.proto",
           "AccessRequestState",
         ),
         "generated/access_events_pb.ts": generatedModule(
-          "spine/examples/access/events.proto",
+          "spine/examples/access/access_request_events.proto",
           "AccessRequestApproved",
         ),
         "generated/access_commands_pb.ts": generatedModule(
-          "spine/examples/access/commands.proto",
+          "spine/examples/access/access_grant_commands.proto",
           "CreateAccessGrant",
           "ExtendAccessGrant",
         ),
@@ -85,19 +85,19 @@ describe("build-time handler analyzer", () => {
         import { ProcessManager, Command } from "@spine-event-engine/server";
         import { TaskSchema } from "../generated/task_pb.js";
         import { type CreateTask } from "../generated/commands_pb.js";
-        import { type CommandChoices, type OptionalEvents } from "./return-aliases.js";
+        import { type CommandChoices, type OptionalCommands } from "./return-aliases.js";
         export class NativeReturns extends ProcessManager<string, typeof TaskSchema> {
           @Command
           choose(command: CreateTask): Promise<CommandChoices> { throw new Error(String(command)); }
           @Command
-          optional(command: CreateTask): OptionalEvents { throw new Error(String(command)); }
+          optional(command: CreateTask): OptionalCommands { throw new Error(String(command)); }
         }
       `,
       "src/return-aliases.ts": `
         import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
         type Either<T, U> = T | U;
         export type CommandChoices = Either<CreateTask, RenameTask>;
-        export type OptionalEvents = readonly [first: CreateTask, second?: RenameTask];
+        export type OptionalCommands = readonly [first: CreateTask, second?: RenameTask];
       `,
       "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
       "generated/commands_pb.ts": generatedModule(
@@ -190,7 +190,7 @@ describe("build-time handler analyzer", () => {
           import { type CreateTask } from "../generated/commands_pb.js";
           import { type TaskCreated } from "../generated/events_pb.js";
 
-          export class DeclaredRejections extends Aggregate<string, typeof TaskSchema, bigint> {
+          export class DeclaredRejections extends Aggregate<string, typeof TaskSchema> {
             @Assign
             @Throws(TaskAlreadyDone)
             canonical(command: CreateTask): TaskCreated { throw new Error(String(command)); }
@@ -233,7 +233,7 @@ describe("build-time handler analyzer", () => {
           import { type CreateTask } from "../generated/commands_pb.js";
           import { type TaskCreated } from "../generated/events_pb.js";
 
-          export class NestedDeclaredRejection extends Aggregate<string, typeof TaskSchema, bigint> {
+          export class NestedDeclaredRejection extends Aggregate<string, typeof TaskSchema> {
             @Assign
             @Throws(TaskAlreadyDone)
             handle(command: CreateTask): TaskCreated { throw new Error(String(command)); }
@@ -260,7 +260,7 @@ describe("build-time handler analyzer", () => {
           import { type CreateTask } from "../generated/commands_pb.js";
           import { type TaskCreated as TaskCreatedMessage } from "../generated/events_pb.js";
 
-          export class InvalidDeclarations extends Aggregate<string, typeof TaskSchema, bigint> {
+          export class InvalidDeclarations extends Aggregate<string, typeof TaskSchema> {
             @Subscribe @Throws(TaskAlreadyDone)
             misplaced(event: TaskCreatedMessage): void { void event; }
 
@@ -297,7 +297,7 @@ describe("build-time handler analyzer", () => {
           import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
           import { type TaskCreated } from "../generated/events_pb.js";
 
-          export class ContextContract extends ProcessManager<string, typeof TaskSchema, bigint> {
+          export class ContextContract extends ProcessManager<string, typeof TaskSchema> {
             @Assign assign(command: CreateTask, context: EventContext): TaskCreated {
               throw new Error(String(command) + String(context));
             }
@@ -331,7 +331,7 @@ describe("build-time handler analyzer", () => {
           import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
           import { type TaskCreated } from "../generated/events_pb.js";
 
-          export class CanonicalContext extends ProcessManager<string, typeof TaskSchema, bigint> {
+          export class CanonicalContext extends ProcessManager<string, typeof TaskSchema> {
             @Assign assign(command: CreateTask, context: CommandMetadata): TaskCreated {
               throw new Error(String(command) + String(context));
             }
@@ -356,7 +356,7 @@ describe("build-time handler analyzer", () => {
           import { TaskSchema } from "../generated/task_pb.js";
           import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
 
-          export class InvalidHandlerContexts extends ProcessManager<string, typeof TaskSchema, bigint> {
+          export class InvalidHandlerContexts extends ProcessManager<string, typeof TaskSchema> {
             @Command primitive(command: CreateTask, context: string): RenameTask {
               throw new Error(String(command) + context);
             }
@@ -679,8 +679,8 @@ describe("build-time handler analyzer", () => {
           import { TaskListSchema } from "../generated/task_list_pb.js";
           import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
 
-          abstract class DomainAggregate extends Aggregate<string, typeof TaskSchema, bigint> {}
-          abstract class DomainProjection extends Projection<string, typeof TaskListSchema, number> {}
+          abstract class DomainAggregate extends Aggregate<string, typeof TaskSchema> {}
+          abstract class DomainProjection extends Projection<string, typeof TaskListSchema> {}
 
           export class InheritedAggregate extends DomainAggregate {
             @Command transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
@@ -708,7 +708,7 @@ describe("build-time handler analyzer", () => {
           import { TaskListSchema } from "../generated/task_list_pb.js";
           import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
 
-          abstract class DomainProcessManager extends ProcessManager<string, typeof TaskListSchema, number> {}
+          abstract class DomainProcessManager extends ProcessManager<string, typeof TaskListSchema> {}
           export class InheritedProcessManager extends DomainProcessManager {
             @Command transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
           }
@@ -734,7 +734,7 @@ describe("build-time handler analyzer", () => {
           export class InvalidBootstrapHandler extends BootstrapBase {
             @Subscribe observe(): void {}
           }
-          export class TaskProcessManager extends ProcessManager<string, typeof TaskListSchema, number> {
+          export class TaskProcessManager extends ProcessManager<string, typeof TaskListSchema> {
             @Subscribe observe(event: TaskCreated): void { void event; }
           }
         `,
@@ -1274,7 +1274,7 @@ describe("build-time handler analyzer", () => {
           import { TaskSchema } from "../generated/task_pb.js";
           import { type NotACommand } from "../generated/notcommands_pb.js";
           import { type NotAnEvent } from "../generated/notevents_pb.js";
-          export class MisnamedAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+          export class MisnamedAggregate extends Aggregate<string, typeof TaskSchema> {
             @Assign command(command: NotACommand): NotAnEvent { throw new Error(String(command)); }
             @React event(event: NotAnEvent): NotAnEvent { throw new Error(String(event)); }
           }
@@ -2048,7 +2048,7 @@ const validTaskSource = `
   import { type RenameTask } from "../generated/spine/examples/todo/task_commands_pb.js";
   import * as events from "../generated/spine/examples/todo/task_events_pb.js";
 
-  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema, bigint> {
+  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema> {
     @Subscribe
     async observeCreated(event: events.TaskCreated): Promise<void> {
       void event;
@@ -2077,7 +2077,7 @@ const neutralCommandSource = `
   import { type CreateTask } from "../generated/domain_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class NeutralCommandAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class NeutralCommandAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2090,7 +2090,7 @@ const neutralEventSource = `
   import { TaskListSchema } from "../generated/task_list_pb.js";
   import { type TaskCreated } from "../generated/domain_pb.js";
 
-  export class NeutralEventProjection extends Projection<string, typeof TaskListSchema, bigint> {
+  export class NeutralEventProjection extends Projection<string, typeof TaskListSchema> {
     @Subscribe
     observe(event: TaskCreated): void {
       void event;
@@ -2102,7 +2102,7 @@ const stateSubscriptionSource = `
   import { Projection, Subscribe } from "@spine-event-engine/server";
   import { TaskSchema, type Task } from "../generated/task_pb.js";
 
-  export class StateProjection extends Projection<string, typeof TaskSchema, bigint> {
+  export class StateProjection extends Projection<string, typeof TaskSchema> {
     @Subscribe
     observe(state: Task): void {
       void state;
@@ -2116,7 +2116,7 @@ const foreignStateSubscriptionSource = `
   import { type ForeignState } from "../generated/foreign_pb.js";
   import { type AuditRecord } from "../generated/audit_pb.js";
 
-  export class ReceiverProjection extends Projection<string, typeof ReceiverStateSchema, bigint> {
+  export class ReceiverProjection extends Projection<string, typeof ReceiverStateSchema> {
     @Subscribe
     observeForeign(state: ForeignState): void {
       void state;
@@ -2135,7 +2135,7 @@ const misleadingCommandPathSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class MisleadingAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class MisleadingAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2149,7 +2149,7 @@ const mixedDescriptorSource = `
   import { type AuditRecord } from "../generated/domain_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class MixedDescriptorAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class MixedDescriptorAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     audit(command: AuditRecord): TaskCreated {
       throw new Error(String(command));
@@ -2163,7 +2163,7 @@ const forgedDescriptorSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class ForgedDescriptorAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class ForgedDescriptorAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     forgedCommand(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2183,7 +2183,7 @@ const badDescriptorSource = `
   import { type RenameTask } from "../generated/malformed_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class BadDescriptorAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class BadDescriptorAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     missing(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2202,7 +2202,7 @@ const sourcePreferenceSource = `
   import { type CreateTask } from "../generated/domain_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class SourcePreferenceAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class SourcePreferenceAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2216,7 +2216,7 @@ const neutralStateSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class NeutralStateAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class NeutralStateAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2230,7 +2230,7 @@ const localEntitySource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  class LocalAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  class LocalAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2244,7 +2244,7 @@ const namedExportSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  class ListedAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  class ListedAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2260,7 +2260,7 @@ const defaultExportSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export default class DefaultAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export default class DefaultAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2279,7 +2279,7 @@ const cyclicAliasSource = `
   type ReturnA = ReturnB;
   type ReturnB = ReturnA;
 
-  export class CyclicAggregate extends Aggregate<string, StateA, bigint> {
+  export class CyclicAggregate extends Aggregate<string, StateA> {
     @Assign
     create(command: SignalA): ReturnA {
       throw new Error(String(command));
@@ -2294,7 +2294,7 @@ const invalidGeneratedSource = `
   import { type AuditRecord } from "../generated/audit_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class InvalidGeneratedAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class InvalidGeneratedAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     typo(command: TaskCreatd): TaskCreated {
       throw new Error(String(command));
@@ -2318,7 +2318,7 @@ const typeOnlySchemaSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
 
-  export class TypeOnlySchemaAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class TypeOnlySchemaAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2337,7 +2337,7 @@ const invalidRoleSource = `
   import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class InvalidRoleAggregate extends ProcessManager<string, typeof TaskSchema, bigint> {
+  export class InvalidRoleAggregate extends ProcessManager<string, typeof TaskSchema> {
     @Assign
     assignCommand(command: CreateTask): RenameTask {
       throw new Error(String(command));
@@ -2365,7 +2365,7 @@ const oddballSource = `
   type State = (typeof StateSchema);
   const computed = "computed";
 
-  export class OddballAggregate extends spine.ProcessManager<string, State, bigint> {
+  export class OddballAggregate extends spine.ProcessManager<string, State> {
     @spine.Assign
     create(command: commands.CreateTask): readonly events.TaskCreated[] {
       throw new Error(String(command));
@@ -2407,7 +2407,7 @@ const edgeSource = `
 
   const computed = "computed";
 
-  export class EdgeAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class EdgeAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     [computed](command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2456,7 +2456,7 @@ const malformedSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class BrokenAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class BrokenAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2467,7 +2467,7 @@ const noEmissionSource = `
   import { TaskListSchema } from "../generated/task_list_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class TaskProjection extends Projection<string, typeof TaskListSchema, number> {
+  export class TaskProjection extends Projection<string, typeof TaskListSchema> {
     @React
     observe(event: TaskCreated): void {
       void event;
@@ -2481,7 +2481,7 @@ const voidEmissionSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class TaskAggregate extends ProcessManager<string, typeof TaskSchema, bigint> {
+  export class TaskAggregate extends ProcessManager<string, typeof TaskSchema> {
     @Assign
     silentAssign(command: CreateTask): void {
       void command;
@@ -2499,7 +2499,7 @@ const emptyTupleReactSource = `
   import { TaskListSchema } from "../generated/task_list_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class TaskProjection extends Projection<string, typeof TaskListSchema, bigint> {
+  export class TaskProjection extends Projection<string, typeof TaskListSchema> {
     @React
     observe(event: TaskCreated): [] {
       void event;
@@ -2514,7 +2514,7 @@ const stringNameSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class QuotedAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class QuotedAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     "create\\u2028\\"task\\"\\nnext"(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2536,7 +2536,7 @@ const invalidSource = `
     }
   }
 
-  export class BadAggregate extends ProcessManager<string, typeof TaskSchema, bigint> {
+  export class BadAggregate extends ProcessManager<string, typeof TaskSchema> {
     @Assign(CreateTaskSchema)
     schemaDecorator(command: CreateTask): TaskCreated {
       throw new Error(String(command));

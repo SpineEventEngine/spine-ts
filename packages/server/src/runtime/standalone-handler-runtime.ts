@@ -49,8 +49,11 @@ import { SignalPublisher } from "./signal-publisher.js";
  */
 export class StandaloneHandlerRuntime {
   readonly #publisher: SignalPublisher;
+
   readonly #metadata = new SignalMetadata();
+
   readonly #bindings: readonly Binding[];
+
   readonly #eventFilters: ReadonlyMap<string, EventHandlerFilterPlan<Binding>>;
 
   /**
@@ -150,6 +153,13 @@ export class StandaloneHandlerRuntime {
     };
   }
 
+  /**
+   * Invokes matching Command handlers and publishes their declared results or rejections.
+   *
+   * @param command Command envelope containing the payload and invocation context.
+   * @param bindings Registered Command receivers to consider.
+   * @returns Completion of invocation and output submission, not downstream handling.
+   */
   async #dispatchCommand(command: Command, bindings: readonly Binding[]): Promise<void> {
     if (command.message === undefined)
       throw new Error("Standalone command handler requires a message.");
@@ -173,6 +183,13 @@ export class StandaloneHandlerRuntime {
     }
   }
 
+  /**
+   * Invokes standalone Event handlers selected by message type, origin, and filters.
+   *
+   * @param event Event envelope containing the payload and invocation context.
+   * @param bindings Registered Event receivers to consider.
+   * @returns Completion of invocation and output submission, not downstream handling.
+   */
   async #dispatchEvent(event: Event, bindings: readonly Binding[]): Promise<void> {
     if (event.message === undefined)
       throw new Error("Standalone event handler requires a message.");
@@ -195,13 +212,41 @@ export class StandaloneHandlerRuntime {
     }
   }
 
+  /**
+   * Validates and packs one handler's entire result before submitting any output.
+   *
+   * @param binding Handler whose result and signal-kind rules apply.
+   * @param output Optional, single, or ordered multiple handler results.
+   * @param source Input signal from which output contexts are derived.
+   * @returns Completion of output submission, without waiting for downstream handlers.
+   */
   #publish(binding: Binding, output: unknown, source: Command | Event): Promise<void> {
     const values = StandaloneHandlerRuntime.#outputValues(output);
     if (!this.#canPublish(binding, values)) return Promise.resolve();
-    for (const value of values) this.#publishValue(binding, value, source);
+    if (
+      binding.handler.kind === "command-substitution" ||
+      binding.handler.kind === "command-reaction"
+    ) {
+      const commands = values.map((value) =>
+        this.#commandOutput(this.#returnedSchema(binding, value), value, source),
+      );
+      for (const command of commands) void this.#publisher.publishCommand(command);
+    } else {
+      const events = values.map((value) =>
+        this.#eventOutput(this.#returnedSchema(binding, value), value, source),
+      );
+      for (const event of events) void this.#publisher.publishEvent(event);
+    }
     return Promise.resolve();
   }
 
+  /**
+   * Checks required-output and no-output rules for the invoked handler kind.
+   *
+   * @param binding Handler declaration supplying the output rules.
+   * @param values Results after absent optional values have been omitted.
+   * @returns False for a valid subscriber with no output; true for a producing handler.
+   */
   #canPublish(binding: Binding, values: readonly unknown[]): boolean {
     const subscriber =
       binding.handler.kind === "event-subscription" ||
@@ -222,50 +267,75 @@ export class StandaloneHandlerRuntime {
     return !subscriber;
   }
 
-  #publishValue(binding: Binding, value: unknown, source: Command | Event): void {
+  /**
+   * Resolves one output against only the invoked handler's declared schemas.
+   *
+   * @param binding Handler declaration containing the permitted output schemas.
+   * @param value Concrete result whose message type must be declared.
+   * @returns The matching schema, or throws if the result is undeclared.
+   */
+  #returnedSchema(binding: Binding, value: unknown): MessageSchema {
     const schema = binding.handler.outcomes.returned.find(
-      (candidate) => (value as { $typeName?: string }).$typeName === candidate.typeName,
+      (candidate) =>
+        typeof value === "object" &&
+        value !== null &&
+        "$typeName" in value &&
+        value.$typeName === candidate.typeName,
     );
     if (schema === undefined)
       throw new Error(
         `Standalone handler "${binding.handler.methodName}" returned an undeclared signal.`,
       );
-    if (
-      binding.handler.kind === "command-substitution" ||
-      binding.handler.kind === "command-reaction"
-    ) {
-      this.#publishCommand(schema, value, source);
-    } else this.#publishEvent(schema, value, source);
+    return schema;
   }
 
-  #publishCommand(schema: MessageSchema, value: unknown, source: Command | Event): void {
+  /**
+   * Packs a produced Command before any result from the same invocation is published.
+   *
+   * @param schema Declared schema used to validate and pack the Command message.
+   * @param value Concrete Command message returned by the handler.
+   * @param source Input signal supplying the output context and origin.
+   * @returns A new Command envelope ready for publication.
+   */
+  #commandOutput(schema: MessageSchema, value: unknown, source: Command | Event): Command {
     const metadata =
       "uuid" in (source.id ?? {})
         ? this.#metadata.commandFromCommand(source as Command)
         : this.#metadata.commandFromEvent(source as Event);
-    void this.#publisher.publishCommand(
-      create(CommandSchema, {
-        id: metadata.id,
-        context: metadata.context,
-        message: AnyMessages.pack(schema, value as never),
-      }),
-    );
+    return create(CommandSchema, {
+      id: metadata.id,
+      context: metadata.context,
+      message: AnyMessages.pack(schema, value as never),
+    });
   }
 
-  #publishEvent(schema: MessageSchema, value: unknown, source: Command | Event): void {
+  /**
+   * Packs a produced Event before any result from the same invocation is published.
+   *
+   * @param schema Declared schema used to validate and pack the Event message.
+   * @param value Concrete Event message returned by the handler.
+   * @param source Input signal supplying the output context and origin.
+   * @returns A new Event envelope ready for publication.
+   */
+  #eventOutput(schema: MessageSchema, value: unknown, source: Command | Event): Event {
     const metadata =
       "uuid" in (source.id ?? {})
         ? this.#metadata.eventFromCommand(source as Command, {})
         : this.#metadata.eventFromEvent(source as Event, {});
-    void this.#publisher.publishEvent(
-      create(EventSchema, {
-        id: metadata.id,
-        context: metadata.context,
-        message: AnyMessages.pack(schema, value as never),
-      }),
-    );
+    return create(EventSchema, {
+      id: metadata.id,
+      context: metadata.context,
+      message: AnyMessages.pack(schema, value as never),
+    });
   }
 
+  /**
+   * Publishes a declared rejection with the rejected Command and rejection details.
+   *
+   * @param command Command rejected by its handler.
+   * @param rejection Declared domain rejection thrown during invocation.
+   * @returns Completion of rejection publication.
+   */
   async #publishRejection(command: Command, rejection: RejectionThrowable): Promise<void> {
     const metadata = this.#metadata.eventFromCommand(command, {});
     await this.#publisher.publishRejectionEvent(
@@ -287,10 +357,14 @@ export class StandaloneHandlerRuntime {
    * Normalizes optional handler output into a list of values.
    *
    * @param output A handler result that may be absent, singular, or an array.
-   * @returns An empty list for nullish output; otherwise the array or a single-item list.
+   * @returns An ordered list without undefined slots, or an empty list for nullish output.
    */
   static #outputValues(output: unknown): readonly unknown[] {
-    return output === undefined || output === null ? [] : Array.isArray(output) ? output : [output];
+    return output === undefined || output === null
+      ? []
+      : Array.isArray(output)
+        ? output.filter((value) => value !== undefined)
+        : [output];
   }
 
   /**
@@ -433,8 +507,29 @@ export interface StandaloneBinding {
    */
   readonly publisher: SignalPublisher;
 }
+
+/**
+ * Generated handler declaration paired with its bound application method.
+ */
 interface Binding {
+  // prettier-ignore
+
+  /**
+   * Generated group containing the standalone receiver's declarations.
+   */
   readonly group: GeneratedStandaloneHandlerGroup;
+
+  /**
+   * Generated declaration for the bound method.
+   */
   readonly handler: GeneratedHandlerRecordInput;
+
+  /**
+   * Invokes the application method with the argument count declared in metadata.
+   *
+   * @param message Unpacked input signal or Entity state.
+   * @param context Invocation context, passed only to a two-parameter method.
+   * @returns The application's synchronous result or Promise.
+   */
   readonly invoke: (message: unknown, context: unknown) => unknown;
 }

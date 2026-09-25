@@ -1611,15 +1611,17 @@ class CommandSubstitutingProcessManager extends ProcessManager<
   typeof ProjectQueueStateSchema
 > {
   static siblingOutputs = false;
+  static wrongOutput = false;
 
   static reset(): void {
     this.siblingOutputs = false;
+    this.wrongOutput = false;
   }
 
   substitute(
     command: CreateProjectSubmission,
     context: CommandContext,
-  ): CreateFollowUpProject | readonly CreateFollowUpProject[] {
+  ): CreateFollowUpProject | CreateProject | readonly CreateFollowUpProject[] {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -1633,9 +1635,16 @@ class CommandSubstitutingProcessManager extends ProcessManager<
       id: command.id,
       name: `${command.name} follow-up`,
     });
+    if (CommandSubstitutingProcessManager.wrongOutput) {
+      return create(CreateProjectSchema, { id: command.id, name: command.name });
+    }
     return CommandSubstitutingProcessManager.siblingOutputs
       ? [first, create(CreateFollowUpProjectSchema, { ...first, name: `${command.name} sibling` })]
       : first;
+  }
+
+  neighbor(command: CreateProject): CreateProject {
+    return command;
   }
 }
 
@@ -1662,6 +1671,23 @@ class FilteredProcessManager extends ProcessManager<string, typeof ProjectQueueS
   commandFallback(event: ProjectCreated): CreateProject {
     FilteredProcessManager.calls.push(`command-fallback:${event.name}`);
     return create(CreateProjectSchema, { id: event.id, name: event.name });
+  }
+}
+
+class UnionCommandProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
+  choose(event: ProjectCreated): CreateFollowUpProject | DraftProject {
+    return event.name === "draft"
+      ? create(DraftProjectSchema, { id: event.id, name: event.name, priority: 1 })
+      : create(CreateFollowUpProjectSchema, { id: event.id, name: event.name });
+  }
+}
+
+class OptionalCommandProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
+  choose(event: ProjectCreated): readonly [CreateFollowUpProject, (DraftProject | undefined)?] {
+    const first = create(CreateFollowUpProjectSchema, { id: event.id, name: event.name });
+    return event.name === "both"
+      ? [first, create(DraftProjectSchema, { id: event.id, name: event.name, priority: 1 })]
+      : [first, undefined];
   }
 }
 
@@ -3014,6 +3040,36 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("copies the full pre-dispatch Aggregate Version to produced Events", async () => {
+    const factory = new InMemoryStorageFactory();
+    const repository = createExecutingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectStateSchema,
+    });
+    const version = create(VersionSchema, {
+      number: 3,
+      timestamp: create(TimestampSchema, { seconds: 41n, nanos: 7 }),
+    });
+    const state = create(ProjectStateSchema, { id: "producer-version", name: "Before" });
+    await storage.writeCurrent({
+      entityId: "producer-version",
+      state,
+      version,
+      lifecycle: { archived: false, deleted: false },
+    });
+    await context.stand().update(ProjectStateSchema, state, { version });
+
+    await context.commandBus().post(createAggregateCommand("producer-command", "producer-version"));
+    const [event] = await new EventStore({ name: "Tasks", multitenant: false }, factory).read();
+    expect(event?.context?.version).toEqual(version);
+  });
+
   it("rejects managed aggregate handlers that return no domain event", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
@@ -3600,6 +3656,45 @@ describe("repository signal routing", () => {
         name: "Transform follow-up",
       }),
     );
+  });
+
+  it("rejects a substitution output declared only by its neighboring handler", async () => {
+    CommandSubstitutingProcessManager.wrongOutput = true;
+    const factory = new InMemoryStorageFactory();
+    const repository = createCommandSubstitutingProcessManagerRepository();
+    const context = BoundedContext.singleTenant("Undeclared substitution output")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    try {
+      const command = create(CommandSchema, {
+        id: create(CommandIdSchema, { uuid: "neighbor-output" }),
+        message: AnyMessages.pack(
+          CreateProjectSubmissionSchema,
+          create(CreateProjectSubmissionSchema, { id: "neighbor-id", name: "Neighbor" }),
+        ),
+      });
+      const delivery = new Delivery({
+        context: { name: "Undeclared substitution output", multitenant: false },
+        storageFactory: factory,
+      });
+      const received = await storeEntityInboxCommand(
+        delivery,
+        command,
+        new Date("2026-09-25T09:00:00.000Z"),
+        1n,
+        { targetId: Identifiers.pack("string", "transform-target") },
+      );
+      await expect(requireEntityInboxTarget(repository).replay(received)).rejects.toThrow(
+        /undeclared.*CreateProject|cannot pack.*CreateProject/i,
+      );
+      await expect(
+        context.stand().read(ProjectQueueStateSchema, "transform-target"),
+      ).resolves.toBeUndefined();
+    } finally {
+      await context.close();
+      CommandSubstitutingProcessManager.reset();
+    }
   });
 
   it("starts every sibling produced command in declaration order when one child rejects", async () => {
@@ -4523,9 +4618,9 @@ describe("repository signal routing", () => {
       await expect(
         context.stand().readVersioned(ProjectStateSchema, "aggregate-one"),
       ).resolves.toMatchObject({ version: { number: 1 }, state: { name: "Task (guarded)" } });
-      await context.eventBus().post(
-        createProjectCreated("event-aggregate-no-op", "ignored", { name: "no-op" }),
-      );
+      await context
+        .eventBus()
+        .post(createProjectCreated("event-aggregate-no-op", "ignored", { name: "no-op" }));
       await expect(
         context.stand().readVersioned(ProjectStateSchema, "aggregate-one"),
       ).resolves.toMatchObject({ version: { number: 1 }, state: { name: "Task (guarded)" } });
@@ -6087,7 +6182,7 @@ describe("repository signal routing", () => {
     expect(stored[0]?.id?.value).toMatch(UUID_PATTERN);
     expect(stored[0]?.context?.timestamp).toBeDefined();
     expect(readReadableProducerId(stored[0])).toBe("pm-dispatch");
-    expect(stored[0]?.context?.version).toEqual(create(VersionSchema, { number: 1 }));
+    expect(stored[0]?.context?.version).toEqual(create(VersionSchema, { number: 0 }));
     expect(stored[0]?.context?.origin).toEqual({
       case: "pastMessage",
       value: create(OriginSchema, {
@@ -6108,6 +6203,36 @@ describe("repository signal routing", () => {
       "process-manager command produced-event dispatch attempt",
     );
     expect("storedEventDispatchFailures" in context).toBe(false);
+  });
+
+  it("copies the full pre-dispatch Process Manager Version to produced Events", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectQueueStateSchema,
+    });
+    const version = create(VersionSchema, {
+      number: 4,
+      timestamp: create(TimestampSchema, { seconds: 43n, nanos: 8 }),
+    });
+    const state = create(ProjectQueueStateSchema, { id: "pm-producer-version", queue: "Before" });
+    await storage.writeCurrent({
+      entityId: "pm-producer-version",
+      state,
+      version,
+      lifecycle: { archived: false, deleted: false },
+    });
+    await context.stand().update(ProjectQueueStateSchema, state, { version });
+
+    await context.commandBus().post(createAggregateCommand("pm-producer", "pm-producer-version"));
+    const [event] = await new EventStore({ name: "Tasks", multitenant: false }, factory).read();
+    expect(event?.context?.version).toEqual(version);
   });
 
   it("preserves a pre-existing process manager when a command is rejected", async () => {
@@ -9657,6 +9782,118 @@ describe("repository signal routing", () => {
     }
   });
 
+  it("retains a void Process Manager reaction without creating invalid initial state", async () => {
+    FilteredProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createVoidProcessManagerRepository();
+    repository.setStateHistoryEnabled(true);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectQueueStateSchema,
+      stateHistory: true,
+      eventHistory: true,
+    });
+
+    await context.eventBus().post(createProjectCreated("pm-void-event", "pm-void"));
+    expect(FilteredProcessManager.calls).toEqual(["react-fallback:Task"]);
+    await expect(storage.readCurrent("pm-void")).resolves.toBeUndefined();
+    await expect(storage.readStates("pm-void")).resolves.toEqual([]);
+    await expect(context.stand().read(ProjectQueueStateSchema, "pm-void")).resolves.toBeUndefined();
+    await expect(storage.readEvents("pm-void")).resolves.toHaveLength(1);
+  });
+
+  it("dispatches a command-only Process Manager reaction without advancing state", async () => {
+    const factory = new InMemoryStorageFactory();
+    const commands: SpineCommand[] = [];
+    const repository = createCommandOnlyProcessManagerRepository();
+    repository.setStateHistoryEnabled(true);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateProjectSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectQueueStateSchema,
+      stateHistory: true,
+      eventHistory: true,
+    });
+
+    await context.eventBus().post(createProjectCreated("pm-command-only", "pm-command-only"));
+    await waitForCondition(() => commands.length === 1);
+    await expect(storage.readCurrent("pm-command-only")).resolves.toBeUndefined();
+    await expect(storage.readStates("pm-command-only")).resolves.toEqual([]);
+    await expect(
+      context.stand().readVersioned(ProjectQueueStateSchema, "pm-command-only"),
+    ).resolves.toBeUndefined();
+    await expect(storage.readEvents("pm-command-only")).resolves.toHaveLength(1);
+  });
+
+  it("dispatches each native @Command union branch from generated handler metadata", async () => {
+    const commands: SpineCommand[] = [];
+    const context = BoundedContext.singleTenant("Union commands")
+      .add(createGeneratedUnionProcessManagerRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateFollowUpProjectSchema, DraftProjectSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    await context
+      .eventBus()
+      .post(createProjectCreated("union-draft", "union-draft", { name: "draft" }));
+    await context
+      .eventBus()
+      .post(createProjectCreated("union-followup", "union-followup", { name: "followup" }));
+    await waitForCondition(() => commands.length === 2);
+    expect(commands.map((command) => command.message?.typeUrl)).toEqual([
+      TypeUrls.derive(DraftProjectSchema),
+      TypeUrls.derive(CreateFollowUpProjectSchema),
+    ]);
+  });
+
+  it("omits an absent optional tuple command and preserves the present order", async () => {
+    const commands: SpineCommand[] = [];
+    const context = BoundedContext.singleTenant("Optional tuple commands")
+      .add(createOptionalCommandProcessManagerRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateFollowUpProjectSchema, DraftProjectSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    await context
+      .eventBus()
+      .post(createProjectCreated("optional-one", "optional-one", { name: "one" }));
+    await context
+      .eventBus()
+      .post(createProjectCreated("optional-both", "optional-both", { name: "both" }));
+    await waitForCondition(() => commands.length === 3);
+    expect(commands.map((command) => command.message?.typeUrl)).toEqual([
+      TypeUrls.derive(CreateFollowUpProjectSchema),
+      TypeUrls.derive(CreateFollowUpProjectSchema),
+      TypeUrls.derive(DraftProjectSchema),
+    ]);
+  });
+
   it("loads existing projection state before applying later delivered events", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createAccumulatingProjectionRepository())
@@ -9727,12 +9964,13 @@ describe("repository signal routing", () => {
           name: "Task (projected)",
           priority: 2,
         }),
-        version: { number: 2, timestamp: expect.any(Object) },
+        version: { number: 2 },
       });
       const standVersion = (
         await context.stand().readVersioned(ProjectOverviewStateSchema, "timestamped-cas")
       )?.version;
       const storedVersions = await storage.readVersionMessages("timestamped-cas");
+      expect(standVersion?.timestamp).toBeDefined();
       expect(storedVersions.current).toEqual(standVersion);
       expect(storedVersions.history).toEqual([standVersion]);
     } finally {
@@ -10343,6 +10581,96 @@ function createFilteredProcessManagerRepository(): Repository<typeof FilteredPro
   });
 }
 
+function createVoidProcessManagerRepository(): Repository<typeof FilteredProcessManager> {
+  return new Repository({
+    entityType: FilteredProcessManager,
+    schema: ProjectQueueStateSchema,
+    handlers: EntityHandlers.define(FilteredProcessManager, ProjectQueueStateSchema, (builder) => [
+      builder.react(ProjectCreatedSchema, "reactFallback"),
+    ]),
+    processManagerEventHistory: true,
+  });
+}
+
+function createCommandOnlyProcessManagerRepository(): Repository<typeof FilteredProcessManager> {
+  const handlers = HandlerMetadataValues.defineArity(
+    FilteredProcessManager,
+    ProjectQueueStateSchema,
+    (builder) => [builder.command(ProjectCreatedSchema, "commandFallback")],
+    [
+      {
+        kind: "command-reaction",
+        methodName: "commandFallback",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([CreateProjectSchema]),
+      },
+    ],
+  );
+  return new Repository({
+    entityType: FilteredProcessManager,
+    schema: ProjectQueueStateSchema,
+    handlers,
+    processManagerEventHistory: true,
+  });
+}
+
+function createGeneratedUnionProcessManagerRepository(): Repository<
+  typeof UnionCommandProcessManager
+> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: UnionCommandProcessManager,
+        stateSchema: ProjectQueueStateSchema,
+        handlers: [
+          {
+            kind: "command-reaction",
+            methodName: "choose",
+            input: { schema: ProjectCreatedSchema, origin: "domestic" },
+            outcomes: handlerOutcomes([CreateFollowUpProjectSchema, DraftProjectSchema]),
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<UnionCommandProcessManager, typeof ProjectQueueStateSchema>;
+  return new Repository({
+    entityType: UnionCommandProcessManager,
+    schema: ProjectQueueStateSchema,
+    handlers,
+  });
+}
+
+function createOptionalCommandProcessManagerRepository(): Repository<
+  typeof OptionalCommandProcessManager
+> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: OptionalCommandProcessManager,
+        stateSchema: ProjectQueueStateSchema,
+        handlers: [
+          {
+            kind: "command-reaction",
+            methodName: "choose",
+            input: { schema: ProjectCreatedSchema, origin: "domestic" },
+            outcomes: handlerOutcomes([CreateFollowUpProjectSchema, DraftProjectSchema]),
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<OptionalCommandProcessManager, typeof ProjectQueueStateSchema>;
+  return new Repository({
+    entityType: OptionalCommandProcessManager,
+    schema: ProjectQueueStateSchema,
+    handlers,
+  });
+}
+
 function createSequencedProjectOverviewRepository(
   eventRouting: EventRouting<ProjectSequenceId>,
 ): Repository<typeof SequencedProjectOverview> {
@@ -10664,12 +10992,21 @@ function createProjectIdTaskRepository(): Repository<typeof ProjectIdProjectAggr
 function createInt32RoutingRepository(
   commandRouting?: CommandRouting<number>,
 ): Repository<typeof NumberedProjectAggregate> {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     NumberedProjectAggregate,
     NumberedProjectStateSchema,
     (builder) => [
       builder.assign(CreateNumberedProjectSchema, "assign"),
       builder.react(NumberedProjectCreatedSchema, "react"),
+    ],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assign",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([NumberedProjectCreatedSchema]),
+      },
     ],
   );
   return new Repository({
@@ -10682,10 +11019,23 @@ function createInt32RoutingRepository(
 }
 
 function createInt64RoutingRepository(): Repository<typeof ProjectWorkflow> {
-  const handlers = EntityHandlers.define(ProjectWorkflow, ProjectWorkflowStateSchema, (builder) => [
-    builder.assign(ScheduleProjectWorkflowSchema, "assign"),
-    builder.react(ProjectWorkflowScheduledSchema, "react"),
-  ]);
+  const handlers = HandlerMetadataValues.defineArity(
+    ProjectWorkflow,
+    ProjectWorkflowStateSchema,
+    (builder) => [
+      builder.assign(ScheduleProjectWorkflowSchema, "assign"),
+      builder.react(ProjectWorkflowScheduledSchema, "react"),
+    ],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assign",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([ProjectWorkflowScheduledSchema]),
+      },
+    ],
+  );
   return new Repository({
     entityType: ProjectWorkflow,
     schema: ProjectWorkflowStateSchema,
@@ -10712,9 +11062,20 @@ function createMalformedFirstFieldRepository(): Repository<typeof MalformedFirst
 function createProjectIdProducingRepository(
   commandRouting?: CommandRouting<TaskId>,
 ): Repository<typeof ProjectIdProducingAggregate> {
-  const handlers = EntityHandlers.define(ProjectIdProducingAggregate, TaskSchema, (builder) => [
-    builder.assign(CreateTaskSchema, "assignTask"),
-  ]);
+  const handlers = HandlerMetadataValues.defineArity(
+    ProjectIdProducingAggregate,
+    TaskSchema,
+    (builder) => [builder.assign(CreateTaskSchema, "assignTask")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assignTask",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([TaskCreatedSchema]),
+      },
+    ],
+  );
 
   return new Repository({
     entityType: ProjectIdProducingAggregate,
@@ -11025,9 +11386,20 @@ function createGeneratedCommandingRepository(): Repository<
 }
 
 function createMultiManagedRepository(): Repository<typeof MultiManagedAggregate> {
-  const handlers = EntityHandlers.define(MultiManagedAggregate, ProjectStateSchema, (builder) => [
-    builder.assign(CreateProjectSchema, "createProject"),
-  ]);
+  const handlers = HandlerMetadataValues.defineArity(
+    MultiManagedAggregate,
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
+  );
 
   return new Repository({
     entityType: MultiManagedAggregate,
@@ -11550,7 +11922,10 @@ function createCommandSubstitutingProcessManagerRepository(): Repository<
   const handlers = HandlerMetadataValues.defineArity(
     CommandSubstitutingProcessManager,
     ProjectQueueStateSchema,
-    (builder) => [builder.substitute(CreateProjectSubmissionSchema, "substitute")],
+    (builder) => [
+      builder.substitute(CreateProjectSubmissionSchema, "substitute"),
+      builder.substitute(CreateProjectSchema, "neighbor"),
+    ],
     [
       {
         kind: "command-substitution",
@@ -11558,6 +11933,13 @@ function createCommandSubstitutingProcessManagerRepository(): Repository<
         parameterCount: 2,
         origin: "domestic",
         outcomes: handlerOutcomes([CreateFollowUpProjectSchema]),
+      },
+      {
+        kind: "command-substitution",
+        methodName: "neighbor",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([CreateProjectSchema]),
       },
     ],
   );
@@ -11662,10 +12044,23 @@ function createThrowingProjectionRepository(): Repository<typeof ThrowingTaskPro
 }
 
 function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
-  const handlers = EntityHandlers.define(NoApplierAggregate, ProjectStateSchema, (builder) => [
-    builder.assign(CreateProjectSchema, "createProject"),
-    builder.react(ProjectCreatedSchema, "reactTask"),
-  ]);
+  const handlers = HandlerMetadataValues.defineArity(
+    NoApplierAggregate,
+    ProjectStateSchema,
+    (builder) => [
+      builder.assign(CreateProjectSchema, "createProject"),
+      builder.react(ProjectCreatedSchema, "reactTask"),
+    ],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
+  );
 
   return new Repository({
     entityType: NoApplierAggregate,
@@ -12391,7 +12786,7 @@ class CurrentRecordTestStorage<S extends Message = Message> {
     readonly entityId: unknown;
     readonly lifecycle: { readonly archived: boolean; readonly deleted: boolean };
     readonly state: S;
-    readonly version: bigint;
+    readonly version: bigint | Version;
   }): Promise<void> {
     const storage = this.#open();
     try {

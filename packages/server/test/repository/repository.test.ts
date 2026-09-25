@@ -16,7 +16,6 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   Aggregate,
-  EntityHandlers,
   describeEntityMetadata,
   ProcessManager,
   Projection,
@@ -31,14 +30,6 @@ import {
   type RepositoryOptions,
 } from "../../src/index.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
-import {
-  type CreateProject,
-  CreateProjectSchema,
-} from "../../test-fixtures/generated/entity-metadata/project_commands_pb.js";
-import {
-  type ProjectCreated,
-  ProjectCreatedSchema,
-} from "../../test-fixtures/generated/entity-metadata/project_events_pb.js";
 import {
   ProjectOverviewStateSchema,
   ProjectSearchStateSchema,

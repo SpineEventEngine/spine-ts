@@ -253,6 +253,22 @@ rejection-input command reactions during generated metadata ingestion and
 repository construction.
 Event- and rejection-input `@Command` methods remain Event- or
 rejection-to-command reactions on Event Bus.
+
+Use a TypeScript union such as `CreateAccessGrant | ExtendAccessGrant` to return
+one of several Commands. A tuple such as
+`readonly [AccessGrantCreated, AccessRequestCompleted?]` returns multiple Events
+in order, with the second optional. Either declaration may have one outer
+`Promise` layer. Generated metadata lists every possible schema; runtime checks
+each result against the invoked handler's list. A whole result may be absent
+only for reactions that permit no output. `@Throws` stays separate and unchanged.
+
+```ts
+// One invocation chooses exactly one generated Command message.
+// type ApprovalCommand = CreateAccessGrant | ExtendAccessGrant;
+// Both generated Events are ordered; completion may be omitted.
+// type ApprovalEvents = readonly [AccessGrantCreated, AccessRequestCompleted?];
+```
+
 Produced commands retain the source actor, tenant, origin, and causal lineage.
 The enqueue is post-commit best effort, not an atomic outbox or exactly-once
 delivery: a process crash between commit and enqueue can lose a child. Accepted
@@ -299,11 +315,7 @@ import {
   type ProjectId,
 } from "../generated/spine/server/testing/project_workflow_pb.js";
 
-class ApprovalCoordinator extends ProcessManager<
-  ProjectId,
-  typeof CoordinationStateSchema,
-  number
-> {
+class ApprovalCoordinator extends ProcessManager<ProjectId, typeof CoordinationStateSchema> {
   @Command
   approve(command: ApproveProject, context: CommandContext): ScheduleProject {
     this.update((draft) => Object.assign(draft, { id: this.id, projectName: command.status }));
@@ -335,7 +347,7 @@ const registry: GeneratedHandlerRegistry = {
 };
 const [handlers] = new HandlerRegistryIngestor().ingest(registry);
 if (handlers === undefined) throw new Error("Generated Process Manager metadata is missing.");
-const repository = new Repository({
+const repository = new Repository<typeof ApprovalCoordinator>({
   entityType: ApprovalCoordinator,
   schema: CoordinationStateSchema,
   handlers: handlers as EntityHandlersMetadata<ApprovalCoordinator, typeof CoordinationStateSchema>,
@@ -464,6 +476,10 @@ handler, `update(mutator)` changes the active draft and returns the draft;
 `tryUpdate(mutator)` validates a scratch draft and returns violations without
 applying an invalid change. Entity lifecycle and version changes are committed
 only after the transaction accepts.
+Every Entity exposes the generated Spine `Version` message, starting at number
+zero. A dispatch that produces Events or changes state or lifecycle advances it
+once; no-op and rejected dispatches do not. Repositories restore and persist the
+full Version, including its timestamp, across current state, history, and Stand.
 
 ## Signals, validation, and rejection behavior
 
