@@ -41,10 +41,12 @@ import {
   Aggregate,
   BoundedContext,
   EntityHandlers,
+  HandlerRegistryIngestor,
   ProcessManager,
   Projection,
   Repository,
   SpineServices,
+  type EntityHandlersMetadata,
 } from "../../src/index.js";
 import {
   NativeProjectStateSchema,
@@ -133,9 +135,7 @@ describe("native service subscriptions", () => {
         new Repository({
           entityType: NativeAggregate,
           schema: NativeProjectStateSchema,
-          handlers: EntityHandlers.define(NativeAggregate, NativeProjectStateSchema, (builder) => [
-            builder.assign(AssignReviewTaskSchema, "assign"),
-          ]),
+          handlers: nativeAggregateHandlers(),
           events: [TaskCreatedSchema],
         }),
       )
@@ -260,6 +260,37 @@ describe("native service subscriptions", () => {
     }
   });
 });
+
+/**
+ * Materializes the Native Aggregate assignment and its declared Event result.
+ *
+ * @returns Handler metadata for the Native Aggregate.
+ */
+function nativeAggregateHandlers(): EntityHandlersMetadata<
+  NativeAggregate,
+  typeof NativeProjectStateSchema
+> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: NativeAggregate,
+        stateSchema: NativeProjectStateSchema,
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "assign",
+            input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+            outcomes: { returned: [TaskCreatedSchema], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0];
+  if (handlers === undefined) throw new Error("Expected Native Aggregate handlers.");
+  return handlers as EntityHandlersMetadata<NativeAggregate, typeof NativeProjectStateSchema>;
+}
 
 function createProcessManagerContext(name: string): BoundedContext {
   return BoundedContext.multitenant(name)

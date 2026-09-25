@@ -186,5 +186,26 @@ The selected final profile is `pnpm verify:release`, followed by
 `node scripts/release-cli.mjs prepare --check`, matching the Build workflow.
 No publication is requested or performed.
 
+The first full release run passed the generation, build, type, lint, formatting,
+documentation, dependency, and release-readiness checks. Its test phase ended
+with 4,953 passing and three failing tests across 302 files (300 passing).
+The failures were two BlackBox subscription/query tests and one native
+Aggregate subscription test. Their old manual handler fixtures did not declare
+the Events returned by the invoked Command handler, so the new per-handler
+output validation correctly rejected those results before publication.
+The run did not establish a passing global coverage result.
+
+The correction adds explicit output metadata to those two fixtures without
+changing runtime validation or timeouts. The two affected Vitest files pass
+20 tests, and the shared BlackBox Node contract passes 16 tests. The complete
+cheap preflight will be repeated before the second full release attempt.
+No production source or branch changed in this correction. The earlier scoped
+coverage inspection of Entity, transaction, repository, and standalone output
+branches remains applicable; the full gate must still establish global coverage.
+The repeated cheap preflight passed: focused Vitest 20/20 in the two failed
+files, shared BlackBox Node contract 16/16, testing/server/tooling TypeScript
+checks, targeted ESLint, cleanup, TSDoc, generated API/audience/snippet docs,
+changed-file Prettier, and `git diff --check`.
+
 The branch has no open PR. Build runs only on PRs to master; permission to
 create one remains unanswered. Local checks cannot be reported as GitHub CI.
