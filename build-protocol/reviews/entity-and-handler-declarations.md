@@ -1,6 +1,6 @@
 # Entity and handler declarations: reviews
 
-Status: round 2 corrections implemented; final mechanical checks in progress.
+Status: all three fresh review rounds complete; final corrections in progress.
 
 Each of three rounds must use fresh reviewers with no inherited history and no
 saved memory. Review the full branch changeset against the human requirements
@@ -9,10 +9,10 @@ and their focused checks before starting the next round.
 
 ## Required concerns
 
-- Code style and maintainability: round 1 complete, two test corrections.
-- Documentation completeness: round 1 complete, one example correction.
-- TypeScript and public API: round 1 complete, three analyzer corrections.
-- Performance and reliability: round 1 complete, two ordering corrections.
+- Code style and maintainability: two round 3 test corrections in progress.
+- Documentation completeness: rounds 2 and 3 clear.
+- TypeScript and public API: round 3 Promise-alias correction in progress.
+- Performance and reliability: round 3 transaction correction in progress.
 
 All four concerns apply: runtime behavior and persistence, public declarations
 and generated metadata, substantial source structure, and public documentation
@@ -40,7 +40,8 @@ waits for capacity. Each round collects all results before corrections begin.
    baseline `2b27a430da213438d600aff8d4a6cdfb7c0cec98`; corrections in progress.
 2. Reviewing `f4746b8b7f41db9e916658f0085b4265bc63cd92` against the same
    master baseline, after round 1 corrections passed and were pushed.
-3. Pending; starts only after round 2 corrections.
+3. Reviewing `c01966b2958fee434914c01fb79a5c787e4a66ad` against the same
+   master baseline, after round 2 corrections passed and were pushed.
 
 Record reviewer identity, explicit model/reasoning, checked commit, findings,
 decisions, correction evidence, and completion here at each round boundary.
@@ -179,3 +180,59 @@ passed directly instead of through redundant callback wrappers.
 
 No finding was dismissed. Final mechanical checks and the correction push
 precede the third fresh review round.
+
+The five corrections were committed and pushed in `c01966b29`. All 433 focused
+tests passed, together with tooling/server typechecks, ESLint, cleanup, TSDoc,
+formatting and diff checks.
+
+### Round 3 assignments
+
+Explicit expected profiles and actual startup metadata agree:
+
+- Performance/reliability: Sol/medium, session
+  `01a0d81a-2938-7843-b900-7d576621da4d`.
+- TypeScript/API: Sol/medium, session
+  `01a0d81a-2dd0-7e30-afa6-2dbe3adbf92b`.
+- Documentation: Luna/medium, session
+  `01a0d81a-325c-7ff3-bef5-8d4ff4296eb5`.
+- Style/maintainability: Sol/medium, session
+  `01a0d81c-8044-75c1-a2cf-418d83a8e9b9`, started after documentation finished.
+
+Each session is fresh, ephemeral and read-only, with memory and child agents
+disabled. They have the original requirements and the full branch comparison,
+split by concern, without preceding review reports or implementation logs.
+
+Round 3 documentation review is clear. TypeScript/API found that an imported
+alias chain ending in Promise is rejected because unwrapping accepts only a
+direct alias body. Main also identified the same restriction for concrete
+generic Promise aliases; both forms need regression reproduction and one
+checker-based correction.
+
+Reliability found that a public transaction with previous state A and supplied
+draft B incorrectly compares against B to detect changes. Compare against A
+when present; retain the initial-draft baseline for unchanged fresh Entities.
+Regression tests must cover validation and version advancement.
+
+Style found a history helper that drops records with missing Versions and a
+fixture still named for bigint versions. Main is correcting these two test-only
+issues in the routing test, while the original implementer corrects the analyzer
+and transaction in separate files. The full finding batch was collected before
+any correction started. No finding was dismissed.
+
+### Round 3 correction evidence
+
+The supplied-draft transaction regressions first demonstrated skipped validation
+and version advancement. Comparing against prior state when present corrects
+both; all 30 transaction tests pass, including fresh no-op behavior.
+Imported alias chains and local/imported concrete generic Promise aliases first
+failed, then passed through checked built-in Promise resolution under strict
+compiler checking. Nested Promise and custom thenable negative cases still pass.
+
+The history assertion now checks every record and fails if any Version is
+missing. The fixture and helper names describe Spine Version messages. All 277
+routing tests and their lint/format checks passed. Final combined checks and
+the correction checkpoint precede the one repository-wide release verification.
+
+The combined focused run passed 437 tests in six files with one Vitest worker.
+Root tooling and server TypeScript checks, targeted ESLint, cleanup, and TSDoc
+passed. The correction checkpoint will be pushed before release verification.

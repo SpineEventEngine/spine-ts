@@ -632,14 +632,14 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema> {
   /**
    * Tests whether a dispatch produced Events or changed state or lifecycle.
    *
-   * @param next Draft state to compare with the initial state.
+   * @param next Draft state to compare with committed state or the initial new-Entity draft.
    * @param producedEvents Whether the handler produced Events.
    * @returns `true` when the dispatch requires a new Version.
    */
   #changed(next: MessageShape<Schema>, producedEvents: boolean): boolean {
     return (
       producedEvents ||
-      !TransactionDrafts.equal(this.#schema, this.#initialDraft, next) ||
+      !TransactionDrafts.equal(this.#schema, this.#previous ?? this.#initialDraft, next) ||
       this.#lifecycle.archived !== this.#initialLifecycle.archived ||
       this.#lifecycle.deleted !== this.#initialLifecycle.deleted
     );

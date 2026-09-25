@@ -1059,7 +1059,7 @@ class MalformedEventAggregate extends Aggregate<string, typeof ProjectStateSchem
   }
 }
 
-class BigintVersionAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+class SpineVersionAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static observedVersions: unknown[] = [];
 
   static reset(): void {
@@ -1067,7 +1067,7 @@ class BigintVersionAggregate extends Aggregate<string, typeof ProjectStateSchema
   }
 
   createProject(command: CreateProject) {
-    BigintVersionAggregate.observedVersions.push(this.version);
+    SpineVersionAggregate.observedVersions.push(this.version);
     return createAggregateEvent(`event-bigint-${command.name}`, command.id, 0, command.name);
   }
 
@@ -3623,9 +3623,9 @@ describe("repository signal routing", () => {
   });
 
   it("rehydrates repository-executed aggregates with Spine Versions", async () => {
-    BigintVersionAggregate.reset();
+    SpineVersionAggregate.reset();
     const context = BoundedContext.singleTenant("Tasks")
-      .add(createBigintVersionRepository())
+      .add(createSpineVersionRepository())
       .withStorageFactory(new InMemoryStorageFactory())
       .build();
 
@@ -3636,7 +3636,7 @@ describe("repository signal routing", () => {
       .commandBus()
       .post(createAggregateCommand("command-bigint-2", "task-bigint", "Two"));
 
-    expect(BigintVersionAggregate.observedVersions).toMatchObject([{ number: 0 }, { number: 1 }]);
+    expect(SpineVersionAggregate.observedVersions).toMatchObject([{ number: 0 }, { number: 1 }]);
   });
 
   it("rejects produced aggregate versions outside the protobuf int32 range", async () => {
@@ -11795,9 +11795,9 @@ function createSerialAsyncAssigneeRepository(): Repository<typeof SerialAsyncAss
   });
 }
 
-function createBigintVersionRepository(): Repository<typeof BigintVersionAggregate> {
+function createSpineVersionRepository(): Repository<typeof SpineVersionAggregate> {
   const handlers = HandlerMetadataValues.defineArity(
-    BigintVersionAggregate,
+    SpineVersionAggregate,
     ProjectStateSchema,
     (builder) => [
       builder.assign(CreateProjectSchema, "createProject"),
@@ -11814,7 +11814,7 @@ function createBigintVersionRepository(): Repository<typeof BigintVersionAggrega
   );
 
   return new Repository({
-    entityType: BigintVersionAggregate,
+    entityType: SpineVersionAggregate,
     schema: ProjectStateSchema,
     handlers,
   });
@@ -13000,7 +13000,12 @@ class CurrentRecordTestStorage<S extends Message = Message> {
       const states = await storage.states.backward(id, 10);
       return {
         current: current?.version,
-        history: states.flatMap((record) => record.version ?? []),
+        history: states.map((record) => {
+          if (record.version === undefined) {
+            throw new Error("Every stored Entity history record must include its Version.");
+          }
+          return record.version;
+        }),
       };
     } finally {
       storage.close();

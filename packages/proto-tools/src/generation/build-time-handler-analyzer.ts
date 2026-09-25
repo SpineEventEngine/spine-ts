@@ -2104,7 +2104,45 @@ const HandlerSources = Object.freeze({
     const unwrapped = HandlerSources.unwrapReadonly(typeNode);
     return ts.isTupleTypeNode(unwrapped) || ts.isArrayTypeNode(unwrapped)
       ? undefined
-      : HandlerSources.checkedSchemas(typeNode, scope, decorator === "React");
+      : (HandlerSources.checkedPromiseSchemas(typeNode, scope, decorator === "React") ??
+          HandlerSources.checkedSchemas(typeNode, scope, decorator === "React"));
+  },
+
+  /**
+   * Resolves one built-in Promise layer after TypeScript expands a whole-return alias.
+   *
+   * @param typeNode Declared handler return type.
+   * @param scope Source and checker context.
+   * @param optional Whether the reaction may return no result.
+   * @returns Inner generated schemas, or undefined for a non-Promise or invalid result.
+   */
+  checkedPromiseSchemas(
+    typeNode: ts.TypeNode,
+    scope: AnalyzerScope,
+    optional: boolean,
+  ): readonly SchemaUse[] | undefined {
+    if (!ts.isMethodDeclaration(typeNode.parent) && !ts.isTypeAliasDeclaration(typeNode.parent))
+      return undefined;
+    const checker = scope.program.getTypeChecker();
+    const type = checker.getTypeFromTypeNode(typeNode);
+    const symbol = type.getSymbol();
+    if (
+      symbol?.getName() !== "Promise" ||
+      !symbol.declarations?.some((declaration) =>
+        scope.program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
+      )
+    )
+      return undefined;
+    const [inner] = checker.getTypeArguments(type as ts.TypeReference);
+    return inner === undefined
+      ? undefined
+      : HandlerSources.fromCheckedType(
+          inner,
+          checker,
+          scope,
+          HandlerSources.newTypeWalk(),
+          optional,
+        );
   },
 
   /**

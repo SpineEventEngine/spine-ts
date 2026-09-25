@@ -152,3 +152,26 @@ No PR creation is authorized yet; the request remains unanswered.
   server TypeScript checks, targeted ESLint on four changed files,
   `pnpm lint:cleanup`, and `pnpm lint:tsdoc` passed. Formatter and diff checks
   follow the durable-log update before the correction checkpoint.
+
+## Review round 3 corrections
+
+- An existing Entity transaction with prior state A and an already supplied
+  draft B was reproduced as a false no-op: a valid B kept A's Version, and an
+  invalid B bypassed transition validation. State-change detection now compares
+  with prior committed state when present, retaining the initial draft as the
+  no-op baseline only for a fresh Entity. Both regressions were red before the
+  fix and green afterward; the unchanged incomplete new-Entity case still
+  passes.
+- Imported `Result -> AsyncResult -> Promise<TaskCreated>`, concrete generic
+  `AsyncResult<TaskCreated>`, and a local generic alias now resolve through the
+  TypeScript checker to exactly one built-in Promise layer. Strict compiler
+  diagnostics and generated metadata assertions pass. Imported nested Promise,
+  custom thenable, and an outer Promise wrapping another Promise alias remain
+  rejected. The analyzer regression was red before the checker-based fix.
+- The routing history test now asserts every returned record has a Version and
+  compares the complete Version list. Its renamed fixture describes Spine
+  Version messages rather than the former bigint representation.
+- Focused single-worker Vitest: 6 files, 437 tests passed. Root tooling and
+  server TypeScript checks, targeted ESLint, `pnpm lint:cleanup`, and
+  `pnpm lint:tsdoc` passed. The orchestrator will run the full release profile
+  once after the review convergence checkpoint.

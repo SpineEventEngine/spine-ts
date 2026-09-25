@@ -96,6 +96,38 @@ describe("entity transactions", () => {
     expect(unchanged.version.committed.number).toBe(3);
   });
 
+  it("advances Version for an already different draft of an existing Entity", () => {
+    const version = create(VersionSchema, { number: 3 });
+    const transaction = createEntityTransaction({
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
+      draft: createProjectOverviewState({ name: "Already changed" }),
+      version: { previous: version, draft: version },
+    });
+
+    const result = transaction.commit();
+    expect(result.status).toBe("accepted");
+    if (result.status !== "accepted") throw new Error("Expected an accepted commit.");
+    expect(result.version.committed.number).toBe(4);
+    expect(result.next.name).toBe("Already changed");
+  });
+
+  it("validates an already invalid draft against an existing Entity before commit", () => {
+    const version = create(VersionSchema, { number: 3 });
+    const transaction = createEntityTransaction({
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
+      draft: createProjectOverviewState({ id: "task-2" }),
+      version: { previous: version, draft: version },
+    });
+
+    const result = transaction.commit();
+    expect(result.status).toBe("rejected");
+    if (result.status !== "rejected") throw new Error("Expected a rejected commit.");
+    expect(result.version.previous.number).toBe(3);
+    expect(result.validation.violations).not.toEqual([]);
+  });
+
   it("keeps version zero when a new Entity transaction makes no change", () => {
     const version = create(VersionSchema);
     const transaction = createEntityTransaction({

@@ -300,6 +300,102 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
+  it("resolves imported alias chains and concrete generic aliases to one built-in Promise", () => {
+    const program = programWithSources(
+      "src/imported-promise-chain.ts",
+      {
+        "src/imported-promise-chain.ts": `
+        import { Aggregate, Assign } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type TaskCreated } from "../generated/events_pb.js";
+        import { type Result, type AsyncResult } from "./result-alias.js";
+        type LocalResult = AsyncResult<TaskCreated>;
+        export class ImportedPromiseChain extends Aggregate<string, typeof TaskSchema> {
+          @Assign chain(command: CreateTask): Result { throw new Error(String(command)); }
+          @Assign generic(command: CreateTask): AsyncResult<TaskCreated> {
+            throw new Error(String(command));
+          }
+          @Assign local(command: CreateTask): LocalResult { throw new Error(String(command)); }
+        }
+      `,
+        "src/result-alias.ts": `
+        import { type TaskCreated } from "../generated/events_pb.js";
+        type DirectResult = Promise<TaskCreated>;
+        export type Result = DirectResult;
+        export type AsyncResult<T> = Promise<T>;
+      `,
+        "generated/task_pb.ts": generatedTypedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+        ),
+      },
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(compilerMessages(program)).toEqual([]);
+    expect(result.diagnostics).toEqual([]);
+    expect(
+      entityReceivers(result)[0]?.handlers.map((handler) => handler.outcomes.returned),
+    ).toEqual([
+      [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+      [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+      [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+    ]);
+  });
+
+  it("rejects imported nested Promise and custom thenable aliases", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/invalid-async-alias.ts", {
+        "src/invalid-async-alias.ts": `
+        import { Aggregate, Assign } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type NestedResult, type ThenableResult, type DirectResult } from "./result-alias.js";
+        export class InvalidAsyncAlias extends Aggregate<string, typeof TaskSchema> {
+          @Assign nested(command: CreateTask): NestedResult { throw new Error(String(command)); }
+          @Assign thenable(command: CreateTask): ThenableResult { throw new Error(String(command)); }
+          @Assign wrapped(command: CreateTask): Promise<DirectResult> {
+            throw new Error(String(command));
+          }
+        }
+      `,
+        "src/result-alias.ts": `
+        import { type TaskCreated } from "../generated/events_pb.js";
+        export type DirectResult = Promise<TaskCreated>;
+        export type NestedResult = Promise<Promise<TaskCreated>>;
+        export type ThenableResult = PromiseLike<TaskCreated>;
+      `,
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+        ),
+      }),
+    );
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
+      "nested",
+      "thenable",
+      "wrapped",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_RETURN_TYPE",
+      "UNSUPPORTED_RETURN_TYPE",
+      "UNSUPPORTED_RETURN_TYPE",
+    ]);
+  });
+
   it("rejects nested arrays hidden behind a return alias", () => {
     const result = analyzeBuildHandlers(
       programWithSources("src/nested-array-alias.ts", {
