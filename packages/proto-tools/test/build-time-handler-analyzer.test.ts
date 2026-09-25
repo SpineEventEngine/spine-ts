@@ -38,8 +38,9 @@ function entityReceivers(analysis: ReturnType<typeof BuildHandlerAnalyzer.analyz
 
 describe("build-time handler analyzer", () => {
   it("generates the exact access-approval @Command union declaration", () => {
-    const result = analyzeBuildHandlers(
-      programWithSources("src/access-approvals.ts", {
+    const program = programWithSources(
+      "src/access-approvals.ts",
+      {
         "src/access-approvals.ts": `
         import { ProcessManager, Command } from "@spine-event-engine/server";
         import { AccessRequestStateSchema } from "../generated/access_state_pb.js";
@@ -52,22 +53,25 @@ describe("build-time handler analyzer", () => {
           }
         }
       `,
-        "generated/access_state_pb.ts": generatedModule(
+        "generated/access_state_pb.ts": generatedTypedModule(
           "spine/examples/access/access_requests.proto",
           "AccessRequestState",
         ),
-        "generated/access_events_pb.ts": generatedModule(
+        "generated/access_events_pb.ts": generatedTypedModule(
           "spine/examples/access/access_request_events.proto",
           "AccessRequestApproved",
         ),
-        "generated/access_commands_pb.ts": generatedModule(
+        "generated/access_commands_pb.ts": generatedTypedModule(
           "spine/examples/access/access_grant_commands.proto",
           "CreateAccessGrant",
           "ExtendAccessGrant",
         ),
-      }),
+      },
+      true,
     );
+    const result = analyzeBuildHandlers(program);
 
+    expect(compilerMessages(program)).toEqual([]);
     expect(result.diagnostics).toEqual([]);
     expect(entityReceivers(result)[0]?.handlers[0]?.outcomes.returned).toEqual([
       schema("../generated/access_commands_pb.js", "CreateAccessGrantSchema"),
@@ -80,8 +84,10 @@ describe("build-time handler analyzer", () => {
     expect(generated).toContain("ExtendAccessGrantSchema");
   });
   it("resolves native unions, optional tuples, and imported concrete generic aliases", () => {
-    const program = programWithSources("src/native-returns.ts", {
-      "src/native-returns.ts": `
+    const program = programWithSources(
+      "src/native-returns.ts",
+      {
+        "src/native-returns.ts": `
         import { ProcessManager, Command } from "@spine-event-engine/server";
         import { TaskSchema } from "../generated/task_pb.js";
         import { type CreateTask } from "../generated/commands_pb.js";
@@ -93,21 +99,24 @@ describe("build-time handler analyzer", () => {
           optional(command: CreateTask): OptionalCommands { throw new Error(String(command)); }
         }
       `,
-      "src/return-aliases.ts": `
+        "src/return-aliases.ts": `
         import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
         type Either<T, U> = T | U;
         export type CommandChoices = Either<CreateTask, RenameTask>;
         export type OptionalCommands = readonly [first: CreateTask, second?: RenameTask];
       `,
-      "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
-      "generated/commands_pb.ts": generatedModule(
-        "spine/examples/todo/task_commands.proto",
-        "CreateTask",
-        "RenameTask",
-      ),
-    });
+        "generated/task_pb.ts": generatedTypedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+          "RenameTask",
+        ),
+      },
+      true,
+    );
     const result = analyzeBuildHandlers(program);
 
+    expect(compilerMessages(program)).toEqual([]);
     expect(result.diagnostics).toEqual([]);
     expect(
       entityReceivers(result)[0]?.handlers.map((handler) => handler.outcomes.returned),
@@ -126,6 +135,80 @@ describe("build-time handler analyzer", () => {
     });
     expect(generated).toContain("CreateTaskSchema");
     expect(generated).toContain("RenameTaskSchema");
+  });
+
+  it("accepts an absent whole Event reaction result through syntax, aliases, and Promise", () => {
+    const program = programWithSources(
+      "src/optional-reactions.ts",
+      {
+        "src/optional-reactions.ts": `
+        import { ProcessManager, React } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+        import { type OptionalReaction } from "./reaction-alias.js";
+        export class OptionalReactions extends ProcessManager<string, typeof TaskSchema> {
+          @React
+          direct(event: TaskCreated): TaskRenamed | undefined { throw new Error(String(event)); }
+          @React
+          aliased(event: TaskCreated): OptionalReaction { throw new Error(String(event)); }
+          @React
+          promised(event: TaskCreated): Promise<OptionalReaction> { throw new Error(String(event)); }
+        }
+      `,
+        "src/reaction-alias.ts": `
+        import { type TaskRenamed } from "../generated/events_pb.js";
+        export type OptionalReaction = TaskRenamed | undefined;
+      `,
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/events_pb.ts": generatedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+          "TaskRenamed",
+        ),
+      },
+      false,
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(
+      entityReceivers(result)[0]?.handlers.map((handler) => handler.outcomes.returned),
+    ).toEqual([
+      [schema("../generated/events_pb.js", "TaskRenamedSchema")],
+      [schema("../generated/events_pb.js", "TaskRenamedSchema")],
+      [schema("../generated/events_pb.js", "TaskRenamedSchema")],
+    ]);
+  });
+
+  it("keeps command-accepting outputs required and rejects unknown reaction branches", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/invalid-optional.ts",
+        `
+      import { ProcessManager, Command, React } from "@spine-event-engine/server";
+      import { TaskSchema } from "../generated/task_pb.js";
+      import { type CreateTask } from "../generated/commands_pb.js";
+      import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+      export class InvalidOptional extends ProcessManager<string, typeof TaskSchema> {
+        @Command
+        command(input: CreateTask): CreateTask | undefined { throw new Error(String(input)); }
+        @React
+        reaction(event: TaskCreated): TaskRenamed | unknown { throw new Error(String(event)); }
+      }
+    `,
+        true,
+      ),
+    );
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
+      "command",
+      "reaction",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_RETURN_TYPE",
+      "UNSUPPORTED_RETURN_TYPE",
+    ]);
   });
 
   it("keeps order and repeated schemas for unions inside named readonly tuples", () => {
@@ -1876,47 +1959,55 @@ describe("build-time handler analyzer", () => {
   });
 });
 
-function programWithSource(fileName: string, source: string): ts.Program {
-  return programWithSources(fileName, {
-    [fileName]: source,
-    "generated/audit_pb.ts": generatedModule("spine/examples/todo/audit.proto", "AuditRecord"),
-    "generated/commands_pb.ts": generatedModule(
-      "spine/examples/todo/task_commands.proto",
-      "CreateTask",
-      "RenameTask",
-      "MissingSchemaCommand",
-    ),
-    "generated/events_pb.ts": generatedModule(
-      "spine/examples/todo/task_events.proto",
-      "TaskCreated",
-      "TaskRenamed",
-    ),
-    "generated/rejections_pb.ts": generatedModule(
-      "spine/examples/todo/task_rejections.proto",
-      "TaskAlreadyDone",
-    ),
-    "generated/task_list_pb.ts": generatedModule("spine/examples/todo/task_list.proto", "TaskList"),
-    "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
-    "generated/spine/examples/todo/task_commands_pb.ts": generatedModule(
-      "spine/examples/todo/task_commands.proto",
-      "CreateTask",
-      "RenameTask",
-    ),
-    "generated/spine/examples/todo/task_events_pb.ts": generatedModule(
-      "spine/examples/todo/task_events.proto",
-      "TaskCompleted",
-      "TaskCreated",
-      "TaskRenamed",
-    ),
-    "generated/spine/examples/todo/rejections_pb.ts": generatedModule(
-      "spine/examples/todo/rejections.proto",
-      "TaskAlreadyDone",
-    ),
-    "generated/spine/examples/todo/tasks_pb.ts": generatedModule(
-      "spine/examples/todo/tasks.proto",
-      "Task",
-    ),
-  });
+function programWithSource(fileName: string, source: string, strictNullChecks = false): ts.Program {
+  return programWithSources(
+    fileName,
+    {
+      [fileName]: source,
+      "generated/audit_pb.ts": generatedModule("spine/examples/todo/audit.proto", "AuditRecord"),
+      "generated/commands_pb.ts": generatedModule(
+        "spine/examples/todo/task_commands.proto",
+        "CreateTask",
+        "RenameTask",
+        "MissingSchemaCommand",
+      ),
+      "generated/events_pb.ts": generatedModule(
+        "spine/examples/todo/task_events.proto",
+        "TaskCreated",
+        "TaskRenamed",
+      ),
+      "generated/rejections_pb.ts": generatedModule(
+        "spine/examples/todo/task_rejections.proto",
+        "TaskAlreadyDone",
+      ),
+      "generated/task_list_pb.ts": generatedModule(
+        "spine/examples/todo/task_list.proto",
+        "TaskList",
+      ),
+      "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+      "generated/spine/examples/todo/task_commands_pb.ts": generatedModule(
+        "spine/examples/todo/task_commands.proto",
+        "CreateTask",
+        "RenameTask",
+      ),
+      "generated/spine/examples/todo/task_events_pb.ts": generatedModule(
+        "spine/examples/todo/task_events.proto",
+        "TaskCompleted",
+        "TaskCreated",
+        "TaskRenamed",
+      ),
+      "generated/spine/examples/todo/rejections_pb.ts": generatedModule(
+        "spine/examples/todo/rejections.proto",
+        "TaskAlreadyDone",
+      ),
+      "generated/spine/examples/todo/tasks_pb.ts": generatedModule(
+        "spine/examples/todo/tasks.proto",
+        "Task",
+      ),
+    },
+    false,
+    strictNullChecks,
+  );
 }
 
 function standaloneContractProgram(fileName: string, source: string): ts.Program {
@@ -1943,13 +2034,36 @@ function standaloneContractProgram(fileName: string, source: string): ts.Program
   });
 }
 
-function programWithSources(rootFileName: string, sources: Record<string, string>): ts.Program {
+function programWithSources(
+  rootFileName: string,
+  sources: Record<string, string>,
+  compilerChecked = false,
+  strictNullChecks = false,
+): ts.Program {
   const options: ts.CompilerOptions = {
-    experimentalDecorators: true,
+    experimentalDecorators: !compilerChecked,
     module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
     noEmit: true,
+    strict: compilerChecked,
+    strictNullChecks: compilerChecked || strictNullChecks,
+    ...(compilerChecked
+      ? {
+          paths: {
+            "@spine-event-engine/server": [resolve("packages/server/dist/index.d.ts")],
+            "@bufbuild/protobuf": [
+              resolve("packages/proto-tools/node_modules/@bufbuild/protobuf/dist/esm/index.d.ts"),
+            ],
+            "@bufbuild/protobuf/codegenv2": [
+              resolve(
+                "packages/proto-tools/node_modules/@bufbuild/protobuf/dist/esm/codegenv2/index.d.ts",
+              ),
+            ],
+          },
+        }
+      : {}),
     target: ts.ScriptTarget.ES2024,
+    ...(compilerChecked ? { types: ["node"] } : {}),
   };
   const host = ts.createCompilerHost(options);
   const originalReadFile = host.readFile.bind(host);
@@ -1968,6 +2082,15 @@ function programWithSources(rootFileName: string, sources: Record<string, string
     originalDirectoryExists?.(requested) === true;
 
   return ts.createProgram([rootFileName, ...Object.keys(sources)], options, host);
+}
+
+function compilerMessages(program: ts.Program): string[] {
+  return ts
+    .getPreEmitDiagnostics(program)
+    .map(
+      (diagnostic) =>
+        `${String(diagnostic.code)}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`,
+    );
 }
 
 function schema(moduleSpecifier: string, exportName: string) {
@@ -2022,6 +2145,29 @@ function generatedModule(protoSource: string, ...names: string[]): string {
     protoSource,
     names.map((name) => ({ exportName: name, descriptorName: name })),
   );
+}
+
+function generatedTypedModule(protoSource: string, ...names: string[]): string {
+  const protoPackage = protoSource.includes("/access/")
+    ? "spine.examples.access"
+    : "spine.examples.todo";
+  const file = "file_spine_examples_v1_test";
+  const declarations = names.map((name, index) =>
+    [
+      `export interface ${name} extends Message<"${protoPackage}.${name}"> {}`,
+      `export const ${name}Schema: GenMessage<${name}> = messageDesc(${file}, ${String(index)});`,
+    ].join("\n"),
+  );
+  return [
+    'import { type Message } from "@bufbuild/protobuf";',
+    'import { type GenMessage, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";',
+    `export const ${file} = fileDesc("${fileDescriptor(
+      protoSource,
+      names.map((name) => ({ exportName: name, descriptorName: name })),
+      protoPackage,
+    )}");`,
+    ...declarations,
+  ].join("\n");
 }
 
 function generatedModuleWithDescriptorMessages(
@@ -2119,9 +2265,11 @@ function generatedModuleWithMixedDescriptors(): string {
 function fileDescriptor(
   protoSource: string,
   messages: readonly { readonly descriptorName: string; readonly entityState?: boolean }[],
+  protoPackage?: string,
 ): string {
   const descriptor = create(FileDescriptorProtoSchema, {
     name: protoSource,
+    ...(protoPackage === undefined ? {} : { package: protoPackage }),
     messageType: messages.map(({ descriptorName, entityState }) => {
       if (entityState !== true) {
         return { name: descriptorName };

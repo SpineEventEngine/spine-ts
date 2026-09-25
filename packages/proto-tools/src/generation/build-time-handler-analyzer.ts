@@ -2098,12 +2098,13 @@ const HandlerSources = Object.freeze({
       typeNode,
       scope.imports,
       HandlerSources.newTypeWalk(),
+      decorator === "React",
     );
     if (direct !== undefined) return direct;
     const unwrapped = HandlerSources.unwrapReadonly(typeNode);
     return ts.isTupleTypeNode(unwrapped) || ts.isArrayTypeNode(unwrapped)
       ? undefined
-      : HandlerSources.checkedSchemas(typeNode, scope);
+      : HandlerSources.checkedSchemas(typeNode, scope, decorator === "React");
   },
 
   /**
@@ -2111,15 +2112,21 @@ const HandlerSources = Object.freeze({
    *
    * @param scope The current source, imports, program, and diagnostic collection.
    * @param typeNode The declared type node under inspection.
+   * @param optional Whether a whole reaction result may be absent.
    * @returns The generated schema uses, or undefined when expansion fails.
    */
-  checkedSchemas(typeNode: ts.TypeNode, scope: AnalyzerScope): readonly SchemaUse[] | undefined {
+  checkedSchemas(
+    typeNode: ts.TypeNode,
+    scope: AnalyzerScope,
+    optional = false,
+  ): readonly SchemaUse[] | undefined {
     const checker = scope.program.getTypeChecker();
     return HandlerSources.fromCheckedType(
       checker.getTypeFromTypeNode(typeNode),
       checker,
       scope,
       HandlerSources.newTypeWalk(),
+      optional,
     );
   },
 
@@ -2257,20 +2264,23 @@ const HandlerSources = Object.freeze({
    * @param imports The imports indexed for the current source.
    * @param typeNode The declared type node under inspection.
    * @param walk The bounded alias traversal state.
+   * @param optional Whether a whole reaction result may be absent.
    * @returns The emitted schemas, or undefined when the declared type is unsupported.
    */
   schemaListFromType(
     typeNode: ts.TypeNode,
     imports: ImportState,
     walk: TypeWalk,
+    optional = false,
   ): readonly SchemaUse[] | undefined {
     if (!HandlerSources.consumeTypeWalk(walk)) {
       return undefined;
     }
     const unwrapped = HandlerSources.unwrapReadonly(typeNode);
+    if (optional && unwrapped.kind === ts.SyntaxKind.UndefinedKeyword) return [];
     if (ts.isUnionTypeNode(unwrapped)) {
       const branches = unwrapped.types.map((branch) =>
-        HandlerSources.schemaListFromType(branch, imports, walk),
+        HandlerSources.schemaListFromType(branch, imports, walk, optional),
       );
       return branches.some((branch) => branch === undefined)
         ? undefined

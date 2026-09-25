@@ -809,6 +809,8 @@ class EmptyManagedAggregate extends Aggregate<string, typeof ProjectStateSchema>
 }
 
 class EnvelopeManagedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+  static payloadMode: "declared" | "undeclared" | "malformed" = "declared";
+
   createProject(command: CreateProject): SpineEvent {
     this.update((draft) =>
       Object.assign(
@@ -820,7 +822,20 @@ class EnvelopeManagedAggregate extends Aggregate<string, typeof ProjectStateSche
         }),
       ),
     );
-    return createAggregateEvent("spoofed-event", command.id, 0, command.name);
+    const envelope = createAggregateEvent("spoofed-event", command.id, 0, command.name);
+    if (EnvelopeManagedAggregate.payloadMode === "undeclared") {
+      envelope.message = AnyMessages.pack(
+        ProjectRegisteredSchema,
+        create(ProjectRegisteredSchema, { id: command.id, name: command.name, priority: 1 }),
+      );
+    }
+    if (EnvelopeManagedAggregate.payloadMode === "malformed") {
+      envelope.message = create(AnySchema, {
+        typeUrl: TypeUrls.derive(ProjectCreatedSchema),
+        value: new Uint8Array([0xff]),
+      });
+    }
+    return envelope;
   }
 }
 
@@ -3142,6 +3157,7 @@ describe("repository signal routing", () => {
   });
 
   it("persists explicit framework event envelopes returned by managed aggregate handlers", async () => {
+    EnvelopeManagedAggregate.payloadMode = "declared";
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createEnvelopeManagedRepository())
@@ -3153,6 +3169,54 @@ describe("repository signal routing", () => {
       context.commandBus().post(createAggregateCommand("command-envelope", "task-envelope")),
     ).resolves.toBeUndefined();
     await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "spoofed-event" } }]);
+  });
+
+  it("rejects an undeclared Event payload inside an Aggregate handler envelope", async () => {
+    EnvelopeManagedAggregate.payloadMode = "undeclared";
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createEnvelopeManagedRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    try {
+      await expect(
+        context
+          .commandBus()
+          .post(createAggregateCommand("command-wrong-envelope", "task-wrong-envelope")),
+      ).resolves.toBeUndefined();
+      await expect(
+        context.stand().read(ProjectStateSchema, "task-wrong-envelope"),
+      ).resolves.toBeUndefined();
+      await expect(eventStore.read()).resolves.toEqual([]);
+    } finally {
+      EnvelopeManagedAggregate.payloadMode = "declared";
+      await context.close();
+    }
+  });
+
+  it("rejects a malformed packed Event payload before Aggregate commit", async () => {
+    EnvelopeManagedAggregate.payloadMode = "malformed";
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createEnvelopeManagedRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    try {
+      await expect(
+        context
+          .commandBus()
+          .post(createAggregateCommand("command-bad-envelope", "task-bad-envelope")),
+      ).resolves.toBeUndefined();
+      await expect(
+        context.stand().read(ProjectStateSchema, "task-bad-envelope"),
+      ).resolves.toBeUndefined();
+      await expect(eventStore.read()).resolves.toEqual([]);
+    } finally {
+      EnvelopeManagedAggregate.payloadMode = "declared";
+      await context.close();
+    }
   });
 
   it("keeps an already registered repository executable after a failed second registration", async () => {
@@ -3435,7 +3499,7 @@ describe("repository signal routing", () => {
     expect((await eventStore.read())[0]?.id?.value).toMatch(UUID_PATTERN);
   });
 
-  it("preserves a returned framework envelope without reconstructing aggregate state", async () => {
+  it("rejects a returned framework envelope without a typed Event payload", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createMalformedEventRepository())
@@ -3446,7 +3510,7 @@ describe("repository signal routing", () => {
     await expect(
       context.commandBus().post(createAggregateCommand("command-malformed", "task-malformed")),
     ).resolves.toBeUndefined();
-    await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-malformed" } }]);
+    await expect(eventStore.read()).resolves.toEqual([]);
   });
 
   it("rejects invalid aggregate command payloads before durable aggregate work", async () => {
@@ -11555,10 +11619,19 @@ function createEmptyManagedRepository(): Repository<typeof EmptyManagedAggregate
 }
 
 function createEnvelopeManagedRepository(): Repository<typeof EnvelopeManagedAggregate> {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     EnvelopeManagedAggregate,
     ProjectStateSchema,
     (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
   );
 
   return new Repository({
@@ -11641,10 +11714,18 @@ function createTransitionViolatingRepository(): Repository<typeof TransitionViol
 }
 
 function createRecoveringTransitionRepository(): Repository<typeof RecoveringTransitionAggregate> {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     RecoveringTransitionAggregate,
     ProjectStateSchema,
     (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
   );
 
   return new Repository({
@@ -11655,9 +11736,19 @@ function createRecoveringTransitionRepository(): Repository<typeof RecoveringTra
 }
 
 function createAsyncAssigneeRepository(): Repository<typeof AsyncAssigneeAggregate> {
-  const handlers = EntityHandlers.define(AsyncAssigneeAggregate, ProjectStateSchema, (builder) => [
-    builder.assign(CreateProjectSchema, "createProject"),
-  ]);
+  const handlers = HandlerMetadataValues.defineArity(
+    AsyncAssigneeAggregate,
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
+  );
 
   return new Repository({
     entityType: AsyncAssigneeAggregate,
@@ -11683,10 +11774,18 @@ function createRejectedAsyncAssigneeRepository(): Repository<
 }
 
 function createSerialAsyncAssigneeRepository(): Repository<typeof SerialAsyncAssigneeAggregate> {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     SerialAsyncAssigneeAggregate,
     ProjectStateSchema,
     (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
   );
 
   return new Repository({
@@ -11697,10 +11796,22 @@ function createSerialAsyncAssigneeRepository(): Repository<typeof SerialAsyncAss
 }
 
 function createBigintVersionRepository(): Repository<typeof BigintVersionAggregate> {
-  const handlers = EntityHandlers.define(BigintVersionAggregate, ProjectStateSchema, (builder) => [
-    builder.assign(CreateProjectSchema, "createProject"),
-    builder.apply(ProjectCreatedSchema, "applyTask"),
-  ]);
+  const handlers = HandlerMetadataValues.defineArity(
+    BigintVersionAggregate,
+    ProjectStateSchema,
+    (builder) => [
+      builder.assign(CreateProjectSchema, "createProject"),
+      builder.apply(ProjectCreatedSchema, "applyTask"),
+    ],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
+  );
 
   return new Repository({
     entityType: BigintVersionAggregate,
@@ -11710,12 +11821,20 @@ function createBigintVersionRepository(): Repository<typeof BigintVersionAggrega
 }
 
 function createProjectionProducingRepository(): Repository<typeof ProjectionProducingAggregate> {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     ProjectionProducingAggregate,
     ProjectStateSchema,
     (builder) => [
       builder.assign(CreateProjectSchema, "createProject"),
       builder.apply(ProjectCreatedSchema, "applyProjection"),
+    ],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
     ],
   );
 
@@ -11729,12 +11848,20 @@ function createProjectionProducingRepository(): Repository<typeof ProjectionProd
 function createTenantProjectionRepo(): Repository<
   typeof CommandTenantProjectionProducingAggregate
 > {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     CommandTenantProjectionProducingAggregate,
     ProjectStateSchema,
     (builder) => [
       builder.assign(CreateProjectSchema, "createProject"),
       builder.apply(ProjectCreatedSchema, "applyProjection"),
+    ],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
     ],
   );
 

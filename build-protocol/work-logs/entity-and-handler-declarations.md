@@ -121,7 +121,34 @@ packages/server-blackbox-tests/test/project-event-routing.test.ts
 ## Integration
 
 Version checkpoint `ed692fbb9` and analyzer checkpoint `28450b3f7` are
-committed and pushed. Runtime checkpoint `2c71dfffe` is pushed; review round 1
-correction checkpoint is pending. Later review rounds and full release
-verification remain in progress.
+committed and pushed. Runtime checkpoint `2c71dfffe` and review round 1
+correction checkpoint `f4746b8b7` are pushed. Later review rounds and full
+release verification remain in progress.
 No PR creation is authorized yet; the request remains unanswered.
+
+## Review round 2 corrections
+
+- Aggregate Command execution now unpacks and validates manually returned Event
+  envelopes against the invoked handler's declared Event schemas before
+  committing. Undeclared and malformed packed payload regressions were red
+  against the previous behavior, then green with no Stand or EventStore record.
+  Explicitly declared valid manual envelopes still pass. Nine older test
+  fixtures now declare their own expected Event outcomes.
+- The analyzer accepts a missing whole result for `@React` Event reactions,
+  including imported aliases and outer Promise returns. A red three-method
+  regression turned green. Command-accepting optional results and unknown
+  reaction branches remain unsupported, with a new negative test.
+- Compiler-checked virtual Protobuf fixtures now prove that the exact
+  access-approval Command union and an imported union/optional tuple alias
+  compile under strict TypeScript and current decorators, in addition to
+  generating both schema alternatives. The optional reaction alias test enables
+  strict null checking so its missing branch remains visible. The initially
+  loose virtual schemas could not establish the compiler claim and were
+  replaced in these positive fixtures only.
+- Repository class documentation now describes full Process Manager Versions.
+  Aggregate, Projection, and Process Manager Stand notifications pass deferred
+  updates directly instead of forwarding through single-use callbacks.
+- Focused single-worker Vitest: 6 files, 433 tests passed. Root tooling and
+  server TypeScript checks, targeted ESLint on four changed files,
+  `pnpm lint:cleanup`, and `pnpm lint:tsdoc` passed. Formatter and diff checks
+  follow the durable-log update before the correction checkpoint.

@@ -516,8 +516,8 @@ export class RepositoryIdentityError extends Error {
  * and write changed projection state through the context-owned `Stand`. With
  * authentic process-manager metadata, built contexts can execute command
  * assignees, event reactors, and event-commanding handlers, storing changed
- * process-manager state through tenant-scoped Stand records with numeric
- * versions. The `events` option declares generated event schemas emitted by
+ * process-manager state through tenant-scoped Stand records with full Spine
+ * Versions. The `events` option declares generated event schemas emitted by
  * aggregate and process-manager producer handlers. The repository surface still
  * does not expose direct entity lookup/storage APIs, inbox/delivery management,
  * caches, lifecycle monitors, or transport startup.
@@ -1718,34 +1718,22 @@ class AggregateExecutionSupport {
       deferred.cancel();
       throw error;
     }
-    this.#notifyDeferredAggregate(deferred, events);
+    this.#notifyAggregate(deferred, events);
     return true;
-  }
-
-  /**
-   * Notifies Stand for a committed Aggregate and reports delivery failure.
-   *
-   * @param deferred Deferred Stand update created before the commit.
-   * @param events Produced Events available for failure reporting.
-   */
-  #notifyDeferredAggregate(
-    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
-    events: readonly Event[],
-  ): void {
-    this.#notifyAggregate(() => {
-      deferred.notify();
-    }, events);
   }
 
   /**
    * Notifies Stand after an Aggregate commit and reports delivery failure.
    *
-   * @param onNotify Delivers the deferred Stand update.
+   * @param deferred Deferred Stand update created before the commit.
    * @param events Produced Events available for failure reporting.
    */
-  #notifyAggregate(onNotify: () => void, events: readonly Event[]): void {
+  #notifyAggregate(
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
+    events: readonly Event[],
+  ): void {
     try {
-      onNotify();
+      deferred.notify();
     } catch (error) {
       const event = events[events.length - 1];
       if (event !== undefined) this.#runtime.publisher.reportFailure("event", event, error);
@@ -2772,12 +2760,8 @@ class ProjectionEventExecution {
       state,
       RepositoryStand.standUpdateOptions(tenantOptions.tenantId, version, lifecycle),
     );
-    await this.#commitProjectionOrCancel(loaded, entityId, state, version, lifecycle, () => {
-      deferred.cancel();
-    });
-    this.#notifyProjection(() => {
-      deferred.notify();
-    });
+    await this.#commitProjectionOrCancel(loaded, entityId, state, version, lifecycle, deferred);
+    this.#notifyProjection(deferred);
     this.#publishProjectionChange(loaded, oldState, mode, state, lifecycle, version);
   }
 
@@ -2789,7 +2773,7 @@ class ProjectionEventExecution {
    * @param state Accepted Projection state.
    * @param version Current Spine Version.
    * @param lifecycle Accepted lifecycle flags.
-   * @param onCancel Cancels the deferred Stand update.
+   * @param deferred Deferred Stand update to cancel if storage rejects the commit.
    * @returns Completion after a successful storage commit.
    */
   async #commitProjectionOrCancel(
@@ -2798,7 +2782,7 @@ class ProjectionEventExecution {
     state: Message,
     version: Version,
     lifecycle: EntityLifecycleFlags,
-    onCancel: () => void,
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
   ): Promise<void> {
     try {
       const outcome = await this.#commitProjectionRecord(
@@ -2810,7 +2794,7 @@ class ProjectionEventExecution {
       );
       if (outcome !== "committed") throw new Error("Concurrent Projection state commit conflict.");
     } catch (error) {
-      onCancel();
+      deferred.cancel();
       throw error;
     }
   }
@@ -2818,11 +2802,11 @@ class ProjectionEventExecution {
   /**
    * Notifies Stand after a Projection commit and reports delivery failure.
    *
-   * @param onNotify Delivers the deferred Stand update.
+   * @param deferred Deferred Stand update to notify.
    */
-  #notifyProjection(onNotify: () => void): void {
+  #notifyProjection(deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>): void {
     try {
-      onNotify();
+      deferred.notify();
     } catch (error) {
       this.#runtime.publisher.reportFailure("event", this.#event, error);
     }
@@ -3180,9 +3164,7 @@ class ProcessManagerExecutionSupport {
       events,
       deferred,
     );
-    this.#notifyProcessManager(() => {
-      deferred.notify();
-    }, events);
+    this.#notifyProcessManager(deferred, events);
     return true;
   }
 
@@ -3285,12 +3267,15 @@ class ProcessManagerExecutionSupport {
   /**
    * Notifies Stand after a Process Manager commit and reports delivery failure.
    *
-   * @param onNotify Delivers the deferred Stand update.
+   * @param deferred Deferred Stand update to notify.
    * @param events Produced or diagnostic Events available for failure reporting.
    */
-  #notifyProcessManager(onNotify: () => void, events: readonly Event[]): void {
+  #notifyProcessManager(
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
+    events: readonly Event[],
+  ): void {
     try {
-      onNotify();
+      deferred.notify();
     } catch (error) {
       this.#runtime.publisher.reportFailure(
         "event",
@@ -5889,7 +5874,10 @@ const RepositoryHandlers = {
   ): void {
     const schemas = HandlerMetadataValues.returnedSchemas(handler);
     for (const signal of signals) {
-      if (allowEnvelopes && EntityInvocation.isEventEnvelope(signal)) continue;
+      if (allowEnvelopes && EntityInvocation.isEventEnvelope(signal)) {
+        RepositoryHandlers.requireDeclaredEnvelope(handler, signal, schemas);
+        continue;
+      }
       const typeName = EntityInvocation.messageTypeName(signal);
       if (!schemas.some((schema) => schema.typeName === typeName)) {
         throw new Error(
@@ -5897,6 +5885,32 @@ const RepositoryHandlers = {
         );
       }
     }
+  },
+
+  /**
+   * Validates a returned Event envelope against the invoked handler's declared schemas.
+   *
+   * @param handler Invoked handler declaration.
+   * @param event Returned Event envelope.
+   * @param schemas Event schemas declared by this handler.
+   */
+  requireDeclaredEnvelope(
+    handler: HandlerMetadata,
+    event: Event,
+    schemas: readonly MessageSchema[],
+  ): void {
+    const packed = EntityInvocation.requireSignalMessage(event.message, "event");
+    const schema = schemas.find((candidate) => TypeUrls.derive(candidate) === packed.typeUrl);
+    if (schema === undefined) {
+      throw new Error(
+        `Handler "${handler.methodName}" returned undeclared message "${packed.typeUrl}".`,
+      );
+    }
+    const payload = AnyMessages.unpack(packed, schema);
+    if (payload === undefined) {
+      throw new Error(`Handler "${handler.methodName}" returned invalid event payload.`);
+    }
+    Validate.check(schema, payload);
   },
 
   /**

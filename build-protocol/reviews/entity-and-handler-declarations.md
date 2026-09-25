@@ -1,7 +1,6 @@
 # Entity and handler declarations: reviews
 
-Status: round 1 complete; eight corrections implemented, final focused checks
-in progress before the next round.
+Status: round 2 corrections implemented; final mechanical checks in progress.
 
 Each of three rounds must use fresh reviewers with no inherited history and no
 saved memory. Review the full branch changeset against the human requirements
@@ -39,7 +38,8 @@ waits for capacity. Each round collects all results before corrections begin.
 
 1. Reviewed `2c71dfffe462dbdbad663d43dd78c77322113ae5` against the master
    baseline `2b27a430da213438d600aff8d4a6cdfb7c0cec98`; corrections in progress.
-2. Pending; starts only after round 1 corrections.
+2. Reviewing `f4746b8b7f41db9e916658f0085b4265bc63cd92` against the same
+   master baseline, after round 1 corrections passed and were pushed.
 3. Pending; starts only after round 2 corrections.
 
 Record reviewer identity, explicit model/reasoning, checked commit, findings,
@@ -117,3 +117,65 @@ the five runtime/analyzer findings; no production files had concurrent writers.
 
 No finding was dismissed. Combined checks and the pushed correction commit
 are recorded before round 2 starts.
+
+All eight corrections were committed and pushed in `f4746b8b7`. The combined
+affected tests passed 355/355, both tooling and server typechecks passed, and
+cleanup, TSDoc, ESLint, compiled snippets, formatting and diff checks passed.
+
+### Round 2 assignments
+
+Explicit expected profiles and actual startup metadata agree:
+
+- Performance/reliability: Sol/medium, session
+  `01a0d802-d6bd-7c02-85b2-18eac816a0b0`.
+- TypeScript/API: Sol/medium, session
+  `01a0d802-db29-7083-a4b4-3de42ab789a7`.
+- Documentation: Luna/medium, session
+  `01a0d802-dfbc-7fb1-85b0-2734edb45280`.
+- Style/maintainability: Sol/medium, session
+  `01a0d804-e2b9-7643-bc96-bfe72faae112`, started after documentation finished.
+
+These are new read-only sessions, with memory and child agents disabled.
+They receive the original requirements and complete branch comparison, split
+by concern, without earlier review findings or implementation history.
+
+### Round 2 findings
+
+- Documentation: no actionable findings.
+- Reliability: Event envelopes bypass the invoked Aggregate handler's schema
+  check. Validate their packed payload against that handler's declarations,
+  retaining valid manually configured envelope support.
+- TypeScript/API: a whole `Event | undefined` reaction return is rejected even
+  for reactions permitted to produce nothing. Support that declaration while
+  preserving required output for command-accepting handlers. Repository class
+  TSDoc also still describes Process Manager versions as numeric; correct it.
+- Style/maintainability: positive native-return fixtures assert only analyzer
+  diagnostics, not TypeScript compiler diagnostics. Add the compiler assertion.
+  Notification helpers add callbacks solely to invoke deferred update methods;
+  pass the deferred update directly and remove unnecessary forwarding layers.
+
+Main confirmed the envelope bypass and optional-result rejection in the source.
+All five findings were returned together to the original implementer for focused
+regressions and corrections. The reviewer reports contain no executed tests;
+correction checks will provide that evidence before round 3.
+
+### Round 2 correction evidence
+
+Undeclared and malformed Event envelopes first reached successful command
+completion in regression tests; corrected handler execution fails before storage
+or publication, while preserving declared manual envelopes. CommandBus reports
+admitted handler failures separately and still resolves `post()`. Nine older fixtures
+now declare their handler's returned schemas explicitly. All 277 routing tests
+pass. Missing whole reaction results now work for direct, aliased and Promise
+returns; required Command outputs and unknown branches remain rejected.
+All 65 analyzer tests pass.
+
+Positive exact-union and imported union/tuple examples now also assert zero
+TypeScript pre-emit diagnostics under strict checking. This exposed weak fixture
+schema types and legacy decorator settings, which were corrected rather than
+ignored. The optional reaction alias test enables strict null checking.
+Repository TSDoc now states full Spine Version, and deferred update objects are
+passed directly instead of through redundant callback wrappers.
+
+No finding was dismissed. Final mechanical checks and the correction push
+precede the third fresh review round.
