@@ -14,11 +14,11 @@ const repoRoot = new URL("..", import.meta.url).pathname;
 describe("new package publication", () => {
   it("resolves a public package from the fixed release inventory", () => {
     expect(resolveNewPackageTarget(repoRoot, "packages/storage-postgres")).toEqual({
-      archiveName: "spine-event-engine-storage-postgres-2.0.0-snapshot.14.tgz",
+      archiveName: "spine-event-engine-storage-postgres-2.0.0-snapshot.15.tgz",
       directory: "packages/storage-postgres",
       name: "@spine-event-engine/storage-postgres",
       tag: "snapshot",
-      version: "2.0.0-snapshot.14",
+      version: "2.0.0-snapshot.15",
     });
     expect(() => resolveNewPackageTarget(repoRoot, "examples/todo")).toThrow(
       "public package directory",

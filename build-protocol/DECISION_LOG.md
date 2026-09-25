@@ -4,6 +4,42 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0127: Use Spine Version and native handler return types
+
+Status: Accepted; implementation in progress.
+
+Date: 2026-09-25
+
+Context: The human requires Spine JVM-compatible Entity versions and handler
+results. Arbitrary Entity version metadata was a temporary arrangement before
+dispatch and storage existed. Current repositories now store Spine `Version`,
+but the Entity API still accepts arbitrary metadata. Handler generation also
+rejects valid TypeScript unions even though it already supports fixed tuples.
+
+Decision: Entity declarations have ID and state-schema parameters only. The
+framework supplies the generated Spine `Version`, advances it according to
+current JVM dispatch rules, and stores the same number and timestamp everywhere
+that describes the committed Entity. A Projection advances its own counter,
+independently of the incoming Event's producer version. This supersedes the
+custom-version portion of D-0042 and the temporary Entity shells in D-0044.
+
+Use native TypeScript unions for one selected result and tuples for multiple
+results, including optional tuple positions and supported aliases. Resolve all
+possible generated schemas with the existing TypeScript compiler. Keep runtime
+validation tied to the invoked handler; do not add a second return-shape type
+system or third-party Either/tuple wrappers.
+
+Sources: official Spine JVM commit `ea3067b137938ac0beb6920c39d11e300976fcc9`,
+Entity.kt, AggregateTransaction.kt, ProjectionTransaction.java, Phase.java,
+Versions.java, Pair.java, Either.java, and the handler signature classes.
+The [approved plan](planning/entity-and-handler-declarations.md) records the
+specific findings, examples, boundaries, and acceptance tests.
+
+Consequences: the snapshot public Entity API changes intentionally; existing
+Protobuf wire and storage schemas remain unchanged. Native TypeScript checks
+tuple shape, while runtime checks each returned message against the handler's
+declared schemas. No new package or compatibility wrapper is required.
+
 ## D-0126: Use Complete Application Replicas Behind Node-Local HTTP/2 Coordinators
 
 Status: Accepted

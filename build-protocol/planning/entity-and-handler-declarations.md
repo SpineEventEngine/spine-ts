@@ -26,11 +26,11 @@ Estimated analysis time: 0.5–0.83 hours.
 Use independent read-only investigations under the protocol's parallel research
 rule. No child may edit files, build, run test suites, or spawn children.
 
-| Assignment | Function | Explicit model | Explicit reasoning |
-| --- | --- | --- | --- |
-| Entity version investigation | Repository and correctness analysis | `gpt-6-sol` | `medium` |
-| Handler returns investigation | Repository and public API analysis | `gpt-6-sol` | `medium` |
-| Proposed plan assessment | Existing requirements splitter | `gpt-6-astra` | `high` |
+| Assignment                    | Function                            | Explicit model | Explicit reasoning |
+| ----------------------------- | ----------------------------------- | -------------- | ------------------ |
+| Entity version investigation  | Repository and correctness analysis | `gpt-6-sol`    | `medium`           |
+| Handler returns investigation | Repository and public API analysis  | `gpt-6-sol`    | `medium`           |
+| Proposed plan assessment      | Existing requirements splitter      | `gpt-6-astra`  | `high`             |
 
 Desktop exposes these explicit model/reasoning selections. Actual runtime
 self-inspection is unavailable; configured dispatch fields are recorded here.
@@ -78,7 +78,7 @@ the Entity API, and some paths calculate or store the wrong value.
   serializes the generated Spine `Version` inside `EntityRecord`.
 - JVM `server/src/main/kotlin/io/spine/server/entity/Entity.kt:46–74` has two
   generic parameters and a fixed `Version`. `core/src/main/java/io/spine/core/
-  Versions.java:66–74` increments the number and sets the timestamp.
+Versions.java:66–74` increments the number and sets the timestamp.
 
 There are four concrete behavioral problems:
 
@@ -316,6 +316,8 @@ two-round maximum because the human explicitly requested three.
 
 Selected skills: implement, subagent-driven-development, test-driven-development;
 requesting-code-review and verification-before-completion apply at their stages.
+The architecture-decision-records skill guided the concise D-0127 record;
+the existing decision-log format is retained.
 Sources: session catalog, repo expected-skill manifest, bounded `rg --files` scan
 under `/Users/armiol/.agents/skills`, and installed skill-lock presence.
 Project rules override skill suggestions for a fresh implementer per subtask,
@@ -326,3 +328,17 @@ The existing plan and this record replace an extra skill-specific progress file.
 Verification profile: release, because shared runtime and generator APIs change.
 Focused tests use a single worker to keep local CPU use bounded. No full baseline
 test run is planned. CI must pass at the final pushed SHA.
+
+Additional read-only assignment: documentation/API scan, explicitly
+`gpt-6-luna` / `medium`, to identify live docs and examples requiring migration.
+No implementation or review conclusion is delegated to this scan.
+
+Release preparation: registry lookup found snapshot.15 absent for all 19 public
+packages. Commit `6dccc8fc1` updates only the top-level version in all 31 workspace
+manifests. Pins, source manifests, lockfile, and related expectations follow in
+a separate commit. Frozen install succeeded without lifecycle scripts.
+
+GitHub access: saved CLI login works after removing stale GH_TOKEN/GITHUB_TOKEN
+overrides from the individual command environment. Build runs only on PRs; none
+exists for this branch. A nonblocking request for permission to create a draft PR
+was sent to the human. No PR will be created without that approval.
