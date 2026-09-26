@@ -2260,7 +2260,7 @@ const HandlerSources = Object.freeze({
     const optional = kind === "event-reaction" || kind === "command-reaction";
     const direct = HandlerSources.schemaListFromType(
       typeNode,
-      scope.imports,
+      scope,
       HandlerSources.newTypeWalk(),
       optional,
     );
@@ -2494,7 +2494,7 @@ const HandlerSources = Object.freeze({
   /**
    * Collects generated schemas from a declared return type.
    *
-   * @param imports The imports indexed for the current source.
+   * @param scope The current source, imports, and compiler program.
    * @param typeNode The declared type node under inspection.
    * @param walk The bounded alias traversal state.
    * @param optional Whether a whole reaction result may be absent.
@@ -2503,7 +2503,7 @@ const HandlerSources = Object.freeze({
    */
   schemaListFromType(
     typeNode: ts.TypeNode,
-    imports: ImportState,
+    scope: AnalyzerScope,
     walk: TypeWalk,
     optional = false,
     collectionDepth = 0,
@@ -2513,7 +2513,7 @@ const HandlerSources = Object.freeze({
     if (optional && unwrapped.kind === ts.SyntaxKind.UndefinedKeyword) return [];
     if (ts.isUnionTypeNode(unwrapped)) {
       const branches = unwrapped.types.map((branch) =>
-        HandlerSources.schemaListFromType(branch, imports, walk, optional, collectionDepth),
+        HandlerSources.schemaListFromType(branch, scope, walk, optional, collectionDepth),
       );
       return branches.some((branch) => branch === undefined)
         ? undefined
@@ -2522,17 +2522,18 @@ const HandlerSources = Object.freeze({
     if (
       ts.isArrayTypeNode(unwrapped) ||
       ts.isTupleTypeNode(unwrapped) ||
-      (ts.isTypeReferenceNode(unwrapped) && HandlerSources.isArrayReferenceType(unwrapped))
-    )
+      (ts.isTypeReferenceNode(unwrapped) &&
+        HandlerSources.isArrayReferenceType(unwrapped, scope.program))
+    ) {
       return HandlerSources.schemaListFromCollection(
         unwrapped,
-        imports,
+        scope,
         walk,
         optional,
         collectionDepth,
       );
-
-    const schema = HandlerSources.schemaUseFromType(unwrapped, imports, walk);
+    }
+    const schema = HandlerSources.schemaUseFromType(unwrapped, scope.imports, walk);
     return schema === undefined ? undefined : [schema];
   },
 
@@ -2540,7 +2541,7 @@ const HandlerSources = Object.freeze({
    * Resolves a declared array or tuple collection return.
    *
    * @param typeNode Declared collection type.
-   * @param imports Indexed imports for the source.
+   * @param scope The current source, imports, and compiler program.
    * @param walk Bounded alias traversal state.
    * @param optional Whether undefined is permitted in a reaction result.
    * @param collectionDepth Number of enclosing collections.
@@ -2548,14 +2549,14 @@ const HandlerSources = Object.freeze({
    */
   schemaListFromCollection(
     typeNode: ts.TypeNode,
-    imports: ImportState,
+    scope: AnalyzerScope,
     walk: TypeWalk,
     optional: boolean,
     collectionDepth: number,
   ): readonly SchemaUse[] | undefined {
     if (collectionDepth > 0) return undefined;
     if (ts.isTupleTypeNode(typeNode))
-      return HandlerSources.schemaListFromTuple(typeNode, imports, walk);
+      return HandlerSources.schemaListFromTuple(typeNode, scope, walk);
     const member = ts.isArrayTypeNode(typeNode)
       ? typeNode.elementType
       : ts.isTypeReferenceNode(typeNode)
@@ -2563,26 +2564,26 @@ const HandlerSources = Object.freeze({
         : undefined;
     return member === undefined
       ? undefined
-      : HandlerSources.schemaListFromType(member, imports, walk, optional, collectionDepth + 1);
+      : HandlerSources.schemaListFromType(member, scope, walk, optional, collectionDepth + 1);
   },
 
   /**
    * Collects generated schemas from a tuple return type.
    *
-   * @param imports The imports indexed for the current source.
+   * @param scope The current source, imports, and compiler program.
    * @param typeNode The declared type node under inspection.
    * @param walk The bounded alias traversal state.
    * @returns The tuple's emitted schemas, or undefined when a member is invalid.
    */
   schemaListFromTuple(
     typeNode: ts.TupleTypeNode,
-    imports: ImportState,
+    scope: AnalyzerScope,
     walk: TypeWalk,
   ): readonly SchemaUse[] | undefined {
     const schemas: SchemaUse[] = [];
 
     for (const element of typeNode.elements) {
-      const member = HandlerSources.schemaFromTupleElement(element, imports, walk, true);
+      const member = HandlerSources.schemaFromTupleElement(element, scope, walk, true);
       if (member === undefined) {
         return undefined;
       }
@@ -2595,7 +2596,7 @@ const HandlerSources = Object.freeze({
   /**
    * Resolves a generated schema from one tuple member.
    *
-   * @param imports The imports indexed for the current source.
+   * @param scope The current source, imports, and compiler program.
    * @param typeNode The declared type node under inspection.
    * @param walk The bounded alias traversal state.
    * @param optional Whether this tuple member may be absent.
@@ -2603,7 +2604,7 @@ const HandlerSources = Object.freeze({
    */
   schemaFromTupleElement(
     typeNode: ts.TypeNode | ts.NamedTupleMember,
-    imports: ImportState,
+    scope: AnalyzerScope,
     walk: TypeWalk,
     optional: boolean,
   ): readonly SchemaUse[] | undefined {
@@ -2616,13 +2617,7 @@ const HandlerSources = Object.freeze({
     const optionalMember = ts.isNamedTupleMember(typeNode)
       ? typeNode.questionToken !== undefined
       : ts.isOptionalTypeNode(member);
-    return HandlerSources.schemaListFromType(
-      candidate,
-      imports,
-      walk,
-      optional || optionalMember,
-      1,
-    );
+    return HandlerSources.schemaListFromType(candidate, scope, walk, optional || optionalMember, 1);
   },
 
   /**
@@ -2936,15 +2931,22 @@ const HandlerSources = Object.freeze({
   },
 
   /**
-   * Checks whether a type reference names an array.
+   * Checks whether a type reference resolves to a built-in array type.
    *
    * @param typeNode The declared type node under inspection.
-   * @returns Whether the type reference names an array.
+   * @param program The program resolving the reference.
+   * @returns Whether the reference is a built-in array type.
    */
-  isArrayReferenceType(typeNode: ts.TypeReferenceNode): boolean {
+  isArrayReferenceType(typeNode: ts.TypeReferenceNode, program: ts.Program): boolean {
+    if (!ts.isIdentifier(typeNode.typeName)) return false;
+    const name = typeNode.typeName.text;
+    if (name !== "Array" && name !== "ReadonlyArray") return false;
+    const symbol = program.getTypeChecker().getSymbolAtLocation(typeNode.typeName);
     return (
-      ts.isIdentifier(typeNode.typeName) &&
-      (typeNode.typeName.text === "Array" || typeNode.typeName.text === "ReadonlyArray")
+      symbol?.getName() === name &&
+      symbol.declarations?.some((declaration) =>
+        program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
+      ) === true
     );
   },
 

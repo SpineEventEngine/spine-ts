@@ -1,8 +1,70 @@
 # Handler result correction reviews
 
-Status: independent reviews are complete and all accepted findings are resolved.
-Local release verification and package-consumer checks passed. The final task
-reply records the published commit's CI result.
+Status: the preceding reviews and verification are complete. Three additional
+independent review/fix rounds were requested on 26 September 2026 and are in
+progress. Their findings and verification are recorded below.
+
+## Three additional independent rounds
+
+Scope: the complete PR #10 changeset, from official master
+`2b27a430da213438d600aff8d4a6cdfb7c0cec98` to initial endpoint
+`23b6e6c9a1665f40541dff6ced5d4bdc8e984199`, including Entity versions and handler
+return declarations. Each later round reviews the corrected endpoint. The
+explicit human request authorizes three sequential whole-change rounds.
+
+Each standalone reviewer uses the existing TypeScript/API-docs reviewer
+profile, explicitly `gpt-6-sol` with `medium` reasoning, and also reports
+changed-code correctness, reliability, maintainability, and documentation
+findings. All four concerns receive separate dispositions. No new role is
+introduced. Sessions are fresh and ephemeral, with memory use/generation and
+child agents disabled; no chat history, prior review reports, or work logs are
+provided. Reviews are read-only and do not run broad tests. The complete human
+requirements in both current planning documents are binding.
+
+The bundled CLI 0.158.0-alpha.2.1 supports explicit profiles. Record each
+session's actual startup metadata before accepting its result. Corrections use
+one retained implementer, `gpt-6-sol` / `medium`; mechanical verification uses
+an orchestrator-dispatched `gpt-6-luna` / `low` function. Main updates records.
+The frozen upstream Proto removal comment is not an implemented TS API and
+must remain unchanged. Security disposition remains as explained below.
+
+Round one: standalone session `01a0dea7-c390-7150-a5ed-ed2bf2a16be8` started
+with explicit `gpt-6-sol`, `medium`, and read-only sandbox, confirmed in startup
+metadata. Memory use/generation and child-agent tools are disabled. Official
+JVM origin was freshly fetched and still resolves to
+`ea3067b137938ac0beb6920c39d11e300976fcc9`.
+
+Round one returned one P2 API finding: the analyzer recognizes `Array` and
+`ReadonlyArray` by spelling, so a custom same-named generic object is accepted
+as a native collection declaration. Main confirmed the name-only predicate and
+its collection parser caller. Accepted; add a failing analyzer reproduction,
+resolve built-in identity, and preserve native arrays and aliases. Standards,
+documentation, and reliability had no additional findings. Full report:
+`/tmp/spine-three-reviews.gOd7Ht/round1.md`.
+
+The preceding implementer is no longer available on the current execution
+surface. A new existing-role implementer, explicitly `gpt-6-sol` / `medium`,
+will perform this bounded fix and be retained for later rounds. Main changes
+only disjoint Markdown records. The implementer must not spawn children.
+
+Round-one correction is verified. The reference must name a built-in array
+and resolve to its default-library declaration; application aliases continue
+through the existing resolved-type path. Two initial regressions failed with
+missing diagnostics before the fix. Main diff inspection also caught an
+intermediate alias regression: inspecting the resulting array type instead of
+the referenced declaration could select the wrong Event. Its test failed with
+`TaskRenamedSchema` instead of `TaskCreatedSchema`; the final predicate fixes
+both problems. Local/imported lookalikes, both built-in names, and fixed-member
+generic aliases are covered. Final analyzer suite: 75 passed. Affected
+TypeScript, ESLint, Prettier, cleanup, TSDoc, and diff checks all passed.
+
+Author: `/root/declaration_review_fixes`, existing implementer with explicit
+`gpt-6-sol` / `medium`. Checks: `/root/declaration_checks`, existing
+orchestrator-dispatched mechanical function with explicit `gpt-6-luna` / `low`.
+Native dispatch exposes configured profiles, not additional runtime model
+introspection; no mismatch or inherited fallback was reported. Main inspected
+the final diff and real log summaries. No round-one finding remains open.
+Logs: `/tmp/spine-three-reviews.gOd7Ht/round1-final-*.log`.
 
 Requirements: [task brief](../planning/handler-result-corrections.md).
 Review scope begins at `bbdcd319441b3c6153cc8db63b0cbb309ad411b8`.

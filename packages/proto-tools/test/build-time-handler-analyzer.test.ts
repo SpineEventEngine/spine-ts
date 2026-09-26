@@ -1912,6 +1912,120 @@ describe("build-time handler analyzer", () => {
     );
   });
 
+  for (const arrayName of ["Array", "ReadonlyArray"] as const) {
+    const nativeName = arrayName === "Array" ? "ReadonlyArray" : "Array";
+
+    it(`rejects a local ${arrayName} lookalike while accepting built-in ${nativeName}`, () => {
+      const result = analyzeBuildHandlers(
+        programWithSource(
+          "src/local-array.ts",
+          handlerFixtureSource(
+            "ProcessManager",
+            "TaskListSchema",
+            `
+            @Assign
+            local(command: CreateTask): ${arrayName}<TaskCreated> { throw new Error(String(command)); }
+
+            @Assign
+            native(command: CreateTask): ${nativeName}<TaskCreated> { throw new Error(String(command)); }
+          `,
+            `
+            import { type CreateTask } from "../generated/commands_pb.js";
+            import { type TaskCreated } from "../generated/events_pb.js";
+            interface ${arrayName}<Value> { readonly value: Value; }
+          `,
+          ),
+        ),
+      );
+
+      expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
+        ["UNSUPPORTED_RETURN_TYPE", "local"],
+      ]);
+      expect(entityReceivers(result)[0]?.handlers.map(({ methodName }) => methodName)).toEqual([
+        "native",
+      ]);
+    });
+
+    it(`rejects an imported ${arrayName} lookalike while accepting built-in ${nativeName}`, () => {
+      const result = analyzeBuildHandlers(
+        programWithSources("src/imported-array.ts", {
+          "src/imported-array.ts": handlerFixtureSource(
+            "ProcessManager",
+            "TaskListSchema",
+            `
+            @Assign
+            imported(command: CreateTask): ${arrayName}<TaskCreated> { throw new Error(String(command)); }
+
+            @Assign
+            native(command: CreateTask): ${nativeName}<TaskCreated> { throw new Error(String(command)); }
+          `,
+            `
+            import { type CreateTask } from "../generated/commands_pb.js";
+            import { type TaskCreated } from "../generated/events_pb.js";
+            import { type ${arrayName} } from "../array-lookalike.js";
+          `,
+          ),
+          "array-lookalike.ts": `export interface ${arrayName}<Value> { readonly value: Value; }`,
+          "generated/commands_pb.ts": generatedModule(
+            "spine/examples/todo/task_commands.proto",
+            "CreateTask",
+          ),
+          "generated/events_pb.ts": generatedModule(
+            "spine/examples/todo/task_events.proto",
+            "TaskCreated",
+          ),
+          "generated/task_list_pb.ts": generatedModule(
+            "spine/examples/todo/task_list.proto",
+            "TaskList",
+          ),
+        }),
+      );
+
+      expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
+        ["UNSUPPORTED_RETURN_TYPE", "imported"],
+      ]);
+      expect(entityReceivers(result)[0]?.handlers.map(({ methodName }) => methodName)).toEqual([
+        "native",
+      ]);
+    });
+  }
+
+  for (const arrayName of ["Array", "ReadonlyArray"] as const) {
+    const nativeName = arrayName === "Array" ? "ReadonlyArray" : "Array";
+
+    it(`uses the resolved array member for concrete ${arrayName} aliases`, () => {
+      const result = analyzeBuildHandlers(
+        programWithSource(
+          "src/concrete-array-alias.ts",
+          handlerFixtureSource(
+            "ProcessManager",
+            "TaskListSchema",
+            `
+            @Assign
+            renamed(command: CreateTask): Outputs<TaskRenamed> { throw new Error(String(command)); }
+
+            @Assign
+            sameName(command: CreateTask): ${arrayName}<TaskRenamed> { throw new Error(String(command)); }
+          `,
+            `
+            import { type CreateTask } from "../generated/commands_pb.js";
+            import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+            type Outputs<Value> = ${nativeName}<TaskCreated>;
+            type ${arrayName}<Value> = ${nativeName}<TaskCreated>;
+          `,
+          ),
+        ),
+      );
+
+      expect(result.diagnostics).toEqual([]);
+      expect(
+        entityReceivers(result)[0]?.handlers.map(({ outcomes }) =>
+          outcomes.returned.map(({ exportName }) => exportName),
+        ),
+      ).toEqual([["TaskCreatedSchema"], ["TaskCreatedSchema"]]);
+    });
+  }
+
   it("rejects void Assign and Command handlers", () => {
     const result = analyzeBuildHandlers(programWithSource("src/void.ts", voidEmissionSource));
 

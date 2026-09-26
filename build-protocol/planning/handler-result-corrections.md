@@ -4,6 +4,8 @@ Status: implementation, independent reviews, and local release verification
 complete. The human approved the no-output reaction declaration on
 25 September 2026. The published commit's CI result is recorded in the final
 task reply and [PR #10 checks](https://github.com/SpineEventEngine/spine-ts/pull/10/checks).
+Three additional independent review/fix rounds, requested on 26 September,
+are in progress in the [review record](../reviews/handler-result-corrections.md).
 
 Branch: `entity-and-signal-handler-declarations` (continuation of PR #10).
 Baseline: `bbdcd319441b3c6153cc8db63b0cbb309ad411b8`.

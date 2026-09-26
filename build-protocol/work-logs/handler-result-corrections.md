@@ -1,5 +1,45 @@
 # Handler result correction work log
 
+## Additional review request — 26 September 2026
+
+Three sequential no-memory standalone reviews and correction batches are in
+progress on the same branch and checkout. High-risk classification is retained
+because the reviewed changes cover public contracts and persisted versions;
+no fresh architecture pass is needed unless a finding changes those contracts.
+Estimate: 1–2 hours including review (0.3–0.6), corrections and focused checks
+(0.3–0.6), final verification/reporting (0.1–0.3), and CI waiting (0.3–0.5).
+The exact scope and explicit model assignments are in the review record.
+
+Official origin was fetched; master and HEAD remain the recorded endpoints.
+Initial tree was clean. Lightweight checks passed: diff whitespace, cleanup,
+TSDoc, and human-document audience. Previous exact-HEAD full release and CI
+evidence remains applicable to the unchanged code before review; do not repeat
+the broad baseline test run. Run focused regression checks after each fix and
+one release profile after all three rounds converge if runtime/code changes.
+
+Skills: the exposed catalog, expected-skills manifest, task-relevant installed
+entrypoints found with `rg --files`, and installed skill-lock entries were
+checked. Main fully read receiving-code-review, requesting-code-review, review,
+and verification-before-completion. Use standards and requirement checks, but
+the human's explicit single standalone reviewer per sequential round replaces
+the review skill's two parallel reviewers. Existing project records replace
+extra skill records; no new worktree or task is required for this continuation.
+Implementation/testing skills will be read if a finding needs code changes.
+
+No branch changes, merge, publication, or second version bump are authorized.
+Each correction commit will be pushed immediately; final CI evidence belongs
+in the final reply and PR checks, without a follow-up record-only commit.
+
+Round one completed with one accepted compiler finding and its verified fix.
+Only the handler analyzer and its tests changed in code. Custom array types
+are rejected, real native arrays remain supported, and aliases keep their
+resolved element type. Both the original failure and an intermediate alias
+regression were reproduced before correction. Final focused evidence: all 75
+analyzer tests and affected static checks passed. Main read the final diff and
+log summaries; the next step is the second fresh whole-branch review after the
+correction push. Implementation and test-driven-development skill instructions
+were read and used for the correction; the existing implementer is retained.
+
 Started: 2026-09-25. Status: implementation, reviews, and local release
 verification complete. The final task reply records the published commit and
 its CI result; [PR #10 checks](https://github.com/SpineEventEngine/spine-ts/pull/10/checks)

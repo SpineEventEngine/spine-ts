@@ -1,12 +1,10 @@
 # Entity and signal-handler declarations
 
-Status: additional human-requested [handler-result corrections](handler-result-corrections.md)
-are in progress. The following completion statement describes the earlier slice:
-original implementation, three independent review/fix rounds, full
-release verification, and package archive checks complete. The human opened
-draft PR #10. Documentation and runnable-example follow-up, its independent
-review corrections, and local verification are complete. Required CI on the
-final pushed commit is the remaining acceptance check.
+Status: implementation, handler-result corrections, documentation, examples,
+and their local and CI verification are complete at `23b6e6c9a`. Three further
+independent review/fix rounds were requested on 26 September 2026 and are in
+progress; see the [review record](../reviews/handler-result-corrections.md).
+The human opened draft PR #10.
 
 Branch: `entity-and-signal-handler-declarations`
 
