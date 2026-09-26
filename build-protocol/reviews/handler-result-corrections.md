@@ -66,6 +66,42 @@ introspection; no mismatch or inherited fallback was reported. Main inspected
 the final diff and real log summaries. No round-one finding remains open.
 Logs: `/tmp/spine-three-reviews.gOd7Ht/round1-final-*.log`.
 
+Round-one correction was pushed as `4959fb7b4`; the tree was clean. Round two
+reviews that complete branch endpoint against the same fixed master baseline,
+not just the correction. Fresh standalone session
+`01a0deb5-2f94-7c10-8574-77f411112086` confirms `gpt-6-sol`, `medium`, and
+read-only access, with memory and children disabled. No earlier findings or
+review reports are supplied.
+
+Round two returned one P2 API finding: checked generic return types only accept
+generated interfaces, whereas real Protobuf-ES messages are type aliases of
+`Message<...> & { ... }`. The simplified interface fixture hides rejection of
+valid generic result aliases. Main confirmed the interface-only lookup and
+fixture shape. Accepted; reproduce with a real generated type shape and retain
+generated-source/schema-role checks while resolving aliases. Standards,
+documentation, and reliability had no separate finding. Full report:
+`/tmp/spine-three-reviews.gOd7Ht/round2.md`. The retained implementer receives
+the complete correction batch before round three starts.
+
+Round-two correction is verified. Generated type aliases now use their actual
+declaration; fieldless messages whose alias TypeScript erases are matched by
+exact checked-type identity against generated declarations in the same program.
+Existing generated-path, export, and schema-role checks remain. No structural
+assignability or arbitrary interface output discovery was added.
+
+The generated fixture now reflects Protobuf-ES type aliases, including a real
+TaskCreated title field. The initial regression failed for arrays, unions,
+tuples, and Promise results. A read-only compiler probe explained the erased
+fieldless alias. Main also required a helper-module regression with no direct
+Event import, which failed before widening the lookup from direct imports to
+the program's generated sources. Both cases now pass; arbitrary objects,
+open-ended Message types, and normal returned rejections remain rejected.
+All 77 analyzer tests and affected TypeScript/ESLint/Prettier/cleanup/TSDoc/diff
+checks passed. Main inspected the final diff and real log summaries. Same
+retained implementer and explicit mechanical profile as round one.
+Logs: `/tmp/spine-three-reviews.gOd7Ht/round2-complete-*.log`.
+No round-two finding remains open.
+
 Requirements: [task brief](../planning/handler-result-corrections.md).
 Review scope begins at `bbdcd319441b3c6153cc8db63b0cbb309ad411b8`.
 Style, API/type contracts, runtime reliability, and documentation all apply.

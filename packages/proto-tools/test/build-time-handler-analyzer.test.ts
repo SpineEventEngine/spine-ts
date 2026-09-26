@@ -268,6 +268,107 @@ describe("build-time handler analyzer", () => {
     expect(generated).toContain("RenameTaskSchema");
   });
 
+  it("resolves generic collections of generated message type aliases", () => {
+    const program = programWithSources(
+      "src/generated-alias-returns.ts",
+      {
+        "src/generated-alias-returns.ts": `
+        import { type Message } from "@bufbuild/protobuf";
+        import { ProcessManager, Assign } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+        import { type TaskAlreadyDone } from "../generated/rejections_pb.js";
+        type Many<T> = readonly T[];
+        type Choice<T> = T | TaskRenamed;
+        type Pair<T> = readonly [TaskCreated, T];
+        type Async<T> = Promise<T>;
+        export class GeneratedAliasReturns extends ProcessManager<string, typeof TaskSchema> {
+          @Assign array(command: CreateTask): Many<TaskCreated> { throw Error(String(command)); }
+          @Assign union(command: CreateTask): Choice<TaskCreated> { throw Error(String(command)); }
+          @Assign tuple(command: CreateTask): Pair<TaskRenamed> { throw Error(String(command)); }
+          @Assign promise(command: CreateTask): Async<Many<TaskCreated>> { throw Error(String(command)); }
+          @Assign object(command: CreateTask): Many<{ value: string }> { throw Error(String(command)); }
+          @Assign genericMessage(command: CreateTask): Many<Message<string>> { throw Error(String(command)); }
+          @Assign rejection(command: CreateTask): Many<TaskAlreadyDone> { throw Error(String(command)); }
+        }
+      `,
+        "generated/task_pb.ts": generatedTypedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+          "TaskRenamed",
+        ),
+        "generated/rejections_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_rejections.proto",
+          "TaskAlreadyDone",
+        ),
+      },
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(compilerMessages(program)).toEqual([]);
+    expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
+      ["UNSUPPORTED_RETURN_TYPE", "object"],
+      ["UNSUPPORTED_RETURN_TYPE", "genericMessage"],
+      ["INVALID_EMITTED_SCHEMA", "rejection"],
+    ]);
+    expect(
+      entityReceivers(result)[0]?.handlers.map(({ methodName, outcomes }) => [
+        methodName,
+        outcomes.returned.map(({ exportName }) => exportName),
+      ]),
+    ).toEqual([
+      ["array", ["TaskCreatedSchema"]],
+      ["union", ["TaskCreatedSchema", "TaskRenamedSchema"]],
+      ["tuple", ["TaskCreatedSchema", "TaskRenamedSchema"]],
+      ["promise", ["TaskCreatedSchema"]],
+    ]);
+  });
+
+  it("resolves an imported concrete generated alias without a direct message import", () => {
+    const program = programWithSources(
+      "src/imported-generated-alias.ts",
+      {
+        "src/imported-generated-alias.ts": `
+        import { ProcessManager, Assign } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type Results } from "./result-alias.js";
+        export class ImportedAlias extends ProcessManager<string, typeof TaskSchema> {
+          @Assign rename(command: CreateTask): Results { throw Error(String(command)); }
+        }
+      `,
+        "src/result-alias.ts": `
+        import { type TaskRenamed } from "../generated/events_pb.js";
+        export type Results = readonly TaskRenamed[];
+      `,
+        "generated/task_pb.ts": generatedTypedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskRenamed",
+        ),
+      },
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(compilerMessages(program)).toEqual([]);
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers[0]?.outcomes.returned).toEqual([
+      schema("../generated/events_pb.js", "TaskRenamedSchema"),
+    ]);
+  });
+
   it("accepts an absent whole Event reaction result through syntax, aliases, and Promise", () => {
     const program = programWithSources(
       "src/optional-reactions.ts",
@@ -2492,12 +2593,13 @@ function generatedTypedModule(protoSource: string, ...names: string[]): string {
     ? "spine.examples.access"
     : "spine.examples.todo";
   const file = "file_spine_examples_v1_test";
-  const declarations = names.map((name, index) =>
-    [
-      `export interface ${name} extends Message<"${protoPackage}.${name}"> {}`,
+  const declarations = names.map((name, index) => {
+    const fields = name === "TaskCreated" ? "title: string;" : "";
+    return [
+      `export type ${name} = Message<"${protoPackage}.${name}"> & { ${fields} };`,
       `export const ${name}Schema: GenMessage<${name}> = messageDesc(${file}, ${String(index)});`,
-    ].join("\n"),
-  );
+    ].join("\n");
+  });
   return [
     'import { type Message } from "@bufbuild/protobuf";',
     'import { type GenMessage, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";',

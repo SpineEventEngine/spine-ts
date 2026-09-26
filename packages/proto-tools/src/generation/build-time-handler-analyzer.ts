@@ -2473,10 +2473,13 @@ const HandlerSources = Object.freeze({
    * @returns The generated message schema, or undefined when unresolved.
    */
   checkedMessage(type: ts.Type, scope: AnalyzerScope): SchemaUse | undefined {
-    const declaration = type.getSymbol()?.declarations?.find(ts.isInterfaceDeclaration);
-    if (declaration === undefined) return undefined;
+    const declaration =
+      type.aliasSymbol?.declarations?.find(ts.isTypeAliasDeclaration) ??
+      type.getSymbol()?.declarations?.find(ts.isInterfaceDeclaration);
+    if (declaration === undefined) return HandlerSources.checkedEmptyMessage(type, scope);
     const source = declaration.getSourceFile();
-    if (!/(^|\/)generated\/.+_pb\.ts$/u.test(source.fileName)) return undefined;
+    if (!/(^|\/)generated\/.+_pb\.ts$/u.test(source.fileName))
+      return HandlerSources.checkedEmptyMessage(type, scope);
     const schemaName = `${declaration.name.text}Schema`;
     const exports = HandlerSources.exportedNames(source);
     if (!exports.types.has(declaration.name.text) || !exports.values.has(schemaName))
@@ -2489,6 +2492,40 @@ const HandlerSources = Object.freeze({
         exportName: schemaName,
       },
     };
+  },
+
+  /**
+   * Finds an empty generated message alias after TypeScript collapses its intersection.
+   *
+   * @param type The checked message type without a generated alias symbol.
+   * @param scope The current source, imports, and compiler program.
+   * @returns A generated schema only for an identical checked alias body.
+   */
+  checkedEmptyMessage(type: ts.Type, scope: AnalyzerScope): SchemaUse | undefined {
+    if (type.aliasSymbol?.getName() !== "Message") return undefined;
+    const checker = scope.program.getTypeChecker();
+    for (const source of scope.program.getSourceFiles()) {
+      if (!/(^|\/)generated\/.+_pb\.ts$/u.test(source.fileName)) continue;
+      const exports = HandlerSources.exportedNames(source);
+      for (const statement of source.statements) {
+        if (!ts.isTypeAliasDeclaration(statement)) continue;
+        const schemaName = `${statement.name.text}Schema`;
+        if (!exports.types.has(statement.name.text) || !exports.values.has(schemaName)) continue;
+        if (checker.getTypeFromTypeNode(statement.type) !== type) continue;
+        const path = relative(dirname(scope.source.fileName), source.fileName).replace(
+          /\.ts$/u,
+          ".js",
+        );
+        return {
+          kind: exports.schemaRoles.get(schemaName),
+          reference: {
+            moduleSpecifier: path.startsWith(".") ? path : `./${path}`,
+            exportName: schemaName,
+          },
+        };
+      }
+    }
+    return undefined;
   },
 
   /**

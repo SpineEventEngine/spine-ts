@@ -40,6 +40,14 @@ log summaries; the next step is the second fresh whole-branch review after the
 correction push. Implementation and test-driven-development skill instructions
 were read and used for the correction; the existing implementer is retained.
 
+Round two completed with one accepted finding in generic output alias
+resolution. A faithful generated type-alias fixture exposed the failure;
+focused compiler evidence also identified erased fieldless aliases, and a
+separate failing test covered aliases imported through a helper module. The
+same implementer corrected these paths without changing the public contract.
+All 77 analyzer tests and affected static checks passed. Main inspected code
+and logs. Push this correction, then start the third fresh whole-branch review.
+
 Started: 2026-09-25. Status: implementation, reviews, and local release
 verification complete. The final task reply records the published commit and
 its CI result; [PR #10 checks](https://github.com/SpineEventEngine/spine-ts/pull/10/checks)
