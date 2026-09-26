@@ -37,7 +37,9 @@ import {
   type AssignReviewTask,
 } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
 import {
+  ReviewStartedSchema,
   ReviewTaskAssignedSchema,
+  type ReviewStarted,
   type ReviewTaskAssigned,
 } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 import { ReviewRejectedSchema } from "../../test-fixtures/generated/handler-registry/rejections_pb.js";
@@ -96,6 +98,22 @@ class ContextSubscriber extends AbstractEventSubscriber {
 }
 
 class EmptyReactor extends AbstractEventReactor {
+  react(): undefined {
+    return undefined;
+  }
+}
+
+class ResultSubscriber extends AbstractEventSubscriber {
+  constructor(readonly result: unknown) {
+    super();
+  }
+
+  subscribe(): unknown {
+    return this.result;
+  }
+}
+
+class NullReactor extends AbstractEventReactor {
   react(): null {
     return null;
   }
@@ -104,6 +122,41 @@ class EmptyReactor extends AbstractEventReactor {
 class ProducingReactor extends AbstractEventReactor {
   react(): readonly ReviewTaskAssigned[] {
     return [create(ReviewTaskAssignedSchema, { id: "produced", name: "Produced" })];
+  }
+}
+
+class OptionalTupleReactor extends AbstractEventReactor {
+  react(
+    event: ReviewTaskAssigned,
+  ): readonly [ReviewTaskAssigned, (ReviewTaskAssigned | undefined)?] {
+    const first = create(ReviewTaskAssignedSchema, { id: "first", name: event.name });
+    return event.name === "both"
+      ? [first, create(ReviewTaskAssignedSchema, { id: "second", name: event.name })]
+      : [first, undefined];
+  }
+}
+
+class InvalidLaterReactor extends AbstractEventReactor {
+  react(): readonly [ReviewTaskAssigned, ReviewStarted] {
+    return [
+      create(ReviewTaskAssignedSchema, { id: "first", name: "First" }),
+      create(ReviewStartedSchema, { id: "undeclared" }),
+    ];
+  }
+}
+
+class InvalidPackedLaterReactor extends AbstractEventReactor {
+  react(): readonly unknown[] {
+    return [
+      create(ReviewTaskAssignedSchema, { id: "first", name: "First" }),
+      {
+        $typeName: ReviewTaskAssignedSchema.typeName,
+        get id() {
+          throw new Error("invalid declared payload");
+        },
+        name: "Invalid payload",
+      },
+    ];
   }
 }
 
@@ -140,6 +193,136 @@ class ContextCommander extends AbstractCommander {
 }
 
 describe("StandaloneHandlerRuntime", () => {
+  it("omits absent optional tuple Events and keeps present results in order", async () => {
+    const published: Event[] = [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: OptionalTupleReactor,
+      handlers: [
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: new OptionalTupleReactor(),
+        publisher: {
+          publishEvent: (event: Event) => {
+            published.push(event);
+            return Promise.resolve();
+          },
+        } as never,
+      },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+    for (const name of ["one", "both"]) {
+      await dispatcher.dispatch(
+        create(EventSchema, {
+          id: { value: name },
+          message: AnyMessages.pack(
+            ReviewTaskAssignedSchema,
+            create(ReviewTaskAssignedSchema, { id: name, name }),
+          ),
+        }),
+      );
+    }
+    expect(
+      published.map((event) => {
+        if (event.message === undefined) throw new Error("Expected Event message.");
+        return AnyMessages.unpack(event.message, ReviewTaskAssignedSchema)?.id;
+      }),
+    ).toEqual(["first", "first", "second"]);
+  });
+
+  it("rejects an invalid later result before publishing any standalone output", async () => {
+    const published: Event[] = [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: InvalidLaterReactor,
+      handlers: [
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: new InvalidLaterReactor(),
+        publisher: {
+          publishEvent: (event: Event) => {
+            published.push(event);
+            return Promise.resolve();
+          },
+        } as never,
+      },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+    await expect(
+      dispatcher.dispatch(
+        create(EventSchema, {
+          id: { value: "invalid-later" },
+          message: AnyMessages.pack(
+            ReviewTaskAssignedSchema,
+            create(ReviewTaskAssignedSchema, { id: "source" }),
+          ),
+        }),
+      ),
+    ).rejects.toThrow(/undeclared signal/);
+    expect(published).toEqual([]);
+  });
+
+  it("packs all declared outputs before publishing any standalone result", async () => {
+    const published: Event[] = [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: InvalidPackedLaterReactor,
+      handlers: [
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: new InvalidPackedLaterReactor(),
+        publisher: {
+          publishEvent: (event: Event) => {
+            published.push(event);
+            return Promise.resolve();
+          },
+        } as never,
+      },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+    await expect(
+      dispatcher.dispatch(
+        create(EventSchema, {
+          id: { value: "invalid-payload" },
+          message: AnyMessages.pack(
+            ReviewTaskAssignedSchema,
+            create(ReviewTaskAssignedSchema, { id: "source" }),
+          ),
+        }),
+      ),
+    ).rejects.toThrow("invalid declared payload");
+    expect(published).toEqual([]);
+  });
   it("routes same-schema domestic and external handlers only on their matching origin", async () => {
     const domestic = new FilteredSubscriber();
     const external = new FilteredSubscriber();
@@ -632,6 +815,65 @@ describe("StandaloneHandlerRuntime", () => {
         }),
       ),
     ).resolves.toBeUndefined();
+  });
+
+  it("rejects every concrete subscriber result before it can be normalized away", async () => {
+    for (const result of [null, [], [undefined]]) {
+      const subscriber = new ResultSubscriber(result);
+      const group: GeneratedStandaloneHandlerGroup = {
+        receiverKind: "standalone",
+        receiverType: ResultSubscriber,
+        handlers: [
+          {
+            kind: "event-subscription",
+            methodName: "subscribe",
+            input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      };
+      const dispatcher = new StandaloneHandlerRuntime([
+        { group, instance: subscriber, publisher: {} as never },
+      ]).eventDispatcher();
+      if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+      await expect(
+        dispatcher.dispatch(
+          create(EventSchema, {
+            id: { value: "subscriber-result" },
+            message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+          }),
+        ),
+      ).rejects.toThrow('Standalone subscriber "subscribe" must not return signals.');
+    }
+  });
+
+  it("rejects a null reactor result instead of treating it as absent", async () => {
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: NullReactor,
+      handlers: [
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      { group, instance: new NullReactor(), publisher: {} as never },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+    await expect(
+      dispatcher.dispatch(
+        create(EventSchema, {
+          id: { value: "null-reactor" },
+          message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+        }),
+      ),
+    ).rejects.toThrow(/undeclared signal/);
   });
 
   it("publishes an array of reactor Events with Event ancestry", async () => {

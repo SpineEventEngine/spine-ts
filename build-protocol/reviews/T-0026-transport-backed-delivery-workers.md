@@ -24,7 +24,7 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 - Reject over-engineered worker abstractions that are not required for this
   slice.
 - Verify no end-user code receives framework `Event` envelopes, manual
-  transactions, `@Apply`, schema-bearing decorators, or materialization helpers.
+  transactions, event replay, schema-bearing decorators, or materialization helpers.
 - Verify `IMPORT_EVENT` remains unsupported for new writes and fail-closed for
   legacy rows.
 

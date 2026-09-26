@@ -24,6 +24,12 @@ expose Java builder types. The design should still preserve:
 - typed command/event handler parameters;
 - typed returned events/commands/rejections where possible.
 
+In the TypeScript implementation, the state parameter is the generated schema
+type, such as `typeof TaskSchema`. There is no third version parameter.
+`entity.version` is always the generated Spine `Version`, returned as a copy.
+The framework initializes, advances, and stores that version; application
+handlers do not update it manually.
+
 ## Decorator-Based Handler Declaration
 
 The preferred end-user mechanism is standard TypeScript decorators:
@@ -64,9 +70,28 @@ constructor of an instance registered through the builder. Each handler record
 names the method, inferred first-parameter signal schema, allowed public arity
 `handler(signal)` or `handler(signal, context)`, and emitted schemas inferred
 from the return type. `@Subscribe` records have no emitted schemas because the
-required return type is explicit `void`. The generated registry intentionally
-excludes `@Apply`; new aggregate behavior is transactional rather than
-event-sourced.
+required return type is explicit `void` or `Promise<void>`. Aggregate behavior
+is transactional rather than event-sourced.
+
+Native unions describe one selected result, for example
+`CreateAccessGrant | ExtendAccessGrant`. Native tuples describe multiple results
+in order, for example `[AccessGrantCreated, AccessRequestCompleted]`.
+Readonly tuples, optional tuple positions, named aliases, and an outer `Promise`
+use the same schema inference. No Pair or Either wrapper classes are needed.
+The invoked handler's returned-schema list limits the messages it may return;
+another handler's declarations do not widen that list.
+
+`@Assign` and Command-input `@Command` require a nonempty successful result.
+An Event/rejection-input `@Command` or `@React` may return an empty typed array,
+or declare `undefined` alone or alongside concrete output types in any union
+position. One outer `Promise` may wrap these declarations. Only subscriptions
+may declare `void` or `Promise<void>`. TypeScript enforces
+tuple structure, while runtime checks actual message types and return order.
+Invalid results fail before Entity commit or output publication. Subscribers
+must return no value, including no empty array. Absent results use `undefined`,
+not `null`; valid no-output reactions still save state changes.
+See the [handler return guide](../docs/USER_GUIDE.md#choose-what-a-handler-returns)
+for supported forms and restrictions.
 
 Generated registry ingestion preserves each handler record's public arity in
 canonical metadata. Existing explicit/schema-bearing handler registration
@@ -76,7 +101,7 @@ two-argument command assignees/command substitutions/event subscribers as
 `handler(signal, context)`, where substitutions receive `CommandContext` and
 event handlers receive `EventContext` from the incoming envelope. If the
 envelope omits context, the framework passes an empty generated context message
-of the proper schema. `@Apply` has no two-argument runtime support.
+of the proper schema.
 
 `@Command` handlers are supported only by Process Manager repositories.
 Aggregate and Projection repositories reject both command-input substitution
@@ -133,12 +158,11 @@ Initial decorator set:
 
 - `@Assign` for command assignees that produce one or more generated domain
   event messages or rejection outcomes.
-- `@Command` for command-producing methods that produce one or more generated
-  domain command messages.
+- `@Command` for methods producing generated domain Commands. Command-input
+  handlers must return at least one; Event/rejection reactions may return none.
 - `@Subscribe` for event subscribers/projection updaters. These handlers must
-  declare explicit `void` return types.
-- `@React` for reactors that emit generated domain event messages or explicitly
-  emit nothing with `void`.
+  declare explicit `void` or `Promise<void>` return types.
+- `@React` for reactors that return generated domain Events or `undefined`.
 - `External<T>` as a type-only first-parameter marker for an external event or
   rejection receptor. Event receptors are domestic when the marker is absent.
 - Field-filter options equivalent to Spine handler filtering.
@@ -147,8 +171,7 @@ Decorators define model metadata. They must not perform runtime registration by
 executing arbitrary global side effects during import unless the behavior is
 deterministic and testable.
 
-`@Apply` must not be introduced for new aggregate behavior. Spine TS aggregates
-are planned as non-event-sourced, so aggregate command handlers mutate state in
+Spine TS aggregates are not event-sourced. Aggregate command handlers mutate state in
 framework-controlled transactions and return generated domain event messages
 for publication.
 

@@ -66,7 +66,7 @@ export { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
 /**
  * Applies commands to one message identified by `MessageId`.
  */
-export class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMessageSchema, bigint> {
+export class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMessageSchema> {
   // prettier-ignore
 
   /**
@@ -78,8 +78,7 @@ export class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMess
   @Assign
   @Throws(MessageAlreadyPosted)
   postMessage(command: PostMessage): MessagePosted {
-    // The handler generator accepts synchronous `@Assign` methods only. The
-    // aggregate's visible state is the only application-level existence fact.
+    // The aggregate's visible state is the application-level existence fact.
     if (this.state.board !== undefined) {
       throw MessageAlreadyPosted.create({ id: this.id });
     }
@@ -111,11 +110,7 @@ export class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMess
 /**
  * Builds the messages displayed on a board.
  */
-export class BoardViewProjection extends Projection<
-  MessageId,
-  typeof BoardMessageViewSchema,
-  number
-> {
+export class BoardViewProjection extends Projection<MessageId, typeof BoardMessageViewSchema> {
   // prettier-ignore
 
   /**
@@ -146,8 +141,7 @@ export class BoardViewProjection extends Projection<
  */
 export class AnnouncementBoardProjection extends Projection<
   BoardId,
-  typeof AnnouncementBoardViewSchema,
-  number
+  typeof AnnouncementBoardViewSchema
 > {
   // prettier-ignore
 

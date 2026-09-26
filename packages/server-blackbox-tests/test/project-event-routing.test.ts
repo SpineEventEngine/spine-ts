@@ -77,7 +77,7 @@ import {
   type StaffingId,
 } from "../generated/spine/server/testing/project_workflow_pb.js";
 
-class Project extends Aggregate<ProjectId, typeof ProjectStateSchema, bigint> {
+class Project extends Aggregate<ProjectId, typeof ProjectStateSchema> {
   static scheduledStatuses: string[] = [];
 
   static reset(): void {
@@ -114,17 +114,17 @@ class Project extends Aggregate<ProjectId, typeof ProjectStateSchema, bigint> {
   }
 }
 
-class ProjectPlanning extends ProcessManager<PlanningId, typeof PlanningStateSchema, number> {
+class ProjectPlanning extends ProcessManager<PlanningId, typeof PlanningStateSchema> {
   react(event: ProjectCreated): void {
     this.update((draft) => Object.assign(draft, { id: this.id, projectName: event.name }));
   }
 }
-class ProjectStaffing extends ProcessManager<StaffingId, typeof StaffingStateSchema, number> {
+class ProjectStaffing extends ProcessManager<StaffingId, typeof StaffingStateSchema> {
   react(event: ProjectCreated): void {
     this.update((draft) => Object.assign(draft, { id: this.id, projectName: event.name }));
   }
 }
-class ProjectCoordinator extends ProcessManager<ProjectId, typeof CoordinationStateSchema, number> {
+class ProjectCoordinator extends ProcessManager<ProjectId, typeof CoordinationStateSchema> {
   command(event: ProjectCreated): ScheduleProject {
     this.update((draft) => Object.assign(draft, { id: this.id, projectName: event.name }));
     return create(ScheduleProjectSchema, { project: this.id, status: "scheduled" });
@@ -136,12 +136,12 @@ class ProjectCoordinator extends ProcessManager<ProjectId, typeof CoordinationSt
     return create(ScheduleProjectSchema, { project: command.project, status: command.status });
   }
 }
-class Portfolio extends Projection<PortfolioId, typeof PortfolioStateSchema, number> {
+class Portfolio extends Projection<PortfolioId, typeof PortfolioStateSchema> {
   subscribe(event: ProjectCreated): void {
     this.update((draft) => Object.assign(draft, { id: this.id, name: event.name }));
   }
 }
-class ProjectProjection extends Projection<ProjectId, typeof ProjectProjectionStateSchema, number> {
+class ProjectProjection extends Projection<ProjectId, typeof ProjectProjectionStateSchema> {
   subscribe(event: ProjectCreated): void {
     this.update((draft) => Object.assign(draft, { id: this.id, name: event.name }));
   }

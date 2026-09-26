@@ -37,7 +37,7 @@ subscriptions.
 - Preserve generated registry contracts and framework-owned handler
   materialization.
 - Keep end-user code free of framework `Event` envelopes, manual transactions,
-  schema-bearing decorators, `@Apply`, and application-owned handler
+  schema-bearing decorators, event replay, and application-owned handler
   materialization.
 - Server-module implementation requires close inspection of local Spine JVM
   docs and corresponding `core-jvm/server` sources before design or code

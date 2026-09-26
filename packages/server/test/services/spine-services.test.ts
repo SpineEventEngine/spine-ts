@@ -130,8 +130,8 @@ import {
   type ProjectState,
   ProjectStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+// prettier-ignore
 import {
-  type ProjectSubmissionCreated,
   ProjectSubmissionCreatedSchema,
 } from "../../test-fixtures/generated/repository-routing/project_validation_events_pb.js";
 import {
@@ -149,7 +149,7 @@ type TaskId = Message<"spine.examples.todo.TaskId"> & {
 
 type TenantInput = string | TenantId;
 
-class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   subscribeTask(event: TaskCreated): void {
     const id = event.id?.value ?? "";
     this.update((draft) =>
@@ -165,7 +165,7 @@ class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchem
   }
 }
 
-class RejectingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class RejectingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignTask(): never {
     throw TaskAlreadyDone.create({
       id: create(GeneratedTaskIdSchema, { value: this.id }),
@@ -173,31 +173,22 @@ class RejectingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema
   }
 }
 
-class ValidatingTaskAggregate extends Aggregate<string, typeof ReviewProjectStateSchema, bigint> {
+class ValidatingTaskAggregate extends Aggregate<string, typeof ReviewProjectStateSchema> {
   assignTask(command: CreateReviewProject) {
-    return createValidatedEvent(`event-${command.id}`, command.id, command.name);
-  }
-
-  applyTask(event: ProjectSubmissionCreated): void {
-    this.startTransaction();
     this.update((draft) =>
       Object.assign(
         draft,
         create(ReviewProjectStateSchema, {
-          id: event.id,
-          name: event.name,
+          id: command.id,
+          name: command.name,
         }),
       ),
     );
-    this.commitTransaction();
+    return createValidatedEvent(`event-${command.id}`, command.id, command.name);
   }
 }
 
-class TransitionViolatingTaskAggregate extends Aggregate<
-  string,
-  typeof ProjectStateSchema,
-  bigint
-> {
+class TransitionViolatingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignTask(command: ProjectState) {
     this.update((draft) =>
       Object.assign(
@@ -229,7 +220,7 @@ class RollingBackTransitionTaskAggregate extends TransitionViolatingTaskAggregat
   }
 }
 
-class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {}
+class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema> {}
 
 describe("SpineServices", () => {
   it("rejects foreign package-private logger access", () => {
@@ -4334,10 +4325,7 @@ function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate
   const handlers = EntityHandlers.define(
     ValidatingTaskAggregate,
     ReviewProjectStateSchema,
-    (builder) => [
-      builder.assign(CreateReviewProjectSchema, "assignTask"),
-      builder.apply(ProjectSubmissionCreatedSchema, "applyTask"),
-    ],
+    (builder) => [builder.assign(CreateReviewProjectSchema, "assignTask")],
   );
 
   return new Repository({

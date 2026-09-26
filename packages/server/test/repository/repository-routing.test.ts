@@ -48,14 +48,17 @@ import {
   InternetDomainSchema,
   MessageIdSchema,
   OriginSchema,
+  RejectionEventContextSchema,
   TenantIdSchema,
   type TenantId,
   UserIdSchema,
   VersionSchema,
+  type Version,
 } from "@spine-event-engine/proto";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { TaskListSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
 import {
+  CompleteTaskSchema,
   type CreateTask,
   CreateTaskSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
@@ -203,6 +206,7 @@ import {
   type CreateProjectSubmission,
   CreateProjectSubmissionSchema,
 } from "../../test-fixtures/generated/repository-routing/project_validation_commands_pb.js";
+// prettier-ignore
 import {
   type ProjectSubmissionCreated,
   ProjectSubmissionCreatedSchema,
@@ -250,7 +254,7 @@ const TaskSchema = TodoTaskSchema;
 const TaskCreatedSchema = TodoEvents.TaskCreatedSchema;
 const ProjectSubmissionIdStateSchema = AcceptedProjectSubmissionStateSchema;
 
-class ProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class ProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): void {
     void command;
   }
@@ -260,33 +264,25 @@ class ProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigi
   }
 }
 
-class CreateProjectRoutingAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class CreateProjectRoutingAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): void {
     void command;
   }
 }
 
-class IdlessCommandProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class IdlessCommandProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   createProject(command: CreateProject): void {
     void command;
   }
 }
 
-class IdlessCommandProjectionAggregate extends Aggregate<
-  string,
-  typeof ProjectStateSchema,
-  bigint
-> {
+class IdlessCommandProjectionAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): void {
     void command;
   }
 }
 
-class DraftProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class DraftProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static calls = 0;
 
   static reset(): void {
@@ -299,7 +295,7 @@ class DraftProjectAggregate extends Aggregate<string, typeof ProjectStateSchema,
   }
 }
 
-class BlankStateIdAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class BlankStateIdAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static calls = 0;
 
   assign(command: CreateProject): void {
@@ -308,11 +304,7 @@ class BlankStateIdAggregate extends Aggregate<string, typeof ProjectStateSchema,
   }
 }
 
-class BlankStateIdProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class BlankStateIdProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static calls = 0;
 
   assign(command: CreateProject): void {
@@ -324,7 +316,7 @@ class BlankStateIdProcessManager extends ProcessManager<
   }
 }
 
-class BlankStateIdProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class BlankStateIdProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static calls = 0;
 
   subscribe(event: ProjectCreated): void {
@@ -338,8 +330,7 @@ class BlankStateIdProjection extends Projection<string, typeof ProjectOverviewSt
 
 class SequencedProjectOverview extends Projection<
   ProjectSequenceId,
-  typeof SequencedProjectOverviewStateSchema,
-  number
+  typeof SequencedProjectOverviewStateSchema
 > {
   static calls = 0;
 
@@ -351,8 +342,7 @@ class SequencedProjectOverview extends Projection<
 
 class RegisteredProjectAggregate extends Aggregate<
   RepositoryProjectId,
-  typeof RegisteredProjectStateSchema,
-  bigint
+  typeof RegisteredProjectStateSchema
 > {
   assign(command: RegisterProject): void {
     this.update((draft) => Object.assign(draft, command));
@@ -361,8 +351,7 @@ class RegisteredProjectAggregate extends Aggregate<
 
 class ProjectMilestoneProjection extends Projection<
   ProjectMilestoneId,
-  typeof ProjectMilestoneOverviewStateSchema,
-  number
+  typeof ProjectMilestoneOverviewStateSchema
 > {
   subscribe(event: ProjectMilestoneAdded | ProjectMilestoneSourceState): void {
     this.update((draft) => Object.assign(draft, event));
@@ -371,8 +360,7 @@ class ProjectMilestoneProjection extends Projection<
 
 class ProjectMilestoneAggregate extends Aggregate<
   ProjectMilestoneId,
-  typeof ProjectMilestoneStateSchema,
-  bigint
+  typeof ProjectMilestoneStateSchema
 > {
   assign(command: AddProjectMilestone): void {
     this.update((draft) => Object.assign(draft, command));
@@ -381,8 +369,7 @@ class ProjectMilestoneAggregate extends Aggregate<
 
 class ProjectMilestoneProcessManager extends ProcessManager<
   ProjectMilestoneId,
-  typeof ProjectMilestoneWorkflowStateSchema,
-  number
+  typeof ProjectMilestoneWorkflowStateSchema
 > {
   static calls = 0;
   static ids: ProjectMilestoneId[] = [];
@@ -423,11 +410,7 @@ class ProjectMilestoneProcessManager extends ProcessManager<
   }
 }
 
-class NumberedProjectAggregate extends Aggregate<
-  number,
-  typeof NumberedProjectStateSchema,
-  bigint
-> {
+class NumberedProjectAggregate extends Aggregate<number, typeof NumberedProjectStateSchema> {
   assign(command: CreateNumberedProject): NumberedProjectCreated {
     this.update((draft) => {
       draft.id = command.id;
@@ -441,12 +424,13 @@ class NumberedProjectAggregate extends Aggregate<
   }
 }
 
-class ProjectWorkflow extends ProcessManager<bigint, typeof ProjectWorkflowStateSchema, number> {
-  assign(command: ScheduleProjectWorkflow): void {
+class ProjectWorkflow extends ProcessManager<bigint, typeof ProjectWorkflowStateSchema> {
+  assign(command: ScheduleProjectWorkflow): ProjectWorkflowScheduled {
     this.update((draft) => {
       draft.id = command.id;
       draft.queue = command.queue;
     });
+    return create(ProjectWorkflowScheduledSchema, { id: command.id, queue: command.queue });
   }
 
   react(event: ProjectWorkflowScheduled): void {
@@ -454,7 +438,7 @@ class ProjectWorkflow extends ProcessManager<bigint, typeof ProjectWorkflowState
   }
 }
 
-class MalformedFirstFieldAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class MalformedFirstFieldAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignRepeated(command: InviteProjectMembers): void {
     void command;
   }
@@ -464,7 +448,7 @@ class MalformedFirstFieldAggregate extends Aggregate<string, typeof ProjectState
   }
 }
 
-class ExecutingProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class ExecutingProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static assigneeCalls = 0;
   static directUpdateCalls = 0;
   static failure: Error | undefined;
@@ -475,7 +459,7 @@ class ExecutingProjectAggregate extends Aggregate<string, typeof ProjectStateSch
     this.failure = failure;
   }
 
-  createProject(command: CreateProject) {
+  createProject(command: CreateProject): ProjectCreated | readonly ProjectCreated[] {
     ExecutingProjectAggregate.assigneeCalls++;
 
     if (ExecutingProjectAggregate.failure !== undefined) {
@@ -488,18 +472,7 @@ class ExecutingProjectAggregate extends Aggregate<string, typeof ProjectStateSch
     if (command.name.startsWith("restore-lifecycle")) this.restoreDraft();
 
     if (command.name.includes("-lifecycle")) {
-      return create(EventSchema, {
-        id: create(EventIdSchema, { value: `event-${command.name}` }),
-        context: create(EventContextSchema),
-        message: AnyMessages.pack(
-          ProjectCreatedSchema,
-          create(ProjectCreatedSchema, {
-            id: command.id,
-            name: command.name,
-            priority: 1,
-          }),
-        ),
-      });
+      return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
     }
 
     const name = command.name === "Multi" ? "Multi two" : command.name;
@@ -517,27 +490,16 @@ class ExecutingProjectAggregate extends Aggregate<string, typeof ProjectStateSch
 
     if (command.name === "Multi") {
       return [
-        createAggregateEvent("event-Multi-1", command.id, 0, "Multi one"),
-        createAggregateEvent("event-Multi-2", command.id, 0, "Multi two"),
+        create(ProjectCreatedSchema, { id: command.id, name: "Multi one", priority: 1 }),
+        create(ProjectCreatedSchema, { id: command.id, name: "Multi two", priority: 1 }),
       ];
     }
 
-    return create(EventSchema, {
-      id: create(EventIdSchema, { value: `event-${command.name}` }),
-      context: create(EventContextSchema),
-      message: AnyMessages.pack(
-        ProjectCreatedSchema,
-        create(ProjectCreatedSchema, {
-          id: command.id,
-          name: command.name,
-          priority: 1,
-        }),
-      ),
-    });
+    return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
   }
 }
 
-class ManagedProjectAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class ManagedProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static assigneeCalls = 0;
   static failure: Error | undefined;
 
@@ -568,7 +530,7 @@ class ManagedProjectAggregate extends Aggregate<string, typeof ProjectStateSchem
   }
 }
 
-class ProjectIdRejectingAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+class ProjectIdRejectingAggregate extends Aggregate<TaskId, typeof TaskSchema> {
   static failure: unknown;
 
   createProject(): never {
@@ -576,7 +538,7 @@ class ProjectIdRejectingAggregate extends Aggregate<TaskId, typeof TaskSchema, b
   }
 }
 
-class GeneratedTwoArgAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class GeneratedTwoArgAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static argumentCounts: number[] = [];
   static contexts: CommandContext[] = [];
   static observedStateNames: string[] = [];
@@ -642,11 +604,7 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof ProjectStateSche
   }
 }
 
-class ProjectRegistrationReactorAggregate extends Aggregate<
-  string,
-  typeof ProjectStateSchema,
-  bigint
-> {
+class ProjectRegistrationReactorAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static argumentCounts: number[] = [];
   static contexts: EventContext[] = [];
   static failure: Error | undefined;
@@ -686,7 +644,15 @@ class ProjectRegistrationReactorAggregate extends Aggregate<
   }
 }
 
-class GuardedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class CountingReactorAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+  reactProjection(event: ProjectCreated): undefined {
+    const count = Number(this.state.name || "0") + 1;
+    this.update((draft) => Object.assign(draft, { id: event.id, name: String(count) }));
+    return undefined;
+  }
+}
+
+class GuardedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static calls = 0;
 
   static reset(): void {
@@ -695,6 +661,7 @@ class GuardedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigi
 
   reactProjection(event: ProjectCreated): void {
     GuardedAggregate.calls++;
+    if (event.name === "no-op") return;
     this.update((draft) =>
       Object.assign(
         draft,
@@ -708,7 +675,7 @@ class GuardedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigi
   }
 }
 
-class ProducingGuardedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class ProducingGuardedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static calls = 0;
 
   static reset(): void {
@@ -737,8 +704,7 @@ class ProducingGuardedAggregate extends Aggregate<string, typeof ProjectStateSch
 
 class GeneratedCommandingProcessManager extends ProcessManager<
   string,
-  typeof ProjectQueueStateSchema,
-  number
+  typeof ProjectQueueStateSchema
 > {
   static argumentCounts: number[] = [];
   static contexts: EventContext[] = [];
@@ -781,7 +747,7 @@ class GeneratedCommandingProcessManager extends ProcessManager<
   }
 }
 
-class MultiManagedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class MultiManagedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): readonly ProjectCreated[] {
     this.update((draft) =>
       Object.assign(
@@ -808,7 +774,7 @@ class MultiManagedAggregate extends Aggregate<string, typeof ProjectStateSchema,
   }
 }
 
-class EmptyManagedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class EmptyManagedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): undefined {
     this.update((draft) =>
       Object.assign(
@@ -824,7 +790,9 @@ class EmptyManagedAggregate extends Aggregate<string, typeof ProjectStateSchema,
   }
 }
 
-class EnvelopeManagedAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class EnvelopeManagedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+  static payloadMode: "declared" | "undeclared" | "malformed" = "declared";
+
   createProject(command: CreateProject): SpineEvent {
     this.update((draft) =>
       Object.assign(
@@ -836,48 +804,48 @@ class EnvelopeManagedAggregate extends Aggregate<string, typeof ProjectStateSche
         }),
       ),
     );
-    return createAggregateEvent("spoofed-event", command.id, 0, command.name);
+    const envelope = createAggregateEvent("spoofed-event", command.id, 0, command.name);
+    if (EnvelopeManagedAggregate.payloadMode === "undeclared") {
+      envelope.message = AnyMessages.pack(
+        ProjectRegisteredSchema,
+        create(ProjectRegisteredSchema, { id: command.id, name: command.name, priority: 1 }),
+      );
+    }
+    if (EnvelopeManagedAggregate.payloadMode === "malformed") {
+      envelope.message = create(AnySchema, {
+        typeUrl: TypeUrls.derive(ProjectCreatedSchema),
+        value: new Uint8Array([0xff]),
+      });
+    }
+    return envelope;
   }
 }
 
-class ValidatingProjectAggregate extends Aggregate<
-  string,
-  typeof ProjectSubmissionStateSchema,
-  bigint
-> {
+class ValidatingProjectAggregate extends Aggregate<string, typeof ProjectSubmissionStateSchema> {
   static assigneeCalls = 0;
-  static applierCalls = 0;
 
   static reset(): void {
     this.assigneeCalls = 0;
-    this.applierCalls = 0;
   }
 
-  createProject(command: CreateProjectSubmission) {
+  createProject(command: CreateProjectSubmission): ProjectSubmissionCreated {
     ValidatingProjectAggregate.assigneeCalls++;
-    return createValidatedEvent(`event-${command.id}`, command.id, command.name);
-  }
-
-  applyTask(event: ProjectSubmissionCreated): void {
-    ValidatingProjectAggregate.applierCalls++;
-    this.startTransaction();
     this.update((draft) =>
       Object.assign(
         draft,
         create(ProjectSubmissionStateSchema, {
-          id: event.id,
-          name: event.name,
+          id: command.id,
+          name: command.name,
         }),
       ),
     );
-    this.commitTransaction();
+    return create(ProjectSubmissionCreatedSchema, { id: command.id, name: command.name });
   }
 }
 
 class ProjectSubmissionIdRouteAggregate extends Aggregate<
   ProjectSubmissionId,
-  typeof ProjectSubmissionIdStateSchema,
-  bigint
+  typeof ProjectSubmissionIdStateSchema
 > {
   static calls = 0;
 
@@ -890,11 +858,7 @@ class ProjectSubmissionIdRouteAggregate extends Aggregate<
   }
 }
 
-class ValidatingProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class ValidatingProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static commandCalls = 0;
 
   static reset(): void {
@@ -920,8 +884,8 @@ class ValidatingProcessManager extends ProcessManager<
   }
 }
 
-class TransitionViolatingAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
-  createProject(command: CreateProject) {
+class TransitionViolatingAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+  createProject(command: CreateProject): ProjectCreated {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -932,12 +896,12 @@ class TransitionViolatingAggregate extends Aggregate<string, typeof ProjectState
         }),
       ),
     );
-    return createAggregateEvent("event-transition-invalid", command.id, 0, command.name);
+    return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
   }
 }
 
 class RecoveringTransitionAggregate extends TransitionViolatingAggregate {
-  override createProject(command: CreateProject) {
+  override createProject(command: CreateProject): ProjectCreated {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -948,14 +912,14 @@ class RecoveringTransitionAggregate extends TransitionViolatingAggregate {
         }),
       ),
     );
-    return createAggregateEvent("event-transition-recovers", command.id, 0, command.name);
+    return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
   }
 }
 
-class AsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class AsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static resolveCommand: ((eventName: string) => void) | undefined;
 
-  createProject(command: CreateProject): Promise<SpineEvent> {
+  createProject(command: CreateProject): Promise<ProjectCreated> {
     return new Promise((resolve) => {
       AsyncAssigneeAggregate.resolveCommand = (eventName) => {
         this.update((draft) =>
@@ -968,20 +932,20 @@ class AsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema
             }),
           ),
         );
-        resolve(createAggregateEvent(`event-${eventName}`, command.id, 0, eventName));
+        resolve(create(ProjectCreatedSchema, { id: command.id, name: eventName, priority: 1 }));
       };
     });
   }
 }
 
-class RejectedAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class RejectedAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static rejectCommand: ((error: Error) => void) | undefined;
 
   static reset(): void {
     this.rejectCommand = undefined;
   }
 
-  createProject(command: CreateProject): Promise<SpineEvent> {
+  createProject(command: CreateProject): Promise<ProjectCreated> {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -998,7 +962,7 @@ class RejectedAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectSta
   }
 }
 
-class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static readonly started: string[] = [];
   static readonly releases: (() => void)[] = [];
 
@@ -1013,7 +977,7 @@ class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectState
     release();
   }
 
-  createProject(command: CreateProject): Promise<SpineEvent> {
+  createProject(command: CreateProject): Promise<ProjectCreated> {
     SerialAsyncAssigneeAggregate.started.push(command.name);
     return new Promise<void>((resolve) => {
       SerialAsyncAssigneeAggregate.releases.push(resolve);
@@ -1028,12 +992,12 @@ class SerialAsyncAssigneeAggregate extends Aggregate<string, typeof ProjectState
           }),
         ),
       );
-      return createAggregateEvent(`event-${command.name}`, command.id, 0, command.name);
+      return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
     });
   }
 }
 
-class NoApplierAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class ReactionMetadataAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(command: CreateProject): ProjectCreated {
     this.update((draft) =>
       Object.assign(
@@ -1051,109 +1015,80 @@ class NoApplierAggregate extends Aggregate<string, typeof ProjectStateSchema, bi
     });
   }
 
-  reactTask(event: ProjectCreated): void {
+  reactTask(event: ProjectCreated): undefined {
     void event;
+    return undefined;
   }
 }
 
-class MalformedEventAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class MalformedEventAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   createProject(): unknown {
     return create(EventSchema, {
       id: create(EventIdSchema, { value: "event-malformed" }),
       context: create(EventContextSchema),
     });
   }
-
-  applyTask(event: ProjectCreated): void {
-    void event;
-  }
 }
 
-class BigintVersionAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class SpineVersionAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static observedVersions: unknown[] = [];
 
   static reset(): void {
     this.observedVersions = [];
   }
 
-  createProject(command: CreateProject) {
-    BigintVersionAggregate.observedVersions.push(this.version);
-    return createAggregateEvent(`event-bigint-${command.name}`, command.id, 0, command.name);
-  }
-
-  applyTask(event: ProjectCreated): void {
-    this.startTransaction();
+  createProject(command: CreateProject): ProjectCreated {
+    SpineVersionAggregate.observedVersions.push(this.version);
     this.update((draft) =>
       Object.assign(
         draft,
         create(ProjectStateSchema, {
-          id: event.id,
-          name: event.name,
+          id: command.id,
+          name: command.name,
           archived: false,
         }),
       ),
     );
-    this.commitTransaction();
+    return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
   }
 }
 
-class ProjectionProducingAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
-  createProject(command: CreateProject) {
-    return createProjectCreated(
-      `event-${command.name}`,
-      command.id,
-      command.name === "PastMessageTenant"
-        ? { pastMessageTenantId: "tenant-b" }
-        : { importTenantId: "tenant-b" },
-    );
-  }
-
-  applyProjection(event: ProjectCreated): void {
-    this.startTransaction();
+class ProjectionProducingAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+  createProject(command: CreateProject): ProjectCreated {
     this.update((draft) =>
       Object.assign(
         draft,
         create(ProjectStateSchema, {
-          id: event.id,
-          name: event.name,
+          id: command.id,
+          name: command.name,
           archived: false,
         }),
       ),
     );
-    this.commitTransaction();
+    return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
   }
 }
 
 class CommandTenantProjectionProducingAggregate extends Aggregate<
   string,
-  typeof ProjectStateSchema,
-  bigint
+  typeof ProjectStateSchema
 > {
-  createProject(command: CreateProject) {
-    return createProjectCreated(`event-${command.name}`, command.id);
-  }
-
-  applyProjection(event: ProjectCreated): void {
-    this.startTransaction();
+  createProject(command: CreateProject): ProjectCreated {
     this.update((draft) =>
       Object.assign(
         draft,
         create(ProjectStateSchema, {
-          id: event.id,
-          name: event.name,
+          id: command.id,
+          name: command.name,
           archived: false,
         }),
       ),
     );
-    this.commitTransaction();
+    return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
   }
 }
 
-class ExecutingTaskProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class ExecutingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static subscriberCalls = 0;
 
   static reset(): void {
@@ -1182,7 +1117,7 @@ class ExecutingTaskProjection extends Projection<
   }
 }
 
-class FilteredTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class FilteredTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static calls: string[] = [];
 
   static reset(): void {
@@ -1198,7 +1133,7 @@ class FilteredTaskProjection extends Projection<string, typeof ProjectOverviewSt
   }
 }
 
-class FilteredEventAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class FilteredEventAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static calls: string[] = [];
 
   static reset(): void {
@@ -1224,14 +1159,16 @@ class FilteredEventAggregate extends Aggregate<string, typeof ProjectStateSchema
   }
 }
 
-class ManagedTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class ManagedTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static subscriberCalls = 0;
+  static result: unknown = undefined;
 
   static reset(): void {
     this.subscriberCalls = 0;
+    this.result = undefined;
   }
 
-  subscribeTask(event: ProjectCreated): void {
+  subscribeTask(event: ProjectCreated): unknown {
     ManagedTaskProjection.subscriberCalls++;
     this.update((draft) =>
       Object.assign(
@@ -1243,10 +1180,11 @@ class ManagedTaskProjection extends Projection<string, typeof ProjectOverviewSta
         }),
       ),
     );
+    return ManagedTaskProjection.result;
   }
 }
 
-class AlternateCatchUpProjection extends Projection<TaskListId, typeof TaskListSchema, number> {
+class AlternateCatchUpProjection extends Projection<TaskListId, typeof TaskListSchema> {
   static subscriberCalls = 0;
 
   static reset(): void {
@@ -1267,11 +1205,7 @@ class AlternateCatchUpProjection extends Projection<TaskListId, typeof TaskListS
   }
 }
 
-class BlockingCatchUpProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class BlockingCatchUpProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static startedCalls = 0;
   static completedCalls = 0;
   static block = false;
@@ -1320,11 +1254,7 @@ class BlockingCatchUpProjection extends Projection<
   }
 }
 
-class GeneratedTwoArgProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class GeneratedTwoArgProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static argumentCounts: number[] = [];
   static contexts: EventContext[] = [];
 
@@ -1349,11 +1279,7 @@ class GeneratedTwoArgProjection extends Projection<
   }
 }
 
-class RejectionObservingProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class RejectionObservingProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static messages: TaskAlreadyDoneMessage[] = [];
   static contexts: EventContext[] = [];
   static argumentCounts: number[] = [];
@@ -1384,8 +1310,7 @@ class RejectionObservingProjection extends Projection<
 
 class ContextMutatingGeneratedProjection extends Projection<
   string,
-  typeof ProjectOverviewStateSchema,
-  number
+  typeof ProjectOverviewStateSchema
 > {
   static firstContext: EventContext | undefined;
   static observerSawSameContext = false;
@@ -1420,7 +1345,7 @@ class ContextMutatingGeneratedProjection extends Projection<
   }
 }
 
-class PassiveTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class PassiveTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static subscriberCalls = 0;
 
   static reset(): void {
@@ -1438,11 +1363,7 @@ class PassiveTaskProjection extends Projection<string, typeof ProjectOverviewSta
   }
 }
 
-class AccumulatingTaskProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class AccumulatingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   subscribeTask(event: ProjectCreated): void {
     this.update((draft) => {
       draft.name = event.name;
@@ -1451,27 +1372,26 @@ class AccumulatingTaskProjection extends Projection<
   }
 }
 
-class StateObservingProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class StateObservingProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static subscriberCalls = 0;
+  static result: unknown = undefined;
 
   static reset(): void {
     this.subscriberCalls = 0;
+    this.result = undefined;
   }
 
-  subscribeState(state: ProjectState): void {
+  subscribeState(state: ProjectState): unknown {
     StateObservingProjection.subscriberCalls++;
     this.update((draft) => {
       draft.name = `${state.name} (projected)`;
       draft.priority = state.archived ? 2 : 1;
     });
+    return StateObservingProjection.result;
   }
 }
 
-class OriginStateProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class OriginStateProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static calls: string[] = [];
 
   static reset(): void {
@@ -1487,49 +1407,41 @@ class OriginStateProjection extends Projection<string, typeof ProjectOverviewSta
   }
 }
 
-class ProjectBacklogProjection extends Projection<
-  string,
-  typeof ProjectBacklogStateSchema,
-  number
-> {
+class ProjectBacklogProjection extends Projection<string, typeof ProjectBacklogStateSchema> {
   subscribeState(state: ProjectOverviewState): void {
     void state;
   }
 }
 
-class ReactingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class ReactingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   reactTask(event: ProjectCreated): void {
     void event;
   }
 }
 
-class UserIdProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class UserIdProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   subscribeUser(event: ProjectCreated): void {
     void event;
   }
 }
 
-class NonFiniteRouteProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class NonFiniteRouteProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   subscribeNumber(event: ProjectPriorityChanged): void {
     void event;
   }
 }
 
-class ProjectIdProjectAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
-  applyTaskCreated(event: TaskCreated): void {
+class ProjectIdProjectAggregate extends Aggregate<TaskId, typeof TaskSchema> {
+  subscribeTaskCreated(event: TaskCreated): void {
     void event;
   }
 
-  applyWrongId(event: ProjectMemberChanged): void {
+  subscribeWrongId(event: ProjectMemberChanged): void {
     void event;
   }
 }
 
-class ProjectIdProducingAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+class ProjectIdProducingAggregate extends Aggregate<TaskId, typeof TaskSchema> {
   assignTask(command: CreateTask): TaskCreated {
     this.update((draft) =>
       Object.assign(draft, {
@@ -1546,17 +1458,13 @@ class ProjectIdProducingAggregate extends Aggregate<TaskId, typeof TaskSchema, b
   }
 }
 
-class TaskCreatedScalarProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  number
-> {
+class TaskCreatedScalarProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   subscribeTaskCreated(event: TaskCreated): void {
     void event;
   }
 }
 
-class CreateTaskScalarAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class CreateTaskScalarAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignCreateTask(command: CreateTask): void {
     void command;
   }
@@ -1564,15 +1472,14 @@ class CreateTaskScalarAggregate extends Aggregate<string, typeof ProjectStateSch
 
 class MissingSubscriberMethodProjection extends Projection<
   string,
-  typeof ProjectOverviewStateSchema,
-  number
+  typeof ProjectOverviewStateSchema
 > {
   missingSubscriber(event: ProjectCreated): void {
     void event;
   }
 }
 
-class ThrowingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class ThrowingTaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static failure: unknown = new Error("projection subscriber failed");
 
   static reset(failure: unknown = new Error("projection subscriber failed")): void {
@@ -1585,20 +1492,24 @@ class ThrowingTaskProjection extends Projection<string, typeof ProjectOverviewSt
   }
 }
 
-class RoutingProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema, number> {
+class RoutingProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static commandCalls = 0;
   static eventCalls = 0;
   static commandReactionCalls = 0;
   static failure: Error | undefined;
+  static malformedProducedCommand = false;
+  static emptyAssignment = false;
 
   static reset(failure?: Error): void {
     this.commandCalls = 0;
     this.eventCalls = 0;
     this.commandReactionCalls = 0;
     this.failure = failure;
+    this.malformedProducedCommand = false;
+    this.emptyAssignment = false;
   }
 
-  createProject(command: CreateProject): ProjectCreated {
+  createProject(command: CreateProject): ProjectCreated | undefined {
     RoutingProcessManager.commandCalls++;
     if (command.name.endsWith("-lifecycle")) {
       if (command.name === "archive-lifecycle") this.archiveDraft();
@@ -1619,6 +1530,7 @@ class RoutingProcessManager extends ProcessManager<string, typeof ProjectQueueSt
     if (RoutingProcessManager.failure !== undefined) {
       throw RoutingProcessManager.failure;
     }
+    if (RoutingProcessManager.emptyAssignment) return undefined;
     return create(ProjectCreatedSchema, {
       id: command.id,
       name: `${command.name} event`,
@@ -1653,10 +1565,13 @@ class RoutingProcessManager extends ProcessManager<string, typeof ProjectQueueSt
         }),
       ),
     );
-    return create(CreateProjectSchema, {
+    const command = create(CreateProjectSchema, {
       id: event.id,
       name: `${event.name} follow-up command`,
     });
+    if (RoutingProcessManager.malformedProducedCommand)
+      return malformedCreateProjectCommand(command.name);
+    return command;
   }
 
   reactTaskWithEvent(event: ProjectCreated): ProjectRegistered {
@@ -1678,21 +1593,32 @@ class RoutingProcessManager extends ProcessManager<string, typeof ProjectQueueSt
   }
 }
 
+function malformedCreateProjectCommand(name: string): CreateProject {
+  return {
+    $typeName: CreateProjectSchema.typeName,
+    get id() {
+      throw new Error("malformed produced Command payload");
+    },
+    name,
+  } as unknown as CreateProject;
+}
+
 class CommandSubstitutingProcessManager extends ProcessManager<
   string,
-  typeof ProjectQueueStateSchema,
-  number
+  typeof ProjectQueueStateSchema
 > {
   static siblingOutputs = false;
+  static wrongOutput = false;
 
   static reset(): void {
     this.siblingOutputs = false;
+    this.wrongOutput = false;
   }
 
   substitute(
     command: CreateProjectSubmission,
     context: CommandContext,
-  ): CreateFollowUpProject | readonly CreateFollowUpProject[] {
+  ): CreateFollowUpProject | CreateProject | readonly CreateFollowUpProject[] {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -1706,17 +1632,20 @@ class CommandSubstitutingProcessManager extends ProcessManager<
       id: command.id,
       name: `${command.name} follow-up`,
     });
+    if (CommandSubstitutingProcessManager.wrongOutput) {
+      return create(CreateProjectSchema, { id: command.id, name: command.name });
+    }
     return CommandSubstitutingProcessManager.siblingOutputs
       ? [first, create(CreateFollowUpProjectSchema, { ...first, name: `${command.name} sibling` })]
       : first;
   }
+
+  neighbor(command: CreateProject): CreateProject {
+    return command;
+  }
 }
 
-class FilteredProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class FilteredProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static calls: string[] = [];
 
   static reset(): void {
@@ -1742,11 +1671,43 @@ class FilteredProcessManager extends ProcessManager<
   }
 }
 
-class DiagnosticOnlyProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class UnionCommandProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
+  choose(event: ProjectCreated): CreateFollowUpProject | DraftProject {
+    return event.name === "draft"
+      ? create(DraftProjectSchema, { id: event.id, name: event.name, priority: 1 })
+      : create(CreateFollowUpProjectSchema, { id: event.id, name: event.name });
+  }
+}
+
+class OptionalCommandProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
+  choose(event: ProjectCreated): readonly [CreateFollowUpProject, (DraftProject | undefined)?] {
+    const first = create(CreateFollowUpProjectSchema, { id: event.id, name: event.name });
+    return event.name === "both"
+      ? [first, create(DraftProjectSchema, { id: event.id, name: event.name, priority: 1 })]
+      : [first, undefined];
+  }
+}
+
+class SilentCommandProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
+  static calls = 0;
+  static rejectionCalls = 0;
+
+  commandSilently(event: ProjectCreated): undefined {
+    SilentCommandProcessManager.calls++;
+    this.update((draft) => Object.assign(draft, { id: event.id, queue: event.name }));
+    return undefined;
+  }
+
+  commandSilentlyOnRejection(rejection: TaskAlreadyDoneMessage): undefined {
+    SilentCommandProcessManager.rejectionCalls++;
+    const id = rejection.id?.value;
+    if (id === undefined) throw new Error("Expected a rejected task ID.");
+    this.update((draft) => Object.assign(draft, { id, queue: "rejected" }));
+    return undefined;
+  }
+}
+
+class DiagnosticOnlyProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static calls = 0;
 
   createProject(command: CreateProject): ProjectCreated {
@@ -1759,11 +1720,7 @@ class DiagnosticOnlyProcessManager extends ProcessManager<
   }
 }
 
-class InboxCheckingProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class InboxCheckingProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static delivery: Delivery | undefined;
   static sawPendingRow = false;
   static eventCalls = 0;
@@ -1804,11 +1761,7 @@ class InboxCheckingProcessManager extends ProcessManager<
   }
 }
 
-class BlockingProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class BlockingProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static startedCalls = 0;
   static completedCalls = 0;
   static blockingId: string | undefined;
@@ -1846,11 +1799,7 @@ class BlockingProcessManager extends ProcessManager<
   }
 }
 
-class SplitRouteProcessManager extends ProcessManager<
-  string,
-  typeof ProjectQueueStateSchema,
-  number
-> {
+class SplitRouteProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   static startedIds: string[] = [];
   static completedIds: string[] = [];
 
@@ -1949,16 +1898,17 @@ describe("repository signal routing", () => {
 
     expect(ExecutingProjectAggregate.assigneeCalls).toBe(1);
     expect(ExecutingProjectAggregate.directUpdateCalls).toBe(1);
-    await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-TaskExec" } }]);
+    const [storedEvent] = await eventStore.read();
+    expect(storedEvent?.id?.value).toMatch(UUID_PATTERN);
     await expect(storage.readEvents("task-exec")).resolves.toMatchObject([
-      { id: { value: "event-TaskExec" } },
+      { id: { value: storedEvent?.id?.value } },
     ]);
     await expect(storage.readCurrent("task-exec")).resolves.toMatchObject({
       entityId: "task-exec",
       version: 1n,
       state: { id: "task-exec", name: "TaskExec (applied)", archived: true },
     });
-    expect(observed).toEqual(["event-TaskExec"]);
+    expect(observed).toEqual([storedEvent?.id?.value]);
   });
 
   it("keeps state-history retention disabled by default across repository families", async () => {
@@ -2055,10 +2005,12 @@ describe("repository signal routing", () => {
         state: { id: "subscriber-id", name: "Task (applied)", archived: true },
       });
       await expect(storage.readStates("subscriber-id")).resolves.toMatchObject([{ version: 1n }]);
-      await expect(storage.readEvents("subscriber-id")).resolves.toMatchObject([
-        { id: { value: "event-Task" } },
-      ]);
-      await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-Task" } }]);
+      const storedEvents = await storage.readEvents("subscriber-id");
+      expect(storedEvents).toHaveLength(1);
+      expect(storedEvents[0]?.id?.value).toMatch(UUID_PATTERN);
+      const publishedEvents = await eventStore.read();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.id?.value).toMatch(UUID_PATTERN);
       expect("storedEventDispatchFailures" in context).toBe(false);
     } finally {
       eventStore.close();
@@ -2193,7 +2145,9 @@ describe("repository signal routing", () => {
       await projectionContext
         .eventBus()
         .post(createProjectCreated("event-history-disabled-projection", "history-projection"));
-      await expect(projectionStorage.readStates("history-projection")).resolves.toEqual([]);
+      await expect(projectionStorage.readStates("history-projection")).resolves.toMatchObject([
+        { version: 1n, state: { name: "Task (projected)" } },
+      ]);
     } finally {
       await projectionContext.close();
     }
@@ -2394,7 +2348,7 @@ describe("repository signal routing", () => {
 
   it("posts a rejected aggregate command without directly updating or persisting output", async () => {
     const rejection = TaskAlreadyDone.create({
-      id: create(GeneratedTaskIdSchema, { value: "task-applier-rejected" }),
+      id: create(GeneratedTaskIdSchema, { value: "task-direct-update-rejected" }),
     });
     ExecutingProjectAggregate.reset(rejection);
     const factory = new InMemoryStorageFactory();
@@ -2412,13 +2366,15 @@ describe("repository signal routing", () => {
     await expect(
       context
         .commandBus()
-        .post(createAggregateCommand("command-applier-rejected", "task-applier-rejected")),
+        .post(
+          createAggregateCommand("command-direct-update-rejected", "task-direct-update-rejected"),
+        ),
     ).resolves.toBeUndefined();
 
     expect(ExecutingProjectAggregate.directUpdateCalls).toBe(0);
     const [stored] = await waitForStoredEvents(eventStore, 1);
     expect(stored?.id?.value).toMatch(UUID_PATTERN);
-    await expect(storage.readCurrent("task-applier-rejected")).resolves.toBeUndefined();
+    await expect(storage.readCurrent("task-direct-update-rejected")).resolves.toBeUndefined();
     ExecutingProjectAggregate.reset();
   });
 
@@ -2790,6 +2746,46 @@ describe("repository signal routing", () => {
     expect(observed[0]).toMatch(/.+/);
   });
 
+  it("retries a failed state-only Aggregate reaction without exposing or duplicating state", async () => {
+    const factory = new FailingSourceDiagnosticStorageFactory();
+    const repository = createCountingReactorRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    const source = createProjectCreated("event-count-retry", "task-count-retry");
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectStateSchema,
+      eventHistory: true,
+    });
+    if (dispatcher === undefined) throw new Error("Expected an Aggregate Event dispatcher.");
+
+    try {
+      await expect(dispatcher.dispatch(source)).rejects.toThrow(/forced.*failure/);
+      await expect(
+        context.stand().read(ProjectStateSchema, "task-count-retry"),
+      ).resolves.toBeUndefined();
+      await expect(storage.readCurrent("task-count-retry")).resolves.toBeUndefined();
+
+      await expect(dispatcher.dispatch(source)).resolves.toBeUndefined();
+      await expect(
+        context.stand().read(ProjectStateSchema, "task-count-retry"),
+      ).resolves.toMatchObject({ name: "1" });
+      await expect(storage.readCurrent("task-count-retry")).resolves.toMatchObject({
+        version: 1n,
+        state: { id: "task-count-retry", name: "1" },
+      });
+      const history = await storage.readEvents("task-count-retry");
+      expect(history).toHaveLength(1);
+      expect(history[0]?.message?.typeUrl).toBe(TypeUrls.derive(ProjectCreatedSchema));
+    } finally {
+      await context.close();
+    }
+  });
+
   it("uses one committed version for every event and state from an aggregate event reaction", async () => {
     ProjectRegistrationReactorAggregate.reset();
     const factory = new InMemoryStorageFactory();
@@ -3105,6 +3101,36 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("copies the full pre-dispatch Aggregate Version to produced Events", async () => {
+    const factory = new InMemoryStorageFactory();
+    const repository = createExecutingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectStateSchema,
+    });
+    const version = create(VersionSchema, {
+      number: 3,
+      timestamp: create(TimestampSchema, { seconds: 41n, nanos: 7 }),
+    });
+    const state = create(ProjectStateSchema, { id: "producer-version", name: "Before" });
+    await storage.writeCurrent({
+      entityId: "producer-version",
+      state,
+      version,
+      lifecycle: { archived: false, deleted: false },
+    });
+    await context.stand().update(ProjectStateSchema, state, { version });
+
+    await context.commandBus().post(createAggregateCommand("producer-command", "producer-version"));
+    const [event] = await new EventStore({ name: "Tasks", multitenant: false }, factory).read();
+    expect(event?.context?.version).toEqual(version);
+  });
+
   it("rejects managed aggregate handlers that return no domain event", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
@@ -3117,9 +3143,69 @@ describe("repository signal routing", () => {
       context.commandBus().post(createAggregateCommand("command-empty", "task-empty")),
     ).resolves.toBeUndefined();
     await expect(eventStore.read()).resolves.toEqual([]);
+    await expect(context.stand().read(ProjectStateSchema, "task-empty")).resolves.toBeUndefined();
   });
 
-  it("persists explicit framework event envelopes returned by managed aggregate handlers", async () => {
+  it("rejects empty Process Manager assignment before state and event commit", async () => {
+    RoutingProcessManager.reset();
+    RoutingProcessManager.emptyAssignment = true;
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectQueueStateSchema,
+    });
+    try {
+      await expect(
+        context.commandBus().post(createAggregateCommand("empty-pm-assignment", "empty-pm")),
+      ).resolves.toBeUndefined();
+      expect(RoutingProcessManager.commandCalls).toBe(1);
+      await expect(storage.readCurrent("empty-pm")).resolves.toBeUndefined();
+      await expect(storage.readStates("empty-pm")).resolves.toEqual([]);
+      await expect(storage.readEvents("empty-pm")).resolves.toEqual([]);
+      await expect(
+        new EventStore({ name: "Tasks", multitenant: false }, factory).read(),
+      ).resolves.toEqual([]);
+    } finally {
+      RoutingProcessManager.reset();
+      await context.close();
+    }
+  });
+
+  it("rejects concrete Projection subscriber returns before committing state", async () => {
+    for (const result of [null, [], [undefined]]) {
+      ManagedTaskProjection.reset();
+      ManagedTaskProjection.result = result;
+      const factory = new InMemoryStorageFactory();
+      const context = BoundedContext.singleTenant("Tasks")
+        .add(createManagedProjection())
+        .withStorageFactory(factory)
+        .build();
+      const storage = new CurrentRecordTestStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: factory,
+        stateSchema: ProjectOverviewStateSchema,
+      });
+      try {
+        await context
+          .eventBus()
+          .post(createProjectCreated("subscriber-value", "subscriber-target"));
+        expect(ManagedTaskProjection.subscriberCalls).toBe(1);
+        await expect(storage.readCurrent("subscriber-target")).resolves.toBeUndefined();
+        await expect(storage.readStates("subscriber-target")).resolves.toEqual([]);
+      } finally {
+        await context.close();
+      }
+    }
+    ManagedTaskProjection.reset();
+  });
+
+  it("rejects framework event envelopes returned by managed aggregate handlers", async () => {
+    EnvelopeManagedAggregate.payloadMode = "declared";
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createEnvelopeManagedRepository())
@@ -3130,7 +3216,58 @@ describe("repository signal routing", () => {
     await expect(
       context.commandBus().post(createAggregateCommand("command-envelope", "task-envelope")),
     ).resolves.toBeUndefined();
-    await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "spoofed-event" } }]);
+    await expect(eventStore.read()).resolves.toEqual([]);
+    await expect(
+      context.stand().read(ProjectStateSchema, "task-envelope"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("rejects an undeclared Event payload inside an Aggregate handler envelope", async () => {
+    EnvelopeManagedAggregate.payloadMode = "undeclared";
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createEnvelopeManagedRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    try {
+      await expect(
+        context
+          .commandBus()
+          .post(createAggregateCommand("command-wrong-envelope", "task-wrong-envelope")),
+      ).resolves.toBeUndefined();
+      await expect(
+        context.stand().read(ProjectStateSchema, "task-wrong-envelope"),
+      ).resolves.toBeUndefined();
+      await expect(eventStore.read()).resolves.toEqual([]);
+    } finally {
+      EnvelopeManagedAggregate.payloadMode = "declared";
+      await context.close();
+    }
+  });
+
+  it("rejects a malformed packed Event payload before Aggregate commit", async () => {
+    EnvelopeManagedAggregate.payloadMode = "malformed";
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createEnvelopeManagedRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    try {
+      await expect(
+        context
+          .commandBus()
+          .post(createAggregateCommand("command-bad-envelope", "task-bad-envelope")),
+      ).resolves.toBeUndefined();
+      await expect(
+        context.stand().read(ProjectStateSchema, "task-bad-envelope"),
+      ).resolves.toBeUndefined();
+      await expect(eventStore.read()).resolves.toEqual([]);
+    } finally {
+      EnvelopeManagedAggregate.payloadMode = "declared";
+      await context.close();
+    }
   });
 
   it("keeps an already registered repository executable after a failed second registration", async () => {
@@ -3195,10 +3332,10 @@ describe("repository signal routing", () => {
 
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
-    await expect(eventStore.read()).resolves.toMatchObject([
-      { id: { value: "event-Multi-1" }, context: { version: { number: 0 } } },
-      { id: { value: "event-Multi-2" }, context: { version: { number: 0 } } },
-    ]);
+    const events = await eventStore.read();
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.context?.version?.number)).toEqual([0, 0]);
+    for (const event of events) expect(event.id?.value).toMatch(UUID_PATTERN);
     await expect(storage.readCurrent("task-multi")).resolves.toMatchObject({
       entityId: "task-multi",
       version: 1n,
@@ -3294,10 +3431,10 @@ describe("repository signal routing", () => {
     SerialAsyncAssigneeAggregate.releaseNext();
     await Promise.all([first, second]);
 
-    await expect(eventStore.read()).resolves.toMatchObject([
-      { id: { value: "event-First" }, context: { version: { number: 0 } } },
-      { id: { value: "event-Second" }, context: { version: { number: 1 } } },
-    ]);
+    const events = await eventStore.read();
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.context?.version?.number).sort()).toEqual([0, 1]);
+    for (const event of events) expect(event.id?.value).toMatch(UUID_PATTERN);
   });
 
   it("resolves aggregate command execution after commit when stored-event dispatch later throws", async () => {
@@ -3328,7 +3465,9 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("command-dispatch-failure", "task-dispatch")),
     ).resolves.toBeUndefined();
 
-    await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-Task" } }]);
+    const events = await eventStore.read();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.id?.value).toMatch(UUID_PATTERN);
     await expect(storage.readCurrent("task-dispatch")).resolves.toMatchObject({
       entityId: "task-dispatch",
       version: 1n,
@@ -3353,7 +3492,11 @@ describe("repository signal routing", () => {
       .addEventDispatcher({
         messageSchemas: () => [ProjectCreatedSchema],
         dispatch: async (event) => {
-          if (event.id?.value === "event-Outer") {
+          const name =
+            event.message === undefined
+              ? undefined
+              : AnyMessages.unpack(event.message, ProjectCreatedSchema)?.name;
+          if (name === "Outer") {
             nestedPosted.resolve();
             const currentContext = contextRef.current;
 
@@ -3368,7 +3511,7 @@ describe("repository signal routing", () => {
             return;
           }
 
-          if (event.id?.value === "event-Inner") {
+          if (name === "Inner") {
             await nestedGate.promise;
           }
         },
@@ -3397,13 +3540,15 @@ describe("repository signal routing", () => {
   it("executes managed aggregate commands when only event reaction metadata is registered", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
-      .add(createNoApplierRepository())
+      .add(createReactionMetadataRepository())
       .withStorageFactory(factory)
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(
-      context.commandBus().post(createAggregateCommand("command-no-applier", "task-no-applier")),
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-reaction-metadata", "task-reaction-metadata")),
     ).resolves.toBeUndefined();
     await expect(eventStore.read()).resolves.toMatchObject([
       {
@@ -3413,7 +3558,7 @@ describe("repository signal routing", () => {
     expect((await eventStore.read())[0]?.id?.value).toMatch(UUID_PATTERN);
   });
 
-  it("preserves a returned framework envelope without reconstructing aggregate state", async () => {
+  it("rejects a returned framework envelope without a typed Event payload", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createMalformedEventRepository())
@@ -3424,7 +3569,7 @@ describe("repository signal routing", () => {
     await expect(
       context.commandBus().post(createAggregateCommand("command-malformed", "task-malformed")),
     ).resolves.toBeUndefined();
-    await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-malformed" } }]);
+    await expect(eventStore.read()).resolves.toEqual([]);
   });
 
   it("rejects invalid aggregate command payloads before durable aggregate work", async () => {
@@ -3439,7 +3584,6 @@ describe("repository signal routing", () => {
     ).rejects.toThrow(/validation/i);
 
     expect(ValidatingProjectAggregate.assigneeCalls).toBe(0);
-    expect(ValidatingProjectAggregate.applierCalls).toBe(0);
   });
 
   it("rejects state-transition validation failures before storing aggregate output", async () => {
@@ -3536,10 +3680,10 @@ describe("repository signal routing", () => {
     ).rejects.toThrow(/tenantId/);
   });
 
-  it("rehydrates repository-executed aggregates with bigint version metadata", async () => {
-    BigintVersionAggregate.reset();
+  it("rehydrates repository-executed aggregates with Spine Versions", async () => {
+    SpineVersionAggregate.reset();
     const context = BoundedContext.singleTenant("Tasks")
-      .add(createBigintVersionRepository())
+      .add(createSpineVersionRepository())
       .withStorageFactory(new InMemoryStorageFactory())
       .build();
 
@@ -3550,7 +3694,7 @@ describe("repository signal routing", () => {
       .commandBus()
       .post(createAggregateCommand("command-bigint-2", "task-bigint", "Two"));
 
-    expect(BigintVersionAggregate.observedVersions).toEqual([0n, 1n]);
+    expect(SpineVersionAggregate.observedVersions).toMatchObject([{ number: 0 }, { number: 1 }]);
   });
 
   it("rejects produced aggregate versions outside the protobuf int32 range", async () => {
@@ -3691,6 +3835,45 @@ describe("repository signal routing", () => {
         name: "Transform follow-up",
       }),
     );
+  });
+
+  it("rejects a substitution output declared only by its neighboring handler", async () => {
+    CommandSubstitutingProcessManager.wrongOutput = true;
+    const factory = new InMemoryStorageFactory();
+    const repository = createCommandSubstitutingProcessManagerRepository();
+    const context = BoundedContext.singleTenant("Undeclared substitution output")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    try {
+      const command = create(CommandSchema, {
+        id: create(CommandIdSchema, { uuid: "neighbor-output" }),
+        message: AnyMessages.pack(
+          CreateProjectSubmissionSchema,
+          create(CreateProjectSubmissionSchema, { id: "neighbor-id", name: "Neighbor" }),
+        ),
+      });
+      const delivery = new Delivery({
+        context: { name: "Undeclared substitution output", multitenant: false },
+        storageFactory: factory,
+      });
+      const received = await storeEntityInboxCommand(
+        delivery,
+        command,
+        new Date("2026-09-25T09:00:00.000Z"),
+        1n,
+        { targetId: Identifiers.pack("string", "transform-target") },
+      );
+      await expect(requireEntityInboxTarget(repository).replay(received)).rejects.toThrow(
+        /undeclared.*CreateProject|cannot pack.*CreateProject/i,
+      );
+      await expect(
+        context.stand().read(ProjectQueueStateSchema, "transform-target"),
+      ).resolves.toBeUndefined();
+    } finally {
+      await context.close();
+      CommandSubstitutingProcessManager.reset();
+    }
   });
 
   it("starts every sibling produced command in declaration order when one child rejects", async () => {
@@ -4611,6 +4794,15 @@ describe("repository signal routing", () => {
 
       expect(routeCalls).toBe(1);
       expect(GuardedAggregate.calls).toBe(2);
+      await expect(
+        context.stand().readVersioned(ProjectStateSchema, "aggregate-one"),
+      ).resolves.toMatchObject({ version: { number: 1 }, state: { name: "Task (guarded)" } });
+      await context
+        .eventBus()
+        .post(createProjectCreated("event-aggregate-no-op", "ignored", { name: "no-op" }));
+      await expect(
+        context.stand().readVersioned(ProjectStateSchema, "aggregate-one"),
+      ).resolves.toMatchObject({ version: { number: 1 }, state: { name: "Task (guarded)" } });
     } finally {
       await context.close();
     }
@@ -6169,7 +6361,7 @@ describe("repository signal routing", () => {
     expect(stored[0]?.id?.value).toMatch(UUID_PATTERN);
     expect(stored[0]?.context?.timestamp).toBeDefined();
     expect(readReadableProducerId(stored[0])).toBe("pm-dispatch");
-    expect(stored[0]?.context?.version).toEqual(create(VersionSchema, { number: 1 }));
+    expect(stored[0]?.context?.version).toEqual(create(VersionSchema, { number: 0 }));
     expect(stored[0]?.context?.origin).toEqual({
       case: "pastMessage",
       value: create(OriginSchema, {
@@ -6190,6 +6382,36 @@ describe("repository signal routing", () => {
       "process-manager command produced-event dispatch attempt",
     );
     expect("storedEventDispatchFailures" in context).toBe(false);
+  });
+
+  it("copies the full pre-dispatch Process Manager Version to produced Events", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectQueueStateSchema,
+    });
+    const version = create(VersionSchema, {
+      number: 4,
+      timestamp: create(TimestampSchema, { seconds: 43n, nanos: 8 }),
+    });
+    const state = create(ProjectQueueStateSchema, { id: "pm-producer-version", queue: "Before" });
+    await storage.writeCurrent({
+      entityId: "pm-producer-version",
+      state,
+      version,
+      lifecycle: { archived: false, deleted: false },
+    });
+    await context.stand().update(ProjectQueueStateSchema, state, { version });
+
+    await context.commandBus().post(createAggregateCommand("pm-producer", "pm-producer-version"));
+    const [event] = await new EventStore({ name: "Tasks", multitenant: false }, factory).read();
+    expect(event?.context?.version).toEqual(version);
   });
 
   it("preserves a pre-existing process manager when a command is rejected", async () => {
@@ -6213,12 +6435,12 @@ describe("repository signal routing", () => {
       .readVersioned(ProjectQueueStateSchema, "pm-rejected");
     const eventsBeforeRejection = await eventStore.read();
 
-    expect(stateBeforeRejection).toEqual({
+    expect(stateBeforeRejection).toMatchObject({
       state: create(ProjectQueueStateSchema, {
         id: "pm-rejected",
         queue: "Persisted assigned",
       }),
-      version: create(VersionSchema, { number: 1 }),
+      version: { number: 1 },
     });
     expect(eventsBeforeRejection).toHaveLength(1);
 
@@ -7419,6 +7641,54 @@ describe("repository signal routing", () => {
     expect("storedEventDispatchFailures" in context).toBe(false);
   });
 
+  it("rejects a malformed later Process Manager Command before any Event or state persists", async () => {
+    RoutingProcessManager.reset();
+    RoutingProcessManager.malformedProducedCommand = true;
+    const factory = new InMemoryStorageFactory();
+    const emitted: SpineEvent[] = [];
+    const repository = createProcessManagerMixedEventRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .addEventDispatcher({
+        messageSchemas: () => [ProjectRegisteredSchema],
+        dispatch: (event) => {
+          emitted.push(event);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const stored = await storePmInboxEvent(
+      delivery,
+      createProjectCreated("event-pm-malformed-command", "pm-malformed-command"),
+      new Date("2026-08-11T04:55:00.000Z"),
+      1n,
+    );
+    expect(() =>
+      AnyMessages.pack(CreateProjectSchema, malformedCreateProjectCommand("invalid")),
+    ).toThrow("malformed produced Command payload");
+
+    try {
+      await expect(requireEntityInboxTarget(repository).replay(stored)).rejects.toThrow(
+        "malformed produced Command payload",
+      );
+      expect(RoutingProcessManager.commandReactionCalls).toBe(1);
+      await expect(
+        context.stand().read(ProjectQueueStateSchema, "pm-malformed-command"),
+      ).resolves.toBeUndefined();
+      await expect(eventStore.read()).resolves.toEqual([]);
+      expect(emitted).toEqual([]);
+    } finally {
+      RoutingProcessManager.reset();
+      await context.close();
+    }
+  });
+
   it("executes projection event subscribers and records latest state in Stand", async () => {
     ExecutingTaskProjection.reset();
     const context = BoundedContext.singleTenant("Tasks")
@@ -8533,13 +8803,13 @@ describe("repository signal routing", () => {
     });
     await expect(
       context.stand().readVersioned(ProjectOverviewStateSchema, "task-catch-up"),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       state: create(ProjectOverviewStateSchema, {
         id: "task-catch-up",
         name: "Task (projected)",
         priority: 2,
       }),
-      version: create(VersionSchema, { number: 1 }),
+      version: { number: 1 },
     });
     await expect(
       context.stand().read(ProjectOverviewStateSchema, "task-stale"),
@@ -8607,7 +8877,7 @@ describe("repository signal routing", () => {
     ).resolves.toEqual(
       create(ProjectOverviewStateSchema, {
         id: "task-catch-up-tenant",
-        name: "Task (projected)",
+        name: "A (projected)",
         priority: 2,
       }),
     );
@@ -8801,7 +9071,7 @@ describe("repository signal routing", () => {
     ).resolves.toEqual(
       create(ProjectOverviewStateSchema, {
         id: "task-space-tenant",
-        name: "Task (projected)",
+        name: "Raw (projected)",
         priority: 2,
       }),
     );
@@ -9728,9 +9998,197 @@ describe("repository signal routing", () => {
       await expect(context.stand().read(ProjectQueueStateSchema, "pm-diagnostic")).resolves.toEqual(
         existing,
       );
+      await expect(
+        context.stand().readVersioned(ProjectQueueStateSchema, "pm-diagnostic"),
+      ).resolves.toMatchObject({ version: { number: 2 } });
       await expect(storage.readEvents("pm-diagnostic")).resolves.toMatchObject([
         { message: { typeUrl: TypeUrls.derive(ProjectCreatedSchema) } },
       ]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("retains a void Process Manager reaction without creating invalid initial state", async () => {
+    FilteredProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createVoidProcessManagerRepository();
+    repository.setStateHistoryEnabled(true);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectQueueStateSchema,
+      stateHistory: true,
+      eventHistory: true,
+    });
+
+    await context.eventBus().post(createProjectCreated("pm-void-event", "pm-void"));
+    expect(FilteredProcessManager.calls).toEqual(["react-fallback:Task"]);
+    await expect(storage.readCurrent("pm-void")).resolves.toBeUndefined();
+    await expect(storage.readStates("pm-void")).resolves.toEqual([]);
+    await expect(context.stand().read(ProjectQueueStateSchema, "pm-void")).resolves.toBeUndefined();
+    await expect(storage.readEvents("pm-void")).resolves.toHaveLength(1);
+  });
+
+  it("dispatches a command-only Process Manager reaction without advancing state", async () => {
+    const factory = new InMemoryStorageFactory();
+    const commands: SpineCommand[] = [];
+    const repository = createCommandOnlyProcessManagerRepository();
+    repository.setStateHistoryEnabled(true);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateProjectSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectQueueStateSchema,
+      stateHistory: true,
+      eventHistory: true,
+    });
+
+    await context.eventBus().post(createProjectCreated("pm-command-only", "pm-command-only"));
+    await waitForCondition(() => commands.length === 1);
+    await expect(storage.readCurrent("pm-command-only")).resolves.toBeUndefined();
+    await expect(storage.readStates("pm-command-only")).resolves.toEqual([]);
+    await expect(
+      context.stand().readVersioned(ProjectQueueStateSchema, "pm-command-only"),
+    ).resolves.toBeUndefined();
+    await expect(storage.readEvents("pm-command-only")).resolves.toHaveLength(1);
+  });
+
+  it("dispatches each native @Command union branch from generated handler metadata", async () => {
+    const commands: SpineCommand[] = [];
+    const context = BoundedContext.singleTenant("Union commands")
+      .add(createGeneratedUnionProcessManagerRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateFollowUpProjectSchema, DraftProjectSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    await context
+      .eventBus()
+      .post(createProjectCreated("union-draft", "union-draft", { name: "draft" }));
+    await context
+      .eventBus()
+      .post(createProjectCreated("union-followup", "union-followup", { name: "followup" }));
+    await waitForCondition(() => commands.length === 2);
+    expect(commands.map((command) => command.message?.typeUrl)).toEqual([
+      TypeUrls.derive(DraftProjectSchema),
+      TypeUrls.derive(CreateFollowUpProjectSchema),
+    ]);
+  });
+
+  it("omits an absent optional tuple command and preserves the present order", async () => {
+    const commands: SpineCommand[] = [];
+    const context = BoundedContext.singleTenant("Optional tuple commands")
+      .add(createOptionalCommandProcessManagerRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateFollowUpProjectSchema, DraftProjectSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    await context
+      .eventBus()
+      .post(createProjectCreated("optional-one", "optional-one", { name: "one" }));
+    await context
+      .eventBus()
+      .post(createProjectCreated("optional-both", "optional-both", { name: "both" }));
+    await waitForCondition(() => commands.length === 3);
+    expect(commands.map((command) => command.message?.typeUrl)).toEqual([
+      TypeUrls.derive(CreateFollowUpProjectSchema),
+      TypeUrls.derive(CreateFollowUpProjectSchema),
+      TypeUrls.derive(DraftProjectSchema),
+    ]);
+  });
+
+  it("runs generated no-output Command reactions and persists Process Manager state", async () => {
+    SilentCommandProcessManager.calls = 0;
+    const commands: SpineCommand[] = [];
+    const repository = createSilentCommandProcessManagerRepository();
+    const context = BoundedContext.singleTenant("Silent commands")
+      .add(repository)
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateProjectSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context.eventBus().post(createProjectCreated("silent-command", "silent-target"));
+      expect(SilentCommandProcessManager.calls).toBe(1);
+      await expect(
+        context.stand().readVersioned(ProjectQueueStateSchema, "silent-target"),
+      ).resolves.toMatchObject({
+        state: { id: "silent-target", queue: "Task" },
+        version: { number: 1 },
+      });
+      expect(commands).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("runs a no-output Command reaction for a rejection without a child Command", async () => {
+    SilentCommandProcessManager.rejectionCalls = 0;
+    const commands: SpineCommand[] = [];
+    const rejection = create(TaskAlreadyDoneSchema, {
+      id: create(GeneratedTaskIdSchema, { value: "silent-rejection" }),
+    });
+    const source = createProjectCreated("silent-rejection-event", "silent-rejection");
+    source.message = AnyMessages.pack(TaskAlreadyDoneSchema, rejection);
+    if (source.context === undefined) throw new Error("Expected a source Event context.");
+    const cause = createAggregateCommand("silent-rejection-command", "silent-rejection");
+    cause.message = AnyMessages.pack(
+      CompleteTaskSchema,
+      create(CompleteTaskSchema, {
+        id: create(GeneratedTaskIdSchema, { value: "silent-rejection" }),
+      }),
+    );
+    source.context.rejection = create(RejectionEventContextSchema, {
+      command: cause,
+    });
+    const context = BoundedContext.singleTenant("Silent commands")
+      .add(createSilentCommandProcessManagerRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateProjectSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context.eventBus().post(source);
+      await waitForCondition(() => SilentCommandProcessManager.rejectionCalls === 1);
+      await expect(
+        context.stand().readVersioned(ProjectQueueStateSchema, "silent-rejection"),
+      ).resolves.toMatchObject({
+        state: { id: "silent-rejection", queue: "rejected" },
+        version: { number: 1 },
+      });
+      expect(commands).toEqual([]);
     } finally {
       await context.close();
     }
@@ -9751,14 +10209,25 @@ describe("repository signal routing", () => {
       name: "Task",
       priority: 2,
     });
+    await expect(
+      context.stand().readVersioned(ProjectOverviewStateSchema, "task-accumulated"),
+    ).resolves.toMatchObject({ version: { number: 2 } });
   });
 
   it("atomically updates a timestamped current Version after repository read-modify-write", async () => {
     const factory = new InMemoryStorageFactory();
+    const repository = createExecutingProjectionRepository();
+    repository.setStateHistoryEnabled(true);
     const context = BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
+      .add(repository)
       .withStorageFactory(factory)
       .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectOverviewStateSchema,
+      stateHistory: true,
+    });
     const initialVersion = create(VersionSchema, {
       number: 1,
       timestamp: create(TimestampSchema, { seconds: 41n, nanos: 7 }),
@@ -9789,14 +10258,21 @@ describe("repository signal routing", () => {
 
       await expect(
         context.stand().readVersioned(ProjectOverviewStateSchema, "timestamped-cas"),
-      ).resolves.toEqual({
+      ).resolves.toMatchObject({
         state: create(ProjectOverviewStateSchema, {
           id: "timestamped-cas",
           name: "Task (projected)",
           priority: 2,
         }),
-        version: nextVersion,
+        version: { number: 2 },
       });
+      const standVersion = (
+        await context.stand().readVersioned(ProjectOverviewStateSchema, "timestamped-cas")
+      )?.version;
+      const storedVersions = await storage.readVersionMessages("timestamped-cas");
+      expect(standVersion?.timestamp).toBeDefined();
+      expect(storedVersions.current).toEqual(standVersion);
+      expect(storedVersions.history).toEqual([standVersion]);
     } finally {
       await context.close();
     }
@@ -9827,7 +10303,7 @@ describe("repository signal routing", () => {
     const projected = await waitForProjectOverviewState(context, "task-tenant", "tenant-a");
 
     expect(projected).toMatchObject({
-      name: "Task (projected)",
+      name: "Tenant (projected)",
       priority: 2,
     });
     await expect(
@@ -9837,7 +10313,7 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("uses command tenant over embedded past-message tenant", async () => {
+  it("uses command tenant for domain Events emitted by an Aggregate", async () => {
     const context = BoundedContext.multitenant("Tasks")
       .add(createProjectionProducingRepository())
       .add(createExecutingProjectionRepository())
@@ -9861,7 +10337,7 @@ describe("repository signal routing", () => {
     );
 
     expect(projected).toMatchObject({
-      name: "Task (projected)",
+      name: "PastMessageTenant (projected)",
       priority: 2,
     });
     await expect(
@@ -9945,13 +10421,13 @@ describe("repository signal routing", () => {
     const projected = await waitForProjectOverviewState(context, "task-command-tenant", "tenant-a");
 
     expect(projected).toMatchObject({
-      name: "Task (projected)",
+      name: "Tenant (projected)",
       priority: 2,
     });
     expect(updates).toEqual([
       create(ProjectOverviewStateSchema, {
         id: "task-command-tenant",
-        name: "Task (projected)",
+        name: "Tenant (projected)",
         priority: 2,
       }),
     ]);
@@ -10024,7 +10500,7 @@ describe("repository signal routing", () => {
     expect("storedEventDispatchFailures" in context).toBe(false);
   });
 
-  it("records projection updates without version metadata when the delivered event has none", async () => {
+  it("advances a Projection version when the delivered Event has no producer version", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingProjectionRepository())
       .build();
@@ -10042,7 +10518,7 @@ describe("repository signal routing", () => {
     });
     await expect(
       context.stand().readVersioned(ProjectOverviewStateSchema, "task-without-version"),
-    ).resolves.not.toHaveProperty("version");
+    ).resolves.toMatchObject({ version: { number: 1 } });
   });
 
   it("rejects a default-routed Event without a producer ID", () => {
@@ -10405,6 +10881,134 @@ function createFilteredProcessManagerRepository(): Repository<typeof FilteredPro
   });
 }
 
+function createVoidProcessManagerRepository(): Repository<typeof FilteredProcessManager> {
+  return new Repository({
+    entityType: FilteredProcessManager,
+    schema: ProjectQueueStateSchema,
+    handlers: EntityHandlers.define(FilteredProcessManager, ProjectQueueStateSchema, (builder) => [
+      builder.react(ProjectCreatedSchema, "reactFallback"),
+    ]),
+    processManagerEventHistory: true,
+  });
+}
+
+function createCommandOnlyProcessManagerRepository(): Repository<typeof FilteredProcessManager> {
+  const handlers = HandlerMetadataValues.defineArity(
+    FilteredProcessManager,
+    ProjectQueueStateSchema,
+    (builder) => [builder.command(ProjectCreatedSchema, "commandFallback")],
+    [
+      {
+        kind: "command-reaction",
+        methodName: "commandFallback",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([CreateProjectSchema]),
+      },
+    ],
+  );
+  return new Repository({
+    entityType: FilteredProcessManager,
+    schema: ProjectQueueStateSchema,
+    handlers,
+    processManagerEventHistory: true,
+  });
+}
+
+function createGeneratedUnionProcessManagerRepository(): Repository<
+  typeof UnionCommandProcessManager
+> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: UnionCommandProcessManager,
+        stateSchema: ProjectQueueStateSchema,
+        handlers: [
+          {
+            kind: "command-reaction",
+            methodName: "choose",
+            input: { schema: ProjectCreatedSchema, origin: "domestic" },
+            outcomes: handlerOutcomes([CreateFollowUpProjectSchema, DraftProjectSchema]),
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<UnionCommandProcessManager, typeof ProjectQueueStateSchema>;
+  return new Repository({
+    entityType: UnionCommandProcessManager,
+    schema: ProjectQueueStateSchema,
+    handlers,
+  });
+}
+
+function createOptionalCommandProcessManagerRepository(): Repository<
+  typeof OptionalCommandProcessManager
+> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: OptionalCommandProcessManager,
+        stateSchema: ProjectQueueStateSchema,
+        handlers: [
+          {
+            kind: "command-reaction",
+            methodName: "choose",
+            input: { schema: ProjectCreatedSchema, origin: "domestic" },
+            outcomes: handlerOutcomes([CreateFollowUpProjectSchema, DraftProjectSchema]),
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<OptionalCommandProcessManager, typeof ProjectQueueStateSchema>;
+  return new Repository({
+    entityType: OptionalCommandProcessManager,
+    schema: ProjectQueueStateSchema,
+    handlers,
+  });
+}
+
+function createSilentCommandProcessManagerRepository(): Repository<
+  typeof SilentCommandProcessManager
+> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: SilentCommandProcessManager,
+        stateSchema: ProjectQueueStateSchema,
+        handlers: [
+          {
+            kind: "command-reaction",
+            methodName: "commandSilently",
+            input: { schema: ProjectCreatedSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
+            parameterCount: 1,
+          },
+          {
+            kind: "command-reaction",
+            methodName: "commandSilentlyOnRejection",
+            input: { schema: TaskAlreadyDoneSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<SilentCommandProcessManager, typeof ProjectQueueStateSchema>;
+  return new Repository({
+    entityType: SilentCommandProcessManager,
+    schema: ProjectQueueStateSchema,
+    handlers,
+    eventRouting: EventRouting.create<string>().route(TaskAlreadyDoneSchema, (r) => [
+      r.id?.value ?? "",
+    ]),
+  });
+}
+
 function createSequencedProjectOverviewRepository(
   eventRouting: EventRouting<ProjectSequenceId>,
 ): Repository<typeof SequencedProjectOverview> {
@@ -10712,8 +11316,8 @@ function createNonFiniteRouteRepository(): Repository<typeof NonFiniteRouteProje
 
 function createProjectIdTaskRepository(): Repository<typeof ProjectIdProjectAggregate> {
   const handlers = EntityHandlers.define(ProjectIdProjectAggregate, TaskSchema, (builder) => [
-    builder.apply(TaskCreatedSchema, "applyTaskCreated"),
-    builder.apply(ProjectMemberChangedSchema, "applyWrongId"),
+    builder.subscribe(TaskCreatedSchema, "subscribeTaskCreated"),
+    builder.subscribe(ProjectMemberChangedSchema, "subscribeWrongId"),
   ]);
 
   return new Repository({
@@ -10726,12 +11330,21 @@ function createProjectIdTaskRepository(): Repository<typeof ProjectIdProjectAggr
 function createInt32RoutingRepository(
   commandRouting?: CommandRouting<number>,
 ): Repository<typeof NumberedProjectAggregate> {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     NumberedProjectAggregate,
     NumberedProjectStateSchema,
     (builder) => [
       builder.assign(CreateNumberedProjectSchema, "assign"),
       builder.react(NumberedProjectCreatedSchema, "react"),
+    ],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assign",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([NumberedProjectCreatedSchema]),
+      },
     ],
   );
   return new Repository({
@@ -10744,10 +11357,23 @@ function createInt32RoutingRepository(
 }
 
 function createInt64RoutingRepository(): Repository<typeof ProjectWorkflow> {
-  const handlers = EntityHandlers.define(ProjectWorkflow, ProjectWorkflowStateSchema, (builder) => [
-    builder.assign(ScheduleProjectWorkflowSchema, "assign"),
-    builder.react(ProjectWorkflowScheduledSchema, "react"),
-  ]);
+  const handlers = HandlerMetadataValues.defineArity(
+    ProjectWorkflow,
+    ProjectWorkflowStateSchema,
+    (builder) => [
+      builder.assign(ScheduleProjectWorkflowSchema, "assign"),
+      builder.react(ProjectWorkflowScheduledSchema, "react"),
+    ],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assign",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([ProjectWorkflowScheduledSchema]),
+      },
+    ],
+  );
   return new Repository({
     entityType: ProjectWorkflow,
     schema: ProjectWorkflowStateSchema,
@@ -10774,9 +11400,20 @@ function createMalformedFirstFieldRepository(): Repository<typeof MalformedFirst
 function createProjectIdProducingRepository(
   commandRouting?: CommandRouting<TaskId>,
 ): Repository<typeof ProjectIdProducingAggregate> {
-  const handlers = EntityHandlers.define(ProjectIdProducingAggregate, TaskSchema, (builder) => [
-    builder.assign(CreateTaskSchema, "assignTask"),
-  ]);
+  const handlers = HandlerMetadataValues.defineArity(
+    ProjectIdProducingAggregate,
+    TaskSchema,
+    (builder) => [builder.assign(CreateTaskSchema, "assignTask")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assignTask",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([TaskCreatedSchema]),
+      },
+    ],
+  );
 
   return new Repository({
     entityType: ProjectIdProducingAggregate,
@@ -10990,6 +11627,33 @@ function createGeneratedReactorRepository(
   });
 }
 
+function createCountingReactorRepository(): Repository<typeof CountingReactorAggregate> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: CountingReactorAggregate,
+        stateSchema: ProjectStateSchema,
+        handlers: [
+          {
+            kind: "event-reaction",
+            methodName: "reactProjection",
+            input: { schema: ProjectCreatedSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<CountingReactorAggregate, typeof ProjectStateSchema>;
+  return new Repository({
+    entityType: CountingReactorAggregate,
+    schema: ProjectStateSchema,
+    handlers,
+    events: [ProjectRegisteredSchema],
+  });
+}
+
 function createGuardedAggregateRepository(
   eventRouting?: EventRouting<string>,
 ): Repository<typeof GuardedAggregate> {
@@ -11087,9 +11751,20 @@ function createGeneratedCommandingRepository(): Repository<
 }
 
 function createMultiManagedRepository(): Repository<typeof MultiManagedAggregate> {
-  const handlers = EntityHandlers.define(MultiManagedAggregate, ProjectStateSchema, (builder) => [
-    builder.assign(CreateProjectSchema, "createProject"),
-  ]);
+  const handlers = HandlerMetadataValues.defineArity(
+    MultiManagedAggregate,
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
+  );
 
   return new Repository({
     entityType: MultiManagedAggregate,
@@ -11113,10 +11788,19 @@ function createEmptyManagedRepository(): Repository<typeof EmptyManagedAggregate
 }
 
 function createEnvelopeManagedRepository(): Repository<typeof EnvelopeManagedAggregate> {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     EnvelopeManagedAggregate,
     ProjectStateSchema,
     (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
   );
 
   return new Repository({
@@ -11131,10 +11815,7 @@ function createValidatingRepository(): Repository<typeof ValidatingProjectAggreg
   const handlers = EntityHandlers.define(
     ValidatingProjectAggregate,
     ProjectSubmissionStateSchema,
-    (builder) => [
-      builder.assign(CreateProjectSubmissionSchema, "createProject"),
-      builder.apply(ProjectSubmissionCreatedSchema, "applyTask"),
-    ],
+    (builder) => [builder.assign(CreateProjectSubmissionSchema, "createProject")],
   );
 
   return new Repository({
@@ -11199,10 +11880,18 @@ function createTransitionViolatingRepository(): Repository<typeof TransitionViol
 }
 
 function createRecoveringTransitionRepository(): Repository<typeof RecoveringTransitionAggregate> {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     RecoveringTransitionAggregate,
     ProjectStateSchema,
     (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
   );
 
   return new Repository({
@@ -11213,9 +11902,19 @@ function createRecoveringTransitionRepository(): Repository<typeof RecoveringTra
 }
 
 function createAsyncAssigneeRepository(): Repository<typeof AsyncAssigneeAggregate> {
-  const handlers = EntityHandlers.define(AsyncAssigneeAggregate, ProjectStateSchema, (builder) => [
-    builder.assign(CreateProjectSchema, "createProject"),
-  ]);
+  const handlers = HandlerMetadataValues.defineArity(
+    AsyncAssigneeAggregate,
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
+  );
 
   return new Repository({
     entityType: AsyncAssigneeAggregate,
@@ -11241,10 +11940,18 @@ function createRejectedAsyncAssigneeRepository(): Repository<
 }
 
 function createSerialAsyncAssigneeRepository(): Repository<typeof SerialAsyncAssigneeAggregate> {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     SerialAsyncAssigneeAggregate,
     ProjectStateSchema,
     (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
   );
 
   return new Repository({
@@ -11254,26 +11961,40 @@ function createSerialAsyncAssigneeRepository(): Repository<typeof SerialAsyncAss
   });
 }
 
-function createBigintVersionRepository(): Repository<typeof BigintVersionAggregate> {
-  const handlers = EntityHandlers.define(BigintVersionAggregate, ProjectStateSchema, (builder) => [
-    builder.assign(CreateProjectSchema, "createProject"),
-    builder.apply(ProjectCreatedSchema, "applyTask"),
-  ]);
+function createSpineVersionRepository(): Repository<typeof SpineVersionAggregate> {
+  const handlers = HandlerMetadataValues.defineArity(
+    SpineVersionAggregate,
+    ProjectStateSchema,
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
+  );
 
   return new Repository({
-    entityType: BigintVersionAggregate,
+    entityType: SpineVersionAggregate,
     schema: ProjectStateSchema,
     handlers,
   });
 }
 
 function createProjectionProducingRepository(): Repository<typeof ProjectionProducingAggregate> {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     ProjectionProducingAggregate,
     ProjectStateSchema,
-    (builder) => [
-      builder.assign(CreateProjectSchema, "createProject"),
-      builder.apply(ProjectCreatedSchema, "applyProjection"),
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
     ],
   );
 
@@ -11287,12 +12008,17 @@ function createProjectionProducingRepository(): Repository<typeof ProjectionProd
 function createTenantProjectionRepo(): Repository<
   typeof CommandTenantProjectionProducingAggregate
 > {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     CommandTenantProjectionProducingAggregate,
     ProjectStateSchema,
-    (builder) => [
-      builder.assign(CreateProjectSchema, "createProject"),
-      builder.apply(ProjectCreatedSchema, "applyProjection"),
+    (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
     ],
   );
 
@@ -11612,7 +12338,10 @@ function createCommandSubstitutingProcessManagerRepository(): Repository<
   const handlers = HandlerMetadataValues.defineArity(
     CommandSubstitutingProcessManager,
     ProjectQueueStateSchema,
-    (builder) => [builder.substitute(CreateProjectSubmissionSchema, "substitute")],
+    (builder) => [
+      builder.substitute(CreateProjectSubmissionSchema, "substitute"),
+      builder.substitute(CreateProjectSchema, "neighbor"),
+    ],
     [
       {
         kind: "command-substitution",
@@ -11620,6 +12349,13 @@ function createCommandSubstitutingProcessManagerRepository(): Repository<
         parameterCount: 2,
         origin: "domestic",
         outcomes: handlerOutcomes([CreateFollowUpProjectSchema]),
+      },
+      {
+        kind: "command-substitution",
+        methodName: "neighbor",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([CreateProjectSchema]),
       },
     ],
   );
@@ -11723,14 +12459,27 @@ function createThrowingProjectionRepository(): Repository<typeof ThrowingTaskPro
   });
 }
 
-function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
-  const handlers = EntityHandlers.define(NoApplierAggregate, ProjectStateSchema, (builder) => [
-    builder.assign(CreateProjectSchema, "createProject"),
-    builder.react(ProjectCreatedSchema, "reactTask"),
-  ]);
+function createReactionMetadataRepository(): Repository<typeof ReactionMetadataAggregate> {
+  const handlers = HandlerMetadataValues.defineArity(
+    ReactionMetadataAggregate,
+    ProjectStateSchema,
+    (builder) => [
+      builder.assign(CreateProjectSchema, "createProject"),
+      builder.react(ProjectCreatedSchema, "reactTask"),
+    ],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
+  );
 
   return new Repository({
-    entityType: NoApplierAggregate,
+    entityType: ReactionMetadataAggregate,
     schema: ProjectStateSchema,
     handlers,
     events: [ProjectCreatedSchema],
@@ -11740,7 +12489,6 @@ function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
 function createMalformedEventRepository(): Repository<typeof MalformedEventAggregate> {
   const handlers = EntityHandlers.define(MalformedEventAggregate, ProjectStateSchema, (builder) => [
     builder.assign(CreateProjectSchema, "createProject"),
-    builder.apply(ProjectCreatedSchema, "applyTask"),
   ]);
 
   return new Repository({
@@ -12078,27 +12826,6 @@ function readProjectOverviewId(event: SpineEvent): string {
   return message.id;
 }
 
-function createValidatedEvent(id: string, aggregateId: string, name: string): SpineEvent {
-  return create(EventSchema, {
-    id: create(EventIdSchema, { value: id }),
-    context: create(EventContextSchema, {
-      producerId: AnyMessages.pack(
-        StringValueSchema,
-        create(StringValueSchema, { value: aggregateId }),
-      ),
-      timestamp: create(TimestampSchema, { seconds: 1n }),
-      version: create(VersionSchema, { number: 1 }),
-    }),
-    message: AnyMessages.pack(
-      ProjectSubmissionCreatedSchema,
-      create(ProjectSubmissionCreatedSchema, {
-        id: aggregateId,
-        name,
-      }),
-    ),
-  });
-}
-
 function createProjectCreated(
   id: string,
   entityId: string,
@@ -12398,6 +13125,28 @@ class CurrentRecordTestStorage<S extends Message = Message> {
     }
   }
 
+  async readVersionMessages(id: unknown): Promise<{
+    readonly current: Version | undefined;
+    readonly history: readonly Version[];
+  }> {
+    const storage = this.#open();
+    try {
+      const current = await storage.current.read(id);
+      const states = await storage.states.backward(id, 10);
+      return {
+        current: current?.version,
+        history: states.map((record) => {
+          if (record.version === undefined) {
+            throw new Error("Every stored Entity history record must include its Version.");
+          }
+          return record.version;
+        }),
+      };
+    } finally {
+      storage.close();
+    }
+  }
+
   async readEvents(id: unknown): Promise<readonly SpineEvent[]> {
     const storage = this.#open();
     try {
@@ -12436,7 +13185,7 @@ class CurrentRecordTestStorage<S extends Message = Message> {
     readonly entityId: unknown;
     readonly lifecycle: { readonly archived: boolean; readonly deleted: boolean };
     readonly state: S;
-    readonly version: bigint;
+    readonly version: bigint | Version;
   }): Promise<void> {
     const storage = this.#open();
     try {
@@ -12634,6 +13383,65 @@ class FailingEntityCommitStorageFactory extends InMemoryStorageFactory {
         if (this.#remainingFailures > 0) {
           this.#remainingFailures -= 1;
           throw new Error("forced Entity commit failure");
+        }
+        return await storage.commit(unit);
+      },
+      close: () => {
+        storage.close();
+      },
+    } satisfies EntityCommitStorage;
+  }
+}
+
+class FailingSourceDiagnosticStorageFactory extends InMemoryStorageFactory {
+  #failCommit = true;
+  #failAppend = true;
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as {
+      readonly current: unknown;
+      readonly states: unknown;
+      readonly events: {
+        append(record: unknown): Promise<void>;
+        backward(id: unknown, depth: number, starting?: bigint): Promise<readonly SpineEvent[]>;
+        close(): void;
+      };
+      close(): void;
+    };
+    return {
+      current: storage.current,
+      states: storage.states,
+      events: {
+        append: async (record: unknown) => {
+          if (this.#failAppend) {
+            this.#failAppend = false;
+            throw new Error("forced diagnostic append failure");
+          }
+          await storage.events.append(record);
+        },
+        backward: (id: unknown, depth: number, starting?: bigint) =>
+          storage.events.backward(id, depth, starting),
+        close: () => {
+          storage.events.close();
+        },
+      },
+      close: () => {
+        storage.close();
+      },
+    };
+  }
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const storage = super.createEntityCommitStorage(input);
+    return {
+      commit: async <I, S extends Message>(
+        unit: EntityCommitInput<I, S>,
+      ): Promise<EntityCommitResult> => {
+        if (this.#failCommit && (unit.diagnostics?.length ?? 0) > 0) {
+          this.#failCommit = false;
+          throw new Error("forced source diagnostic commit failure");
         }
         return await storage.commit(unit);
       },
@@ -13136,6 +13944,43 @@ describe("Projection state-update routing", () => {
         priority: 1,
       });
     } finally {
+      await context.close();
+    }
+  });
+
+  it("does not commit a state subscriber that returns a concrete value", async () => {
+    StateObservingProjection.reset();
+    StateObservingProjection.result = null;
+    const factory = new InMemoryStorageFactory();
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
+    );
+    const repository = new Repository({
+      entityType: StateObservingProjection,
+      schema: ProjectOverviewStateSchema,
+      handlers,
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectStateSchema, () => [
+        "target",
+      ]),
+    });
+    const context = BoundedContext.singleTenant("State updates")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "State updates", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectOverviewStateSchema,
+    });
+    try {
+      await boundedContextAccess.postSystemEvent(context, createStateChangedEvent("source"));
+      await waitForCondition(() => StateObservingProjection.subscriberCalls === 1);
+      await expect(storage.readCurrent("target")).resolves.toBeUndefined();
+      await expect(storage.readStates("target")).resolves.toEqual([]);
+    } finally {
+      StateObservingProjection.reset();
       await context.close();
     }
   });

@@ -54,7 +54,7 @@ return await BoundedContext.singleTenant("Tasks")
 - Handler discovery/materialization is a framework responsibility only.
 - End-user application code uses bare decorators and returns generated domain
   messages, not framework `Event` or `Command` envelopes.
-- Aggregates must not use `@Apply`.
+- Aggregates must not use event replay.
 - End-user application code must not call transaction-control methods or create
   internal event IDs.
 - Generated registry loading must preserve declaration order, `parameterCount`,

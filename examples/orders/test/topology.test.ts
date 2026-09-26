@@ -214,7 +214,7 @@ function manager(type: { readonly prototype: object }, id: string) {
     id: string;
     state: { id: string; updates: number };
     update(change: (state: { id: string; updates: number }) => void): void;
-    onOrderCreated(event: unknown): void;
+    onOrderCreated(event: unknown): undefined;
     onSkuRegistered(event: unknown): void;
   };
   Object.defineProperty(instance, "id", { value: id });

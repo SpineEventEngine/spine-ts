@@ -275,8 +275,8 @@ that run the workflow.
 `@spine-event-engine/server` provides descriptor-derived entity metadata,
 explicit handler metadata, a handler registry supplied by the caller, a
 standard decorator adapter, and built-in set-once transition validation. It
-also provides thin entity-family marker
-classes over the transactional entity shell. The package consumes curated
+also provides Aggregate, Projection, and Process Manager base classes with
+transactional state and family-specific helpers. The package consumes curated
 option exports from `@spine-event-engine/proto` and delegates transition result shaping
 to `@spine-event-engine/core`.
 
@@ -312,13 +312,10 @@ remains public for framework tests, generated-registry ingestion, and legacy
 non-decorator migration tooling. Ordinary application code should use bare
 decorators plus generated registry assembly instead. The explicit constructor
 accepts an entity class, a state schema, and a builder callback whose methods
-record command assignment, command reaction, event subscription, event
-reaction, and event application metadata. Each handler record keeps the
+record command assignment, command substitution, command reaction, event
+subscription, state subscription, and event reaction metadata. Each handler record keeps the
 generated Protobuf-ES schema, message full type name, handler kind, and entity
-method name. Event application metadata also records `allowImport` only for
-legacy `@Apply` compatibility metadata. It is retained only so
-unsupported legacy metadata can be detected; event import is removed from the
-active runtime plan by upstream ADR 0001 D1.
+method name. Aggregates update state directly within the handler transaction.
 
 Handler metadata is deterministic and frozen. The all-handlers array preserves
 the user declaration order, and role-specific arrays preserve the same relative
@@ -332,9 +329,8 @@ layer over explicit `EntityHandlersMetadata`. It registers existing metadata
 objects, keeps deterministic frozen listing/lookup arrays in registration and
 handler declaration order, and indexes handlers by entity state full type name,
 handler kind, and command/event message full type name. Its duplicate
-policy rejects one ambiguous command assignment per command message full type
-name and one ambiguous event application per entity state full type name plus
-event message full type name. Command reactions, event subscriptions, and event
+policy rejects ambiguous command assignment or substitution for the same Command
+type. Command reactions, event subscriptions, and event
 reactions intentionally allow multiple handlers for the same message type so
 runtime fan-out remains possible.
 
@@ -344,8 +340,8 @@ ordinary application syntax collected from public instance methods into
 standard per-class decorator metadata. They are the only public decorator
 signatures. Schema-bearing handler metadata is generated/internal tooling input
 and framework materialization state, not an application decorator form.
-`@Apply` and `materializeDecoratedEntityHandlers()` remain framework-only
-compatibility. Generated registry tooling performs ordinary schema inference from
+`materializeDecoratedEntityHandlers()` remains a framework-only helper.
+Generated registry tooling performs ordinary schema inference from
 handler parameter and return types, keeps decorated classes compatible with
 `HandlerMetadataRegistry`, and leaves `EntityHandlers.define()` available only
 for framework tests, generated-registry ingestion, and legacy non-decorator
@@ -363,10 +359,10 @@ set-once rule remains private; callers receive the core
 `TransitionValidationResult` shape with repo-local `spine.validation.*`
 messages, field paths, and no raw previous/next values.
 
-`Entity` is the common OOP entity state shell. It binds a caller-supplied
+`Entity` is the common OOP entity base. It binds an
 ID to one descriptor-backed Protobuf-ES state schema, derives and caches
 `EntityMetadata`, snapshots state on construction and read access, snapshots
-plain version metadata supplied by the caller without computing increments, and exposes
+the generated Spine `Version`, and exposes
 lifecycle flags plus `isActive`, `isArchived`, `isDeleted`, and sticky
 `lifecycleFlagsChanged` accessors. Protected replacement hooks give
 framework subclasses a narrow place to apply accepted state/version or
@@ -377,33 +373,32 @@ state.
 
 `TransactionalEntity` is the protected OOP draft layer over `EntityTransaction`.
 It adds one active transaction slot per entity instance, scoped helpers for
-reading and updating draft state, draft version metadata, and draft lifecycle
+reading and updating draft state and draft lifecycle
 flags, and commit/rollback helpers that close over the existing transaction
-kernel. Accepted commits apply only the accepted state, explicit version
-metadata, and lifecycle flags back through the `Entity` replacement hooks.
+kernel. Accepted commits apply the accepted state, framework-calculated version,
+and lifecycle flags back through the `Entity` replacement hooks.
 Rejected commits apply nothing and intentionally keep the transaction active so
 subclass code can correct the draft or roll it back explicitly, matching the
 current `EntityTransaction.commit()` behavior. The `changed` signal records
 accepted state changes or committed lifecycle flag changes without making
 repository storage decisions. Scope errors are deterministic
 `TransactionalEntityScopeError` instances for missing or duplicate active
-transactions. The layer still avoids handler invocation, repositories, storage,
-lifecycle events, Java builders, automatic version increments, transaction
+transactions. This shared base class does not implement handler invocation, repositories, storage,
+lifecycle events, Java builders, transaction
 listeners, recent history, async-local/global transaction state, and
 entity-family-specific aggregate/projection/process-manager behavior.
 
-`Aggregate`, `Projection`, and `ProcessManager` are public abstract entity
-family markers. Each extends `TransactionalEntity<Id, Schema, Version>` and
-adds only a stable readonly `entityFamily` property typed by the exported
-`EntityFamily` union. This follows the JVM family shape only as far as the
-TypeScript runtime supports safely: JVM `Projection` directly
-extends `TransactionalEntity`, while JVM aggregate and process-manager behavior
-is mostly supplied by assignee, dispatch, event-history, repository, querying,
-and bounded-context collaborators that this implementation has not implemented. The
-TypeScript family classes therefore do not expose public transaction mutators,
-repository hooks, dispatch APIs, command posting, query clients, aggregate event
-history, snapshots, process workflow execution, idempotency guards, lifecycle
-events, handler invocation, or async-local/global transaction state.
+`Aggregate`, `Projection`, and `ProcessManager` are public abstract Entity
+families. Each extends `TransactionalEntity<Id, Schema>` and exposes a stable
+readonly `entityFamily` property typed by `EntityFamily`. Every family uses
+the generated Spine `Version`; application code supplies no third version type.
+Repository and bounded-context collaborators perform handler dispatch,
+transactions, persistence, Event publication, and produced-Command delivery.
+Process Managers also expose protected `select()` reads of Projections.
+Aggregates and Process Managers provide protected Event-history reads backed
+by their repositories.
+These classes do not give application code public transaction controls.
+Aggregates update state directly rather than rebuilding it by replaying Events.
 
 `Repository` connects entity behavior to context registration.
 It accepts one entity constructor and one
@@ -439,8 +434,8 @@ entity storage/cache/catch-up, inbox/delivery, lifecycle monitors, gRPC server
 lifecycle, and transport.
 
 `EntityTransaction` is the server's draft/result commit boundary over
-one entity state. It buffers a draft state, explicit previous/draft version
-metadata, lifecycle flags, and visible status (`active`, `committed`, or
+one entity state. It buffers a draft state, previous/draft Spine `Version`
+values, lifecycle flags, and visible status (`active`, `committed`, or
 `rolled-back`). The compatibility contract is intentionally small and
 JVM-familiar: this API records only in-memory transaction evidence for
 framework-controlled entity bases, not repository storage, database
@@ -451,10 +446,11 @@ validates it, and applies it only when valid; it returns an immutable violations
 array and propagates unrelated mutator errors without changing the live draft.
 The `previous` and `currentDraft` accessors return snapshots so callers do not
 mutate the transaction's stored previous state by accident. `archive()`, `unarchive()`,
-`markDeleted()`, and `restore()` replace only buffered lifecycle flags, and
-`updateVersionMetadata()` replaces only draft version metadata supplied by the caller.
-These helpers deliberately do not compute automatic version increments, emit
-lifecycle events, write storage, or filter read-side queries. `requireActive()`
+`markDeleted()`, and `restore()` replace only buffered lifecycle flags.
+Application code cannot replace the version. The framework advances it once
+when successful handling produces Events or changes state or lifecycle flags.
+A true no-op leaves it unchanged. These draft helpers do not emit lifecycle
+events, write storage, or filter read-side queries. `requireActive()`
 is the local active-state guard: it rejects committed/rolled-back transactions
 and active drafts already marked archived or deleted with deterministic errors
 that do not include entity state payloads. `commit()` validates the
@@ -697,7 +693,7 @@ context, event origin chains, primitive producer IDs, and validated int32
 version metadata. IDs are generated through Node secure UUIDs; tests use fixed
 source envelopes and `Clock` rather than mutating process-global state. This seam is still metadata-only: end-user
 handlers continue to accept generated domain messages instead of framework
-`Event` envelopes, `@Apply` remains absent, manual transaction controls are
+`Event` envelopes, manual transaction controls are
 not introduced, and the seam does not discover handlers, load generated
 registries, materialize application handlers, or widen into transport,
 storage, tracing, or application handler APIs.

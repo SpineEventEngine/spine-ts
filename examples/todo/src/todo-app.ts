@@ -104,19 +104,20 @@ export interface TaskAssignmentEvent {
 /**
  * Task aggregate for the create-task example flow.
  */
-export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema> {
   // prettier-ignore
 
   /**
-   * Creates a task and produces its stored domain event.
+   * Creates a task and optionally records its first assignee after creation.
    *
    * @param command The command that supplies the task title.
-   * @returns The event that records the created task.
+   * @returns The creation Event followed by an assignment Event when requested.
    */
   @Assign
-  createTask(command: CreateTask): TaskCreated {
+  createTask(command: CreateTask): readonly [TaskCreated, TaskAssignedEvent?] {
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(command.taskListId);
+    const assignee = command.assignee === undefined ? undefined : assignees.require(command.assignee);
 
     this.update((draft) =>
       Object.assign(
@@ -126,14 +127,19 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
           title: command.title,
           completed: false,
           taskListId,
+          assignee,
         }),
       ),
     );
-    return create(TaskCreatedSchema, {
+    const created = create(TaskCreatedSchema, {
       id,
       taskListId,
       title: command.title,
     });
+    // The optional second slot exists only when the new task starts assigned.
+    return assignee === undefined
+      ? [created]
+      : [created, create(TaskAssignedSchema, { id, taskListId, assignee })];
   }
 
   /**
@@ -229,25 +235,29 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
   }
 
   /**
-   * Records a task assignment and its assignee.
+   * Records an initial assignment or a change to a different assignee.
    *
    * @param command The command that selects the assignee.
-   * @returns The event that records the assignment.
+   * @returns The initial-assignment or reassignment Event, as appropriate.
    */
   @Assign
   @Throws(TaskAlreadyDone, TaskAlreadyAssigned)
-  assignTask(command: AssignTask): TaskAssignedEvent {
+  assignTask(command: AssignTask): TaskAssignedEvent | TaskReassignedEvent {
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(this.state.taskListId);
     const assignee = assignees.require(command.assignee);
     if (this.state.completed) throw TaskAlreadyDone.create({ id });
-    if (this.state.assignee !== undefined) {
-      throw TaskAlreadyAssigned.create({ id, assignee: this.state.assignee, taskListId });
+    const previousAssignee = this.state.assignee;
+    if (previousAssignee?.value === assignee.value) {
+      throw TaskAlreadyAssigned.create({ id, assignee: previousAssignee, taskListId });
     }
     this.update((draft) =>
       Object.assign(draft, create(TaskSchema, { ...draft, id, taskListId, assignee })),
     );
-    return create(TaskAssignedSchema, { id, taskListId, assignee });
+    // The union names the two Events this command may actually produce.
+    return previousAssignee === undefined
+      ? create(TaskAssignedSchema, { id, taskListId, assignee })
+      : create(TaskReassignedSchema, { id, taskListId, previousAssignee, assignee });
   }
 
   /**
@@ -299,7 +309,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
 /**
  * Read-side task list projection for visible task queries.
  */
-export class TaskListProjection extends Projection<TaskListId, typeof TaskListSchema, number> {
+export class TaskListProjection extends Projection<TaskListId, typeof TaskListSchema> {
   // prettier-ignore
 
   /**
@@ -504,6 +514,13 @@ export class TaskListProjection extends Projection<TaskListId, typeof TaskListSc
     this.updateTaskAssignee(event.id, event.taskListId, undefined);
   }
 
+  /**
+   * Updates the assignee of one task in its task-list projection.
+   *
+   * @param id Task whose assignee changed.
+   * @param taskListId Task list containing the task.
+   * @param assignee New assignee, or undefined when the task was unassigned.
+   */
   private updateTaskAssignee(
     id: TaskId | undefined,
     taskListId: TaskListId | undefined,
@@ -537,7 +554,7 @@ export class TaskListProjection extends Projection<TaskListId, typeof TaskListSc
 /**
  * Tracks task identifiers currently assigned to one user.
  */
-export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssigneeSchema, number> {
+export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssigneeSchema> {
   // prettier-ignore
 
   /**
@@ -591,6 +608,11 @@ export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssign
     );
   }
 
+  /**
+   * Removes a task from this assignee's task list.
+   *
+   * @param id Task no longer assigned to this user.
+   */
   private remove(id: TaskId | undefined): void {
     const taskId = taskIds.require(id);
     this.update((draft) =>
@@ -606,41 +628,40 @@ export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssign
 }
 
 /**
+ * Selects optional facilities for the single-tenant Tasks context.
+ */
+interface TodoContextOptions {
+  // prettier-ignore
+
+  /**
+   * Selects the Delivery shard strategy used by the Tasks context.
+   */
+  readonly deliveryStrategy?: DeliveryStrategy;
+
+  // prettier-ignore
+
+  /**
+   * Transfers the subscription registry to the Tasks context.
+   * The context closes the supplied registry during shutdown.
+   */
+  readonly subscriptionRegistry?: import("@spine-event-engine/server").StandSubscriptionRegistry;
+
+  // prettier-ignore
+
+  /**
+   * Supplies the storage factory used by the Tasks context.
+   * The caller closes it after all dependent contexts and servers finish.
+   */
+  readonly storageFactory?: StorageFactory;
+}
+
+/**
  * Creates the single-tenant Tasks bounded context with in-memory defaults.
  *
- * @param options Supplies application-owned bounded-context facilities.
+ * @param options Supplies optional context facilities.
  * @returns The assembled Tasks bounded context.
  */
-export async function createTodoContext(
-  options: {
-    // prettier-ignore
-
-    /**
-     *
-     * Selects the Delivery shard strategy used by the Tasks context.
-     */
-    readonly deliveryStrategy?: DeliveryStrategy;
-
-    // prettier-ignore
-
-    /**
-     *
-     * Transfers the subscription registry to the Tasks context.
-     *
-     * The context owns and closes the supplied registry during shutdown.
-     */
-    readonly subscriptionRegistry?: import("@spine-event-engine/server").StandSubscriptionRegistry;
-
-    // prettier-ignore
-
-    /**
-     *
-     * Supplies the caller-owned storage factory used by the Tasks context.
-     * The caller closes it after all dependent contexts and servers finish.
-     */
-    readonly storageFactory?: StorageFactory;
-  } = {},
-): Promise<BoundedContext> {
+export async function createTodoContext(options: TodoContextOptions = {}): Promise<BoundedContext> {
   const taskListRouting = EventRouting.create<TaskListId>()
     .route(TaskEvent, (event) => [taskListIds.require(event.taskListId)])
     .route(TaskAlreadyDoneSchema, (event) => taskListIds.fromTaskId(event.id))
@@ -666,6 +687,12 @@ export async function createTodoContext(
 }
 
 const taskIds = {
+  /**
+   * Copies a task ID, rejecting a missing routing value.
+   *
+   * @param id Task ID supplied by the framework or an Event.
+   * @returns An independent task ID message.
+   */
   require(id: TaskId | undefined): TaskId {
     if (id === undefined) {
       throw new Error("Framework-provided task ID is missing.");
@@ -676,11 +703,23 @@ const taskIds = {
 };
 
 const taskListIds = {
+  /**
+   * Copies the task-list ID required by a projection update.
+   *
+   * @param id Task-list ID from the incoming Event.
+   * @returns An independent task-list ID message.
+   */
   require(id: TaskListId | undefined): TaskListId {
     if (id === undefined) throw new Error("Task list ID is missing.");
     return clone(TaskListIdSchema, id);
   },
 
+  /**
+   * Routes an Event to the task list sharing its task ID value.
+   *
+   * @param id Task ID from the Event being routed.
+   * @returns One matching task-list ID, or no route when the task ID is absent.
+   */
   fromTaskId(id: TaskId | undefined): readonly TaskListId[] {
     if (id === undefined) return [];
     return [create(TaskListIdSchema, { value: id.value })];
@@ -688,6 +727,12 @@ const taskListIds = {
 };
 
 const assignees = {
+  /**
+   * Copies the user ID required by an assignment change.
+   *
+   * @param id User ID from the assignment Event.
+   * @returns An independent assignee ID message.
+   */
   require(id: UserId | undefined): UserId {
     if (id === undefined) throw new Error("Task assignee is missing.");
     return clone(UserIdSchema, id);

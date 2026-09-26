@@ -58,7 +58,7 @@ evidence, and first follow-up task handoff.
   inspection requirement, acceptance criteria, verification, and
   minimal-todo-vs-production-parity classification.
 - The end-user code constraints remain visible: no framework `Event` envelopes,
-  manual transactions, `@Apply`, schema-bearing decorators, or app-owned handler
+  manual transactions, event replay, schema-bearing decorators, or app-owned handler
   materialization.
 - Generated registry contracts are preserved as a top-level invariant, with
   framework/generated-registry ownership as the intended handler-materialization

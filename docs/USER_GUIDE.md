@@ -140,8 +140,8 @@ provider-side pagination feature.
 
 ## 4. Implement behavior
 
-Put behavior in entity classes. An Aggregate accepts a command and returns a
-generated event. A Projection subscribes to that event and builds queryable
+Put behavior in entity classes. An Aggregate accepts a command and returns one
+or more generated events. A Projection subscribes to those events and builds queryable
 state. Handlers use bare `@Assign`, `@Command`, `@React`, and `@Subscribe`
 decorators; generated registry tooling discovers their schemas and signatures.
 
@@ -150,8 +150,89 @@ flowchart LR
   Post[PostMessage] --> Aggregate[Message Aggregate]
   Aggregate --> Event[MessagePosted]
   Event --> Projection[Board View Projection]
-  Projection --> Query[Board query]
+Projection --> Query[Board query]
 ```
+
+### Choose what a handler returns
+
+Use ordinary TypeScript types to describe the result. You do not need a Pair,
+Either, or other wrapper library. These examples use To-Do domain messages:
+
+| Return declaration                                                    | Meaning                                                                                                                                    |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TaskCreated`                                                         | One Event.                                                                                                                                 |
+| `TaskAssigned \| TaskReassigned`                                      | One Event: either a first assignment or a reassignment.                                                                                    |
+| `TaskAssigned[]`                                                      | A list of Events of the same type. `readonly TaskAssigned[]`, `Array<TaskAssigned>`, and `ReadonlyArray<TaskAssigned>` are also supported. |
+| `[TaskCreated, TaskAssigned]`                                         | Creation and assignment Events, in that order.                                                                                             |
+| `readonly [TaskCreated, TaskAssigned?]`                               | Creation, followed by assignment only when an initial assignee was supplied.                                                               |
+| `[assignment: TaskAssigned \| TaskReassigned, renamed?: TaskRenamed]` | Named tuple entries, with a choice of type in one entry and an optional later entry.                                                       |
+| `Promise<TaskCreated>`                                                | One Event after asynchronous work. One outer `Promise` can wrap any supported result shape.                                                |
+
+A union (`|`) means **choose one**. A tuple (`[...]`) means **return several
+together**. The question mark makes a tuple entry optional; absent entries are
+not dispatched. `readonly` means your code cannot modify the array or tuple
+through that type. Local or imported type aliases are supported when the
+generator can resolve every alternative to a concrete generated message.
+
+The decorator determines which messages are allowed:
+
+| Handler      | Normal result                                                                                                                                  |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@Assign`    | Domain Events, with at least one Event returned on success.                                                                                    |
+| `@Command`   | Domain Commands. A Command-input handler must return at least one. An Event/rejection reaction may return `undefined` or an empty typed array. |
+| `@React`     | Domain Events, `undefined`, or an empty typed array. `void` is not a valid declaration.                                                        |
+| `@Subscribe` | `void`, or `Promise<void>` for asynchronous work. It does not produce signals.                                                                 |
+
+For example, a Command reaction can declare
+`CreateAccessGrant | ExtendAccessGrant`: approve a new request by creating a
+grant, or approve an existing one by extending it. The handler returns one
+generated Command; Spine creates its envelope and delivers it.
+
+If approval sometimes needs no further action, declare
+`CreateAccessGrant | ExtendAccessGrant | undefined`. Return a Command when a
+grant needs creating or extending, and `undefined` when nothing needs doing.
+The position of `undefined` in the union does not matter. The same choice is
+available to `@React`, for example `TaskRenamed | undefined`.
+
+A reaction that only changes its Entity state can declare `undefined` alone,
+or `Promise<undefined>` when asynchronous. Its state changes are still saved;
+no signal is produced. This applies to `@React` and Event/rejection-input
+`@Command`, not to handlers receiving Commands or to `@Subscribe`.
+
+Use explicit return annotations. Rejections are **thrown**, not returned;
+declare a Command handler's possible rejections with `@Throws`. Do not return
+framework Command/Event envelopes, arbitrary objects, `any`, or `unknown`.
+Nested collections, tuple rest entries, nested promises, and custom thenables
+are not supported. Use `undefined`, not `null`, for an absent result or tuple
+entry. Only `@Subscribe` accepts `void` or `Promise<void>`; it must not return
+any value at runtime. A required result that is empty, or an invalid returned
+value, fails before the framework commits the Entity changes or publishes outputs.
+
+TypeScript checks tuple positions and lengths. Spine checks each actual
+message against that handler's declared message types and keeps result order;
+it does not add a separate runtime tuple-length checker. This ordering does not
+promise that independent downstream handlers finish in that order.
+
+See the [server reference](../packages/server/REFERENCE.md#handler-return-types)
+for runnable declarations and the [To-Do guide](../examples/todo/USER_GUIDE.md)
+for a complete application workflow.
+
+### Let Spine manage Entity versions
+
+Entity classes take two type parameters: their identifier and state schema.
+There is no application-defined version parameter. Every Entity has the same
+Spine `Version`, containing a number and a timestamp.
+
+A fresh Entity starts at version zero before its first handler runs. Creating
+the task saves version one; renaming it saves version two; completing it saves
+version three. Spine advances the version once when a handler
+produces Events or changes Entity state or lifecycle. It does not advance for
+a failed operation or a no-op. Application code does not increment it manually.
+The Entity, its stored record, and notifications of its state carry the same
+committed Version. A Projection advances its own version instead of copying
+the source Event's producer version.
+
+### Route messages to the right Entity
 
 Use an exact route when the first field is not the correct target. `CommandRouting`,
 `EventRouting`, and `StateUpdateRouting` accept both `.route(Schema, via)` and

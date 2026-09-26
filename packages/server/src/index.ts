@@ -142,8 +142,6 @@ export {
   type EntityLifecycleFlags,
   type EntityOptions,
   type EntityScopeReason,
-  type EntityVersionMetadata,
-  type PlainEntityVersionMetadata,
   ProcessManager,
   Projection,
   TransactionalEntity,
@@ -235,7 +233,6 @@ export {
 
 export {
   EventRegistrationReadiness,
-  type EventRegistrationApplicationMetadata,
   type EventRegistrationReadinessLookup,
   type EventRegistrationReactorMetadata,
   type EventRegistrationSubscriberMetadata,
@@ -263,7 +260,6 @@ export {
 } from "./repository/repository.js";
 
 export {
-  Apply,
   Assign,
   Command,
   type HandlerMethodDecorator,
@@ -306,8 +302,6 @@ export {
   type CommandReactionHandlerMetadata,
   type EntityClass,
   type EntityHandlersMetadata,
-  type EventApplicationHandlerMetadata,
-  type EventApplicationOptions,
   type EventReactionHandlerMetadata,
   type EventSubscriptionHandlerMetadata,
   type StateSubscriptionHandlerMetadata,

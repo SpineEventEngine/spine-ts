@@ -61,8 +61,7 @@ import {
 type ReviewTaskAssigned = Message<"ReviewTaskAssigned"> & { id: string; name: string };
 class ReviewTaskAssignedOriginProjection extends Projection<
   string,
-  typeof Wave13OriginStateSchema,
-  number
+  typeof Wave13OriginStateSchema
 > {
   static externalContexts: EventContext[] = [];
 

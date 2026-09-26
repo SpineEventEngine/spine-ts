@@ -15,7 +15,7 @@
 import { Buffer } from "node:buffer";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 import type * as Protobuf from "@bufbuild/protobuf";
 import type * as ProtobufWkt from "@bufbuild/protobuf/wkt";
@@ -240,7 +240,6 @@ interface AnalyzedMethodInput {
  * Stable diagnostic codes emitted by build-time handler analysis.
  */
 export type BuildHandlerDiagnosticCode =
-  | "APPLY_DECORATOR"
   | "FRAMEWORK_ENVELOPE_RETURN"
   | "INVALID_EMITTED_SCHEMA"
   | "INVALID_HANDLER_NAME"
@@ -463,7 +462,7 @@ interface TypeWalk {
 }
 
 type HandlerDecorator = "Assign" | "Command" | "React" | "Subscribe";
-type ServerDecorator = HandlerDecorator | "Apply" | "Where" | "Throws";
+type ServerDecorator = HandlerDecorator | "Where" | "Throws";
 type SignalKind = "command" | "event" | "rejection" | "state";
 
 interface DecoratorUse {
@@ -491,10 +490,22 @@ let packageDependencies:
   { readonly protobuf: typeof Protobuf; readonly protobufWkt: typeof ProtobufWkt } | undefined;
 
 const HandlerSources = Object.freeze({
+  /**
+   * Gets non-declaration source files from the program.
+   *
+   * @param program The TypeScript program supplying source files and type information.
+   * @returns The program's source files, excluding declaration files.
+   */
   appSourceFiles(program: ts.Program): readonly ts.SourceFile[] {
     return program.getSourceFiles().filter((source) => !source.isDeclarationFile);
   },
 
+  /**
+   * Collects supported receiver classes declared in one source file.
+   *
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns The receiver records found in the source file.
+   */
   analyzeSource(scope: AnalyzerScope): readonly BuildReceiverHandlers[] {
     const receivers: BuildReceiverHandlers[] = [];
 
@@ -516,6 +527,13 @@ const HandlerSources = Object.freeze({
     return receivers;
   },
 
+  /**
+   * Validates a decorated class and assembles its receiver record.
+   *
+   * @param node The syntax node being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns The receiver record, or undefined when the class is ineligible.
+   */
   analyzeClass(node: ts.ClassDeclaration, scope: AnalyzerScope): BuildReceiverHandlers | undefined {
     const className = node.name?.text ?? "DefaultReceiver";
     const exportIssue = HandlerSources.receiverExportIssue(node, scope.source);
@@ -537,6 +555,15 @@ const HandlerSources = Object.freeze({
     return HandlerSources.receiverRecord(node, className, lineage, handlers, scope.source.fileName);
   },
 
+  /**
+   * Collects valid decorated handler methods from a class.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param lineage The resolved receiver base and state schema, when available.
+   * @param node The syntax node being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns The valid handler records found in the class.
+   */
   analyzeMethods(
     node: ts.ClassDeclaration,
     className: string,
@@ -559,6 +586,16 @@ const HandlerSources = Object.freeze({
     return handlers;
   },
 
+  /**
+   * Builds the entity or standalone receiver record from its lineage and handlers.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param handlers The validated handlers found on the receiver.
+   * @param lineage The resolved receiver base and state schema, when available.
+   * @param node The syntax node being inspected.
+   * @param sourceFile The receiver source path.
+   * @returns The receiver record, or undefined when entity state is unresolved.
+   */
   receiverRecord(
     node: ts.ClassDeclaration,
     className: string,
@@ -590,6 +627,17 @@ const HandlerSources = Object.freeze({
         };
   },
 
+  /**
+   * Finds a handler decorator and validates one method.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param entityBase The resolved entity base class, when present.
+   * @param node The syntax node being inspected.
+   * @param receiverKind The resolved entity or standalone receiver kind, when present.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param stateSchema The resolved entity state schema, when present.
+   * @returns The handler record, or undefined when validation fails.
+   */
   analyzeMethod(
     node: ts.MethodDeclaration,
     className: string,
@@ -599,14 +647,12 @@ const HandlerSources = Object.freeze({
     scope: AnalyzerScope,
   ): BuildHandlerRecord | undefined {
     const decorators = HandlerSources.methodDecorators(node, scope.imports);
-    const apply = decorators.find((decorator) => decorator.name === "Apply");
     const handler = decorators.find(HandlerSources.isHandlerUse);
     const whereUses = decorators.filter((decorator) => decorator.name === "Where");
     const throwsUses = decorators.filter((decorator) => decorator.name === "Throws");
     const method = HandlerTypes.methodName(node);
     const use = {
       node,
-      apply,
       handler,
       whereUses,
       throwsUses,
@@ -621,6 +667,12 @@ const HandlerSources = Object.freeze({
     return HandlerSources.analyzeValidMethod(use);
   },
 
+  /**
+   * Resolves a validated method's input, context, outcomes, and declarations.
+   *
+   * @param input The collected method or validation input.
+   * @returns The handler record, or undefined when a declaration is invalid.
+   */
   analyzeValidMethod(input: AnalyzedMethodInput): BuildHandlerRecord | undefined {
     const { className, handler, method, node, scope } = input;
     const parameters = node.parameters;
@@ -645,6 +697,14 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Validates the Where and Throws declarations attached to a handler.
+   *
+   * @param input The collected method or validation input.
+   * @param methodName The handler method name used in diagnostics.
+   * @param signalKind The resolved input signal kind.
+   * @returns The validated filter and rejection schemas, or undefined on failure.
+   */
   methodDeclarations(
     input: AnalyzedMethodInput,
     signalKind: SignalKind | undefined,
@@ -675,6 +735,15 @@ const HandlerSources = Object.freeze({
       : { where, thrown: thrown ?? [] };
   },
 
+  /**
+   * Resolves the input signal and emitted message schemas of a handler.
+   *
+   * @param handler The recognized handler decorator.
+   * @param node The syntax node being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param signalType The handler's declared input type.
+   * @returns The input and output schemas, or undefined when resolution fails.
+   */
   methodSchemaUses(
     node: ts.MethodDeclaration,
     handler: HandlerDecoratorUse,
@@ -686,14 +755,27 @@ const HandlerSources = Object.freeze({
     const signal = HandlerSources.schemaUseFromType(signalType, scope.imports);
     const returned = HandlerSources.emittedSchemaUses(
       node.type === undefined ? undefined : HandlerSources.unwrapOuterPromise(node.type, scope),
-      handler.name,
-      scope.imports,
+      HandlerSources.handlerKind(handler.name, signal?.kind),
+      scope,
     );
     return signal === undefined || returned === undefined
       ? undefined
       : { signal, returnedSchemas: returned.map((schema) => schema.reference) };
   },
 
+  /**
+   * Builds the generated handler record from resolved method metadata.
+   *
+   * @param handler The recognized handler decorator.
+   * @param method The handler method name.
+   * @param node The syntax node being inspected.
+   * @param origin Whether the input is domestic or external.
+   * @param returnedSchemas The generated schemas emitted by the handler.
+   * @param signal The resolved input schema and signal kind.
+   * @param thrownSchemas The rejection schemas declared by the handler.
+   * @param where The validated event filter, when declared.
+   * @returns The generated handler record.
+   */
   buildHandlerRecord(
     node: ts.MethodDeclaration,
     handler: HandlerDecoratorUse,
@@ -713,9 +795,14 @@ const HandlerSources = Object.freeze({
     };
   },
 
+  /**
+   * Rejects unsupported decorator combinations and receiver placements.
+   *
+   * @param input The collected method or validation input.
+   * @returns Whether the decorator combination and receiver placement are valid.
+   */
   validMethodUse(input: {
     readonly node: ts.MethodDeclaration;
-    readonly apply: DecoratorUse | undefined;
     readonly handler: HandlerDecoratorUse | undefined;
     readonly whereUses: readonly DecoratorUse[];
     readonly throwsUses: readonly DecoratorUse[];
@@ -726,7 +813,6 @@ const HandlerSources = Object.freeze({
     readonly scope: AnalyzerScope;
     readonly method: string | undefined;
   }): input is typeof input & { readonly handler: HandlerDecoratorUse } {
-    HandlerSources.reportUnsupportedApply(input);
     if (input.handler === undefined) return HandlerSources.reportMissingHandler(input);
     const { className, handler, method, node, scope } = input;
     if (!HandlerSources.validHandlerKind({ ...input, handler })) return false;
@@ -742,6 +828,17 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Resolves declared rejection schemas for a handler.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param handler The recognized handler decorator.
+   * @param methodName The handler method name used in diagnostics.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param signalKind The resolved input signal kind.
+   * @param uses The decorator uses under inspection.
+   * @returns The declared rejection schemas, or undefined on failure.
+   */
   throwsDeclaration(
     uses: readonly DecoratorUse[],
     handler: HandlerDecoratorUse,
@@ -763,6 +860,17 @@ const HandlerSources = Object.freeze({
     return HandlerSources.thrownSchemas(expression, scope, className, methodName);
   },
 
+  /**
+   * Reads rejection schema references from a Throws decorator call.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param handler The recognized handler decorator.
+   * @param methodName The handler method name used in diagnostics.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param signalKind The resolved input signal kind.
+   * @param uses The decorator uses under inspection.
+   * @returns The schema expressions in the decorator call, or undefined when invalid.
+   */
   throwsCall(
     uses: readonly DecoratorUse[],
     handler: HandlerDecoratorUse,
@@ -796,6 +904,15 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Resolves rejection schemas named by a Throws declaration.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param expression The expression being inspected.
+   * @param methodName The handler method name used in diagnostics.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns The resolved rejection schemas, or undefined when invalid.
+   */
   thrownSchemas(
     expression: ts.CallExpression,
     scope: AnalyzerScope,
@@ -830,6 +947,15 @@ const HandlerSources = Object.freeze({
     return resolved;
   },
 
+  /**
+   * Records an invalid Throws declaration at its decorator.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param message The descriptor message or diagnostic text being inspected.
+   * @param methodName The handler method name used in diagnostics.
+   * @param node The syntax node being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   */
   invalidThrows(
     scope: AnalyzerScope,
     node: ts.Node,
@@ -841,6 +967,13 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Resolves a rejection schema referenced by a decorator expression.
+   *
+   * @param expression The expression being inspected.
+   * @param imports The imports indexed for the current source.
+   * @returns The imported rejection schema, or undefined when unresolved.
+   */
   rejectionSchemaFromExpression(
     expression: ts.Expression,
     imports: ImportState,
@@ -857,23 +990,12 @@ const HandlerSources = Object.freeze({
       : { moduleSpecifier: namespace.moduleSpecifier, exportName: schemaName };
   },
 
-  reportUnsupportedApply(input: {
-    readonly apply: DecoratorUse | undefined;
-    readonly scope: AnalyzerScope;
-    readonly className: string;
-    readonly method: string | undefined;
-  }): void {
-    if (input.apply === undefined) return;
-    HandlerTypes.pushDiagnostic(
-      input.scope,
-      "APPLY_DECORATOR",
-      input.apply.node,
-      "Generated registries do not support @Apply.",
-      input.className,
-      input.method,
-    );
-  },
-
+  /**
+   * Records Where or Throws decorators without a handler decorator.
+   *
+   * @param input The collected method or validation input.
+   * @returns False to stop analysis when no handler decorator is present.
+   */
   reportMissingHandler(input: {
     readonly whereUses: readonly DecoratorUse[];
     readonly throwsUses: readonly DecoratorUse[];
@@ -903,6 +1025,15 @@ const HandlerSources = Object.freeze({
     return false;
   },
 
+  /**
+   * Checks that a handler decorator has no arguments.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param handler The recognized handler decorator.
+   * @param method The handler method name.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns Whether the handler decorator is bare.
+   */
   validBareHandlerDecorator(
     handler: HandlerDecoratorUse,
     scope: AnalyzerScope,
@@ -921,6 +1052,12 @@ const HandlerSources = Object.freeze({
     return false;
   },
 
+  /**
+   * Checks that a handler decorator fits the receiver kind.
+   *
+   * @param input The collected method or validation input.
+   * @returns Whether the decorator fits the receiver kind.
+   */
   validHandlerKind(input: {
     readonly handler: HandlerDecoratorUse;
     readonly entityBase: string | undefined;
@@ -935,6 +1072,12 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Checks an entity handler against its aggregate, projection, or process manager base.
+   *
+   * @param input The collected method or validation input.
+   * @returns Whether the entity base supports this handler kind.
+   */
   validEntityHandlerKind(input: {
     readonly handler: HandlerDecoratorUse;
     readonly entityBase: string | undefined;
@@ -966,6 +1109,12 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Checks a standalone handler against its receiver base.
+   *
+   * @param input The collected method or validation input.
+   * @returns Whether the standalone base supports this handler kind.
+   */
   validStandaloneHandlerKind(input: {
     readonly handler: HandlerDecoratorUse;
     readonly entityBase: string | undefined;
@@ -989,6 +1138,17 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Records an unsupported handler configuration.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param code The diagnostic code to report.
+   * @param message The descriptor message or diagnostic text being inspected.
+   * @param method The handler method name.
+   * @param node The syntax node being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns False after recording the unsupported configuration.
+   */
   unsupported(
     scope: AnalyzerScope,
     code: BuildHandlerDiagnosticCode,
@@ -1001,6 +1161,17 @@ const HandlerSources = Object.freeze({
     return false;
   },
 
+  /**
+   * Validates and reads the event filter declared by Where.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param handler The recognized handler decorator.
+   * @param methodName The handler method name used in diagnostics.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param signalKind The resolved input signal kind.
+   * @param uses The decorator uses under inspection.
+   * @returns The validated event filter, or undefined when absent or invalid.
+   */
   whereDeclaration(
     uses: readonly DecoratorUse[],
     handler: HandlerDecoratorUse,
@@ -1017,9 +1188,8 @@ const HandlerSources = Object.freeze({
       (signalKind !== "event" && signalKind !== "rejection") ||
       use === undefined
     ) {
-      HandlerTypes.pushDiagnostic(
+      HandlerSources.invalidWhere(
         scope,
-        "INVALID_WHERE",
         use?.node ?? handler.node,
         "@Where is allowed once on an Event-consuming @Subscribe, @React, or @Command handler.",
         className,
@@ -1027,11 +1197,28 @@ const HandlerSources = Object.freeze({
       );
       return undefined;
     }
+    return HandlerSources.whereOptions(use, scope, className, methodName);
+  },
+
+  /**
+   * Reads the object literal from one Where decorator.
+   *
+   * @param use Where decorator to inspect.
+   * @param scope Current analysis context.
+   * @param className Receiver class name.
+   * @param methodName Handler method name.
+   * @returns Parsed filter, or undefined when invalid.
+   */
+  whereOptions(
+    use: DecoratorUse,
+    scope: AnalyzerScope,
+    className: string,
+    methodName: string,
+  ): BuildWhereOptions | undefined {
     const expression = use.node.expression;
     if (!ts.isCallExpression(expression) || expression.arguments.length !== 1) {
-      HandlerTypes.pushDiagnostic(
+      HandlerSources.invalidWhere(
         scope,
-        "INVALID_WHERE",
         use.node,
         "@Where requires one object literal.",
         className,
@@ -1041,9 +1228,8 @@ const HandlerSources = Object.freeze({
     }
     const options = expression.arguments[0];
     if (options === undefined || !ts.isObjectLiteralExpression(options)) {
-      HandlerTypes.pushDiagnostic(
+      HandlerSources.invalidWhere(
         scope,
-        "INVALID_WHERE",
         expression,
         "@Where options must be an object literal.",
         className,
@@ -1051,44 +1237,34 @@ const HandlerSources = Object.freeze({
       );
       return undefined;
     }
+    return HandlerSources.whereProperties(options, scope, className, methodName);
+  },
+
+  /**
+   * Validates string-valued Where filter properties.
+   *
+   * @param options Object literal supplied to Where.
+   * @param scope Current analysis context.
+   * @param className Receiver class name.
+   * @param methodName Handler method name.
+   * @returns Parsed filter, or undefined when invalid.
+   */
+  whereProperties(
+    options: ts.ObjectLiteralExpression,
+    scope: AnalyzerScope,
+    className: string,
+    methodName: string,
+  ): BuildWhereOptions | undefined {
     const values = new Map<string, string>();
     for (const property of options.properties) {
-      if (
-        !ts.isPropertyAssignment(property) ||
-        (property.name.kind !== ts.SyntaxKind.Identifier &&
-          !ts.isStringLiteralLike(property.name)) ||
-        !ts.isStringLiteralLike(property.initializer)
-      ) {
-        HandlerTypes.pushDiagnostic(
-          scope,
-          "INVALID_WHERE",
-          property,
-          "@Where accepts only eventField and equals string literals.",
-          className,
-          methodName,
-        );
+      if (!HandlerSources.readWhereProperty(property, values, scope, className, methodName))
         return undefined;
-      }
-      const name = property.name.text;
-      if ((name !== "eventField" && name !== "equals") || values.has(name)) {
-        HandlerTypes.pushDiagnostic(
-          scope,
-          "INVALID_WHERE",
-          property,
-          "@Where accepts each of eventField and equals exactly once.",
-          className,
-          methodName,
-        );
-        return undefined;
-      }
-      values.set(name, property.initializer.text);
     }
-    const eventField = values.get("eventField");
-    const equals = values.get("equals");
+    const eventField = values.get("eventField"),
+      equals = values.get("equals");
     if (eventField === undefined || eventField.trim().length === 0 || equals === undefined) {
-      HandlerTypes.pushDiagnostic(
+      HandlerSources.invalidWhere(
         scope,
-        "INVALID_WHERE",
         options,
         "@Where requires non-empty eventField and string equals.",
         className,
@@ -1099,6 +1275,78 @@ const HandlerSources = Object.freeze({
     return Object.freeze({ eventField, equals });
   },
 
+  /**
+   * Reads one literal Where filter property.
+   *
+   * @param property Object-literal member to inspect.
+   * @param values Parsed filter entries.
+   * @param scope Current analysis context.
+   * @param className Receiver class name.
+   * @param methodName Handler method name.
+   * @returns Whether the property was accepted.
+   */
+  readWhereProperty(
+    property: ts.ObjectLiteralElementLike,
+    values: Map<string, string>,
+    scope: AnalyzerScope,
+    className: string,
+    methodName: string,
+  ): boolean {
+    if (
+      !ts.isPropertyAssignment(property) ||
+      (property.name.kind !== ts.SyntaxKind.Identifier && !ts.isStringLiteralLike(property.name)) ||
+      !ts.isStringLiteralLike(property.initializer)
+    ) {
+      HandlerSources.invalidWhere(
+        scope,
+        property,
+        "@Where accepts only eventField and equals string literals.",
+        className,
+        methodName,
+      );
+      return false;
+    }
+    const name = property.name.text;
+    if ((name !== "eventField" && name !== "equals") || values.has(name)) {
+      HandlerSources.invalidWhere(
+        scope,
+        property,
+        "@Where accepts each of eventField and equals exactly once.",
+        className,
+        methodName,
+      );
+      return false;
+    }
+    values.set(name, property.initializer.text);
+    return true;
+  },
+
+  /**
+   * Checks an invalid Where declaration and records its diagnostic.
+   *
+   * @param scope Current analysis context.
+   * @param node Invalid syntax node.
+   * @param message Diagnostic message.
+   * @param className Receiver class name.
+   * @param methodName Handler method name.
+   */
+  invalidWhere(
+    scope: AnalyzerScope,
+    node: ts.Node,
+    message: string,
+    className: string,
+    methodName: string,
+  ): void {
+    HandlerTypes.pushDiagnostic(scope, "INVALID_WHERE", node, message, className, methodName);
+  },
+
+  /**
+   * Checks whether a class has a recognized method decorator.
+   *
+   * @param imports The imports indexed for the current source.
+   * @param node The syntax node being inspected.
+   * @returns Whether the class has a recognized decorated method.
+   */
   hasDecoratedMethod(node: ts.ClassDeclaration, imports: ImportState): boolean {
     return node.members.some(
       (member) =>
@@ -1107,6 +1355,13 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Finds the export problem that prevents generated receiver imports.
+   *
+   * @param node The syntax node being inspected.
+   * @param source The source file being inspected.
+   * @returns Whether the source exports the class by name.
+   */
   receiverExportIssue(
     node: ts.ClassDeclaration,
     source: ts.SourceFile,
@@ -1125,6 +1380,13 @@ const HandlerSources = Object.freeze({
     };
   },
 
+  /**
+   * Checks whether a class is exported by name from its source.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param source The source file being inspected.
+   * @returns Whether the export clause includes the class name.
+   */
   hasNamedClassExport(className: string, source: ts.SourceFile): boolean {
     return source.statements.some(
       (statement) =>
@@ -1135,6 +1397,13 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Checks whether an export clause names a class.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param clause The named export clause to inspect.
+   * @returns Whether the named export clause includes the class.
+   */
   namedExportIncludes(clause: ts.NamedExportBindings, className: string): boolean {
     return (
       ts.isNamedExports(clause) &&
@@ -1146,6 +1415,18 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Checks the method declaration and its decorator before schema analysis.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param decorator The decorator under inspection.
+   * @param method The handler method name.
+   * @param node The syntax node being inspected.
+   * @param requiresEntityState Whether the receiver requires a generated entity state schema.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param stateSchema The resolved entity state schema, when present.
+   * @returns Whether the method can be analyzed.
+   */
   validateHandlerNode(
     node: ts.MethodDeclaration,
     decorator: HandlerDecorator,
@@ -1171,6 +1452,17 @@ const HandlerSources = Object.freeze({
     ].some(Boolean);
   },
 
+  /**
+   * Checks that an entity receiver declares a generated state schema.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param method The handler method name.
+   * @param node The syntax node being inspected.
+   * @param requiresEntityState Whether the receiver requires a generated entity state schema.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param stateSchema The resolved entity state schema, when present.
+   * @returns Whether the entity state schema is valid.
+   */
   validateEntityState(
     node: ts.MethodDeclaration,
     stateSchema: SchemaReference | undefined,
@@ -1194,6 +1486,14 @@ const HandlerSources = Object.freeze({
     return true;
   },
 
+  /**
+   * Checks that a handler method has an importable name.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param node The syntax node being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns Whether the method name is importable.
+   */
   validateName(node: ts.MethodDeclaration, scope: AnalyzerScope, className: string): boolean {
     if (HandlerTypes.methodName(node) !== undefined) {
       return false;
@@ -1209,6 +1509,15 @@ const HandlerSources = Object.freeze({
     return true;
   },
 
+  /**
+   * Checks that a handler method is publicly callable.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param method The handler method name.
+   * @param node The syntax node being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns Whether the handler method is public.
+   */
   validateVisibility(
     node: ts.MethodDeclaration,
     scope: AnalyzerScope,
@@ -1234,7 +1543,63 @@ const HandlerSources = Object.freeze({
     return true;
   },
 
+  /**
+   * Checks the parameter count and required input declaration.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param decorator The decorator under inspection.
+   * @param method The handler method name.
+   * @param node The syntax node being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns Whether the input and context parameters are valid.
+   */
   validateParameters(
+    node: ts.MethodDeclaration,
+    decorator: HandlerDecorator,
+    scope: AnalyzerScope,
+    className: string,
+    method: string | undefined,
+  ): boolean {
+    if (HandlerSources.parameterShapeIssue(node, decorator, scope, className, method)) return true;
+    const origin = HandlerSources.externalOrigin(node.parameters, scope, className, method);
+    if (origin === undefined) return true;
+    const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
+    if (signal !== undefined && HandlerSources.acceptsSignalKind(decorator, signal.kind)) {
+      if (origin.value === "external" && signal.kind === "command") {
+        HandlerTypes.pushDiagnostic(
+          scope,
+          "EXTERNAL_COMMAND_RECEIVER",
+          node.parameters[0]?.type ?? node,
+          "Command receivers cannot declare External<Command>.",
+          className,
+          method,
+        );
+        return true;
+      }
+      return false;
+    }
+    HandlerTypes.pushDiagnostic(
+      scope,
+      "INVALID_SIGNAL_TYPE",
+      node.parameters[0]?.type ?? node,
+      `@${decorator} first parameter must be ${HandlerSources.signalMessage(decorator)}.`,
+      className,
+      method,
+    );
+    return true;
+  },
+
+  /**
+   * Checks handler parameter count and explicit input annotation.
+   *
+   * @param node Handler method declaration.
+   * @param decorator Handler decorator.
+   * @param scope Current analysis context.
+   * @param className Receiver class name.
+   * @param method Handler method name.
+   * @returns Whether a parameter-shape issue was reported.
+   */
+  parameterShapeIssue(
     node: ts.MethodDeclaration,
     decorator: HandlerDecorator,
     scope: AnalyzerScope,
@@ -1263,36 +1628,19 @@ const HandlerSources = Object.freeze({
       );
       return true;
     }
-
-    const origin = HandlerSources.externalOrigin(node.parameters, scope, className, method);
-    if (origin === undefined) return true;
-    const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
-    if (signal !== undefined && HandlerSources.acceptsSignalKind(decorator, signal.kind)) {
-      if (origin.value === "external" && signal.kind === "command") {
-        HandlerTypes.pushDiagnostic(
-          scope,
-          "EXTERNAL_COMMAND_RECEIVER",
-          node.parameters[0].type,
-          "Command receivers cannot declare External<Command>.",
-          className,
-          method,
-        );
-        return true;
-      }
-      return false;
-    }
-
-    HandlerTypes.pushDiagnostic(
-      scope,
-      "INVALID_SIGNAL_TYPE",
-      node.parameters[0].type,
-      `@${decorator} first parameter must be ${HandlerSources.signalMessage(decorator)}.`,
-      className,
-      method,
-    );
-    return true;
+    return false;
   },
 
+  /**
+   * Checks the explicit return shape required by a handler decorator.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param decorator The decorator under inspection.
+   * @param method The handler method name.
+   * @param node The syntax node being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns Whether the return declaration meets the handler contract.
+   */
   validateReturn(
     node: ts.MethodDeclaration,
     decorator: HandlerDecorator,
@@ -1300,9 +1648,8 @@ const HandlerSources = Object.freeze({
     className: string,
     method: string | undefined,
   ): boolean {
-    if (decorator === "Subscribe") {
+    if (decorator === "Subscribe")
       return HandlerSources.validateSubscribeReturn(node, scope, className, method);
-    }
     if (node.type === undefined) {
       HandlerTypes.pushDiagnostic(
         scope,
@@ -1316,18 +1663,8 @@ const HandlerSources = Object.freeze({
     }
 
     const returnType = HandlerSources.unwrapOuterPromise(node.type, scope);
-    const envelope = HandlerSources.frameworkEnvelope(returnType, scope.imports);
-    if (envelope !== undefined) {
-      HandlerTypes.pushDiagnostic(
-        scope,
-        "FRAMEWORK_ENVELOPE_RETURN",
-        node.type,
-        `Handler return type must not be framework ${envelope}.`,
-        className,
-        method,
-      );
+    if (HandlerSources.rejectFrameworkEnvelope(node, returnType, scope, className, method))
       return true;
-    }
 
     return HandlerSources.validateEmittedReturn(
       node,
@@ -1336,9 +1673,71 @@ const HandlerSources = Object.freeze({
       className,
       method,
       returnType,
+      HandlerSources.resolvedHandlerKind(node, decorator, scope),
     );
   },
 
+  /**
+   * Checks for a framework envelope used as an application handler return.
+   *
+   * @param node Decorated handler method.
+   * @param returnType Unwrapped declared return type.
+   * @param scope Current source and import context.
+   * @param className Receiver class name for diagnostics.
+   * @param method Handler method name for diagnostics.
+   * @returns Whether an invalid framework envelope was reported.
+   */
+  rejectFrameworkEnvelope(
+    node: ts.MethodDeclaration,
+    returnType: ts.TypeNode,
+    scope: AnalyzerScope,
+    className: string,
+    method: string | undefined,
+  ): boolean {
+    const envelope = HandlerSources.frameworkEnvelope(returnType, scope.imports);
+    if (envelope === undefined) return false;
+    HandlerTypes.pushDiagnostic(
+      scope,
+      "FRAMEWORK_ENVELOPE_RETURN",
+      node.type ?? node,
+      `Handler return type must not be framework ${envelope}.`,
+      className,
+      method,
+    );
+    return true;
+  },
+
+  /**
+   * Resolves a handler role from its input signal.
+   *
+   * @param node Decorated handler method.
+   * @param decorator Handler decorator under inspection.
+   * @param scope Current source and import context.
+   * @returns The concrete generated handler role.
+   */
+  resolvedHandlerKind(
+    node: ts.MethodDeclaration,
+    decorator: HandlerDecorator,
+    scope: AnalyzerScope,
+  ): GeneratedHandlerKind {
+    const first = node.parameters[0]?.type;
+    const input =
+      first === undefined
+        ? undefined
+        : (HandlerSources.externalMarker(first, scope)?.type ?? first);
+    const signal = HandlerSources.schemaUseFromType(input, scope.imports);
+    return HandlerSources.handlerKind(decorator, signal?.kind);
+  },
+
+  /**
+   * Checks that a subscription handler explicitly returns void.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param method The handler method name.
+   * @param node The syntax node being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns Whether the return type is explicitly void.
+   */
   validateSubscribeReturn(
     node: ts.MethodDeclaration,
     scope: AnalyzerScope,
@@ -1347,7 +1746,7 @@ const HandlerSources = Object.freeze({
   ): boolean {
     if (
       node.type !== undefined &&
-      HandlerSources.isExplicitVoidType(HandlerSources.unwrapOuterPromise(node.type, scope))
+      HandlerSources.isSubscriberVoidReturn(node.type, scope.program)
     ) {
       return false;
     }
@@ -1363,6 +1762,18 @@ const HandlerSources = Object.freeze({
     return true;
   },
 
+  /**
+   * Checks the generated messages emitted by a handler.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param decorator The decorator under inspection.
+   * @param kind The resolved handler role.
+   * @param method The handler method name.
+   * @param node The syntax node being inspected.
+   * @param returnType The declared handler return type.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns Whether emitted schemas meet the handler contract.
+   */
   validateEmittedReturn(
     node: ts.MethodDeclaration,
     decorator: HandlerDecorator,
@@ -1370,60 +1781,173 @@ const HandlerSources = Object.freeze({
     className: string,
     method: string | undefined,
     returnType = node.type,
+    kind: GeneratedHandlerKind = HandlerSources.handlerKind(decorator, undefined),
   ): boolean {
-    const schemas = HandlerSources.emittedSchemaUses(returnType, decorator, scope.imports);
-    if (schemas === undefined) {
-      HandlerTypes.pushDiagnostic(
-        scope,
-        "UNSUPPORTED_RETURN_TYPE",
-        returnType ?? node,
-        `@${decorator} return type must resolve to generated schema references.`,
-        className,
-        method,
-      );
-      return true;
-    }
-    const expected = HandlerSources.emittedSignalKind(decorator);
-    if (expected !== undefined && schemas.some((schema) => schema.kind !== expected)) {
-      HandlerTypes.pushDiagnostic(
-        scope,
-        "INVALID_EMITTED_SCHEMA",
-        returnType ?? node,
-        `@${decorator} return type must emit generated ${expected} schemas.`,
-        className,
-        method,
-      );
-      return true;
-    }
-    if ((decorator === "Assign" || decorator === "Command") && schemas.length === 0) {
-      HandlerTypes.pushDiagnostic(
-        scope,
-        "MISSING_EMITTED_SCHEMAS",
-        returnType ?? node,
-        `@${decorator} handlers must emit at least one schema.`,
-        className,
-        method,
-      );
-      return true;
-    }
-    if (
-      decorator === "React" &&
-      schemas.length === 0 &&
-      !HandlerSources.isExplicitVoidType(returnType)
-    ) {
-      HandlerTypes.pushDiagnostic(
-        scope,
-        "MISSING_EMITTED_SCHEMAS",
-        returnType ?? node,
-        "@React handlers must emit at least one schema unless they return explicit void.",
-        className,
-        method,
-      );
-      return true;
-    }
-    return false;
+    const schemas = HandlerSources.emittedSchemaUses(returnType, kind, scope);
+    const issue = HandlerSources.emittedIssue(schemas, decorator, kind, returnType, scope);
+    return issue === undefined
+      ? false
+      : HandlerSources.returnDiagnostic(
+          scope,
+          issue.code,
+          returnType ?? node,
+          issue.message,
+          className,
+          method,
+        );
   },
 
+  /**
+   * Finds the first invalid emitted return shape.
+   *
+   * @param decorator The decorator under inspection.
+   * @param kind The resolved handler role.
+   * @param returnType The declared handler return type.
+   * @param schemas The generated schemas under inspection.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns The first invalid return condition, or undefined when valid.
+   */
+  emittedIssue(
+    schemas: readonly SchemaUse[] | undefined,
+    decorator: HandlerDecorator,
+    kind: GeneratedHandlerKind,
+    returnType: ts.TypeNode | undefined,
+    scope: AnalyzerScope,
+  ): { readonly code: BuildHandlerDiagnostic["code"]; readonly message: string } | undefined {
+    if (schemas === undefined)
+      return {
+        code: "UNSUPPORTED_RETURN_TYPE",
+        message: `@${decorator} return type must resolve to generated schema references.`,
+      };
+    const expected = HandlerSources.emittedSignalKind(decorator);
+    if (expected !== undefined && schemas.some((schema) => schema.kind !== expected))
+      return {
+        code: "INVALID_EMITTED_SCHEMA",
+        message: `@${decorator} return type must emit generated ${expected} schemas.`,
+      };
+    if (HandlerSources.missingRequiredOutput(kind, schemas, returnType, scope))
+      return {
+        code: "MISSING_EMITTED_SCHEMAS",
+        message: `@${decorator} handlers must emit at least one schema.`,
+      };
+    if (HandlerSources.missingReactionOutput(kind, schemas, returnType, scope))
+      return {
+        code: HandlerSources.isExplicitVoidType(returnType)
+          ? "UNSUPPORTED_RETURN_TYPE"
+          : "MISSING_EMITTED_SCHEMAS",
+        message: `@${decorator} no-output reactions must declare undefined.`,
+      };
+    return undefined;
+  },
+
+  /**
+   * Checks whether a required-output handler lacks a guaranteed Event.
+   *
+   * @param kind Resolved handler role.
+   * @param schemas Resolved output schemas.
+   * @param returnType Declared return type.
+   * @param scope Current TypeScript analysis context.
+   * @returns Whether the handler lacks a guaranteed output.
+   */
+  missingRequiredOutput(
+    kind: GeneratedHandlerKind,
+    schemas: readonly SchemaUse[],
+    returnType: ts.TypeNode | undefined,
+    scope: AnalyzerScope,
+  ): boolean {
+    return (
+      (kind === "command-assignment" || kind === "command-substitution") &&
+      (schemas.length === 0 || HandlerSources.optionalOnlyTuple(returnType, scope))
+    );
+  },
+
+  /**
+   * Checks whether a reaction omits its explicit undefined result.
+   *
+   * @param kind Resolved handler role.
+   * @param schemas Resolved output schemas.
+   * @param returnType Declared return type.
+   * @param scope Current TypeScript analysis context.
+   * @returns Whether the reaction return is invalid.
+   */
+  missingReactionOutput(
+    kind: GeneratedHandlerKind,
+    schemas: readonly SchemaUse[],
+    returnType: ts.TypeNode | undefined,
+    scope: AnalyzerScope,
+  ): boolean {
+    if (kind !== "event-reaction" && kind !== "command-reaction") return false;
+    if (schemas.length !== 0) return false;
+    if (returnType === undefined) return true;
+    const type = scope.program.getTypeChecker().getTypeFromTypeNode(returnType);
+    return (type.flags & ts.TypeFlags.Undefined) === 0;
+  },
+
+  /**
+   * Checks a result tuple whose members can all be absent.
+   *
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param typeNode The declared type node under inspection.
+   * @returns Whether every tuple member may be absent.
+   */
+  optionalOnlyTuple(typeNode: ts.TypeNode | undefined, scope: AnalyzerScope): boolean {
+    if (typeNode === undefined) return false;
+    const checker = scope.program.getTypeChecker();
+    const type = checker.getTypeFromTypeNode(typeNode);
+    return (type.isUnion() ? type.types : [type]).some((branch) => {
+      if (!checker.isTupleType(branch)) return false;
+      const tuple = branch as ts.TupleTypeReference;
+      const members = checker.getTypeArguments(tuple);
+      return !members.some(
+        (member, index) =>
+          ((tuple.target.elementFlags[index] ?? 0) & ts.ElementFlags.Required) !== 0 &&
+          !HandlerSources.includesUndefined(member),
+      );
+    });
+  },
+
+  /**
+   * Checks for an undefined alternative in a resolved tuple member.
+   *
+   * @param type Resolved TypeScript member type.
+   * @returns Whether the member can be undefined.
+   */
+  includesUndefined(type: ts.Type): boolean {
+    return type.isUnion()
+      ? type.types.some(HandlerSources.includesUndefined)
+      : (type.flags & ts.TypeFlags.Undefined) !== 0;
+  },
+
+  /**
+   * Records an invalid handler return shape.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param code The diagnostic code to report.
+   * @param message The descriptor message or diagnostic text being inspected.
+   * @param method The handler method name.
+   * @param node The syntax node being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns True after adding the return diagnostic.
+   */
+  returnDiagnostic(
+    scope: AnalyzerScope,
+    code: BuildHandlerDiagnostic["code"],
+    node: ts.Node,
+    message: string,
+    className: string,
+    method: string | undefined,
+  ): true {
+    HandlerTypes.pushDiagnostic(scope, code, node, message, className, method);
+    return true;
+  },
+
+  /**
+   * Collects recognized Spine decorators attached to a method.
+   *
+   * @param imports The imports indexed for the current source.
+   * @param node The syntax node being inspected.
+   * @returns The recognized decorators attached to the method.
+   */
   methodDecorators(node: ts.MethodDeclaration, imports: ImportState): readonly DecoratorUse[] {
     return (ts.getDecorators(node) ?? []).flatMap((decorator) => {
       const expression = ts.isCallExpression(decorator.expression)
@@ -1437,6 +1961,13 @@ const HandlerSources = Object.freeze({
     });
   },
 
+  /**
+   * Resolves a decorator expression to its imported Spine name.
+   *
+   * @param expression The expression being inspected.
+   * @param imports The imports indexed for the current source.
+   * @returns The imported Spine decorator name, or undefined when unrecognized.
+   */
   serverDecoratorName(
     expression: ts.Expression,
     imports: ImportState,
@@ -1454,10 +1985,23 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Checks a recognized decorator to a handler decorator.
+   *
+   * @param decorator The decorator under inspection.
+   * @returns Whether the decorator is a handler decorator.
+   */
   isHandlerUse(decorator: DecoratorUse): decorator is HandlerDecoratorUse {
     return handlerDecorators.has(decorator.name as HandlerDecorator);
   },
 
+  /**
+   * Checks whether a standalone receiver base permits a handler decorator.
+   *
+   * @param base The resolved framework receiver base, when present.
+   * @param decorator The decorator under inspection.
+   * @returns Whether the base permits this handler decorator.
+   */
   allowsStandaloneDecorator(base: string | undefined, decorator: HandlerDecorator): boolean {
     return (
       (base === "AbstractAssignee" && decorator === "Assign") ||
@@ -1467,6 +2011,14 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Resolves a class to its entity or standalone receiver ancestry.
+   *
+   * @param node The syntax node being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param seen The declarations already visited during traversal.
+   * @returns The resolved receiver ancestry, or undefined when unsupported.
+   */
   receiverLineage(
     node: ts.ClassDeclaration,
     scope: AnalyzerScope,
@@ -1499,6 +2051,13 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Resolves a class's direct framework receiver base.
+   *
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param type The checked or declared type under inspection.
+   * @returns The direct receiver ancestry, or undefined when absent.
+   */
   directReceiverLineage(
     type: ts.ExpressionWithTypeArguments,
     scope: AnalyzerScope,
@@ -1532,6 +2091,14 @@ const HandlerSources = Object.freeze({
       return { receiverKind: "standalone", base: standalone, stateSchema: undefined };
   },
 
+  /**
+   * Resolves receiver ancestry through a local base class.
+   *
+   * @param expression The expression being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param seen The declarations already visited during traversal.
+   * @returns The inherited receiver ancestry, or undefined when unresolved.
+   */
   inheritedReceiverLineage(
     expression: ts.Expression,
     scope: AnalyzerScope,
@@ -1558,6 +2125,13 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Finds the framework entity base named by an extends expression.
+   *
+   * @param expression The expression being inspected.
+   * @param imports The imports indexed for the current source.
+   * @returns The entity base name, or undefined when absent.
+   */
   directEntityBaseName(expression: ts.Expression, imports: ImportState): string | undefined {
     if (ts.isIdentifier(expression)) {
       const base = imports.serverSymbols.get(expression.text);
@@ -1574,6 +2148,13 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Finds the framework standalone base named by an extends expression.
+   *
+   * @param expression The expression being inspected.
+   * @param imports The imports indexed for the current source.
+   * @returns The standalone base name, or undefined when absent.
+   */
   directStandaloneBaseName(expression: ts.Expression, imports: ImportState): string | undefined {
     if (ts.isIdentifier(expression)) {
       const base = imports.serverSymbols.get(expression.text);
@@ -1590,6 +2171,13 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Finds the local class declaration referenced by an extends expression.
+   *
+   * @param expression The expression being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns The local base class declaration, or undefined when absent.
+   */
   classDeclarationFor(
     expression: ts.Expression,
     scope: AnalyzerScope,
@@ -1606,18 +2194,31 @@ const HandlerSources = Object.freeze({
     return declarations === undefined ? undefined : declarations.find(ts.isClassDeclaration);
   },
 
+  /**
+   * Checks whether an extends expression names an entity base.
+   *
+   * @param expression The expression being inspected.
+   * @param imports The imports indexed for the current source.
+   * @returns Whether the expression names a framework entity base.
+   */
   isEntityBase(expression: ts.Expression, imports: ImportState): boolean {
     return HandlerSources.directEntityBaseName(expression, imports) !== undefined;
   },
 
+  /**
+   * Resolves an entity state schema referenced by a type query.
+   *
+   * @param imports The imports indexed for the current source.
+   * @param typeNode The declared type node under inspection.
+   * @param walk The bounded alias traversal state.
+   * @returns The referenced generated schema, or undefined when unresolved.
+   */
   schemaFromTypeQuery(
     typeNode: ts.TypeNode,
     imports: ImportState,
     walk: TypeWalk,
   ): SchemaReference | undefined {
-    if (!HandlerSources.consumeTypeWalk(walk)) {
-      return undefined;
-    }
+    if (!HandlerSources.consumeTypeWalk(walk)) return undefined;
     if (ts.isParenthesizedTypeNode(typeNode)) {
       return HandlerSources.schemaFromTypeQuery(typeNode.type, imports, walk);
     }
@@ -1636,84 +2237,451 @@ const HandlerSources = Object.freeze({
     return HandlerSources.schemaFromEntityName(typeNode.exprName, imports);
   },
 
+  /**
+   * Collects generated schemas allowed by a handler's return type.
+   *
+   * @param kind The resolved handler role.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param typeNode The declared type node under inspection.
+   * @returns The emitted schema uses, or undefined when the return type is invalid.
+   */
   emittedSchemaUses(
     typeNode: ts.TypeNode | undefined,
-    decorator: HandlerDecorator,
-    imports: ImportState,
+    kind: GeneratedHandlerKind,
+    scope: AnalyzerScope,
   ): readonly SchemaUse[] | undefined {
-    if (decorator === "Subscribe") {
-      return typeNode?.kind === ts.SyntaxKind.VoidKeyword ? [] : undefined;
-    }
+    if (kind === "event-subscription" || kind === "state-subscription") return [];
     if (typeNode?.kind === ts.SyntaxKind.VoidKeyword) {
       return [];
     }
     if (typeNode === undefined) {
       return undefined;
     }
-
-    return HandlerSources.schemaListFromType(typeNode, imports, HandlerSources.newTypeWalk());
+    const optional = kind === "event-reaction" || kind === "command-reaction";
+    const direct = HandlerSources.schemaListFromType(
+      typeNode,
+      scope,
+      HandlerSources.newTypeWalk(),
+      optional,
+    );
+    if (direct !== undefined) return direct;
+    const unwrapped = HandlerSources.unwrapReadonly(typeNode);
+    if (
+      ts.isTupleTypeNode(unwrapped) &&
+      unwrapped.elements.some(
+        (member) =>
+          ts.isRestTypeNode(member) ||
+          (ts.isNamedTupleMember(member) && member.dotDotDotToken !== undefined),
+      )
+    )
+      return undefined;
+    return (
+      HandlerSources.checkedPromiseSchemas(typeNode, scope, optional) ??
+      HandlerSources.checkedSchemas(typeNode, scope, optional)
+    );
   },
 
-  schemaListFromType(
+  /**
+   * Resolves one built-in Promise layer after TypeScript expands a whole-return alias.
+   *
+   * @param typeNode Declared handler return type.
+   * @param scope Source and checker context.
+   * @param optional Whether the reaction may return no result.
+   * @returns Inner generated schemas, or undefined for a non-Promise or invalid result.
+   */
+  checkedPromiseSchemas(
     typeNode: ts.TypeNode,
-    imports: ImportState,
-    walk: TypeWalk,
+    scope: AnalyzerScope,
+    optional: boolean,
   ): readonly SchemaUse[] | undefined {
-    if (!HandlerSources.consumeTypeWalk(walk)) {
+    if (!ts.isMethodDeclaration(typeNode.parent) && !ts.isTypeAliasDeclaration(typeNode.parent))
       return undefined;
-    }
-    const unwrapped = HandlerSources.unwrapReadonly(typeNode);
-    if (ts.isArrayTypeNode(unwrapped)) {
-      const item = HandlerSources.schemaUseFromType(unwrapped.elementType, imports, walk);
-      return item === undefined ? undefined : [item];
-    }
-    if (ts.isTupleTypeNode(unwrapped)) {
-      return HandlerSources.schemaListFromTuple(unwrapped, imports, walk);
-    }
-    if (ts.isTypeReferenceNode(unwrapped) && HandlerSources.isArrayReferenceType(unwrapped)) {
-      const item = HandlerSources.schemaUseFromType(unwrapped.typeArguments?.[0], imports, walk);
-      return item === undefined ? undefined : [item];
-    }
+    const checker = scope.program.getTypeChecker();
+    const type = checker.getTypeFromTypeNode(typeNode);
+    const symbol = type.getSymbol();
+    if (
+      symbol?.getName() !== "Promise" ||
+      !symbol.declarations?.some((declaration) =>
+        scope.program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
+      )
+    )
+      return undefined;
+    const [inner] = checker.getTypeArguments(type as ts.TypeReference);
+    return inner === undefined
+      ? undefined
+      : HandlerSources.fromCheckedType(
+          inner,
+          checker,
+          scope,
+          HandlerSources.newTypeWalk(),
+          optional,
+        );
+  },
 
-    const schema = HandlerSources.schemaUseFromType(unwrapped, imports, walk);
+  /**
+   * Resolves concrete generated schemas from a checked TypeScript type.
+   *
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param typeNode The declared type node under inspection.
+   * @param optional Whether a whole reaction result may be absent.
+   * @returns The generated schema uses, or undefined when expansion fails.
+   */
+  checkedSchemas(
+    typeNode: ts.TypeNode,
+    scope: AnalyzerScope,
+    optional = false,
+  ): readonly SchemaUse[] | undefined {
+    const checker = scope.program.getTypeChecker();
+    return HandlerSources.fromCheckedType(
+      checker.getTypeFromTypeNode(typeNode),
+      checker,
+      scope,
+      HandlerSources.newTypeWalk(),
+      optional,
+    );
+  },
+
+  /**
+   * Collects generated schemas from checked union, array, or tuple types.
+   *
+   * @param checker The TypeScript type checker for the program.
+   * @param optional Whether this checked branch may be absent.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param type The checked or declared type under inspection.
+   * @param walk The bounded alias traversal state.
+   * @param collectionDepth Number of array or tuple containers already entered.
+   * @returns The schema uses, or undefined when a checked type is unsupported.
+   */
+  fromCheckedType(
+    type: ts.Type,
+    checker: ts.TypeChecker,
+    scope: AnalyzerScope,
+    walk: TypeWalk,
+    optional = false,
+    collectionDepth = 0,
+  ): readonly SchemaUse[] | undefined {
+    if (!HandlerSources.consumeTypeWalk(walk)) return undefined;
+    if (optional && (type.flags & ts.TypeFlags.Undefined) !== 0) return [];
+    if (type.isUnion()) {
+      return HandlerSources.checkedBranches(
+        type.types,
+        checker,
+        scope,
+        walk,
+        optional,
+        collectionDepth,
+      );
+    }
+    if (checker.isTupleType(type)) {
+      return HandlerSources.fromCheckedTuple(type, checker, scope, walk, collectionDepth);
+    }
+    if (checker.isArrayType(type)) {
+      return HandlerSources.fromCheckedArray(type, checker, scope, walk, optional, collectionDepth);
+    }
+    const schema = HandlerSources.checkedMessage(type, scope);
     return schema === undefined ? undefined : [schema];
   },
 
+  /**
+   * Resolves one checked array without permitting nested collections.
+   *
+   * @param type Checked array type.
+   * @param checker TypeScript type checker.
+   * @param scope Current source and imports.
+   * @param walk Bounded alias traversal state.
+   * @param optional Whether undefined may occur within the array.
+   * @param collectionDepth Number of enclosing collections.
+   * @returns Array member schemas, or undefined for an invalid shape.
+   */
+  fromCheckedArray(
+    type: ts.Type,
+    checker: ts.TypeChecker,
+    scope: AnalyzerScope,
+    walk: TypeWalk,
+    optional: boolean,
+    collectionDepth: number,
+  ): readonly SchemaUse[] | undefined {
+    if (collectionDepth > 0) return undefined;
+    const member = checker.getTypeArguments(type as ts.TypeReference)[0];
+    return member === undefined
+      ? undefined
+      : HandlerSources.fromCheckedType(member, checker, scope, walk, optional, collectionDepth + 1);
+  },
+
+  /**
+   * Resolves one checked tuple without permitting nested collection shapes.
+   *
+   * @param type Checked tuple type.
+   * @param checker TypeScript checker for its member types.
+   * @param scope Current source and diagnostic context.
+   * @param walk Bounded alias traversal state.
+   * @param collectionDepth Number of prior tuple or array containers.
+   * @returns Member schemas, or undefined for nested or variadic tuples.
+   */
+  fromCheckedTuple(
+    type: ts.Type,
+    checker: ts.TypeChecker,
+    scope: AnalyzerScope,
+    walk: TypeWalk,
+    collectionDepth: number,
+  ): readonly SchemaUse[] | undefined {
+    if (collectionDepth > 0) return undefined;
+    const tuple = type as ts.TupleTypeReference;
+    if (tuple.target.combinedFlags & ts.ElementFlags.Variable) return undefined;
+    return HandlerSources.checkedBranches(
+      checker.getTypeArguments(tuple),
+      checker,
+      scope,
+      walk,
+      true,
+      collectionDepth + 1,
+    );
+  },
+
+  /**
+   * Collects schemas across checked alternatives and optional branches.
+   *
+   * @param checker The TypeScript type checker for the program.
+   * @param optional Whether this checked branch may be absent.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param types The checked type alternatives to inspect.
+   * @param walk The bounded alias traversal state.
+   * @param collectionDepth Number of array or tuple containers already entered.
+   * @returns The schema uses across all branches, or undefined when one cannot resolve.
+   */
+  checkedBranches(
+    types: readonly ts.Type[],
+    checker: ts.TypeChecker,
+    scope: AnalyzerScope,
+    walk: TypeWalk,
+    optional: boolean,
+    collectionDepth: number,
+  ): readonly SchemaUse[] | undefined {
+    const branches = types.map((type) =>
+      HandlerSources.fromCheckedType(type, checker, scope, walk, optional, collectionDepth),
+    );
+    return branches.some((branch) => branch === undefined)
+      ? undefined
+      : branches.flatMap((branch) => branch ?? []);
+  },
+
+  /**
+   * Maps a checked generated message type to its schema reference.
+   *
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param type The checked or declared type under inspection.
+   * @returns The generated message schema, or undefined when unresolved.
+   */
+  checkedMessage(type: ts.Type, scope: AnalyzerScope): SchemaUse | undefined {
+    const declaration =
+      type.aliasSymbol?.declarations?.find(ts.isTypeAliasDeclaration) ??
+      type.getSymbol()?.declarations?.find(ts.isInterfaceDeclaration);
+    if (declaration === undefined) return HandlerSources.checkedEmptyMessage(type, scope);
+    const source = declaration.getSourceFile();
+    if (!/(^|\/)generated\/.+_pb\.ts$/u.test(source.fileName))
+      return HandlerSources.checkedEmptyMessage(type, scope);
+    const schemaName = `${declaration.name.text}Schema`;
+    const exports = HandlerSources.exportedNames(source);
+    if (!exports.types.has(declaration.name.text) || !exports.values.has(schemaName))
+      return undefined;
+    const path = relative(dirname(scope.source.fileName), source.fileName).replace(/\.ts$/u, ".js");
+    return {
+      kind: exports.schemaRoles.get(schemaName),
+      reference: {
+        moduleSpecifier: path.startsWith(".") ? path : `./${path}`,
+        exportName: schemaName,
+      },
+    };
+  },
+
+  /**
+   * Finds an empty generated message alias after TypeScript collapses its intersection.
+   *
+   * @param type The checked message type without a generated alias symbol.
+   * @param scope The current source, imports, and compiler program.
+   * @returns A generated schema only for an identical checked alias body.
+   */
+  checkedEmptyMessage(type: ts.Type, scope: AnalyzerScope): SchemaUse | undefined {
+    if (type.aliasSymbol?.getName() !== "Message") return undefined;
+    const checker = scope.program.getTypeChecker();
+    for (const source of scope.program.getSourceFiles()) {
+      if (!/(^|\/)generated\/.+_pb\.ts$/u.test(source.fileName)) continue;
+      const exports = HandlerSources.exportedNames(source);
+      for (const statement of source.statements) {
+        if (!ts.isTypeAliasDeclaration(statement)) continue;
+        const schemaName = `${statement.name.text}Schema`;
+        if (!exports.types.has(statement.name.text) || !exports.values.has(schemaName)) continue;
+        if (checker.getTypeFromTypeNode(statement.type) !== type) continue;
+        const path = relative(dirname(scope.source.fileName), source.fileName).replace(
+          /\.ts$/u,
+          ".js",
+        );
+        return {
+          kind: exports.schemaRoles.get(schemaName),
+          reference: {
+            moduleSpecifier: path.startsWith(".") ? path : `./${path}`,
+            exportName: schemaName,
+          },
+        };
+      }
+    }
+    return undefined;
+  },
+
+  /**
+   * Collects generated schemas from a declared return type.
+   *
+   * @param scope The current source, imports, and compiler program.
+   * @param typeNode The declared type node under inspection.
+   * @param walk The bounded alias traversal state.
+   * @param optional Whether a whole reaction result may be absent.
+   * @param collectionDepth Number of enclosing array or tuple collections.
+   * @returns The emitted schemas, or undefined when the declared type is unsupported.
+   */
+  schemaListFromType(
+    typeNode: ts.TypeNode,
+    scope: AnalyzerScope,
+    walk: TypeWalk,
+    optional = false,
+    collectionDepth = 0,
+  ): readonly SchemaUse[] | undefined {
+    if (!HandlerSources.consumeTypeWalk(walk)) return undefined;
+    const unwrapped = HandlerSources.unwrapReadonly(typeNode);
+    if (optional && unwrapped.kind === ts.SyntaxKind.UndefinedKeyword) return [];
+    if (ts.isUnionTypeNode(unwrapped)) {
+      const branches = unwrapped.types.map((branch) =>
+        HandlerSources.schemaListFromType(branch, scope, walk, optional, collectionDepth),
+      );
+      return branches.some((branch) => branch === undefined)
+        ? undefined
+        : branches.flatMap((branch) => branch ?? []);
+    }
+    if (
+      ts.isArrayTypeNode(unwrapped) ||
+      ts.isTupleTypeNode(unwrapped) ||
+      (ts.isTypeReferenceNode(unwrapped) &&
+        HandlerSources.isArrayReferenceType(unwrapped, scope.program))
+    ) {
+      return HandlerSources.schemaListFromCollection(
+        unwrapped,
+        scope,
+        walk,
+        optional,
+        collectionDepth,
+      );
+    }
+    const schema = HandlerSources.schemaUseFromType(unwrapped, scope.imports, walk);
+    return schema === undefined ? undefined : [schema];
+  },
+
+  /**
+   * Resolves a declared array or tuple collection return.
+   *
+   * @param typeNode Declared collection type.
+   * @param scope The current source, imports, and compiler program.
+   * @param walk Bounded alias traversal state.
+   * @param optional Whether undefined is permitted in a reaction result.
+   * @param collectionDepth Number of enclosing collections.
+   * @returns Collection member schemas, or undefined for an invalid shape.
+   */
+  schemaListFromCollection(
+    typeNode: ts.TypeNode,
+    scope: AnalyzerScope,
+    walk: TypeWalk,
+    optional: boolean,
+    collectionDepth: number,
+  ): readonly SchemaUse[] | undefined {
+    if (collectionDepth > 0) return undefined;
+    if (ts.isTupleTypeNode(typeNode))
+      return HandlerSources.schemaListFromTuple(typeNode, scope, walk);
+    const member = ts.isArrayTypeNode(typeNode)
+      ? typeNode.elementType
+      : ts.isTypeReferenceNode(typeNode)
+        ? typeNode.typeArguments?.[0]
+        : undefined;
+    return member === undefined
+      ? undefined
+      : HandlerSources.schemaListFromType(member, scope, walk, optional, collectionDepth + 1);
+  },
+
+  /**
+   * Collects generated schemas from a tuple return type.
+   *
+   * @param scope The current source, imports, and compiler program.
+   * @param typeNode The declared type node under inspection.
+   * @param walk The bounded alias traversal state.
+   * @returns The tuple's emitted schemas, or undefined when a member is invalid.
+   */
   schemaListFromTuple(
     typeNode: ts.TupleTypeNode,
-    imports: ImportState,
+    scope: AnalyzerScope,
     walk: TypeWalk,
   ): readonly SchemaUse[] | undefined {
     const schemas: SchemaUse[] = [];
 
     for (const element of typeNode.elements) {
-      const schema = HandlerSources.schemaFromTupleElement(element, imports, walk);
-      if (schema === undefined) {
+      const member = HandlerSources.schemaFromTupleElement(element, scope, walk, true);
+      if (member === undefined) {
         return undefined;
       }
-      schemas.push(schema);
+      schemas.push(...member);
     }
 
     return schemas;
   },
 
+  /**
+   * Resolves a generated schema from one tuple member.
+   *
+   * @param scope The current source, imports, and compiler program.
+   * @param typeNode The declared type node under inspection.
+   * @param walk The bounded alias traversal state.
+   * @param optional Whether this tuple member may be absent.
+   * @returns The member's schema use, or undefined when it cannot resolve.
+   */
   schemaFromTupleElement(
     typeNode: ts.TypeNode | ts.NamedTupleMember,
-    imports: ImportState,
+    scope: AnalyzerScope,
     walk: TypeWalk,
-  ): SchemaUse | undefined {
-    if (ts.isNamedTupleMember(typeNode)) {
-      return typeNode.questionToken === undefined && typeNode.dotDotDotToken === undefined
-        ? HandlerSources.schemaUseFromType(typeNode.type, imports, walk)
-        : undefined;
-    }
-    if (ts.isRestTypeNode(typeNode) || ts.isOptionalTypeNode(typeNode)) {
-      return undefined;
-    }
-
-    return HandlerSources.schemaUseFromType(typeNode, imports, walk);
+    optional: boolean,
+  ): readonly SchemaUse[] | undefined {
+    const member = ts.isNamedTupleMember(typeNode) ? typeNode.type : typeNode;
+    if (ts.isNamedTupleMember(typeNode) && typeNode.dotDotDotToken !== undefined) return undefined;
+    if (ts.isRestTypeNode(member)) return undefined;
+    const candidate = HandlerSources.unwrapReadonly(
+      ts.isOptionalTypeNode(member) ? member.type : member,
+    );
+    const optionalMember = ts.isNamedTupleMember(typeNode)
+      ? typeNode.questionToken !== undefined
+      : ts.isOptionalTypeNode(member);
+    return HandlerSources.schemaListFromType(candidate, scope, walk, optional || optionalMember, 1);
   },
 
+  /**
+   * Wraps one resolved tuple schema as a schema list.
+   *
+   * @param imports The imports indexed for the current source.
+   * @param typeNode The declared type node under inspection.
+   * @param walk The bounded alias traversal state.
+   * @returns The single schema as a list, or undefined when it is unresolved.
+   */
+  singleSchema(
+    typeNode: ts.TypeNode,
+    imports: ImportState,
+    walk: TypeWalk,
+  ): readonly SchemaUse[] | undefined {
+    const schema = HandlerSources.schemaUseFromType(typeNode, imports, walk);
+    return schema === undefined ? undefined : [schema];
+  },
+
+  /**
+   * Resolves a generated signal schema from a type node.
+   *
+   * @param imports The imports indexed for the current source.
+   * @param typeNode The declared type node under inspection.
+   * @param walk The bounded alias traversal state.
+   * @returns The generated schema use, or undefined when unresolved.
+   */
   schemaUseFromType(
     typeNode: ts.TypeNode | undefined,
     imports: ImportState,
@@ -1746,6 +2714,13 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Resolves an imported generated symbol to its schema.
+   *
+   * @param imports The imports indexed for the current source.
+   * @param name The symbol, class, or member name to resolve.
+   * @returns The generated schema use, or undefined when unresolved.
+   */
   schemaUseFromSymbol(name: string, imports: ImportState): SchemaUse | undefined {
     const symbol = imports.generatedSymbols.get(name);
     if (symbol?.schemaExportName === undefined) {
@@ -1758,6 +2733,13 @@ const HandlerSources = Object.freeze({
     };
   },
 
+  /**
+   * Resolves a qualified generated type name to its schema.
+   *
+   * @param imports The imports indexed for the current source.
+   * @param name The symbol, class, or member name to resolve.
+   * @returns The generated schema use, or undefined when unresolved.
+   */
   schemaUseFromName(name: ts.QualifiedName, imports: ImportState): SchemaUse | undefined {
     if (!ts.isIdentifier(name.left)) {
       return undefined;
@@ -1775,6 +2757,13 @@ const HandlerSources = Object.freeze({
         };
   },
 
+  /**
+   * Resolves a generated entity name to its schema reference.
+   *
+   * @param imports The imports indexed for the current source.
+   * @param name The symbol, class, or member name to resolve.
+   * @returns The generated schema reference, or undefined when unresolved.
+   */
   schemaFromEntityName(name: ts.EntityName, imports: ImportState): SchemaReference | undefined {
     if (ts.isIdentifier(name)) {
       const symbol = imports.generatedSymbols.get(name.text);
@@ -1792,6 +2781,14 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Checks a framework Command or Event envelope return type.
+   *
+   * @param imports The imports indexed for the current source.
+   * @param typeNode The declared type node under inspection.
+   * @param walk The bounded alias traversal state.
+   * @returns Whether the type is a framework Command or Event envelope.
+   */
   frameworkEnvelope(
     typeNode: ts.TypeNode,
     imports: ImportState,
@@ -1827,6 +2824,12 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Removes a Readonly wrapper from a declared type.
+   *
+   * @param typeNode The declared type node under inspection.
+   * @returns The inner type when wrapped in Readonly, otherwise the original type.
+   */
   unwrapReadonly(typeNode: ts.TypeNode): ts.TypeNode {
     if (ts.isParenthesizedTypeNode(typeNode)) {
       return HandlerSources.unwrapReadonly(typeNode.type);
@@ -1838,37 +2841,80 @@ const HandlerSources = Object.freeze({
     return typeNode;
   },
 
+  /**
+   * Removes a top-level Promise wrapper from a declared return type.
+   *
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param typeNode The declared type node under inspection.
+   * @param walk The bounded alias traversal state.
+   * @returns The inner type when wrapped in Promise, otherwise the original type.
+   */
   unwrapOuterPromise(
     typeNode: ts.TypeNode,
     scope: AnalyzerScope,
     walk: TypeWalk = HandlerSources.newTypeWalk(),
   ): ts.TypeNode {
-    if (!HandlerSources.consumeTypeWalk(walk)) {
-      return typeNode;
-    }
+    if (!HandlerSources.consumeTypeWalk(walk)) return typeNode;
     const unwrapped = HandlerSources.unwrapReadonly(typeNode);
     if (!ts.isTypeReferenceNode(unwrapped) || !ts.isIdentifier(unwrapped.typeName)) {
       return typeNode;
     }
     const alias = scope.imports.localTypeAliases.get(unwrapped.typeName.text);
-    if (alias !== undefined) {
+    if (alias !== undefined && unwrapped.typeArguments?.length === undefined) {
       return (
         HandlerSources.resolveAlias(unwrapped.typeName.text, alias, walk, (resolved) =>
           HandlerSources.unwrapOuterPromise(resolved, scope, walk),
         ) ?? typeNode
       );
     }
-    if (
-      unwrapped.typeName.text !== "Promise" ||
-      unwrapped.typeArguments?.length !== 1 ||
-      !HandlerSources.isBuiltInPromise(unwrapped, scope.program)
-    ) {
-      return typeNode;
+    const imported = HandlerSources.importedPromiseAlias(unwrapped, scope);
+    if (imported !== undefined) {
+      return (
+        HandlerSources.resolveAlias(unwrapped.typeName.text, imported, walk, (resolved) =>
+          HandlerSources.unwrapOuterPromise(resolved, scope, walk),
+        ) ?? typeNode
+      );
     }
-
+    if (unwrapped.typeName.text !== "Promise" || unwrapped.typeArguments?.length !== 1)
+      return typeNode;
+    if (!HandlerSources.isBuiltInPromise(unwrapped, scope.program)) return typeNode;
     return unwrapped.typeArguments[0] ?? typeNode;
   },
 
+  /**
+   * Finds a concrete imported alias to the built-in Promise type.
+   *
+   * @param reference Imported type reference in a handler declaration.
+   * @param scope Current compiler program and source context.
+   * @returns The Promise alias body, or undefined for other references.
+   */
+  importedPromiseAlias(
+    reference: ts.TypeReferenceNode,
+    scope: AnalyzerScope,
+  ): ts.TypeNode | undefined {
+    if (reference.typeArguments?.length) return undefined;
+    const checker = scope.program.getTypeChecker();
+    const symbol = checker.getSymbolAtLocation(reference.typeName);
+    if (symbol === undefined || (symbol.flags & ts.SymbolFlags.Alias) === 0) return undefined;
+    const alias = checker.getAliasedSymbol(symbol);
+    const declaration = alias.declarations?.find(ts.isTypeAliasDeclaration);
+    if (declaration === undefined || declaration.typeParameters?.length) return undefined;
+    const body = HandlerSources.unwrapReadonly(declaration.type);
+    return ts.isTypeReferenceNode(body) &&
+      ts.isIdentifier(body.typeName) &&
+      body.typeName.text === "Promise" &&
+      HandlerSources.isBuiltInPromise(body, scope.program)
+      ? declaration.type
+      : undefined;
+  },
+
+  /**
+   * Checks whether a type reference resolves to the built-in Promise.
+   *
+   * @param program The TypeScript program supplying source files and type information.
+   * @param typeNode The declared type node under inspection.
+   * @returns Whether the type is the built-in Promise.
+   */
   isBuiltInPromise(typeNode: ts.TypeReferenceNode, program: ts.Program): boolean {
     const symbol = program.getTypeChecker().getTypeFromTypeNode(typeNode).getSymbol();
     return (
@@ -1879,6 +2925,37 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Accepts void or one built-in Promise<void> after concrete alias instantiation.
+   *
+   * @param typeNode Subscriber's declared return type.
+   * @param program Compiler program resolving generic and imported aliases.
+   * @returns Whether the concrete result contains exactly the permitted void shape.
+   */
+  isSubscriberVoidReturn(typeNode: ts.TypeNode, program: ts.Program): boolean {
+    const checker = program.getTypeChecker();
+    const resolved = checker.getTypeFromTypeNode(typeNode);
+    if ((resolved.flags & ts.TypeFlags.Void) !== 0) return true;
+    if ((resolved.flags & ts.TypeFlags.Object) === 0) return false;
+    const reference = resolved as ts.TypeReference;
+    const symbol = reference.getSymbol();
+    if (
+      symbol?.getName() !== "Promise" ||
+      symbol.declarations?.some((declaration) =>
+        program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
+      ) !== true
+    )
+      return false;
+    const arguments_ = checker.getTypeArguments(reference);
+    return arguments_.length === 1 && ((arguments_[0]?.flags ?? 0) & ts.TypeFlags.Void) !== 0;
+  },
+
+  /**
+   * Checks whether a declared type is explicitly void.
+   *
+   * @param typeNode The declared type node under inspection.
+   * @returns Whether the declared type is explicitly void.
+   */
   isExplicitVoidType(typeNode: ts.TypeNode | undefined): boolean {
     if (typeNode === undefined) {
       return false;
@@ -1890,13 +2967,33 @@ const HandlerSources = Object.freeze({
     return typeNode.kind === ts.SyntaxKind.VoidKeyword;
   },
 
-  isArrayReferenceType(typeNode: ts.TypeReferenceNode): boolean {
+  /**
+   * Checks whether a type reference resolves to a built-in array type.
+   *
+   * @param typeNode The declared type node under inspection.
+   * @param program The program resolving the reference.
+   * @returns Whether the reference is a built-in array type.
+   */
+  isArrayReferenceType(typeNode: ts.TypeReferenceNode, program: ts.Program): boolean {
+    if (!ts.isIdentifier(typeNode.typeName)) return false;
+    const name = typeNode.typeName.text;
+    if (name !== "Array" && name !== "ReadonlyArray") return false;
+    const symbol = program.getTypeChecker().getSymbolAtLocation(typeNode.typeName);
     return (
-      ts.isIdentifier(typeNode.typeName) &&
-      (typeNode.typeName.text === "Array" || typeNode.typeName.text === "ReadonlyArray")
+      symbol?.getName() === name &&
+      symbol.declarations?.some((declaration) =>
+        program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
+      ) === true
     );
   },
 
+  /**
+   * Maps a handler decorator and input signal to the generated handler kind.
+   *
+   * @param decorator The decorator under inspection.
+   * @param signalKind The resolved input signal kind.
+   * @returns The generated handler kind for the decorator and input signal.
+   */
   handlerKind(
     decorator: HandlerDecorator,
     signalKind: SignalKind | undefined,
@@ -1913,6 +3010,13 @@ const HandlerSources = Object.freeze({
     }
   },
 
+  /**
+   * Checks whether a decorator accepts the resolved input signal kind.
+   *
+   * @param decorator The decorator under inspection.
+   * @param kind The signal, modifier, or syntax kind being checked.
+   * @returns Whether the decorator accepts the input signal kind.
+   */
   acceptsSignalKind(decorator: HandlerDecorator, kind: SignalKind | undefined): boolean {
     if (decorator === "Command") {
       return kind === "command" || kind === "event" || kind === "rejection";
@@ -1926,6 +3030,12 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Describes the input signal expected by a handler decorator.
+   *
+   * @param decorator The decorator under inspection.
+   * @returns The diagnostic description of the expected input signal.
+   */
   signalMessage(decorator: HandlerDecorator): string {
     if (decorator === "Command") {
       return "a generated command, event, or rejection type";
@@ -1939,6 +3049,12 @@ const HandlerSources = Object.freeze({
       : "a generated event or rejection type";
   },
 
+  /**
+   * Determines the generated signal kind emitted by a handler decorator.
+   *
+   * @param decorator The decorator under inspection.
+   * @returns The emitted signal kind, or undefined for no emission.
+   */
   emittedSignalKind(decorator: HandlerDecorator): SignalKind | undefined {
     if (decorator === "Command") {
       return "command";
@@ -1950,6 +3066,15 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Finds the handler input type and domestic or external origin.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param method The handler method name.
+   * @param parameters The handler parameter declarations.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @returns The input type and domestic or external origin, or undefined when invalid.
+   */
   externalOrigin(
     parameters: readonly ts.ParameterDeclaration[],
     scope: AnalyzerScope,
@@ -1985,6 +3110,16 @@ const HandlerSources = Object.freeze({
     return { value: "domestic", type: first };
   },
 
+  /**
+   * Checks the optional context parameter for the input signal kind.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param method The handler method name.
+   * @param parameters The handler parameter declarations.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param signalKind The resolved input signal kind.
+   * @returns Whether the context parameter matches the signal kind.
+   */
   validContextParameter(
     parameters: readonly ts.ParameterDeclaration[],
     signalKind: SignalKind | undefined,
@@ -2011,6 +3146,14 @@ const HandlerSources = Object.freeze({
     return false;
   },
 
+  /**
+   * Checks that a context type references the framework declaration.
+   *
+   * @param expected The canonical framework context type expected for this signal.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param type The checked or declared type under inspection.
+   * @returns Whether the type is the framework context declaration.
+   */
   isCanonicalContext(
     type: ts.TypeNode,
     expected: "CommandContext" | "EventContext",
@@ -2027,6 +3170,13 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Finds an External marker in a handler parameter type.
+   *
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param type The checked or declared type under inspection.
+   * @returns The type wrapped by External, or undefined when absent or invalid.
+   */
   externalMarker(
     type: ts.TypeNode,
     scope: AnalyzerScope,
@@ -2047,6 +3197,14 @@ const HandlerSources = Object.freeze({
       : { direct: type.typeArguments?.length === 1, type: argument };
   },
 
+  /**
+   * Finds nested type nodes for an External marker.
+   *
+   * @param scope The current source, imports, program, and diagnostic collection.
+   * @param seen The declarations already visited during traversal.
+   * @param type The checked or declared type under inspection.
+   * @returns Whether a nested type contains the External marker.
+   */
   containsExternalMarker(
     type: ts.TypeNode,
     scope: AnalyzerScope,
@@ -2074,6 +3232,13 @@ const HandlerSources = Object.freeze({
     return found;
   },
 
+  /**
+   * Checks that an External type names the framework declaration.
+   *
+   * @param name The symbol, class, or member name to resolve.
+   * @param program The TypeScript program supplying source files and type information.
+   * @returns Whether the type is the framework External declaration.
+   */
   isCanonicalExternal(name: ts.EntityName, program: ts.Program): boolean {
     const checker = program.getTypeChecker();
     const location = ts.isQualifiedName(name) ? name.right : name;
@@ -2094,16 +3259,37 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Creates a bounded traversal state for recursive type aliases.
+   *
+   * @returns A fresh bounded alias traversal state.
+   */
   newTypeWalk(): TypeWalk {
     return { remaining: maxAliasDepth, seen: new Set() };
   },
 
+  /**
+   * Checks one alias traversal step and rejects repeated or excessive recursion.
+   *
+   * @param walk The bounded alias traversal state.
+   * @returns Whether alias traversal can continue.
+   */
   consumeTypeWalk(walk: TypeWalk): boolean {
     walk.remaining -= 1;
 
     return walk.remaining >= 0;
   },
 
+  /**
+   * Resolves a local type alias while guarding against recursive expansion.
+   *
+   * @param name The symbol, class, or member name to resolve.
+   * @param resolveType The callback that inspects the expanded alias type.
+   * @param typeNode The declared type node under inspection.
+   * @param walk The bounded alias traversal state.
+   * @typeParam T The result type produced by the alias callback.
+   * @returns The callback result, or undefined when alias expansion cannot continue.
+   */
   resolveAlias<T>(
     name: string,
     typeNode: ts.TypeNode,
@@ -2121,6 +3307,13 @@ const HandlerSources = Object.freeze({
     return resolved;
   },
 
+  /**
+   * Records framework and generated imports used by a source file.
+   *
+   * @param program The TypeScript program supplying source files and type information.
+   * @param source The source file being inspected.
+   * @returns The indexed imports and local aliases.
+   */
   buildImportState(source: ts.SourceFile, program: ts.Program): ImportState {
     const state: MutableImportState = {
       generatedNamespaces: new Map(),
@@ -2142,6 +3335,14 @@ const HandlerSources = Object.freeze({
     return state;
   },
 
+  /**
+   * Records one source import or local type alias.
+   *
+   * @param program The TypeScript program supplying source files and type information.
+   * @param source The source file being inspected.
+   * @param state The mutable import index receiving declarations.
+   * @param statement The declaration or import statement being indexed.
+   */
   recordImportStatement(
     statement: ts.Statement,
     source: ts.SourceFile,
@@ -2162,6 +3363,15 @@ const HandlerSources = Object.freeze({
     }
   },
 
+  /**
+   * Records the named bindings of an import declaration.
+   *
+   * @param moduleSpecifier The imported module path to resolve.
+   * @param program The TypeScript program supplying source files and type information.
+   * @param source The source file being inspected.
+   * @param state The mutable import index receiving declarations.
+   * @param statement The declaration or import statement being indexed.
+   */
   recordImportDeclaration(
     statement: ts.ImportDeclaration,
     moduleSpecifier: string,
@@ -2192,6 +3402,13 @@ const HandlerSources = Object.freeze({
     );
   },
 
+  /**
+   * Records declarations imported from a framework module.
+   *
+   * @param bindings The named import bindings being indexed.
+   * @param moduleSpecifier The imported module path to resolve.
+   * @param state The mutable import index receiving declarations.
+   */
   recordFrameworkImport(
     bindings: ts.NamedImportBindings,
     moduleSpecifier: string,
@@ -2205,6 +3422,15 @@ const HandlerSources = Object.freeze({
     }
   },
 
+  /**
+   * Records rejection schemas from a generated companion module.
+   *
+   * @param bindings The named import bindings being indexed.
+   * @param moduleSpecifier The imported module path to resolve.
+   * @param program The TypeScript program supplying source files and type information.
+   * @param source The source file being inspected.
+   * @param state The mutable import index receiving declarations.
+   */
   recordRejectionCompanionImport(
     bindings: ts.NamedImportBindings,
     moduleSpecifier: string,
@@ -2241,6 +3467,12 @@ const HandlerSources = Object.freeze({
     }
   },
 
+  /**
+   * Finds the generated message module paired with a rejection companion.
+   *
+   * @param source The source file being inspected.
+   * @returns The paired generated message module, or undefined when absent.
+   */
   rejectionSchemaImport(source: ts.SourceFile): string | undefined {
     for (const statement of source.statements) {
       if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
@@ -2260,6 +3492,12 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Records server decorators and receiver bases from an import.
+   *
+   * @param bindings The named import bindings being indexed.
+   * @param state The mutable import index receiving declarations.
+   */
   recordServerImport(bindings: ts.NamedImportBindings, state: MutableImportState): void {
     if (ts.isNamespaceImport(bindings)) {
       state.serverNamespaces.add(bindings.name.text);
@@ -2271,6 +3509,12 @@ const HandlerSources = Object.freeze({
     }
   },
 
+  /**
+   * Records framework context and External types from an import.
+   *
+   * @param bindings The named import bindings being indexed.
+   * @param state The mutable import index receiving declarations.
+   */
   recordProtoImport(bindings: ts.NamedImportBindings, state: MutableImportState): void {
     if (ts.isNamespaceImport(bindings)) {
       state.protoNamespaces.add(bindings.name.text);
@@ -2288,6 +3532,16 @@ const HandlerSources = Object.freeze({
     }
   },
 
+  /**
+   * Records generated message types and schema values from an import.
+   *
+   * @param bindings The named import bindings being indexed.
+   * @param moduleSpecifier The imported module path to resolve.
+   * @param program The TypeScript program supplying source files and type information.
+   * @param source The source file being inspected.
+   * @param state The mutable import index receiving declarations.
+   * @param valueImport Whether the import includes a runtime value.
+   */
   recordGeneratedImport(
     bindings: ts.NamedImportBindings,
     moduleSpecifier: string,
@@ -2324,20 +3578,46 @@ const HandlerSources = Object.freeze({
     }
   },
 
+  /**
+   * Checks whether a module path denotes generated code.
+   *
+   * @param moduleSpecifier The imported module path to resolve.
+   * @returns Whether the module path denotes generated code.
+   */
   isGeneratedModule(moduleSpecifier: string): boolean {
     return /(^|\/)generated\/.+_pb(\.js)?$/.test(moduleSpecifier);
   },
 
+  /**
+   * Checks whether a module path denotes a rejection companion.
+   *
+   * @param moduleSpecifier The imported module path to resolve.
+   * @returns Whether the module path denotes a rejection companion.
+   */
   isRejectionCompanion(moduleSpecifier: string): boolean {
     return /(^|\/)generated\/(?:.+\/)?(?:[^/]+_)?rejections(\.js)?$/u.test(moduleSpecifier);
   },
 
+  /**
+   * Finds the message module paired with a rejection companion.
+   *
+   * @param moduleSpecifier The imported module path to resolve.
+   * @returns The paired generated message module path.
+   */
   rejectionSchemaModule(moduleSpecifier: string): string {
     return moduleSpecifier.endsWith(".js")
       ? moduleSpecifier.replace(/\.js$/u, "_pb.js")
       : `${moduleSpecifier}_pb`;
   },
 
+  /**
+   * Reads generated type, value, and schema exports from a module.
+   *
+   * @param moduleSpecifier The imported module path to resolve.
+   * @param program The TypeScript program supplying source files and type information.
+   * @param source The source file being inspected.
+   * @returns The generated module's indexed exports, or undefined when unresolved.
+   */
   generatedModuleExports(
     source: ts.SourceFile,
     moduleSpecifier: string,
@@ -2356,6 +3636,12 @@ const HandlerSources = Object.freeze({
     };
   },
 
+  /**
+   * Finds runtime exports paired with generated type declarations.
+   *
+   * @param declarations The generated declaration source file.
+   * @returns The paired runtime export index, or undefined when absent.
+   */
   pairedRuntimeExports(declarations: ts.SourceFile): GeneratedExports | undefined {
     if (!declarations.isDeclarationFile) return undefined;
     const runtimePath = declarations.fileName.replace(/\.d\.ts$/u, ".js");
@@ -2368,15 +3654,21 @@ const HandlerSources = Object.freeze({
     }
   },
 
+  /**
+   * Resolves the source file for a generated module.
+   *
+   * @param moduleSpecifier The imported module path to resolve.
+   * @param program The TypeScript program supplying source files and type information.
+   * @param source The source file being inspected.
+   * @returns The generated module source file, or undefined when unresolved.
+   */
   generatedModuleSource(
     source: ts.SourceFile,
     moduleSpecifier: string,
     program: ts.Program,
   ): ts.SourceFile | undefined {
     const imported = HandlerSources.importedModuleSource(source, moduleSpecifier, program);
-    if (imported !== undefined) {
-      return imported;
-    }
+    if (imported !== undefined) return imported;
     const resolved = ts.resolveModuleName(
       moduleSpecifier,
       source.fileName,
@@ -2398,14 +3690,20 @@ const HandlerSources = Object.freeze({
 
     for (const candidate of candidates) {
       const sourceFile = sourceFiles.get(candidate);
-      if (sourceFile !== undefined) {
-        return sourceFile;
-      }
+      if (sourceFile !== undefined) return sourceFile;
     }
 
     return undefined;
   },
 
+  /**
+   * Resolves a module import to a source file in the program.
+   *
+   * @param moduleSpecifier The imported module path to resolve.
+   * @param program The TypeScript program supplying source files and type information.
+   * @param source The source file being inspected.
+   * @returns The imported source file, or undefined when unresolved.
+   */
   importedModuleSource(
     source: ts.SourceFile,
     moduleSpecifier: string,
@@ -2426,10 +3724,22 @@ const HandlerSources = Object.freeze({
     return imported;
   },
 
+  /**
+   * Returns strings while preserving their first occurrence.
+   *
+   * @param values The strings to deduplicate.
+   * @returns The distinct strings in first-seen order.
+   */
   uniqueStrings(values: readonly string[]): readonly string[] {
     return [...new Set(values)];
   },
 
+  /**
+   * Records generated type, value, and schema exports in a source file.
+   *
+   * @param source The source file being inspected.
+   * @returns The indexed type, value, and schema exports.
+   */
   exportedNames(source: ts.SourceFile): GeneratedExports {
     const files = HandlerSources.generatedFiles(source);
     const schemaRoles = new Map<string, SignalKind | undefined>();
@@ -2442,6 +3752,12 @@ const HandlerSources = Object.freeze({
     return exports;
   },
 
+  /**
+   * Records file descriptors declared by generated code.
+   *
+   * @param source The source file being inspected.
+   * @returns The generated file descriptors indexed by declaration.
+   */
   generatedFiles(source: ts.SourceFile): ReadonlyMap<string, GeneratedFile> {
     const files = new Map<string, GeneratedFile>();
 
@@ -2463,6 +3779,13 @@ const HandlerSources = Object.freeze({
     return files;
   },
 
+  /**
+   * Records an exported declaration and its schema role.
+   *
+   * @param exports The generated export index to update or inspect.
+   * @param files The generated file descriptors indexed for this source.
+   * @param statement The declaration or import statement being indexed.
+   */
   recordExportedNames(
     statement: ts.Statement,
     exports: GeneratedExports,
@@ -2492,6 +3815,14 @@ const HandlerSources = Object.freeze({
     }
   },
 
+  /**
+   * Determines a generated schema's signal role from its initializer.
+   *
+   * @param files The generated file descriptors indexed for this source.
+   * @param initializer The generated declaration initializer to inspect.
+   * @param schemaExportName The generated schema export name being classified.
+   * @returns The schema's signal kind, or undefined when unknown.
+   */
   schemaRoleFromInitializer(
     schemaExportName: string,
     initializer: ts.Expression | undefined,
@@ -2525,6 +3856,12 @@ const HandlerSources = Object.freeze({
     };
   },
 
+  /**
+   * Finds descriptor message indexes in a generated declaration call.
+   *
+   * @param call The call expression being inspected.
+   * @returns The descriptor index path, or undefined when absent.
+   */
   messageDescIndexes(call: ts.CallExpression): readonly number[] | undefined {
     const indexes: number[] = [];
     for (const argument of call.arguments.slice(1)) {
@@ -2541,6 +3878,13 @@ const HandlerSources = Object.freeze({
     return indexes.length === 0 ? undefined : indexes;
   },
 
+  /**
+   * Gets a nested message descriptor by index path.
+   *
+   * @param file The generated file descriptor or source path under inspection.
+   * @param indexes The nested descriptor index path.
+   * @returns The selected nested descriptor, or undefined for invalid indexes.
+   */
   descriptorMessageAt(
     file: GeneratedFile,
     indexes: readonly number[] | undefined,
@@ -2564,6 +3908,12 @@ const HandlerSources = Object.freeze({
     return message === undefined ? undefined : { descriptor: message, exportName: path.join("_") };
   },
 
+  /**
+   * Reads a file descriptor from a generated initializer.
+   *
+   * @param initializer The generated declaration initializer to inspect.
+   * @returns The decoded file descriptor, or undefined when invalid.
+   */
   fileDescriptor(initializer: ts.Expression | undefined): GeneratedFile | undefined {
     const call = HandlerSources.callExpression(initializer, "fileDesc");
     const descriptor = call?.arguments[0];
@@ -2588,6 +3938,13 @@ const HandlerSources = Object.freeze({
     }
   },
 
+  /**
+   * Removes an expression when it calls a named function.
+   *
+   * @param expression The expression being inspected.
+   * @param functionName The expected called function name.
+   * @returns The matching call expression, or undefined when the function differs.
+   */
   callExpression(
     expression: ts.Expression | undefined,
     functionName: string,
@@ -2603,6 +3960,12 @@ const HandlerSources = Object.freeze({
     return unwrapped.expression.text === functionName ? unwrapped : undefined;
   },
 
+  /**
+   * Removes syntactic wrappers from an expression.
+   *
+   * @param expression The expression being inspected.
+   * @returns The expression after removing syntactic wrappers.
+   */
   unwrapExpression(expression: ts.Expression): ts.Expression {
     if (ts.isParenthesizedExpression(expression)) {
       return HandlerSources.unwrapExpression(expression.expression);
@@ -2614,6 +3977,13 @@ const HandlerSources = Object.freeze({
     return expression;
   },
 
+  /**
+   * Determines a generated message's signal kind from its descriptor.
+   *
+   * @param messageIndexes The nested message indexes within the file descriptor.
+   * @param sourceFile The receiver source path.
+   * @returns The message's signal kind, or undefined when unresolved.
+   */
   signalKindFromProto(
     sourceFile: string,
     messageIndexes: readonly number[] | undefined,
@@ -2632,6 +4002,12 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Reads a message name, entity option, and nested descriptors.
+   *
+   * @param message The descriptor message or diagnostic text being inspected.
+   * @returns The message descriptor summary including nested messages.
+   */
   descriptorMessage(message: ProtobufWkt.DescriptorProto): DescriptorMessage {
     return {
       name: message.name,
@@ -2666,6 +4042,11 @@ export const PackageIdentity: Readonly<{ nameFor(sourceFile: string): string | u
   });
 
 const PackageDependencies = Object.freeze({
+  /**
+   * Loads Protobuf dependencies for the analyzed program.
+   *
+   * @param program The TypeScript program supplying source files and type information.
+   */
   load(program: ts.Program): void {
     packageDependencies ??= {
       protobuf: PackageDependencies.require("@bufbuild/protobuf", program) as typeof Protobuf,
@@ -2676,12 +4057,24 @@ const PackageDependencies = Object.freeze({
     };
   },
 
+  /**
+   * Returns the Protobuf dependencies loaded for analysis.
+   *
+   * @returns The loaded Protobuf runtime modules.
+   */
   current(): { readonly protobuf: typeof Protobuf; readonly protobufWkt: typeof ProtobufWkt } {
     if (packageDependencies === undefined)
       throw new Error("Build handler analyzer dependencies are not loaded.");
     return packageDependencies;
   },
 
+  /**
+   * Resolves a dependency from the analyzer or application package boundary.
+   *
+   * @param program The TypeScript program supplying source files and type information.
+   * @param specifier The dependency module specifier.
+   * @returns The resolved module exports.
+   */
   require(specifier: string, program: ts.Program): unknown {
     try {
       return createRequire(import.meta.url)(specifier);
@@ -2708,6 +4101,12 @@ const PackageDependencies = Object.freeze({
     }
   },
 
+  /**
+   * Finds the package directory containing an entry point.
+   *
+   * @param entry The resolved package entry path.
+   * @returns The containing package directory.
+   */
   rootFor(entry: string): string {
     let directory = dirname(entry);
     while (!existsSync(join(directory, "package.json"))) {
@@ -2720,6 +4119,12 @@ const PackageDependencies = Object.freeze({
 });
 
 const HandlerTypes = Object.freeze({
+  /**
+   * Records a generated declaration's type and value exports.
+   *
+   * @param exports The generated export index to update or inspect.
+   * @param statement The declaration or import statement being indexed.
+   */
   recordNamedExport(statement: ts.Statement, exports: GeneratedExports): void {
     if (ts.isClassDeclaration(statement) || ts.isEnumDeclaration(statement)) {
       const name = statement.name;
@@ -2741,22 +4146,40 @@ const HandlerTypes = Object.freeze({
     }
   },
 
+  /**
+   * Checks whether generated exports contain a named type or value.
+   *
+   * @param exports The generated export index to update or inspect.
+   * @param name The symbol, class, or member name to resolve.
+   * @returns Whether the exports include the named generated type or value.
+   */
   hasGeneratedType(exports: GeneratedExports, name: string): boolean {
     return exports.types.has(name) || exports.values.has(name);
   },
 
+  /**
+   * Checks a Spine server decorator name.
+   *
+   * @param name The symbol, class, or member name to resolve.
+   * @returns The recognized server decorator name, or undefined otherwise.
+   */
   serverDecorator(name: string | undefined): ServerDecorator | undefined {
     return name === "Assign" ||
       name === "Command" ||
       name === "React" ||
       name === "Subscribe" ||
-      name === "Apply" ||
       name === "Where" ||
       name === "Throws"
       ? name
       : undefined;
   },
 
+  /**
+   * Reads a handler method's identifier or string literal name.
+   *
+   * @param node The syntax node being inspected.
+   * @returns The identifier or string literal method name, or undefined otherwise.
+   */
   methodName(node: ts.MethodDeclaration): string | undefined {
     if (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) {
       return node.name.text;
@@ -2765,6 +4188,13 @@ const HandlerTypes = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Checks whether a syntax node carries a modifier.
+   *
+   * @param kind The signal, modifier, or syntax kind being checked.
+   * @param node The syntax node being inspected.
+   * @returns Whether the node has the requested modifier.
+   */
   hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
     return (
       ts.canHaveModifiers(node) &&
@@ -2772,6 +4202,12 @@ const HandlerTypes = Object.freeze({
     );
   },
 
+  /**
+   * Reads a dotted name from an identifier or property access.
+   *
+   * @param expression The expression being inspected.
+   * @returns The dotted expression name, or undefined for unsupported expressions.
+   */
   expressionName(expression: ts.Expression): string | undefined {
     if (ts.isIdentifier(expression)) {
       return expression.text;
@@ -2784,6 +4220,16 @@ const HandlerTypes = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Adds a located handler diagnostic to the analysis scope.
+   *
+   * @param className The receiver class name used in records and diagnostics.
+   * @param code The diagnostic code to report.
+   * @param message The descriptor message or diagnostic text being inspected.
+   * @param methodNameValue The optional method name included in the diagnostic.
+   * @param node The syntax node being inspected.
+   * @param scope The current source, imports, program, and diagnostic collection.
+   */
   pushDiagnostic(
     scope: AnalyzerScope,
     code: BuildHandlerDiagnosticCode,
@@ -2808,6 +4254,13 @@ const HandlerTypes = Object.freeze({
     });
   },
 
+  /**
+   * Converts a TypeScript syntax error to a handler diagnostic.
+   *
+   * @param diagnostic The TypeScript diagnostic to convert.
+   * @param source The source file being inspected.
+   * @returns A located handler diagnostic for the syntax error.
+   */
   syntaxDiagnostic(
     source: ts.SourceFile,
     diagnostic: ts.DiagnosticWithLocation,

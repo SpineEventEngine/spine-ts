@@ -47,7 +47,7 @@ routing registration.
   - no app-owned materialization;
   - no schema-bearing decorators;
   - no framework `Command`/`Event` envelopes in ordinary end-user handlers;
-  - no `@Apply`;
+  - no event replay;
   - no manual end-user transactions.
 - The to-do example docs remain accurate for a fully runnable in-memory
   gRPC/query/subscription application.

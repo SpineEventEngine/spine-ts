@@ -94,7 +94,11 @@ import {
   TaskAlreadyDoneSchema,
   TaskNotAssignedSchema,
 } from "../generated/spine/examples/todo/task_rejections_pb.js";
-import { TaskCreatedSchema } from "../generated/spine/examples/todo/task_events_pb.js";
+import {
+  TaskAssignedSchema,
+  TaskCreatedSchema,
+  TaskReassignedSchema,
+} from "../generated/spine/examples/todo/task_events_pb.js";
 import { TaskSchema, type Task } from "../generated/spine/examples/todo/tasks_pb.js";
 
 type TodoModule = typeof import("../dist/src/index.js");
@@ -651,6 +655,50 @@ describe("@spine-event-engine/example-todo", () => {
     );
   });
 
+  it("creates a task with an optional initial assignment in Event order", async () => {
+    const context = await createTodoContext();
+    const fixture = await createTodoBlackBox(context);
+    const scope = fixture.asGuest();
+    const ada = create(UserIdSchema, { value: "ada" });
+
+    try {
+      await scope.post(CreateTaskSchema, createTask("task-unassigned-create", "Solo"));
+      expect(fixture.assertEvents()).toHaveLength(1);
+      const unassignedMessage = fixture.assertEvents()[0]?.message;
+      if (unassignedMessage === undefined) throw new Error("Expected the TaskCreated Event.");
+      expect(AnyMessages.unpack(unassignedMessage, TaskCreatedSchema)?.id?.value).toBe(
+        "task-unassigned-create",
+      );
+
+      await scope.post(
+        CreateTaskSchema,
+        create(CreateTaskSchema, {
+          id: create(TaskIdSchema, { value: "task-assigned-create" }),
+          taskListId: create(TaskListIdSchema, { value: "task-assigned-create" }),
+          title: "Shared",
+          assignee: ada,
+        }),
+      );
+      const events = await fixture.eventually(
+        () => fixture.assertEvents(),
+        (candidate) => candidate.length === 3,
+      );
+      const createdMessage = events[1]?.message;
+      const assignedMessage = events[2]?.message;
+      if (createdMessage === undefined || assignedMessage === undefined) {
+        throw new Error("Expected a created Event followed by an assignment Event.");
+      }
+
+      expect(AnyMessages.unpack(createdMessage, TaskCreatedSchema)?.id?.value).toBe(
+        "task-assigned-create",
+      );
+      expect(AnyMessages.unpack(assignedMessage, TaskAssignedSchema)?.assignee).toEqual(ada);
+      await expectTaskAssigneeEventually(fixture, context, ada, ["task-assigned-create"]);
+    } finally {
+      await fixture.close();
+    }
+  });
+
   it("starts and closes the standalone server with its default listener options", async () => {
     const server = await startTodoServer();
     try {
@@ -727,6 +775,43 @@ describe("@spine-event-engine/example-todo", () => {
     }
   });
 
+  it("assigns an open task or changes its assignee with the matching Event alternative", async () => {
+    const context = await createTodoContext();
+    const fixture = await createTodoBlackBox(context);
+    const scope = fixture.asGuest();
+    const taskId = "task-assign-choice";
+    const ada = create(UserIdSchema, { value: "ada" });
+    const lin = create(UserIdSchema, { value: "lin" });
+
+    try {
+      await scope.post(CreateTaskSchema, createTask(taskId, "Choice"));
+      await scope.post(AssignTaskSchema, assignTask(taskId, "ada"));
+      await scope.post(AssignTaskSchema, assignTask(taskId, "lin"));
+      const events = await fixture.eventually(
+        () => fixture.assertEvents(),
+        (candidate) => candidate.length === 3,
+      );
+      const assignedMessage = events[1]?.message;
+      const reassignedMessage = events[2]?.message;
+      if (assignedMessage === undefined || reassignedMessage === undefined) {
+        throw new Error("Expected an initial assignment followed by a reassignment Event.");
+      }
+
+      expect(AnyMessages.unpack(assignedMessage, TaskAssignedSchema)?.assignee).toEqual(ada);
+      expect(AnyMessages.unpack(reassignedMessage, TaskReassignedSchema)).toMatchObject({
+        previousAssignee: ada,
+        assignee: lin,
+      });
+      await expectTaskAssigneeEventually(fixture, context, ada, []);
+      await expectTaskAssigneeEventually(fixture, context, lin, [taskId]);
+
+      await scope.post(AssignTaskSchema, assignTask(taskId, "lin"));
+      expect(fixture.assertEvents()).toHaveLength(3);
+    } finally {
+      await fixture.close();
+    }
+  });
+
   it("keeps projections unchanged for rejected assignment transitions before reopening permits one", async () => {
     const context = await createTodoContext();
     const fixture = await createTodoBlackBox(context);
@@ -754,7 +839,7 @@ describe("@spine-event-engine/example-todo", () => {
         createTaskListIdQuery(listId),
         (rows) => readTask(rows, taskId)?.assignee?.value === "ada",
       );
-      await scope.post(AssignTaskSchema, assignTask(taskId, "lin"));
+      await scope.post(AssignTaskSchema, assignTask(taskId, "ada"));
       await scope.post(ReassignTaskSchema, reassignTask(taskId, "ada"));
       await expectTaskListEventuallyUnchanged(fixture, scope, assigned, taskId);
       await scope.post(CompleteTaskSchema, completeTask(taskId));
@@ -1425,7 +1510,7 @@ describe("@spine-event-engine/example-todo", () => {
         "TaskAlreadyAssigned subscription",
       );
       await scope.post(AssignTaskSchema, assignTask(taskId, "ada"));
-      await scope.post(AssignTaskSchema, assignTask(taskId, "lin"));
+      await scope.post(AssignTaskSchema, assignTask(taskId, "ada"));
       expect(await alreadyAssignedUpdate).toEqual(
         create(TaskAlreadyAssignedSchema, {
           id: create(TaskIdSchema, { value: taskId }),
@@ -1493,7 +1578,7 @@ describe("@spine-event-engine/example-todo", () => {
       assignmentRoute.mockClear();
       reassignmentRoute.mockClear();
 
-      await scope.post(AssignTaskSchema, assignTask(taskId, "lin"));
+      await scope.post(AssignTaskSchema, assignTask(taskId, "ada"));
       await scope.post(ReassignTaskSchema, reassignTask(taskId, "ada"));
       await scope.post(CompleteTaskSchema, completeTask(taskId));
       await scope.post(AssignTaskSchema, assignTask(taskId, "lin"));

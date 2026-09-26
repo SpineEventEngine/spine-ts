@@ -13,7 +13,8 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { VersionSchema } from "@spine-event-engine/proto";
+import { describe, expect, it } from "vitest";
 import {
   ProjectOverviewStateSchema,
   ProjectProfileSchema,
@@ -30,7 +31,6 @@ import {
   EntityTransaction,
   DraftStateError,
   EntityTransactionStateError,
-  type EntityTransactionVersionMetadata,
 } from "../../src/index.js";
 
 function createProjectOverviewState(
@@ -72,6 +72,90 @@ function createSingularState(overrides: Partial<ProjectRecordState> = {}): Proje
 }
 
 describe("entity transactions", () => {
+  it("advances Spine Version once for a state change and preserves it for a no-op", () => {
+    const version = create(VersionSchema, { number: 3 });
+    const changed = createEntityTransaction({
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
+      version: { previous: version, draft: version },
+    });
+    changed.update((draft) => void (draft.name = "Ready"));
+    const accepted = changed.commit();
+    expect(accepted.status).toBe("accepted");
+    if (accepted.status !== "accepted") throw new Error("Expected an accepted commit.");
+    expect(accepted.version.committed.number).toBe(4);
+    expect(accepted.version.committed.timestamp).toBeDefined();
+
+    const noOp = createEntityTransaction({
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
+      version: { previous: version, draft: version },
+    });
+    const unchanged = noOp.commit();
+    if (unchanged.status !== "accepted") throw new Error("Expected an accepted commit.");
+    expect(unchanged.version.committed.number).toBe(3);
+  });
+
+  it("advances Version for an already different draft of an existing Entity", () => {
+    const version = create(VersionSchema, { number: 3 });
+    const transaction = createEntityTransaction({
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
+      draft: createProjectOverviewState({ name: "Already changed" }),
+      version: { previous: version, draft: version },
+    });
+
+    const result = transaction.commit();
+    expect(result.status).toBe("accepted");
+    if (result.status !== "accepted") throw new Error("Expected an accepted commit.");
+    expect(result.version.committed.number).toBe(4);
+    expect(result.next.name).toBe("Already changed");
+  });
+
+  it("validates an already invalid draft against an existing Entity before commit", () => {
+    const version = create(VersionSchema, { number: 3 });
+    const transaction = createEntityTransaction({
+      schema: ProjectOverviewStateSchema,
+      previous: createProjectOverviewState(),
+      draft: createProjectOverviewState({ id: "task-2" }),
+      version: { previous: version, draft: version },
+    });
+
+    const result = transaction.commit();
+    expect(result.status).toBe("rejected");
+    if (result.status !== "rejected") throw new Error("Expected a rejected commit.");
+    expect(result.version.previous.number).toBe(3);
+    expect(result.validation.violations).not.toEqual([]);
+  });
+
+  it("keeps version zero when a new Entity transaction makes no change", () => {
+    const version = create(VersionSchema);
+    const transaction = createEntityTransaction({
+      schema: ProjectOverviewStateSchema,
+      previous: undefined,
+      draft: createProjectOverviewState(),
+      version: { previous: version, draft: version },
+    });
+
+    const result = transaction.commit();
+    if (result.status !== "accepted") throw new Error("Expected an accepted commit.");
+    expect(result.version.committed.number).toBe(0);
+  });
+
+  it("accepts an unchanged incomplete new Entity without validating or advancing it", () => {
+    const version = create(VersionSchema);
+    const transaction = createEntityTransaction({
+      schema: ProjectOverviewStateSchema,
+      previous: undefined,
+      version: { previous: version, draft: version },
+    });
+
+    const result = transaction.commit();
+    expect(result.status).toBe("accepted");
+    if (result.status !== "accepted") throw new Error("Expected an accepted no-op.");
+    expect(result.version.committed.number).toBe(0);
+  });
+
   it("exports the public entity transaction surface from the server root", () => {
     expect(serverRoot.EntityTransaction).toBe(EntityTransaction);
     expect(serverRoot.createEntityTransaction).toBe(createEntityTransaction);
@@ -82,7 +166,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous,
-      version: { previous: 7, draft: 8 },
+      version: {
+        previous: create(VersionSchema, { number: 7 }),
+        draft: create(VersionSchema, { number: 8 }),
+      },
     });
 
     expect(transaction.status).toBe("active");
@@ -90,7 +177,7 @@ describe("entity transactions", () => {
     expect(transaction.previous).not.toBe(previous);
     expect(transaction.currentDraft).toEqual(previous);
     expect(transaction.currentDraft).not.toBe(previous);
-    expect(transaction.version).toEqual({ previous: 7, draft: 8 });
+    expect(transaction.version).toMatchObject({ previous: { number: 7 }, draft: { number: 8 } });
     expect(transaction.lifecycle).toEqual({ archived: false, deleted: false });
   });
 
@@ -99,7 +186,10 @@ describe("entity transactions", () => {
     const transaction = new EntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous,
-      version: { previous: 1, draft: 1 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 1 }),
+      },
     });
 
     const returnedDraft = transaction.update((draft) => {
@@ -118,7 +208,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
 
     transaction.update((draft) => {
@@ -133,7 +226,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
 
     const violations = transaction.tryUpdate((draft) => {
@@ -152,7 +248,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     const before = transaction.currentDraft;
 
@@ -169,7 +268,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     const violations = transaction.tryUpdate((draft) => {
       draft.id = "task-2";
@@ -197,7 +299,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     const before = transaction.currentDraft;
     const asyncMutator = async (draft: ProjectOverviewState) => {
@@ -216,7 +321,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     const before = transaction.currentDraft;
     const asyncMutator = async (draft: ProjectOverviewState) => {
@@ -236,7 +344,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectProfileStateSchema,
       previous: createRichState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     let retained: ProjectProfileState | undefined;
 
@@ -265,7 +376,10 @@ describe("entity transactions", () => {
     const validTransaction = createEntityTransaction({
       schema: ProjectRecordStateSchema,
       previous: createSingularState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     let retainedValid: ProjectRecordState | undefined;
     expect(
@@ -284,7 +398,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     const before = transaction.currentDraft;
     const error = new Error("boom");
@@ -302,7 +419,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
 
     expect(
@@ -331,13 +451,16 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous,
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     const originalDraft = transaction.currentDraft;
 
     expect(transaction.archive()).toEqual({ archived: true, deleted: false });
     expect(transaction.currentDraft).toEqual(originalDraft);
-    expect(transaction.version).toEqual({ previous: 1, draft: 2 });
+    expect(transaction.version).toMatchObject({ previous: { number: 1 }, draft: { number: 2 } });
 
     const accepted = transaction.commit();
 
@@ -347,7 +470,10 @@ describe("entity transactions", () => {
     const rollbackTransaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous,
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
       lifecycle: { archived: true },
     });
 
@@ -363,13 +489,16 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous,
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     const originalDraft = transaction.currentDraft;
 
     expect(transaction.markDeleted()).toEqual({ archived: false, deleted: true });
     expect(transaction.currentDraft).toEqual(originalDraft);
-    expect(transaction.version).toEqual({ previous: 1, draft: 2 });
+    expect(transaction.version).toMatchObject({ previous: { number: 1 }, draft: { number: 2 } });
 
     const accepted = transaction.commit();
 
@@ -379,7 +508,10 @@ describe("entity transactions", () => {
     const rollbackTransaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous,
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
       lifecycle: { deleted: true },
     });
 
@@ -394,7 +526,10 @@ describe("entity transactions", () => {
     const active = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
 
     active.requireActive();
@@ -402,7 +537,10 @@ describe("entity transactions", () => {
     const archived = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     archived.archive();
 
@@ -419,7 +557,10 @@ describe("entity transactions", () => {
     const deleted = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     deleted.markDeleted();
 
@@ -433,7 +574,10 @@ describe("entity transactions", () => {
     const committed = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     committed.commit();
 
@@ -447,7 +591,10 @@ describe("entity transactions", () => {
     const rolledBack = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     rolledBack.rollback();
 
@@ -463,24 +610,36 @@ describe("entity transactions", () => {
     const archived = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
       lifecycle: { archived: true },
     });
     const deleted = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
       lifecycle: { deleted: true },
     });
     const committed = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     const rolledBack = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     committed.commit();
     rolledBack.rollback();
@@ -500,7 +659,10 @@ describe("entity transactions", () => {
     const committed = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     committed.commit();
 
@@ -512,7 +674,10 @@ describe("entity transactions", () => {
     const rolledBack = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     rolledBack.rollback();
 
@@ -522,71 +687,15 @@ describe("entity transactions", () => {
     expect(() => rolledBack.restore()).toThrow(/rolled-back/);
   });
 
-  it("updates explicit draft version metadata with preserved generic type", () => {
-    interface RevisionMetadata {
-      revision: number;
-      source: "server";
-    }
-    const transaction = createEntityTransaction({
-      schema: ProjectOverviewStateSchema,
-      previous: createProjectOverviewState(),
-      version: {
-        previous: { revision: 1, source: "server" },
-        draft: { revision: 1, source: "server" },
-      } satisfies EntityTransactionVersionMetadata<RevisionMetadata>,
-    });
-
-    const updated = transaction.updateVersionMetadata({ revision: 2, source: "server" });
-
-    expect(updated).toEqual({
-      previous: { revision: 1, source: "server" },
-      draft: { revision: 2, source: "server" },
-    });
-    expectTypeOf(updated.draft).toEqualTypeOf<RevisionMetadata>();
-
-    const accepted = transaction.commit();
-
-    expect(accepted.status).toBe("accepted");
-    if (accepted.status !== "accepted") {
-      throw new Error("Expected unchanged set-once state to commit successfully.");
-    }
-    expect(accepted.version.committed).toEqual({ revision: 2, source: "server" });
-    expectTypeOf(accepted.version.committed).toEqualTypeOf<RevisionMetadata>();
-  });
-
-  it("returns updated explicit draft version metadata in rejected commit and rollback results", () => {
-    const rejected = createEntityTransaction({
-      schema: ProjectOverviewStateSchema,
-      previous: createProjectOverviewState({ id: "task-1" }),
-      version: { previous: 1, draft: 1 },
-    });
-    rejected.updateVersionMetadata(2);
-    rejected.update((draft) => {
-      draft.id = "task-2";
-    });
-
-    const rejectedResult = rejected.commit();
-
-    expect(rejectedResult.status).toBe("rejected");
-    expect(rejectedResult.version).toEqual({ previous: 1, draft: 2 });
-    expect(rejected.status).toBe("active");
-
-    const rolledBack = createEntityTransaction({
-      schema: ProjectOverviewStateSchema,
-      previous: createProjectOverviewState(),
-      version: { previous: 3, draft: 3 },
-    });
-    rolledBack.updateVersionMetadata(4);
-
-    expect(rolledBack.rollback().version).toEqual({ previous: 3, draft: 4 });
-  });
-
   it("returns an accepted commit result when transition validation passes", () => {
     const previous = createProjectOverviewState();
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous,
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     transaction.update((draft) => {
       draft.name = "Ready";
@@ -598,40 +707,19 @@ describe("entity transactions", () => {
     expect(result.status).toBe("accepted");
     expect(result.previous).toEqual(previous);
     expect(result.next).toEqual(createProjectOverviewState({ name: "Ready", priority: 2 }));
-    expect(result.version).toEqual({ previous: 1, committed: 2 });
+    expect(result.version).toMatchObject({ previous: { number: 1 }, committed: { number: 2 } });
     expect(result.lifecycle).toEqual({ archived: false, deleted: false });
     expect(transaction.status).toBe("committed");
-  });
-
-  it("preserves caller-supplied version metadata type after an accepted commit", () => {
-    interface RevisionMetadata {
-      revision: number;
-      source: "server";
-    }
-    const version: EntityTransactionVersionMetadata<RevisionMetadata> = {
-      previous: { revision: 1, source: "server" },
-      draft: { revision: 2, source: "server" },
-    };
-    const transaction = createEntityTransaction({
-      schema: ProjectOverviewStateSchema,
-      previous: createProjectOverviewState(),
-      version,
-    });
-
-    const result = transaction.commit();
-
-    if (result.status !== "accepted") {
-      throw new Error("Expected unchanged set-once state to commit successfully.");
-    }
-    expect(result.version.committed).toEqual({ revision: 2, source: "server" });
-    expectTypeOf(result.version.committed).toEqualTypeOf<RevisionMetadata>();
   });
 
   it("returns a rejected commit result with validator violations when set-once state changes", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState({ id: "task-1" }),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     transaction.update((draft) => {
       draft.id = "task-2";
@@ -642,7 +730,7 @@ describe("entity transactions", () => {
     expect(result.status).toBe("rejected");
     expect(result.previous).toEqual(createProjectOverviewState({ id: "task-1" }));
     expect(result.next).toEqual(createProjectOverviewState({ id: "task-2" }));
-    expect(result.version).toEqual({ previous: 1, draft: 2 });
+    expect(result.version).toMatchObject({ previous: { number: 1 }, draft: { number: 2 } });
     expect(result.lifecycle).toEqual({ archived: false, deleted: false });
     expect(result.validation.valid).toBe(false);
     if (result.validation.valid) {
@@ -657,7 +745,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous,
-      version: { previous: 3, draft: 4 },
+      version: {
+        previous: create(VersionSchema, { number: 3 }),
+        draft: create(VersionSchema, { number: 4 }),
+      },
     });
     transaction.update((draft) => {
       draft.name = "Rolled back";
@@ -669,7 +760,7 @@ describe("entity transactions", () => {
     expect(result.status).toBe("rolled-back");
     expect(result.previous).toEqual(previous);
     expect(result.draft).toEqual(createProjectOverviewState({ name: "Rolled back" }));
-    expect(result.version).toEqual({ previous: 3, draft: 4 });
+    expect(result.version).toMatchObject({ previous: { number: 3 }, draft: { number: 4 } });
     expect(result.lifecycle).toEqual({ archived: true, deleted: false });
     expect(transaction.status).toBe("rolled-back");
   });
@@ -678,7 +769,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     transaction.commit();
 
@@ -690,7 +784,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     transaction.rollback();
 
@@ -702,7 +799,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState({ id: "task-1" }),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     transaction.update((draft) => {
       draft.id = "task-2";
@@ -720,7 +820,10 @@ describe("entity transactions", () => {
     const transaction = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     const before = transaction.currentDraft;
 
@@ -737,7 +840,10 @@ describe("entity transactions", () => {
     const committed = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     committed.commit();
 
@@ -747,7 +853,10 @@ describe("entity transactions", () => {
     const rolledBack = createEntityTransaction({
       schema: ProjectOverviewStateSchema,
       previous: createProjectOverviewState(),
-      version: { previous: 1, draft: 2 },
+      version: {
+        previous: create(VersionSchema, { number: 1 }),
+        draft: create(VersionSchema, { number: 2 }),
+      },
     });
     rolledBack.rollback();
 

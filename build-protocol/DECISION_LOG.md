@@ -4,6 +4,50 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+The approved [handler-result corrections](planning/handler-result-corrections.md)
+extend D-0127. They supersede older decisions permitting void reactors or
+retaining event-replay handler compatibility. Only subscriptions declare void;
+Event/rejection reactions may declare undefined, alone or in a concrete signal
+union. Required results are checked before Entity commit. No compatibility
+implementation of the retired handler remains. Older entries below are
+historical decisions, not permission to restore removed behavior.
+
+## D-0127: Use Spine Version and native handler return types
+
+Status: Accepted; implementation in progress.
+
+Date: 2026-09-25
+
+Context: The human requires Spine JVM-compatible Entity versions and handler
+results. Arbitrary Entity version metadata was a temporary arrangement before
+dispatch and storage existed. Current repositories now store Spine `Version`,
+but the Entity API still accepts arbitrary metadata. Handler generation also
+rejects valid TypeScript unions even though it already supports fixed tuples.
+
+Decision: Entity declarations have ID and state-schema parameters only. The
+framework supplies the generated Spine `Version`, advances it according to
+current JVM dispatch rules, and stores the same number and timestamp everywhere
+that describes the committed Entity. A Projection advances its own counter,
+independently of the incoming Event's producer version. This supersedes the
+custom-version portion of D-0042 and the temporary Entity shells in D-0044.
+
+Use native TypeScript unions for one selected result and tuples for multiple
+results, including optional tuple positions and supported aliases. Resolve all
+possible generated schemas with the existing TypeScript compiler. Keep runtime
+validation tied to the invoked handler; do not add a second return-shape type
+system or third-party Either/tuple wrappers.
+
+Sources: official Spine JVM commit `ea3067b137938ac0beb6920c39d11e300976fcc9`,
+Entity.kt, AggregateTransaction.kt, ProjectionTransaction.java, Phase.java,
+Versions.java, Pair.java, Either.java, and the handler signature classes.
+The [approved plan](planning/entity-and-handler-declarations.md) records the
+specific findings, examples, boundaries, and acceptance tests.
+
+Consequences: the snapshot public Entity API changes intentionally; existing
+Protobuf wire and storage schemas remain unchanged. Native TypeScript checks
+tuple shape, while runtime checks each returned message against the handler's
+declared schemas. No new package or compatibility wrapper is required.
+
 ## D-0126: Use Complete Application Replicas Behind Node-Local HTTP/2 Coordinators
 
 Status: Accepted
@@ -274,7 +318,7 @@ explicit public arity of one or two parameters, and emitted schemas inferred
 from explicit return types. `@Assign` emits non-empty generated event schemas,
 `@Command` emits non-empty generated command schemas, `@React` emits generated
 event schemas or nothing, and `@Subscribe` emits none because it must return
-explicit `void`. New generated registry records do not include `@Apply`.
+explicit `void`. New generated registry records do not include event replay.
 
 Generated registry modules are ignored build artifacts under `generated/`
 output directories and must not be committed. T-0015a deliberately does not
@@ -1411,11 +1455,11 @@ preserving an explicit fallback and avoiding legacy `emitDecoratorMetadata`,
 parameter decorators, import-order-sensitive globals, or runtime invocation
 during metadata declaration.
 
-Decision: Implement decorator support as syntax over the explicit handler
-metadata contract. Public `@Assign`, `@Command`, `@Subscribe`, `@React`, and
-`@Apply` method decorators must require explicit Protobuf-ES schemas, collect
-class-owned deterministic metadata, and expose a materialization function that
-returns the same `EntityHandlersMetadata` shape accepted by
+Historical decision: implement decorators over explicit handler metadata,
+including event appliers that have since been removed. The decorators required
+explicit Protobuf-ES schemas, collected deterministic class metadata, and
+exposed a materialization function that returned
+the same `EntityHandlersMetadata` shape accepted by
 `HandlerMetadataRegistry`. The explicit `defineEntityHandlers()` API remains the
 fallback and the canonical metadata shape. Decorators must not instantiate
 entities, invoke handlers, unpack payloads, write storage, start buses or
@@ -1765,9 +1809,10 @@ server-module work.
 
 Decision: T-0010.5 adds only a metadata/readiness surface that reports
 registered event message types and fan-out handler metadata for event
-subscriptions and event reactions, plus event-application metadata grouped by
-event type. It must reuse `HandlerMetadataRegistry` for event-application
-uniqueness and must not reject duplicate subscribers or reactors. Because the
+subscriptions and event reactions, plus retired event-replay metadata grouped by
+event type. The registry checked that there was only one event applier per
+Entity state and Event type; this retired behavior did not restrict multiple
+subscribers or reactors. Because the
 current TS handler metadata does not yet model external event interests,
 domestic/external filtering and integration-broker wanted-event publication are
 documented as deferred rather than guessed.
@@ -1982,7 +2027,7 @@ Decision:
 - End-user application code must not discover or materialize decorated handler
   metadata. Handler discovery/materialization belongs to the framework and
   generated registry tooling.
-- Aggregates must not use `@Apply`; aggregate state changes happen in
+- Aggregates must not use event replay; aggregate state changes happen in
   framework-owned transactions for non-event-sourced aggregates.
 - End-user application code must not call entity transaction-control methods such
   as `startTransaction()` or `commitTransaction()`.
@@ -2009,7 +2054,7 @@ Consequences:
   leak schema arguments into ordinary app handlers.
 - Automated checks should be added where practical to reject envelope returns,
   `packEvent()`/`packCommand()` in ordinary handlers, schema-bearing
-  decorators, aggregate `@Apply` handlers, transaction-control calls, direct
+  decorators, aggregate event replay, transaction-control calls, direct
   internal event ID construction, missing `void` subscriber returns, and
   default-route ID extraction in examples, plus handler materialization helpers
   in end-user app code.
@@ -2580,9 +2625,9 @@ Context: Upstream Spine JVM ADR 0001 is accepted and D1 was revised on
 2026-07-05 to drop event import. It removes `@Import`, `ImportBus`, import
 endpoints/routing, and related test API, while retaining
 `InboxLabel.IMPORT_EVENT` only as deprecated wire compatibility surface. D2
-makes aggregate and aggregate-part `@Apply` a model-building error retained
-only for detection. Local JVM notes still document the old path as
-`ImportBus` routing to aggregate `@Apply(allowImport = true)` appliers and an
+makes aggregate and aggregate-part event appliers a model-building error.
+At that revision, the old declarations remained only to detect this error.
+The historical import path routed through aggregate event appliers and an
 aggregate `IMPORT_EVENT` inbox endpoint, confirming the import path is tied to
 the event-sourced aggregate applier model.
 
@@ -2603,7 +2648,7 @@ Alternatives considered:
 
 - Treat aggregate importers as future runtime work. Rejected because upstream
   ADR 0001 D1 removes event import and the old JVM import path depends on
-  aggregate `@Apply` appliers.
+  aggregate event replay.
 - Remove `IMPORT_EVENT` compatibility surfaces now. Rejected because the
   upstream ADR retains the label for wire compatibility, and TS compatibility
   behavior needs its own delivery-label contract task.
@@ -2648,7 +2693,7 @@ Decision:
 - Keep `CATCH_UP` out of worker execution unless the existing code already has
   a supported endpoint; do not invent projection catch-up semantics here.
 - Keep end-user code free of framework envelopes, manual transactions,
-  `@Apply`, schema-bearing decorators, and materialization helpers.
+  event replay, schema-bearing decorators, and materialization helpers.
 
 Alternatives considered:
 
@@ -2790,7 +2835,7 @@ Decision:
 - Use the continuation only for durable inbox pending-row scans in
   `Delivery`/`DeliveryLoop`.
 - Keep production database adapters, broad query optimization, retry policy,
-  durable catch-up storage, import work, and aggregate `@Apply` delivery out of
+  durable catch-up storage, import work, and aggregate event replay delivery out of
   scope.
 
 Alternatives considered:
@@ -5795,3 +5840,32 @@ Consequences:
 - BlackBox can verify external routing and produced signals without depending
   on a particular test runner. Snapshot reads are immediate; callers use the
   existing eventual helper when background processing has not settled.
+
+## D-0121: Route Project Work Through The GPT-6 Model Family
+
+Status: Accepted
+
+Date: 2026-09-24
+
+Context: The project routing was designed for GPT-5.6 Sol, Terra, and Luna.
+GPT-6 Astra, Sol, and Luna are now available. The project requires Astra High
+for the main chat and future main chats, while bounded implementation and review
+should avoid unnecessarily expensive reasoning profiles.
+
+Decision:
+
+- Configure the main project chat and requirements splitter as GPT-6 Astra with
+  high reasoning.
+- Configure implementation and the ordinary style, TypeScript/API, and
+  performance/reliability reviewers as GPT-6 Sol with medium reasoning.
+- Configure the final security reviewer as GPT-6 Sol with high reasoning.
+- Configure documentation review as GPT-6 Luna with medium reasoning, and use
+  Luna Low or Medium for mechanical verification according to classification
+  difficulty.
+- Escalate demonstrated architecture or correctness ambiguity to Astra High.
+  Keep Standard speed and do not use Max or Ultra in the normal cycle.
+
+Consequences: Project configuration supplies Astra High as the default for new
+project chats unless a person explicitly overrides it. Every child dispatch
+still names its model and reasoning. The tracked Codex profiles and the two
+active routing documents must remain synchronized when routing changes.

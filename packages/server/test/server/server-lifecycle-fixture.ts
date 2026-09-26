@@ -53,7 +53,7 @@ import {
 } from "../../test-fixtures/generated/server-lifecycle/events_pb.js";
 import { ServerStatusSchema } from "../../test-fixtures/generated/server-lifecycle/states_pb.js";
 
-class ServerStatusProjection extends Projection<string, typeof ServerStatusSchema, number> {
+class ServerStatusProjection extends Projection<string, typeof ServerStatusSchema> {
   onServerStarted(event: ServerStarted): void {
     void event;
   }

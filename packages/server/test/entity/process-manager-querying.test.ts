@@ -22,6 +22,7 @@ import {
   CommandIdSchema,
   TenantIdSchema,
   UserIdSchema,
+  VersionSchema,
   ZoneIdSchema,
 } from "@spine-event-engine/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
@@ -61,7 +62,7 @@ const projectionColumns = EntityColumn.register(
 );
 const selectedProjectionColumns: Pick<typeof projectionColumns, "priority"> = projectionColumns;
 
-class QueryProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class QueryProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   subscribe(event: ProjectionEvent): void {
     this.update((draft) =>
       Object.assign(
@@ -76,7 +77,7 @@ class QueryProjection extends Projection<string, typeof ProjectOverviewStateSche
   }
 }
 
-class QueryProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {
+class QueryProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   static results: readonly ProjectOverviewState[] = [];
   static predicate: unknown;
   static failure: unknown;
@@ -119,11 +120,7 @@ class QueryProcessManager extends ProcessManager<string, typeof ProcessManagerSt
   }
 }
 
-abstract class QueryTypeFixture extends ProcessManager<
-  string,
-  typeof ProcessManagerStateSchema,
-  number
-> {
+abstract class QueryTypeFixture extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   protected verifySelectedColumn(): void {
     const query = this.select(ProjectOverviewStateSchema, selectedProjectionColumns);
     query.orderBy(selectedProjectionColumns.priority);
@@ -195,7 +192,7 @@ describe("Process Manager querying", () => {
       id: "process-1",
       schema: ProcessManagerStateSchema,
       state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
-      version: 1,
+      version: create(VersionSchema, { number: 1 }),
       lifecycle: { archived: false, deleted: false },
     });
 
@@ -226,7 +223,7 @@ describe("Process Manager querying", () => {
     expect(query).not.toHaveProperty("tenant");
     expectTypeOf(query).not.toHaveProperty("update");
     expectTypeOf(query).not.toHaveProperty("tenant");
-    expectTypeOf<Aggregate<string, typeof ProjectOverviewStateSchema, number>>().not.toHaveProperty(
+    expectTypeOf<Aggregate<string, typeof ProjectOverviewStateSchema>>().not.toHaveProperty(
       "select",
     );
     expect(() => query.limit(1_001)).toThrow("Process Manager query limit may be at most 1000.");
@@ -242,7 +239,7 @@ describe("Process Manager querying", () => {
       id: "process-1",
       schema: ProcessManagerStateSchema,
       state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
-      version: 1,
+      version: create(VersionSchema, { number: 1 }),
       lifecycle: { archived: false, deleted: false },
     });
     const states = Object.freeze(

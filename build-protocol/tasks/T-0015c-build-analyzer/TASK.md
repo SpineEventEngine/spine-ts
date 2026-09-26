@@ -37,7 +37,7 @@ into source code.
 - `@Subscribe` handlers require explicit `void` return types.
 - `handler(signal)` and `handler(signal, context)` are accepted for all handler
   kinds covered by generated registries.
-- `@Apply` is not supported for generated registries.
+- event replay is not supported for generated registries.
 - Ordinary end-user handlers return generated domain messages, not framework
   `Command` or `Event` envelopes.
 - Analyzer output must feed the T-0015b generated registry contract without
@@ -61,7 +61,7 @@ into source code.
 - Discover bare standard-decorator handler methods for `@Assign`, `@Command`,
   `@React`, and `@Subscribe`.
 - Reject schema-bearing handler decorators in ordinary analyzed app source.
-- Reject `@Apply` in analyzed generated-registry source.
+- Reject event replay in analyzed generated-registry source.
 - Require explicit first parameter type annotations and public arity `1 | 2`.
 - Require explicit return type annotations for `@Assign`, `@Command`, and
   `@React`; require explicit `void` return type for `@Subscribe`.

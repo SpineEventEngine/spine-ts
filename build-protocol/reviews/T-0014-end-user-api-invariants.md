@@ -24,7 +24,7 @@ Required review lanes:
   `Command` or `Event` envelopes.
 - End-user app code uses bare decorators; schema-bearing decorators are
   forbidden in normal app code.
-- No aggregate `@Apply` in end-user code.
+- No aggregate event replay in end-user code.
 - No end-user transaction control such as `startTransaction()`.
 - No end-user internal `EventId` generation.
 - No end-user handler metadata discovery/materialization helper code.

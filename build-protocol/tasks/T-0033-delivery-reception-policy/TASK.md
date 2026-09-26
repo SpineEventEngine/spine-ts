@@ -44,8 +44,8 @@ endpoint callback failures after retryable classification and the existing
 - Keep generated Protobuf output out of VCS and preserve Spine Protobuf
   contracts, type URLs, options, and modeling conventions.
 - Keep end-user code free of framework `Event` envelopes, manual transactions,
-  `@Apply`, schema-bearing decorators, and app-owned handler materialization.
-- Aggregate import/importers, `ImportBus`, and aggregate `@Apply` delivery are
+  event replay, schema-bearing decorators, and app-owned handler materialization.
+- Aggregate import/importers, `ImportBus`, and aggregate event replay delivery are
   removed from the active roadmap.
 - `IMPORT_EVENT` is unsupported for new inbox writes; legacy stored rows fail
   closed.

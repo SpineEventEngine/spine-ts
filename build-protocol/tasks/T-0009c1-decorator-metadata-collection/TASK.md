@@ -103,8 +103,8 @@ Skipped relevant-looking skills:
 
 In scope:
 
-- Public `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply`
-  standard method decorators.
+- Public `@Assign`, `@Command`, `@Subscribe`, and `@React` standard method
+  decorators, plus the event-applier decorator that has since been removed.
 - Explicit schema arguments for every decorator; no `emitDecoratorMetadata`,
   reflect-metadata, parameter decorators, or inferred message types.
 - Class-owned deterministic metadata collection with no global registry

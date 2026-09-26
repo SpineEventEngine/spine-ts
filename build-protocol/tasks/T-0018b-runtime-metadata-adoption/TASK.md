@@ -43,7 +43,7 @@ example or test code.
 - No change may be made without updating the relevant durable log.
 - Use installed skills where applicable.
 - Preserve end-user handler invariants: handlers return generated domain
-  messages, not framework `Event` envelopes; no `@Apply`; no manual end-user
+  messages, not framework `Event` envelopes; no event replay; no manual end-user
   transactions; no application-owned handler materialization.
 - Keep changes simple and JVM-familiar; avoid new abstractions unless they make
   the caller clearly easier to read.
@@ -55,7 +55,7 @@ example or test code.
 - Example/test helpers use `SignalMetadata` or one narrow helper built on it for
   routine command metadata construction.
 - No end-user/example handler invariant regresses: handlers still return domain
-  messages; no framework envelopes, no `@Apply`, no manual transactions.
+  messages; no framework envelopes, no event replay, no manual transactions.
 - Documentation clearly distinguishes the metadata seam from low-level envelope
   packing.
 - Focused tests, static checks, and full verification pass before integration

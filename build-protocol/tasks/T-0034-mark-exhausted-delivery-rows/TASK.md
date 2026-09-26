@@ -27,7 +27,7 @@ rows already classified as exhausted before callback invocation.
 - Reserve full `pnpm verify` for final and post-merge gates.
 - Preserve Protobuf contracts and keep generated output out of VCS.
 - Preserve end-user API constraints, removed aggregate import/`ImportBus`/
-  aggregate `@Apply` roadmap, unsupported new `IMPORT_EVENT` writes, and
+  aggregate event replay roadmap, unsupported new `IMPORT_EVENT` writes, and
   pending/skipped `CATCH_UP`.
 - Inspect relevant Spine JVM server source before implementation.
 

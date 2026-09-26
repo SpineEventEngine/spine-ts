@@ -253,6 +253,92 @@ rejection-input command reactions during generated metadata ingestion and
 repository construction.
 Event- and rejection-input `@Command` methods remain Event- or
 rejection-to-command reactions on Event Bus.
+
+### Handler return types
+
+Use a TypeScript union such as `CreateAccessGrant | ExtendAccessGrant` to return
+one of several Commands. A tuple such as
+`readonly [AccessGrantCreated, AccessRequestCompleted?]` returns multiple Events
+in order, with the second optional. Either declaration may have one outer
+`Promise` layer. Generated metadata lists every possible schema; runtime checks
+each result against the invoked handler's list. A whole result may be absent
+for `@React` and Event/rejection-input `@Command`, using a generated signal type
+unioned with `undefined`. A reaction that never emits can declare `undefined`
+alone or `Promise<undefined>`. Either reaction kind may also return an empty
+typed array. Command-input `@Command` and `@Assign` require nonempty results.
+`@Subscribe` declares `void` or `Promise<void>` and produces no signals.
+`@Throws` declares thrown rejections separately from normal results.
+
+Only subscriptions accept `void`. An absent reaction result or optional tuple
+entry uses `undefined`, never `null`. The framework validates all returned
+values before committing Entity changes or publishing outputs. An invalid
+subscription result fails even if it is an empty array. A valid no-output
+reaction still saves its Entity state changes.
+
+Other supported forms are `T[]`, `readonly T[]`, `Array<T>`, `ReadonlyArray<T>`,
+named tuple entries, union alternatives inside tuple entries, and local or
+imported aliases resolving to concrete generated messages. Only one flat
+collection level is supported. Rest tuples, nested collections, nested promises,
+custom thenables, framework envelopes, and unresolved/`any`/`unknown` result
+branches are rejected. TypeScript enforces tuple structure; the runtime checks
+declared message types, required nonempty results, and result order, not tuple
+arity or positional schema constraints. See the
+[user guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/USER_GUIDE.md#choose-what-a-handler-returns) for a compact
+return-type table and examples.
+
+These independent examples use generated review-workflow messages. The Commander
+chooses whether to start or schedule a review. The reactor example shows a
+different workflow: record a started review and optionally schedule a follow-up.
+They illustrate return declarations, not two handlers to register together.
+
+<!-- docs-snippet-path: packages/server/test/runtime/standalone-handler-runtime.test.ts -->
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import {
+  AbstractCommander,
+  AbstractEventReactor,
+  Command,
+  React,
+} from "@spine-event-engine/server";
+import {
+  StartReviewSchema,
+  ScheduleReviewSchema,
+  type StartReview,
+  type ScheduleReview,
+} from "../../test-fixtures/generated/handler-registry/commands_pb.js";
+import {
+  ReviewStartedSchema,
+  ReviewFollowUpScheduledSchema,
+  type ReviewStarted,
+  type ReviewFollowUpScheduled,
+  type ReviewTaskAssigned,
+} from "../../test-fixtures/generated/handler-registry/events_pb.js";
+
+export class ReviewCommander extends AbstractCommander {
+  @Command
+  planReview(event: ReviewTaskAssigned): StartReview | ScheduleReview {
+    // Return one Command, choosing its type using the application's rules.
+    return event.name === "Security review"
+      ? create(ScheduleReviewSchema, { id: event.id })
+      : create(StartReviewSchema, { id: event.id });
+  }
+}
+
+export class ReviewReactor extends AbstractEventReactor {
+  @React
+  recordReview(event: ReviewTaskAssigned): readonly [ReviewStarted, ReviewFollowUpScheduled?] {
+    const started = create(ReviewStartedSchema, { id: event.id });
+    // A tuple returns ordered Events. Its optional second value may be absent.
+    if (event.name !== "Security review") return [started];
+    return [
+      started,
+      create(ReviewFollowUpScheduledSchema, { id: event.id, name: "Security follow-up" }),
+    ];
+  }
+}
+```
+
 Produced commands retain the source actor, tenant, origin, and causal lineage.
 The enqueue is post-commit best effort, not an atomic outbox or exactly-once
 delivery: a process crash between commit and enqueue can lose a child. Accepted
@@ -299,11 +385,7 @@ import {
   type ProjectId,
 } from "../generated/spine/server/testing/project_workflow_pb.js";
 
-class ApprovalCoordinator extends ProcessManager<
-  ProjectId,
-  typeof CoordinationStateSchema,
-  number
-> {
+class ApprovalCoordinator extends ProcessManager<ProjectId, typeof CoordinationStateSchema> {
   @Command
   approve(command: ApproveProject, context: CommandContext): ScheduleProject {
     this.update((draft) => Object.assign(draft, { id: this.id, projectName: command.status }));
@@ -335,7 +417,7 @@ const registry: GeneratedHandlerRegistry = {
 };
 const [handlers] = new HandlerRegistryIngestor().ingest(registry);
 if (handlers === undefined) throw new Error("Generated Process Manager metadata is missing.");
-const repository = new Repository({
+const repository = new Repository<typeof ApprovalCoordinator>({
   entityType: ApprovalCoordinator,
   schema: CoordinationStateSchema,
   handlers: handlers as EntityHandlersMetadata<ApprovalCoordinator, typeof CoordinationStateSchema>,
@@ -453,7 +535,7 @@ record-storage handle, while the context closes the registry.
 
 `Entity` is the state base class. `Aggregate`, `Projection`, and
 `ProcessManager` identify the three entity families. Handler decorators are
-`@Assign`, `@Command`, `@React`, `@Subscribe`, and `@Apply`. A command-accepting
+`@Assign`, `@Command`, `@React`, and `@Subscribe`. A command-accepting
 handler uses `@Throws(GeneratedRejection)` to declare its possible domain
 rejections. Write the primary handler decorator first and `@Throws` immediately
 below it; declaration order does not affect behavior. Generated metadata records
@@ -464,6 +546,10 @@ handler, `update(mutator)` changes the active draft and returns the draft;
 `tryUpdate(mutator)` validates a scratch draft and returns violations without
 applying an invalid change. Entity lifecycle and version changes are committed
 only after the transaction accepts.
+Every Entity exposes the generated Spine `Version` message, starting at number
+zero. A dispatch that produces Events or changes state or lifecycle advances it
+once; no-op and rejected dispatches do not. Repositories restore and persist the
+full Version, including its timestamp, across current state, history, and Stand.
 
 ## Signals, validation, and rejection behavior
 

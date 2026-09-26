@@ -12,6 +12,14 @@ regenerate it through package/workspace scripts rather than editing it.
 
 The example covers `CreateTask`, `AssignTask`, `ReassignTask`, `UnassignTask`,
 `RenameTask`, `CompleteTask`, and `ReopenTask`.
+In `TaskAggregate`, `createTask()` returns
+`readonly [TaskCreated, TaskAssignedEvent?]`: the second Event is present only when
+`CreateTask.assignee` is supplied, and its order follows creation.
+`assignTask()` returns `TaskAssignedEvent | TaskReassignedEvent`: it selects the first
+type for an unassigned task and the second for a different existing assignee.
+These local names alias the generated `TaskAssigned` and `TaskReassigned` message
+types; no new Event types are introduced.
+`ReassignTask` remains strict: it requires a current assignee.
 Validation failures produce non-OK responses. Domain rejections remain
 OK-acknowledged command admission results and are published separately as typed
 rejection events. Client-visible rejection updates redact rejected-command
@@ -72,7 +80,7 @@ Do not edit it. Regenerate with `pnpm proto:generate`.
 | Attempt                                      | Rejection             |
 | -------------------------------------------- | --------------------- |
 | Any assignment operation on a completed task | `TaskAlreadyDone`     |
-| Assign when already assigned                 | `TaskAlreadyAssigned` |
+| Assign to the current assignee               | `TaskAlreadyAssigned` |
 | Reassign or unassign with no assignee        | `TaskNotAssigned`     |
 | Reassign to the current assignee             | `TaskAlreadyAssigned` |
 

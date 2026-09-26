@@ -48,7 +48,7 @@ Scope: runtime metadata and generated-registry documentation closure.
   command/event role validation from descriptors, explicit return-type rules
   including emitted schemas, explicit `void` for `@Subscribe` and no-emission
   `@React`, no app-owned materialization, no schema-bearing decorator forms, no
-  ordinary handler framework envelopes, no `@Apply`, and no manual end-user
+  ordinary handler framework envelopes, no event replay, and no manual end-user
   transactions.
 - Verification results:
   - `pnpm --config.verify-deps-before-run=false format:check`: passed.

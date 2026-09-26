@@ -1,5 +1,5 @@
-model = "gpt-5.6-terra"
-model_reasoning_effort = "high"
+model = "gpt-6-sol"
+model_reasoning_effort = "medium"
 
 developer_instructions = """
 Retain the existing performance/reliability review remit. Review only changed
