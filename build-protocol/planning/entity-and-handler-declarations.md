@@ -2,8 +2,10 @@
 
 Status: implementation, handler-result corrections, documentation, examples,
 and their local and CI verification are complete at `23b6e6c9a`. Three further
-independent review/fix rounds were requested on 26 September 2026 and are in
-progress; see the [review record](../reviews/handler-result-corrections.md).
+independent review/fix rounds requested on 26 September 2026 and local release
+verification of their corrections are complete. The final task reply and PR
+checks record CI for the final published commit. See the
+[review record](../reviews/handler-result-corrections.md).
 The human opened draft PR #10.
 
 Branch: `entity-and-signal-handler-declarations`

@@ -1,8 +1,9 @@
 # Handler result correction reviews
 
-Status: the preceding reviews and verification are complete. Three additional
-independent review/fix rounds were requested on 26 September 2026 and are in
-progress. Their findings and verification are recorded below.
+Status: all three additional independent review/fix rounds requested on
+26 September 2026 are complete. Every accepted finding is resolved; round
+three is clean. Local release and package-consumer verification passed. The
+final task reply and PR checks record CI for the final published commit.
 
 ## Three additional independent rounds
 
@@ -101,6 +102,41 @@ checks passed. Main inspected the final diff and real log summaries. Same
 retained implementer and explicit mechanical profile as round one.
 Logs: `/tmp/spine-three-reviews.gOd7Ht/round2-complete-*.log`.
 No round-two finding remains open.
+
+Round-two correction was pushed as `9ab30c65c`; the tree was clean. Round three
+reviews the whole updated branch in fresh standalone session
+`01a0dec6-f421-7a91-9df7-d672bb555b59`. Startup metadata confirms explicit
+`gpt-6-sol`, `medium`, read-only access, with memory and children disabled.
+No earlier reviewer reports or findings were supplied. Round three is CLEAN:
+no Spec or Standards findings and clean dispositions for style/maintainability,
+documentation, TypeScript/API, and performance/reliability. The reviewer traced
+Entity versions, output validation, declarations, retired API removal, tests,
+examples, and current documentation. Report:
+`/tmp/spine-three-reviews.gOd7Ht/round3.md`.
+
+All three standalone reviewer processes have exited. Main verified their
+explicit profiles and read their reports. Both accepted reviewer findings and
+the related correction regressions are fixed. The final cheap preflight passed:
+tooling types, formatting, audience checks, compiled documentation snippets,
+and diff whitespace, in addition to the focused 77-test and static evidence.
+The analyzer's existing compiler-integration coverage exclusion is unchanged;
+its changed paths are tested directly. Final `verify:release` passed 302 test
+files and 4,998 tests, with statements 93.27%, branches 90.04%, functions
+93.06%, and lines 94.43%. The package-consumer check also passed. An earlier
+interrupted run and the subsequent restart-test investigation are preserved
+in the work log; they are not represented as successful verification.
+Main read actual command exits and aggregate output. The code endpoint
+`9ab30c65c` also passed CI. The final records commit's CI is recorded externally
+in the final reply and PR checks, avoiding a further self-referential commit.
+
+TypeScript limitation: a hand-written exact `Message<"known.empty.Type">` can
+have the same checked type as that generated fieldless message. Matching a
+validated generated declaration by exact type identity preserves equivalent
+aliases; it does not provide nominal distinction that TypeScript has erased.
+Open-ended `Message<string>`, arbitrary objects, and unsupported signal roles
+remain rejected. No new nominal wrapper or validation API is introduced.
+
+## Earlier reviews — 25 September 2026
 
 Requirements: [task brief](../planning/handler-result-corrections.md).
 Review scope begins at `bbdcd319441b3c6153cc8db63b0cbb309ad411b8`.

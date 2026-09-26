@@ -2,8 +2,8 @@
 
 ## Additional review request — 26 September 2026
 
-Three sequential no-memory standalone reviews and correction batches are in
-progress on the same branch and checkout. High-risk classification is retained
+Three sequential no-memory standalone reviews and correction batches are
+complete on the same branch and checkout. High-risk classification is retained
 because the reviewed changes cover public contracts and persisted versions;
 no fresh architecture pass is needed unless a finding changes those contracts.
 Estimate: 1–2 hours including review (0.3–0.6), corrections and focused checks
@@ -47,6 +47,54 @@ separate failing test covered aliases imported through a helper module. The
 same implementer corrected these paths without changing the public contract.
 All 77 analyzer tests and affected static checks passed. Main inspected code
 and logs. Push this correction, then start the third fresh whole-branch review.
+
+Round three reviewed the whole corrected branch and returned CLEAN across all
+four concerns. All reviewer processes are closed. Remaining cheap preflight
+passed without code changes. Final mechanical verification is assigned to the
+same Luna/low function: run `pnpm verify:release` once, then
+`node scripts/release-cli.mjs prepare --check`. Only one test/build process may
+run at a time; use the release script's single-worker settings. Preserve global
+90% coverage thresholds and the pre-existing analyzer coverage policy. Main
+will read the actual logs, record results, push the final records, and confirm
+green CI at the exact final SHA. No finding remains open.
+
+Final verification encountered a failure in an unchanged managed-child restart
+test failure. The mechanical agent incorrectly interrupted the suite before
+its final assertion report, yielding exit 130 and no aggregate coverage. This
+run is not acceptance evidence. The execution instruction is corrected: let
+the test runner finish and print assertions; stop only subsequent commands.
+The isolated restart test passed, then its complete 58-test file passed.
+No production change is justified from that evidence. A bounded sequential
+repeat gathers timing evidence before the full cheap preflight and a new
+complete release run. Systematic-debugging was read and applied; the original
+failure is retained in `/tmp/spine-three-reviews.gOd7Ht/release.log` rather than
+discarded or described as fixed.
+
+All ten sequential isolated restart-test repeats passed, as did the full
+58-test file. No source change was made without a reproduced cause. The
+verification function is rerunning the entire cheap preflight before one
+complete release retry, with explicit instructions to allow the runner to
+finish naturally and preserve any final assertion report. This adds about
+0.25–0.33 hours to verification; final CI waiting remains separate.
+
+Final local acceptance is complete. The entire repeated cheap preflight
+passed. `pnpm verify:release` then finished naturally with exit 0: 302 test
+files and 4,998 tests passed in 582.60 seconds of test execution. Coverage:
+statements 93.27% (23817/25534), branches 90.04% (14040/15592), functions
+93.06% (6061/6513), lines 94.43% (22024/23321). The child-restart failure did
+not recur; its original cause was not established, and no speculative source
+change was made. `node scripts/release-cli.mjs prepare --check` exited 0.
+Logs: `/tmp/spine-three-reviews.gOd7Ht/retry-preflight.log`,
+`release-retry.log`, and `consumers.log`. Main inspected the real summaries and
+exit codes. No tracked generated output changed; only the four final task
+records remain to commit and push. All three reviewers and the implementation
+and verification agents have completed their work. No review finding remains.
+
+CI passed on code endpoint `9ab30c65c` in run `36259394658`. After the final
+record push, confirm required checks on its exact SHA and report that result
+in the final reply/PR checks; do not create another commit only to record it.
+
+## Earlier correction work — 25 September 2026
 
 Started: 2026-09-25. Status: implementation, reviews, and local release
 verification complete. The final task reply records the published commit and
