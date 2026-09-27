@@ -1,6 +1,6 @@
 # Entity dependency configuration review
 
-Status: Entity implementation review complete; all findings resolved. Publication choice and final release verification pending.
+Status: initial Entity review complete; three additional fresh review/fix rounds requested. Dual-tag automation is blocked by npm support; final release verification is pending.
 Branch: `entity-dependency-configuration`.
 Base: `794bd524b8875f10a75777a41bbebe1dbece600b`.
 
@@ -14,8 +14,9 @@ Entities, without changing stored messages, framework context bindings, or
 existing constructor/schema restrictions. Existing one-options constructors
 remain valid. The Projects example and public documentation teach the same API.
 
-The publication tag choice is pending human clarification. Do not treat the
-unimplemented publication amendment as a completed behavior.
+The human confirmed that both publication tags must advance. Supported npm
+trusted publishing cannot automate the second tag update; a manual-step choice
+is pending. Do not treat the unimplemented amendment as completed behavior.
 
 ## Independent assignments
 

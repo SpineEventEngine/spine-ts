@@ -18,8 +18,9 @@ Base: freshly fetched official `origin/master`,
   JVM syntax is not required. The preceding analysis is complete.
 - Continue in this chat and checkout; no additional chat or worktree, following
   the human's earlier explicit instruction.
-- Beginning with the next publication, npm `latest` must point at the newest
-  published snapshot. Do not mutate npm tags during this investigation.
+- Beginning with the next publication, both npm `latest` and `snapshot` must
+  point at the newest published snapshot. The human confirmed both must advance.
+  Do not mutate npm tags during this investigation.
 - Use simple explanations and concrete examples. No new dependency container,
   speculative lifecycle system, or unrelated infrastructure.
 
@@ -64,11 +65,11 @@ immutable dispatch settings are the acceptance evidence absent a mismatch.
 
 ## Next publication
 
-The human's new tag policy is binding for the next publication. Preserve the
-existing snapshot access and advance latest to the newly published snapshot.
-Implementation source checks found that the supported trusted-publishing flow
-sets one tag per publication. A human clarification about continued snapshot
-tag advancement is pending in the work log. Do not introduce private token
+The human's new tag policy is binding for the next publication: advance both
+snapshot and latest to the newly published snapshot. Implementation source
+checks found that the supported trusted-publishing flow sets one tag per
+publication. Verification of a supported way to advance both is pending in the
+work log; the desired policy is no longer an open question. Do not introduce private token
 handling or mutate live tags. Version preparation has advanced to snapshot.16.
 
 ## Confirmed source findings

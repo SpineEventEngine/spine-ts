@@ -235,6 +235,28 @@ findings with their expected explicit Sol/medium profiles; reliability is pendin
 
 ## Review corrections
 
+Human follow-up requests three additional sequential whole-changeset review/fix
+rounds. Each receives fresh context with no history or memory, explicit
+gpt-6-sol/medium, using the existing performance/reliability review role for
+whole-change correctness and regressions; the prior specialist dispositions
+remain recorded. Reviewers read the full diff and requirements, do not edit or
+run heavy checks, and do not dispatch children. Collect each complete report,
+fix accepted findings in the retained implementation context, verify affected
+behavior, then start the next fresh review. Estimate: 0.5–0.9 additional hours
+for these three rounds and focused rechecks. The human request overrides the
+normal limit on complete review rounds. Round one can review the current Entity
+changes while the independent publication API investigation runs read-only;
+any subsequent release implementation must also receive review.
+
+Dispatch correction: the initial performance/reliability reviewer reported no
+findings but confirmed its configured instructions prevent a whole-changeset
+review. Its result is retained only as reliability evidence, not counted as
+one of the human's three rounds. For those rounds, dispatch a fresh default
+agent explicitly as the human-requested whole-changeset review function with
+Sol/medium, covering the existing technical and documentation concerns; do not
+create or rename a persistent project role. No prior results or memory enter
+these fresh reviewer contexts.
+
 The independent review wave completed. Style and TypeScript/API found no
 issues. Reliability found no runtime defect but identified missing tests for
 history access and tenant-aware Process Manager queries on injected instances.
@@ -266,7 +288,42 @@ exists for this branch at the last GitHub check, so no branch CI result is
 available. The final release profile is deferred until the publication choice
 below is resolved; scoped passing checks are not a claim of release readiness.
 
-## Pending publication choice
+## Publication support and human decision
+
+27 September follow-up: the human answered "Both tags advance." Future snapshot
+publication must advance both latest and snapshot to the same version; leaving
+snapshot behind is rejected. The remaining question is technical support, not
+the intended policy. No stored npm credential, patched third-party library,
+private authentication workaround, or live publication is authorized.
+
+Estimate: 0.2–0.4 hours for supported-API verification, plus 0.4–0.8 hours for
+implementation, review, and checks if a supported credential-free path exists.
+This continues the existing high-risk release slice and branch. Main re-read
+systematic-debugging for source-first constraint verification. Desktop still
+supports the explicit profiles. A read-only version-specific API function is
+assigned gpt-6-luna/medium to check current npm CLI and registry documentation,
+including dist-tag authentication and multi-tag publication. No builds, tests,
+live registry writes, credential reads, or child dispatches are permitted.
+Runtime introspection is not separately exposed; explicit dispatch fields are
+the profile evidence absent a visible mismatch.
+
+The fresh Luna/medium investigation completed using the explicit profile,
+read-only, without memory, file changes, builds, tests, registry writes or
+child dispatches. It confirms the same limitation in pinned npm 11.16.0 and
+current upstream CLI: publish accepts one tag; dist-tag uses traditional auth,
+not the publish-only OIDC helper. The registry can represent both tags, but
+the supported trusted-publishing flow cannot automate both. Re-publishing the
+same version is prohibited; staged publishing also selects one tag and requires
+human approval. Main independently checked the current official documentation.
+Sources: [trusted-publishing limitations](https://docs.npmjs.com/trusted-publishers/#limitations-and-future-improvements),
+[pinned publish command](https://github.com/npm/cli/blob/v11.16.0/lib/commands/publish.js),
+[pinned dist-tag command](https://github.com/npm/cli/blob/v11.16.0/lib/commands/dist-tag.js),
+and [publish tag contract](https://docs.npmjs.com/cli/v11/commands/npm-publish/#tag).
+
+An asynchronous question asks whether a manual authenticated second-tag step
+after each CI publication is acceptable without storing a token in GitHub.
+Only that supported-process choice can unblock the release slice under the
+current constraints. Entity review rounds continue independently.
 
 The Luna/medium API investigation completed read-only. Main verified the current
 [npm trusted-publishing limitations](https://docs.npmjs.com/trusted-publishers/#limitations-and-future-improvements)
@@ -276,8 +333,6 @@ a supported dual-tag option. Separate npm dist-tag mutation is outside the
 documented trusted-publishing command support. No token fallback, third-party
 patch, custom OIDC credential reuse, or live tag mutation is introduced.
 
-An asynchronous question asks whether future snapshots should publish under
-latest while the existing snapshot tag stays unchanged, or whether advancing
-both remains required. Await this choice before release-policy implementation;
-continue the independent Entity runtime work. This is not a blocker for that
-runtime slice.
+The earlier asynchronous question offered latest-only publication or continued
+advancement of both tags. The human rejected latest-only; the remaining
+manual-step question and supported-flow limitation are recorded above.

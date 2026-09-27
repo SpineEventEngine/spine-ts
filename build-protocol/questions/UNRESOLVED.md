@@ -8,14 +8,15 @@ Template: `build-protocol/templates/UNRESOLVED_QUESTIONS_TEMPLATE.md`.
 
 ## Blocking Questions
 
-- 2026-09-27, Entity dependency configuration: future publications must advance
-  npm `latest` to the newest snapshot. Must `snapshot` also keep advancing, or
-  may it stay at its current version while future snapshots use `latest`?
-  The supported npm trusted-publishing flow sets one tag per publication and
-  does not support separate `dist-tag` commands. This blocks the publication
-  policy change, not the independent Entity implementation. The recommendation
-  and source evidence are in the
-  [work log](../work-logs/entity-dependency-configuration.md#pending-publication-choice).
+- 2026-09-27, Entity dependency configuration: the human confirmed that both
+  npm `latest` and `snapshot` must advance to the newest snapshot. Current
+  official npm documentation and CLI source provide no supported automated
+  way to do that using only trusted publishing: publication sets one tag,
+  and the separate `dist-tag` command requires traditional authentication.
+  Would a manual authenticated second-tag step after each CI publication be
+  acceptable, without storing a token in GitHub? This blocks the publication
+  change, not the independent Entity reviews. Source evidence is in the
+  [work log](../work-logs/entity-dependency-configuration.md#publication-support-and-human-decision).
   The question has been sent to the human; no token fallback or live tag change
   is approved.
 
