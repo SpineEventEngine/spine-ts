@@ -209,7 +209,8 @@ these mechanical corrections; the public documentation review is retained.
 
 Report correction: the implementer disclosed an earlier manual restoration of
 the generationId strings in examples/projects/spine-proto-manifest.json and
-the ignored generated/.spine-proto-generation.json after scoped generation.
+generated/.spine-proto-generation.json after scoped generation. The latter
+marker is tracked as an explicit exception inside the ignored generated tree.
 This violated the required generated-output boundary; the earlier blanket
 "not hand-edited" claim was incorrect. No Protobuf source or generated message
 or handler body was hand-edited. Canonical root generation has rewritten both
@@ -223,6 +224,47 @@ canonical artifacts: 22 files and 633 tests passed again; whitespace passed.
 The source is frozen for the three fresh technical reviewers, with the already
 completed public-documentation review retained in the same wave. New decision
 branches and the corresponding behavior/type tests are mapped in the review log.
+
+The implementation checkpoint cc3a0de14 was pushed. Main's explicit staging
+list initially omitted the tracked generation marker; its value was verified
+equal to the already committed manifest and added in pushed commit 0bd063089.
+This records the same canonical generated artifacts used in the passing tests,
+not a new runtime change. GitHub reports no open PR for this branch, so no PR
+Build run exists yet. Independent style and TypeScript/API reviews returned no
+findings with their expected explicit Sol/medium profiles; reliability is pending.
+
+## Review corrections
+
+The independent review wave completed. Style and TypeScript/API found no
+issues. Reliability found no runtime defect but identified missing tests for
+history access and tenant-aware Process Manager queries on injected instances.
+These are required by the approved plan, so the finding is accepted. The
+retained Sol/medium implementer received one bounded correction batch, without
+new agents or production changes unless a test exposes a defect. Main corrects
+the Projects README to describe the actual Commands and resulting Events.
+Only the affected reliability concern will be reviewed again.
+
+The new focused query check passes for tenant A, tenant B, then restored tenant
+A, with callback Versions 0, 0, 1 and separate query results. The first history
+check failed because its new Aggregate Assign fixture returned no Event, which
+the existing runtime correctly rejects. The fixture now returns ProjectCreated
+with the corresponding outcome metadata. Both focused checks pass: restored
+history contains the earlier service-derived state, callback Versions are 0, 1,
+and final state uses the same service. No production change was needed. Full
+affected-file and mechanical checks precede the limited review follow-up.
+
+The retained implementer completed the correction using the accepted explicit
+Sol/medium profile. All 299 tests in both affected files pass without filtering;
+tooling typecheck, targeted ESLint, formatting, and whitespace also pass. No
+runtime code changed. The retained reliability reviewer is checking only its
+original finding and this correction, using its existing Sol/medium profile.
+
+The reliability follow-up confirms the P2 resolved with no remaining finding
+or introduced defect. The Entity implementation and documentation review is
+complete. The correction will be committed and pushed immediately. No PR
+exists for this branch at the last GitHub check, so no branch CI result is
+available. The final release profile is deferred until the publication choice
+below is resolved; scoped passing checks are not a claim of release readiness.
 
 ## Pending publication choice
 

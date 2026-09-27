@@ -32,6 +32,7 @@ import {
   BoundedContext,
   type DescriptorMessageSchema,
   EntityHandlers,
+  type EntityOptions,
   ProcessManager,
   Projection,
   Repository,
@@ -77,10 +78,23 @@ class QueryProjection extends Projection<string, typeof ProjectOverviewStateSche
   }
 }
 
+interface ProjectionNameFilter {
+  match(name: string): string;
+}
+
+const identityNameFilter: ProjectionNameFilter = { match: (name) => name };
+
 class QueryProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   static results: readonly ProjectOverviewState[] = [];
   static predicate: unknown;
   static failure: unknown;
+
+  constructor(
+    options: EntityOptions<string, typeof ProcessManagerStateSchema>,
+    private readonly nameFilter: ProjectionNameFilter,
+  ) {
+    super(options);
+  }
 
   static reset(): void {
     this.results = [];
@@ -103,7 +117,7 @@ class QueryProcessManager extends ProcessManager<string, typeof ProcessManagerSt
           ? await query.all()
           : await query
               .byId(command.id)
-              .where(EntityQuery.eq(projectionColumns.name, command.name))
+              .where(EntityQuery.eq(projectionColumns.name, this.nameFilter.match(command.name)))
               .read();
     } catch (error) {
       QueryProcessManager.failure = error;
@@ -140,7 +154,10 @@ function projectionRepository(): Repository<typeof QueryProjection> {
   });
 }
 
-function processManagerRepository(): Repository<typeof QueryProcessManager> {
+function processManagerRepository(
+  nameFilter: ProjectionNameFilter = identityNameFilter,
+  createdVersions?: number[],
+): Repository<typeof QueryProcessManager> {
   return new Repository({
     entityType: QueryProcessManager,
     schema: ProcessManagerStateSchema,
@@ -159,6 +176,10 @@ function processManagerRepository(): Repository<typeof QueryProcessManager> {
       ],
     ),
     events: [ProjectionEventSchema],
+    onCreate(options) {
+      createdVersions?.push(options.version?.number ?? -1);
+      return new QueryProcessManager(options, nameFilter);
+    },
   });
 }
 
@@ -188,13 +209,16 @@ function queryCommand(id: string, name: string, tenant?: string, suffix?: string
 
 describe("Process Manager querying", () => {
   it("offers a typed, read-only query only during handler execution", async () => {
-    const manager = new QueryProcessManager({
-      id: "process-1",
-      schema: ProcessManagerStateSchema,
-      state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
-      version: create(VersionSchema, { number: 1 }),
-      lifecycle: { archived: false, deleted: false },
-    });
+    const manager = new QueryProcessManager(
+      {
+        id: "process-1",
+        schema: ProcessManagerStateSchema,
+        state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
+        version: create(VersionSchema, { number: 1 }),
+        lifecycle: { archived: false, deleted: false },
+      },
+      identityNameFilter,
+    );
 
     expect(() => manager.query()).toThrow(
       "Process Manager queries are available only during repository handler execution.",
@@ -235,13 +259,16 @@ describe("Process Manager querying", () => {
   });
 
   it("caps an unlimited read at 1,000 states", async () => {
-    const manager = new QueryProcessManager({
-      id: "process-1",
-      schema: ProcessManagerStateSchema,
-      state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
-      version: create(VersionSchema, { number: 1 }),
-      lifecycle: { archived: false, deleted: false },
-    });
+    const manager = new QueryProcessManager(
+      {
+        id: "process-1",
+        schema: ProcessManagerStateSchema,
+        state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
+        version: create(VersionSchema, { number: 1 }),
+        lifecycle: { archived: false, deleted: false },
+      },
+      identityNameFilter,
+    );
     const states = Object.freeze(
       Array.from({ length: 1_001 }, (_, index) =>
         create(ProjectOverviewStateSchema, {
@@ -271,9 +298,17 @@ describe("Process Manager querying", () => {
 
   it("reads only projection state from the active tenant", async () => {
     QueryProcessManager.reset();
+    const matchedNames: string[] = [];
+    const createdVersions: number[] = [];
+    const nameFilter: ProjectionNameFilter = {
+      match(name) {
+        matchedNames.push(name);
+        return name;
+      },
+    };
     const context = BoundedContext.multitenant("ProcessManagerQueries")
       .add(projectionRepository())
-      .add(processManagerRepository())
+      .add(processManagerRepository(nameFilter, createdVersions))
       .build();
     const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } });
     const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-b" } });
@@ -303,6 +338,13 @@ describe("Process Manager querying", () => {
       expect(QueryProcessManager.results).toEqual([
         create(ProjectOverviewStateSchema, { id: "shared", name: "B", priority: 2 }),
       ]);
+
+      await context.commandBus().post(queryCommand("shared", "A", "tenant-a", "restored"));
+      expect(QueryProcessManager.results).toEqual([
+        create(ProjectOverviewStateSchema, { id: "shared", name: "A", priority: 1 }),
+      ]);
+      expect(createdVersions).toEqual([0, 0, 1]);
+      expect(matchedNames).toEqual(["A", "B", "A"]);
     } finally {
       await context.close();
     }

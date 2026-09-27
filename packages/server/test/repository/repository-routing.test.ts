@@ -271,6 +271,8 @@ interface ProjectLabelService {
 
 class InjectedProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   static calls = 0;
+  static retainedNames: readonly (readonly string[])[] = [];
+
   constructor(
     options: EntityOptions<string, typeof ProjectStateSchema>,
     private readonly service: ProjectLabelService,
@@ -280,6 +282,18 @@ class InjectedProjectAggregate extends Aggregate<string, typeof ProjectStateSche
 
   createProject(command: CreateProject): ProjectCreated {
     InjectedProjectAggregate.calls++;
+    this.update((draft) => {
+      draft.name = this.service.label(command.name);
+    });
+    return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
+  }
+
+  async createProjectWithHistory(command: CreateProject): Promise<ProjectCreated> {
+    const previous = await this.stateHistoryBackward(2);
+    InjectedProjectAggregate.retainedNames = [
+      ...InjectedProjectAggregate.retainedNames,
+      previous.map((state) => state.name),
+    ];
     this.update((draft) => {
       draft.name = this.service.label(command.name);
     });
@@ -2210,6 +2224,58 @@ describe("repository signal routing", () => {
       await context.close();
     }
   });
+
+  it("binds retained history on an injected restored aggregate", async () => {
+    const service: ProjectLabelService = { label: (name) => `${name} retained` };
+    const versions: number[] = [];
+    const previousTrace = InjectedProjectAggregate.retainedNames;
+    InjectedProjectAggregate.retainedNames = [];
+    const repository = new Repository({
+      entityType: InjectedProjectAggregate,
+      schema: ProjectStateSchema,
+      handlers: HandlerMetadataValues.defineArity(
+        InjectedProjectAggregate,
+        ProjectStateSchema,
+        (builder) => [builder.assign(CreateProjectSchema, "createProjectWithHistory")],
+        [
+          {
+            kind: "command-assignment",
+            methodName: "createProjectWithHistory",
+            parameterCount: 1,
+            outcomes: handlerOutcomes([ProjectCreatedSchema]),
+          },
+        ],
+      ),
+      events: [ProjectCreatedSchema],
+      onCreate(options) {
+        versions.push(options.version?.number ?? -1);
+        return new InjectedProjectAggregate(options, service);
+      },
+    });
+    repository.setStateHistoryEnabled(true);
+    const context = BoundedContext.singleTenant("HistoryInjectedTasks").add(repository).build();
+
+    try {
+      await context
+        .commandBus()
+        .post(createAggregateCommand("history-injected-1", "history-injected", "First"));
+      await context
+        .commandBus()
+        .post(createAggregateCommand("history-injected-2", "history-injected", "Second"));
+
+      expect(versions).toEqual([0, 1]);
+      expect(InjectedProjectAggregate.retainedNames).toEqual([[], ["First retained"]]);
+      await expect(
+        context.stand().read(ProjectStateSchema, "history-injected"),
+      ).resolves.toMatchObject({
+        name: "Second retained",
+      });
+    } finally {
+      InjectedProjectAggregate.retainedNames = previousTrace;
+      await context.close();
+    }
+  });
+
   it("uses the current Todo descriptor type names in routing fixtures", () => {
     expect(TaskIdSchema.typeName).toBe("spine.examples.todo.TaskId");
     expect(TaskSchema.typeName).toBe("spine.examples.todo.Task");

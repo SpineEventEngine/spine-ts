@@ -8,7 +8,16 @@ Template: `build-protocol/templates/UNRESOLVED_QUESTIONS_TEMPLATE.md`.
 
 ## Blocking Questions
 
-None.
+- 2026-09-27, Entity dependency configuration: future publications must advance
+  npm `latest` to the newest snapshot. Must `snapshot` also keep advancing, or
+  may it stay at its current version while future snapshots use `latest`?
+  The supported npm trusted-publishing flow sets one tag per publication and
+  does not support separate `dist-tag` commands. This blocks the publication
+  policy change, not the independent Entity implementation. The recommendation
+  and source evidence are in the
+  [work log](../work-logs/entity-dependency-configuration.md#pending-publication-choice).
+  The question has been sent to the human; no token fallback or live tag change
+  is approved.
 
 ## Non-Blocking Questions
 

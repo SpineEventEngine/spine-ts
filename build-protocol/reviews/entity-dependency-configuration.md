@@ -1,6 +1,6 @@
 # Entity dependency configuration review
 
-Status: scoped preflight passed; public documentation review complete and technical reviews starting.
+Status: Entity implementation review complete; all findings resolved. Publication choice and final release verification pending.
 Branch: `entity-dependency-configuration`.
 Base: `794bd524b8875f10a75777a41bbebe1dbece600b`.
 
@@ -26,12 +26,12 @@ All model and reasoning fields will be explicit. The surface does not expose
 separate runtime self-inspection; the immutable dispatch configuration is the
 profile evidence absent a visible mismatch.
 
-| Existing role                    | Model      | Reasoning | Scope                                                                                                                     | Disposition                     |
-| -------------------------------- | ---------- | --------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| style_maintainability_reviewer   | gpt-6-sol  | medium    | Changed construction helpers, callback storage, registration types, example code, maintainability                         | Pending                         |
-| typescript_api_docs_reviewer     | gpt-6-sol  | medium    | Required/optional factories, ID/schema/result inference, generated registration, declaration output, TSDoc                | Pending                         |
-| performance_reliability_reviewer | gpt-6-sol  | medium    | Creation/restoration/rebuild, error ordering, framework bindings, independent contexts, persistence and resource lifetime | Pending                         |
-| documentation_reviewer           | gpt-6-luna | medium    | Changed public guides, example instructions and claims, explanatory clarity, current contract                             | Completed; one wording advisory |
+| Existing role                    | Model      | Reasoning | Scope                                                                                                                     | Disposition                           |
+| -------------------------------- | ---------- | --------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| style_maintainability_reviewer   | gpt-6-sol  | medium    | Changed construction helpers, callback storage, registration types, example code, maintainability                         | Completed; no findings                |
+| typescript_api_docs_reviewer     | gpt-6-sol  | medium    | Required/optional factories, ID/schema/result inference, generated registration, declaration output, TSDoc                | Completed; no findings                |
+| performance_reliability_reviewer | gpt-6-sol  | medium    | Creation/restoration/rebuild, error ordering, framework bindings, independent contexts, persistence and resource lifetime | Completed; P2 resolved on follow-up   |
+| documentation_reviewer           | gpt-6-luna | medium    | Changed public guides, example instructions and claims, explanatory clarity, current contract                             | Completed; wording advisory corrected |
 
 Security review is not a separate task-level requirement: this feature changes
 neither authorization nor credential handling. Reassess if the publication
@@ -78,6 +78,30 @@ This is a P3 wording advisory, retained for the complete correction batch.
 Use "posts two CreateTask Commands" rather than the suggested "creates two
 tasks": the actual test posts twice for the same task ID to exercise restoration.
 
-Technical concerns remain pending. Collect the full wave before assigning one
-correction batch to the existing implementer. Re-review only substantively
-affected concerns. Final release checks remain required after convergence.
+All three technical reviews completed with the expected explicit Sol/medium
+profiles and fresh context. Style and TypeScript/API returned no findings.
+Reliability found no concrete runtime regression, but reported one accepted P2
+coverage gap: the injected-instance tests do not exercise restored history
+access or tenant-aware Process Manager queries. Both are explicit requirements
+of the approved plan; ordinary-constructor tests alone do not demonstrate them.
+
+The complete correction batch was returned to the retained implementer, using
+its existing Sol/medium profile: add those focused checks, and add a failure
+report assertion if straightforward. Main corrects the example wording above.
+Only reliability coverage needs a follow-up review. Final release checks remain
+required after convergence and resolution of the publication choice.
+
+Correction preflight passes: all 299 tests in the two affected files,
+workspace tooling typecheck, targeted ESLint, formatting, and whitespace. The
+correction changes tests only. The retained reliability reviewer receives the
+bounded follow-up using its existing explicit Sol/medium profile; it checks
+the original P2 and the added tests, without reopening unchanged concerns or
+running duplicate verification. The example wording advisory is corrected.
+
+The follow-up review confirms the P2 resolved, with no introduced defect:
+the restored injected Aggregate reads the prior persisted state, and the
+injected Process Manager reads tenant-specific Projections across A/B/A with
+the expected callback Versions. The explicit retained Sol/medium profile is
+accepted; no runtime metadata mismatch was visible. All accepted Entity review
+findings are resolved. Publication policy and the final release gate remain
+pending; no remote CI success is claimed for this branch.

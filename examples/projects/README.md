@@ -92,9 +92,10 @@ service itself is not saved in storage. The callback is synchronous. Prepare
 async clients before creating the context and close them after context shutdown.
 
 Without an argument, the example uses weight one, so its existing load scenario
-is unchanged. The focused example test supplies weight three, delivers two
-`TaskCreated` Events, and checks a saved total of six at version two. This
-checks both the first object and a later object restored from its saved state.
+is unchanged. The focused example test supplies weight three, posts two
+`CreateTask` Commands, handles the resulting `TaskCreated` Events, and checks
+a saved total of six at version two. This checks both the first object and a
+later object restored from its saved state.
 See the [Entity dependency guide](../../docs/USER_GUIDE.md#give-an-entity-an-application-service)
 for the general API.
 
