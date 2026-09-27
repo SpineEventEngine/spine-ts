@@ -357,6 +357,17 @@ publication; these classes do not expose public transaction controls.
 Aggregates and Process Managers provide the protected, repository-bound
 event-history methods documented below; Projections intentionally do not.
 Process Managers also provide protected `select()` reads of Projections.
+To pass an application service to an Entity constructor, supply `onCreate` in
+`RepositoryOptions`, or in the second argument of
+`BoundedContextBuilder.add(EntityClass, options)`. Spine supplies typed
+`EntityOptions`; the callback passes them to a fresh instance together with the
+service. The callback is required if the constructor cannot accept framework
+options alone. It runs for fresh and restored objects of all three Entity
+families, including Projection rebuilds. It is synchronous, returns the
+registered class, and does not replace framework history or query setup.
+Application services are not persisted or closed by Spine. See the
+[constructor dependency contract](../../packages/server/REFERENCE.md#entity-constructor-dependencies)
+for lifecycle and failure behavior.
 `Repository`, `RepositoryOptions`, `RepositoryEntityType`,
 `ConcreteRepositoryEntityType`, `RepositoryStateSchema`,
 `RepositoryIdentitySnapshot`, `RepositoryIdentityError`,

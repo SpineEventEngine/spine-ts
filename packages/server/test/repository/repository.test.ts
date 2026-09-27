@@ -59,6 +59,28 @@ function expectRepositoryIdentityError(
 class TaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
 class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {}
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {}
+class RequiredServiceProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema
+> {
+  constructor(
+    options: EntityOptions<string, typeof ProcessManagerStateSchema>,
+    readonly service: string,
+  ) {
+    super(options);
+  }
+}
+class OptionalServiceProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema
+> {
+  constructor(
+    options: EntityOptions<string, typeof ProcessManagerStateSchema>,
+    readonly service?: string,
+  ) {
+    super(options);
+  }
+}
 class RuntimeCheckedAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
 class CommandTransformingProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   transformTask(command: CreateReviewProject): CreateReviewProject {
@@ -646,6 +668,42 @@ describe("repository identity", () => {
       new Repository({
         entityType: TaskProcessManager,
         schema: ProcessManagerStateSchema,
+      });
+      // @ts-expect-error required service constructor needs onCreate.
+      new Repository({
+        entityType: RequiredServiceProcessManager,
+        schema: ProcessManagerStateSchema,
+      });
+      new Repository({
+        entityType: RequiredServiceProcessManager,
+        schema: ProcessManagerStateSchema,
+        onCreate(options) {
+          expectTypeOf(options).toEqualTypeOf<
+            EntityOptions<string, typeof ProcessManagerStateSchema>
+          >();
+          return new RequiredServiceProcessManager(options, "ready");
+        },
+      });
+      new Repository({
+        entityType: OptionalServiceProcessManager,
+        schema: ProcessManagerStateSchema,
+      });
+      new Repository({
+        entityType: OptionalServiceProcessManager,
+        schema: ProcessManagerStateSchema,
+        onCreate: (options) => new OptionalServiceProcessManager(options, "optional"),
+      });
+      new Repository({
+        entityType: TaskProcessManager,
+        schema: ProcessManagerStateSchema,
+        // @ts-expect-error onCreate must return the registered Process Manager.
+        onCreate: () => new TaskAggregate({} as EntityOptions<string, typeof ProjectStateSchema>),
+      });
+      new Repository({
+        entityType: TaskProcessManager,
+        schema: ProcessManagerStateSchema,
+        // @ts-expect-error asynchronous creation is unsupported.
+        onCreate: (options) => Promise.resolve(new TaskProcessManager(options)),
       });
       new Repository({
         entityType: TaskAggregate,

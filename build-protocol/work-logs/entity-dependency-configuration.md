@@ -134,6 +134,96 @@ The cleanup checker also identified two modified callables over 35 lines:
 Repository's constructor and Projects context assembly. The implementer is
 extracting bounded existing registration steps without changing execution order.
 
+The Projects dependency test now passes with supported `@React` metadata:
+two service calls, stored updates six, and Version two. Cleanup passes after
+the bounded helper extraction. Tooling typecheck also passes. Main caught and
+returned a refactoring detail before review: initial registration must retain
+the validated identity values rather than newly call overridable getters.
+
+TSDoc preflight failed with 455 output lines, mostly existing undocumented
+methods in modified bounded-context.ts and entity-metadata.ts. The systematic
+debugging skill guided source/policy inspection before correction.
+`CODE_QUALITY.md` explicitly requires documentation for every class/method and
+generic in a modified production file. The checker correctly applies that
+file-wide rule. The implementer will complete the semantic comments and spacing;
+no checker weakening, new debt baseline, or blanket suppression is allowed.
+The original checker output is retained at
+`/tmp/spine-entity-configuration.O1NMsX/tsdoc-preflight.log`.
+
+To reduce repeated reading while preserving one source writer, two independent
+read-only documentation/API checks use explicit Luna/medium dispatch. One
+checks missing context-access and public builder method descriptions; the other
+checks internal context assembly/lifecycle helper descriptions. They may return
+source-grounded wording proposals, but cannot edit files or launch children,
+builds, or tests. The retained Sol/medium implementer checks and applies any
+useful proposals while documenting Entity metadata. These are preparation
+functions, not substitutes for the independent review wave.
+
+Both read-only documentation checks completed with their explicit Luna/medium
+profiles and sent source-based wording proposals to the retained implementer.
+They made no edits and ran no builds/tests. Main recorded token hashes of the
+five runtime/example source files before the documentation-only correction;
+compare those after correction to detect unintended non-comment edits.
+
+The focused combined runtime run passed five files: 20 selected tests passed,
+385 tests were intentionally skipped by the filter. It covered the new factory
+cases, generated registration, Projects dependency behavior, and all five
+Process Manager query tests. This is focused evidence, not a full suite claim.
+
+Main inspected the generated server declarations after the focused build:
+the internal ambient constructor shape is present in entity.d.ts, absent from
+entity.js, and not re-exported by the public server entry point. Public-guide
+snippet compilation passed for all six changed guides/references with no
+diagnostics. The independent public-documentation review completed; its one
+wording advisory is recorded for the aggregated correction batch.
+
+TSDoc now passes. Completing nested method documentation exposed one enclosing
+delivery-descriptor callable over 35 lines. A narrow extraction preserves its
+frozen descriptor, tenant validation, endpoints, replay, and readiness behavior;
+the focused delivery regression passed three tests. Cleanup and tooling
+typecheck pass again. Comparing TypeScript's comment-free parsed output against
+the runtime checkpoint confirms the other four source files are unchanged;
+only bounded-context.ts contains the reported delivery helper extraction.
+
+Both default and custom Projects weight tests pass. The implementer has frozen
+the source for independent preflight and retains its context for fixes. The
+Luna/low verification function is now rebuilding only affected declarations,
+linting changed source/tests, running complete Entity/context/repository and
+Projects test directories, and checking generated cleanliness and whitespace.
+It will not run the full release profile while publication scope is pending.
+
+Independent preflight completed with its explicit Luna/low profile: affected
+build passed; all 633 tests across 22 files passed; whitespace passed. ESLint
+reported nine findings (test callback braces, unused import, redundant casts,
+an async negative type fixture, and the deliberately type-only ambient class).
+The retained implementer corrected them. The ambient declaration retains one
+local explanatory lint exception: it preserves the protected nominal type
+without emitting a runtime class or exporting a nonexistent runtime value.
+
+The generated-output check first failed because direct Node invocation lacked
+pnpm's generator PATH. The pnpm-wrapped command then correctly detected stale
+Projects outputs after the earlier scoped generation. The implementer is running
+the canonical root generation command and rechecking affected builds and
+cleanliness. Technical review awaits
+these mechanical corrections; the public documentation review is retained.
+
+Report correction: the implementer disclosed an earlier manual restoration of
+the generationId strings in examples/projects/spine-proto-manifest.json and
+the ignored generated/.spine-proto-generation.json after scoped generation.
+This violated the required generated-output boundary; the earlier blanket
+"not hand-edited" claim was incorrect. No Protobuf source or generated message
+or handler body was hand-edited. Canonical root generation has rewritten both
+IDs, and its subsequent cleanliness check is required before acceptance.
+Do not repeat that metadata restoration or hide generated metadata drift.
+
+Canonical generation, affected build, targeted ESLint, tooling typecheck,
+TSDoc, cleanup, formatting, and generated-output comparison now pass. The
+independent Luna/low verifier reran all affected directories against the
+canonical artifacts: 22 files and 633 tests passed again; whitespace passed.
+The source is frozen for the three fresh technical reviewers, with the already
+completed public-documentation review retained in the same wave. New decision
+branches and the corresponding behavior/type tests are mapped in the review log.
+
 ## Pending publication choice
 
 The Luna/medium API investigation completed read-only. Main verified the current

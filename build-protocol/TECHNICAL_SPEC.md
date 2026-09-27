@@ -90,6 +90,32 @@ committed version. Emitted Events carry the producer's pre-dispatch version,
 matching current Spine JVM behavior. Applications do not set or increment
 Entity versions manually.
 
+## Entity Dependencies
+
+Applications may supply a synchronous `onCreate(options)` callback when
+registering an Entity class or an explicit Repository. It constructs the
+registered Entity with the supplied `EntityOptions` and application dependencies.
+The callback is required when the constructor needs arguments that the default
+one-options construction cannot supply. Ordinary Entity constructors need no
+callback. Keep the existing concrete ID/state-schema type checks.
+
+The repository calls the callback when constructing an object for handling,
+including restoration from stored state and Projection rebuilds. It is not a
+notification of the first creation of a persistent Entity ID. The callback must
+return a fresh instance of the registered class synchronously and pass the
+framework's state, Version, and lifecycle options through unchanged. A wrong
+result or thrown error prevents handler invocation and business-state commit;
+normal infrastructure failure reporting remains in place.
+
+Framework history and Process Manager query bindings remain separate from
+application construction. Dependencies are ordinary application objects, never
+Proto state or generated registry data. Applications initialize shared clients
+before building the context and close them during application shutdown. The
+factory does not receive tenant or actor information; tenant-aware services
+receive validated context through their handler calls. Dependency injection
+adds no external-side-effect rollback, async constructor, disposal hook, cache,
+container, or wire/storage format.
+
 ## End-User Handler API Invariants
 
 These invariants come from human clarification on `2026-07-07` and are

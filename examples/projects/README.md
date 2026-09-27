@@ -10,6 +10,7 @@ creation event through a query-side Projection subscription.
 - ✅ How generated handlers connect commands and events to domain code.
 - ✅ How a Node client posts `CreateProject`, queries `ProjectSummary`, and
   observes an update.
+- ✅ How to give a Process Manager an application service through its constructor.
 - ✅ How to run a bounded, repeatable local load scenario.
 
 ## 🚀 Run it
@@ -62,6 +63,40 @@ createProject(command: CreateProject): ProjectCreated {
 `ProjectSummaryProjection` observes `ProjectCreated` to make a queryable
 summary. The additional Aggregates, Process Managers, and Projections give the
 load topology realistic fan-out; they do not add a production deployment.
+
+## Give a Process Manager an application service
+
+When a task is created, `AssignmentManager` adds its weight to a saved counter.
+The application supplies the weight calculation through an
+`AssignmentWeightService`. This keeps the calculation separate from the
+Process Manager's stored state.
+
+<!-- docs-snippet-path: examples/projects/test/topology.test.ts -->
+
+```ts
+import { createProjectManagementContext, type AssignmentWeightService } from "../src/index.js";
+
+// This example service counts each task as three units of work.
+const weights: AssignmentWeightService = { weightFor: () => 3 };
+const context = await createProjectManagementContext(weights);
+
+// Use the context to handle messages, then close it during shutdown.
+await context.close();
+```
+
+Inside `createProjectManagementContext()`, registration uses
+`onCreate: (options) => new AssignmentManager(options, weights)`. Spine supplies
+the ID, state, version, and lifecycle options. The application adds its shared
+service. Each restored Process Manager receives that service again; the
+service itself is not saved in storage. The callback is synchronous. Prepare
+async clients before creating the context and close them after context shutdown.
+
+Without an argument, the example uses weight one, so its existing load scenario
+is unchanged. The focused example test supplies weight three, delivers two
+`TaskCreated` Events, and checks a saved total of six at version two. This
+checks both the first object and a later object restored from its saved state.
+See the [Entity dependency guide](../../docs/USER_GUIDE.md#give-an-entity-an-application-service)
+for the general API.
 
 ## 🗄️ Add persistence deliberately
 

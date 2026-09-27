@@ -245,12 +245,34 @@ interface RepositoryRegistration {
 }
 
 interface RegisteredEntityInbox extends EntityInbox {
+  /**
+   * Registers an Aggregate or Process Manager target for local delivery.
+   *
+   * @param target Target delivery metadata.
+   */
   register(target: EntityInboxTarget): void;
+
+  /**
+   * Lists endpoints registered for local Entity work.
+   *
+   * @returns Registered delivery endpoints.
+   */
   endpoints(): readonly DeliveryEndpoint[];
 }
 
 interface PrjInbox extends ProjectionInbox {
+  /**
+   * Registers a Projection target for local subscriber delivery.
+   *
+   * @param target Subscriber delivery metadata.
+   */
   register(target: ProjectionInboxTarget): void;
+
+  /**
+   * Lists endpoints registered for local Projection work.
+   *
+   * @returns Registered delivery endpoints.
+   */
   endpoints(): readonly DeliveryEndpoint[];
 }
 
@@ -491,18 +513,65 @@ const builderBuilds = new WeakMap<
 >();
 
 interface BoundedContextAccess {
+  /**
+   * Checks whether a value is a builder created by this module.
+   *
+   * @param value Value to check.
+   * @returns True for a registered builder.
+   */
   isBuilder(value: unknown): value is BoundedContextBuilder;
+
+  /**
+   * Builds a registered context builder with supplied default storage.
+   *
+   * @param builder Registered builder to build.
+   * @param defaultStorageFactory Storage used when the builder has none.
+   * @returns Promise resolving to a bounded context.
+   */
   build(
     builder: BoundedContextBuilder,
     defaultStorageFactory: StorageFactory,
   ): Promise<BoundedContext>;
+
+  /**
+   * Subscribes to a public event type on a built context.
+   *
+   * @param context Built context to observe.
+   * @param typeUrl Public event type URL.
+   * @param subscriber Event subscriber to register.
+   * @returns Cancellable event subscription.
+   */
   subscribeToEvent(
     context: BoundedContext,
     typeUrl: string,
     subscriber: EventSubscriber,
   ): EventSubscription;
+
+  /**
+   * Posts a framework System event through the context publisher.
+   *
+   * @param context Target bounded context.
+   * @param event System event to post.
+   * @returns Promise settling after publication.
+   */
   postSystemEvent(context: BoundedContext, event: Event): Promise<void>;
+
+  /**
+   * Marks a copied event as external and posts it through the context endpoint.
+   *
+   * @param context Target bounded context.
+   * @param event External event to post.
+   * @returns Event dispatch promise.
+   */
   postExternalEvent(context: BoundedContext, event: Event): Promise<void>;
+
+  /**
+   * Observes commands and events published by the context.
+   *
+   * @param context Context whose signals are observed.
+   * @param observer Callbacks for produced commands and events.
+   * @returns Handle whose close operation removes the observer.
+   */
   observeProducedSignals(
     context: BoundedContext,
     observer: {
@@ -510,17 +579,75 @@ interface BoundedContextAccess {
       readonly onEvent?: (event: Readonly<Event>) => void;
     },
   ): { readonly close: () => void };
+
+  /**
+   * Returns a copy-safe snapshot of paired domain and System specifications.
+   *
+   * @param context Context whose pairing is read.
+   * @returns Paired specification snapshot.
+   */
   systemPairing(context: BoundedContext): SystemPairingSnapshot;
+
+  /**
+   * Returns the context tenant index.
+   *
+   * @param context Context whose index is read.
+   * @returns Tenant index for the built context.
+   */
   tenantIndex(context: BoundedContext): TenantIndex;
+
+  /**
+   * Returns the storage factory configured for a built context.
+   *
+   * @param context Context whose storage factory is read.
+   * @returns Configured storage factory.
+   */
   storageFactory(context: BoundedContext): StorageFactory;
+
+  /**
+   * Returns the context's Stand subscription registry.
+   *
+   * @param context Context whose registry is read.
+   * @returns Stand subscription registry.
+   */
   subscriptionRegistry(context: BoundedContext): StandSubscriptionRegistry;
+
+  /**
+   * Processes a registered Stand subscription and forwards each update.
+   *
+   * @param context Context containing the subscription.
+   * @param id Registered subscription ID.
+   * @param onUpdate Callback receiving updates.
+   * @returns Promise resolving to the subscription handle.
+   */
   consumeSubscription(
     context: BoundedContext,
     id: string,
     onUpdate: (update: import("@spine-event-engine/proto/client").SubscriptionUpdate) => void,
   ): Promise<import("../stand/stand.js").StandSubscription>;
+
+  /**
+   * Sets a logger on context buses and subscription runtime.
+   *
+   * @param context Context receiving the logger.
+   * @param logger Logging layer to install.
+   */
   installLogger(context: BoundedContext, logger: ILogLayer): void;
+
+  /**
+   * Returns the logger installed on a built context.
+   *
+   * @param context Context whose logger is read.
+   * @returns Installed logging layer.
+   */
   loggerFor(context: BoundedContext): ILogLayer;
+
+  /**
+   * Returns the delivery descriptor for a built context.
+   *
+   * @param context Context whose descriptor is read.
+   * @returns Delivery descriptor.
+   */
   delivery(context: BoundedContext): ContextDeliveryDescriptor;
 }
 let constructBoundedContext:
@@ -551,21 +678,37 @@ let constructContextSpec:
  */
 export class BoundedContext {
   readonly #snapshot: BoundedContextSnapshot;
+
   readonly #commandBus: CommandBus;
+
   readonly #eventBus: EventBus;
+
   readonly #systemEventBus: EventBus;
+
   readonly #publisher: SignalPublisher;
+
   readonly #commandEndpoint: CommandEndpoint;
+
   readonly #eventEndpoint: EventEndpoint;
+
   readonly #entityInbox: RegisteredEntityInbox;
+
   readonly #projectionInbox: PrjInbox;
+
   readonly #deliveryStrategy: DeliveryStrategy;
+
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
+
   readonly #repositoryViews = new Set<RepositoryView>();
+
   readonly #storageFactory: StorageFactory;
+
   readonly #stand: Stand;
+
   readonly #systemStand: Stand;
+
   readonly #subscriptionRuntime: SubscriptionRuntime;
+
   #closed: Promise<void> | undefined;
 
   /**
@@ -1165,7 +1308,10 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
 });
 
 /**
- * Customizes a repository assembled from an Entity class and generated handlers.
+ * Configures routing and Entity construction for a generated repository.
+ *
+ * `onCreate` passes the framework's Entity options to an application constructor callback.
+ * It is required when the Entity class has additional required constructor arguments.
  *
  * @typeParam EntityType - The Entity class added to a Bounded Context builder.
  */
@@ -1176,7 +1322,10 @@ export type GeneratedRepositoryOptions<
     RepositoryOptions<EntityType>,
     "commandRouting" | "eventRouting" | "stateUpdateRouting" | "stringifierRegistry"
   >
->;
+> &
+  (RepositoryOptions<EntityType> extends { readonly onCreate: infer Callback }
+    ? { readonly onCreate: Callback }
+    : Pick<RepositoryOptions<EntityType>, "onCreate">);
 
 /**
  * Tracks resources that may require cleanup after context assembly fails.
@@ -1228,18 +1377,31 @@ interface ContextBuildRuntime {
  */
 export class BoundedContextBuilder {
   readonly #specSnapshot: ContextSpecSnapshot;
+
   readonly #commandDispatchers = new Set<CommandDispatcher>();
+
   readonly #eventDispatchers = new Set<EventDispatcher>();
+
   readonly #assignees: AbstractAssignee[] = [];
+
   readonly #commanders: AbstractCommander[] = [];
+
   readonly #eventReceivers: (AbstractEventReactor | AbstractEventSubscriber)[] = [];
+
   readonly #repositories = new Set<RepositoryView>();
+
   readonly #entityTypes = new Set<RepositoryEntityType>();
+
   readonly #generatedRepositoryOptions = new Map<RepositoryEntityType, object>();
+
   #deliveryStrategy: DeliveryStrategy = UniformAcrossAllShards.singleShard();
+
   #storageFactory: StorageFactory | undefined;
+
   #subscriptionRegistry: StandSubscriptionRegistry | undefined;
+
   #persistSystemEvents = false;
+
   #generatedRegistryRoot: string | URL | undefined;
 
   /**
@@ -1305,6 +1467,7 @@ export class BoundedContextBuilder {
   /**
    * Adds an explicitly assembled repository.
    *
+   * @typeParam EntityType Concrete Entity class represented by the repository.
    * @param entry The repository to register.
    * @returns This builder for further configuration.
    */
@@ -1315,18 +1478,23 @@ export class BoundedContextBuilder {
   /**
    * Adds an Entity class whose repository is assembled from generated handlers.
    *
+   * @typeParam EntityType Concrete Entity class represented by this entry.
    * @param entry The Entity class to register.
-   * @param options Optional custom routing and field mappings for its generated repository.
+   * @param options Routing and constructor callback for its generated repository. The callback
+   * is required when the Entity constructor needs additional application arguments.
    * @returns This builder for further configuration.
    */
   add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     entry: EntityType,
-    options?: GeneratedRepositoryOptions<EntityType>,
+    ...options: GeneratedRepositoryOptions<EntityType> extends { readonly onCreate: object }
+      ? [options: GeneratedRepositoryOptions<EntityType>]
+      : [options?: GeneratedRepositoryOptions<EntityType>]
   ): this;
 
   /**
    * Adds an explicitly assembled repository or an Entity class.
    *
+   * @typeParam EntityType Concrete Entity class represented by this entry.
    * @param entry The repository or Entity class to register.
    * @param options Optional settings used only when an Entity class is supplied.
    * @returns This builder for further configuration.
@@ -1354,6 +1522,7 @@ export class BoundedContextBuilder {
   /**
    * Removes a repository from the context registration list.
    *
+   * @typeParam EntityType Concrete Entity class represented by the repository.
    * @param repository Identifies the repository to remove.
    * @returns Returns this builder for further configuration.
    */
@@ -1825,6 +1994,12 @@ export class BoundedContextBuilder {
     return Object.freeze([...this.#assignees, ...this.#commanders, ...this.#eventReceivers]);
   }
 
+  /**
+   * Creates the domain EventStore using this context's storage mode.
+   *
+   * @param storageFactory Storage provider for event records.
+   * @returns Domain EventStore.
+   */
   private createEventStore(storageFactory: StorageFactory): EventStore {
     return new EventStore(ContextParts.createStorageMode(this.#specSnapshot), storageFactory);
   }
@@ -1904,12 +2079,23 @@ export class ContextSpec {
   }
 }
 
+/**
+ * Describes a repository prepared for context registration and rollback.
+ */
 interface PreparedRepository {
   readonly repository: RepositoryView;
   readonly snapshot: RegistrationSnapshot;
   readonly entityInboxTarget?: EntityInboxTarget;
   readonly projectionInboxTarget?: ProjectionInboxTarget;
+
+  /**
+   * Commits runtime bindings after Stand schema registration.
+   */
   commit(): void;
+
+  /**
+   * Closes storage prepared for registration.
+   */
   close(): void;
 }
 
@@ -1933,11 +2119,22 @@ interface CatchUpReplayDetail {
   readonly message: string;
 }
 
+/**
+ * Reports failure while redispatching a stored event during read-side replay.
+ */
 class CatchUpReplayError extends Error {
   readonly code: CatchUpReplayCode = "READ_SIDE_CATCH_UP_REPLAY_FAILED";
+
   readonly eventId: string;
+
   readonly detail: CatchUpReplayDetail;
 
+  /**
+   * Creates a replay error tied to the stored event that failed.
+   *
+   * @param eventId Identifies the stored event.
+   * @param detail Contains the bounded cause name and message.
+   */
   constructor(eventId: string, detail: CatchUpReplayDetail) {
     super(`Read-side catch-up failed for stored event "${eventId}".`);
     this.name = "ReadCatchUpReplayError";
@@ -1951,6 +2148,11 @@ class CatchUpReplayError extends Error {
  * Assembles private bounded-context lifecycle and replay details.
  */
 const ContextParts = Object.freeze({
+  /**
+   * Rejects duplicate command receptors in generated standalone groups.
+   *
+   * @param receivers Generated groups to validate.
+   */
   assertUniqueCommandReceptors(receivers: readonly GeneratedStandaloneHandlerGroup[]): void {
     const receptorByType = new Map<string, string>();
     for (const receiver of receivers) {
@@ -1972,6 +2174,15 @@ const ContextParts = Object.freeze({
       }
     }
   },
+
+  /**
+   * Matches generated standalone groups to their registered instances.
+   *
+   * @param generated Generated handler groups.
+   * @param instances Registered standalone instances.
+   * @param publisher Publisher used by bindings.
+   * @returns Frozen bindings in generated order.
+   */
   matchStandaloneHandlers(
     generated: readonly GeneratedStandaloneHandlerGroup[],
     instances: readonly object[],
@@ -2005,6 +2216,12 @@ const ContextParts = Object.freeze({
     return Object.freeze(bindings);
   },
 
+  /**
+   * Calls cleanup and records any thrown error.
+   *
+   * @param onCleanup Cleanup action.
+   * @param errors Collection receiving failures.
+   */
   attemptCleanup(onCleanup: () => void, errors: unknown[]): void {
     try {
       onCleanup();
@@ -2012,6 +2229,13 @@ const ContextParts = Object.freeze({
       errors.push(error);
     }
   },
+
+  /**
+   * Closes buses and stores after context assembly fails.
+   *
+   * @param resources Partially created resources.
+   * @param errors Collection receiving failures.
+   */
   cleanupBuildBuses(resources: ContextBuildResources, errors: unknown[]): void {
     ContextParts.attemptCleanup(() => {
       if (resources.commandBus !== undefined) commandBusAccess.abortClose(resources.commandBus);
@@ -2026,25 +2250,68 @@ const ContextParts = Object.freeze({
       else resources.eventStore?.close();
     }, errors);
   },
+
+  /**
+   * Returns constituent failures from nested aggregate errors.
+   *
+   * @param errors Errors to expand.
+   * @returns Flattened error list.
+   */
   flattenErrors(errors: readonly unknown[]): unknown[] {
     return errors.flatMap((error) =>
       error instanceof AggregateError ? ContextParts.flattenErrors(error.errors) : [error],
     );
   },
+
+  /**
+   * Rejects construction without the framework token.
+   *
+   * @param token Supplied token.
+   * @param message Error message for an invalid token.
+   */
   requireFrameworkConstructionToken(token: unknown, message: string): void {
     if (token !== frameworkConstructionToken) {
       throw new TypeError(message);
     }
   },
 
+  /**
+   * Creates a context specification from its snapshot.
+   *
+   * @param specSnapshot Snapshot used for construction.
+   * @returns Constructed context specification.
+   */
   createContextSpec(specSnapshot: ContextSpecSnapshot): ContextSpec {
     return constructContextSpec(specSnapshot, frameworkConstructionToken);
   },
 
+  /**
+   * Creates a builder for a context snapshot.
+   *
+   * @param specSnapshot Context configuration snapshot.
+   * @returns Constructed context builder.
+   */
   createBoundedContextBuilder(specSnapshot: ContextSpecSnapshot): BoundedContextBuilder {
     return constructBoundedContextBuilder(specSnapshot, frameworkConstructionToken);
   },
 
+  /**
+   * Creates a bounded context from assembled runtime components.
+   *
+   * @param specSnapshot Context configuration.
+   * @param commandBus Command dispatch bus.
+   * @param eventBus Domain event bus.
+   * @param systemEventBus System event bus.
+   * @param publisher Signal publisher.
+   * @param stand Domain read-side Stand.
+   * @param systemStand System read-side Stand.
+   * @param runtime Subscription runtime.
+   * @param systemSpec Paired System specification.
+   * @param storageFactory Storage provider.
+   * @param repositories Registered repository views.
+   * @param deliveryStrategy Delivery sharding strategy.
+   * @returns Constructed bounded context.
+   */
   createBoundedContext(
     specSnapshot: ContextSpecSnapshot,
     commandBus: CommandBus,
@@ -2080,6 +2347,12 @@ const ContextParts = Object.freeze({
     );
   },
 
+  /**
+   * Creates the storage mode represented by a context snapshot.
+   *
+   * @param specSnapshot Context configuration snapshot.
+   * @returns Storage mode for the context.
+   */
   createStorageMode(specSnapshot: ContextSpecSnapshot): StorageMode {
     return Object.freeze({
       name: specSnapshot.name.value,
@@ -2087,6 +2360,12 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Creates a non-tenant-scoped subscription storage context.
+   *
+   * @param specSnapshot Context configuration snapshot.
+   * @returns Subscription storage context.
+   */
   createSubscriptionStorageContext(specSnapshot: ContextSpecSnapshot): StorageContext {
     return Object.freeze({
       name: `${specSnapshot.name.value}:subscriptions`,
@@ -2094,6 +2373,12 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Captures the shard count and validates later shard results.
+   *
+   * @param strategy Configured delivery strategy.
+   * @returns Immutable delivery strategy snapshot.
+   */
   snapshotDeliveryStrategy(strategy: DeliveryStrategy): DeliveryStrategy {
     if (!Number.isSafeInteger(strategy.shardCount) || strategy.shardCount <= 0) {
       throw new Error("Delivery strategy shard count must be a positive safe integer.");
@@ -2101,6 +2386,14 @@ const ContextParts = Object.freeze({
     const shardCount = strategy.shardCount;
     return Object.freeze({
       shardCount,
+
+      /**
+       * Returns a target shard after verifying the captured shard total.
+       *
+       * @param targetId Inbox target identifier.
+       * @param targetType Inbox target type.
+       * @returns Validated shard index.
+       */
       shardFor(targetId: Any, targetType: string): ShardIndex {
         const shard = strategy.shardFor(InboxTargets.clone(targetId), targetType);
         if (shard.ofTotal !== shardCount) {
@@ -2111,6 +2404,13 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Creates the storage context for read-side catch-up.
+   *
+   * @param specSnapshot Context configuration.
+   * @param options Catch-up tenant options.
+   * @returns Storage context for the selected scope.
+   */
   catchUpStorageContext(
     specSnapshot: ContextSpecSnapshot,
     options: ReadCatchUpOptions,
@@ -2138,6 +2438,12 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Creates a bounded-context name after checking reserved names.
+   *
+   * @param value Candidate context name.
+   * @returns Immutable validated name.
+   */
   createBoundedContextName(value: string): BoundedContextName {
     if (
       typeof value !== "string" ||
@@ -2149,6 +2455,13 @@ const ContextParts = Object.freeze({
     return Object.freeze({ value });
   },
 
+  /**
+   * Creates a context snapshot with event storage enabled.
+   *
+   * @param name Context name.
+   * @param multitenant Whether tenant isolation is enabled.
+   * @returns Immutable specification snapshot.
+   */
   createSpecSnapshot(name: string, multitenant: boolean): ContextSpecSnapshot {
     return Object.freeze({
       name: ContextParts.createBoundedContextName(name),
@@ -2157,10 +2470,22 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Copies a bounded-context name into an immutable value.
+   *
+   * @param name Source context name.
+   * @returns Immutable name copy.
+   */
   cloneName(name: BoundedContextName): BoundedContextName {
     return ContextParts.createBoundedContextName(name.value);
   },
 
+  /**
+   * Copies a context specification snapshot and its name.
+   *
+   * @param spec Source specification.
+   * @returns Immutable specification copy.
+   */
   cloneSpecSnapshot(spec: ContextSpecSnapshot): ContextSpecSnapshot {
     return Object.freeze({
       name: ContextParts.cloneName(spec.name),
@@ -2169,6 +2494,12 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Copies a bounded-context snapshot and its specification.
+   *
+   * @param snapshot Source context snapshot.
+   * @returns Immutable context snapshot copy.
+   */
   cloneContextSnapshot(snapshot: BoundedContextSnapshot): BoundedContextSnapshot {
     return Object.freeze({
       name: ContextParts.cloneName(snapshot.name),
@@ -2177,6 +2508,13 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Creates the System specification paired with a domain context.
+   *
+   * @param domainSpec Domain specification.
+   * @param storesEvents Whether System events are stored.
+   * @returns System context snapshot.
+   */
   createSystemSpec(domainSpec: ContextSpecSnapshot, storesEvents: boolean): ContextSpecSnapshot {
     return Object.freeze({
       name: ContextParts.createBoundedContextName(`${domainSpec.name.value}_System`),
@@ -2185,6 +2523,13 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Creates a pairing snapshot for domain and System specifications.
+   *
+   * @param snapshot Domain snapshot.
+   * @param systemSpec Paired System specification.
+   * @returns Immutable context pairing.
+   */
   createSystemPairing(
     snapshot: BoundedContextSnapshot,
     systemSpec: ContextSpecSnapshot,
@@ -2195,6 +2540,12 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Copies both specifications in a System pairing.
+   *
+   * @param pairing Pairing to copy.
+   * @returns Immutable pairing copy.
+   */
   cloneSystemPairing(pairing: SystemPairingSnapshot): SystemPairingSnapshot {
     return Object.freeze({
       domain: ContextParts.cloneContextSnapshot(pairing.domain),
@@ -2202,6 +2553,12 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Lists non-internal event type URLs exposed by an event bus.
+   *
+   * @param eventBus Bus whose schemas are inspected.
+   * @returns Frozen exposed type URLs.
+   */
   exposedEventTypeUrls(eventBus: EventBus): readonly string[] {
     return Object.freeze(
       eventBusAccess
@@ -2211,6 +2568,12 @@ const ContextParts = Object.freeze({
     );
   },
 
+  /**
+   * Collects external event schemas by type URL.
+   *
+   * @param dispatchers Dispatchers to inspect.
+   * @returns Unique frozen schemas.
+   */
   externalEventSchemas(dispatchers: Iterable<EventDispatcher>): readonly MessageSchema[] {
     const schemas = new Map<string, MessageSchema>();
     for (const dispatcher of dispatchers) {
@@ -2221,6 +2584,14 @@ const ContextParts = Object.freeze({
     return Object.freeze([...schemas.values()]);
   },
 
+  /**
+   * Opens the integration broker and associates context readiness.
+   *
+   * @param context Context receiving integration.
+   * @param eventBus Event bus supplied to broker.
+   * @param systemSpec Paired System specification.
+   * @param externalEventSchemas Schemas accepted from outside.
+   */
   attachIntegration(
     context: BoundedContext,
     eventBus: EventBus,
@@ -2248,6 +2619,13 @@ const ContextParts = Object.freeze({
     contextIntegrations.set(context, { broker, ready });
   },
 
+  /**
+   * Posts an event after integration readiness and tenant validation.
+   *
+   * @param context Target context.
+   * @param event Event to post.
+   * @returns Promise fulfilled after posting.
+   */
   postContextEvent(context: BoundedContext, event: Event): Promise<void> {
     const buses = contextEventBuses.get(context);
     if (buses === undefined) return Promise.reject(new Error("Context EventBus is unavailable."));
@@ -2258,10 +2636,23 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Closes the context integration broker.
+   *
+   * @param context Context whose broker is closed.
+   * @returns Promise fulfilled after closing.
+   */
   closeIntegration(context: BoundedContext): Promise<void> {
     return contextIntegrations.get(context)?.broker.close() ?? Promise.resolve();
   },
 
+  /**
+   * Publishes an imported event through the integration broker.
+   *
+   * @param context Context integration.
+   * @param event Imported event.
+   * @returns Promise fulfilled after publishing.
+   */
   publishImported(context: BoundedContext, event: Event): Promise<void> {
     const integration = contextIntegrations.get(context);
     if (integration === undefined)
@@ -2269,6 +2660,12 @@ const ContextParts = Object.freeze({
     return integration.ready.then(() => integration.broker.publishImported(event));
   },
 
+  /**
+   * Checks imported event tenant against the context tenant mode.
+   *
+   * @param context Target context.
+   * @param event Imported event to validate.
+   */
   validateImportedTenant(context: BoundedContext, event: Event): void {
     const tenantId = ContextParts.readReplayTenant(event);
     if (!context.isMultitenant) {
@@ -2283,10 +2680,22 @@ const ContextParts = Object.freeze({
     TenantBoundary.from(tenantId);
   },
 
+  /**
+   * Waits for the integration broker to become ready.
+   *
+   * @param context Context whose readiness is observed.
+   * @returns Readiness promise.
+   */
   integrationReady(context: BoundedContext): Promise<void> {
     return contextIntegrations.get(context)?.ready ?? Promise.resolve();
   },
 
+  /**
+   * Checks whether a schema carries an internal or SPI marker.
+   *
+   * @param schema Event schema to inspect.
+   * @returns True when an internal marker is set.
+   */
   isInternalEventSchema(schema: DescriptorMessageSchema): boolean {
     return (
       (hasOption(schema, internal_type) && getOption(schema, internal_type)) ||
@@ -2295,10 +2704,22 @@ const ContextParts = Object.freeze({
     );
   },
 
+  /**
+   * Converts the multitenant flag to a tenant mode.
+   *
+   * @param multitenant Context isolation flag.
+   * @returns Corresponding tenant mode.
+   */
   toTenantMode(multitenant: boolean): TenantMode {
     return multitenant ? "multitenant" : "single-tenant";
   },
 
+  /**
+   * Reads the System pairing recorded for a built context.
+   *
+   * @param context Context to inspect.
+   * @returns Pairing snapshot; throws if unpaired.
+   */
   requireSystemPairing(context: BoundedContext): SystemPairingSnapshot {
     const pairing = contextSystemPairings.get(context);
 
@@ -2309,6 +2730,12 @@ const ContextParts = Object.freeze({
     return pairing;
   },
 
+  /**
+   * Reads the tenant index recorded for a built context.
+   *
+   * @param context Context to inspect.
+   * @returns Tenant index; throws if unavailable.
+   */
   requireTenantIndex(context: BoundedContext): TenantIndex {
     const tenantIndex = contextTenantIndexes.get(context);
 
@@ -2319,12 +2746,24 @@ const ContextParts = Object.freeze({
     return tenantIndex;
   },
 
+  /**
+   * Rejects values that are not Repository instances.
+   *
+   * @param repository Candidate value.
+   * @param operation Operation name included in the error.
+   */
   requireRepositoryInstance(repository: unknown, operation: string): void {
     if (!repositoryAccess.hasInstance(repository)) {
       throw new TypeError(`${operation} requires a Repository instance.`);
     }
   },
 
+  /**
+   * Rejects values that are not Entity classes.
+   *
+   * @param entityType Candidate Entity constructor.
+   * @param operation Operation name included in the error.
+   */
   requireEntityClass(entityType: unknown, operation: string): void {
     if (typeof entityType !== "function") {
       throw new TypeError(
@@ -2333,6 +2772,11 @@ const ContextParts = Object.freeze({
     }
   },
 
+  /**
+   * Rejects synchronous assembly when classes need generated metadata.
+   *
+   * @param entityTypes Entity classes to assemble.
+   */
   rejectSyncEntityAssembly(entityTypes: ReadonlySet<RepositoryEntityType>): void {
     if (entityTypes.size === 0) {
       return;
@@ -2344,6 +2788,12 @@ const ContextParts = Object.freeze({
     );
   },
 
+  /**
+   * Validates that a root exists when generated metadata must be loaded.
+   *
+   * @param root Configured registry location.
+   * @returns Configured root; throws when absent.
+   */
   requireGeneratedRegistryRoot(root: string | URL | undefined): string | URL {
     if (root !== undefined) {
       return root;
@@ -2355,6 +2805,12 @@ const ContextParts = Object.freeze({
     );
   },
 
+  /**
+   * Resolves the generated registry module and verifies it stays beneath the configured root.
+   *
+   * @param root Configured filesystem path or file URL.
+   * @returns Registry module file URL.
+   */
   async trustedGeneratedRegistryModule(root: string | URL): Promise<URL> {
     const trustedRoot = await ContextParts.canonicalGeneratedRegistryRoot(root);
     const registryPath = resolve(trustedRoot, generatedRegistryFile);
@@ -2370,6 +2826,12 @@ const ContextParts = Object.freeze({
     return pathToFileURL(canonicalRegistryPath);
   },
 
+  /**
+   * Resolves a generated registry root to its canonical filesystem path.
+   *
+   * @param root Configured path or file URL.
+   * @returns Canonical directory path.
+   */
   async canonicalGeneratedRegistryRoot(root: string | URL): Promise<string> {
     const rootPath = ContextParts.generatedRegistryRootPath(root);
 
@@ -2383,6 +2845,12 @@ const ContextParts = Object.freeze({
     }
   },
 
+  /**
+   * Converts a registry root path or file URL to an absolute filesystem path.
+   *
+   * @param root Configured path or file URL.
+   * @returns Absolute filesystem path.
+   */
   generatedRegistryRootPath(root: string | URL): string {
     if (root instanceof URL) {
       return ContextParts.fileUrlPath(root, "Generated registry root");
@@ -2395,6 +2863,13 @@ const ContextParts = Object.freeze({
     return resolve(root);
   },
 
+  /**
+   * Validates a file URL and converts it to an absolute filesystem path.
+   *
+   * @param url File URL to convert.
+   * @param label Label used in validation errors.
+   * @returns Filesystem path.
+   */
   fileUrlPath(url: URL, label: string): string {
     if (url.protocol !== "file:") {
       throw new Error(`${label} "${url.href}" must use the file: URL scheme.`);
@@ -2407,6 +2882,12 @@ const ContextParts = Object.freeze({
     return resolve(fileURLToPath(url));
   },
 
+  /**
+   * Parses a generated registry root string as a URL.
+   *
+   * @param root Registry root string.
+   * @returns Parsed URL.
+   */
   parseRootUrl(root: string): URL {
     try {
       return new URL(root);
@@ -2415,10 +2896,22 @@ const ContextParts = Object.freeze({
     }
   },
 
+  /**
+   * Checks strings for a URL scheme, excluding Windows drive paths.
+   *
+   * @param value String to inspect.
+   * @returns True when the string has a URL scheme.
+   */
   isUrlLike(value: string): boolean {
     return moduleSchemeRe.test(value) && !/^[A-Za-z]:[\\/]/.test(value);
   },
 
+  /**
+   * Verifies registry-module readability and resolves its canonical path.
+   *
+   * @param registryPath Registry module filesystem path.
+   * @returns Canonical readable path.
+   */
   async canonicalReadableRegistryPath(registryPath: string): Promise<string> {
     try {
       await access(registryPath, fsConstants.R_OK);
@@ -2431,6 +2924,13 @@ const ContextParts = Object.freeze({
     }
   },
 
+  /**
+   * Checks whether a canonical path escapes a canonical root.
+   *
+   * @param canonicalRoot Root directory.
+   * @param canonicalPath Candidate path.
+   * @returns True when the candidate escapes the root.
+   */
   resolvesOutsideRoot(canonicalRoot: string, canonicalPath: string): boolean {
     const relativePath = relative(canonicalRoot, canonicalPath);
 
@@ -2442,6 +2942,12 @@ const ContextParts = Object.freeze({
     );
   },
 
+  /**
+   * Creates a cache-bust query after a prior registry load failure.
+   *
+   * @param registryKey Canonical registry identifier.
+   * @returns Retry query, or an empty object on the first attempt.
+   */
   generatedRegistryCacheBust(
     registryKey: string,
   ): { readonly cacheBust: string } | Record<string, never> {
@@ -2450,6 +2956,11 @@ const ContextParts = Object.freeze({
     return attempt === 0 ? {} : { cacheBust: `retry-${attempt.toString()}` };
   },
 
+  /**
+   * Records another failed load for a registry.
+   *
+   * @param registryKey Canonical registry identifier.
+   */
   recordGeneratedRegistryFailure(registryKey: string): void {
     generatedRegistryLoadAttempts.set(
       registryKey,
@@ -2457,6 +2968,12 @@ const ContextParts = Object.freeze({
     );
   },
 
+  /**
+   * Loads generated handler registries into a metadata registry.
+   *
+   * @param registries Generated registries to ingest.
+   * @returns Populated handler metadata registry.
+   */
   ingestGeneratedRegistries(
     registries: readonly GeneratedHandlerRegistry[],
   ): HandlerMetadataRegistry {
@@ -2470,6 +2987,15 @@ const ContextParts = Object.freeze({
     return registry;
   },
 
+  /**
+   * Creates a repository from generated Entity handler metadata.
+   *
+   * @param entityType Entity class.
+   * @param registries Generated registries to search.
+   * @param metadata Ingested handler metadata.
+   * @param options Repository options overriding defaults.
+   * @returns Configured repository view.
+   */
   createGeneratedRepository(
     entityType: RepositoryEntityType,
     registries: readonly GeneratedHandlerRegistry[],
@@ -2491,6 +3017,13 @@ const ContextParts = Object.freeze({
     return new Repository(repositoryOptions as never);
   },
 
+  /**
+   * Finds the generated Entity handler group for an Entity class.
+   *
+   * @param entityType Entity class to find.
+   * @param registries Generated registries to search.
+   * @returns Matching handler group; throws when absent.
+   */
   findGeneratedEntity(
     entityType: RepositoryEntityType,
     registries: readonly GeneratedHandlerRegistry[],
@@ -2508,6 +3041,14 @@ const ContextParts = Object.freeze({
     throw new Error(`Generated handler registry is missing metadata for ${entityType.name}.`);
   },
 
+  /**
+   * Finds handler metadata for an Entity class and state schema.
+   *
+   * @param entityType Entity class.
+   * @param generated Matching generated Entity group.
+   * @param metadata Handler metadata registry.
+   * @returns Matching handler metadata; throws when absent.
+   */
   findGeneratedHandlers(
     entityType: RepositoryEntityType,
     generated: GeneratedEntityHandlerGroup,
@@ -2523,6 +3064,12 @@ const ContextParts = Object.freeze({
     return handlers;
   },
 
+  /**
+   * Collects event schemas declared as returned or thrown handler outcomes.
+   *
+   * @param generated Generated Entity handler group.
+   * @returns Frozen unique event schemas.
+   */
   aggregateAssignedEvents(
     generated: GeneratedEntityHandlerGroup,
   ): readonly DescriptorMessageSchema[] {
@@ -2538,6 +3085,12 @@ const ContextParts = Object.freeze({
     );
   },
 
+  /**
+   * Collects event schemas produced by standalone handler outcomes.
+   *
+   * @param receivers Generated standalone groups.
+   * @returns Frozen unique event schemas.
+   */
   standaloneProducedEventSchemas(
     receivers: readonly GeneratedStandaloneHandlerGroup[],
   ): readonly DescriptorMessageSchema[] {
@@ -2555,6 +3108,13 @@ const ContextParts = Object.freeze({
     );
   },
 
+  /**
+   * Returns unique schemas by Protobuf type name, preserving the last schema.
+   *
+   * @typeParam Schema Descriptor schema type retained in the result.
+   * @param schemas Schemas to deduplicate.
+   * @returns Frozen deduplicated schemas.
+   */
   uniqueSchemas<Schema extends DescriptorMessageSchema>(
     schemas: readonly Schema[],
   ): readonly Schema[] {
@@ -2567,6 +3127,11 @@ const ContextParts = Object.freeze({
     return Object.freeze([...byTypeName.values()]);
   },
 
+  /**
+   * Validates repository uniqueness, registration state, and projection cycles.
+   *
+   * @param repositories Repository views to validate.
+   */
   preflightRepositories(repositories: readonly RepositoryView[]): void {
     const entityTypes = new Set<RepositoryEntityType>();
     const stateTypeNames = new Set<string>();
@@ -2600,6 +3165,11 @@ const ContextParts = Object.freeze({
     ContextParts.rejectStateCycles(repositories);
   },
 
+  /**
+   * Rejects cycles among repository state-subscription dependencies.
+   *
+   * @param repositories Repository views whose dependencies are checked.
+   */
   rejectStateCycles(repositories: readonly RepositoryView[]): void {
     const dependencies = new Map<string, readonly string[]>();
     for (const repository of repositories) {
@@ -2632,6 +3202,12 @@ const ContextParts = Object.freeze({
     for (const stateType of dependencies.keys()) visit(stateType);
   },
 
+  /**
+   * Collects command dispatchers configured by repositories.
+   *
+   * @param repositories Repository views to inspect.
+   * @returns Present command dispatchers.
+   */
   repositoryCommandDispatchers(
     repositories: readonly RepositoryView[],
   ): readonly CommandDispatcher[] {
@@ -2641,6 +3217,12 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Collects event dispatchers configured by repositories.
+   *
+   * @param repositories Repository views to inspect.
+   * @returns Present event dispatchers.
+   */
   repositoryEventDispatchers(repositories: readonly RepositoryView[]): readonly EventDispatcher[] {
     return repositories.flatMap((repository) => {
       const dispatcher = repositoryAccess.eventDispatcher(repository);
@@ -2648,6 +3230,12 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Collects System event dispatchers configured by repositories.
+   *
+   * @param repositories Repository views to inspect.
+   * @returns Present System event dispatchers.
+   */
   repositorySystemEventDispatchers(
     repositories: readonly RepositoryView[],
   ): readonly EventDispatcher[] {
@@ -2657,18 +3245,36 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Returns event dispatchers excluding System routes.
+   *
+   * @param dispatchers Event dispatchers to filter.
+   * @returns Frozen domain event dispatchers.
+   */
   domainEventDispatchers(dispatchers: readonly EventDispatcher[]): readonly EventDispatcher[] {
     return Object.freeze(
       dispatchers.filter((dispatcher) => !ContextParts.isSystemEventDispatcher(dispatcher)),
     );
   },
 
+  /**
+   * Returns System event dispatchers.
+   *
+   * @param dispatchers Event dispatchers to filter.
+   * @returns Frozen System event dispatchers.
+   */
   systemEventDispatchers(dispatchers: readonly EventDispatcher[]): readonly EventDispatcher[] {
     return Object.freeze(
       dispatchers.filter((dispatcher) => ContextParts.isSystemEventDispatcher(dispatcher)),
     );
   },
 
+  /**
+   * Checks a dispatcher's event family and rejects mixed families.
+   *
+   * @param dispatcher Dispatcher to inspect.
+   * @returns True when its schemas are System event schemas.
+   */
   isSystemEventDispatcher(dispatcher: EventDispatcher): boolean {
     const schemas = [...dispatcher.messageSchemas()];
     const systemSchemas = schemas.filter((schema) => schema.typeName.startsWith("spine.system."));
@@ -2678,6 +3284,12 @@ const ContextParts = Object.freeze({
     return systemSchemas.length > 0;
   },
 
+  /**
+   * Collects repository-produced event schemas by type URL.
+   *
+   * @param repositories Repository views to inspect.
+   * @returns Frozen unique event schemas.
+   */
   repositoryProducedEventSchemas(
     repositories: readonly RepositoryView[],
   ): readonly MessageSchema[] {
@@ -2692,11 +3304,22 @@ const ContextParts = Object.freeze({
     return Object.freeze([...schemas.values()]);
   },
 
+  /**
+   * Clears metadata for a failed context build and closes its tenant index.
+   *
+   * @param context Context whose build failed.
+   * @param tenantIndex Tenant index to close.
+   */
   cleanupFailedContext(context: BoundedContext, tenantIndex: TenantIndex): void {
     ContextParts.clearContextMetadata(context);
     tenantIndex.close();
   },
 
+  /**
+   * Removes runtime metadata associated with a context.
+   *
+   * @param context Context whose WeakMap metadata is removed.
+   */
   clearContextMetadata(context: BoundedContext): void {
     const buses = contextEventBuses.get(context);
     if (buses !== undefined) {
@@ -2718,6 +3341,17 @@ const ContextParts = Object.freeze({
     systemEventPosters.delete(context);
   },
 
+  /**
+   * Creates delivery operations from the context inboxes and readiness state.
+   *
+   * @param context Built context snapshot.
+   * @param storageFactory Context storage provider.
+   * @param tenantIndex Tenant index for startup scopes.
+   * @param entityInbox Registered Entity inbox.
+   * @param projections Projection inbox.
+   * @param readiness Delivery readiness coordinator.
+   * @returns Delivery descriptor.
+   */
   createDeliveryDescriptor(
     context: BoundedContextSnapshot,
     storageFactory: StorageFactory,
@@ -2726,57 +3360,68 @@ const ContextParts = Object.freeze({
     projections: PrjInbox,
     readiness: DeliveryReadiness,
   ): ContextDeliveryDescriptor {
-    return Object.freeze({
+    return Object.freeze<ContextDeliveryDescriptor>({
       storageFactory,
-      async startupScopes(): Promise<readonly DeliveryTenantScope[]> {
-        if (tenantIndex.tenantMode === "single-tenant") {
-          return Object.freeze([Object.freeze({})]);
-        }
-
-        return Object.freeze(
-          (await tenantIndex.all()).map((tenantId) => Object.freeze({ tenantId })),
-        );
-      },
-      storageContext(scope: DeliveryTenantScope): StorageContext {
-        if (context.tenantMode === "single-tenant") {
-          if (scope.tenantId !== undefined) {
-            throw new Error(
-              `Single-tenant context "${context.name.value}" does not accept tenantId.`,
-            );
-          }
-          return Object.freeze({ name: context.name.value, multitenant: false });
-        }
-        const tenantId = scope.tenantId;
-        if (tenantId === undefined) {
-          throw new Error(`Multitenant context "${context.name.value}" requires tenantId.`);
-        }
-        return Object.freeze({
-          name: context.name.value,
-          multitenant: true,
-          tenantId: TenantBoundary.from(tenantId).tenantId,
-        });
-      },
-      endpoints(): readonly DeliveryEndpoint[] {
-        return Object.freeze([...entityInbox.endpoints(), ...projections.endpoints()]);
-      },
-      replay(message: DeliveryEndpointMessage, tenantId?: TenantId): Promise<void> {
-        return message.label === "UPDATE_SUBSCRIBER"
+      startupScopes: () => ContextParts.deliveryStartupScopes(tenantIndex),
+      storageContext: (scope) => ContextParts.deliveryStorageContext(context, scope),
+      endpoints: () => Object.freeze([...entityInbox.endpoints(), ...projections.endpoints()]),
+      replay: (message, tenantId) =>
+        message.label === "UPDATE_SUBSCRIBER"
           ? projections.replay(message, tenantId)
-          : entityInbox.replay(message, tenantId);
-      },
-      onReady(onReady: (ready: DeliveryReady) => void): () => void {
-        return readiness.onReady(onReady);
-      },
-      transition(
-        scopes: readonly DeliveryReady[],
-        onReady: OnDeliveryReady,
-        options?: { readonly allowEmpty?: boolean },
-      ): Promise<void> {
-        return readiness.transition(scopes, onReady, options);
-      },
+          : entityInbox.replay(message, tenantId),
+      onReady: (onReady) => readiness.onReady(onReady),
+      transition: (scopes, onReady, options) => readiness.transition(scopes, onReady, options),
     });
   },
 
+  /**
+   * Lists delivery startup scopes, one per tenant in multitenant contexts.
+   *
+   * @param tenantIndex Tenant index supplying configured scopes.
+   * @returns Frozen startup scope list.
+   */
+  async deliveryStartupScopes(tenantIndex: TenantIndex): Promise<readonly DeliveryTenantScope[]> {
+    if (tenantIndex.tenantMode === "single-tenant") {
+      return Object.freeze([Object.freeze({})]);
+    }
+
+    return Object.freeze((await tenantIndex.all()).map((tenantId) => Object.freeze({ tenantId })));
+  },
+
+  /**
+   * Creates tenant-validated storage context for a delivery scope.
+   *
+   * @param context Built context snapshot.
+   * @param scope Selected startup scope.
+   * @returns Storage context for the selected tenant.
+   */
+  deliveryStorageContext(
+    context: BoundedContextSnapshot,
+    scope: DeliveryTenantScope,
+  ): StorageContext {
+    if (context.tenantMode === "single-tenant") {
+      if (scope.tenantId !== undefined) {
+        throw new Error(`Single-tenant context "${context.name.value}" does not accept tenantId.`);
+      }
+      return Object.freeze({ name: context.name.value, multitenant: false });
+    }
+    const tenantId = scope.tenantId;
+    if (tenantId === undefined) {
+      throw new Error(`Multitenant context "${context.name.value}" requires tenantId.`);
+    }
+    return Object.freeze({
+      name: context.name.value,
+      multitenant: true,
+      tenantId: TenantBoundary.from(tenantId).tenantId,
+    });
+  },
+
+  /**
+   * Closes prepared repositories and collects close failures.
+   *
+   * @param preparedRepositories Prepared repository resources to close.
+   * @returns Collected close errors.
+   */
   closePreparedRepositories(
     preparedRepositories: readonly PreparedRepository[],
   ): readonly unknown[] {
@@ -2792,6 +3437,13 @@ const ContextParts = Object.freeze({
     return errors;
   },
 
+  /**
+   * Calls one asynchronous context close action and records failures.
+   *
+   * @param close Close operation.
+   * @param errors Failure collection.
+   * @returns Promise fulfilled after the close attempt is recorded.
+   */
   async closeContextPart(close: () => unknown, errors: unknown[]): Promise<void> {
     try {
       await close();
@@ -2800,6 +3452,15 @@ const ContextParts = Object.freeze({
     }
   },
 
+  /**
+   * Waits until accepted command, event, System event, and signal work drains.
+   *
+   * @param commandBus Command bus.
+   * @param eventBus Domain event bus.
+   * @param systemEventBus System event bus.
+   * @param publisher Signal publisher.
+   * @returns Promise fulfilled when accepted work stabilizes.
+   */
   async drainContextWork(
     commandBus: CommandBus,
     eventBus: EventBus,
@@ -2825,6 +3486,12 @@ const ContextParts = Object.freeze({
     );
   },
 
+  /**
+   * Adds an error or aggregate causes to the close error collection.
+   *
+   * @param error Close failure.
+   * @param errors Failure collection.
+   */
   collectCloseError(error: unknown, errors: unknown[]): void {
     if (error instanceof AggregateError) {
       const causes = error.errors as readonly unknown[];
@@ -2836,6 +3503,13 @@ const ContextParts = Object.freeze({
     errors.push(error);
   },
 
+  /**
+   * Binds a repository to context runtime services and supplies commit and close operations.
+   *
+   * @param repository Repository to prepare.
+   * @param registration Context services and schemas.
+   * @returns Prepared repository.
+   */
   prepareRepositoryForContext(
     repository: RepositoryView,
     registration: RepositoryRegistration,
@@ -2872,6 +3546,12 @@ const ContextParts = Object.freeze({
     };
   },
 
+  /**
+   * Captures repository metadata needed for context registration.
+   *
+   * @param repository Repository to inspect.
+   * @returns Frozen registration snapshot.
+   */
   repositorySnapshot(repository: RepositoryView): RegistrationSnapshot {
     const snapshot = repositoryAccess.snapshot(repository);
 
@@ -2886,6 +3566,11 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Rejects a repository already registered with a bounded context.
+   *
+   * @param repository Repository to check.
+   */
   rejectRegisteredRepository(repository: RepositoryView): void {
     const snapshot = ContextParts.repositorySnapshot(repository);
     const registration = registeredRepositories.get(repository);
@@ -2898,6 +3583,12 @@ const ContextParts = Object.freeze({
     }
   },
 
+  /**
+   * Creates storage record columns from Entity metadata.
+   *
+   * @param snapshot Registration snapshot supplying fields.
+   * @returns Record columns.
+   */
   repositoryColumns(snapshot: RegistrationSnapshot): readonly RecordColumn<Message>[] {
     return snapshot.metadata.columns.map(
       (field) =>
@@ -2907,6 +3598,12 @@ const ContextParts = Object.freeze({
     );
   },
 
+  /**
+   * Creates an immutable repository view from a registration snapshot.
+   *
+   * @param snapshot Registration snapshot.
+   * @returns Immutable repository view.
+   */
   createRepositoryView(snapshot: RegistrationSnapshot): RepositoryView {
     return Object.freeze({
       entityType: snapshot.entityType,
@@ -2919,6 +3616,12 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Builds dispatch descriptors for Projection repositories with event handlers.
+   *
+   * @param repositories Repository views to inspect.
+   * @returns Frozen Projection dispatch descriptors.
+   */
   projectionDispatchers(repositories: Iterable<RepositoryView>): readonly ProjectionDispatch[] {
     const projections: ProjectionDispatch[] = [];
 
@@ -2946,6 +3649,12 @@ const ContextParts = Object.freeze({
     return Object.freeze(projections);
   },
 
+  /**
+   * Collects unique Projection state schemas for clearing.
+   *
+   * @param projections Projection dispatch descriptors.
+   * @returns Frozen unique clear targets.
+   */
   projectionStateClearTargets(
     projections: readonly ProjectionDispatch[],
   ): readonly ProjectionStateClearTarget[] {
@@ -2966,6 +3675,13 @@ const ContextParts = Object.freeze({
     return Object.freeze([...unique.values()]);
   },
 
+  /**
+   * Reads stored events in deterministic timestamp, producer, version, and ID order.
+   *
+   * @param context Event-store storage context.
+   * @param storageFactory Event storage provider.
+   * @returns Stored events in deterministic order.
+   */
   async readStoredEvents(
     context: StorageContext,
     storageFactory: StorageFactory,
@@ -2986,6 +3702,12 @@ const ContextParts = Object.freeze({
     }
   },
 
+  /**
+   * Builds Stand options for the catch-up tenant scope.
+   *
+   * @param context Catch-up storage context.
+   * @returns Options with a cloned tenant ID when multitenant.
+   */
   catchUpStandOptions(context: StorageContext): { readonly tenantId?: TenantId } {
     if (!context.multitenant) {
       return {};
@@ -2994,6 +3716,12 @@ const ContextParts = Object.freeze({
     return Object.freeze({ tenantId: clone(TenantIdSchema, context.tenantId) });
   },
 
+  /**
+   * Verifies a stored event envelope belongs to the catch-up tenant.
+   *
+   * @param context Catch-up storage context.
+   * @param event Stored event to validate.
+   */
   validateReplayTenant(context: StorageContext, event: Event): void {
     if (!context.multitenant) {
       return;
@@ -3010,6 +3738,12 @@ const ContextParts = Object.freeze({
     }
   },
 
+  /**
+   * Reads the tenant ID from an event import or past-message origin.
+   *
+   * @param event Event whose origin is inspected.
+   * @returns Cloned tenant ID when present.
+   */
   readReplayTenant(event: Event): TenantId | undefined {
     switch (event.context?.origin.case) {
       case "importContext":
@@ -3021,10 +3755,24 @@ const ContextParts = Object.freeze({
     }
   },
 
+  /**
+   * Copies a tenant ID when present.
+   *
+   * @param tenantId Optional tenant ID.
+   * @returns Cloned tenant ID or undefined.
+   */
   tenantIdValue(tenantId: TenantId | undefined): TenantId | undefined {
     return tenantId === undefined ? undefined : clone(TenantIdSchema, tenantId);
   },
 
+  /**
+   * Dispatches a stored event to matching Projection handlers and direct updates.
+   *
+   * @param projections Projection dispatch descriptors.
+   * @param event Stored event.
+   * @param rebuild Whether direct dispatch is a rebuild.
+   * @returns One when a Projection matched, otherwise zero.
+   */
   async dispatchStoredProjectionEvent(
     projections: readonly ProjectionDispatch[],
     event: Event,
@@ -3052,6 +3800,13 @@ const ContextParts = Object.freeze({
     return matching.length > 0 ? 1 : 0;
   },
 
+  /**
+   * Creates a replay error with the event ID and bounded cause details.
+   *
+   * @param event Event that failed.
+   * @param cause Thrown replay cause.
+   * @returns Replay error.
+   */
   catchUpReplayError(event: Event, cause: unknown): Error {
     return new CatchUpReplayError(
       event.id?.value ?? "(missing)",
@@ -3059,10 +3814,23 @@ const ContextParts = Object.freeze({
     );
   },
 
+  /**
+   * Returns an error string truncated to a maximum length.
+   *
+   * @param value String to bound.
+   * @param limit Maximum character count.
+   * @returns Bounded string.
+   */
   boundedErrorString(value: string, limit: number): string {
     return value.length <= limit ? value : `${value.slice(0, limit - 3)}...`;
   },
 
+  /**
+   * Converts a thrown value to bounded error name and message details.
+   *
+   * @param error Thrown value.
+   * @returns Immutable bounded details.
+   */
   catchUpReplayDetail(error: unknown): CatchUpReplayDetail {
     if (error instanceof Error) {
       return Object.freeze({
@@ -3077,6 +3845,13 @@ const ContextParts = Object.freeze({
     });
   },
 
+  /**
+   * Reads and requires the Entity ID field from a stored record.
+   *
+   * @param record Protobuf record.
+   * @param snapshot Repository metadata identifying the ID field.
+   * @returns ID field value; throws when missing.
+   */
   readRecordId(record: Message, snapshot: RegistrationSnapshot): unknown {
     const value = ContextParts.readRecordField(record, snapshot.idField.localName);
 
@@ -3089,6 +3864,13 @@ const ContextParts = Object.freeze({
     return value;
   },
 
+  /**
+   * Reads a field from a Protobuf record by descriptor local name.
+   *
+   * @param record Record message.
+   * @param localName Descriptor local field name.
+   * @returns Field value.
+   */
   readRecordField(record: Message, localName: DescriptorFieldMetadata["localName"]): unknown {
     return (record as Record<string, unknown>)[localName];
   },

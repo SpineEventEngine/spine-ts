@@ -620,6 +620,30 @@ export abstract class Entity<Id, Schema extends DescriptorMessageSchema> {
   }
 }
 
+/* eslint-disable @typescript-eslint/no-unused-vars -- Ambient nominal constructor shape emits no JS. */
+
+/**
+ * Describes the static Entity family marker without restricting application constructors.
+ *
+ * @internal
+ */
+declare abstract class EntityConstructorShape extends Entity<unknown, DescriptorMessageSchema> {
+  /**
+   * Accepts concrete Entity constructors with application-supplied arguments.
+   *
+   * @param args Constructor arguments supplied by a repository callback.
+   */
+  constructor(...args: never[]);
+}
+/* eslint-enable @typescript-eslint/no-unused-vars */
+
+/**
+ * Preserves the protected Entity family marker while allowing constructor dependencies.
+ *
+ * @internal
+ */
+export type EntityConstructorStatic = typeof EntityConstructorShape;
+
 interface BoundEntityHistory {
   readonly stateAt: (time: Timestamp) => Promise<unknown>;
   readonly states: (depth: number) => Promise<readonly unknown[]>;

@@ -152,6 +152,23 @@ receiver records to their instances.
 If the registry is missing, stale, malformed, or rejected during ingestion,
 context creation should fail deterministically before any handler is invoked.
 
+## Entity constructor dependencies
+
+Both `new Repository({ entityType, schema, onCreate })` and
+`builder.add(EntityClass, { onCreate })` accept an application constructor
+callback. Its input is the framework's typed `EntityOptions`; its result is an
+instance of the registered Entity class. The callback can pass additional
+required constructor arguments without exposing those dependencies in generated
+metadata or changing the Entity's two generic parameters. A constructor that
+cannot accept the framework options alone requires this callback.
+
+Use constructor injection rather than assigning dependencies after creation.
+The callback runs for new and restored objects, not merely for new domain IDs.
+Default construction remains available for existing classes. History, query,
+transaction and handler setup remain framework-controlled. State-only queries
+do not construct Entities. A callback exception follows the existing failure
+path before handler invocation or Entity commit, not a domain rejection path.
+
 ## Handler Decorators
 
 Initial decorator set:

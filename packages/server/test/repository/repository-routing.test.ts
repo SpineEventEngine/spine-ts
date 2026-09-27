@@ -112,6 +112,7 @@ import {
   Projection,
   Repository,
   type RepositoryOptions,
+  type EntityOptions,
   RepositoryIdentityError,
   ShardIndex,
   EntityHandlers,
@@ -261,6 +262,63 @@ class ProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {
 
   reactToProjection(event: ProjectCreated): void {
     void event;
+  }
+}
+
+interface ProjectLabelService {
+  label(name: string): string;
+}
+
+class InjectedProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+  static calls = 0;
+  constructor(
+    options: EntityOptions<string, typeof ProjectStateSchema>,
+    private readonly service: ProjectLabelService,
+  ) {
+    super(options);
+  }
+
+  createProject(command: CreateProject): ProjectCreated {
+    InjectedProjectAggregate.calls++;
+    this.update((draft) => {
+      draft.name = this.service.label(command.name);
+    });
+    return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
+  }
+}
+
+class InjectedProjectProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
+  constructor(
+    options: EntityOptions<string, typeof ProjectOverviewStateSchema>,
+    private readonly service: ProjectLabelService,
+  ) {
+    super(options);
+  }
+
+  subscribeTask(event: ProjectCreated): void {
+    if (event.name === "delete-lifecycle") {
+      this.markDraftDeleted();
+      return;
+    }
+    this.update((draft) => {
+      draft.name = this.service.label(event.name);
+    });
+  }
+}
+
+class InjectedProjectManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
+  constructor(
+    options: EntityOptions<string, typeof ProjectQueueStateSchema>,
+    private readonly service: ProjectLabelService,
+  ) {
+    super(options);
+  }
+
+  createProject(command: CreateProject): ProjectCreated {
+    this.update((draft) => {
+      draft.queue = this.service.label(command.name);
+    });
+    return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
   }
 }
 
@@ -1829,6 +1887,329 @@ class SplitRouteProcessManager extends ProcessManager<string, typeof ProjectQueu
 }
 
 describe("repository signal routing", () => {
+  it("keeps constructor services separate for the same Entity class in two contexts", async () => {
+    const handlers = HandlerMetadataValues.defineArity(
+      InjectedProjectAggregate,
+      ProjectStateSchema,
+      (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+      [
+        {
+          kind: "command-assignment",
+          methodName: "createProject",
+          parameterCount: 1,
+          outcomes: handlerOutcomes([ProjectCreatedSchema]),
+        },
+      ],
+    );
+    const firstService: ProjectLabelService = { label: (name) => `${name} first` };
+    const secondService: ProjectLabelService = { label: (name) => `${name} second` };
+    const first = BoundedContext.singleTenant("First")
+      .add(
+        new Repository({
+          entityType: InjectedProjectAggregate,
+          schema: ProjectStateSchema,
+          handlers,
+          events: [ProjectCreatedSchema],
+          onCreate: (options) => new InjectedProjectAggregate(options, firstService),
+        }),
+      )
+      .build();
+    const second = BoundedContext.singleTenant("Second")
+      .add(
+        new Repository({
+          entityType: InjectedProjectAggregate,
+          schema: ProjectStateSchema,
+          handlers,
+          events: [ProjectCreatedSchema],
+          onCreate: (options) => new InjectedProjectAggregate(options, secondService),
+        }),
+      )
+      .build();
+
+    try {
+      await first.commandBus().post(createAggregateCommand("first-client", "shared-id"));
+      await second.commandBus().post(createAggregateCommand("second-client", "shared-id"));
+      await expect(first.stand().read(ProjectStateSchema, "shared-id")).resolves.toMatchObject({
+        name: "Task first",
+      });
+      await expect(second.stand().read(ProjectStateSchema, "shared-id")).resolves.toMatchObject({
+        name: "Task second",
+      });
+    } finally {
+      await first.close();
+      await second.close();
+    }
+  });
+  it("passes fresh state, Version, and lifecycle to a rebuilt deleted projection", async () => {
+    const seen: { version: number; deleted: boolean; name: string }[] = [];
+    const service: ProjectLabelService = { label: (name) => `${name} rebuilt` };
+    const repository = new Repository({
+      entityType: InjectedProjectProjection,
+      schema: ProjectOverviewStateSchema,
+      handlers: EntityHandlers.define(
+        InjectedProjectProjection,
+        ProjectOverviewStateSchema,
+        (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeTask")],
+      ),
+      onCreate(options) {
+        seen.push({
+          version: options.version?.number ?? -1,
+          deleted: options.lifecycle?.deleted ?? false,
+          name: options.state.name,
+        });
+        return new InjectedProjectProjection(options, service);
+      },
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+
+    try {
+      await context
+        .eventBus()
+        .post(createProjectCreated("rebuild-1", "rebuild-id", { name: "First" }));
+      await context
+        .eventBus()
+        .post(createProjectCreated("rebuild-2", "rebuild-id", { name: "delete-lifecycle" }));
+      await repositoryAccess.dispatchProjectionDirect(
+        repository,
+        createProjectCreated("rebuild-3", "rebuild-id", { name: "After" }),
+        true,
+      );
+      expect(seen).toEqual([
+        { version: 0, deleted: false, name: "" },
+        { version: 1, deleted: false, name: "First rebuilt" },
+        { version: 0, deleted: false, name: "" },
+      ]);
+      await expect(
+        context.stand().readVersioned(ProjectOverviewStateSchema, "rebuild-id"),
+      ).resolves.toMatchObject({ state: { name: "After rebuilt" }, version: { number: 1 } });
+    } finally {
+      await context.close();
+    }
+  });
+  it("rejects a different Entity returned by onCreate before its handler runs", async () => {
+    let unrelatedCalls = 0;
+    class UnrelatedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+      createProject(command: CreateProject): ProjectCreated {
+        unrelatedCalls++;
+        this.update((draft) => {
+          draft.name = command.name;
+        });
+        return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
+      }
+    }
+    const repository = new Repository({
+      entityType: InjectedProjectAggregate,
+      schema: ProjectStateSchema,
+      handlers: EntityHandlers.define(InjectedProjectAggregate, ProjectStateSchema, (builder) => [
+        builder.assign(CreateProjectSchema, "createProject"),
+      ]),
+      onCreate: (options) => new UnrelatedAggregate(options) as never,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+
+    try {
+      await context.commandBus().post(createAggregateCommand("factory-unrelated", "unrelated-id"));
+      expect(unrelatedCalls).toBe(0);
+      await expect(
+        context.stand().read(ProjectStateSchema, "unrelated-id"),
+      ).resolves.toBeUndefined();
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("rejects a Promise returned by onCreate before its handler runs", async () => {
+    const service: ProjectLabelService = { label: (name) => name };
+    const beforeCalls = InjectedProjectAggregate.calls;
+    const repository = new Repository({
+      entityType: InjectedProjectAggregate,
+      schema: ProjectStateSchema,
+      handlers: EntityHandlers.define(InjectedProjectAggregate, ProjectStateSchema, (builder) => [
+        builder.assign(CreateProjectSchema, "createProject"),
+      ]),
+      onCreate: (options) =>
+        Promise.resolve(new InjectedProjectAggregate(options, service)) as never,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+
+    try {
+      await context.commandBus().post(createAggregateCommand("factory-promise", "promise-id"));
+      expect(InjectedProjectAggregate.calls).toBe(beforeCalls);
+      await expect(context.stand().read(ProjectStateSchema, "promise-id")).resolves.toBeUndefined();
+    } finally {
+      await context.close();
+    }
+  });
+  it("stops dispatch before handlers and persistence when onCreate throws", async () => {
+    const failure = new Error("service unavailable");
+    const repository = new Repository({
+      entityType: InjectedProjectAggregate,
+      schema: ProjectStateSchema,
+      handlers: EntityHandlers.define(InjectedProjectAggregate, ProjectStateSchema, (builder) => [
+        builder.assign(CreateProjectSchema, "createProject"),
+      ]),
+      onCreate() {
+        throw failure;
+      },
+    });
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectStateSchema,
+    });
+    const events = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const beforeCalls = InjectedProjectAggregate.calls;
+
+    try {
+      await expect(
+        context.commandBus().post(createAggregateCommand("factory-throw", "factory-id")),
+      ).resolves.toBeUndefined();
+      expect(InjectedProjectAggregate.calls).toBe(beforeCalls);
+      await expect(storage.readCurrent("factory-id")).resolves.toBeUndefined();
+      await expect(events.read()).resolves.toEqual([]);
+    } finally {
+      events.close();
+      await context.close();
+    }
+  });
+  it("passes a service to new and restored projection instances", async () => {
+    const seen: number[] = [];
+    const service: ProjectLabelService = { label: (name) => `${name} projected` };
+    const repository = new Repository({
+      entityType: InjectedProjectProjection,
+      schema: ProjectOverviewStateSchema,
+      handlers: EntityHandlers.define(
+        InjectedProjectProjection,
+        ProjectOverviewStateSchema,
+        (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeTask")],
+      ),
+      onCreate(options) {
+        seen.push(options.version?.number ?? -1);
+        return new InjectedProjectProjection(options, service);
+      },
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+
+    try {
+      await expect(
+        context.stand().read(ProjectOverviewStateSchema, "injected-projection"),
+      ).resolves.toBeUndefined();
+      expect(seen).toEqual([]);
+      await context
+        .eventBus()
+        .post(createProjectCreated("projection-injected-1", "injected-projection"));
+      await context
+        .eventBus()
+        .post(createProjectCreated("projection-injected-2", "injected-projection"));
+      expect(seen).toEqual([0, 1]);
+      await expect(
+        context.stand().read(ProjectOverviewStateSchema, "injected-projection"),
+      ).resolves.toMatchObject({ name: "Task projected" });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("passes a service to new and restored process-manager instances", async () => {
+    const seen: number[] = [];
+    const service: ProjectLabelService = { label: (name) => `${name} managed` };
+    const repository = new Repository({
+      entityType: InjectedProjectManager,
+      schema: ProjectQueueStateSchema,
+      handlers: HandlerMetadataValues.defineArity(
+        InjectedProjectManager,
+        ProjectQueueStateSchema,
+        (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+        [
+          {
+            kind: "command-assignment",
+            methodName: "createProject",
+            parameterCount: 1,
+            outcomes: handlerOutcomes([ProjectCreatedSchema]),
+          },
+        ],
+      ),
+      events: [ProjectCreatedSchema],
+      onCreate(options) {
+        seen.push(options.version?.number ?? -1);
+        return new InjectedProjectManager(options, service);
+      },
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+
+    try {
+      await context
+        .commandBus()
+        .post(createAggregateCommand("manager-injected-1", "injected-manager"));
+      await context
+        .commandBus()
+        .post(createAggregateCommand("manager-injected-2", "injected-manager"));
+      expect(seen).toEqual([0, 1]);
+      await expect(
+        context.stand().read(ProjectQueueStateSchema, "injected-manager"),
+      ).resolves.toMatchObject({ queue: "Task managed" });
+    } finally {
+      await context.close();
+    }
+  });
+  it("passes one shared service to new and restored aggregate instances", async () => {
+    const service: ProjectLabelService = { label: (name) => `${name} through service` };
+    const seen: number[] = [];
+    const beforeCalls = InjectedProjectAggregate.calls;
+    const repository = new Repository({
+      entityType: InjectedProjectAggregate,
+      schema: ProjectStateSchema,
+      handlers: HandlerMetadataValues.defineArity(
+        InjectedProjectAggregate,
+        ProjectStateSchema,
+        (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+        [
+          {
+            kind: "command-assignment",
+            methodName: "createProject",
+            parameterCount: 1,
+            outcomes: handlerOutcomes([ProjectCreatedSchema]),
+          },
+        ],
+      ),
+      events: [ProjectCreatedSchema],
+      onCreate(options) {
+        seen.push(options.version?.number ?? -1);
+        return new InjectedProjectAggregate(options, service);
+      },
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+
+    try {
+      await context
+        .commandBus()
+        .post(createAggregateCommand("injected-1", "project-injected", "First"));
+      expect(InjectedProjectAggregate.calls).toBe(beforeCalls + 1);
+      await expect(
+        context.stand().read(ProjectStateSchema, "project-injected"),
+      ).resolves.toMatchObject({
+        id: "project-injected",
+        name: "First through service",
+      });
+      await context
+        .commandBus()
+        .post(createAggregateCommand("injected-2", "project-injected", "Second"));
+      expect(seen).toEqual([0, 1]);
+      await expect(
+        context.stand().read(ProjectStateSchema, "project-injected"),
+      ).resolves.toMatchObject({
+        id: "project-injected",
+        name: "Second through service",
+      });
+    } finally {
+      await context.close();
+    }
+  });
   it("uses the current Todo descriptor type names in routing fixtures", () => {
     expect(TaskIdSchema.typeName).toBe("spine.examples.todo.TaskId");
     expect(TaskSchema.typeName).toBe("spine.examples.todo.Task");
@@ -1837,7 +2218,7 @@ describe("repository signal routing", () => {
 
   it("derives stable current-record identity from every supported ID representation", () => {
     new Repository({ entityType: ExecutingTaskProjection, schema: ProjectOverviewStateSchema });
-    const spec = SpecScanner.scan(ExecutingTaskProjection as never);
+    const spec = SpecScanner.scan(ExecutingTaskProjection);
     const descriptor = entityStorageDescriptor({ name: "Tasks", multitenant: false }, spec);
     const structured = { value: "task-1" };
     const record = EntityRecords.pack(
@@ -4128,7 +4509,7 @@ describe("repository signal routing", () => {
       entityType: ProjectMilestoneProjection,
       schema: ProjectMilestoneOverviewStateSchema,
     });
-    const spec = SpecScanner.scan(ProjectMilestoneProjection as never);
+    const spec = SpecScanner.scan(ProjectMilestoneProjection);
     const descriptor = entityStorageDescriptor({ name: "Composite", multitenant: false }, spec);
 
     expect(descriptor.id.key(idA)).toBe(descriptor.id.key(clone(ProjectMilestoneIdSchema, idA)));

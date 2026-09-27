@@ -5632,6 +5632,21 @@ Date: 2026-08-24
 
 Task: T-0220 GitHub Actions NPM publishing
 
+### Snapshot tag amendment — 27 September 2026
+
+The human requires npm `latest` to point to the newest published snapshot,
+beginning with the next publication. Keep the existing `snapshot` channel
+available. This supersedes the original rule below that snapshot publication
+must leave `latest` unchanged. Other publication controls, including trusted
+publishing and protection against version rollback, remain in effect.
+
+Status: accepted requirement; release scripts, workflow, tests, and developer
+instructions must be updated before the next publication. No live npm tag is
+changed by recording this decision. The implementation plan is tracked in
+[Entity dependency configuration](planning/entity-dependency-configuration.md).
+
+### Original decision
+
 Context:
 
 - The first public snapshot was published manually through a disposable

@@ -19,8 +19,11 @@ import {
   BoundedContext,
   ProcessManager,
   Projection,
+  React,
   Server,
   Subscribe,
+  type EntityOptions,
+  type BoundedContextBuilder,
   type RunningServer,
 } from "@spine-event-engine/server";
 
@@ -516,24 +519,68 @@ export class ProgressViewProjection extends Projection<string, typeof ProgressVi
 }
 
 /**
- * Represents a fixed-topology process manager with a generic update counter.
+ * Supplies a task's contribution to the assignment update count.
+ */
+export interface AssignmentWeightService {
+  // prettier-ignore
+
+  /**
+   * Returns the update increment for a created task.
+   *
+   * @param event The task creation event.
+   * @returns The increment applied to the assignment counter.
+   */
+  weightFor(event: TaskCreated): number;
+}
+
+const unitAssignmentWeightService: AssignmentWeightService = Object.freeze({
+  /**
+   * Returns one update for each created task in the default topology.
+   *
+   * @param event The task creation event.
+   * @returns One update.
+   */
+  weightFor(event: TaskCreated): number {
+    void event;
+    return 1;
+  },
+});
+
+/**
+ * Counts task assignments using an application-supplied weight service.
  */
 export class AssignmentManager extends ProcessManager<string, typeof AssignmentManagerSchema> {
   // prettier-ignore
 
   /**
-   * Updates the generic counter by incrementing it for a task-created event.
+   * Initializes the manager with framework state and the shared assignment weight service.
+   *
+   * @param options Identity, state, Version, and lifecycle supplied by the repository.
+   * @param weights Application service used by task-created handlers.
+   */
+  constructor(
+    options: EntityOptions<string, typeof AssignmentManagerSchema>,
+    private readonly weights: AssignmentWeightService,
+  ) {
+    super(options);
+  }
+
+  /**
+   * Updates the assignment count using the shared service's task weight.
    *
    * @param event The task-created event that triggers the update.
    */
-  @Subscribe onTaskCreated(event: TaskCreated): void {
+  @React onTaskCreated(event: TaskCreated): undefined {
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AssignmentManagerSchema, { id: this.id, updates: draft.updates + 1 }),
+        create(AssignmentManagerSchema, {
+          id: this.id,
+          updates: draft.updates + this.weights.weightFor(event),
+        }),
       ),
     );
-    void event;
+    return undefined;
   }
 }
 
@@ -827,46 +874,83 @@ export const projectManagementTopology: {
 /**
  * Creates the fixed project-management topology with in-memory storage.
  *
+ * @param weights Shared service used by each new or restored AssignmentManager instance.
  * @returns The assembled bounded context.
  */
-export async function createProjectManagementContext(): Promise<BoundedContext> {
-  return BoundedContext.singleTenant("ProjectManagement")
+export async function createProjectManagementContext(
+  weights: AssignmentWeightService = unitAssignmentWeightService,
+): Promise<BoundedContext> {
+  const builder = BoundedContext.singleTenant("ProjectManagement")
     .withGeneratedRegistryRoot(new URL("..", import.meta.url))
     .add(ProjectAggregate)
     .add(TaskAggregate)
-    .add(PersonAggregate)
-    .add(ProjectSummaryProjection)
-    .add(TaskListProjection)
-    .add(StatusCountersProjection)
-    .add(PriorityCountersProjection)
-    .add(AssigneeWorkloadProjection)
-    .add(ActivityFeedProjection)
-    .add(TenantViewProjection)
-    .add(UserViewProjection)
-    .add(DueDateViewProjection)
-    .add(AssignmentViewProjection)
-    .add(ProjectLifecycleViewProjection)
-    .add(TaskDependencyViewProjection)
-    .add(AuditViewProjection)
-    .add(SubscriptionFanoutViewProjection)
-    .add(CleanupViewProjection)
-    .add(ProjectIndexProjection)
-    .add(TaskIndexProjection)
-    .add(PersonIndexProjection)
-    .add(CapacityViewProjection)
-    .add(ProgressViewProjection)
-    .add(AssignmentManager)
-    .add(DueDateManager)
-    .add(StatusManager)
-    .add(NotificationManager)
-    .add(WorkloadManager)
-    .add(ProjectLifecycleManager)
-    .add(TaskDependencyManager)
-    .add(AuditManager)
-    .add(SubscriptionFanoutManager)
-    .add(CleanupManager)
-    .buildAsync();
+    .add(PersonAggregate);
+  return ProjectRegistration.managers(
+    ProjectRegistration.projections(builder),
+    weights,
+  ).buildAsync();
 }
+
+/**
+ * Groups generated read-model and Process Manager registration for the example topology.
+ */
+const ProjectRegistration = {
+  /**
+   * Registers generated query projections for the fixed Projects topology.
+   *
+   * @param builder Context builder receiving the projections.
+   * @returns The builder with its read models registered.
+   */
+  projections(builder: BoundedContextBuilder): BoundedContextBuilder {
+    return builder
+      .add(ProjectSummaryProjection)
+      .add(TaskListProjection)
+      .add(StatusCountersProjection)
+      .add(PriorityCountersProjection)
+      .add(AssigneeWorkloadProjection)
+      .add(ActivityFeedProjection)
+      .add(TenantViewProjection)
+      .add(UserViewProjection)
+      .add(DueDateViewProjection)
+      .add(AssignmentViewProjection)
+      .add(ProjectLifecycleViewProjection)
+      .add(TaskDependencyViewProjection)
+      .add(AuditViewProjection)
+      .add(SubscriptionFanoutViewProjection)
+      .add(CleanupViewProjection)
+      .add(ProjectIndexProjection)
+      .add(TaskIndexProjection)
+      .add(PersonIndexProjection)
+      .add(CapacityViewProjection)
+      .add(ProgressViewProjection);
+  },
+
+  /**
+   * Registers generated Process Managers with the assignment service.
+   *
+   * @param builder Context builder receiving the Process Managers.
+   * @param weights Shared service passed to AssignmentManager instances.
+   * @returns The builder with its Process Managers registered.
+   */
+  managers(
+    builder: BoundedContextBuilder,
+    weights: AssignmentWeightService,
+  ): BoundedContextBuilder {
+    return builder
+      .add(AssignmentManager, {
+        onCreate: (options) => new AssignmentManager(options, weights),
+      })
+      .add(DueDateManager)
+      .add(StatusManager)
+      .add(NotificationManager)
+      .add(WorkloadManager)
+      .add(ProjectLifecycleManager)
+      .add(TaskDependencyManager)
+      .add(AuditManager)
+      .add(SubscriptionFanoutManager)
+      .add(CleanupManager);
+  },
+};
 
 /**
  * Configures the local project-management server.

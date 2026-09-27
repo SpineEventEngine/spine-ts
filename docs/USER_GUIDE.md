@@ -232,6 +232,59 @@ The Entity, its stored record, and notifications of its state carry the same
 committed Version. A Projection advances its own version instead of copying
 the source Event's producer version.
 
+### Give an Entity an application service
+
+Suppose an assignment Process Manager needs your application's service to
+decide how much work a newly created task represents. That service belongs in
+its constructor, but Spine creates the Process Manager when a message arrives.
+Use `onCreate` to connect the two: Spine supplies the Entity's state, and your
+callback supplies the service.
+
+The Projects example's `AssignmentManager` takes an `AssignmentWeightService`
+after its normal `EntityOptions`. Its handler asks that service for a task's
+weight and adds the result to its stored counter. Register it like this:
+
+<!-- docs-snippet-path: examples/projects/test/topology.test.ts -->
+
+```ts
+import { BoundedContext } from "@spine-event-engine/server";
+import { AssignmentManager, type AssignmentWeightService } from "../src/index.js";
+
+// Set up the service once, before the context starts receiving messages.
+const weights: AssignmentWeightService = {
+  weightFor: () => 2,
+};
+
+const builder = BoundedContext.singleTenant("Assignments")
+  .withGeneratedRegistryRoot(new URL("..", import.meta.url))
+  .add(AssignmentManager, {
+    // Keep Spine's ID, state, version, and lifecycle options intact.
+    onCreate: (options) => new AssignmentManager(options, weights),
+  });
+
+// buildAsync() loads the generated handler registry for this application.
+const context = await builder.buildAsync();
+await context.close();
+```
+
+When another message arrives for a saved Process Manager, Spine loads its
+state and calls `onCreate` again for the new object. The service is supplied
+again; it is not saved in the database. The same mechanism works for Aggregates
+and Projections, including Projection rebuilds.
+
+The callback must return a fresh instance synchronously. Initialize an async
+client before building the context, rather than returning a promise from
+`onCreate`. Pass the supplied options unchanged. Put business work in handlers:
+a construction failure prevents the handler from running and is not a domain
+rejection. If a shared service needs closing, your application closes it after
+the context shuts down.
+
+Existing Entities that need only `EntityOptions` require no change. If a
+constructor requires another argument, TypeScript requires `onCreate` at
+registration. An explicit repository accepts the same callback alongside
+`entityType` and `schema`; see the
+[server reference](../packages/server/REFERENCE.md#entity-constructor-dependencies).
+
 ### Route messages to the right Entity
 
 Use an exact route when the first field is not the correct target. `CommandRouting`,

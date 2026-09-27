@@ -19,6 +19,22 @@ complete tenant to its configured database; Datastore routes it to a native
 namespace. Neither provider uses the Bounded Context name as a physical
 partition.
 
+## Assignment Manager dependency
+
+`AssignmentManager` takes `EntityOptions<string, typeof AssignmentManagerSchema>`
+and an `AssignmentWeightService` in its constructor. Its `TaskCreated`
+reaction asks `weightFor(event)` for the increment to its stored `updates`
+counter. `createProjectManagementContext(weights)` registers it through
+`onCreate`, forwarding the framework options and the same application service
+for every fresh or restored object. Omitting the argument uses weight one.
+
+The `@React` handler declares `undefined`: it changes state without producing
+another Event. The service is a synchronous application dependency, not Entity state. This
+example makes no external network calls and adds no dependency container.
+The topology test supplies a fixed weight of three and verifies two deliveries
+produce stored updates six and version two. The existing load runner continues
+to exercise project creation, not task assignment.
+
 ## Load-runner behavior
 
 Each simulated user uses one HTTP/2 session and a subscription filtered to its

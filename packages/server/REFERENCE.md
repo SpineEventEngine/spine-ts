@@ -40,6 +40,39 @@ consume Events, rejections, or Entity states and produce no signal. State
 subscribers use the System Event Bus. Produced signals are published in-process
 on a best-effort basis; this is not an exactly-once contract.
 
+## Entity constructor dependencies
+
+Supply `onCreate` when an Entity constructor needs an application service:
+`new Repository({ entityType, schema, onCreate })` for an explicit repository,
+or `.add(EntityClass, { onCreate })` for generated repository assembly. The
+callback receives `EntityOptions` with the registered class's exact identifier
+and state-schema types. Its result must be an instance of that class.
+
+`onCreate` is required when the class cannot be constructed with framework
+options alone. It is optional for existing one-options constructors and for
+constructors whose additional parameters are optional or have defaults.
+
+For each new object, the callback must synchronously return a fresh instance
+and pass the supplied options unchanged to its constructor. Those options
+contain the ID, schema, state, Spine `Version`, and lifecycle flags. The same
+callback runs when restoring a stored Aggregate, Projection, or Process Manager,
+and when creating a Projection during a rebuild. It is not a once-per-ID hook.
+Queries that read stored state without constructing an Entity do not call it.
+
+Construct and initialize shared services before building the context. Keep
+network calls and other business work in handlers, not in `onCreate`. A thrown
+construction error fails that dispatch before its handler runs; it is not a
+domain rejection. An asynchronous callback or a result of the wrong class is
+rejected. Services are neither serialized nor closed by Spine; close them in
+application shutdown after closing the context.
+
+Spine still connects Entity history and Process Manager queries. A constructor
+callback has no active handler actor or tenant; handler queries retain their
+normal context. This feature adds no dependency container or storage format.
+
+See the [Entity dependency guide](../../docs/USER_GUIDE.md#give-an-entity-an-application-service)
+and the [Projects example](../../examples/projects/README.md).
+
 ## Integration broker and event origin
 
 Each `BoundedContext` creates and closes exactly one private integration broker.
