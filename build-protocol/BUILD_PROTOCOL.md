@@ -97,9 +97,10 @@ senior engineer specializing in the assigned aspect.
 Use Standard speed. Do not enable Fast/boost mode. Max and Ultra reasoning are
 outside the normal autonomous cycle.
 
-Always start with the least expensive GPT-5.6 configuration suitable for the
-function and pass the model plus reasoning explicitly when spawning. An omitted
-model inherits the parent and is a protocol defect.
+Use the configured GPT-6 profile for each function and pass the model plus
+reasoning explicitly when spawning. An omitted model inherits the parent and is
+a protocol defect. The main project chat is intentionally fixed at Astra High;
+subagents use the least expensive configured profile suitable for their work.
 
 Before the first child dispatch in a session, verify that the selected
 execution surface supports the required model profiles and explicit child
@@ -121,29 +122,30 @@ field was omitted, the wrong role ran, a mismatch is visible, or the surface
 actually fell back to an inherited profile. This is an orchestrator
 assignment-acceptance gate; it does not create a verifier role.
 
-| Existing function                                                                                               | Model           | Reasoning                                        |
-| --------------------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------ |
-| Main orchestration in future sessions                                                                           | `gpt-5.6-sol`   | `medium`                                         |
-| Requirements splitting, architecture, domain modelling, public-contract design, or difficult milestone planning | `gpt-5.6-sol`   | `high`                                           |
-| Normal TypeScript implementation, ordinary fixes, and bounded refactoring                                       | `gpt-5.6-terra` | `medium`                                         |
-| Correctness, DDD, compatibility, concurrency, persistence, security, or difficult public-contract review        | `gpt-5.6-terra` | `high`                                           |
-| Builds, tests, typechecking, linting, log triage, and repository scanning                                       | `gpt-5.6-luna`  | `low`, or `medium` for nontrivial classification |
-| Dependency, documentation, package, and version-specific API verification                                       | `gpt-5.6-luna`  | `medium`                                         |
-| High-risk architecture or correctness escalation                                                                | `gpt-5.6-sol`   | `high`                                           |
+| Existing function                                                                                               | Model         | Reasoning                                        |
+| --------------------------------------------------------------------------------------------------------------- | ------------- | ------------------------------------------------ |
+| Main orchestration in future sessions                                                                           | `gpt-6-astra` | `high`                                           |
+| Requirements splitting, architecture, domain modelling, public-contract design, or difficult milestone planning | `gpt-6-astra` | `high`                                           |
+| Normal TypeScript implementation, ordinary fixes, and bounded refactoring                                       | `gpt-6-sol`   | `medium`                                         |
+| Correctness, DDD, compatibility, concurrency, persistence, or difficult public-contract review                  | `gpt-6-sol`   | `medium`                                         |
+| Final release-readiness security review                                                                         | `gpt-6-sol`   | `high`                                           |
+| Builds, tests, typechecking, linting, log triage, and repository scanning                                       | `gpt-6-luna`  | `low`, or `medium` for nontrivial classification |
+| Dependency, documentation, package, and version-specific API verification                                       | `gpt-6-luna`  | `medium`                                         |
+| High-risk architecture or correctness escalation                                                                | `gpt-6-astra` | `high`                                           |
 
 The requirements splitter is the existing architecture/planning role. Invoke it
 only for a new subsystem or bounded context, changed aggregate/entity
 responsibility, public or serialized contract, command/event/domain-service
 semantics, transaction/consistency/concurrency/idempotency rule, or a
 demonstrated architectural blocker. Ordinary implementation outlines and fixes
-remain with the Sol Medium orchestrator and Terra Medium implementer.
+remain with the Astra High orchestrator and Sol Medium implementer.
 
-Escalate Luna to Terra only when evidence gathering becomes nontrivial code
-reasoning. Escalate Terra Medium to Terra High for deeper correctness analysis.
-Escalate Terra to Sol High only for demonstrated ambiguity, architectural
-significance, repeated lower-tier failure, or high-risk behavior. After the
-uncertainty is resolved, return ordinary implementation and verification to
-Terra and Luna.
+Escalate Luna to Sol Medium only when evidence gathering becomes nontrivial code
+reasoning. Escalate Sol Medium to Astra High only for demonstrated ambiguity,
+architectural significance, repeated lower-tier failure, or high-risk behavior.
+The final security reviewer uses Sol High as a deliberate exception. After the
+uncertainty is resolved, return ordinary implementation and verification to Sol
+Medium and Luna.
 
 The project has no separate verifier role. Mechanical validation is an
 orchestrator-dispatched function using Luna Low/Medium; this does not create or
@@ -184,7 +186,7 @@ rename an agent role.
    records answers.
 4. Each write-heavy task/sub-task receives a dedicated implementation branch and
    worktree when isolation is useful.
-5. One Terra Medium implementation sub-agent is responsible for that task/sub-task branch and
+5. One Sol Medium implementation sub-agent is responsible for that task/sub-task branch and
    its behavior-focused tests.
 6. Luna Low/Medium mechanical validation runs the narrowest useful tests,
    typechecks, lint, format, builds, examples, and log classification before
@@ -295,13 +297,13 @@ fail closed to the complete task gate. Deterministic human-document audience
 checks still run. `verify:release` remains unconditional.
 
 Use scripts-first mechanical checks before LLM failure classification. For a
-frozen approved wave, one Sol/high architecture pass is sufficient; repeat it
+frozen approved wave, one Astra High architecture pass is sufficient; repeat it
 only after a material contract change or demonstrated architecture blocker.
-Ordinary implementation uses Terra/medium, and ordinary documentation or API
-documentation uses Luna/medium or Terra/medium. Preserve Terra/high for public
-or wire contracts and real correctness, persistence, concurrency, or lifecycle
-risk. Keep narrow slice documentation current, but defer broad documentation
-and all-example execution until runtime interfaces stabilize.
+Ordinary implementation and technical review use Sol Medium, while ordinary
+documentation and version-specific API verification use Luna Medium. Escalate
+demonstrated architecture or correctness ambiguity to Astra High. Keep narrow
+slice documentation current, but defer broad documentation and all-example
+execution until runtime interfaces stabilize.
 
 The splitter must prefer small task slices. A task should produce a review
 package that one reviewer can inspect carefully in one pass. If the proposed
@@ -357,9 +359,10 @@ one complete wave of relevant reviewers, and one aggregated correction batch.
 A high-risk task changes persistence or transactions, concurrency or
 idempotency, lifecycle responsibility, public or serialized contracts, security or
 authentication, destructive behavior or migrations, or architecture spanning
-multiple subsystems. Preserve selective Sol High planning, Terra High review
-for the affected risk, regression evidence, and full verification. High-risk
-defects are never waived by review-cycle limits.
+multiple subsystems. Preserve selective Astra High planning, the relevant Sol
+Medium specialist review, regression evidence, and full verification. The final
+release-readiness security review remains Sol High. High-risk defects are never
+waived by review-cycle limits.
 
 The orchestrator records the classification and concrete reasons. A task may
 be promoted at any time; it must not be demoted after implementation merely to
@@ -458,8 +461,9 @@ and similar reproducible rules are mechanical checks, not reasons to spawn a
 specialist. Public framework compatibility, persisted or serialized data,
 aggregate consistency, transaction/concurrency/idempotency, migrations,
 authentication/security, or destructive behavior always requires the
-corresponding Terra High review. Add Sol High review only when Terra High
-cannot establish the answer or the high-risk escalation rule applies.
+corresponding Sol Medium specialist review. Final release-readiness security
+review uses Sol High. Demonstrated architecture or correctness ambiguity
+escalates to the Astra High orchestrator.
 
 Run independent relevant reviewers concurrently when the execution surface has
 capacity. If a lane must be sequenced for capacity or dependency reasons,
@@ -707,12 +711,15 @@ Additional end-user API gates:
 - end-user `@Assign`, `@Command`, and `@React` handlers must declare explicit
   return types as allowed by `TECHNICAL_SPEC.md`: `@Assign` emits generated
   events, `@Command` emits generated commands, and `@React` emits generated
-  events or explicit `void` for no emission;
-- end-user `@Subscribe` handlers must declare explicit `void` return types;
+  events or `undefined` for no output. Event/rejection-input `@Command` may also
+  return `undefined`, alone or in any union position. Command-input handlers
+  must produce at least one signal on success;
+- end-user `@Subscribe` handlers must declare explicit `void` or `Promise<void>`
+  return types;
 - end-user application code must not use schema-bearing decorators such as
   `@Assign(SomeSchema)` unless a task records a temporary legacy/testing
   exception;
-- end-user application code must not define or call aggregate `@Apply` handlers;
+- aggregates must update state directly in framework-controlled transactions;
 - end-user application code must not call transaction-control methods such as
   `startTransaction()` or `commitTransaction()`;
 - end-user application code must not construct internal `Event` IDs or use
@@ -736,12 +743,12 @@ automated checks that reject:
   `examples/**/src`;
 - `packCommand(` or `packEvent(` inside ordinary end-user handler methods;
 - schema-bearing decorators in ordinary end-user/example code;
-- aggregate `@Apply` handlers in ordinary end-user/example code;
+- unsupported handler decorators in ordinary end-user/example code;
 - transaction-control calls such as `startTransaction()` and
   `commitTransaction()` inside ordinary end-user/example code;
 - direct internal event ID construction such as `EventIdSchema` usage inside
   ordinary end-user/example code;
-- `@Subscribe` handlers without explicit `void` return types;
+- `@Subscribe` handlers without explicit `void` or `Promise<void>` return types;
 - default-route ID extraction helpers in end-user handlers;
 - handler materialization helpers in examples, including
   `materializeDecoratedEntityHandlers`, whether imported from the framework or

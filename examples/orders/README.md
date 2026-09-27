@@ -62,6 +62,28 @@ to focus on the handler.
 many Projections and Process Managers are deliberately a topology exercise,
 not a claim that every application needs that many read models.
 
+`OrderSalesManager` shows a reaction that changes state without producing another
+signal. Its `@React` handler declares `undefined`, not `void`:
+
+```text
+@React onOrderCreated(event: OrderCreated): undefined {
+  // Count this order in the Process Manager's state.
+  this.update((draft) =>
+    Object.assign(
+      draft,
+      create(OrderSalesManagerSchema, { id: this.id, updates: draft.updates + 1 }),
+    ),
+  );
+  // State changes are saved, but there is no outgoing Event.
+  return undefined;
+}
+```
+
+Use `void` or `Promise<void>` for `@Subscribe` methods instead. A reaction that
+sometimes produces a signal can declare its concrete type alongside
+`undefined`, for example `OrderCreated | undefined`. An asynchronous reaction
+wraps the same result in one `Promise`.
+
 ## 🗄️ Try the same model with durable storage
 
 The local scenario deliberately uses memory. Its application assembly accepts

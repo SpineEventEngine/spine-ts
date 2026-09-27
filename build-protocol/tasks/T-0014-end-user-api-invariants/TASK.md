@@ -32,7 +32,7 @@ event ID generation.
   app code.
 - `@Assign`, `@Command`, and `@React` handlers require explicit return types.
 - `@Subscribe` handlers require explicit `void` return types.
-- Aggregates must not use `@Apply`; de-event-sourcing makes aggregate appliers
+- Aggregates must not use event replay; de-event-sourcing makes aggregate appliers
   invalid.
 - End-user code must not call `startTransaction()` or otherwise control entity
   transactions. The framework opens, commits, validates, and rolls back entity
@@ -253,7 +253,7 @@ Out of scope:
   verification passed with 76 tests; repo-level cleanup remains intentionally
   red on the current to-do example migration input.
 - `2026-07-07 16:40 WEST`: Main orchestrator addressed round-14 findings:
-  stale event-sourced replay wording was removed, no-`@Apply`/no end-user
+  stale event-sourced replay wording was removed, no-event replay/no end-user
   transaction/no internal event-ID rules were promoted into shared docs,
   generated signal fallback classification no longer treats `TaskCommand` as an
   event, package `src` symlink traversal was removed from package-test checking,
@@ -271,7 +271,7 @@ Out of scope:
   framework wraps those returned messages into internal `Event` envelopes with
   internal IDs and writes snapshots/events. Projection subscriber execution now
   owns the transaction when subscribers only mutate draft state. The to-do example
-  no longer contains `@Apply`, schema-bearing decorators, transaction calls,
+  no longer contains event replay, schema-bearing decorators, transaction calls,
   framework `Event` returns, `EventIdSchema`, `packEvent`, default-route ID
   validation helpers, or local handler materialization.
 - `2026-07-07 17:06 WEST`: Verification evidence after the migration:
@@ -295,7 +295,7 @@ examples/todo/src/index.test.ts packages/server/test/repository/repository-routi
   dispatch. Projection subscriber execution no longer uses source-text heuristics
   for transaction ownership. The to-do aggregate command handlers now use the
   routed `this.id`. Public docs no longer present schema-bearing decorators,
-  aggregate `@Apply`, or app-owned materialization as normal application usage.
+  aggregate event replay, or app-owned materialization as normal application usage.
   The cleanup guard now uses NUL-separated Git file listing, escaped diagnostics,
   broader target-helper detection, and smaller target-validation helpers.
   Verification passed with full coverage 733/733, 95.12% statements, and 90.46%
@@ -364,7 +364,7 @@ examples/todo/src/index.test.ts packages/server/test/repository/repository-routi
   (`format:check`, `lint`, `docs:check`, cleanup guard, `git diff --check`).
   Full coverage passed 740/740 with 95.28% statements and 90.51% branches.
 - `2026-07-07 18:18 WEST`: Round-22 architecture documentation findings fixed.
-  Architecture docs now scope schema-bearing decorators, `@Apply`, and
+  Architecture docs now scope schema-bearing decorators, event replay, and
   materialization as compatibility and describe the managed aggregate command
   transaction path without applier wording.
 - `2026-07-07 18:19 WEST`: Round-22 architecture documentation verification
@@ -409,7 +409,7 @@ examples/todo/src/index.test.ts packages/server/test/repository/repository-routi
   branches, 97.92% functions, and 95.33% lines.
 - `2026-07-07 18:51 WEST`: Round-28 TypeScript/API findings fixed.
   `@spine-ts/storage` now root-exports the public `EventRollback` token type.
-  Public API docs and decorator JSDoc now mark `@Apply` and
+  Public API docs and decorator JSDoc now mark event replay and
   `materializeDecoratedEntityHandlers()` as legacy/framework compatibility, not
   ordinary application APIs.
 - `2026-07-07 18:52 WEST`: First TypeScript/API docs verification attempt
@@ -417,7 +417,7 @@ examples/todo/src/index.test.ts packages/server/test/repository/repository-routi
   missing from the expected API export manifest. The manifest now includes
   `EventRollback`.
 - `2026-07-07 18:53 WEST`: First lint attempt after the TypeScript/API docs
-  fix failed because formal `@deprecated` JSDoc on `@Apply` tripped
+  fix failed because formal `@deprecated` JSDoc on event replay tripped
   `no-deprecated` in framework compatibility exports/tests. The public warning
   text remains, but the formal deprecation tag was removed.
 - `2026-07-07 18:55 WEST`: Round-28 TypeScript/API public-surface
@@ -466,7 +466,7 @@ examples/todo/src/index.test.ts packages/server/test/repository/repository-routi
 ## Verification Plan
 
 - Focused tests for generated registry/decorator metadata.
-- Focused tests for aggregate command handling without `@Apply`.
+- Focused tests for aggregate command handling without event replay.
 - Focused tests for default first-field command route rejection before handler
   invocation.
 - Focused tests proving user handlers return domain events and the framework

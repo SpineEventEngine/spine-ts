@@ -200,7 +200,7 @@ const externalCommandSource = `
   import { type CreateTask, type RenameTask } from "../generated/task_commands_pb.js";
   import { type TaskCreated } from "../generated/task_events_pb.js";
 
-  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema, number> {
+  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema> {
     @Assign assign(command: External<CreateTask>): TaskCreated { throw new Error(String(command)); }
     @Command onEvent(event: External<TaskCreated>): RenameTask { throw new Error(String(event)); }
   }
@@ -215,7 +215,7 @@ const externalOriginSource = `
 
   type IndirectExternal<T> = External<T>;
   type LocalEvent = TaskCreated;
-  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema, number> {
+  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema> {
     @Subscribe externalEvent(event: External<TaskCreated>): void { void event; }
     @Subscribe domesticEvent(event: TaskRenamed): void { void event; }
     @React externalReaction(event: External<TaskCreated>): TaskRenamed { throw new Error(String(event)); }

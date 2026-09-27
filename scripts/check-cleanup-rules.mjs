@@ -746,8 +746,8 @@ function nodeDecorators(node) {
   return ts.canHaveDecorators(node) ? (ts.getDecorators(node) ?? []) : [];
 }
 
-function buildImportState(source) {
-  const state = createImportState();
+function buildImportState(source, context) {
+  const state = createImportState(context);
 
   for (const statement of source.statements) {
     recordImportStatement(statement, state);
@@ -761,6 +761,7 @@ function buildImportState(source) {
 function cloneState(state) {
   return {
     serverDecoratorAliases: new Map(state.serverDecoratorAliases),
+    externalTypeAliases: new Set(state.externalTypeAliases),
     forbiddenApiAliases: new Map(state.forbiddenApiAliases),
     coreNamespaces: new Set(state.coreNamespaces),
     coreSignalEnvelopeOwners: new Set(state.coreSignalEnvelopeOwners),
@@ -770,13 +771,20 @@ function cloneState(state) {
     generatedTypes: new Map(state.generatedTypes),
     generatedNamespaces: new Map(state.generatedNamespaces),
     localTypeAliases: new Map(state.localTypeAliases),
+    localAliasDeclarations: new Map(state.localAliasDeclarations),
+    importedTypeAliases: new Map(state.importedTypeAliases),
+    shadowedTypes: new Set(state.shadowedTypes),
+    repoRoot: state.repoRoot,
+    file: state.file,
+    moduleCache: state.moduleCache,
     importEqualsAliases: state.importEqualsAliases,
   };
 }
 
-function createImportState() {
+function createImportState(context) {
   return {
     serverDecoratorAliases: new Map(),
+    externalTypeAliases: new Set(),
     forbiddenApiAliases: new Map(),
     coreNamespaces: new Set(),
     coreSignalEnvelopeOwners: new Set(),
@@ -786,6 +794,12 @@ function createImportState() {
     generatedTypes: new Map(),
     generatedNamespaces: new Map(),
     localTypeAliases: new Map(),
+    localAliasDeclarations: new Map(),
+    importedTypeAliases: new Map(),
+    shadowedTypes: new Set(),
+    repoRoot: context.repoRoot,
+    file: context.file,
+    moduleCache: context.moduleCache,
     importEqualsAliases: [],
   };
 }
@@ -799,7 +813,10 @@ function recordImportStatement(statement, state) {
   }
   if (ts.isTypeAliasDeclaration(statement)) {
     state.localTypeAliases.set(statement.name.text, statement.type);
+    state.localAliasDeclarations.set(statement.name.text, statement);
   }
+  if (ts.isInterfaceDeclaration(statement) || ts.isClassDeclaration(statement))
+    state.shadowedTypes.add(statement.name.text);
 }
 
 function recordImportDeclaration(statement, state) {
@@ -808,6 +825,10 @@ function recordImportDeclaration(statement, state) {
 
   if (clause?.namedBindings === undefined) {
     return;
+  }
+
+  if (ts.isNamedImports(clause.namedBindings)) {
+    for (const element of clause.namedBindings.elements) state.shadowedTypes.add(element.name.text);
   }
 
   if (moduleName === "@spine-event-engine/core") {
@@ -821,6 +842,19 @@ function recordImportDeclaration(statement, state) {
   }
   if (isGeneratedModule(moduleName)) {
     recordGeneratedImport(clause, state, moduleName);
+  }
+  if (moduleName.startsWith(".") && !isGeneratedModule(moduleName)) {
+    recordRelativeTypeImports(clause, state, moduleName);
+  }
+}
+
+function recordRelativeTypeImports(clause, state, moduleName) {
+  if (!ts.isNamedImports(clause.namedBindings)) return;
+  for (const element of clause.namedBindings.elements) {
+    state.importedTypeAliases.set(element.name.text, {
+      moduleName,
+      importedName: element.propertyName?.text ?? element.name.text,
+    });
   }
 }
 
@@ -867,6 +901,7 @@ function recordServerImport(clause, state) {
     if (valueElement) {
       state.serverDecoratorAliases.set(element.name.text, importedName);
     }
+    if (importedName === "External") state.externalTypeAliases.add(element.name.text);
     if (isForbiddenEndUserServerApi(importedName)) {
       state.forbiddenApiAliases.set(element.name.text, importedName);
     }
@@ -918,7 +953,7 @@ function generatedModuleKind(moduleName) {
   if (/(^|\/)commands?_pb(\.js)?$/.test(moduleName)) {
     return "command";
   }
-  if (/(^|\/)events?_pb(\.js)?$/.test(moduleName)) {
+  if (/(^|\/)(events?|rejections?)_pb(\.js)?$/.test(moduleName)) {
     return "event";
   }
 
@@ -1067,7 +1102,10 @@ function stateForScope(node, baseState) {
   for (const statement of scopeStatements(node)) {
     if (ts.isTypeAliasDeclaration(statement)) {
       state.localTypeAliases.set(statement.name.text, statement.type);
+      state.localAliasDeclarations.set(statement.name.text, statement);
     }
+    if (ts.isInterfaceDeclaration(statement) || ts.isClassDeclaration(statement))
+      state.shadowedTypes.add(statement.name.text);
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
         recordValueAlias(declaration, state, aliasNames);
@@ -1667,92 +1705,179 @@ function firstForbiddenTypeLabel(typeNodes, importState, state) {
   return undefined;
 }
 
-function returnIssue(typeNode, importState, expectedKind) {
+function returnIssue(typeNode, importState, expectedKind, allowMissing = false) {
   if (forbiddenTypeLabel(typeNode, importState) !== undefined) {
     return undefined;
   }
 
-  return isMessageReturn(typeNode, importState, expectedKind)
+  return (allowMissing && isUndefinedTypeNode(typeNode, importState)) ||
+    isMessageReturn(typeNode, importState, expectedKind, allowMissing)
     ? undefined
     : `handler return type generated domain ${expectedKind}`;
 }
 
-function isMessageReturn(typeNode, importState, expectedKind) {
+function isMessageReturn(typeNode, importState, expectedKind, allowMissing) {
   const state = { remaining: maxTypeReferenceVisits, seen: new Set() };
 
-  return checkMessageReturn(typeNode, importState, state, expectedKind);
-}
-
-function checkMessageReturn(typeNode, importState, state, expectedKind) {
-  state.remaining -= 1;
-  if (state.remaining < 0) {
-    return false;
-  }
-
-  if (ts.isParenthesizedTypeNode(typeNode)) {
-    return checkMessageReturn(typeNode.type, importState, state, expectedKind);
-  }
-
-  if (ts.isTypeOperatorNode(typeNode)) {
-    return checkMessageReturn(typeNode.type, importState, state, expectedKind);
-  }
-
-  if (ts.isTupleTypeNode(typeNode)) {
-    return (
-      hasRequiredHead(typeNode, importState, state, expectedKind) &&
-      typeNode.elements.every((element) =>
-        checkTupleElement(element, importState, state, expectedKind),
-      )
-    );
-  }
-
-  if (ts.isTypeReferenceNode(typeNode)) {
-    return checkTypeReturn(typeNode, importState, state, expectedKind);
-  }
-
-  return false;
-}
-
-function hasRequiredHead(typeNode, importState, state, expectedKind) {
-  const first = typeNode.elements[0];
-
   return (
-    first !== undefined &&
-    !ts.isRestTypeNode(first) &&
-    !ts.isOptionalTypeNode(first) &&
-    checkTupleElement(first, importState, state, expectedKind)
+    (checkMessageReturn(typeNode, importState, state, expectedKind, {
+      allowMissing,
+      collectionDepth: 0,
+      promiseDepth: 0,
+      wholeResult: true,
+    }) ?? 0) > 0
   );
 }
 
-function checkTupleElement(typeNode, importState, state, expectedKind) {
-  if (ts.isRestTypeNode(typeNode)) {
+function isUndefinedTypeNode(
+  typeNode,
+  imports,
+  seen = new Set(),
+  promised = false,
+  bindings = new Map(),
+) {
+  if (ts.isParenthesizedTypeNode(typeNode))
+    return isUndefinedTypeNode(typeNode.type, imports, seen, promised, bindings);
+  if (typeNode.kind === ts.SyntaxKind.UndefinedKeyword) return true;
+  if (!ts.isTypeReferenceNode(typeNode) || !ts.isIdentifier(typeNode.typeName)) return false;
+  const name = typeNode.typeName.text;
+  const bound = bindings.get(name);
+  if (bound !== undefined)
+    return isUndefinedTypeNode(bound.type, bound.imports, seen, promised, bound.bindings);
+  const alias =
+    localAlias(name, imports) ??
+    (imports.importedTypeAliases.has(name) ? importedAlias(name, imports) : undefined);
+  if (alias === undefined)
     return (
-      ts.isArrayTypeNode(typeNode.type) &&
-      checkMessageReturn(typeNode.type.elementType, importState, state, expectedKind)
+      name === "Promise" &&
+      !promised &&
+      typeNode.typeArguments?.length === 1 &&
+      !imports.shadowedTypes.has(name) &&
+      isUndefinedTypeNode(typeNode.typeArguments[0], imports, seen, true, bindings)
     );
-  }
-
-  if (ts.isNamedTupleMember(typeNode)) {
-    if (typeNode.dotDotDotToken !== undefined) {
-      return (
-        ts.isArrayTypeNode(typeNode.type) &&
-        checkMessageReturn(typeNode.type.elementType, importState, state, expectedKind)
-      );
-    }
-
-    return (
-      !typeNode.questionToken && checkTupleElement(typeNode.type, importState, state, expectedKind)
-    );
-  }
-
-  if (ts.isOptionalTypeNode(typeNode)) {
-    return false;
-  }
-
-  return checkMessageReturn(typeNode, importState, state, expectedKind);
+  if ((alias.parameters?.length ?? 0) !== (typeNode.typeArguments?.length ?? 0)) return false;
+  const key = `${alias.imports.file}:${alias.name}`;
+  if (seen.has(key)) return false;
+  const nextBindings = new Map(bindings);
+  for (const [index, param] of (alias.parameters ?? []).entries())
+    nextBindings.set(param.name.text, { type: typeNode.typeArguments[index], imports, bindings });
+  seen.add(key);
+  const result = isUndefinedTypeNode(alias.type, alias.imports, seen, promised, nextBindings);
+  seen.delete(key);
+  return result;
 }
 
-function checkTypeReturn(typeNode, importState, state, expectedKind) {
+function containsUndefinedReturn(typeNode, imports, options, seen = new Set()) {
+  if (ts.isParenthesizedTypeNode(typeNode))
+    return containsUndefinedReturn(typeNode.type, imports, options, seen);
+  if (typeNode.kind === ts.SyntaxKind.UndefinedKeyword) return true;
+  if (ts.isUnionTypeNode(typeNode))
+    return typeNode.types.some((branch) => containsUndefinedReturn(branch, imports, options, seen));
+  if (!ts.isTypeReferenceNode(typeNode) || !ts.isIdentifier(typeNode.typeName)) return false;
+  const name = typeNode.typeName.text;
+  const bound = options.typeBindings?.get(name);
+  if (bound !== undefined)
+    return containsUndefinedReturn(
+      bound.type,
+      bound.imports,
+      { ...options, typeBindings: bound.bindings },
+      seen,
+    );
+  const alias =
+    localAlias(name, imports) ??
+    (imports.importedTypeAliases.has(name) ? importedAlias(name, imports) : undefined);
+  if (alias === undefined) return false;
+  const key = `${alias.imports.file}:${alias.name}`;
+  if (seen.has(key) || (alias.parameters?.length ?? 0) !== (typeNode.typeArguments?.length ?? 0))
+    return false;
+  const typeBindings = new Map(options.typeBindings);
+  for (const [index, param] of (alias.parameters ?? []).entries())
+    typeBindings.set(param.name.text, {
+      type: typeNode.typeArguments[index],
+      imports,
+      bindings: options.typeBindings,
+    });
+  seen.add(key);
+  const result = containsUndefinedReturn(
+    alias.type,
+    alias.imports,
+    { ...options, typeBindings },
+    seen,
+  );
+  seen.delete(key);
+  return result;
+}
+
+function checkMessageReturn(typeNode, importState, state, expectedKind, options) {
+  state.remaining -= 1;
+  if (state.remaining < 0) return undefined;
+  if (ts.isParenthesizedTypeNode(typeNode))
+    return checkMessageReturn(typeNode.type, importState, state, expectedKind, options);
+  if (ts.isTypeOperatorNode(typeNode))
+    return typeNode.operator === ts.SyntaxKind.ReadonlyKeyword
+      ? checkMessageReturn(typeNode.type, importState, state, expectedKind, options)
+      : undefined;
+  if (typeNode.kind === ts.SyntaxKind.UndefinedKeyword) return options.allowMissing ? 0 : undefined;
+  if (ts.isUnionTypeNode(typeNode))
+    return sumMessageReturns(typeNode.types, importState, state, expectedKind, options);
+  if (ts.isArrayTypeNode(typeNode))
+    return options.collectionDepth === 0
+      ? checkMessageReturn(typeNode.elementType, importState, state, expectedKind, {
+          ...options,
+          allowMissing: options.allowMissing,
+          collectionDepth: 1,
+          wholeResult: false,
+        })
+      : undefined;
+  if (ts.isTupleTypeNode(typeNode))
+    return checkTupleReturn(typeNode, importState, state, expectedKind, options);
+  return ts.isTypeReferenceNode(typeNode)
+    ? checkTypeReturn(typeNode, importState, state, expectedKind, options)
+    : undefined;
+}
+
+function sumMessageReturns(types, importState, state, expectedKind, options) {
+  let count = 0;
+  for (const type of types) {
+    const branch = checkMessageReturn(type, importState, state, expectedKind, {
+      ...options,
+      wholeResult: false,
+    });
+    if (branch === undefined) return undefined;
+    count += branch;
+  }
+  return count;
+}
+
+function checkTupleReturn(typeNode, importState, state, expectedKind, options) {
+  if (options.collectionDepth !== 0 || typeNode.elements.length === 0) return undefined;
+  let count = 0;
+  let guaranteed = false;
+  for (const element of typeNode.elements) {
+    const member = ts.isNamedTupleMember(element) ? element.type : element;
+    const optional =
+      ts.isOptionalTypeNode(member) ||
+      (ts.isNamedTupleMember(element) && element.questionToken !== undefined);
+    if (
+      ts.isRestTypeNode(member) ||
+      (ts.isNamedTupleMember(element) && element.dotDotDotToken !== undefined)
+    )
+      return undefined;
+    const value = ts.isOptionalTypeNode(member) ? member.type : member;
+    if (!optional && !containsUndefinedReturn(value, importState, options)) guaranteed = true;
+    const branch = checkMessageReturn(value, importState, state, expectedKind, {
+      ...options,
+      allowMissing: true,
+      collectionDepth: 1,
+      wholeResult: false,
+    });
+    if (branch === undefined) return undefined;
+    count += branch;
+  }
+  return options.allowMissing || guaranteed ? count : undefined;
+}
+
+function checkTypeReturn(typeNode, importState, state, expectedKind, options) {
   const { typeName } = typeNode;
 
   if (ts.isIdentifier(typeName)) {
@@ -1762,33 +1887,149 @@ function checkTypeReturn(typeNode, importState, state, expectedKind) {
       importState,
       state,
       expectedKind,
+      options,
     );
   }
 
   if (ts.isQualifiedName(typeName)) {
-    return isGeneratedQualified(typeName, importState, expectedKind);
+    return typeNode.typeArguments?.length === 0 || typeNode.typeArguments === undefined
+      ? isGeneratedQualified(typeName, importState, expectedKind)
+        ? 1
+        : undefined
+      : undefined;
   }
 
-  return false;
+  return undefined;
 }
 
-function checkNamedReturn(name, typeArguments, importState, state, expectedKind) {
-  if (typeArguments.length > 0 || isContainerName(name)) {
-    return false;
+function checkNamedReturn(name, typeArguments, importState, state, expectedKind, options) {
+  const bound = options.typeBindings?.get(name);
+  if (bound !== undefined) {
+    if (typeArguments.length > 0) return undefined;
+    return checkMessageReturn(bound.type, bound.imports, state, expectedKind, {
+      ...options,
+      typeBindings: bound.bindings,
+    });
   }
-
-  const aliasedType = importState.localTypeAliases.get(name);
-  if (aliasedType !== undefined) {
-    if (state.seen.has(name)) {
-      return false;
-    }
-    state.seen.add(name);
-    const matches = checkMessageReturn(aliasedType, importState, state, expectedKind);
-    state.seen.delete(name);
-    return matches;
+  const local = localAlias(name, importState);
+  if (
+    (name === "Promise" || name === "Array" || name === "ReadonlyArray") &&
+    (local !== undefined || importState.importedTypeAliases.has(name))
+  )
+    return undefined;
+  if (local !== undefined)
+    return aliasReturn(local, typeArguments, importState, state, expectedKind, options);
+  if (importState.importedTypeAliases.has(name)) {
+    const imported = importedAlias(name, importState);
+    return imported === undefined
+      ? undefined
+      : aliasReturn(imported, typeArguments, importState, state, expectedKind, options);
   }
+  if (name === "Promise" || name === "Array" || name === "ReadonlyArray")
+    return checkNamedContainer(name, typeArguments, importState, state, expectedKind, options);
+  return typeArguments.length === 0 && importState.generatedTypes.get(name) === expectedKind
+    ? 1
+    : undefined;
+}
 
-  return importState.generatedTypes.get(name) === expectedKind;
+function localAlias(name, importState) {
+  const type = importState.localTypeAliases.get(name);
+  return type === undefined
+    ? undefined
+    : {
+        type,
+        imports: importState,
+        name,
+        parameters: importState.localAliasDeclarations.get(name)?.typeParameters,
+      };
+}
+
+function checkNamedContainer(name, typeArguments, importState, state, expectedKind, options) {
+  if (importState.shadowedTypes.has(name)) return undefined;
+  if (
+    name === "Promise" &&
+    typeArguments.length === 1 &&
+    options.promiseDepth === 0 &&
+    options.collectionDepth === 0 &&
+    options.wholeResult
+  )
+    return checkMessageReturn(typeArguments[0], importState, state, expectedKind, {
+      ...options,
+      promiseDepth: 1,
+      wholeResult: false,
+    });
+  if (
+    (name === "Array" || name === "ReadonlyArray") &&
+    typeArguments.length === 1 &&
+    options.collectionDepth === 0
+  )
+    return checkMessageReturn(typeArguments[0], importState, state, expectedKind, {
+      ...options,
+      allowMissing: options.allowMissing,
+      collectionDepth: 1,
+      wholeResult: false,
+    });
+  return undefined;
+}
+
+function aliasReturn(alias, typeArguments, callerImports, state, expectedKind, options) {
+  const key = `${alias.imports.file}:${alias.name}`;
+  const parameters = alias.parameters ?? [];
+  if (
+    state.seen.has(key) ||
+    typeArguments.length !== parameters.length ||
+    parameters.some((param) => param.constraint !== undefined || param.default !== undefined)
+  )
+    return undefined;
+  const typeBindings = new Map(options.typeBindings);
+  for (const [index, param] of parameters.entries())
+    typeBindings.set(param.name.text, {
+      type: typeArguments[index],
+      imports: callerImports,
+      bindings: options.typeBindings,
+    });
+  state.seen.add(key);
+  const matches = checkMessageReturn(alias.type, alias.imports, state, expectedKind, {
+    ...options,
+    typeBindings,
+  });
+  state.seen.delete(key);
+  return matches;
+}
+
+function importedAlias(name, importState) {
+  const binding = importState.importedTypeAliases.get(name);
+  if (binding === undefined) return undefined;
+  const moduleName = binding.moduleName.replace(/\.js$/u, ".ts");
+  const path = resolve(dirname(join(importState.repoRoot, importState.file)), moduleName);
+  const file = relative(importState.repoRoot, path);
+  if (file.split(sep)[0] !== "examples" || !file.endsWith(".ts")) return undefined;
+  let module = importState.moduleCache.get(file);
+  if (module === undefined) {
+    const read = readExampleSource(importState.repoRoot, realpathSync(importState.repoRoot), file);
+    if (read.kind !== "source") return undefined;
+    const imports = buildImportState(read.source, {
+      repoRoot: importState.repoRoot,
+      file,
+      moduleCache: importState.moduleCache,
+    });
+    module = { source: read.source, imports };
+    importState.moduleCache.set(file, module);
+  }
+  const alias = module.source.statements.find(
+    (statement) =>
+      ts.isTypeAliasDeclaration(statement) &&
+      statement.name.text === binding.importedName &&
+      (ts.getCombinedModifierFlags(statement) & ts.ModifierFlags.Export) !== 0,
+  );
+  return alias === undefined
+    ? undefined
+    : {
+        type: alias.type,
+        imports: module.imports,
+        name: binding.importedName,
+        parameters: alias.typeParameters,
+      };
 }
 
 function isGeneratedQualified(typeName, importState, expectedKind) {
@@ -1834,6 +2075,8 @@ function readSignalKind(typeNode, importState, state) {
 
   const { typeName } = typeNode;
   if (ts.isIdentifier(typeName)) {
+    if (importState.externalTypeAliases.has(typeName.text) && typeNode.typeArguments?.length === 1)
+      return readSignalKind(typeNode.typeArguments[0], importState, state);
     const aliasedType = importState.localTypeAliases.get(typeName.text);
     if (aliasedType !== undefined) {
       if (state.seen.has(typeName.text)) {
@@ -1876,10 +2119,6 @@ function isEventName(name) {
 
 function isNonSignalName(name) {
   return /(State|View|Details|Detail|Id|ID|Status|Priority|Pointer|Projection|Result)$/.test(name);
-}
-
-function isContainerName(name) {
-  return name === "Array" || name === "ReadonlyArray" || name === "Promise";
 }
 
 function commandFieldName(node, commandNames) {
@@ -2706,7 +2945,7 @@ function collectExampleFileViolations(repoRoot, resolvedRepoRoot, file) {
     return [source];
   }
 
-  return collectExampleApiViolations(source.file, source.source);
+  return collectExampleApiViolations(repoRoot, source.file, source.source);
 }
 
 function readExampleSource(repoRoot, resolvedRepoRoot, file) {
@@ -2750,11 +2989,15 @@ function resolvesOutsideRoot(resolvedRepoRoot, resolvedFile) {
   );
 }
 
-function collectExampleApiViolations(file, source) {
+function collectExampleApiViolations(repoRoot, file, source) {
   const violations = [];
   const schemaDecorators = ["Assign", "Command", "React", "Subscribe"];
-  const handlerDecorators = new Set(["Apply", ...schemaDecorators]);
-  const importState = buildImportState(source);
+  const handlerDecorators = new Set(schemaDecorators);
+  const importState = buildImportState(source, {
+    repoRoot,
+    file,
+    moduleCache: new Map(),
+  });
 
   function visit(node, state = importState, shadowedNames = new Set()) {
     const scope = stateForScope(node, state);
@@ -2773,13 +3016,6 @@ function collectExampleApiViolations(file, source) {
         .filter(Boolean);
 
       for (const decorator of decorators) {
-        if (serverDecoratorName(decorator, scopedState, scopedShadowedNames) === "Apply") {
-          violations.push({
-            kind: "api",
-            detail: lineDetail(source, file, decorator, "@Apply"),
-          });
-        }
-
         for (const name of schemaDecorators) {
           if (isSchemaBearingDecorator(decorator, name, scopedState, scopedShadowedNames)) {
             violations.push({
@@ -2907,13 +3143,18 @@ function handlerReturnViolations(node, decoratorNames, importState) {
         violations.push(`@${name} handler return type annotation`);
       } else {
         const expectedKind = name === "Command" ? "command" : "event";
-        const issue = returnIssue(node.type, importState, expectedKind);
+        const inputKind =
+          node.parameters[0]?.type === undefined
+            ? undefined
+            : typeNodeSignalKind(node.parameters[0].type, importState);
+        const optionalReaction = name === "React" || (name === "Command" && inputKind === "event");
+        const issue = returnIssue(node.type, importState, expectedKind, optionalReaction);
         if (issue !== undefined) {
           violations.push(issue);
         }
       }
     }
-    if (name === "Subscribe" && !isVoidTypeNode(node.type)) {
+    if (name === "Subscribe" && !isVoidTypeNode(node.type, importState)) {
       violations.push("@Subscribe handler return type void");
     }
   }
@@ -2936,8 +3177,54 @@ function handlerParameterViolations(node, decoratorNames) {
   return violations;
 }
 
-function isVoidTypeNode(type) {
-  return type?.kind === ts.SyntaxKind.VoidKeyword;
+function isVoidTypeNode(
+  type,
+  importState,
+  seen = new Set(),
+  promised = false,
+  bindings = new Map(),
+) {
+  if (type === undefined) return false;
+  if (ts.isParenthesizedTypeNode(type))
+    return isVoidTypeNode(type.type, importState, seen, promised, bindings);
+  if (type.kind === ts.SyntaxKind.VoidKeyword) return true;
+  if (!ts.isTypeReferenceNode(type) || !ts.isIdentifier(type.typeName)) return false;
+  const name = type.typeName.text;
+  const bound = bindings.get(name);
+  if (bound !== undefined)
+    return isVoidTypeNode(bound.type, bound.imports, seen, promised, bound.bindings);
+  const alias = localAlias(name, importState);
+  if (alias !== undefined) return voidAlias(alias, type, importState, seen, promised, bindings);
+  if (importState.importedTypeAliases.has(name)) {
+    const imported = importedAlias(name, importState);
+    return (
+      imported !== undefined && voidAlias(imported, type, importState, seen, promised, bindings)
+    );
+  }
+  return (
+    name === "Promise" &&
+    !importState.shadowedTypes.has(name) &&
+    !promised &&
+    type.typeArguments?.length === 1 &&
+    isVoidTypeNode(type.typeArguments[0], importState, seen, true, bindings)
+  );
+}
+
+function voidAlias(alias, reference, callerImports, seen, promised, bindings) {
+  const key = `${alias.imports.file}:${alias.name}`;
+  const parameters = alias.parameters ?? [];
+  if (seen.has(key) || (reference.typeArguments?.length ?? 0) !== parameters.length) return false;
+  const nextBindings = new Map();
+  for (const [index, param] of parameters.entries())
+    nextBindings.set(param.name.text, {
+      type: reference.typeArguments[index],
+      imports: callerImports,
+      bindings,
+    });
+  seen.add(key);
+  const result = isVoidTypeNode(alias.type, alias.imports, seen, promised, nextBindings);
+  seen.delete(key);
+  return result;
 }
 
 function groupExampleViolations(violations) {

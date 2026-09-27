@@ -230,7 +230,6 @@ describe("command registration readiness", () => {
       eventSubscriptions: [],
       stateSubscriptions: [],
       eventReactions: [],
-      eventApplications: [],
     };
     const mutableRegisteredHandler: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> = {
       entityHandlers: mutableEntityHandlers,
@@ -299,7 +298,6 @@ describe("command registration readiness", () => {
       eventSubscriptions: [],
       stateSubscriptions: [],
       eventReactions: [],
-      eventApplications: [],
     };
     const mutableRegisteredHandler: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> = {
       entityHandlers: mutableEntityHandlers,
@@ -351,7 +349,6 @@ describe("command registration readiness", () => {
       eventSubscriptions: [],
       stateSubscriptions: [],
       eventReactions: [],
-      eventApplications: [],
     };
     const registeredHandler: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> = {
       entityHandlers,
@@ -425,7 +422,6 @@ function createRegistryLookupForCommandNames(
       eventSubscriptions: [],
       stateSubscriptions: [],
       eventReactions: [],
-      eventApplications: [],
     };
 
     return {
@@ -457,7 +453,6 @@ function createRegistryLookupForAssignments(
       assignments.filter(({ handler }) => handler.messageFullTypeName === messageFullTypeName),
     findCommandAssignment: (commandFullTypeName) =>
       assignments.find(({ handler }) => handler.messageFullTypeName === commandFullTypeName),
-    findEventApplication: () => undefined,
   };
 }
 

@@ -33,7 +33,6 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
-  Apply,
   Assign,
   Command,
   HandlerMetadataRegistry,
@@ -79,7 +78,6 @@ interface DecoratedClassFactoryInput {
   readonly Command: typeof Command;
   readonly Subscribe: typeof Subscribe;
   readonly React: typeof React;
-  readonly Apply: typeof Apply;
   readonly CreateProjectSchema: typeof CreateProjectSchema;
   readonly ProjectCreatedSchema: typeof ProjectCreatedSchema;
 }
@@ -104,7 +102,6 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
       Command,
       Subscribe,
       React,
-      Apply,
       CreateProjectSchema,
       ProjectCreatedSchema,
     }) {
@@ -129,8 +126,8 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
           void event;
         }
 
-        @Apply(ProjectCreatedSchema, { allowImport: true })
-        applyCreated(event) {
+        @Subscribe(ProjectCreatedSchema)
+        observeCreated(event) {
           void event;
         }
       }
@@ -141,8 +138,8 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
           void command;
         }
 
-        @Apply(ProjectCreatedSchema)
-        applyCreated(event) {
+        @Subscribe(ProjectCreatedSchema)
+        observeCreated(event) {
           void event;
         }
       }
@@ -153,8 +150,8 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
           void command;
         }
 
-        @Apply(ProjectCreatedSchema, { allowImport: true })
-        applyCreated(event) {
+        @Subscribe(ProjectCreatedSchema)
+        observeCreated(event) {
           void event;
         }
       }
@@ -167,8 +164,8 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
       }
 
       class SecondDecoratedProjection {
-        @Apply(ProjectCreatedSchema)
-        applyCreated(event) {
+        @Subscribe(ProjectCreatedSchema)
+        observeCreated(event) {
           void event;
         }
       }
@@ -255,7 +252,6 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
     Command,
     Subscribe,
     React,
-    Apply,
     CreateProjectSchema,
     ProjectCreatedSchema,
   });
@@ -407,9 +403,8 @@ describe("handler decorators", () => {
       "assignCreate",
     );
     expect(
-      registry.findEventApplication(ProjectStateSchema.typeName, ProjectCreatedSchema.typeName)
-        ?.handler,
-    ).toBe(metadata.eventApplications[0]);
+      registry.findHandlersByKind("event-subscription").map((entry) => entry.handler),
+    ).toContain(metadata.eventSubscriptions[0]);
   });
 
   it("keeps decorator metadata class-owned and isolated between classes", async () => {
@@ -425,7 +420,7 @@ describe("handler decorators", () => {
     );
 
     expect(first.handlers.map((handler) => handler.methodName)).toEqual(["assignCreate"]);
-    expect(second.handlers.map((handler) => handler.methodName)).toEqual(["applyCreated"]);
+    expect(second.handlers.map((handler) => handler.methodName)).toEqual(["observeCreated"]);
     expect(new HandlerMetadataRegistry().listHandlers()).toEqual([]);
   });
 
@@ -493,7 +488,7 @@ describe("handler decorators", () => {
         void command;
       }
 
-      applyCreated(event: ProjectCreated): void {
+      observeCreated(event: ProjectCreated): void {
         void event;
       }
     }
@@ -507,7 +502,7 @@ describe("handler decorators", () => {
       ProjectOverviewStateSchema,
       (builder) => [
         builder.assign(CreateProjectSchema, "assignCreate"),
-        builder.apply(ProjectCreatedSchema, "applyCreated", { allowImport: true }),
+        builder.subscribe(ProjectCreatedSchema, "observeCreated"),
       ],
     );
 
@@ -523,9 +518,6 @@ describe("handler decorators", () => {
         messageFullTypeName: handler.messageFullTypeName,
         methodName: handler.methodName,
       })),
-    );
-    expect(decorated.eventApplications[0]?.allowImport).toBe(
-      explicit.eventApplications[0]?.allowImport,
     );
   });
 });

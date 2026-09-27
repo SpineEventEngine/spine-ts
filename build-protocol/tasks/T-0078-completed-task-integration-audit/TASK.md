@@ -114,7 +114,7 @@ The splitter found no missing behavior:
   transactions/event production, first-class rejections, delivery handoff,
   entity history storage, handler contracts, generated registries, bare
   decorators, aggregate cutover, and reactor/subscriber behavior.
-- The removed `@Apply`/event-replay design is intentionally superseded, not
+- The removed event-replay design is intentionally superseded, not
   missing.
 
 All 15 legacy tips are pushed at their exact SHAs under non-active

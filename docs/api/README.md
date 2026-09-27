@@ -333,37 +333,30 @@ Projection repository, entity IDs, or a starting time. It does not return a
 catch-up operation ID or implement durable progress, overlap admission, live
 event coordination, delivery jobs, schedulers, inbox lifecycle, retries,
 restart, resumption, or transport topology.
-Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
+Server exports also include the abstract `Entity`, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `EntityScopeReason`,
-`TransactionalEntityScopeOperation`, `EntityOptions`, `EntityVersionMetadata`,
-`PlainEntityVersionMetadata`, and `EntityLifecycleFlags` for local OOP entity
-state with identity, descriptor-derived metadata, cloned Protobuf-ES state
-snapshots, plain version metadata supplied by the caller, lifecycle flags, and
-active/archive/delete accessors.
-`PlainEntityVersionMetadata<T>` is the compile-time plain-shape helper used by
-entity inputs so ordinary metadata interfaces can be accepted while non-plain
-types such as `Date` are rejected. The shell has protected hooks used by
-framework subclasses and repository/runtime seams, but no public state
-setters, Java builders, transaction execution, repository/storage writes,
-handler invocation, dispatch, lifecycle events, automatic version increments,
-routing, query APIs, buses, transports, or global runtime state.
-`TransactionalEntity` adds only protected, scoped draft helpers over
-`EntityTransaction`: one active transaction can read/update draft state, replace
-draft version metadata, update draft lifecycle flags, commit accepted results
-back into the entity, or roll back without applying state. Accepted commits
-close the scope and update state/version/lifecycle; rejected commits keep the
-scope active for correction or explicit rollback and apply nothing. The
-`changed` signal reports accepted state changes or committed lifecycle flag
-changes, not repository storage policy.
-`Aggregate`, `Projection`, and `ProcessManager` are thin abstract family marker
-classes over `TransactionalEntity` with the same `<Id, Schema, Version>` generic
+`TransactionalEntityScopeOperation`, `EntityOptions`, and `EntityLifecycleFlags`.
+An Entity has an ID, a descriptor-backed state schema, cloned state snapshots,
+a Spine `Version`, and lifecycle flags. Its version is not an application-defined
+type. A new Entity starts at version zero; a restored Entity receives its stored
+number and timestamp. Reading `entity.version` returns a copy, so changing that
+copy cannot alter the Entity.
+`TransactionalEntity` provides protected draft helpers over `EntityTransaction`.
+The framework opens the transaction, invokes the handler, validates the result,
+and commits or rolls back. Application handlers update their draft state and
+lifecycle flags, not the version. Accepted commits update state, version, and
+lifecycle together. Rejected commits apply nothing. The `changed` property
+reports accepted state or lifecycle changes; repository handling also considers
+returned Events when deciding whether to advance the version.
+`Aggregate`, `Projection`, and `ProcessManager` are abstract Entity family
+classes over `TransactionalEntity` with the same `<Id, Schema>` generic
 shape and a stable readonly `entityFamily` property typed by `EntityFamily`.
-They do not add public transaction mutators, repositories, dispatch, aggregate
-event-history access, snapshots, subscriptions, command posting, query clients,
-storage, buses, or lifecycle events. Aggregates and Process Managers do add the
-protected, repository-bound event-history methods documented below;
-Projections intentionally do not.
+Repositories and bounded contexts handle dispatch, persistence, and message
+publication; these classes do not expose public transaction controls.
+Aggregates and Process Managers provide the protected, repository-bound
+event-history methods documented below; Projections intentionally do not.
+Process Managers also provide protected `select()` reads of Projections.
 `Repository`, `RepositoryOptions`, `RepositoryEntityType`,
 `ConcreteRepositoryEntityType`, `RepositoryStateSchema`,
 `RepositoryIdentitySnapshot`, `RepositoryIdentityError`,
@@ -405,9 +398,9 @@ durable inbox handoff with `REACT_UPON_EVENT` rows, original `Event`
 envelopes, and exact-row target replay. Before handler code runs, replay
 validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
 target type URL, and routed target ID.
-State is stored in tenant-scoped `Stand` records with numeric
-versions, returned commands are wrapped and posted after state storage, and
-returned event messages are wrapped with process-manager-emitted event schemas
+State is stored in tenant-scoped `Stand` records with Spine `Version`
+messages, returned commands are wrapped and posted after state storage, and
+returned event messages are wrapped using the invoked handler's declared Event schemas
 and appended through the event store before produced-event dispatch. The repository
 surface still does not expose direct entity lookup/storage APIs, inboxes,
 caches, catch-up, or transport startup. Built bounded contexts use repository
@@ -418,7 +411,7 @@ metadata to register known state types with their direct read-side `Stand`.
 direct read-side entity-state API. A stand registers known generated state
 schemas, rejects unknown state types on read/update/subscribe, stores latest
 states through `StorageFactory`/`RecordStorage`, reads latest state by schema
-and entity ID, can return caller-supplied version metadata through
+and entity ID, can return the stored Spine `Version` through
 `readVersioned()`, can return storage-backed query results through
 `queryVersioned()`, can return storage-order list results through
 `readAllVersioned()`, can clear one registered state type through
@@ -654,7 +647,7 @@ facade. Repeated, map-valued, and explicit optional `(set_once)` fields are
 unsupported here and fail closed with field-specific validation
 violations. The transaction kernel exports `EntityTransaction`,
 `createEntityTransaction()`, typed draft/commit/rollback result contracts,
-version metadata contracts, lifecycle flags, status/mutator/helper operation
+Spine `Version` result contracts, lifecycle flags, status/mutator/helper operation
 types, `EntityTransactionStateError`, and
 `DraftStateError`. This public surface is an in-memory,
 framework draft/result boundary over one entity state. It is intentionally
@@ -663,17 +656,17 @@ transaction context, dispatch step, or lifecycle-event emitter. It is a
 framework compatibility seam, not an end-user manual-transaction API.
 Application handlers must not start, commit, roll back, or otherwise control
 transactions manually. Lifecycle
-helpers mutate only buffered draft flags, `updateVersionMetadata()` replaces
-only draft version metadata supplied by the caller, and `requireActive()` rejects closed
+helpers mutate only buffered draft flags, and `requireActive()` rejects closed
 transactions or active drafts already marked archived/deleted without including
 state payloads. `commit()` validates the buffered draft and closes the
 transaction only for accepted commits; rejected commits return violations and
 leave the transaction active. `rollback()` closes the transaction and returns
-the discarded draft evidence.
+the discarded draft evidence. Handlers rely on the framework to advance Spine
+Versions; application code does not set or increment them.
 Server handler metadata exports include
-`EntityHandlers.define()`, `HandlerRegistrationBuilder`, the seven handler
+`EntityHandlers.define()`, `HandlerRegistrationBuilder`, the six handler
 metadata roles for command assignment, command substitution, command
-reaction, event subscription, state subscription, event reaction, and legacy event application,
+reaction, event subscription, state subscription, and event reaction,
 `HandlerParameterCount` for
 canonical arity metadata, and `HandlerMetadataError` for registration-time
 structural failures. Handler names must refer to prototype data methods
@@ -681,17 +674,16 @@ declared with normal class method syntax. `EntityHandlers.define()` remains
 public for framework tests, generated-registry ingestion, and legacy
 non-decorator migration tooling; ordinary application code should use bare
 decorators plus generated registry assembly instead. Decorator adapter exports
-include `@Assign`, `@Command`, `@Subscribe`, `@React`, `@Throws`, legacy/framework-only
-`@Apply`, framework-only `materializeDecoratedEntityHandlers()`,
+include `@Assign`, `@Command`, `@Subscribe`, `@React`, `@Throws`,
+framework-only `materializeDecoratedEntityHandlers()`,
 `HandlerMethodDecorator`, `HandlerMethodValue`, and `RejectionDeclaration`.
 Bare `@Assign`, `@Command`, `@Subscribe`, and `@React` are the primary public
 handler decorators. A command-accepting handler uses `@Throws` below its primary
 decorator to declare generated domain rejections. Generated handler registries
 perform ordinary schema inference. Schema-bearing handler metadata is internal/tooling input for
 generated registry assembly and framework materialization; it is not a
-public decorator form. `@Apply` and `materializeDecoratedEntityHandlers()`
-remain framework-only compatibility paths; new application code must not use
-them.
+public decorator form. `materializeDecoratedEntityHandlers()` remains a
+framework-only helper; application code must not call it.
 Ordinary generated assembly uses
 `await BoundedContext.singleTenant(name).add(EntityClass).withGeneratedRegistryRoot(compiledPackageRoot).buildAsync()`.
 `withGeneratedRegistryRoot(root)` accepts a trusted compiled package/app root as
@@ -731,9 +723,27 @@ only. Aggregate and Projection repositories
 reject command-input substitutions and event- or rejection-input command
 reactions during generated ingestion and repository construction. `@React`
 records may return generated event messages
-or explicit `void` with no emitted schemas. `@Subscribe` records return
-explicit `void` and declare no emitted schemas. They are generated build
+or `undefined` with no returned schemas. Event/rejection-input `@Command`
+records may likewise declare `undefined` with no returned schemas.
+`@Subscribe` records return
+explicit `void` or `Promise<void>` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
+
+Producing handlers can declare native message unions, flat arrays, and fixed
+tuples, including readonly tuples, named entries, union-valued entries, and
+optional entries. Concrete local/imported aliases and one outer built-in
+`Promise` are supported. `@Subscribe` may use `Promise<void>`. `@React` and
+Event/rejection-input `@Command` may use `undefined` alone or alongside concrete
+signal types in any union position, or return an empty typed array. Neither
+reaction kind accepts `void`. `@Assign` and Command-input `@Command`
+must produce at least one message on success. The generator records every
+possible message schema for that handler. TypeScript checks tuple structure;
+runtime validates actual message types and preserves output order. Required
+empty results, `null`, returned envelopes, and unexpected subscriber values
+fail before committing Entity changes or publishing outputs. Valid no-output
+reactions still commit their state changes.
+See the [return-type guide](../USER_GUIDE.md#choose-what-a-handler-returns)
+for the complete supported-form table and unsupported shapes.
 
 A generated Process Manager command-input handler uses distinct domain Command
 types and can receive `CommandContext`. This self-contained example explicitly
@@ -774,11 +784,7 @@ import {
   type ProjectId,
 } from "../generated/spine/server/testing/project_workflow_pb.js";
 
-class ApprovalCoordinator extends ProcessManager<
-  ProjectId,
-  typeof CoordinationStateSchema,
-  number
-> {
+class ApprovalCoordinator extends ProcessManager<ProjectId, typeof CoordinationStateSchema> {
   @Command
   approve(command: ApproveProject, context: CommandContext): ScheduleProject {
     this.update((draft) => Object.assign(draft, { id: this.id, projectName: command.status }));
@@ -954,8 +960,8 @@ or end-user envelope APIs.
 Existing Command and Event envelopes retain their supplied IDs without UUID-format
 validation; the UUID guarantee applies to newly generated IDs, not to decoding,
 transport, or retransmission of an existing envelope.
-It does not broaden end-user APIs into framework `Command`/`Event` envelopes,
-does not reintroduce `@Apply`, and does not expose manual transaction-control
+It does not broaden end-user APIs into framework `Command`/`Event` envelopes
+and does not expose manual transaction-control
 APIs.
 Copied Proto semantic-tag options are wire metadata only. They are not
 TypeScript `TypeRegistry` or entity metadata, repository-routing input, or

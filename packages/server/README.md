@@ -52,6 +52,24 @@ results and structural or imported thenable lookalikes are rejected during handl
 analysis. Rejection rolls back framework state and suppresses produced output; it
 cannot roll back an external HTTP request or other side effect.
 
+Handler return declarations can use native unions for one of several results,
+or fixed tuples for several ordered results. For example,
+`CreateAccessGrant | ExtendAccessGrant` selects one Command, while
+`readonly [AccessGrantCreated, AccessRequestCompleted?]` returns an Event and
+possibly a second Event. Each actual result must be declared by that handler.
+Arrays and local/imported aliases of these concrete message types are supported
+too. `@Assign` returns Events, `@Command` returns Commands, `@React` returns
+Events or `undefined`, and `@Subscribe` declares `void` or `Promise<void>`.
+Event/rejection-input `@Command` also permits `undefined`, alone or alongside
+concrete Command types. Only subscriptions accept `void`; required empty
+results and unexpected returned values fail before Entity commit or publication.
+See the [return-type guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/USER_GUIDE.md#choose-what-a-handler-returns)
+for examples, optional results, and the restrictions for each decorator.
+
+Every Entity's `version` is the generated Spine `Version`; the framework
+advances it once when a successful dispatch produces Events or changes state or
+lifecycle, not for a no-op.
+
 Declare each domain rejection a command handler may throw. This registers the
 rejection before the server starts, so a client can subscribe even when no
 server handler consumes that rejection:

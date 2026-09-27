@@ -45,17 +45,17 @@ import type {
   StandaloneReceiverConstructor,
 } from "../../src/handler/generated-handler-registry.js";
 
-class Manager extends ProcessManager<string, typeof StateSchema, number> {
+class Manager extends ProcessManager<string, typeof StateSchema> {
   substitute(command: Message<"spine.server.testing.StartReview">) {
     return command;
   }
 }
-class AggregateReceiver extends Aggregate<string, typeof StateSchema, number> {
+class AggregateReceiver extends Aggregate<string, typeof StateSchema> {
   substitute(command: Message<"spine.server.testing.StartReview">) {
     return command;
   }
 }
-class ProjectionReceiver extends Projection<string, typeof StateSchema, number> {
+class ProjectionReceiver extends Projection<string, typeof StateSchema> {
   handle(command: Message<"spine.server.testing.StartReview">) {
     return command;
   }
@@ -318,6 +318,12 @@ describe("generated handler registry ingestion", () => {
     expect(
       standalone(Commander, {
         ...reaction,
+        outcomes: { ...reaction.outcomes, returned: [] },
+      }),
+    ).not.toThrow();
+    expect(
+      standalone(Commander, {
+        ...reaction,
         input: { ...reaction.input, schema: StartReviewSchema },
       }),
     ).toThrow(HandlerRegistryIngestionError);
@@ -327,10 +333,6 @@ describe("generated handler registry ingestion", () => {
         input: { ...reaction.input, schema: ReviewRejectedSchema },
       }),
     ).not.toThrow();
-    expect(
-      standalone(Commander, { ...reaction, outcomes: { ...reaction.outcomes, returned: [] } }),
-    ).toThrow(HandlerRegistryIngestionError);
-
     const eventReaction = domainHandler("event-reaction");
     expect(standalone(Reactor, eventReaction)).not.toThrow();
     expect(

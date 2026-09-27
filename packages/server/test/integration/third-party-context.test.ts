@@ -60,7 +60,7 @@ import type {
 
 const StateSchema = ProjectOverviewStateSchema;
 const SubscribedStateSchema = ProjectStateSchema;
-class ExternalStateProjection extends Projection<string, typeof StateSchema, number> {
+class ExternalStateProjection extends Projection<string, typeof StateSchema> {
   onExternalState(state: ProjectState): void {
     void state;
   }

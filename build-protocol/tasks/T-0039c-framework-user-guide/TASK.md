@@ -28,7 +28,7 @@ without reading internal source.
   review, logging, verification, worktree, push, and cleanup requirements.
 - Ordinary application code uses bare decorators and generated domain messages.
   It must not use framework `Command`/`Event` envelopes, `packCommand()` or
-  `packEvent()` in handlers, schema-bearing decorators, aggregate `@Apply`,
+  `packEvent()` in handlers, schema-bearing decorators, aggregate event replay,
   manual transaction controls, internal IDs/default-target extraction, handler
   materializers, or internal lifecycle APIs.
 - Public guide claims describe observable current behavior and explicit initial-

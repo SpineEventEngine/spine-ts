@@ -36,33 +36,36 @@ responses.
 Use Standard speed. Do not enable Fast/boost mode. Do not use Max or Ultra in
 the normal autonomous cycle.
 
-- Future main orchestrators default to `gpt-5.6-sol` with `medium` reasoning.
+- Future main orchestrators default to `gpt-6-astra` with `high` reasoning.
 - Requirements splitting, architecture, domain modelling, public-contract
-  design, and difficult milestone planning use `gpt-5.6-sol` with `high`
+  design, and difficult milestone planning use `gpt-6-astra` with `high`
   reasoning only at milestone boundaries or demonstrated architectural blocks.
 - Normal TypeScript implementation, ordinary fixes, and bounded refactoring use
-  `gpt-5.6-terra` with `medium` reasoning.
-- Correctness, DDD, compatibility, concurrency, persistence, security, and
-  difficult public-contract review use `gpt-5.6-terra` with `high` reasoning.
+  `gpt-6-sol` with `medium` reasoning.
+- Correctness, DDD, compatibility, concurrency, persistence, and difficult
+  public-contract review use `gpt-6-sol` with `medium` reasoning.
 - Builds, tests, typechecking, linting, log triage, and repository scanning use
-  `gpt-5.6-luna` with `low` reasoning; use `medium` when classification or
+  `gpt-6-luna` with `low` reasoning; use `medium` when classification or
   version-specific verification needs judgment.
 - Documentation, dependency, package, and version-specific API verification use
-  `gpt-5.6-luna` with `medium` reasoning.
-- Escalate to `gpt-5.6-sol` with `high` reasoning only for high-risk
+  `gpt-6-luna` with `medium` reasoning.
+- The final release-readiness security review uses `gpt-6-sol` with `high`
+  reasoning.
+- Escalate to `gpt-6-astra` with `high` reasoning only for high-risk
   architecture/correctness ambiguity or after a lower-cost configuration cannot
   establish the answer.
 
 Always pass the model and reasoning explicitly when spawning a subagent. Never
 allow the parent model to become the accidental default for a child.
 
-For an approved frozen wave, run one `gpt-5.6-sol` / `high` architecture pass.
+For an approved frozen wave, run one `gpt-6-astra` / `high` architecture pass.
 Repeat it only for a material contract change or a demonstrated architecture
 blocker. Persist scripts-first mechanical evidence before asking an agent to
-classify an ordinary failure. Use `gpt-5.6-terra` / `medium` for ordinary
-implementation, and Luna/medium or Terra/medium for ordinary documentation,
-package, and API-documentation work. Reserve Terra/high for public or wire
-contracts and real correctness, persistence, concurrency, or lifecycle risk.
+classify an ordinary failure. Use `gpt-6-sol` / `medium` for ordinary
+implementation and technical review, and Luna/medium for ordinary
+documentation, package, and version-specific API verification. Reserve
+Astra/high for the main orchestrator, architecture, and demonstrated high-risk
+correctness ambiguity.
 
 Before accepting child work, record the assignment's existing role or
 orchestrator-dispatched function, expected model, and expected reasoning in the

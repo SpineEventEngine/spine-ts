@@ -14,6 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { VersionSchema, type Version } from "@spine-event-engine/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import * as serverRoot from "../../src/index.js";
@@ -26,35 +27,12 @@ import {
   TransactionalEntity,
   TransactionalEntityScopeError,
   type EntityFamily,
-  type EntityOptions,
   type TransactionalEntityScopeOperation,
 } from "../../src/index.js";
 import { entityHistoryAccess } from "../../src/entity/entity.js";
 
 // @ts-expect-error EntityStorageInput is an internal repository/runtime seam, not a root storage export.
 import type { EntityStorageInput } from "@spine-event-engine/storage";
-
-interface RevisionMetadata {
-  readonly revision: number;
-  readonly source: "server";
-  readonly labels?: readonly string[];
-}
-
-interface NestedRevisionMetadata extends RevisionMetadata {
-  readonly audit: {
-    readonly actor: string;
-    readonly checkpoints: readonly string[];
-  };
-  readonly history: readonly {
-    readonly stage: string;
-    readonly counters: readonly number[];
-  }[];
-}
-
-interface SizedRevisionMetadata {
-  readonly revision: number;
-  readonly size: number;
-}
 
 /**
  * Compile-only negative declaration fixtures for intentionally absent APIs.
@@ -95,13 +73,9 @@ function createProjectOverviewState(
   });
 }
 
-class TestEntity extends Entity<string, typeof ProjectOverviewStateSchema, RevisionMetadata> {
+class TestEntity extends Entity<string, typeof ProjectOverviewStateSchema> {
   applyState(state: ProjectOverviewState): void {
     this.replaceState(state);
-  }
-
-  applyVersion(version: RevisionMetadata): void {
-    this.replaceVersionMetadata(version);
   }
 
   applyLifecycle(lifecycle: { readonly archived?: boolean; readonly deleted?: boolean }): void {
@@ -109,20 +83,9 @@ class TestEntity extends Entity<string, typeof ProjectOverviewStateSchema, Revis
   }
 }
 
-class NestedVersionEntity extends Entity<
-  string,
-  typeof ProjectOverviewStateSchema,
-  NestedRevisionMetadata
-> {
-  applyVersion(version: NestedRevisionMetadata): void {
-    this.replaceVersionMetadata(version);
-  }
-}
-
 class TestTransactionalEntity extends TransactionalEntity<
   string,
-  typeof ProjectOverviewStateSchema,
-  RevisionMetadata
+  typeof ProjectOverviewStateSchema
 > {
   start(): void {
     this.startTransaction();
@@ -130,10 +93,6 @@ class TestTransactionalEntity extends TransactionalEntity<
 
   draft(): ProjectOverviewState {
     return this.currentDraft();
-  }
-
-  draftVersion(): { readonly previous: RevisionMetadata; readonly draft: RevisionMetadata } {
-    return this.draftVersionMetadata();
   }
 
   draftLifecycle(): { readonly archived: boolean; readonly deleted: boolean } {
@@ -163,13 +122,6 @@ class TestTransactionalEntity extends TransactionalEntity<
     return this.tryUpdate((draft) => {
       draft.id = id;
     });
-  }
-
-  reviseDraft(revision: number): {
-    readonly previous: RevisionMetadata;
-    readonly draft: RevisionMetadata;
-  } {
-    return this.updateDraftVersionMetadata({ revision, source: "server" });
   }
 
   archiveDraftForTest(): void {
@@ -210,7 +162,7 @@ class GetterCountingTransactionalEntity extends TestTransactionalEntity {
   }
 }
 
-class TestAggregate extends Aggregate<string, typeof ProjectOverviewStateSchema, RevisionMetadata> {
+class TestAggregate extends Aggregate<string, typeof ProjectOverviewStateSchema> {
   start(): void {
     this.startTransaction();
   }
@@ -219,10 +171,6 @@ class TestAggregate extends Aggregate<string, typeof ProjectOverviewStateSchema,
     return this.update((draft) => {
       draft.name = name;
     });
-  }
-
-  reviseDraft(revision: number): void {
-    this.updateDraftVersionMetadata({ revision, source: "server" });
   }
 
   commitForTest(): ReturnType<TestAggregate["commitTransaction"]> {
@@ -257,17 +205,9 @@ class TestAggregate extends Aggregate<string, typeof ProjectOverviewStateSchema,
   }
 }
 
-class TestProjection extends Projection<
-  string,
-  typeof ProjectOverviewStateSchema,
-  RevisionMetadata
-> {}
+class TestProjection extends Projection<string, typeof ProjectOverviewStateSchema> {}
 
-class TestProcessManager extends ProcessManager<
-  string,
-  typeof ProjectOverviewStateSchema,
-  RevisionMetadata
-> {
+class TestProcessManager extends ProcessManager<string, typeof ProjectOverviewStateSchema> {
   historyEventsForTest(depth: number) {
     return this.eventHistoryBackward(depth);
   }
@@ -278,6 +218,27 @@ class TestProcessManager extends ProcessManager<
 }
 
 describe("entities", () => {
+  it("starts at Spine Version zero and isolates restored version snapshots", () => {
+    const initialVersion = create(VersionSchema, { number: 7 });
+    const fresh = new TestEntity({
+      id: "task-1",
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState(),
+    });
+    const restored = new TestEntity({
+      id: "task-2",
+      schema: ProjectOverviewStateSchema,
+      state: createProjectOverviewState({ id: "task-2" }),
+      version: initialVersion,
+    });
+
+    expect(fresh.version.number).toBe(0);
+    initialVersion.number = 9;
+    const snapshot = restored.version;
+    snapshot.number = 11;
+    expect(restored.version.number).toBe(7);
+  });
+
   it("exports the common entity base class from the server root", () => {
     expect(serverRoot.Entity).toBe(Entity);
   });
@@ -299,7 +260,7 @@ describe("entities", () => {
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: initialState,
-      version: { revision: 7, source: "server" },
+      version: create(VersionSchema, { number: 7 }),
     });
 
     initialState.name = "Caller-side mutation";
@@ -309,7 +270,7 @@ describe("entities", () => {
     expect(entity.metadata).toEqual(describeEntityMetadata(ProjectOverviewStateSchema));
     expect(entity.state).toEqual(createProjectOverviewState());
     expect(entity.state).not.toBe(initialState);
-    expect(entity.version).toEqual({ revision: 7, source: "server" });
+    expect(entity.version).toMatchObject({ number: 7 });
     expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
     expect(entity.isActive).toBe(true);
     expect(entity.isArchived).toBe(false);
@@ -317,7 +278,7 @@ describe("entities", () => {
     expect(entity.lifecycleFlagsChanged).toBe(false);
     expectTypeOf(entity.id).toEqualTypeOf<string>();
     expectTypeOf(entity.state).toEqualTypeOf<ProjectOverviewState>();
-    expectTypeOf(entity.version).toEqualTypeOf<RevisionMetadata>();
+    expectTypeOf(entity.version).toEqualTypeOf<Version>();
   });
 
   it("returns cloned Protobuf-ES state snapshots so callers cannot mutate stored state", () => {
@@ -325,7 +286,7 @@ describe("entities", () => {
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
 
     const returnedState = entity.state;
@@ -340,335 +301,12 @@ describe("entities", () => {
     expect("withStoredState" in Entity.prototype).toBe(false);
   });
 
-  it("keeps constructor-provided version metadata isolated from caller mutations", () => {
-    const initialVersion = { revision: 1, source: "server" as const, labels: ["initial"] };
-    const entity = new TestEntity({
-      id: "task-1",
-      schema: ProjectOverviewStateSchema,
-      state: createProjectOverviewState(),
-      version: initialVersion,
-    });
-
-    initialVersion.revision = 2;
-    initialVersion.labels.push("caller mutation");
-
-    const returnedVersion = entity.version as unknown as {
-      revision: number;
-      labels: string[];
-    };
-    returnedVersion.revision = 3;
-    returnedVersion.labels.push("getter mutation");
-
-    expect(entity.version).toEqual({
-      revision: 1,
-      source: "server",
-      labels: ["initial"],
-    });
-    expect(entity.version).not.toBe(initialVersion);
-    expect(entity.version).not.toBe(returnedVersion);
-  });
-
-  it("rejects non-plain version metadata snapshots", () => {
-    class ClassBackedRevision {
-      revision = 1;
-      source = "server" as const;
-    }
-
-    const cyclicVersion = { revision: 1, source: "server" as const } as {
-      revision: number;
-      source: "server";
-      self?: unknown;
-    };
-    cyclicVersion.self = cyclicVersion;
-    const symbolKeyedVersion = {
-      revision: 1,
-      source: "server" as const,
-      [Symbol("trace")]: "caller",
-    };
-    const nonEnumerableVersion = { revision: 1, source: "server" as const };
-    Object.defineProperty(nonEnumerableVersion, "hidden", {
-      enumerable: false,
-      value: "caller",
-    });
-    const accessorVersion = { revision: 1, source: "server" as const };
-    Object.defineProperty(accessorVersion, "derived", {
-      enumerable: true,
-      get: () => "caller",
-    });
-    const invalidVersionInputs = [
-      { revision: 1, source: "server" as const, clock: new Date("2026-06-29T00:00:00.000Z") },
-      { revision: 1, source: "server" as const, seen: new Set(["task-1"]) },
-      { revision: 1, source: "server" as const, lookup: new Map([["task-1", 1]]) },
-      { revision: 1, source: "server" as const, bytes: new ArrayBuffer(1) },
-      { revision: 1, source: "server" as const, bytes: new SharedArrayBuffer(1) },
-      { revision: 1, source: "server" as const, bytes: new Uint8Array(new ArrayBuffer(1)) },
-      {
-        revision: 1,
-        source: "server" as const,
-        bytes: new Uint8Array(new SharedArrayBuffer(1)),
-      },
-      cyclicVersion,
-      symbolKeyedVersion,
-      nonEnumerableVersion,
-      accessorVersion,
-      new ClassBackedRevision(),
-      () => ({ revision: 1, source: "server" as const }),
-    ];
-
-    for (const version of invalidVersionInputs) {
-      expect(() => {
-        new TestEntity({
-          id: "task-1",
-          schema: ProjectOverviewStateSchema,
-          state: createProjectOverviewState(),
-          version: version as unknown as RevisionMetadata,
-        });
-      }).toThrow(/plain snapshot data/);
-    }
-
-    const entity = new TestEntity({
-      id: "task-1",
-      schema: ProjectOverviewStateSchema,
-      state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
-    });
-    expect(() => {
-      entity.applyVersion({
-        revision: 2,
-        source: "server",
-        bytes: new Uint8Array(new SharedArrayBuffer(1)),
-      } as unknown as RevisionMetadata);
-    }).toThrow(/plain snapshot data/);
-  });
-
-  it("rejects array version metadata with caller-controlled descriptor hazards", () => {
-    let speciesRead = false;
-    class CallerArray<T> extends Array<T> {
-      static override get [Symbol.species](): ArrayConstructor {
-        speciesRead = true;
-        return Array;
-      }
-    }
-
-    const speciesVersion = {
-      revision: 1,
-      source: "server" as const,
-      labels: new CallerArray("initial"),
-    };
-    expect(() => {
-      new TestEntity({
-        id: "task-1",
-        schema: ProjectOverviewStateSchema,
-        state: createProjectOverviewState(),
-        version: speciesVersion,
-      });
-    }).toThrow(/plain snapshot data/);
-    expect(speciesRead).toBe(false);
-
-    let accessorRead = false;
-    const accessorLabels = ["initial"];
-    Object.defineProperty(accessorLabels, "0", {
-      enumerable: true,
-      get: () => {
-        accessorRead = true;
-        return "caller";
-      },
-    });
-    expect(() => {
-      new TestEntity({
-        id: "task-1",
-        schema: ProjectOverviewStateSchema,
-        state: createProjectOverviewState(),
-        version: { revision: 1, source: "server", labels: accessorLabels },
-      });
-    }).toThrow(/plain snapshot data/);
-    expect(accessorRead).toBe(false);
-
-    const customPropertyLabels = ["initial"] as string[] & { extra?: string };
-    customPropertyLabels.extra = "caller";
-    expect(() => {
-      new TestEntity({
-        id: "task-1",
-        schema: ProjectOverviewStateSchema,
-        state: createProjectOverviewState(),
-        version: { revision: 1, source: "server", labels: customPropertyLabels },
-      });
-    }).toThrow(/plain snapshot data/);
-  });
-
-  it("clones JSON __proto__ version metadata without mutating clone prototypes", () => {
-    const version = JSON.parse(
-      '{"revision":1,"source":"server","__proto__":{"polluted":true}}',
-    ) as RevisionMetadata & { readonly __proto__: { readonly polluted: true } };
-
-    const entity = new TestEntity({
-      id: "task-1",
-      schema: ProjectOverviewStateSchema,
-      state: createProjectOverviewState(),
-      version,
-    });
-
-    const returnedVersion = entity.version as RevisionMetadata & {
-      readonly __proto__: { readonly polluted: true };
-    };
-    expect(Object.prototype.hasOwnProperty.call(returnedVersion, "__proto__")).toBe(true);
-    expect(returnedVersion.__proto__).toEqual({ polluted: true });
-    expect(Object.getPrototypeOf(returnedVersion)).toBe(Object.prototype);
-    expect(({} as { readonly polluted?: true }).polluted).toBeUndefined();
-  });
-
-  it("does not invoke caller-controlled constructor getters while labeling rejected metadata", () => {
-    let constructorRead = false;
-    const rejectedVersion = Object.create({ arbitrary: true }) as RevisionMetadata;
-    Object.defineProperty(rejectedVersion, "constructor", {
-      enumerable: true,
-      get: () => {
-        constructorRead = true;
-        return { name: "CallerControlled" };
-      },
-    });
-
-    expect(() => {
-      new TestEntity({
-        id: "task-1",
-        schema: ProjectOverviewStateSchema,
-        state: createProjectOverviewState(),
-        version: rejectedVersion,
-      });
-    }).toThrow(/plain snapshot data/);
-    expect(constructorRead).toBe(false);
-  });
-
-  it("rejects proxy version metadata without invoking traps", () => {
-    let trapInvoked = false;
-    const trap = () => {
-      trapInvoked = true;
-      throw new Error("proxy trap invoked");
-    };
-    const proxiedVersion = new Proxy(
-      { revision: 1, source: "server" as const },
-      {
-        getPrototypeOf: trap,
-        getOwnPropertyDescriptor: trap,
-        ownKeys: trap,
-        get: trap,
-        has: trap,
-      },
-    );
-
-    expect(() => {
-      new TestEntity({
-        id: "task-1",
-        schema: ProjectOverviewStateSchema,
-        state: createProjectOverviewState(),
-        version: proxiedVersion,
-      });
-    }).toThrow(/plain snapshot data/);
-    expect(trapInvoked).toBe(false);
-  });
-
-  it("rejects excessively deep plain version metadata with the domain error", () => {
-    let deepVersion: unknown = { revision: 1, source: "server" };
-    for (let index = 0; index < 20_000; index += 1) {
-      deepVersion = { child: deepVersion };
-    }
-
-    expect(() => {
-      new TestEntity({
-        id: "task-1",
-        schema: ProjectOverviewStateSchema,
-        state: createProjectOverviewState(),
-        version: deepVersion as RevisionMetadata,
-      });
-    }).toThrow(/plain snapshot data/);
-  });
-
-  it("constrains entity version generics to plain metadata at compile time", () => {
-    expectTypeOf<TestEntity["version"]>().toEqualTypeOf<RevisionMetadata>();
-    expectTypeOf<
-      EntityOptions<string, typeof ProjectOverviewStateSchema, SizedRevisionMetadata>["version"]
-    >().toEqualTypeOf<SizedRevisionMetadata>();
-
-    const dateVersionOptions: EntityOptions<string, typeof ProjectOverviewStateSchema, Date> = {
-      id: "task-1",
-      schema: ProjectOverviewStateSchema,
-      state: createProjectOverviewState(),
-      // @ts-expect-error Date is non-plain metadata and must be rejected by EntityOptions.
-      version: new Date("2026-06-29T00:00:00.000Z"),
-    };
-
-    expectTypeOf(dateVersionOptions).not.toBeAny();
-  });
-
-  it("keeps nested plain version metadata isolated through construction, reads, and replacement", () => {
-    const initialVersion = {
-      revision: 1,
-      source: "server" as const,
-      audit: { actor: "creator", checkpoints: ["created"] },
-      history: [{ stage: "draft", counters: [1] }],
-    };
-    const entity = new NestedVersionEntity({
-      id: "task-1",
-      schema: ProjectOverviewStateSchema,
-      state: createProjectOverviewState(),
-      version: initialVersion,
-    });
-
-    initialVersion.audit.actor = "caller";
-    initialVersion.audit.checkpoints.push("caller mutation");
-    initialVersion.history[0]?.counters.push(2);
-
-    const returnedInitialVersion = entity.version as unknown as {
-      audit: { actor: string; checkpoints: string[] };
-      history: { counters: number[] }[];
-    };
-    returnedInitialVersion.audit.actor = "getter";
-    returnedInitialVersion.audit.checkpoints.push("getter mutation");
-    returnedInitialVersion.history[0]?.counters.push(3);
-
-    expect(entity.version).toEqual({
-      revision: 1,
-      source: "server",
-      audit: { actor: "creator", checkpoints: ["created"] },
-      history: [{ stage: "draft", counters: [1] }],
-    });
-
-    const replacementVersion = {
-      revision: 2,
-      source: "server" as const,
-      audit: { actor: "approver", checkpoints: ["accepted"] },
-      history: [{ stage: "ready", counters: [5] }],
-    };
-    entity.applyVersion(replacementVersion);
-
-    replacementVersion.audit.actor = "caller";
-    replacementVersion.audit.checkpoints.push("caller mutation");
-    replacementVersion.history[0]?.counters.push(6);
-
-    const returnedReplacementVersion = entity.version as unknown as {
-      audit: { actor: string; checkpoints: string[] };
-      history: { counters: number[] }[];
-    };
-    returnedReplacementVersion.audit.actor = "getter";
-    returnedReplacementVersion.audit.checkpoints.push("getter mutation");
-    returnedReplacementVersion.history[0]?.counters.push(7);
-
-    expect(entity.version).toEqual({
-      revision: 2,
-      source: "server",
-      audit: { actor: "approver", checkpoints: ["accepted"] },
-      history: [{ stage: "ready", counters: [5] }],
-    });
-    expect(entity.version).not.toBe(replacementVersion);
-    expect(entity.version).not.toBe(returnedReplacementVersion);
-  });
-
   it("tracks lifecycle flags and keeps lifecycle-change tracking sticky after protected changes", () => {
     const entity = new TestEntity({
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
       lifecycle: { archived: true },
     });
 
@@ -702,7 +340,7 @@ describe("entities", () => {
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
       lifecycle: { deleted: true },
     });
 
@@ -714,58 +352,12 @@ describe("entities", () => {
     expect(entity.lifecycleFlagsChanged).toBe(false);
   });
 
-  it("lets protected subclass code replace state and caller-owned version metadata without auto-increments", () => {
-    const entity = new TestEntity({
-      id: "task-1",
-      schema: ProjectOverviewStateSchema,
-      state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
-    });
-
-    entity.applyState(createProjectOverviewState({ name: "Ready", priority: 2 }));
-    entity.applyVersion({ revision: 99, source: "server" });
-
-    expect(entity.state).toEqual(createProjectOverviewState({ name: "Ready", priority: 2 }));
-    expect(entity.version).toEqual({ revision: 99, source: "server" });
-    expect(entity.lifecycleFlagsChanged).toBe(false);
-  });
-
-  it("keeps protected version metadata replacements isolated from caller mutations", () => {
-    const replacementVersion = { revision: 2, source: "server" as const, labels: ["accepted"] };
-    const entity = new TestEntity({
-      id: "task-1",
-      schema: ProjectOverviewStateSchema,
-      state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
-    });
-
-    entity.applyVersion(replacementVersion);
-
-    replacementVersion.revision = 3;
-    replacementVersion.labels.push("caller mutation");
-
-    const returnedVersion = entity.version as unknown as {
-      revision: number;
-      labels: string[];
-    };
-    returnedVersion.revision = 4;
-    returnedVersion.labels.push("getter mutation");
-
-    expect(entity.version).toEqual({
-      revision: 2,
-      source: "server",
-      labels: ["accepted"],
-    });
-    expect(entity.version).not.toBe(replacementVersion);
-    expect(entity.version).not.toBe(returnedVersion);
-  });
-
   it("requires one active transactional entity scope for draft helpers", () => {
     const entity = new TestTransactionalEntity({
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
 
     expect(entity.hasActiveTransaction()).toBe(false);
@@ -788,7 +380,7 @@ describe("entities", () => {
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
 
     entity.start();
@@ -802,7 +394,7 @@ describe("entities", () => {
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
 
     expect(() => entity.tryRenameDraft("Outside transaction")).toThrow(
@@ -823,17 +415,16 @@ describe("entities", () => {
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
 
     entity.start();
     const returnedDraft = entity.renameDraft("Ready", 2);
     returnedDraft.name = "Caller-side draft mutation";
-    entity.reviseDraft(2);
     entity.archiveDraftForTest();
 
     expect(entity.state).toEqual(createProjectOverviewState());
-    expect(entity.version).toEqual({ revision: 1, source: "server" });
+    expect(entity.version).toMatchObject({ number: 1 });
     expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
     expect(entity.changed).toBe(false);
 
@@ -842,7 +433,7 @@ describe("entities", () => {
     expect(result.status).toBe("accepted");
     expect(entity.hasActiveTransaction()).toBe(false);
     expect(entity.state).toEqual(createProjectOverviewState({ name: "Ready", priority: 2 }));
-    expect(entity.version).toEqual({ revision: 2, source: "server" });
+    expect(entity.version).toMatchObject({ number: 2 });
     expect(entity.lifecycle).toEqual({ archived: true, deleted: false });
     expect(entity.lifecycleFlagsChanged).toBe(true);
     expect(entity.changed).toBe(true);
@@ -853,12 +444,11 @@ describe("entities", () => {
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
 
     entity.start();
     entity.changeDraftId("task-2");
-    entity.reviseDraft(2);
     entity.markDraftDeletedForTest();
 
     const rejected = entity.commitForTest();
@@ -866,58 +456,22 @@ describe("entities", () => {
     expect(rejected.status).toBe("rejected");
     expect(entity.hasActiveTransaction()).toBe(true);
     expect(entity.state).toEqual(createProjectOverviewState());
-    expect(entity.version).toEqual({ revision: 1, source: "server" });
+    expect(entity.version).toMatchObject({ number: 1 });
     expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
     expect(entity.changed).toBe(false);
 
     entity.restoreDraftForTest();
     entity.changeDraftId("task-1");
     entity.renameDraft("Recovered", 3);
-    entity.reviseDraft(3);
 
     const accepted = entity.commitForTest();
 
     expect(accepted.status).toBe("accepted");
     expect(entity.hasActiveTransaction()).toBe(false);
     expect(entity.state).toEqual(createProjectOverviewState({ name: "Recovered", priority: 3 }));
-    expect(entity.version).toEqual({ revision: 3, source: "server" });
+    expect(entity.version).toMatchObject({ number: 2 });
     expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
     expect(entity.changed).toBe(true);
-  });
-
-  it("keeps rejected commit version results isolated from the active transaction", () => {
-    const entity = new TestTransactionalEntity({
-      id: "task-1",
-      schema: ProjectOverviewStateSchema,
-      state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
-    });
-
-    entity.start();
-    entity.changeDraftId("task-2");
-    entity.reviseDraft(2);
-
-    const rejected = entity.commitForTest();
-
-    expect(rejected.status).toBe("rejected");
-    if (rejected.status !== "rejected") {
-      throw new Error("Expected the first transaction commit to be rejected.");
-    }
-    expect(entity.hasActiveTransaction()).toBe(true);
-
-    const rejectedVersion = rejected.version as unknown as {
-      draft: { revision: number; labels?: string[] };
-    };
-    rejectedVersion.draft.revision = 99;
-    rejectedVersion.draft.labels = ["caller mutation"];
-
-    entity.changeDraftId("task-1");
-    entity.renameDraft("Recovered", 3);
-
-    const accepted = entity.commitForTest();
-
-    expect(accepted.status).toBe("accepted");
-    expect(entity.version).toEqual({ revision: 2, source: "server" });
   });
 
   it("rolls back active transactional entity drafts without applying them", () => {
@@ -925,12 +479,11 @@ describe("entities", () => {
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
 
     entity.start();
     entity.renameDraft("Discarded", 9);
-    entity.reviseDraft(9);
     entity.archiveDraftForTest();
 
     const result = entity.rollbackForTest();
@@ -938,7 +491,7 @@ describe("entities", () => {
     expect(result.status).toBe("rolled-back");
     expect(entity.hasActiveTransaction()).toBe(false);
     expect(entity.state).toEqual(createProjectOverviewState());
-    expect(entity.version).toEqual({ revision: 1, source: "server" });
+    expect(entity.version).toMatchObject({ number: 1 });
     expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
     expect(entity.changed).toBe(false);
     expect(() => entity.commitForTest()).toThrow(TransactionalEntityScopeError);
@@ -949,24 +502,18 @@ describe("entities", () => {
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
 
     entity.start();
     const draft = entity.draft();
     draft.name = "Caller-side mutation";
-    const version = entity.draftVersion() as {
-      draft: { revision: number };
-    };
-    version.draft.revision = 99;
+    const version = entity.version;
+    version.number = 99;
 
     expect(entity.draft()).toEqual(createProjectOverviewState());
-    expect(entity.draftVersion()).toEqual({
-      previous: { revision: 1, source: "server" },
-      draft: { revision: 1, source: "server" },
-    });
     expect(entity.state).toEqual(createProjectOverviewState());
-    expect(entity.version).toEqual({ revision: 1, source: "server" });
+    expect(entity.version).toMatchObject({ number: 1 });
   });
 
   it("marks aggregate, projection, and process manager families with stable identity", () => {
@@ -974,19 +521,19 @@ describe("entities", () => {
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
     const projection = new TestProjection({
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
     const processManager = new TestProcessManager({
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
 
     expect(aggregate).toBeInstanceOf(TransactionalEntity);
@@ -999,13 +546,13 @@ describe("entities", () => {
     expectTypeOf(projection.entityFamily).toEqualTypeOf<"projection">();
     expectTypeOf(processManager.entityFamily).toEqualTypeOf<"process-manager">();
     expectTypeOf<TestAggregate>().toExtend<
-      TransactionalEntity<string, typeof ProjectOverviewStateSchema, RevisionMetadata>
+      TransactionalEntity<string, typeof ProjectOverviewStateSchema>
     >();
     expectTypeOf<TestProjection>().toExtend<
-      TransactionalEntity<string, typeof ProjectOverviewStateSchema, RevisionMetadata>
+      TransactionalEntity<string, typeof ProjectOverviewStateSchema>
     >();
     expectTypeOf<TestProcessManager>().toExtend<
-      TransactionalEntity<string, typeof ProjectOverviewStateSchema, RevisionMetadata>
+      TransactionalEntity<string, typeof ProjectOverviewStateSchema>
     >();
     expectTypeOf<TestAggregate["entityFamily"]>().toExtend<EntityFamily>();
   });
@@ -1015,19 +562,19 @@ describe("entities", () => {
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
     const projection = new TestProjection({
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
     const processManager = new TestProcessManager({
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
 
     expect(Reflect.set(aggregate, "entityFamily", "projection")).toBe(false);
@@ -1052,7 +599,7 @@ describe("entities", () => {
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
     const originalAggregatePrototypeDescriptor = Object.getOwnPropertyDescriptor(
       Aggregate.prototype,
@@ -1076,7 +623,7 @@ describe("entities", () => {
         id: "task-2",
         schema: ProjectOverviewStateSchema,
         state: createProjectOverviewState(),
-        version: { revision: 1, source: "server" },
+        version: create(VersionSchema, { number: 1 }),
       });
 
       expect(aggregate.entityFamily).toBe("aggregate");
@@ -1099,23 +646,22 @@ describe("entities", () => {
       id: "task-1",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
 
     aggregate.start();
     const returnedDraft = aggregate.renameDraft("Ready");
     returnedDraft.name = "Caller-side draft mutation";
-    aggregate.reviseDraft(2);
 
     expect(aggregate.state).toEqual(createProjectOverviewState());
-    expect(aggregate.version).toEqual({ revision: 1, source: "server" });
+    expect(aggregate.version).toMatchObject({ number: 1 });
     expect(aggregate.changed).toBe(false);
 
     const result = aggregate.commitForTest();
 
     expect(result.status).toBe("accepted");
     expect(aggregate.state).toEqual(createProjectOverviewState({ name: "Ready" }));
-    expect(aggregate.version).toEqual({ revision: 2, source: "server" });
+    expect(aggregate.version).toMatchObject({ number: 2 });
     expect(aggregate.changed).toBe(true);
   });
 
@@ -1183,13 +729,13 @@ describe("entities", () => {
       id: "task-history-unbound",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
     const processManager = new TestProcessManager({
       id: "pm-history-unbound",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
 
     expect(() => aggregate.stateAtForTest(create(TimestampSchema))).toThrow(
@@ -1211,7 +757,7 @@ describe("entities", () => {
       id: "task-history-depth",
       schema: ProjectOverviewStateSchema,
       state: createProjectOverviewState(),
-      version: { revision: 1, source: "server" },
+      version: create(VersionSchema, { number: 1 }),
     });
     entityHistoryAccess.bind(aggregate, {
       stateAt: () => Promise.resolve(undefined),

@@ -348,4 +348,4 @@ in-use close rejects without tearing down its configured facilities.
 The lifecycle exposes no public delivery scheduler, monitor, action,
 dead-letter, retry-timing, topology, adapter, supervision, or catch-up policy.
 It does not add distributed transport, legacy `IMPORT_EVENT` delivery,
-aggregate import, or a new aggregate `@Apply` path.
+aggregate import, or a new aggregate event replay path.

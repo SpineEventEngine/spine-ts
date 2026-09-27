@@ -12,7 +12,7 @@ through `defineEntityHandlers()` and can register the resulting
 `EntityHandlersMetadata` into `HandlerMetadataRegistry`.
 
 The implementation rejects unsupported registry versions, generated
-`event-application` records, invalid public arity, empty emitted schemas for
+retired event-replay metadata records, invalid public arity, empty emitted schemas for
 emitting handler kinds, and emitted schemas on event subscriptions. Method-name
 validation stays in `defineEntityHandlers()`, and duplicate command assignment
 validation stays in `HandlerMetadataRegistry`.

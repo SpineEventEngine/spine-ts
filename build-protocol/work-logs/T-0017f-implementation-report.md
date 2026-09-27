@@ -38,7 +38,7 @@ Worktree:
 - Allowed command handlers with no produced result; produced events are optional
   for process-manager command handlers.
 - Kept durable inbox, delivery scheduler, durable subscription recovery,
-  public schema-bearing decorators, `@Apply`, and end-user framework envelopes
+  public schema-bearing decorators, event replay, and end-user framework envelopes
   out of scope.
 
 ## Tests Run

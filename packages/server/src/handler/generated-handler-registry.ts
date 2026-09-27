@@ -52,9 +52,38 @@ interface DescriptorCandidate {
 }
 
 interface DescriptorValidationOperations {
+  /**
+   * Checks whether a value is a generated message descriptor.
+   *
+   * @param value Candidate descriptor.
+   * @returns Whether the value is a valid message descriptor.
+   */
   isMessage(value: unknown): value is DescriptorMessageSchema;
+
+  /**
+   * Checks the Protobuf type name of a descriptor payload.
+   *
+   * @param value Candidate Protobuf payload.
+   * @param typeName Expected Protobuf type name.
+   * @returns Whether the payload has the expected type name.
+   */
   hasProtoType(value: unknown, typeName: string): boolean;
+
+  /**
+   * Checks whether a value is a generated file descriptor.
+   *
+   * @param value Candidate file descriptor.
+   * @returns Whether the value is a valid file descriptor.
+   */
   isFile(value: unknown): value is DescriptorCandidate;
+
+  /**
+   * Checks whether a file contains a message descriptor.
+   *
+   * @param file File descriptor to search.
+   * @param target Message descriptor to find.
+   * @returns Whether the file contains the message.
+   */
   fileContainsMessage(file: DescriptorCandidate, target: object): boolean;
 }
 
@@ -62,6 +91,12 @@ interface DescriptorValidationOperations {
  * Cohesive fail-closed validation for generated Protobuf-ES descriptor objects.
  */
 const DescriptorValidation: DescriptorValidationOperations = Object.freeze({
+  /**
+   * Checks whether a value is a generated message descriptor.
+   *
+   * @param value Candidate descriptor.
+   * @returns Whether the value is a valid message descriptor.
+   */
   isMessage(value: unknown): value is DescriptorMessageSchema {
     if (value === null || typeof value !== "object") return false;
     const message = value as DescriptorCandidate;
@@ -87,6 +122,13 @@ const DescriptorValidation: DescriptorValidationOperations = Object.freeze({
     return DescriptorValidation.fileContainsMessage(message.file, value);
   },
 
+  /**
+   * Checks the Protobuf type name of a descriptor payload.
+   *
+   * @param value Candidate Protobuf payload.
+   * @param typeName Expected Protobuf type name.
+   * @returns Whether the payload has the expected type name.
+   */
   hasProtoType(value: unknown, typeName: string): boolean {
     return (
       value !== null &&
@@ -95,6 +137,12 @@ const DescriptorValidation: DescriptorValidationOperations = Object.freeze({
     );
   },
 
+  /**
+   * Checks whether a value is a generated file descriptor.
+   *
+   * @param value Candidate file descriptor.
+   * @returns Whether the value is a valid file descriptor.
+   */
   isFile(value: unknown): value is DescriptorCandidate {
     if (value === null || typeof value !== "object") return false;
     const file = value as DescriptorCandidate;
@@ -108,6 +156,13 @@ const DescriptorValidation: DescriptorValidationOperations = Object.freeze({
     );
   },
 
+  /**
+   * Checks whether a file contains a message descriptor.
+   *
+   * @param file File descriptor to search.
+   * @param target Message descriptor to find.
+   * @returns Whether the file contains the message.
+   */
   fileContainsMessage(file: DescriptorCandidate, target: object): boolean {
     const visited = new Set<object>();
     const contains = (messages: unknown): boolean => {
@@ -261,6 +316,11 @@ export interface GeneratedEntityHandlerGroup {
 type StandaloneReceiver =
   AbstractAssignee | AbstractCommander | AbstractEventReactor | AbstractEventSubscriber;
 
+/**
+ * Constructor contract for a nominal standalone receiver.
+ *
+ * @typeParam Instance Concrete standalone receiver type.
+ */
 interface NominalStandaloneReceiverConstructor<Instance extends StandaloneReceiver> {
   // prettier-ignore
 
@@ -318,6 +378,8 @@ export type GeneratedReceiver = GeneratedEntityHandlerGroup | GeneratedStandalon
 /**
  * Describes generated handler records for one entity class.
  *
+ * @typeParam Instance Entity receiver type.
+ * @typeParam StateSchema Generated Entity state schema type.
  */
 export interface GeneratedEntityHandlers<
   Instance extends object = object,
@@ -384,6 +446,7 @@ export interface GeneratedHandlerRecordInput {
 /**
  * Describes generated metadata for one decorated handler method on a concrete entity class.
  *
+ * @typeParam Instance Entity receiver type.
  */
 export interface GeneratedHandlerRecord<
   Instance extends object = object,
@@ -397,37 +460,204 @@ export interface GeneratedHandlerRecord<
 }
 
 interface GeneratedRegistryOperations {
+  /**
+   * Checks the untrusted generated registry shape.
+   *
+   * @param registry Candidate generated registry.
+   */
   assert(registry: unknown): asserts registry is GeneratedHandlerRegistry;
+
+  /**
+   * Builds entity metadata from a generated registry.
+   *
+   * @param registry Validated generated registry.
+   * @returns Canonical entity handler metadata.
+   */
   materializeAll(registry: GeneratedHandlerRegistry): readonly EntityHandlersMetadata[];
+
+  /**
+   * Builds one generated entity group.
+   *
+   * @param entity Generated entity handler group.
+   * @returns Canonical entity handler metadata.
+   */
   materialize(entity: GeneratedEntityHandlerGroup): EntityHandlersMetadata;
+
+  /**
+   * Registers one generated handler with the metadata builder.
+   *
+   * @param builder Entity registration builder.
+   * @param handler Generated handler declaration.
+   * @typeParam Instance Receiver instance type.
+   * @returns Canonical handler metadata.
+   */
   build<Instance extends object>(
     builder: GeneratedHandlerRegistrationBuilder<Instance>,
     handler: GeneratedHandlerRecordInput,
   ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>;
+
+  /**
+   * Validates one generated handler declaration.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateHandler(handler: GeneratedHandlerRecordInput): void;
+
+  /**
+   * Validates one generated receiver declaration.
+   *
+   * @param receiver Candidate receiver declaration.
+   */
   validateReceiver(receiver: unknown): asserts receiver is GeneratedReceiver;
+
+  /**
+   * Checks entity support for generated Command handlers.
+   *
+   * @param entity Generated entity handler group.
+   */
   validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void;
+
+  /**
+   * Checks a generated standalone receiver and its handlers.
+   *
+   * @param receiver Generated standalone receiver group.
+   */
   validateStandalone(receiver: GeneratedStandaloneHandlerGroup): void;
+
+  /**
+   * Finds the nominal role of a standalone receiver.
+   *
+   * @param prototype Receiver prototype to classify.
+   * @returns The nominal role, or undefined when unsupported.
+   */
   standaloneRole(prototype: object): StandaloneRole | undefined;
+
+  /**
+   * Checks whether a handler fits its standalone receiver role.
+   *
+   * @param handler Generated handler declaration.
+   * @param role Nominal standalone receiver role.
+   */
   validateStandaloneRole(handler: GeneratedHandlerRecordInput, role: StandaloneRole): void;
+
+  /**
+   * Checks standalone output schemas for the receiver role.
+   *
+   * @param handler Generated handler declaration.
+   * @param role Nominal standalone receiver role.
+   */
   validateStandaloneOutput(handler: GeneratedHandlerRecordInput, role: StandaloneRole): void;
+
+  /**
+   * Checks standalone input origin for the receiver role.
+   *
+   * @param handler Generated handler declaration.
+   * @param role Nominal standalone receiver role.
+   */
   validateStandaloneOrigin(handler: GeneratedHandlerRecordInput, role: StandaloneRole): void;
+
+  /**
+   * Checks the structural shape of a generated handler record.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateRecordShape(handler: GeneratedHandlerRecordInput): void;
+
+  /**
+   * Checks the handler input signal origin.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateOrigin(handler: GeneratedHandlerRecordInput): void;
+
+  /**
+   * Checks the handler method parameter count.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateParameterCount(handler: GeneratedHandlerRecordInput): void;
+
+  /**
+   * Checks returned and thrown outcome schemas.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateOutcomeSchemas(handler: GeneratedHandlerRecordInput): void;
+
+  /**
+   * Checks subscription and required-output shape.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateSubscriptionShape(handler: GeneratedHandlerRecordInput): void;
+
+  /**
+   * Checks one generated message schema descriptor.
+   *
+   * @param schema Candidate generated message schema.
+   * @param label Context for a validation error.
+   */
   validateSchema(schema: DescriptorMessageSchema, label: string): void;
+
+  /**
+   * Checks for at least one declared emitted schema.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateEmits(handler: GeneratedHandlerRecordInput): void;
+
+  /**
+   * Checks input and output signal roles.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateCommandRoles(handler: GeneratedHandlerRecordInput): void;
+
+  /**
+   * Checks that a subscription emits no schemas.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateSubscription(handler: GeneratedHandlerRecordInput): void;
+
+  /**
+   * Checks a generated Event field filter.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateWhere(handler: GeneratedHandlerRecordInput): void;
+
+  /**
+   * Checks whether a schema represents a Command.
+   *
+   * @param schema Generated message schema.
+   * @returns Whether the schema represents a Command.
+   */
   isCommandSchema(schema: DescriptorMessageSchema): boolean;
+
+  /**
+   * Checks whether a schema represents an Event or rejection.
+   *
+   * @param schema Generated message schema.
+   * @returns Whether the schema represents an Event or rejection.
+   */
   isLegacyEventSchema(schema: DescriptorMessageSchema): boolean;
+
+  /**
+   * Checks whether a handler kind is supported.
+   *
+   * @param kind Candidate handler kind.
+   * @returns Whether the kind is supported.
+   */
   isKind(kind: string): kind is GeneratedHandlerKind;
 }
 
 const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
+  /**
+   * Checks the untrusted generated registry shape.
+   *
+   * @param registry Candidate generated registry.
+   */
   assert(registry: unknown): asserts registry is GeneratedHandlerRegistry {
     if (registry === null || typeof registry !== "object") {
       throw new HandlerRegistryIngestionError(
@@ -449,6 +679,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     });
   },
 
+  /**
+   * Validates one generated receiver declaration.
+   *
+   * @param receiver Candidate receiver declaration.
+   */
   validateReceiver(receiver: unknown): asserts receiver is GeneratedReceiver {
     if (receiver === null || typeof receiver !== "object") {
       throw new HandlerRegistryIngestionError(
@@ -489,6 +724,12 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     });
   },
 
+  /**
+   * Builds entity metadata from a generated registry.
+   *
+   * @param registry Validated generated registry.
+   * @returns Canonical entity handler metadata.
+   */
   materializeAll(registry: GeneratedHandlerRegistry): readonly EntityHandlersMetadata[] {
     registry.receivers.forEach((receiver) => {
       if (receiver.receiverKind === "standalone") GeneratedRegistry.validateStandalone(receiver);
@@ -502,6 +743,12 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     );
   },
 
+  /**
+   * Builds one generated entity group.
+   *
+   * @param entity Generated entity handler group.
+   * @returns Canonical entity handler metadata.
+   */
   materialize(entity: GeneratedEntityHandlerGroup): EntityHandlersMetadata {
     GeneratedRegistry.validateSchema(entity.stateSchema, "entity state schema");
     entity.handlers.forEach((handler) => {
@@ -529,6 +776,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     );
   },
 
+  /**
+   * Checks entity support for generated Command handlers.
+   *
+   * @param entity Generated entity handler group.
+   */
   validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void {
     if (
       entity.handlers.some(
@@ -543,6 +795,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
+  /**
+   * Checks a generated standalone receiver and its handlers.
+   *
+   * @param receiver Generated standalone receiver group.
+   */
   validateStandalone(receiver: GeneratedStandaloneHandlerGroup): void {
     const role = GeneratedRegistry.standaloneRole(receiver.receiverType.prototype);
     if (role === undefined) {
@@ -557,6 +814,12 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
+  /**
+   * Finds the nominal role of a standalone receiver.
+   *
+   * @param prototype Receiver prototype to classify.
+   * @returns The nominal role, or undefined when unsupported.
+   */
   standaloneRole(prototype: object): StandaloneRole | undefined {
     return prototype instanceof AbstractAssignee
       ? "assignee"
@@ -569,6 +832,12 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
             : undefined;
   },
 
+  /**
+   * Checks whether a handler fits its standalone receiver role.
+   *
+   * @param handler Generated handler declaration.
+   * @param role Nominal standalone receiver role.
+   */
   validateStandaloneRole(handler: GeneratedHandlerRecordInput, role: StandaloneRole): void {
     const valid =
       (role === "assignee" && handler.kind === "command-assignment") ||
@@ -587,6 +856,12 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     GeneratedRegistry.validateStandaloneOrigin(handler, role);
   },
 
+  /**
+   * Checks standalone output schemas for the receiver role.
+   *
+   * @param handler Generated handler declaration.
+   * @param role Nominal standalone receiver role.
+   */
   validateStandaloneOutput(handler: GeneratedHandlerRecordInput, role: StandaloneRole): void {
     if (role !== "assignee" && role !== "reactor") return;
     const invalid = handler.outcomes.returned.some(
@@ -600,6 +875,12 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
+  /**
+   * Checks standalone input origin for the receiver role.
+   *
+   * @param handler Generated handler declaration.
+   * @param role Nominal standalone receiver role.
+   */
   validateStandaloneOrigin(handler: GeneratedHandlerRecordInput, role: StandaloneRole): void {
     if (
       role === "subscriber" &&
@@ -613,6 +894,14 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
+  /**
+   * Registers one generated handler with the metadata builder.
+   *
+   * @param builder Entity registration builder.
+   * @param handler Generated handler declaration.
+   * @typeParam Instance Receiver instance type.
+   * @returns Canonical handler metadata.
+   */
   build<Instance extends object>(
     builder: GeneratedHandlerRegistrationBuilder<Instance>,
     handler: GeneratedHandlerRecordInput,
@@ -639,6 +928,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
+  /**
+   * Validates one generated handler declaration.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateHandler(handler: GeneratedHandlerRecordInput): void {
     GeneratedRegistry.validateRecordShape(handler);
     if (!GeneratedRegistry.isKind(handler.kind)) {
@@ -655,6 +949,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     GeneratedRegistry.validateSubscriptionShape(handler);
   },
 
+  /**
+   * Checks the structural shape of a generated handler record.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateRecordShape(handler: GeneratedHandlerRecordInput): void {
     const untrustedHandler: unknown = handler;
     if (untrustedHandler === null || typeof untrustedHandler !== "object") {
@@ -683,6 +982,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
+  /**
+   * Checks the handler input signal origin.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateOrigin(handler: GeneratedHandlerRecordInput): void {
     const origin: unknown = handler.input.origin;
     if (origin !== "domestic" && origin !== "external") {
@@ -702,6 +1006,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
+  /**
+   * Checks the handler method parameter count.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateParameterCount(handler: GeneratedHandlerRecordInput): void {
     const parameterCount: number = handler.parameterCount;
     if (parameterCount !== 1 && parameterCount !== 2) {
@@ -713,6 +1022,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
+  /**
+   * Checks returned and thrown outcome schemas.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateOutcomeSchemas(handler: GeneratedHandlerRecordInput): void {
     GeneratedRegistry.validateSchema(
       handler.input.schema,
@@ -748,6 +1062,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
+  /**
+   * Checks subscription and required-output shape.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateSubscriptionShape(handler: GeneratedHandlerRecordInput): void {
     if (handler.kind === "event-subscription" || handler.kind === "state-subscription") {
       GeneratedRegistry.validateSubscription(handler);
@@ -765,15 +1084,17 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       }
       return;
     }
-    if (
-      handler.kind === "command-assignment" ||
-      handler.kind === "command-substitution" ||
-      handler.kind === "command-reaction"
-    ) {
+    if (handler.kind === "command-assignment" || handler.kind === "command-substitution") {
       GeneratedRegistry.validateEmits(handler);
     }
   },
 
+  /**
+   * Checks one generated message schema descriptor.
+   *
+   * @param schema Candidate generated message schema.
+   * @param label Context for a validation error.
+   */
   validateSchema(schema: DescriptorMessageSchema, label: string): void {
     if (DescriptorValidation.isMessage(schema)) return;
 
@@ -783,6 +1104,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     );
   },
 
+  /**
+   * Checks for at least one declared emitted schema.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateEmits(handler: GeneratedHandlerRecordInput): void {
     if (handler.outcomes.returned.length > 0) {
       return;
@@ -794,6 +1120,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     );
   },
 
+  /**
+   * Checks input and output signal roles.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateCommandRoles(handler: GeneratedHandlerRecordInput): void {
     if (
       (handler.kind === "command-assignment" || handler.kind === "command-substitution") &&
@@ -822,6 +1153,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     );
   },
 
+  /**
+   * Checks that a subscription emits no schemas.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateSubscription(handler: GeneratedHandlerRecordInput): void {
     if (handler.outcomes.returned.length === 0) {
       return;
@@ -833,6 +1169,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     );
   },
 
+  /**
+   * Checks a generated Event field filter.
+   *
+   * @param handler Generated handler declaration.
+   */
   validateWhere(handler: GeneratedHandlerRecordInput): void {
     const where = handler.input.where as unknown;
     if (where === undefined) return;
@@ -868,6 +1209,12 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     }
   },
 
+  /**
+   * Checks whether a schema represents an Event or rejection.
+   *
+   * @param schema Generated message schema.
+   * @returns Whether the schema represents an Event or rejection.
+   */
   isLegacyEventSchema(schema: DescriptorMessageSchema): boolean {
     const fileName = schema.file.name.split(/[\\/]/u).at(-1);
     return (
@@ -882,6 +1229,12 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     );
   },
 
+  /**
+   * Checks whether a schema represents a Command.
+   *
+   * @param schema Generated message schema.
+   * @returns Whether the schema represents a Command.
+   */
   isCommandSchema(schema: DescriptorMessageSchema): boolean {
     const fileName = schema.file.name.split(/[\\/]/u).at(-1);
     return (
@@ -893,6 +1246,12 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     );
   },
 
+  /**
+   * Checks whether a handler kind is supported.
+   *
+   * @param kind Candidate handler kind.
+   * @returns Whether the kind is supported.
+   */
   isKind(kind: string): kind is GeneratedHandlerKind {
     return (
       kind === "command-assignment" ||

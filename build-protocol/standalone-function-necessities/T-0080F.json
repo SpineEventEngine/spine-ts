@@ -372,15 +372,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/handler/handler-decorators.ts",
     "kind": "function-declaration",
-    "identity": "Apply()#1",
-    "name": "Apply",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration Apply()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/handler/handler-decorators.ts",
-    "kind": "function-declaration",
     "identity": "Assign()#1",
     "name": "Assign",
     "disposition": "migration-debt",

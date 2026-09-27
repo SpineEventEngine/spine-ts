@@ -88,7 +88,7 @@ Implementation impact:
 - Return deterministic event message full type names using locale-independent
   ordering.
 - Expose fan-out metadata for event subscriptions and event reactions.
-- Expose event-application metadata by event type and retain the per-entity
+- Expose retired event-replay metadata by event type and retain the per-entity
   uniqueness enforced by `HandlerMetadataRegistry`.
 - Return fresh frozen/copy-safe readiness metadata consistent with
   `CommandRegistrationReadiness`.

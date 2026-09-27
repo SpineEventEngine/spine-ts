@@ -13,6 +13,7 @@
  */
 
 import { Buffer } from "node:buffer";
+import { resolve, sep } from "node:path";
 
 import { create, setExtension, toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorProtoSchema, MessageOptionsSchema } from "@bufbuild/protobuf/wkt";
@@ -21,6 +22,7 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import { BuildHandlerAnalyzer } from "../src/generation/build-time-handler-analyzer.js";
+import { GeneratedRegistryWriter } from "../src/generation/generated-registry-writer.js";
 
 const analyzeBuildHandlers = (...args: Parameters<typeof BuildHandlerAnalyzer.analyze>) =>
   BuildHandlerAnalyzer.analyze(...args);
@@ -35,6 +37,654 @@ function entityReceivers(analysis: ReturnType<typeof BuildHandlerAnalyzer.analyz
 }
 
 describe("build-time handler analyzer", () => {
+  it("treats concrete aliases, tuple members, arrays, and void subscriber aliases consistently", () => {
+    const program = programWithSources(
+      "src/return-shapes.ts",
+      {
+        "src/return-shapes.ts": `
+        import { ProcessManager, Assign, React, Subscribe } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+        type Either<T> = T | TaskRenamed;
+        type Pair<T> = [TaskCreated, T | undefined];
+        type MaybeTuple = [TaskCreated?] | [TaskRenamed];
+        type VoidAlias = void;
+        type Identity<T> = T;
+        type Async<T> = Promise<T>;
+        export class ReturnShapes extends ProcessManager<string, typeof TaskSchema> {
+          @React direct(event: TaskCreated): (TaskCreated | TaskRenamed | undefined)[] {
+            throw Error(String(event));
+          }
+          @React alias(event: TaskCreated): Array<Either<TaskCreated> | undefined> { throw Error(String(event)); }
+          @React tuple(event: TaskCreated): [TaskCreated, Either<TaskCreated> | undefined] {
+            throw Error(String(event));
+          }
+          @Assign optional(command: CreateTask): [TaskCreated, TaskRenamed?] { throw Error(String(command)); }
+          @Assign union(command: CreateTask): [TaskCreated, TaskRenamed | undefined] { throw Error(String(command)); }
+          @Assign generic(command: CreateTask): Pair<TaskRenamed> { throw Error(String(command)); }
+          @Assign missing(command: CreateTask): [TaskCreated | undefined] { throw Error(String(command)); }
+          @Assign missingUnion(command: CreateTask): [TaskCreated?] | [TaskRenamed] { throw Error(String(command)); }
+          @Assign missingAlias(command: CreateTask): MaybeTuple { throw Error(String(command)); }
+          @Subscribe parenthesized(event: TaskCreated): (void) { void event; }
+          @Subscribe aliased(event: TaskCreated): Promise<VoidAlias> { void event; return Promise.resolve(); }
+          @Subscribe genericVoid(event: TaskCreated): Identity<void> { void event; }
+          @Subscribe genericAsync(event: TaskCreated): Async<void> { void event; return Promise.resolve(); }
+          @Subscribe nestedAsync(event: TaskCreated): Async<Promise<void>> { throw Error(String(event)); }
+          @Subscribe thenable(event: TaskCreated): PromiseLike<void> { throw Error(String(event)); }
+          @Subscribe invalid(event: TaskCreated): undefined { void event; return undefined; }
+        }
+      `,
+        "generated/task_pb.ts": generatedTypedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+          "TaskRenamed",
+        ),
+      },
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
+      ["MISSING_EMITTED_SCHEMAS", "missing"],
+      ["MISSING_EMITTED_SCHEMAS", "missingUnion"],
+      ["MISSING_EMITTED_SCHEMAS", "missingAlias"],
+      ["INVALID_SUBSCRIBE_RETURN", "nestedAsync"],
+      ["INVALID_SUBSCRIBE_RETURN", "thenable"],
+      ["INVALID_SUBSCRIBE_RETURN", "invalid"],
+    ]);
+    expect(entityReceivers(result)[0]?.handlers.map(({ methodName }) => methodName)).toEqual([
+      "direct",
+      "alias",
+      "tuple",
+      "optional",
+      "union",
+      "generic",
+      "parenthesized",
+      "aliased",
+      "genericVoid",
+      "genericAsync",
+    ]);
+  });
+
+  it("resolves optional reaction results by input kind across equivalent declarations", () => {
+    const program = programWithSources(
+      "src/optional-reactions.ts",
+      {
+        "src/optional-reactions.ts": `
+        import { ProcessManager, Command, React, Subscribe } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+        import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+        type Optional<T> = T | undefined;
+        export class Reactions extends ProcessManager<string, typeof TaskSchema> {
+          @Command fromEvent(event: TaskCreated): RenameTask | undefined | CreateTask { throw Error(String(event)); }
+          @Command fromAlias(event: TaskCreated): Promise<Optional<RenameTask>> { throw Error(String(event)); }
+          @Command silentCommand(event: TaskCreated): Promise<undefined> { throw Error(String(event)); }
+          @React fromArray(event: TaskCreated): (TaskRenamed | undefined)[] { throw Error(String(event)); }
+          @React silentEvent(event: TaskCreated): undefined { throw Error(String(event)); }
+          @Command transform(command: CreateTask): CreateTask | undefined { throw Error(String(command)); }
+          @React invalidVoid(event: TaskCreated): void { void event; }
+          @Subscribe invalidSubscriber(event: TaskCreated): undefined { return undefined; }
+        }
+      `,
+        "generated/task_pb.ts": generatedTypedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+          "RenameTask",
+        ),
+        "generated/events_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+          "TaskRenamed",
+        ),
+      },
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
+      ["UNSUPPORTED_RETURN_TYPE", "transform"],
+      ["UNSUPPORTED_RETURN_TYPE", "invalidVoid"],
+      ["INVALID_SUBSCRIBE_RETURN", "invalidSubscriber"],
+    ]);
+    expect(
+      entityReceivers(result)[0]?.handlers.map(({ methodName, outcomes }) => [
+        methodName,
+        outcomes.returned.map(({ exportName }) => exportName),
+      ]),
+    ).toEqual([
+      ["fromEvent", ["RenameTaskSchema", "CreateTaskSchema"]],
+      ["fromAlias", ["RenameTaskSchema"]],
+      ["silentCommand", []],
+      ["fromArray", ["TaskRenamedSchema"]],
+      ["silentEvent", []],
+    ]);
+  });
+
+  it("generates the exact access-approval @Command union declaration", () => {
+    const program = programWithSources(
+      "src/access-approvals.ts",
+      {
+        "src/access-approvals.ts": `
+        import { ProcessManager, Command } from "@spine-event-engine/server";
+        import { AccessRequestStateSchema } from "../generated/access_state_pb.js";
+        import { type AccessRequestApproved } from "../generated/access_events_pb.js";
+        import { type CreateAccessGrant, type ExtendAccessGrant } from "../generated/access_commands_pb.js";
+        export class AccessRequests extends ProcessManager<string, typeof AccessRequestStateSchema> {
+          @Command
+          issueOnApproval(event: AccessRequestApproved): CreateAccessGrant | ExtendAccessGrant {
+            throw new Error(String(event));
+          }
+        }
+      `,
+        "generated/access_state_pb.ts": generatedTypedModule(
+          "spine/examples/access/access_requests.proto",
+          "AccessRequestState",
+        ),
+        "generated/access_events_pb.ts": generatedTypedModule(
+          "spine/examples/access/access_request_events.proto",
+          "AccessRequestApproved",
+        ),
+        "generated/access_commands_pb.ts": generatedTypedModule(
+          "spine/examples/access/access_grant_commands.proto",
+          "CreateAccessGrant",
+          "ExtendAccessGrant",
+        ),
+      },
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(compilerMessages(program)).toEqual([]);
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers[0]?.outcomes.returned).toEqual([
+      schema("../generated/access_commands_pb.js", "CreateAccessGrantSchema"),
+      schema("../generated/access_commands_pb.js", "ExtendAccessGrantSchema"),
+    ]);
+    const generated = new GeneratedRegistryWriter().render(result, {
+      outputFile: "src/generated/handler/generated-handler-registry.ts",
+    });
+    expect(generated).toContain("CreateAccessGrantSchema");
+    expect(generated).toContain("ExtendAccessGrantSchema");
+  });
+  it("resolves native unions, optional tuples, and imported concrete generic aliases", () => {
+    const program = programWithSources(
+      "src/native-returns.ts",
+      {
+        "src/native-returns.ts": `
+        import { ProcessManager, Command } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type CommandChoices, type OptionalCommands } from "./return-aliases.js";
+        export class NativeReturns extends ProcessManager<string, typeof TaskSchema> {
+          @Command
+          choose(command: CreateTask): Promise<CommandChoices> { throw new Error(String(command)); }
+          @Command
+          optional(command: CreateTask): OptionalCommands { throw new Error(String(command)); }
+        }
+      `,
+        "src/return-aliases.ts": `
+        import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+        type Either<T, U> = T | U;
+        export type CommandChoices = Either<CreateTask, RenameTask>;
+        export type OptionalCommands = readonly [first: CreateTask, second?: RenameTask];
+      `,
+        "generated/task_pb.ts": generatedTypedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+          "RenameTask",
+        ),
+      },
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(compilerMessages(program)).toEqual([]);
+    expect(result.diagnostics).toEqual([]);
+    expect(
+      entityReceivers(result)[0]?.handlers.map((handler) => handler.outcomes.returned),
+    ).toEqual([
+      [
+        schema("../generated/commands_pb.js", "CreateTaskSchema"),
+        schema("../generated/commands_pb.js", "RenameTaskSchema"),
+      ],
+      [
+        schema("../generated/commands_pb.js", "CreateTaskSchema"),
+        schema("../generated/commands_pb.js", "RenameTaskSchema"),
+      ],
+    ]);
+    const generated = new GeneratedRegistryWriter().render(result, {
+      outputFile: "src/generated/handler/generated-handler-registry.ts",
+    });
+    expect(generated).toContain("CreateTaskSchema");
+    expect(generated).toContain("RenameTaskSchema");
+  });
+
+  it("resolves generic collections of generated message type aliases", () => {
+    const program = programWithSources(
+      "src/generated-alias-returns.ts",
+      {
+        "src/generated-alias-returns.ts": `
+        import { type Message } from "@bufbuild/protobuf";
+        import { ProcessManager, Assign } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+        import { type TaskAlreadyDone } from "../generated/rejections_pb.js";
+        type Many<T> = readonly T[];
+        type Choice<T> = T | TaskRenamed;
+        type Pair<T> = readonly [TaskCreated, T];
+        type Async<T> = Promise<T>;
+        export class GeneratedAliasReturns extends ProcessManager<string, typeof TaskSchema> {
+          @Assign array(command: CreateTask): Many<TaskCreated> { throw Error(String(command)); }
+          @Assign union(command: CreateTask): Choice<TaskCreated> { throw Error(String(command)); }
+          @Assign tuple(command: CreateTask): Pair<TaskRenamed> { throw Error(String(command)); }
+          @Assign promise(command: CreateTask): Async<Many<TaskCreated>> { throw Error(String(command)); }
+          @Assign object(command: CreateTask): Many<{ value: string }> { throw Error(String(command)); }
+          @Assign genericMessage(command: CreateTask): Many<Message<string>> { throw Error(String(command)); }
+          @Assign rejection(command: CreateTask): Many<TaskAlreadyDone> { throw Error(String(command)); }
+        }
+      `,
+        "generated/task_pb.ts": generatedTypedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+          "TaskRenamed",
+        ),
+        "generated/rejections_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_rejections.proto",
+          "TaskAlreadyDone",
+        ),
+      },
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(compilerMessages(program)).toEqual([]);
+    expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
+      ["UNSUPPORTED_RETURN_TYPE", "object"],
+      ["UNSUPPORTED_RETURN_TYPE", "genericMessage"],
+      ["INVALID_EMITTED_SCHEMA", "rejection"],
+    ]);
+    expect(
+      entityReceivers(result)[0]?.handlers.map(({ methodName, outcomes }) => [
+        methodName,
+        outcomes.returned.map(({ exportName }) => exportName),
+      ]),
+    ).toEqual([
+      ["array", ["TaskCreatedSchema"]],
+      ["union", ["TaskCreatedSchema", "TaskRenamedSchema"]],
+      ["tuple", ["TaskCreatedSchema", "TaskRenamedSchema"]],
+      ["promise", ["TaskCreatedSchema"]],
+    ]);
+  });
+
+  it("resolves an imported concrete generated alias without a direct message import", () => {
+    const program = programWithSources(
+      "src/imported-generated-alias.ts",
+      {
+        "src/imported-generated-alias.ts": `
+        import { ProcessManager, Assign } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type Results } from "./result-alias.js";
+        export class ImportedAlias extends ProcessManager<string, typeof TaskSchema> {
+          @Assign rename(command: CreateTask): Results { throw Error(String(command)); }
+        }
+      `,
+        "src/result-alias.ts": `
+        import { type TaskRenamed } from "../generated/events_pb.js";
+        export type Results = readonly TaskRenamed[];
+      `,
+        "generated/task_pb.ts": generatedTypedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskRenamed",
+        ),
+      },
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(compilerMessages(program)).toEqual([]);
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers[0]?.outcomes.returned).toEqual([
+      schema("../generated/events_pb.js", "TaskRenamedSchema"),
+    ]);
+  });
+
+  it("accepts an absent whole Event reaction result through syntax, aliases, and Promise", () => {
+    const program = programWithSources(
+      "src/optional-reactions.ts",
+      {
+        "src/optional-reactions.ts": `
+        import { ProcessManager, React } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+        import { type OptionalReaction } from "./reaction-alias.js";
+        export class OptionalReactions extends ProcessManager<string, typeof TaskSchema> {
+          @React
+          direct(event: TaskCreated): TaskRenamed | undefined { throw new Error(String(event)); }
+          @React
+          aliased(event: TaskCreated): OptionalReaction { throw new Error(String(event)); }
+          @React
+          promised(event: TaskCreated): Promise<OptionalReaction> { throw new Error(String(event)); }
+        }
+      `,
+        "src/reaction-alias.ts": `
+        import { type TaskRenamed } from "../generated/events_pb.js";
+        export type OptionalReaction = TaskRenamed | undefined;
+      `,
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/events_pb.ts": generatedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+          "TaskRenamed",
+        ),
+      },
+      false,
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(
+      entityReceivers(result)[0]?.handlers.map((handler) => handler.outcomes.returned),
+    ).toEqual([
+      [schema("../generated/events_pb.js", "TaskRenamedSchema")],
+      [schema("../generated/events_pb.js", "TaskRenamedSchema")],
+      [schema("../generated/events_pb.js", "TaskRenamedSchema")],
+    ]);
+  });
+
+  it("keeps command-accepting outputs required and rejects unknown reaction branches", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/invalid-optional.ts",
+        `
+      import { ProcessManager, Command, React } from "@spine-event-engine/server";
+      import { TaskSchema } from "../generated/task_pb.js";
+      import { type CreateTask } from "../generated/commands_pb.js";
+      import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+      export class InvalidOptional extends ProcessManager<string, typeof TaskSchema> {
+        @Command
+        command(input: CreateTask): CreateTask | undefined { throw new Error(String(input)); }
+        @React
+        reaction(event: TaskCreated): TaskRenamed | unknown { throw new Error(String(event)); }
+      }
+    `,
+        true,
+      ),
+    );
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
+      "command",
+      "reaction",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_RETURN_TYPE",
+      "UNSUPPORTED_RETURN_TYPE",
+    ]);
+  });
+
+  it("keeps order and repeated schemas for unions inside named readonly tuples", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/tuple-union.ts",
+        `
+      import { Aggregate, Assign } from "@spine-event-engine/server";
+      import { TaskSchema } from "../generated/task_pb.js";
+      import { type CreateTask } from "../generated/commands_pb.js";
+      import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+      export class TupleUnion extends Aggregate<string, typeof TaskSchema> {
+        @Assign
+        produce(command: CreateTask): readonly [first: TaskCreated | TaskRenamed,
+          second: TaskCreated, third?: TaskCreated] { throw new Error(String(command)); }
+      }
+    `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers[0]?.outcomes.returned).toEqual([
+      schema("../generated/events_pb.js", "TaskCreatedSchema"),
+      schema("../generated/events_pb.js", "TaskRenamedSchema"),
+      schema("../generated/events_pb.js", "TaskCreatedSchema"),
+      schema("../generated/events_pb.js", "TaskCreatedSchema"),
+    ]);
+  });
+
+  it("resolves every branch of an optional union tuple member", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/optional-union-tuple.ts",
+        `
+      import { Aggregate, Assign } from "@spine-event-engine/server";
+      import { TaskSchema } from "../generated/task_pb.js";
+      import { type CreateTask } from "../generated/commands_pb.js";
+      import { type TaskCreated, type TaskRenamed } from "../generated/spine/examples/todo/task_events_pb.js";
+      import { type TaskCompleted } from "../generated/spine/examples/todo/task_events_pb.js";
+      export class OptionalUnionTuple extends Aggregate<string, typeof TaskSchema> {
+        @Assign
+        produce(command: CreateTask): readonly [TaskCreated, (TaskRenamed | TaskCompleted)?] {
+          throw new Error(String(command));
+        }
+      }
+    `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers[0]?.outcomes.returned).toEqual([
+      schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
+      schema("../generated/spine/examples/todo/task_events_pb.js", "TaskRenamedSchema"),
+      schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCompletedSchema"),
+    ]);
+  });
+
+  it("resolves an imported whole-return alias with one outer Promise", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/imported-promise.ts", {
+        "src/imported-promise.ts": `
+        import { Aggregate, Assign } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type Result } from "./result-alias.js";
+        export class ImportedPromise extends Aggregate<string, typeof TaskSchema> {
+          @Assign produce(command: CreateTask): Result { throw new Error(String(command)); }
+        }
+      `,
+        "src/result-alias.ts": `
+        import { type TaskCreated } from "../generated/events_pb.js";
+        export type Result = Promise<TaskCreated>;
+      `,
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+        ),
+      }),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(entityReceivers(result)[0]?.handlers[0]?.outcomes.returned).toEqual([
+      schema("../generated/events_pb.js", "TaskCreatedSchema"),
+    ]);
+  });
+
+  it("resolves imported alias chains and concrete generic aliases to one built-in Promise", () => {
+    const program = programWithSources(
+      "src/imported-promise-chain.ts",
+      {
+        "src/imported-promise-chain.ts": `
+        import { Aggregate, Assign } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type TaskCreated } from "../generated/events_pb.js";
+        import { type Result, type AsyncResult } from "./result-alias.js";
+        type LocalResult = AsyncResult<TaskCreated>;
+        export class ImportedPromiseChain extends Aggregate<string, typeof TaskSchema> {
+          @Assign chain(command: CreateTask): Result { throw new Error(String(command)); }
+          @Assign generic(command: CreateTask): AsyncResult<TaskCreated> {
+            throw new Error(String(command));
+          }
+          @Assign local(command: CreateTask): LocalResult { throw new Error(String(command)); }
+        }
+      `,
+        "src/result-alias.ts": `
+        import { type TaskCreated } from "../generated/events_pb.js";
+        type DirectResult = Promise<TaskCreated>;
+        export type Result = DirectResult;
+        export type AsyncResult<T> = Promise<T>;
+      `,
+        "generated/task_pb.ts": generatedTypedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedTypedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+        ),
+      },
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+
+    expect(compilerMessages(program)).toEqual([]);
+    expect(result.diagnostics).toEqual([]);
+    expect(
+      entityReceivers(result)[0]?.handlers.map((handler) => handler.outcomes.returned),
+    ).toEqual([
+      [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+      [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+      [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+    ]);
+  });
+
+  it("rejects imported nested Promise and custom thenable aliases", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/invalid-async-alias.ts", {
+        "src/invalid-async-alias.ts": `
+        import { Aggregate, Assign } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type NestedResult, type ThenableResult, type DirectResult } from "./result-alias.js";
+        export class InvalidAsyncAlias extends Aggregate<string, typeof TaskSchema> {
+          @Assign nested(command: CreateTask): NestedResult { throw new Error(String(command)); }
+          @Assign thenable(command: CreateTask): ThenableResult { throw new Error(String(command)); }
+          @Assign wrapped(command: CreateTask): Promise<DirectResult> {
+            throw new Error(String(command));
+          }
+        }
+      `,
+        "src/result-alias.ts": `
+        import { type TaskCreated } from "../generated/events_pb.js";
+        export type DirectResult = Promise<TaskCreated>;
+        export type NestedResult = Promise<Promise<TaskCreated>>;
+        export type ThenableResult = PromiseLike<TaskCreated>;
+      `,
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+        ),
+      }),
+    );
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
+      "nested",
+      "thenable",
+      "wrapped",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_RETURN_TYPE",
+      "UNSUPPORTED_RETURN_TYPE",
+      "UNSUPPORTED_RETURN_TYPE",
+    ]);
+  });
+
+  it("rejects nested arrays hidden behind a return alias", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/nested-array-alias.ts", {
+        "src/nested-array-alias.ts": `
+        import { Aggregate, Assign } from "@spine-event-engine/server";
+        import { TaskSchema } from "../generated/task_pb.js";
+        import { type CreateTask } from "../generated/commands_pb.js";
+        import { type Results } from "./result-alias.js";
+        export class NestedArrayAlias extends Aggregate<string, typeof TaskSchema> {
+          @Assign produce(command: CreateTask): Results { throw new Error(String(command)); }
+        }
+      `,
+        "src/result-alias.ts": `
+        import { type TaskCreated } from "../generated/events_pb.js";
+        export type Results = TaskCreated[][];
+      `,
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/commands_pb.ts": generatedModule(
+          "spine/examples/todo/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedModule(
+          "spine/examples/todo/task_events.proto",
+          "TaskCreated",
+        ),
+      }),
+    );
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_RETURN_TYPE",
+    ]);
+  });
+
+  it("rejects invalid branches of unions rather than omitting them", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/invalid-unions.ts",
+        `
+      import { ProcessManager, Command } from "@spine-event-engine/server";
+      import { TaskSchema } from "../generated/task_pb.js";
+      import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+      import { type TaskCreated } from "../generated/events_pb.js";
+      export class InvalidUnions extends ProcessManager<string, typeof TaskSchema> {
+        @Command mixed(command: CreateTask): RenameTask | TaskCreated { throw new Error(String(command)); }
+        @Command anyBranch(command: CreateTask): RenameTask | any { throw new Error(String(command)); }
+        @Command unknownBranch(command: CreateTask): RenameTask | unknown { throw new Error(String(command)); }
+      }
+    `,
+      ),
+    );
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_EMITTED_SCHEMA",
+      "UNSUPPORTED_RETURN_TYPE",
+      "UNSUPPORTED_RETURN_TYPE",
+    ]);
+  });
   it("records declared rejections with either decorator order", () => {
     const result = analyzeBuildHandlers(
       programWithSource(
@@ -46,7 +696,7 @@ describe("build-time handler analyzer", () => {
           import { type CreateTask } from "../generated/commands_pb.js";
           import { type TaskCreated } from "../generated/events_pb.js";
 
-          export class DeclaredRejections extends Aggregate<string, typeof TaskSchema, bigint> {
+          export class DeclaredRejections extends Aggregate<string, typeof TaskSchema> {
             @Assign
             @Throws(TaskAlreadyDone)
             canonical(command: CreateTask): TaskCreated { throw new Error(String(command)); }
@@ -89,7 +739,7 @@ describe("build-time handler analyzer", () => {
           import { type CreateTask } from "../generated/commands_pb.js";
           import { type TaskCreated } from "../generated/events_pb.js";
 
-          export class NestedDeclaredRejection extends Aggregate<string, typeof TaskSchema, bigint> {
+          export class NestedDeclaredRejection extends Aggregate<string, typeof TaskSchema> {
             @Assign
             @Throws(TaskAlreadyDone)
             handle(command: CreateTask): TaskCreated { throw new Error(String(command)); }
@@ -116,7 +766,7 @@ describe("build-time handler analyzer", () => {
           import { type CreateTask } from "../generated/commands_pb.js";
           import { type TaskCreated as TaskCreatedMessage } from "../generated/events_pb.js";
 
-          export class InvalidDeclarations extends Aggregate<string, typeof TaskSchema, bigint> {
+          export class InvalidDeclarations extends Aggregate<string, typeof TaskSchema> {
             @Subscribe @Throws(TaskAlreadyDone)
             misplaced(event: TaskCreatedMessage): void { void event; }
 
@@ -153,7 +803,7 @@ describe("build-time handler analyzer", () => {
           import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
           import { type TaskCreated } from "../generated/events_pb.js";
 
-          export class ContextContract extends ProcessManager<string, typeof TaskSchema, bigint> {
+          export class ContextContract extends ProcessManager<string, typeof TaskSchema> {
             @Assign assign(command: CreateTask, context: EventContext): TaskCreated {
               throw new Error(String(command) + String(context));
             }
@@ -187,7 +837,7 @@ describe("build-time handler analyzer", () => {
           import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
           import { type TaskCreated } from "../generated/events_pb.js";
 
-          export class CanonicalContext extends ProcessManager<string, typeof TaskSchema, bigint> {
+          export class CanonicalContext extends ProcessManager<string, typeof TaskSchema> {
             @Assign assign(command: CreateTask, context: CommandMetadata): TaskCreated {
               throw new Error(String(command) + String(context));
             }
@@ -212,7 +862,7 @@ describe("build-time handler analyzer", () => {
           import { TaskSchema } from "../generated/task_pb.js";
           import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
 
-          export class InvalidHandlerContexts extends ProcessManager<string, typeof TaskSchema, bigint> {
+          export class InvalidHandlerContexts extends ProcessManager<string, typeof TaskSchema> {
             @Command primitive(command: CreateTask, context: string): RenameTask {
               throw new Error(String(command) + context);
             }
@@ -355,8 +1005,9 @@ describe("build-time handler analyzer", () => {
           throw new Error(String(event));
         }
         @React
-        observeRejection(rejection: TaskAlreadyDone): void {
+        observeRejection(rejection: TaskAlreadyDone): undefined {
           void rejection;
+          return undefined;
         }
       }
       export class TaskSubscriber extends AbstractEventSubscriber {
@@ -535,8 +1186,8 @@ describe("build-time handler analyzer", () => {
           import { TaskListSchema } from "../generated/task_list_pb.js";
           import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
 
-          abstract class DomainAggregate extends Aggregate<string, typeof TaskSchema, bigint> {}
-          abstract class DomainProjection extends Projection<string, typeof TaskListSchema, number> {}
+          abstract class DomainAggregate extends Aggregate<string, typeof TaskSchema> {}
+          abstract class DomainProjection extends Projection<string, typeof TaskListSchema> {}
 
           export class InheritedAggregate extends DomainAggregate {
             @Command transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
@@ -564,7 +1215,7 @@ describe("build-time handler analyzer", () => {
           import { TaskListSchema } from "../generated/task_list_pb.js";
           import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
 
-          abstract class DomainProcessManager extends ProcessManager<string, typeof TaskListSchema, number> {}
+          abstract class DomainProcessManager extends ProcessManager<string, typeof TaskListSchema> {}
           export class InheritedProcessManager extends DomainProcessManager {
             @Command transform(command: CreateTask): RenameTask { throw new Error(String(command)); }
           }
@@ -590,7 +1241,7 @@ describe("build-time handler analyzer", () => {
           export class InvalidBootstrapHandler extends BootstrapBase {
             @Subscribe observe(): void {}
           }
-          export class TaskProcessManager extends ProcessManager<string, typeof TaskListSchema, number> {
+          export class TaskProcessManager extends ProcessManager<string, typeof TaskListSchema> {
             @Subscribe observe(event: TaskCreated): void { void event; }
           }
         `,
@@ -1130,7 +1781,7 @@ describe("build-time handler analyzer", () => {
           import { TaskSchema } from "../generated/task_pb.js";
           import { type NotACommand } from "../generated/notcommands_pb.js";
           import { type NotAnEvent } from "../generated/notevents_pb.js";
-          export class MisnamedAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+          export class MisnamedAggregate extends Aggregate<string, typeof TaskSchema> {
             @Assign command(command: NotACommand): NotAnEvent { throw new Error(String(command)); }
             @React event(event: NotAnEvent): NotAnEvent { throw new Error(String(event)); }
           }
@@ -1272,7 +1923,7 @@ describe("build-time handler analyzer", () => {
     );
   });
 
-  it("accepts no-emission React handlers with explicit void returns", () => {
+  it("accepts no-emission React handlers with explicit undefined returns", () => {
     const result = analyzeBuildHandlers(programWithSource("src/reaction.ts", noEmissionSource));
 
     expect(result.diagnostics).toEqual([]);
@@ -1362,13 +2013,127 @@ describe("build-time handler analyzer", () => {
     );
   });
 
+  for (const arrayName of ["Array", "ReadonlyArray"] as const) {
+    const nativeName = arrayName === "Array" ? "ReadonlyArray" : "Array";
+
+    it(`rejects a local ${arrayName} lookalike while accepting built-in ${nativeName}`, () => {
+      const result = analyzeBuildHandlers(
+        programWithSource(
+          "src/local-array.ts",
+          handlerFixtureSource(
+            "ProcessManager",
+            "TaskListSchema",
+            `
+            @Assign
+            local(command: CreateTask): ${arrayName}<TaskCreated> { throw new Error(String(command)); }
+
+            @Assign
+            native(command: CreateTask): ${nativeName}<TaskCreated> { throw new Error(String(command)); }
+          `,
+            `
+            import { type CreateTask } from "../generated/commands_pb.js";
+            import { type TaskCreated } from "../generated/events_pb.js";
+            interface ${arrayName}<Value> { readonly value: Value; }
+          `,
+          ),
+        ),
+      );
+
+      expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
+        ["UNSUPPORTED_RETURN_TYPE", "local"],
+      ]);
+      expect(entityReceivers(result)[0]?.handlers.map(({ methodName }) => methodName)).toEqual([
+        "native",
+      ]);
+    });
+
+    it(`rejects an imported ${arrayName} lookalike while accepting built-in ${nativeName}`, () => {
+      const result = analyzeBuildHandlers(
+        programWithSources("src/imported-array.ts", {
+          "src/imported-array.ts": handlerFixtureSource(
+            "ProcessManager",
+            "TaskListSchema",
+            `
+            @Assign
+            imported(command: CreateTask): ${arrayName}<TaskCreated> { throw new Error(String(command)); }
+
+            @Assign
+            native(command: CreateTask): ${nativeName}<TaskCreated> { throw new Error(String(command)); }
+          `,
+            `
+            import { type CreateTask } from "../generated/commands_pb.js";
+            import { type TaskCreated } from "../generated/events_pb.js";
+            import { type ${arrayName} } from "../array-lookalike.js";
+          `,
+          ),
+          "array-lookalike.ts": `export interface ${arrayName}<Value> { readonly value: Value; }`,
+          "generated/commands_pb.ts": generatedModule(
+            "spine/examples/todo/task_commands.proto",
+            "CreateTask",
+          ),
+          "generated/events_pb.ts": generatedModule(
+            "spine/examples/todo/task_events.proto",
+            "TaskCreated",
+          ),
+          "generated/task_list_pb.ts": generatedModule(
+            "spine/examples/todo/task_list.proto",
+            "TaskList",
+          ),
+        }),
+      );
+
+      expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
+        ["UNSUPPORTED_RETURN_TYPE", "imported"],
+      ]);
+      expect(entityReceivers(result)[0]?.handlers.map(({ methodName }) => methodName)).toEqual([
+        "native",
+      ]);
+    });
+  }
+
+  for (const arrayName of ["Array", "ReadonlyArray"] as const) {
+    const nativeName = arrayName === "Array" ? "ReadonlyArray" : "Array";
+
+    it(`uses the resolved array member for concrete ${arrayName} aliases`, () => {
+      const result = analyzeBuildHandlers(
+        programWithSource(
+          "src/concrete-array-alias.ts",
+          handlerFixtureSource(
+            "ProcessManager",
+            "TaskListSchema",
+            `
+            @Assign
+            renamed(command: CreateTask): Outputs<TaskRenamed> { throw new Error(String(command)); }
+
+            @Assign
+            sameName(command: CreateTask): ${arrayName}<TaskRenamed> { throw new Error(String(command)); }
+          `,
+            `
+            import { type CreateTask } from "../generated/commands_pb.js";
+            import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
+            type Outputs<Value> = ${nativeName}<TaskCreated>;
+            type ${arrayName}<Value> = ${nativeName}<TaskCreated>;
+          `,
+          ),
+        ),
+      );
+
+      expect(result.diagnostics).toEqual([]);
+      expect(
+        entityReceivers(result)[0]?.handlers.map(({ outcomes }) =>
+          outcomes.returned.map(({ exportName }) => exportName),
+        ),
+      ).toEqual([["TaskCreatedSchema"], ["TaskCreatedSchema"]]);
+    });
+  }
+
   it("rejects void Assign and Command handlers", () => {
     const result = analyzeBuildHandlers(programWithSource("src/void.ts", voidEmissionSource));
 
     expect(entityReceivers(result)).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_EMITTED_SCHEMAS",
-      "MISSING_EMITTED_SCHEMAS",
+      "UNSUPPORTED_RETURN_TYPE",
     ]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
       "silentAssign",
@@ -1408,7 +2173,6 @@ describe("build-time handler analyzer", () => {
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "MISSING_ENTITY_STATE_SCHEMA",
       "SCHEMA_BEARING_DECORATOR",
-      "APPLY_DECORATOR",
       "INVALID_HANDLER_VISIBILITY",
       "MISSING_SIGNAL_TYPE",
       "INVALID_PARAMETER_COUNT",
@@ -1419,7 +2183,6 @@ describe("build-time handler analyzer", () => {
     expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
       "create",
       "schemaDecorator",
-      "apply",
       "hidden",
       "missingSignal",
       "tooMany",
@@ -1608,7 +2371,7 @@ describe("build-time handler analyzer", () => {
     ]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "INVALID_HANDLER_NAME",
-      "UNSUPPORTED_RETURN_TYPE",
+      "MISSING_EMITTED_SCHEMAS",
       "UNSUPPORTED_RETURN_TYPE",
       "UNSUPPORTED_RETURN_TYPE",
       "INVALID_SIGNAL_TYPE",
@@ -1637,47 +2400,55 @@ describe("build-time handler analyzer", () => {
   });
 });
 
-function programWithSource(fileName: string, source: string): ts.Program {
-  return programWithSources(fileName, {
-    [fileName]: source,
-    "generated/audit_pb.ts": generatedModule("spine/examples/todo/audit.proto", "AuditRecord"),
-    "generated/commands_pb.ts": generatedModule(
-      "spine/examples/todo/task_commands.proto",
-      "CreateTask",
-      "RenameTask",
-      "MissingSchemaCommand",
-    ),
-    "generated/events_pb.ts": generatedModule(
-      "spine/examples/todo/task_events.proto",
-      "TaskCreated",
-      "TaskRenamed",
-    ),
-    "generated/rejections_pb.ts": generatedModule(
-      "spine/examples/todo/task_rejections.proto",
-      "TaskAlreadyDone",
-    ),
-    "generated/task_list_pb.ts": generatedModule("spine/examples/todo/task_list.proto", "TaskList"),
-    "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
-    "generated/spine/examples/todo/task_commands_pb.ts": generatedModule(
-      "spine/examples/todo/task_commands.proto",
-      "CreateTask",
-      "RenameTask",
-    ),
-    "generated/spine/examples/todo/task_events_pb.ts": generatedModule(
-      "spine/examples/todo/task_events.proto",
-      "TaskCompleted",
-      "TaskCreated",
-      "TaskRenamed",
-    ),
-    "generated/spine/examples/todo/rejections_pb.ts": generatedModule(
-      "spine/examples/todo/rejections.proto",
-      "TaskAlreadyDone",
-    ),
-    "generated/spine/examples/todo/tasks_pb.ts": generatedModule(
-      "spine/examples/todo/tasks.proto",
-      "Task",
-    ),
-  });
+function programWithSource(fileName: string, source: string, strictNullChecks = false): ts.Program {
+  return programWithSources(
+    fileName,
+    {
+      [fileName]: source,
+      "generated/audit_pb.ts": generatedModule("spine/examples/todo/audit.proto", "AuditRecord"),
+      "generated/commands_pb.ts": generatedModule(
+        "spine/examples/todo/task_commands.proto",
+        "CreateTask",
+        "RenameTask",
+        "MissingSchemaCommand",
+      ),
+      "generated/events_pb.ts": generatedModule(
+        "spine/examples/todo/task_events.proto",
+        "TaskCreated",
+        "TaskRenamed",
+      ),
+      "generated/rejections_pb.ts": generatedModule(
+        "spine/examples/todo/task_rejections.proto",
+        "TaskAlreadyDone",
+      ),
+      "generated/task_list_pb.ts": generatedModule(
+        "spine/examples/todo/task_list.proto",
+        "TaskList",
+      ),
+      "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+      "generated/spine/examples/todo/task_commands_pb.ts": generatedModule(
+        "spine/examples/todo/task_commands.proto",
+        "CreateTask",
+        "RenameTask",
+      ),
+      "generated/spine/examples/todo/task_events_pb.ts": generatedModule(
+        "spine/examples/todo/task_events.proto",
+        "TaskCompleted",
+        "TaskCreated",
+        "TaskRenamed",
+      ),
+      "generated/spine/examples/todo/rejections_pb.ts": generatedModule(
+        "spine/examples/todo/rejections.proto",
+        "TaskAlreadyDone",
+      ),
+      "generated/spine/examples/todo/tasks_pb.ts": generatedModule(
+        "spine/examples/todo/tasks.proto",
+        "Task",
+      ),
+    },
+    false,
+    strictNullChecks,
+  );
 }
 
 function standaloneContractProgram(fileName: string, source: string): ts.Program {
@@ -1704,23 +2475,63 @@ function standaloneContractProgram(fileName: string, source: string): ts.Program
   });
 }
 
-function programWithSources(rootFileName: string, sources: Record<string, string>): ts.Program {
+function programWithSources(
+  rootFileName: string,
+  sources: Record<string, string>,
+  compilerChecked = false,
+  strictNullChecks = false,
+): ts.Program {
   const options: ts.CompilerOptions = {
-    experimentalDecorators: true,
+    experimentalDecorators: !compilerChecked,
     module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
     noEmit: true,
+    strict: compilerChecked,
+    strictNullChecks: compilerChecked || strictNullChecks,
+    ...(compilerChecked
+      ? {
+          paths: {
+            "@spine-event-engine/server": [resolve("packages/server/dist/index.d.ts")],
+            "@bufbuild/protobuf": [
+              resolve("packages/proto-tools/node_modules/@bufbuild/protobuf/dist/esm/index.d.ts"),
+            ],
+            "@bufbuild/protobuf/codegenv2": [
+              resolve(
+                "packages/proto-tools/node_modules/@bufbuild/protobuf/dist/esm/codegenv2/index.d.ts",
+              ),
+            ],
+          },
+        }
+      : {}),
     target: ts.ScriptTarget.ES2024,
+    ...(compilerChecked ? { types: ["node"] } : {}),
   };
   const host = ts.createCompilerHost(options);
   const originalReadFile = host.readFile.bind(host);
   const originalFileExists = host.fileExists.bind(host);
+  const originalDirectoryExists = host.directoryExists?.bind(host);
+  const virtualSources = new Map(
+    Object.entries(sources).map(([name, text]) => [resolve(name), text]),
+  );
 
-  host.readFile = (requested) => sources[requested] ?? originalReadFile(requested);
+  host.readFile = (requested) =>
+    virtualSources.get(resolve(requested)) ?? originalReadFile(requested);
   host.fileExists = (requested) =>
-    sources[requested] !== undefined || originalFileExists(requested);
+    virtualSources.has(resolve(requested)) || originalFileExists(requested);
+  host.directoryExists = (requested) =>
+    [...virtualSources.keys()].some((file) => file.startsWith(`${resolve(requested)}${sep}`)) ||
+    originalDirectoryExists?.(requested) === true;
 
   return ts.createProgram([rootFileName, ...Object.keys(sources)], options, host);
+}
+
+function compilerMessages(program: ts.Program): string[] {
+  return ts
+    .getPreEmitDiagnostics(program)
+    .map(
+      (diagnostic) =>
+        `${String(diagnostic.code)}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`,
+    );
 }
 
 function schema(moduleSpecifier: string, exportName: string) {
@@ -1775,6 +2586,30 @@ function generatedModule(protoSource: string, ...names: string[]): string {
     protoSource,
     names.map((name) => ({ exportName: name, descriptorName: name })),
   );
+}
+
+function generatedTypedModule(protoSource: string, ...names: string[]): string {
+  const protoPackage = protoSource.includes("/access/")
+    ? "spine.examples.access"
+    : "spine.examples.todo";
+  const file = "file_spine_examples_v1_test";
+  const declarations = names.map((name, index) => {
+    const fields = name === "TaskCreated" ? "title: string;" : "";
+    return [
+      `export type ${name} = Message<"${protoPackage}.${name}"> & { ${fields} };`,
+      `export const ${name}Schema: GenMessage<${name}> = messageDesc(${file}, ${String(index)});`,
+    ].join("\n");
+  });
+  return [
+    'import { type Message } from "@bufbuild/protobuf";',
+    'import { type GenMessage, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";',
+    `export const ${file} = fileDesc("${fileDescriptor(
+      protoSource,
+      names.map((name) => ({ exportName: name, descriptorName: name })),
+      protoPackage,
+    )}");`,
+    ...declarations,
+  ].join("\n");
 }
 
 function generatedModuleWithDescriptorMessages(
@@ -1872,9 +2707,11 @@ function generatedModuleWithMixedDescriptors(): string {
 function fileDescriptor(
   protoSource: string,
   messages: readonly { readonly descriptorName: string; readonly entityState?: boolean }[],
+  protoPackage?: string,
 ): string {
   const descriptor = create(FileDescriptorProtoSchema, {
     name: protoSource,
+    ...(protoPackage === undefined ? {} : { package: protoPackage }),
     messageType: messages.map(({ descriptorName, entityState }) => {
       if (entityState !== true) {
         return { name: descriptorName };
@@ -1896,7 +2733,7 @@ const validTaskSource = `
   import { type RenameTask } from "../generated/spine/examples/todo/task_commands_pb.js";
   import * as events from "../generated/spine/examples/todo/task_events_pb.js";
 
-  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema, bigint> {
+  export class TaskProcessManager extends ProcessManager<string, typeof TaskSchema> {
     @Subscribe
     async observeCreated(event: events.TaskCreated): Promise<void> {
       void event;
@@ -1925,7 +2762,7 @@ const neutralCommandSource = `
   import { type CreateTask } from "../generated/domain_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class NeutralCommandAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class NeutralCommandAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -1938,7 +2775,7 @@ const neutralEventSource = `
   import { TaskListSchema } from "../generated/task_list_pb.js";
   import { type TaskCreated } from "../generated/domain_pb.js";
 
-  export class NeutralEventProjection extends Projection<string, typeof TaskListSchema, bigint> {
+  export class NeutralEventProjection extends Projection<string, typeof TaskListSchema> {
     @Subscribe
     observe(event: TaskCreated): void {
       void event;
@@ -1950,7 +2787,7 @@ const stateSubscriptionSource = `
   import { Projection, Subscribe } from "@spine-event-engine/server";
   import { TaskSchema, type Task } from "../generated/task_pb.js";
 
-  export class StateProjection extends Projection<string, typeof TaskSchema, bigint> {
+  export class StateProjection extends Projection<string, typeof TaskSchema> {
     @Subscribe
     observe(state: Task): void {
       void state;
@@ -1964,7 +2801,7 @@ const foreignStateSubscriptionSource = `
   import { type ForeignState } from "../generated/foreign_pb.js";
   import { type AuditRecord } from "../generated/audit_pb.js";
 
-  export class ReceiverProjection extends Projection<string, typeof ReceiverStateSchema, bigint> {
+  export class ReceiverProjection extends Projection<string, typeof ReceiverStateSchema> {
     @Subscribe
     observeForeign(state: ForeignState): void {
       void state;
@@ -1983,7 +2820,7 @@ const misleadingCommandPathSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class MisleadingAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class MisleadingAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -1997,7 +2834,7 @@ const mixedDescriptorSource = `
   import { type AuditRecord } from "../generated/domain_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class MixedDescriptorAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class MixedDescriptorAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     audit(command: AuditRecord): TaskCreated {
       throw new Error(String(command));
@@ -2011,7 +2848,7 @@ const forgedDescriptorSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class ForgedDescriptorAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class ForgedDescriptorAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     forgedCommand(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2031,7 +2868,7 @@ const badDescriptorSource = `
   import { type RenameTask } from "../generated/malformed_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class BadDescriptorAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class BadDescriptorAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     missing(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2050,7 +2887,7 @@ const sourcePreferenceSource = `
   import { type CreateTask } from "../generated/domain_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class SourcePreferenceAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class SourcePreferenceAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2064,7 +2901,7 @@ const neutralStateSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class NeutralStateAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class NeutralStateAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2078,7 +2915,7 @@ const localEntitySource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  class LocalAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  class LocalAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2092,7 +2929,7 @@ const namedExportSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  class ListedAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  class ListedAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2108,7 +2945,7 @@ const defaultExportSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export default class DefaultAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export default class DefaultAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2127,7 +2964,7 @@ const cyclicAliasSource = `
   type ReturnA = ReturnB;
   type ReturnB = ReturnA;
 
-  export class CyclicAggregate extends Aggregate<string, StateA, bigint> {
+  export class CyclicAggregate extends Aggregate<string, StateA> {
     @Assign
     create(command: SignalA): ReturnA {
       throw new Error(String(command));
@@ -2142,7 +2979,7 @@ const invalidGeneratedSource = `
   import { type AuditRecord } from "../generated/audit_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class InvalidGeneratedAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class InvalidGeneratedAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     typo(command: TaskCreatd): TaskCreated {
       throw new Error(String(command));
@@ -2166,7 +3003,7 @@ const typeOnlySchemaSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
 
-  export class TypeOnlySchemaAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class TypeOnlySchemaAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2185,7 +3022,7 @@ const invalidRoleSource = `
   import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class InvalidRoleAggregate extends ProcessManager<string, typeof TaskSchema, bigint> {
+  export class InvalidRoleAggregate extends ProcessManager<string, typeof TaskSchema> {
     @Assign
     assignCommand(command: CreateTask): RenameTask {
       throw new Error(String(command));
@@ -2213,7 +3050,7 @@ const oddballSource = `
   type State = (typeof StateSchema);
   const computed = "computed";
 
-  export class OddballAggregate extends spine.ProcessManager<string, State, bigint> {
+  export class OddballAggregate extends spine.ProcessManager<string, State> {
     @spine.Assign
     create(command: commands.CreateTask): readonly events.TaskCreated[] {
       throw new Error(String(command));
@@ -2255,7 +3092,7 @@ const edgeSource = `
 
   const computed = "computed";
 
-  export class EdgeAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class EdgeAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     [computed](command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2304,7 +3141,7 @@ const malformedSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class BrokenAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class BrokenAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     create(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2315,10 +3152,11 @@ const noEmissionSource = `
   import { TaskListSchema } from "../generated/task_list_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class TaskProjection extends Projection<string, typeof TaskListSchema, number> {
+  export class TaskProjection extends Projection<string, typeof TaskListSchema> {
     @React
-    observe(event: TaskCreated): void {
+    observe(event: TaskCreated): undefined {
       void event;
+      return undefined;
     }
   }
 `;
@@ -2329,7 +3167,7 @@ const voidEmissionSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class TaskAggregate extends ProcessManager<string, typeof TaskSchema, bigint> {
+  export class TaskAggregate extends ProcessManager<string, typeof TaskSchema> {
     @Assign
     silentAssign(command: CreateTask): void {
       void command;
@@ -2347,7 +3185,7 @@ const emptyTupleReactSource = `
   import { TaskListSchema } from "../generated/task_list_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class TaskProjection extends Projection<string, typeof TaskListSchema, bigint> {
+  export class TaskProjection extends Projection<string, typeof TaskListSchema> {
     @React
     observe(event: TaskCreated): [] {
       void event;
@@ -2362,7 +3200,7 @@ const stringNameSource = `
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
-  export class QuotedAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+  export class QuotedAggregate extends Aggregate<string, typeof TaskSchema> {
     @Assign
     "create\\u2028\\"task\\"\\nnext"(command: CreateTask): TaskCreated {
       throw new Error(String(command));
@@ -2371,7 +3209,7 @@ const stringNameSource = `
 `;
 
 const invalidSource = `
-  import { Apply, Assign, Command, ProcessManager, Subscribe } from "@spine-event-engine/server";
+  import { Assign, Command, ProcessManager, Subscribe } from "@spine-event-engine/server";
   import { type Event } from "@spine-event-engine/proto";
   import { TaskSchema } from "../generated/task_pb.js";
   import { CreateTaskSchema, type CreateTask } from "../generated/commands_pb.js";
@@ -2384,15 +3222,10 @@ const invalidSource = `
     }
   }
 
-  export class BadAggregate extends ProcessManager<string, typeof TaskSchema, bigint> {
+  export class BadAggregate extends ProcessManager<string, typeof TaskSchema> {
     @Assign(CreateTaskSchema)
     schemaDecorator(command: CreateTask): TaskCreated {
       throw new Error(String(command));
-    }
-
-    @Apply
-    apply(event: TaskCreated): void {
-      void event;
     }
 
     @Assign

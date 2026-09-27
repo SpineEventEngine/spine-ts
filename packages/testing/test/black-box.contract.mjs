@@ -3,13 +3,8 @@
 import { BoundedContext } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
-import {
-  EventContextSchema,
-  EventIdSchema,
-  TenantIdSchema,
-  ZoneIdSchema,
-} from "@spine-event-engine/proto";
+import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TenantIdSchema, ZoneIdSchema } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
   QuerySchema,
@@ -18,7 +13,13 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { Aggregate, EntityHandlers, Projection, Repository } from "@spine-event-engine/server";
+import {
+  Aggregate,
+  EntityHandlers,
+  HandlerRegistryIngestor,
+  Projection,
+  Repository,
+} from "@spine-event-engine/server";
 import { CreateProjectSchema } from "../test-fixtures/generated/project_commands_pb.ts";
 import {
   ProjectCreatedSchema,
@@ -31,23 +32,14 @@ import {
 
 class ProjectAggregate extends Aggregate {
   registerProject(command) {
-    return SignalEnvelopes.event({
-      id: create(EventIdSchema, { value: `event-${command.id}` }),
-      context: create(EventContextSchema),
-      schema: ProjectCreatedSchema,
-      message: create(ProjectCreatedSchema, {
-        id: command.id,
-        name: command.name,
-        priority: 1,
-      }),
-    });
-  }
-  applyProjectCreated(event) {
-    this.startTransaction();
     this.update((draft) =>
-      Object.assign(draft, create(ProjectSchema, { id: event.id, name: event.name })),
+      Object.assign(draft, create(ProjectSchema, { id: command.id, name: command.name })),
     );
-    this.commitTransaction();
+    return create(ProjectCreatedSchema, {
+      id: command.id,
+      name: command.name,
+      priority: 1,
+    });
   }
 }
 class ProjectOverview extends Projection {
@@ -191,7 +183,9 @@ export function registerBlackBoxContract(test, testing) {
     const blackBox = await BlackBox.from(projectEventContext());
     try {
       const scope = blackBox.asGuest();
-      const events = await scope.createSubscription(topic(ProjectObservedSchema), { kind: "event" });
+      const events = await scope.createSubscription(topic(ProjectObservedSchema), {
+        kind: "event",
+      });
       await events.activate();
       const iterator = events.updates[Symbol.asyncIterator]();
       const pending = iterator.next();
@@ -202,8 +196,10 @@ export function registerBlackBoxContract(test, testing) {
         update.done ||
         update.value.kind !== "update" ||
         update.value.update.update.case !== "eventUpdates" ||
-        AnyMessages.unpack(update.value.update.update.value.event[0]?.message, ProjectObservedSchema)
-          ?.id !== "event-1" ||
+        AnyMessages.unpack(
+          update.value.update.update.value.event[0]?.message,
+          ProjectObservedSchema,
+        )?.id !== "event-1" ||
         update.value.update.update.value.event[0]?.context === undefined
       ) {
         throw new Error("event subscription did not decode an immutable event context");
@@ -264,7 +260,10 @@ export function registerBlackBoxContract(test, testing) {
     try {
       await blackBox
         .onBehalfOf("external-system")
-        .postExternalEvent(ProjectObservedSchema, create(ProjectObservedSchema, { id: "external" }));
+        .postExternalEvent(
+          ProjectObservedSchema,
+          create(ProjectObservedSchema, { id: "external" }),
+        );
       const context = await blackBox.eventually(
         () => contexts[0],
         (value) => value !== undefined,
@@ -374,7 +373,10 @@ export function registerBlackBoxContract(test, testing) {
     );
     await assertFailure(
       () =>
-        scope.postExternalEvent(ProjectObservedSchema, create(ProjectObservedSchema, { id: "closed" })),
+        scope.postExternalEvent(
+          ProjectObservedSchema,
+          create(ProjectObservedSchema, { id: "closed" }),
+        ),
       BlackBoxClosedError,
     );
   });
@@ -554,10 +556,7 @@ function projectContext() {
       new Repository({
         entityType: ProjectAggregate,
         schema: ProjectSchema,
-        handlers: EntityHandlers.define(ProjectAggregate, ProjectSchema, (builder) => [
-          builder.assign(CreateProjectSchema, "registerProject"),
-          builder.apply(ProjectCreatedSchema, "applyProjectCreated"),
-        ]),
+        handlers: projectAggregateHandlers(),
       }),
     )
     .add(
@@ -571,6 +570,33 @@ function projectContext() {
     )
     .build();
 }
+
+/**
+ * Materializes the declared Command result while retaining a separate Event application.
+ *
+ * @returns Handler metadata for the Project Aggregate assignment.
+ */
+function projectAggregateHandlers() {
+  return new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: ProjectAggregate,
+        stateSchema: ProjectSchema,
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "registerProject",
+            input: { schema: CreateProjectSchema, origin: "domestic" },
+            outcomes: { returned: [ProjectCreatedSchema], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0];
+}
+
 function projectEventContext() {
   return BoundedContext.singleTenant("Events")
     .addEventDispatcher({

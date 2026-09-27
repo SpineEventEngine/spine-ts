@@ -25,8 +25,8 @@ Required review lanes:
 - Generated registry/build tooling owns schema inference from explicit handler
   parameter and return types.
 - `handler(signal)` and `handler(signal, context)` are both supported for
-  non-`@Apply` handlers.
-- No `@Apply` for new aggregate behavior.
+  supported.
+- No event replay for new aggregate behavior.
 - No framework `Command`/`Event` envelope returns in ordinary end-user handlers.
 - Generated output is ignored and regenerated, not committed.
 - Keep the contract small; no broad analyzer/generator/runtime discovery in

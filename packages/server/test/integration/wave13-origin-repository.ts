@@ -28,11 +28,7 @@ import {
 
 export const Wave13OriginStateSchema = ProjectOverviewStateSchema;
 
-export class Wave13OriginProjection extends Projection<
-  string,
-  typeof Wave13OriginStateSchema,
-  number
-> {
+export class Wave13OriginProjection extends Projection<string, typeof Wave13OriginStateSchema> {
   static domesticContexts: EventContext[] = [];
   static externalContexts: EventContext[] = [];
 

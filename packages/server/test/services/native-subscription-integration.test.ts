@@ -17,6 +17,7 @@ import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
+  type CommandContext,
   CommandContextSchema,
   CommandIdSchema,
   CommandSchema,
@@ -41,10 +42,12 @@ import {
   Aggregate,
   BoundedContext,
   EntityHandlers,
+  HandlerRegistryIngestor,
   ProcessManager,
   Projection,
   Repository,
   SpineServices,
+  type EntityHandlersMetadata,
 } from "../../src/index.js";
 import {
   NativeProjectStateSchema,
@@ -56,6 +59,8 @@ import {
   AssignReviewTaskSchema,
 } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
 import {
+  type TaskAssigned,
+  TaskAssignedSchema,
   TaskCreatedSchema,
   type TaskCreated,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
@@ -64,7 +69,7 @@ import {
   TaskListIdSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
-class NativeAggregate extends Aggregate<string, typeof NativeProjectStateSchema, bigint> {
+class NativeAggregate extends Aggregate<string, typeof NativeProjectStateSchema> {
   assign(command: AssignReviewTask): TaskCreated {
     this.update((draft) =>
       Object.assign(
@@ -84,7 +89,7 @@ class NativeAggregate extends Aggregate<string, typeof NativeProjectStateSchema,
   }
 }
 
-class NativeProjection extends Projection<string, typeof NativeProjectOverviewStateSchema, number> {
+class NativeProjection extends Projection<string, typeof NativeProjectOverviewStateSchema> {
   project(event: TaskCreated): void {
     const id = event.id?.value ?? "";
     this.update((draft) =>
@@ -100,12 +105,8 @@ class NativeProjection extends Projection<string, typeof NativeProjectOverviewSt
   }
 }
 
-class NativeProcessManager extends ProcessManager<
-  string,
-  typeof NativeProcessManagerStateSchema,
-  number
-> {
-  assign(command: AssignReviewTask): void {
+class NativeProcessManager extends ProcessManager<string, typeof NativeProcessManagerStateSchema> {
+  assign(command: AssignReviewTask, context: CommandContext): TaskAssigned {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -115,9 +116,16 @@ class NativeProcessManager extends ProcessManager<
         }),
       ),
     );
+    const assignee = context.actorContext?.actor;
+    if (assignee === undefined) throw new Error("Expected the assigning actor.");
+    return create(TaskAssignedSchema, {
+      id: create(TaskIdSchema, { value: command.id }),
+      taskListId: create(TaskListIdSchema, { value: command.id }),
+      assignee,
+    });
   }
 
-  react(event: TaskCreated): void {
+  react(event: TaskCreated): undefined {
     this.update((draft) =>
       Object.assign(
         draft,
@@ -127,6 +135,7 @@ class NativeProcessManager extends ProcessManager<
         }),
       ),
     );
+    return undefined;
   }
 }
 
@@ -137,9 +146,7 @@ describe("native service subscriptions", () => {
         new Repository({
           entityType: NativeAggregate,
           schema: NativeProjectStateSchema,
-          handlers: EntityHandlers.define(NativeAggregate, NativeProjectStateSchema, (builder) => [
-            builder.assign(AssignReviewTaskSchema, "assign"),
-          ]),
+          handlers: nativeAggregateHandlers(),
           events: [TaskCreatedSchema],
         }),
       )
@@ -225,7 +232,6 @@ describe("native service subscriptions", () => {
       await activationTurn();
 
       await context.commandBus().post(createAggregateCommand("process-command-1", "Process"));
-      await context.eventBus().post(createProjectionEvent("process-command-flush", "Flush"));
 
       await expectNativeState(next, NativeProcessManagerStateSchema, {
         id: "process-command-1",
@@ -265,20 +271,86 @@ describe("native service subscriptions", () => {
   });
 });
 
+/**
+ * Materializes the Native Aggregate assignment and its declared Event result.
+ *
+ * @returns Handler metadata for the Native Aggregate.
+ */
+function nativeAggregateHandlers(): EntityHandlersMetadata<
+  NativeAggregate,
+  typeof NativeProjectStateSchema
+> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: NativeAggregate,
+        stateSchema: NativeProjectStateSchema,
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "assign",
+            input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+            outcomes: { returned: [TaskCreatedSchema], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0];
+  if (handlers === undefined) throw new Error("Expected Native Aggregate handlers.");
+  return handlers as EntityHandlersMetadata<NativeAggregate, typeof NativeProjectStateSchema>;
+}
+
+/**
+ * Registers the Process Manager assignment outcome and state-only Event reaction.
+ *
+ * @returns Generated handler metadata for the native Process Manager.
+ */
+function nativeProcessManagerHandlers(): EntityHandlersMetadata<
+  NativeProcessManager,
+  typeof NativeProcessManagerStateSchema
+> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: NativeProcessManager,
+        stateSchema: NativeProcessManagerStateSchema,
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "assign",
+            input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+            outcomes: { returned: [TaskAssignedSchema], thrown: [] },
+            parameterCount: 2,
+          },
+          {
+            kind: "event-reaction",
+            methodName: "react",
+            input: { schema: TaskCreatedSchema, origin: "domestic" },
+            outcomes: { returned: [], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0];
+  if (handlers === undefined) throw new Error("Expected Native Process Manager handlers.");
+  return handlers as EntityHandlersMetadata<
+    NativeProcessManager,
+    typeof NativeProcessManagerStateSchema
+  >;
+}
+
 function createProcessManagerContext(name: string): BoundedContext {
   return BoundedContext.multitenant(name)
     .add(
       new Repository({
         entityType: NativeProcessManager,
         schema: NativeProcessManagerStateSchema,
-        handlers: EntityHandlers.define(
-          NativeProcessManager,
-          NativeProcessManagerStateSchema,
-          (builder) => [
-            builder.assign(AssignReviewTaskSchema, "assign"),
-            builder.react(TaskCreatedSchema, "react"),
-          ],
-        ),
+        handlers: nativeProcessManagerHandlers(),
+        events: [TaskAssignedSchema],
       }),
     )
     .build();

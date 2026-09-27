@@ -580,7 +580,6 @@ const expectedTestingExports = [
 ];
 const expectedServerExports = [
   "Aggregate",
-  "Apply",
   "AbstractAssignee",
   "AbstractCommander",
   "AbstractEventReactor",
@@ -658,7 +657,6 @@ const expectedServerExports = [
   "EntityHandlersMetadata",
   "EntityLifecycleFlags",
   "EntityOptions",
-  "EntityVersionMetadata",
   "Environment",
   "EnvironmentType",
   "EventBus",
@@ -681,7 +679,6 @@ const expectedServerExports = [
   "InboxWriteResult",
   "ListenerLifecycle",
   "MessageId",
-  "PlainEntityVersionMetadata",
   "PrimitiveId",
   "ProcessManager",
   "Projection",
@@ -782,9 +779,6 @@ const expectedServerExports = [
   "EntityKind",
   "EntityMetadata",
   "EntityVisibility",
-  "EventApplicationHandlerMetadata",
-  "EventApplicationOptions",
-  "EventRegistrationApplicationMetadata",
   "EventRegistrationReadiness",
   "EventRegistrationReadinessLookup",
   "EventRegistrationReactorMetadata",

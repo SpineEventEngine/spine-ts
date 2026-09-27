@@ -110,9 +110,13 @@ available container logs. It then cleans up only resources it created.
 
 ## How it works
 
-`CreateTask` produces a stored `TaskCreated` Event. The Task List Projection
-observes that Event and makes the resulting task list readable. The walkthrough
-explains the generated Proto model, handlers, and routing in more depth.
+`CreateTask` always produces a stored `TaskCreated` Event. If the command also
+names an initial assignee, it produces `TaskAssigned` second. The Task List and
+Task Assignee Projections observe those Events to make the task readable.
+`AssignTask` produces `TaskAssigned` for an unassigned task or `TaskReassigned`
+when moving it from one person to another. The
+[walkthrough](USER_GUIDE.md#return-one-event-or-an-ordered-pair) explains why
+the handlers declare these alternatives and how the optional Event works.
 
 <!-- docs-snippet-path: examples/todo/src/docs/create-task.ts -->
 

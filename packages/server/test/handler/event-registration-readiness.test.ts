@@ -18,10 +18,7 @@ import {
   EventRegistrationReadiness,
   EntityHandlers,
   HandlerMetadataRegistry,
-  HandlerMetadataRegistryError,
   type EntityHandlersMetadata,
-  type EventApplicationHandlerMetadata,
-  type EventRegistrationApplicationMetadata,
   type EventRegistrationReadinessLookup,
   type EventRegistrationReactorMetadata,
   type EventRegistrationSubscriberMetadata,
@@ -41,8 +38,7 @@ import {
   ProjectStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
-type EventHandlerMetadata =
-  EventApplicationHandlerMetadata | EventReactionHandlerMetadata | EventSubscriptionHandlerMetadata;
+type EventHandlerMetadata = EventReactionHandlerMetadata | EventSubscriptionHandlerMetadata;
 
 class TaskProjection {
   subscribeCreated(event: ProjectCreated): void {
@@ -50,10 +46,6 @@ class TaskProjection {
   }
 
   reactToCreated(event: ProjectCreated): void {
-    void event;
-  }
-
-  applyCreated(event: ProjectCreated): void {
     void event;
   }
 }
@@ -66,10 +58,6 @@ class AuditProjection {
   reactToCreated(event: ProjectCreated): void {
     void event;
   }
-
-  applyCreated(event: ProjectCreated): void {
-    void event;
-  }
 }
 
 describe("event registration readiness", () => {
@@ -80,7 +68,6 @@ describe("event registration readiness", () => {
     expect(readiness.eventTypeNames()).toEqual([]);
     expect(readiness.findEventSubscribers(ProjectCreatedSchema.typeName)).toEqual([]);
     expect(readiness.findEventReactors(ProjectCreatedSchema.typeName)).toEqual([]);
-    expect(readiness.findEventApplications(ProjectCreatedSchema.typeName)).toEqual([]);
     expect(Object.isFrozen(readiness.eventTypeNames())).toBe(true);
   });
 
@@ -90,11 +77,10 @@ describe("event registration readiness", () => {
       eventFullTypeNames: readonly string[],
       subscribersByTypeName: ReadonlyMap<string, readonly EventRegistrationSubscriberMetadata[]>,
       reactorsByTypeName: ReadonlyMap<string, readonly EventRegistrationReactorMetadata[]>,
-      applicationsByTypeName: ReadonlyMap<string, readonly EventRegistrationApplicationMetadata[]>,
     ) => EventRegistrationReadiness;
 
     expect(() => {
-      Reflect.construct(constructor, [Symbol("external"), [], new Map(), new Map(), new Map()]);
+      Reflect.construct(constructor, [Symbol("external"), [], new Map(), new Map()]);
     }).toThrow(
       "EventRegistrationReadiness instances must be created by the package factory methods.",
     );
@@ -107,7 +93,6 @@ describe("event registration readiness", () => {
       (builder) => [
         builder.subscribe(ProjectCreatedSchema, "subscribeCreated"),
         builder.react(ProjectCreatedSchema, "reactToCreated"),
-        builder.apply(ProjectCreatedSchema, "applyCreated", { allowImport: true }),
       ],
     );
     const readiness = EventRegistrationReadiness.fromRegistry(
@@ -170,81 +155,6 @@ describe("event registration readiness", () => {
     ]);
   });
 
-  it("groups event applications by event type and keeps allowImport metadata", () => {
-    const projectionHandlers = EntityHandlers.define(
-      TaskProjection,
-      ProjectOverviewStateSchema,
-      (builder) => [builder.apply(ProjectCreatedSchema, "applyCreated", { allowImport: true })],
-    );
-    const auditHandlers = EntityHandlers.define(AuditProjection, ProjectStateSchema, (builder) => [
-      builder.apply(ProjectCreatedSchema, "applyCreated"),
-    ]);
-    const readiness = EventRegistrationReadiness.fromEntityHandlers([
-      projectionHandlers,
-      auditHandlers,
-    ]);
-
-    const applications = readiness.findEventApplications(ProjectCreatedSchema.typeName);
-
-    expectTypeOf<
-      (typeof applications)[number]
-    >().toEqualTypeOf<EventRegistrationApplicationMetadata>();
-    expect(applications).toMatchObject([
-      {
-        eventFullTypeName: ProjectCreatedSchema.typeName,
-        stateTypeName: ProjectOverviewStateSchema.typeName,
-        handler: { kind: "event-application", methodName: "applyCreated", allowImport: true },
-      },
-      {
-        eventFullTypeName: ProjectCreatedSchema.typeName,
-        stateTypeName: ProjectStateSchema.typeName,
-        handler: { kind: "event-application", methodName: "applyCreated", allowImport: false },
-      },
-    ]);
-  });
-
-  it("keeps duplicate event application failure owned by HandlerMetadataRegistry", () => {
-    const first = EntityHandlers.define(TaskProjection, ProjectOverviewStateSchema, (builder) => [
-      builder.apply(ProjectCreatedSchema, "applyCreated"),
-    ]);
-    const second = EntityHandlers.define(TaskProjection, ProjectOverviewStateSchema, (builder) => [
-      builder.apply(ProjectCreatedSchema, "applyCreated"),
-    ]);
-
-    expect(() => EventRegistrationReadiness.fromEntityHandlers([first, second])).toThrow(
-      HandlerMetadataRegistryError,
-    );
-    expect(() => EventRegistrationReadiness.fromEntityHandlers([first, second])).toThrow(
-      new RegExp(
-        `Duplicate event application for entity "${ProjectOverviewStateSchema.typeName}" ` +
-          `and event "${ProjectCreatedSchema.typeName}"`,
-      ),
-    );
-  });
-
-  it("rejects duplicate event applications from custom registry lookups", () => {
-    const first = EntityHandlers.define(TaskProjection, ProjectOverviewStateSchema, (builder) => [
-      builder.apply(ProjectCreatedSchema, "applyCreated"),
-    ]);
-    const second = EntityHandlers.define(TaskProjection, ProjectOverviewStateSchema, (builder) => [
-      builder.apply(ProjectCreatedSchema, "applyCreated"),
-    ]);
-    const customLookup = createRegistryLookupForEventHandlers([
-      createRegisteredEventHandler(first, first.eventApplications[0]),
-      createRegisteredEventHandler(second, second.eventApplications[0]),
-    ]);
-
-    expect(() => EventRegistrationReadiness.fromRegistry(customLookup)).toThrow(
-      HandlerMetadataRegistryError,
-    );
-    expect(() => EventRegistrationReadiness.fromRegistry(customLookup)).toThrow(
-      new RegExp(
-        `Duplicate event application for entity "${ProjectOverviewStateSchema.typeName}" ` +
-          `and event "${ProjectCreatedSchema.typeName}"`,
-      ),
-    );
-  });
-
   it("returns frozen copy-safe event lists and receiver values", () => {
     const handlers = EntityHandlers.define(
       TaskProjection,
@@ -252,7 +162,6 @@ describe("event registration readiness", () => {
       (builder) => [
         builder.subscribe(ProjectCreatedSchema, "subscribeCreated"),
         builder.react(ProjectCreatedSchema, "reactToCreated"),
-        builder.apply(ProjectCreatedSchema, "applyCreated", { allowImport: true }),
       ],
     );
     const readiness = EventRegistrationReadiness.fromEntityHandlers([handlers]);
@@ -261,8 +170,6 @@ describe("event registration readiness", () => {
     const secondList = readiness.eventTypeNames();
     const firstSubscribers = readiness.findEventSubscribers(ProjectCreatedSchema.typeName);
     const secondSubscribers = readiness.findEventSubscribers(ProjectCreatedSchema.typeName);
-    const firstApplications = readiness.findEventApplications(ProjectCreatedSchema.typeName);
-    const secondApplications = readiness.findEventApplications(ProjectCreatedSchema.typeName);
 
     expect(firstList).toEqual([ProjectCreatedSchema.typeName]);
     expect(Object.isFrozen(firstList)).toBe(true);
@@ -282,11 +189,6 @@ describe("event registration readiness", () => {
         "example.MutatedEvent";
     }).toThrow(TypeError);
 
-    expect(firstApplications).toEqual(secondApplications);
-    expect(firstApplications).not.toBe(secondApplications);
-    expect(firstApplications[0]).not.toBe(secondApplications[0]);
-    expect(Object.isFrozen(firstApplications)).toBe(true);
-    expect(Object.isFrozen(firstApplications[0]?.handler)).toBe(true);
     expect(
       readiness.findEventSubscribers(ProjectCreatedSchema.typeName)[0]?.eventFullTypeName,
     ).toBe(ProjectCreatedSchema.typeName);
@@ -312,7 +214,6 @@ describe("event registration readiness", () => {
       eventSubscriptions: [mutableHandler],
       stateSubscriptions: [],
       eventReactions: [],
-      eventApplications: [],
     };
     const mutableRegisteredHandler: RegisteredHandlerMetadata<EventSubscriptionHandlerMetadata> = {
       entityHandlers: mutableEntityHandlers,
@@ -380,7 +281,6 @@ describe("event registration readiness", () => {
       eventSubscriptions: [mutableHandler],
       stateSubscriptions: [],
       eventReactions: [],
-      eventApplications: [],
     };
     const mutableRegisteredHandler: RegisteredHandlerMetadata<EventSubscriptionHandlerMetadata> = {
       entityHandlers: mutableEntityHandlers,
@@ -432,7 +332,6 @@ describe("event registration readiness", () => {
       eventSubscriptions: [handler],
       stateSubscriptions: [],
       eventReactions: [],
-      eventApplications: [],
     };
     const registeredHandler: RegisteredHandlerMetadata<EventSubscriptionHandlerMetadata> = {
       entityHandlers,
@@ -452,15 +351,11 @@ describe("event registration readiness", () => {
     const handlers = EntityHandlers.define(
       TaskProjection,
       ProjectOverviewStateSchema,
-      (builder) => [
-        builder.subscribe(ProjectCreatedSchema, "subscribeCreated"),
-        builder.apply(ProjectCreatedSchema, "applyCreated"),
-      ],
+      (builder) => [builder.subscribe(ProjectCreatedSchema, "subscribeCreated")],
     );
     const readiness = EventRegistrationReadiness.fromEntityHandlers([handlers]);
 
     const subscriber = readiness.findEventSubscribers(ProjectCreatedSchema.typeName)[0];
-    const application = readiness.findEventApplications(ProjectCreatedSchema.typeName)[0];
 
     expect(handlers.entity.idField).toBe(handlers.entity.firstFieldRoutingHint.field);
     expect(subscriber?.entity.idField).toBe(subscriber?.entity.firstFieldRoutingHint.field);
@@ -469,13 +364,6 @@ describe("event registration readiness", () => {
     );
     expect(subscriber?.entityHandlers.entity.idField).toBe(
       subscriber?.entityHandlers.entity.firstFieldRoutingHint.field,
-    );
-    expect(application?.entity.idField).toBe(application?.entity.firstFieldRoutingHint.field);
-    expect(application?.registeredHandler.entity.idField).toBe(
-      application?.registeredHandler.entity.firstFieldRoutingHint.field,
-    );
-    expect(application?.entityHandlers.entity.idField).toBe(
-      application?.entityHandlers.entity.firstFieldRoutingHint.field,
     );
   });
 
@@ -521,7 +409,6 @@ function createRegistryLookupForEventNames(
       eventSubscriptions: [handler],
       stateSubscriptions: [],
       eventReactions: [],
-      eventApplications: [],
     };
 
     return {
@@ -554,29 +441,6 @@ function createRegistryLookupForEventHandlers(
     findByMessage: (messageFullTypeName) =>
       eventHandlers.filter(({ handler }) => handler.messageFullTypeName === messageFullTypeName),
     findCommandAssignment: () => undefined,
-    findEventApplication: (entityStateFullTypeName, eventFullTypeName) =>
-      eventHandlers.find(
-        (entry): entry is RegisteredHandlerMetadata<EventApplicationHandlerMetadata> =>
-          entry.handler.kind === "event-application" &&
-          entry.entity.fullTypeName === entityStateFullTypeName &&
-          entry.handler.messageFullTypeName === eventFullTypeName,
-      ),
-  };
-}
-
-function createRegisteredEventHandler<Handler extends EventHandlerMetadata>(
-  entityHandlers: EntityHandlersMetadata,
-  handler: Handler | undefined,
-): RegisteredHandlerMetadata<Handler> {
-  if (handler === undefined) {
-    throw new Error("Expected event handler metadata.");
-  }
-
-  return {
-    entityHandlers,
-    entityType: entityHandlers.entityType,
-    entity: entityHandlers.entity,
-    handler,
   };
 }
 

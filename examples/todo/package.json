@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/example-todo",
-  "version": "2.0.0-snapshot.14",
+  "version": "2.0.0-snapshot.15",
   "private": true,
   "type": "module",
   "description": "Runnable server-side to-do example for Spine TS.",
@@ -42,7 +42,7 @@
     "@spine-event-engine/client-node": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
     "@spine-event-engine/delivery-client": "workspace:*",
-    "@spine-event-engine/proto": "2.0.0-snapshot.14",
+    "@spine-event-engine/proto": "2.0.0-snapshot.15",
     "@spine-event-engine/server": "workspace:*",
     "@spine-event-engine/storage": "workspace:*",
     "@spine-event-engine/storage-datastore": "workspace:*",
@@ -51,7 +51,7 @@
     "@google-cloud/datastore": "10.1.1"
   },
   "devDependencies": {
-    "@spine-event-engine/proto-tools": "2.0.0-snapshot.14",
+    "@spine-event-engine/proto-tools": "2.0.0-snapshot.15",
     "@spine-event-engine/testing": "workspace:*"
   }
 }

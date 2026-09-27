@@ -144,9 +144,9 @@ type ProjectState = Message<"ProjectState"> & {
 const { ProjectOverviewStateSchema, ProjectStateSchema } =
   await import("../../test-fixtures/generated/entity-metadata/project_states_pb.js");
 
-class TaskAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {}
-class DuplicateTaskAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {}
-class ReplayTaskAggregate extends Aggregate<string, typeof ProjectStateSchema, number> {
+class TaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
+class DuplicateTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
+class ReplayTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignTask(command: AssignReviewTask): ReviewStarted {
     this.update((draft) =>
       Object.assign(
@@ -157,7 +157,7 @@ class ReplayTaskAggregate extends Aggregate<string, typeof ProjectStateSchema, n
     return create(ReviewStartedSchema, { id: command.id });
   }
 }
-class GeneratedTaskAggregate extends Aggregate<string, typeof ProjectStateSchema, bigint> {
+class GeneratedTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignProjection(command: AssignReviewTask): ReviewTaskAssigned {
     this.update((draft) =>
       Object.assign(
@@ -173,7 +173,7 @@ class GeneratedTaskAggregate extends Aggregate<string, typeof ProjectStateSchema
     return create(ReviewTaskAssignedSchema, { id: command.id, name: command.name });
   }
 }
-class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema, number> {
+class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   onProjection(event: ProcessManagerState): void {
     this.update((draft) =>
       Object.assign(
@@ -187,7 +187,7 @@ class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchem
     );
   }
 }
-class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
+class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {}
 class StandaloneAssignee extends AbstractAssignee {
   assign(): ReviewTaskAssigned {
     return create(ReviewTaskAssignedSchema, { id: "event-1", name: "assigned" });
@@ -255,11 +255,7 @@ class StateOutputSubscriber extends AbstractEventSubscriber {
     return create(ReviewTaskAssignedSchema, { id: "illegal", name: "illegal output" });
   }
 }
-class GeneratedTaskProcessManager extends ProcessManager<
-  string,
-  typeof ProcessManagerStateSchema,
-  number
-> {
+class GeneratedTaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   assignTask(command: AssignReviewTask): ReviewTaskAssigned {
     this.update((draft) =>
       Object.assign(
@@ -278,11 +274,7 @@ class GeneratedTaskProcessManager extends ProcessManager<
   }
 }
 
-class ReplayTaskProcessManager extends ProcessManager<
-  string,
-  typeof ProcessManagerStateSchema,
-  number
-> {
+class ReplayTaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   assignTask(command: ScheduleReviewTask): ReviewStarted {
     this.update((draft) =>
       Object.assign(
@@ -314,8 +306,7 @@ const pendingFreshRecovery = new Error("leave dynamic tenant row for fresh recov
 
 class FailingRecoveryProcessManager extends ProcessManager<
   string,
-  typeof ProcessManagerStateSchema,
-  number
+  typeof ProcessManagerStateSchema
 > {
   assignTask(command: AssignReviewTask): void {
     void command;
@@ -323,11 +314,7 @@ class FailingRecoveryProcessManager extends ProcessManager<
   }
 }
 
-class FreshRecoveryProcessManager extends ProcessManager<
-  string,
-  typeof ProcessManagerStateSchema,
-  number
-> {
+class FreshRecoveryProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   assignTask(command: AssignReviewTask): ReviewTaskAssigned {
     this.update((draft) =>
       Object.assign(

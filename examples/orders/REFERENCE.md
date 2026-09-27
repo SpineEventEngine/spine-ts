@@ -13,6 +13,11 @@ the Datastore-specific composition entry point: its caller supplies the `Datasto
 client and the function hands that same client to `DatastoreStorageFactory`.
 Domain handlers must not import provider types.
 
+`OrderSalesManager.onOrderCreated` is a state-only `@React` handler with an
+explicit `undefined` return. Generated metadata has no returned Event schemas
+for this method. The framework must still persist its counter and advance its
+Entity version. Other subscribers retain their `void` declarations.
+
 When this example is composed with Datastore, the provider boundary is native:
 the complete tenant selects a namespace, the record family selects a kind, and
 the record ID selects the key. Persisted bytes remain authoritative; only
