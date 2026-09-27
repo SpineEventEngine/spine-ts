@@ -1,6 +1,6 @@
 # Entity dependency configuration review
 
-Status: all requested review rounds and the API documentation correction review are complete; no accepted finding remains. Packed-package checks exposed a documentation link error, now corrected and covered by 36 passing focused tests. Final verification is being repeated. Dual-tag automation remains blocked by npm support.
+Status: all requested reviews and corrections complete; full local release verification and audits pass. Dual-tag automation remains blocked by npm support. No PR CI result exists for this branch.
 Branch: `entity-dependency-configuration`.
 Base: `794bd524b8875f10a75777a41bbebe1dbece600b`.
 
@@ -171,3 +171,18 @@ including actual checked release preparation and installed-package consumers.
 This deterministic URL correction does not reopen reviewer concerns. Full
 preflight precedes the next release attempt; use the real package-consumer
 tests as proof instead of redundantly running the same preparation again.
+
+## Final local verification
+
+Verified source commit: `e14e196ae36478ac2045d9d175b01a44c9e1902f`.
+The exact remote branch SHA matched. All 303 files and 5,019 tests pass in
+verify:release (580.85 seconds), with no skipped tests reported. Coverage:
+93.27% statements, 90.05% branches, 93.08% functions, 94.42% lines. Both complete
+and production-only publication audits report no known vulnerabilities.
+Real release preparation and native/full packed-consumer tests pass within
+the full suite. Final edits after that source commit record evidence only.
+
+GitHub reports no open PR for this branch, so local success is not described
+as green CI. No PR was created, package published, credential added, or npm tag
+changed. Do not treat the branch as publication-ready until the separate
+dual-tag authentication question is resolved.

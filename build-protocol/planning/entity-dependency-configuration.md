@@ -1,6 +1,6 @@
 # Entity dependency configuration
 
-Status: implementation approved on 27 September 2026 and in progress.
+Status: Entity implementation, requested reviews, full local release verification and audits complete. Dual-tag publication remains blocked by npm's supported authentication flow.
 Date: 27 September 2026.
 Branch: `entity-dependency-configuration`.
 Base: freshly fetched official `origin/master`,

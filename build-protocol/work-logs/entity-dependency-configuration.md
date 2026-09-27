@@ -354,6 +354,31 @@ package-consumer evidence rather than invoke identical preparation a third
 time. Audits still run separately after full verification. No test or gate was
 weakened; the fix changes only server documentation URLs.
 
+## Final verified state
+
+The explicit Luna/low verification function completed naturally on source
+commit e14e196ae36478ac2045d9d175b01a44c9e1902f. Complete preflight and
+verify:release pass: 303 files, 5,019 tests, no skipped tests reported,
+580.85 seconds. Coverage is 93.27% statements, 90.05% branches, 93.08%
+functions, and 94.42% lines. The real staged release preparation and native/full
+packed consumers pass inside that suite. Both all-dependency and production-only
+audits report no known vulnerabilities. Main checked the raw final summaries
+and confirmed the exact pushed remote SHA. No visible profile mismatch.
+
+Evidence: /tmp/spine-entity-configuration.O1NMsX/release-links-final.log,
+package-links-focused.log, and audit-final.log. Earlier failed release logs are
+retained, not replaced. The final record update changes no verified source.
+All three requested independent no-memory whole-change rounds and accepted
+fixes are complete, along with the bounded TypeDoc correction review.
+
+No open PR exists for this branch; no CI success is claimed. No publication or
+tag mutation occurred. The Entity work is locally verified and pushed, but
+publication remains blocked: both tags must advance and npm trusted publishing
+cannot automate the second tag update. The human's answer on a manual
+authenticated second-tag step is still required. Do not merge for publication
+until that requirement is settled; do not introduce stored tokens or a private
+authentication workaround.
+
 The independent review wave completed. Style and TypeScript/API found no
 issues. Reliability found no runtime defect but identified missing tests for
 history access and tenant-aware Process Manager queries on injected instances.
