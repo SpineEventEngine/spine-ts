@@ -1,6 +1,6 @@
 # Entity dependency configuration review
 
-Status: all requested review rounds and the API documentation correction review are complete; no accepted finding remains. Final preflight and release verification are being repeated. Dual-tag automation remains blocked by npm support.
+Status: all requested review rounds and the API documentation correction review are complete; no accepted finding remains. Packed-package checks exposed a documentation link error, now corrected and covered by 36 passing focused tests. Final verification is being repeated. Dual-tag automation remains blocked by npm support.
 Branch: `entity-dependency-configuration`.
 Base: `794bd524b8875f10a75777a41bbebe1dbece600b`.
 
@@ -162,3 +162,12 @@ accepted without visible mismatch; no separate runtime metadata is exposed.
 The real docs:api:check and eight focused tests passed before review. Repeat the
 complete cheap preflight before rerunning verify:release, then package-consumer
 preparation and publication audits if successful. No gate has been weakened.
+
+The subsequent full coverage run passed 5,015 tests but failed four package
+consumer tests because the new server README guide link escaped the npm
+artifact. Main replaced repository-level links in the server README/reference
+with official GitHub URLs. All 36 tests in the three failing files now pass,
+including actual checked release preparation and installed-package consumers.
+This deterministic URL correction does not reopen reviewer concerns. Full
+preflight precedes the next release attempt; use the real package-consumer
+tests as proof instead of redundantly running the same preparation again.

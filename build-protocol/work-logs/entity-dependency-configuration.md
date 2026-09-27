@@ -334,6 +334,26 @@ Entity/Projects/plugin behavior tests, before one release rerun. On success it
 then runs package-consumer preparation and publication audits, sequentially.
 No live publication, npm tag mutation, credential reading, or PR creation.
 
+The release retry completed its full coverage run naturally: 5,015 of 5,019
+tests passed, with four failures in three files. All four fail before package
+consumer setup because the new server README links outside its packed package
+to ../../docs/USER_GUIDE.md. No coverage summary was produced on failure.
+Main corrects repository-level links in the published server README and
+REFERENCE to official GitHub URLs; package-local reference links remain local.
+This is a documentation-only mechanical correction, not a runtime or script
+change. Estimate: 0.1 hours for the correction and focused link checks, plus
+the measured full-suite waiting time (about nine minutes) after preflight.
+The retained Luna/low function reruns the three failing files first, then the
+complete cheap preflight before one further release attempt. Existing reviewer
+dispositions remain valid for this deterministic link correction.
+
+The focused regression passes all three files and 36 tests in 61.64 seconds.
+It includes real release-cli prepare --check and native/full tarball consumers,
+not just mocked preparation. Reuse their successful full-suite rerun as final
+package-consumer evidence rather than invoke identical preparation a third
+time. Audits still run separately after full verification. No test or gate was
+weakened; the fix changes only server documentation URLs.
+
 The independent review wave completed. Style and TypeScript/API found no
 issues. Reliability found no runtime defect but identified missing tests for
 history access and tenant-aware Process Manager queries on injected instances.

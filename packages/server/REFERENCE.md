@@ -70,8 +70,8 @@ Spine still connects Entity history and Process Manager queries. A constructor
 callback has no active handler actor or tenant; handler queries retain their
 normal context. This feature adds no dependency container or storage format.
 
-See the [Entity dependency guide](../../docs/USER_GUIDE.md#give-an-entity-an-application-service)
-and the [Projects example](../../examples/projects/README.md).
+See the [Entity dependency guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/USER_GUIDE.md#give-an-entity-an-application-service)
+and the [Projects example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/projects/README.md).
 
 ## Integration broker and event origin
 
@@ -685,7 +685,7 @@ admission.
 `ServerOptions` is native-only: it configures contexts, resources, services,
 and the native listener. It has no `browser` option and the root package does
 not load `@spine-event-engine/auth`. Browser hosting belongs to the explicit
-`@spine-event-engine/server/browser` entry point; see the [browser/auth guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
+`@spine-event-engine/server/browser` entry point; see the [browser/auth guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
 
 Browser unary gateway admission has a fixed 1 MiB (1,048,576-byte) request
 limit. A larger unary gateway request is rejected with `ResourceExhausted`.

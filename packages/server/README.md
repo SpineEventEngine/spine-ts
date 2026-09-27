@@ -74,7 +74,7 @@ services are not persisted; the application manages their initialization and
 shutdown. Existing one-options constructors need no callback.
 
 Explicit repositories accept `onCreate` in their options too. See the
-[guide](../../docs/USER_GUIDE.md#give-an-entity-an-application-service) for the
+[guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/USER_GUIDE.md#give-an-entity-an-application-service) for the
 full story and the [reference](REFERENCE.md#entity-constructor-dependencies)
 for the exact contract.
 
