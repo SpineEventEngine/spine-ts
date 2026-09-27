@@ -103,9 +103,11 @@ The repository calls the callback when constructing an object for handling,
 including restoration from stored state and Projection rebuilds. It is not a
 notification of the first creation of a persistent Entity ID. The callback must
 return a fresh instance of the registered class synchronously and pass the
-framework's state, Version, and lifecycle options through unchanged. A wrong
-result or thrown error prevents handler invocation and business-state commit;
-normal infrastructure failure reporting remains in place.
+framework's state, Version, and lifecycle options through unchanged. Returning
+a result of the wrong class or a Promise, or throwing an error, prevents handler
+invocation and business-state commit. Freshness and forwarding unchanged options
+are application responsibilities; normal infrastructure failure reporting
+remains in place.
 
 Framework history and Process Manager query bindings remain separate from
 application construction. Dependencies are ordinary application objects, never

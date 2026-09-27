@@ -1,6 +1,6 @@
 # Entity dependency configuration review
 
-Status: initial Entity review complete; three additional fresh review/fix rounds requested. Dual-tag automation is blocked by npm support; final release verification is pending.
+Status: initial specialist review and all three additional whole-changeset rounds complete; accepted findings corrected. Final release verification is running. Dual-tag automation remains blocked by npm support.
 Branch: `entity-dependency-configuration`.
 Base: `794bd524b8875f10a75777a41bbebe1dbece600b`.
 
@@ -106,3 +106,36 @@ the expected callback Versions. The explicit retained Sol/medium profile is
 accepted; no runtime metadata mismatch was visible. All accepted Entity review
 findings are resolved. Publication policy and the final release gate remain
 pending; no remote CI success is claimed for this branch.
+
+## Three additional whole-changeset rounds
+
+Requested explicitly by the human after the initial specialist wave. Each
+whole-changeset review function uses a fresh default-agent context with explicit
+Sol/medium, no conversation history or memory, and no prior review findings.
+The earlier specialized follow-up could not cover all concerns and is not
+counted as a whole-changeset round.
+
+1. Round one reviewed base `794bd524b` through `1497b95e3`: no actionable
+   findings. It covered runtime, public types, tests, Projects, public docs,
+   package versions, lockfile, generation markers, and release test updates.
+   No edits, tests, or builds were performed by the reviewer. The explicit
+   Sol/medium profile is accepted; no separate runtime introspection is exposed.
+2. Round two independently reviewed base `794bd524b` through `1497b95e3`:
+   no actionable findings across runtime, public types, tests, public docs,
+   Projects, generated metadata and version alignment. Whitespace was clean;
+   no edits, builds, or tests were performed. Explicit Sol/medium accepted
+   without visible mismatch. No correction was needed after either round.
+3. Round three reviewed the complete diff in another fresh explicit Sol/medium
+   context. It initially proposed detecting reused callback results with a
+   WeakSet, then withdrew that finding after comparing it with the approved
+   application preconditions and limited runtime validation. No failure with
+   a conforming callback was established. Its remaining P3 wording finding
+   was accepted and corrected: TECHNICAL_SPEC and the creation helper TSDoc
+   now name wrong-class and Promise results explicitly instead of implying
+   all incorrect callbacks are detected. No runtime tracking was added.
+
+All three whole-changeset rounds are complete, their explicit profiles accepted,
+and every accepted finding corrected. None used memory, inherited chat history,
+or earlier reviewer conclusions. No production behavior changed in these rounds.
+The final preflight and release checks follow; dual-tag publication remains a
+separate supported-authentication blocker.

@@ -1630,7 +1630,7 @@ interface AggregateConstructorOptions {
  */
 const RepositoryCreation = {
   /**
-   * Creates one Entity and rejects invalid callback results before handler execution.
+   * Creates one Entity and rejects wrong-class or Promise results before handler execution.
    *
    * @param repository The registered constructor and callback.
    * @param options Framework values for this new or restored instance.

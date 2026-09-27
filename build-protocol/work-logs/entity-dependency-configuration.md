@@ -257,6 +257,29 @@ Sol/medium, covering the existing technical and documentation concerns; do not
 create or rename a persistent project role. No prior results or memory enter
 these fresh reviewer contexts.
 
+Whole-changeset rounds one and two completed with no actionable findings across
+all changed categories. Both used fresh explicit Sol/medium contexts and did
+not edit or run builds/tests. Round three is dispatched the same way. The
+release authentication decision remains separate: after these Entity reviews
+converge, verify the current complete changeset once with verify:release and
+the package-consumer preparation check, without claiming the unimplemented
+dual-tag change has passed. This closes the independent runtime verification
+rather than waiting indefinitely on an unrelated release-policy choice.
+The mechanical verification function retains its explicit Luna/low profile;
+only one heavy process may run. Existing scoped tests/typechecks are still
+current because review rounds changed no source, tests, or public guides.
+
+Round three completed full-scope review and withdrew its proposed runtime
+WeakSet after verifying the approved boundary: freshness and unchanged options
+are callback preconditions, not a promise of exhaustive runtime validation.
+No valid-callback defect was found. Its remaining P3 wording correction is
+applied to TECHNICAL_SPEC and the creation helper TSDoc, explicitly naming
+wrong-class and Promise results. This is a comment-only production-file change;
+no runtime logic or test changes. All three requested rounds and accepted fixes
+are complete. The verification skill requires fresh evidence for final claims;
+the Luna/low mechanical function will check the wording correction, then run
+one full release profile and package-consumer preparation check.
+
 The independent review wave completed. Style and TypeScript/API found no
 issues. Reliability found no runtime defect but identified missing tests for
 history access and tenant-aware Process Manager queries on injected instances.
