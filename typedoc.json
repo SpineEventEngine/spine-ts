@@ -1,5 +1,6 @@
 {
   "$schema": "https://typedoc.org/schema.json",
+  "plugin": ["./scripts/typedoc-entity-types.mjs"],
   "entryPoints": [
     "packages/proto-tools/src/index.ts",
     "packages/proto-tools/src/testing/index.ts",

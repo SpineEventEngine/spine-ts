@@ -280,6 +280,60 @@ are complete. The verification skill requires fresh evidence for final claims;
 the Luna/low mechanical function will check the wording correction, then run
 one full release profile and package-consumer preparation check.
 
+Final release verification stopped naturally at docs:api:check: TypeDoc output
+exposes internal EntityConstructor machinery. Build, tooling typecheck, global
+ESLint, cleanup, TSDoc, copyright and formatting passed; the global coverage
+tests were not reached. Consumer and audit checks did not run. This is a real
+documentation-generation defect missed by the reviews, not a green release.
+Return it to the retained explicit Sol/medium implementer for a bounded fix,
+with targeted API-doc generation and constructor type regressions. Do not
+weaken the forbidden-internal-symbol gate or simply rename a leaking symbol.
+After the fix, rerun the complete cheap preflight before another release gate;
+only substantively affected API documentation concerns need follow-up review.
+
+Two targeted TypeDoc annotation approaches failed and were reverted: inlineType
+on the public alias and inline on the internal alias. @internal hides the helper
+declaration but its reference/type-query remains embedded in Repository and
+builder generic constraints. This is a demonstrated nominal-type/docs blocker.
+The retained requirements splitter receives one bounded Astra/high consultation
+to preserve compiler nominality while producing public docs without private
+helper names. No permission to weaken documentation checks, add runtime types,
+or introduce broad new tooling. The implementer remains the only source writer;
+the consultation is read-only. Explicit retained profile is acceptance evidence
+without separate runtime self-inspection.
+
+The bounded Astra/high consultation confirmed TypeDoc 0.28.19 query conversion
+does not honor inline directives, and resolved generic constraints lose the
+original public alias syntax. Correcting excludeTags plus annotations removed
+one direct alias but still leaked private typeof queries; the targeted check
+failed naturally. Those ineffective edits are reverted. Approve the supported
+fallback: a small local TypeDoc converter plugin, loaded by typedoc.json for
+both generation paths, removing only exact internal nominal helper members
+from documented constructor intersections. Preserve constructor, instance,
+prototype/name and schema members, actual TypeScript source/declarations, and
+the strict forbidden-name checker. Focused tests must prove unrelated types
+and unexpected shapes are not silently removed. This is presentation-only,
+not a new runtime abstraction. The retained Sol/medium implementer writes it;
+fresh API/style review follows targeted mechanical checks.
+
+The retained implementer completed the correction in scripts/typedoc-entity-types.mjs,
+its focused test, and typedoc.json. An initial wrong event-callback arity failed
+the real API check, then was corrected against TypeDoc's actual context-only
+event and covered by a load-hook regression. Final eight focused tests, real
+docs:api:check (including all 240 server exports), targeted ESLint/formatting,
+TSDoc, cleanup, tooling typecheck and whitespace pass. No server runtime source
+or emitted declaration contract changed. Fresh API and maintainability reviews
+use the recorded explicit Sol/medium profiles, no memory or prior chat history,
+before the complete cheap preflight and release rerun.
+
+Fresh API and maintainability reviewers completed without findings, using the
+explicit recorded Sol/medium profiles and no memory/history. The complete
+correction wave is accepted. The retained Luna/low mechanical function repeats
+the complete cheap preflight, including the real API-doc gate and focused
+Entity/Projects/plugin behavior tests, before one release rerun. On success it
+then runs package-consumer preparation and publication audits, sequentially.
+No live publication, npm tag mutation, credential reading, or PR creation.
+
 The independent review wave completed. Style and TypeScript/API found no
 issues. Reliability found no runtime defect but identified missing tests for
 history access and tenant-aware Process Manager queries on injected instances.

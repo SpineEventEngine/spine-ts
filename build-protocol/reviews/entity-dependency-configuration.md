@@ -1,6 +1,6 @@
 # Entity dependency configuration review
 
-Status: initial specialist review and all three additional whole-changeset rounds complete; accepted findings corrected. Final release verification is running. Dual-tag automation remains blocked by npm support.
+Status: all requested review rounds and the API documentation correction review are complete; no accepted finding remains. Final preflight and release verification are being repeated. Dual-tag automation remains blocked by npm support.
 Branch: `entity-dependency-configuration`.
 Base: `794bd524b8875f10a75777a41bbebe1dbece600b`.
 
@@ -139,3 +139,26 @@ and every accepted finding corrected. None used memory, inherited chat history,
 or earlier reviewer conclusions. No production behavior changed in these rounds.
 The final preflight and release checks follow; dual-tag publication remains a
 separate supported-authentication blocker.
+
+## API documentation correction after release verification
+
+The full release gate found private constructor helper references in TypeDoc
+output. Earlier reviews did not catch this. Configuration/annotation attempts
+were ineffective and reverted. A bounded architecture consultation confirmed
+the converter limitation and retained the nominal TypeScript contract. The
+implementer is adding a narrowly scoped, supported converter plugin with
+behavior tests; the strict API checker remains unchanged. Fresh
+typescript_api_docs_reviewer and style_maintainability_reviewer assignments
+use explicit Sol/medium with no inherited context after targeted mechanical
+checks. Reliability is covered within the plugin's exact matching and
+fail-closed shape tests and API review; there is no new Entity runtime path.
+No new framework or wire contract, dependency, or authentication behavior.
+
+Both fresh correction reviewers completed with no actionable findings. The API
+review confirmed precise helper matching, retained structural constraints and
+unchanged TS declarations. Maintainability confirmed the bounded supported
+converter integration and focused tests. Both explicit Sol/medium profiles are
+accepted without visible mismatch; no separate runtime metadata is exposed.
+The real docs:api:check and eight focused tests passed before review. Repeat the
+complete cheap preflight before rerunning verify:release, then package-consumer
+preparation and publication audits if successful. No gate has been weakened.
