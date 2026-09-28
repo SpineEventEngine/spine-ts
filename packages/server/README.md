@@ -173,6 +173,9 @@ context without naming that context. An Entity in another context must allow
 queries (`query` or `full` visibility). Registering the same Entity type in two
 contexts causes a startup error.
 
+The [Orders example](../../examples/orders/README.md#cross-context-order-review)
+shows this in an Event handler and includes a runnable integration test.
+
 Queries preserve the handler's actor and effective tenant; there is no tenant
 override. Single-tenant execution uses `SINGLE_TENANT`, even when the request
 omits a tenant field. A named tenant cannot query a single-tenant context: that

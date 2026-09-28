@@ -26,8 +26,21 @@ import type { Stand } from "../stand/stand.js";
  * A state registration and its bounded context for server-local reads.
  */
 export interface RegisteredTarget {
+  // prettier-ignore
+
+  /**
+   * Context containing the registered Entity state.
+   */
   readonly context: BoundedContext;
+
+  /**
+   * Repository whose schema and columns authorize reads.
+   */
   readonly repository: RepositoryView;
+
+  /**
+   * Wire type URL shared by equivalent descriptors of this state.
+   */
   readonly typeUrl: string;
 }
 
@@ -121,7 +134,7 @@ export class RegisteredTargets {
   }
 
   /**
-   * Makes this server's validated routes available to its repository handlers.
+   * Registers validated routes for every context Stand before recovery invokes handlers.
    *
    * @param contexts Contexts whose handlers use these routes.
    */

@@ -1224,7 +1224,7 @@ export abstract class Projection<
  * Base class for Process Managers coordinating a workflow through signals.
  *
  * Provides transactional state, protected Event-history access, and
- * handler-scoped Projection reads through `select()`. Repositories and bounded
+ * handler-scoped queryable Entity-state reads through `select()`. Repositories and bounded
  * contexts invoke handlers, persist changes, and deliver returned signals.
  *
  * @typeParam Id Domain identifier type.
@@ -1289,11 +1289,13 @@ export abstract class ProcessManager<
    *
    * The repository binds this capability only while it invokes a Process Manager
    * handler. Reads use that signal's actor and tenant; they cannot mutate state
-   * or select a different tenant.
+   * or select a different tenant. A target in another context must be registered
+   * by the same Server, visible for queries, and compatible with the effective
+   * operation tenant.
    *
-   * @typeParam QuerySchema Generated Projection state schema to query.
+   * @typeParam QuerySchema Generated query-visible Entity state schema to query.
    * @typeParam Columns Descriptor-backed columns available for that schema.
-   * @param schema Projection state schema to query.
+   * @param schema Query-visible Entity state schema to query.
    * @param columns Generated descriptor-backed columns for `schema`.
    * @returns A read-only Entity query.
    */

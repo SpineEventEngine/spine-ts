@@ -610,7 +610,7 @@ describe("Process Manager querying", () => {
     const comparison = (column: string) => ({
       kind: "comparison" as const,
       column,
-      operator: "eq" as const,
+      operator: "equal" as const,
       value: "ready",
     });
 

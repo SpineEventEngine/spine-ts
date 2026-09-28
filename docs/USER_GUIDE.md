@@ -435,6 +435,9 @@ read. Registering the same Entity type in two contexts is an error, rather than
 a choice determined by registration order. Separately running servers are not
 searched. A context used without a Server continues to query its local state.
 
+See the [Orders example](../examples/orders/README.md#cross-context-order-review)
+for the two context builders, the handler, and a test of the complete workflow.
+
 The query keeps the triggering signal's actor and effective tenant. An Acme
 process reads only Acme's data in a multitenant destination; querying a
 single-tenant destination instead is a tenant mismatch and fails before a read.

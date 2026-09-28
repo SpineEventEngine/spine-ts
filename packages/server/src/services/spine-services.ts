@@ -118,7 +118,19 @@ const serviceLoggers = new WeakMap<SpineServices, ILogLayer>();
 const serviceInstances = new WeakSet<SpineServices>();
 
 interface SpineServicesAccess {
+  /**
+   * Sets the server logger for service diagnostics.
+   *
+   * @param services Adapter receiving the logger.
+   * @param logger Server logging layer.
+   */
   installLogger(services: SpineServices, logger: ILogLayer): void;
+
+  /**
+   * Clears the logger installed for a closed service adapter.
+   *
+   * @param services Adapter whose logger is removed.
+   */
   clearLogger(services: SpineServices): void;
 }
 
@@ -157,15 +169,25 @@ interface SpineServicesAccess {
  */
 export class SpineServices {
   readonly #contexts: readonly BoundedContext[];
+
   readonly #commandRoutes = new Map<string, CommandRoute>();
+
   readonly #stateRoutes = new Map<string, StateRoute>();
+
   readonly #eventRoutes = new Map<string, EventRoute>();
+
   readonly #subscriptions = new Map<string, SubscriptionRecord>();
+
   readonly #activationTails = new Map<string, Promise<void>>();
+
   readonly #removals = new Map<string, SubscriptionRemoval>();
+
   readonly #unknownRemovals = new Set<string>();
+
   readonly #testRegistries = new WeakMap<object, StandSubscriptionRegistry>();
+
   readonly #queueLimit: number;
+
   readonly #subscriptionLimit: number;
 
   /**
@@ -182,8 +204,14 @@ export class SpineServices {
     this.#subscriptionLimit = ServiceValues.subscriptionLimit(
       options.subscriptionLimit ?? ServiceValues.defaultSubscriptionLimit,
     );
-    const targets = new RegisteredTargets(this.#contexts);
+    this.#registerSignalRoutes();
+    this.#registerStateRoutes(new RegisteredTargets(this.#contexts));
+  }
 
+  /**
+   * Registers Command and Event routes exposed by the assembled contexts.
+   */
+  #registerSignalRoutes(): void {
     for (const context of this.#contexts) {
       for (const typeUrl of context.commandBus().acceptedCommandTypes()) {
         if (!this.#commandRoutes.has(typeUrl)) {
@@ -197,6 +225,14 @@ export class SpineServices {
         }
       }
     }
+  }
+
+  /**
+   * Registers state routes from the validated server-wide Entity lookup.
+   *
+   * @param targets Validated state registrations.
+   */
+  #registerStateRoutes(targets: RegisteredTargets): void {
     for (const { context, repository, typeUrl } of targets.all()) {
       const schema = repository.stateSchema;
       const declaredColumns = repository.metadata.columns.map((column) => column.name);
@@ -240,6 +276,12 @@ export class SpineServices {
     return router;
   }
 
+  /**
+   * Resolves a public Command route before attempting dispatch.
+   *
+   * @param command Public Command request.
+   * @returns Acknowledgement for route validation or dispatch.
+   */
   async #post(command: Command): Promise<Ack> {
     const messageId =
       command.id && AnyMessages.pack(CommandIdSchema, command.id, { validate: false });
@@ -291,6 +333,12 @@ export class SpineServices {
     }
   }
 
+  /**
+   * Validates a public state query before reading its registered Stand.
+   *
+   * @param query Public query request.
+   * @returns States or a stable query error response.
+   */
   async #read(query: Query): Promise<QueryResponse> {
     const target = query.target;
     const route = this.#readRoute(target);
@@ -307,6 +355,18 @@ export class SpineServices {
       return ServiceValues.queryErrorResponse(queryError.type, queryError.message);
     }
 
+    return this.#readValidated(query, target, route);
+  }
+
+  /**
+   * Resolves the effective tenant and executes an already validated read.
+   *
+   * @param query Validated public query.
+   * @param target Registered query target.
+   * @param route Route containing the target Stand and schema.
+   * @returns States or a stable tenant/read error response.
+   */
+  async #readValidated(query: Query, target: Target, route: StateRoute): Promise<QueryResponse> {
     const tenantId = ServiceValues.tenantValue(query.context?.tenantId);
     const tenantError = ServiceValues.tenantMismatch(
       route.context.isMultitenant,
@@ -691,12 +751,24 @@ export class SpineServices {
  * @internal
  */
 export const spineServicesAccess: SpineServicesAccess = Object.freeze({
+  /**
+   * Clears the logger installed for a closed service adapter.
+   *
+   * @param services Adapter whose logger is removed.
+   */
   clearLogger(services: SpineServices): void {
     if (!serviceInstances.has(services)) {
       throw new TypeError("SpineServices logger requires a SpineServices instance.");
     }
     serviceLoggers.delete(services);
   },
+
+  /**
+   * Sets the server logger for service diagnostics.
+   *
+   * @param services Adapter receiving the logger.
+   * @param logger Server logging layer.
+   */
   installLogger(services: SpineServices, logger: ILogLayer): void {
     if (!serviceInstances.has(services)) {
       throw new TypeError("SpineServices logger requires a SpineServices instance.");
@@ -807,30 +879,64 @@ type SubscriptionShape =
 
 interface SubscriptionMatcher {
   readonly fieldMask: readonly string[] | undefined;
+
+  /**
+   * Matches one Stand update against a subscribed state filter.
+   *
+   * @param update State update to inspect.
+   * @returns Delivery kind, if the update affects the subscriber.
+   */
   match(update: StandUpdate): SubscriptionMatch | undefined;
 }
 
 type SubscriptionMatch = "state" | "noLongerMatching";
 
+/**
+ * Buffers subscription updates and wakes active stream readers.
+ */
 class SubscriptionDelivery {
   readonly #queue: SubscriptionUpdate[] = [];
+
   readonly #waiters: ((update: SubscriptionUpdate | undefined) => void)[] = [];
+
   readonly #queueLimit: number;
+
   #subscription: SubscriptionAttachment | undefined;
+
   #closed = false;
 
+  /**
+   * Sets the bounded update queue capacity.
+   *
+   * @param queueLimit Maximum pending updates before closure.
+   */
   constructor(queueLimit: number) {
     this.#queueLimit = queueLimit;
   }
 
+  /**
+   * Checks whether a source attachment is active.
+   *
+   * @returns `true` after an attachment is installed.
+   */
   get active(): boolean {
     return this.#subscription !== undefined;
   }
 
+  /**
+   * Checks whether this delivery queue has closed.
+   *
+   * @returns `true` after closure.
+   */
   get closed(): boolean {
     return this.#closed;
   }
 
+  /**
+   * Attaches a source subscription or immediately removes it after close.
+   *
+   * @param subscription Source attachment to track.
+   */
   attach(subscription: SubscriptionAttachment): void {
     if (this.#closed) {
       subscription.unsubscribe();
@@ -840,6 +946,11 @@ class SubscriptionDelivery {
     this.#subscription = subscription;
   }
 
+  /**
+   * Queues one update or wakes the next waiting stream reader.
+   *
+   * @param update State or Event update to deliver.
+   */
   push(update: SubscriptionUpdate): void {
     if (this.#closed) {
       return;
@@ -857,6 +968,11 @@ class SubscriptionDelivery {
     }
   }
 
+  /**
+   * Reads the next queued update, waiting while the stream is open and empty.
+   *
+   * @returns Next update, or `undefined` after closure.
+   */
   next(): Promise<SubscriptionUpdate | undefined> {
     const update = this.#queue.shift();
     if (update !== undefined || this.#closed) {
@@ -866,6 +982,9 @@ class SubscriptionDelivery {
     return new Promise((resolve) => this.#waiters.push(resolve));
   }
 
+  /**
+   * Closes the source subscription and completes all waiting readers.
+   */
   close(): void {
     if (this.#closed) {
       return;
@@ -884,6 +1003,10 @@ class SubscriptionDelivery {
 
 interface SubscriptionAttachment {
   readonly closed: boolean;
+
+  /**
+   * Removes the attached source subscription.
+   */
   unsubscribe(): void;
 }
 
@@ -1589,6 +1712,13 @@ const ServiceValues = (() => {
 
     return {
       fieldMask,
+
+      /**
+       * Matches one state update against the topic's ID and field filters.
+       *
+       * @param update State update to inspect.
+       * @returns Delivery kind, if the update changes a matching state.
+       */
       match(update) {
         if (
           idValues !== undefined &&
@@ -1971,6 +2101,14 @@ const ServiceValues = (() => {
     return left.length === right.length && left.every((byte, index) => byte === right[index]);
   }
 
+  /**
+   * Packs a state snapshot and version for a public query result.
+   *
+   * @typeParam Schema Generated state schema.
+   * @param schema Schema used to pack the state.
+   * @param result Stored state and its version.
+   * @returns Wire state/version pair.
+   */
   function packVersionedState<Schema extends MessageSchema>(
     schema: Schema,
     result: StandReadResult<Schema>,

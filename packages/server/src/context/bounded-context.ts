@@ -669,23 +669,107 @@ interface BoundedContextAccess {
    */
   delivery(context: BoundedContext): ContextDeliveryDescriptor;
 }
-let constructBoundedContext:
-  | ((
-      snapshot: BoundedContextSnapshot,
-      commandBus: CommandBus,
-      eventBus: EventBus,
-      systemEventBus: EventBus,
-      publisher: SignalPublisher,
-      stand: Stand,
-      systemStand: Stand,
-      runtime: SubscriptionRuntime,
-      systemSpec: ContextSpecSnapshot,
-      storageFactory: StorageFactory,
-      repositories: readonly RepositoryView[],
-      deliveryStrategy: DeliveryStrategy,
-      token: FrameworkConstructionToken,
-    ) => BoundedContext)
-  | undefined;
+
+/**
+ * Prepared services passed through the framework-only context construction hook.
+ */
+interface BoundedContextAssembly {
+  // prettier-ignore
+
+  /**
+   * Immutable context metadata.
+   */
+  readonly snapshot: BoundedContextSnapshot;
+
+  /**
+   * Command dispatch for this context.
+   */
+  readonly commandBus: CommandBus;
+
+  /**
+   * Domain Event dispatch for this context.
+   */
+  readonly eventBus: EventBus;
+
+  /**
+   * System Event dispatch for the paired context.
+   */
+  readonly systemEventBus: EventBus;
+
+  /**
+   * Publishes signals produced by handlers.
+   */
+  readonly publisher: SignalPublisher;
+
+  /**
+   * Domain read-side Stand.
+   */
+  readonly stand: Stand;
+
+  /**
+   * Paired System read-side Stand.
+   */
+  readonly systemStand: Stand;
+
+  /**
+   * Coordinates paired subscriptions.
+   */
+  readonly subscriptionRuntime: SubscriptionRuntime;
+
+  /**
+   * Paired System Context metadata.
+   */
+  readonly systemSpec: ContextSpecSnapshot;
+
+  /**
+   * Provider that creates context storage.
+   */
+  readonly storageFactory: StorageFactory;
+
+  /**
+   * Repositories registered in this context.
+   */
+  readonly repositories: readonly RepositoryView[];
+
+  /**
+   * Sharding choice for Entity Inbox delivery.
+   */
+  readonly deliveryStrategy: DeliveryStrategy;
+
+  /**
+   * Proof of framework-controlled construction.
+   */
+  readonly token: FrameworkConstructionToken;
+}
+
+/**
+ * Tenant-aware delivery services prepared during context construction.
+ */
+interface ContextDeliveryParts {
+  // prettier-ignore
+
+  /**
+   * Readiness signal shared by both Inboxes.
+   */
+  readonly deliveryReadiness: DeliveryReadiness;
+
+  /**
+   * Effective tenant index for delivery scopes.
+   */
+  readonly tenantIndex: TenantIndex;
+
+  /**
+   * Inbox for Entity messages.
+   */
+  readonly entityInbox: RegisteredEntityInbox;
+
+  /**
+   * Inbox for Projection messages.
+   */
+  readonly projectionInbox: PrjInbox;
+}
+
+let constructBoundedContext: ((input: BoundedContextAssembly) => BoundedContext) | undefined;
 let constructBoundedContextBuilder:
   | ((snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) => BoundedContextBuilder)
   | undefined;
@@ -734,85 +818,29 @@ export class BoundedContext {
    * Registers the framework-only construction hook for this module.
    */
   static {
-    constructBoundedContext = (
-      snapshot,
-      commandBus,
-      eventBus,
-      systemEventBus,
-      publisher,
-      stand,
-      systemStand,
-      runtime,
-      systemSpec,
-      storageFactory,
-      repositories,
-      deliveryStrategy,
-      token,
-    ): BoundedContext =>
-      new BoundedContext(
-        snapshot,
-        commandBus,
-        eventBus,
-        systemEventBus,
-        publisher,
-        stand,
-        systemStand,
-        runtime,
-        systemSpec,
-        storageFactory,
-        repositories,
-        deliveryStrategy,
-        token,
-      );
+    constructBoundedContext = (input): BoundedContext => new BoundedContext(input);
   }
 
   /**
    * Creates a Bounded Context from its prepared framework services.
    *
-   * @param snapshot Contains the immutable context metadata.
-   * @param commandBus Dispatches commands accepted by this context.
-   * @param eventBus Dispatches events accepted by this context.
-   * @param systemEventBus Dispatches framework-only System events.
-   * @param publisher Publishes signals produced by context handlers.
-   * @param stand Stores read-side state for this context.
-   * @param systemStand Stores read-side state for the paired System Context.
-   * @param subscriptionRuntime Coordinates subscriptions for the paired contexts.
-   * @param systemSpec Contains paired System Context metadata.
-   * @param storageFactory Creates context storage.
-   * @param repositories Lists repositories to register.
-   * @param deliveryStrategy Selects immutable Entity Inbox shards.
-   * @param token Proves framework-controlled construction.
+   * @param input Prepared services and framework construction token.
    */
-  protected constructor(
-    snapshot: BoundedContextSnapshot,
-    commandBus: CommandBus,
-    eventBus: EventBus,
-    systemEventBus: EventBus,
-    publisher: SignalPublisher,
-    stand: Stand,
-    systemStand: Stand,
-    subscriptionRuntime: SubscriptionRuntime,
-    systemSpec: ContextSpecSnapshot,
-    storageFactory: StorageFactory,
-    repositories: readonly RepositoryView[],
-    deliveryStrategy: DeliveryStrategy,
-    token: FrameworkConstructionToken,
-  ) {
+  protected constructor(input: BoundedContextAssembly) {
     ContextParts.requireFrameworkConstructionToken(
-      token,
+      input.token,
       "BoundedContext instances are framework-owned.",
     );
-    this.#snapshot = ContextParts.cloneContextSnapshot(snapshot);
-    this.#commandBus = commandBus;
-    this.#eventBus = eventBus;
-    this.#systemEventBus = systemEventBus;
-    this.#publisher = publisher;
-    contextEventBuses.set(this, [eventBus, systemEventBus]);
-    this.#stand = stand;
-    this.#systemStand = systemStand;
-    this.#subscriptionRuntime = subscriptionRuntime;
-    this.#storageFactory = storageFactory;
-    this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(deliveryStrategy);
+    this.#snapshot = ContextParts.cloneContextSnapshot(input.snapshot);
+    this.#commandBus = input.commandBus;
+    this.#eventBus = input.eventBus;
+    this.#systemEventBus = input.systemEventBus;
+    this.#publisher = input.publisher;
+    this.#stand = input.stand;
+    this.#systemStand = input.systemStand;
+    this.#subscriptionRuntime = input.subscriptionRuntime;
+    this.#storageFactory = input.storageFactory;
+    this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(input.deliveryStrategy);
     this.#commandEndpoint = Object.freeze({
       acceptedCommandTypes: () => this.#commandBus.acceptedCommandTypes(),
       post: (command: Command) => this.#commandBus.post(command),
@@ -821,6 +849,21 @@ export class BoundedContext {
       acceptedEventTypes: () => ContextParts.exposedEventTypeUrls(this.#eventBus),
       post: (event: Event) => ContextParts.postContextEvent(this, event),
     });
+    const delivery = this.#createDelivery(input.storageFactory);
+    this.#entityInbox = delivery.entityInbox;
+    this.#projectionInbox = delivery.projectionInbox;
+    this.#installReferences(input, delivery);
+    this.#registerAndStart(input.repositories, delivery.tenantIndex);
+    Object.freeze(this);
+  }
+
+  /**
+   * Creates tenant-aware Inboxes and their shared readiness signal.
+   *
+   * @param storageFactory Provider supplying the tenant catalog.
+   * @returns Inboxes, tenant index, and readiness signal.
+   */
+  #createDelivery(storageFactory: StorageFactory): ContextDeliveryParts {
     const deliveryReadiness = new DeliveryReadiness();
     const tenantIndex = TenantIndexes.create({
       contextName: this.#snapshot.name.value,
@@ -828,26 +871,40 @@ export class BoundedContext {
       storageFactory,
     });
     const keepTenant = (tenantId: TenantId) => tenantIndex.keep(tenantId);
-    this.#entityInbox = new LocalEntityInbox(
+    const entityInbox = new LocalEntityInbox(
       this.#snapshot.name.value,
       deliveryReadiness,
       keepTenant,
       this.#deliveryStrategy,
     );
-    this.#projectionInbox = new LocalProjectionInbox(
+    const projectionInbox = new LocalProjectionInbox(
       this.#snapshot.name.value,
       deliveryReadiness,
       keepTenant,
     );
+    return { deliveryReadiness, tenantIndex, entityInbox, projectionInbox };
+  }
+
+  /**
+   * Installs framework references used after context construction.
+   *
+   * @param input Prepared framework services.
+   * @param delivery Tenant index and Inboxes prepared for this context.
+   */
+  #installReferences(input: BoundedContextAssembly, delivery: ContextDeliveryParts): void {
+    contextEventBuses.set(this, [this.#eventBus, this.#systemEventBus]);
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
     systemEventPosters.set(this, (event) => this.#publisher.publishSystemEvent(event));
-    contextSystemPairings.set(this, ContextParts.createSystemPairing(this.#snapshot, systemSpec));
-    contextTenantIndexes.set(this, tenantIndex);
-    contextStorageFactories.set(this, storageFactory);
-    contextSubscriptionRuntimes.set(this, subscriptionRuntime);
-    contextSignalPublishers.set(this, publisher);
+    contextSystemPairings.set(
+      this,
+      ContextParts.createSystemPairing(this.#snapshot, input.systemSpec),
+    );
+    contextTenantIndexes.set(this, delivery.tenantIndex);
+    contextStorageFactories.set(this, input.storageFactory);
+    contextSubscriptionRuntimes.set(this, this.#subscriptionRuntime);
+    contextSignalPublishers.set(this, this.#publisher);
     contextClosePhases.set(this, {
       begin: () => {
         this.#beginClose();
@@ -858,13 +915,22 @@ export class BoundedContext {
       this,
       ContextParts.createDeliveryDescriptor(
         this.#snapshot,
-        storageFactory,
-        tenantIndex,
+        input.storageFactory,
+        delivery.tenantIndex,
         this.#entityInbox,
         this.#projectionInbox,
-        deliveryReadiness,
+        delivery.deliveryReadiness,
       ),
     );
+  }
+
+  /**
+   * Registers repositories and starts subscriptions, closing the tenant index on failure.
+   *
+   * @param repositories Prepared repositories.
+   * @param tenantIndex Index to close if registration fails.
+   */
+  #registerAndStart(repositories: readonly RepositoryView[], tenantIndex: TenantIndex): void {
     try {
       this.#registerRepositories(repositories);
       this.#subscriptionRuntime.start();
@@ -879,7 +945,6 @@ export class BoundedContext {
       }
       throw error;
     }
-    Object.freeze(this);
   }
 
   #registerRepositories(repositories: readonly RepositoryView[]): void {
@@ -1164,6 +1229,11 @@ export class BoundedContext {
     if (errors.length > 0) throw new AggregateError(errors, "BoundedContext drain failed.");
   }
 
+  /**
+   * Closes the context's remaining stores and repository registrations.
+   *
+   * @returns Completion after resource closure.
+   */
   async #closeOnce(): Promise<void> {
     const errors: unknown[] = [];
 
@@ -1188,17 +1258,26 @@ export class BoundedContext {
       ContextParts.requireTenantIndex(this).close();
     }, errors);
 
+    await this.#closeRepositories(errors);
+    if (errors.length > 0) {
+      this.#closed = undefined;
+      throw new AggregateError(ContextParts.flattenErrors(errors), "BoundedContext close failed.");
+    }
+    ContextParts.clearContextMetadata(this);
+  }
+
+  /**
+   * Clears repository runtime registration after Stand closure.
+   *
+   * @param errors Failures collected during context closure.
+   */
+  async #closeRepositories(errors: unknown[]): Promise<void> {
     for (const repository of this.#repositoryViews) {
       await ContextParts.closeContextPart(() => {
         repositoryAccess.clearRuntime(repository);
         registeredRepositories.delete(repository);
       }, errors);
     }
-    if (errors.length > 0) {
-      this.#closed = undefined;
-      throw new AggregateError(ContextParts.flattenErrors(errors), "BoundedContext close failed.");
-    }
-    ContextParts.clearContextMetadata(this);
   }
 }
 
@@ -2381,8 +2460,8 @@ const ContextParts = Object.freeze({
     repositories: readonly RepositoryView[],
     deliveryStrategy: DeliveryStrategy,
   ): BoundedContext {
-    return constructBoundedContext(
-      {
+    return constructBoundedContext({
+      snapshot: {
         name: specSnapshot.name,
         tenantMode: ContextParts.toTenantMode(specSnapshot.multitenant),
         spec: specSnapshot,
@@ -2393,13 +2472,13 @@ const ContextParts = Object.freeze({
       publisher,
       stand,
       systemStand,
-      runtime,
+      subscriptionRuntime: runtime,
       systemSpec,
       storageFactory,
       repositories,
       deliveryStrategy,
-      frameworkConstructionToken,
-    );
+      token: frameworkConstructionToken,
+    });
   },
 
   /**

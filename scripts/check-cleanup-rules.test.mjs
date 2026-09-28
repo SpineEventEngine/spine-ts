@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -835,6 +835,147 @@ describe("check-cleanup-rules", () => {
       "modified production/example callables exceed 35 physical lines",
     );
     expect(result.stderr).toContain("register");
+  });
+
+  it("allows documentation and whitespace edits inside an unchanged long wrapper", () => {
+    const repoRoot = createFixture();
+    const path = join(repoRoot, "packages/demo/src/index.ts");
+    const prefix = readFileSync(path, "utf8");
+    const statements = Array.from({ length: 36 }, (_, index) => `  values.push(${index});`);
+    const baseline = [
+      "export const registry = (() => {",
+      "  const values: number[] = [];",
+      ...statements,
+      "  return values;",
+      "})();",
+      "",
+    ].join("\n");
+    writeFileSync(path, prefix + baseline);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "long wrapper baseline"], repoRoot);
+    writeFileSync(
+      path,
+      prefix +
+        baseline
+          .replace("  values.push(1);", "    values.push(1);")
+          .replace(
+            "  return values;",
+            "  /** Describes the unchanged returned values. */\n  return values;",
+          ),
+    );
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it("rejects an executable edit inside a long wrapper", () => {
+    const repoRoot = createFixture();
+    const path = join(repoRoot, "packages/demo/src/index.ts");
+    const prefix = readFileSync(path, "utf8");
+    const statements = Array.from({ length: 36 }, (_, index) => `  values.push(${index});`);
+    const baseline = [
+      "export const registry = (() => {",
+      "  const values: number[] = [];",
+      ...statements,
+      "  return values;",
+      "})();",
+      "",
+    ].join("\n");
+    writeFileSync(path, prefix + baseline);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "long wrapper baseline"], repoRoot);
+    writeFileSync(path, prefix + baseline.replace("values.push(1);", "values.push(100);"));
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "modified production/example callables exceed 35 physical lines",
+    );
+    expect(result.stderr).toContain("anonymous callable");
+  });
+
+  it("rejects a newly added long callable even when most lines are documentation", () => {
+    const repoRoot = createFixture();
+    const path = join(repoRoot, "packages/demo/src/index.ts");
+    const prefix = readFileSync(path, "utf8");
+    const comments = Array.from({ length: 36 }, (_, index) => `  // Explanation ${index}.`);
+    writeFileSync(
+      path,
+      prefix +
+        ["export const callback = (): number => {", ...comments, "  return 1;", "};", ""].join(
+          "\n",
+        ),
+    );
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "modified production/example callables exceed 35 physical lines",
+    );
+    expect(result.stderr).toContain("callback");
+  });
+
+  it("does not reuse one baseline signature to exempt a copied long callable", () => {
+    const repoRoot = createFixture();
+    const path = join(repoRoot, "packages/demo/src/index.ts");
+    const prefix = readFileSync(path, "utf8");
+    const statements = Array.from({ length: 36 }, (_, index) => `  values.push(${index});`);
+    const wrapper = [
+      "(() => {",
+      "  const values: number[] = [];",
+      ...statements,
+      "  return values;",
+      "})()",
+    ].join("\n");
+    writeFileSync(path, `${prefix}export const registry = ${wrapper};\n`);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "long wrapper baseline"], repoRoot);
+    writeFileSync(
+      path,
+      `${prefix}export const registry = ${wrapper};\nexport const copy = ${wrapper};\n`,
+    );
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "modified production/example callables exceed 35 physical lines",
+    );
+  });
+
+  it("treats comment-looking text inside a multiline template as code", () => {
+    const repoRoot = createFixture();
+    const path = join(repoRoot, "packages/demo/src/index.ts");
+    const prefix = readFileSync(path, "utf8");
+    const statements = Array.from({ length: 34 }, (_, index) => `  values.push(${index});`);
+    const baseline = [
+      "export const registry = (() => {",
+      "  const values: number[] = [];",
+      ...statements,
+      "  const text = `first",
+      "// unchanged-looking content",
+      "last`;",
+      "  return { values, text };",
+      "})();",
+      "",
+    ].join("\n");
+    writeFileSync(path, prefix + baseline);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "template wrapper baseline"], repoRoot);
+    writeFileSync(
+      path,
+      prefix + baseline.replace("// unchanged-looking content", "// changed-looking content"),
+    );
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "modified production/example callables exceed 35 physical lines",
+    );
   });
 
   it("does not classify unchanged long production methods as edited after an exact rename", () => {

@@ -180,3 +180,74 @@ queries and detached rereads (25 tests), followed by TypeScript build. Scoped
 lint caught repeated callback style and one non-null assertion in these tests;
 the implementer is correcting those before this checkpoint is pushed and will
 include lint in subsequent handoffs.
+
+Checkpoint 9899b4165 was pushed after scoped lint and the 25 query tests passed.
+Orders now has a separate two-context composition, a real OrderReview reaction,
+and an OrderReviewed Event in the proper signal file. Proto generation,
+example TypeScript compilation and its end-to-end test passed. The ID-only
+query was simplified to an empty column selection, avoiding application use
+of code-generation helpers. Public guides link to the runnable example.
+
+GitHub CLI API access currently returns HTTP 401; credentials were not changed.
+Public GitHub API access succeeds and reports no open PR for this branch.
+SSH pushes continue to succeed. Final-SHA GitHub build evidence therefore
+requires a human-created PR; no PR was created by this task.
+
+Method-size corrections preserve existing construction/start/close steps and
+add no lifecycle framework. The cleanup check, TypeScript build and 372 focused
+tests passed after those extractions. Remaining semantic comments are being
+completed before the review input is frozen.
+
+Mechanical preflight assignment, recorded before dispatch: orchestrator
+function using gpt-6-luna / low, with explicit model/reasoning and no child
+dispatch. After implementation freezes, run generation/build prerequisites,
+affected lint/format/TSDoc/cleanup/docs/Proto checks, focused behavior tests and
+new-source coverage. Save actual output and exit codes. Do not fix authored
+code, run the full release profile, commit or push. Main will inspect results,
+return deterministic findings to the retained implementer, and only then
+dispatch the planned independent review wave.
+
+Preflight exposed a checker false positive: required TSDoc inside the existing
+ServiceValues wrapper caused its unchanged enclosing code to count as a newly
+modified 1,370-line callable. Main rejected a checkpoint-based workaround and
+any IIFE exemption. The retained implementer is responsible for a bounded
+checker correction and regression tests in scripts/check-cleanup-rules.mjs and
+its existing test file. Comment-only edits must not count as executable changes;
+new or code-modified callables retain the same 35-physical-line limit. Restore
+extractions made only to work around this false positive, preserving actual
+feature changes. Systematic-debugging and receiving-code-review guidance was
+read for root-cause verification and evaluation of proposed corrections.
+
+The checker correction passed all 154 existing/focused tests and a subsequent
+new duplicate-copy regression. It compares executable/type tokens with the
+baseline and counts matching baseline callables, so copied new callables do not
+inherit an exception. New or code-modified callables still use 35 physical
+lines, including comments. Comment-looking multiline template content remains
+code. No IIFE or checkpoint exemption was introduced. The ServiceValues token
+sequence is identical to the base; unrelated matcher and command-post bodies
+were restored. Scoped ESLint, cleanup, TSDoc, TypeScript compilation and all
+373 focused runtime/example tests pass after the correction.
+
+Dispatched cross_context_preflight with explicit gpt-6-luna / low and no
+inherited history. Its scope is missing deterministic checks and new-source
+coverage, not a repeated full build or release profile. Authored code is frozen
+for this check. Runtime metadata is not separately exposed by this surface;
+the explicit configured profile meets the dispatch requirement.
+
+Independent preflight passed formatting (including new example files), API docs,
+audience checks, Proto lint/freshness, logging/dependency checks, release readiness
+and diff whitespace checks. Tooling typecheck found a test predicate using `eq`
+instead of a supported comparison operator; returned to the same implementer.
+The 31-test targeted coverage run passed: 97.77% statements, 93.33% branches,
+100% functions/lines. Main checked the raw LCOV after the mechanical report
+mistakenly described the routing file as absent: registered-targets.ts has
+28/28 lines and 20/20 branches covered. EffectiveTenants has 13/13 lines and
+8/10 branches; the implementer will add the missing rejection-path tests while
+correcting the fixture. No runtime or coverage threshold change is needed.
+
+Mechanical corrections are complete: tooling typecheck and scoped lint pass;
+the fixture uses the supported `equal` operator and three direct tenant-error
+tests cover missing/malformed multitenant identity and explicit single-tenant
+identity. Main reran the combined 34-test coverage selection with both new
+runtime files included: 100% statements (45/45), branches (30/30), functions
+(10/10), and lines (41/41). The implementation is frozen for independent review.

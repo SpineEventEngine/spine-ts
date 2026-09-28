@@ -84,6 +84,52 @@ sometimes produces a signal can declare its concrete type alongside
 `undefined`, for example `OrderCreated | undefined`. An asynchronous reaction
 wraps the same result in one `Promise`.
 
+## Cross-context order review
+
+The separate [two-context composition](src/cross-context.ts) keeps the load
+demo's fixed topology unchanged. `Catalog` registers `SkuAggregate` and
+`SkuCatalogProjection`; `Ordering` registers `OrderAggregate` and the
+`OrderReview` Process Manager. Both contexts join one `Server`. When an order
+is created, `OrderReview` reads the SKU catalog in the other context with
+`select(SkuCatalogSchema, {}).byId(event.skuId).read()`, copies the
+current name into its state, and emits `OrderReviewed`.
+
+The catalog projection is eventually consistent. The
+[integration test](test/cross-context.test.ts) waits until `SkuRegistered` is
+visible there before posting `CreateOrder`; if the record is missing when the
+reaction runs, the review captures an empty name. An application needing a
+guaranteed name should establish that prerequisite in its workflow.
+
+Run this real command-to-event path from the repository root:
+
+```bash
+pnpm proto:generate
+pnpm exec tsc -b examples/orders --pretty false
+pnpm exec vitest run examples/orders/test/cross-context.test.ts --maxWorkers=1
+```
+
+The exported `OrderReviewContexts.create(storageFactory)` returns the
+two contexts for adding to a single `Server`; it does not start another load
+scenario or change `createDatastoreOrdersContext()`.
+
+`Server.atPort()` returns a builder. Start it after adding both contexts, then
+close the running server when the application stops:
+
+<!-- docs-snippet-path: examples/orders/test/cross-context.test.ts -->
+
+```ts
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { Server } from "@spine-event-engine/server";
+import { OrderReviewContexts } from "../src/cross-context.js";
+
+// Use in-memory storage for this local example.
+const { catalog, orders } = await OrderReviewContexts.create(new InMemoryStorageFactory());
+// Register both contexts with the same server builder to enable the catalog read.
+const running = await Server.atPort(0).add(catalog).add(orders).start();
+// Close the running server during application shutdown.
+await running.close();
+```
+
 ## 🗄️ Try the same model with durable storage
 
 The local scenario deliberately uses memory. Its application assembly accepts

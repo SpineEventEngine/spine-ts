@@ -12,7 +12,15 @@
  * the License.
  */
 
-import { clone, create, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
+import {
+  clone,
+  create,
+  ScalarType,
+  toBinary,
+  type Message,
+  type MessageShape,
+} from "@bufbuild/protobuf";
+import type { EntityQueryPlan } from "@spine-event-engine/core/spi/entity-query-plan";
 import {
   AnySchema,
   Int32ValueSchema,
@@ -52,6 +60,7 @@ import {
   EntityOption_Kind,
 } from "@spine-event-engine/proto";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
+import type { Query } from "@spine-event-engine/proto/client";
 import { EntityTypeNameSchema } from "@spine-event-engine/proto/generated/spine/system/server/entity_type_pb.js";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
@@ -3086,37 +3095,55 @@ const ProcessManagerQueries = Object.freeze({
     context.tenantId = effectiveTenant;
     return processManagerQueryAccess.bind(
       entity,
-      async (plan, schema, query) => {
-        const routes = RegisteredTargets.forStand(runtime.stand);
-        const typeUrl = TypeUrls.derive(schema);
-        const target = routes?.find(typeUrl);
-        if (routes !== undefined && target === undefined) {
-          throw new Error(`No bounded context registered query target "${typeUrl}".`);
-        }
-        if (target !== undefined && target.context.stand() !== runtime.stand) {
-          const visibility = target.repository.metadata.visibility;
-          if (visibility !== "query" && visibility !== "full") {
-            throw new Error(`Query target "${typeUrl}" does not have query visibility.`);
-          }
-        }
-        const registeredSchema = target?.repository.stateSchema ?? schema;
-        if (target !== undefined) routes?.validate(target, plan);
-        const destination = EffectiveTenants.destination(
-          effectiveTenant,
-          target?.context.isMultitenant ?? runtime.context.multitenant,
-        );
-        const results = await QueryReader.read(
-          target?.context.stand() ?? runtime.stand,
-          registeredSchema,
-          plan,
-          destination,
-          10_000,
-          query,
-        );
-        return Object.freeze(results.map((result) => clone(schema, result.state as never)));
-      },
+      (plan, schema, query) =>
+        ProcessManagerQueries.read(runtime, effectiveTenant, plan, schema, query),
       context,
     );
+  },
+
+  /**
+   * Routes a handler read to the registered state target before reaching storage.
+   *
+   * @typeParam Schema State schema supplied by the handler.
+   * @param runtime Current context services and local Stand.
+   * @param tenantId Effective tenant of the current operation.
+   * @param plan Compiled read criteria.
+   * @param schema State schema supplied by the handler.
+   * @param query Wire query carrying the actor and requested fields.
+   * @returns Detached state snapshots decoded with the caller's schema.
+   */
+  async read<Schema extends DescriptorMessageSchema>(
+    runtime: RepositoryRuntime,
+    tenantId: TenantId,
+    plan: EntityQueryPlan,
+    schema: Schema,
+    query: Query,
+  ): Promise<readonly MessageShape<Schema>[]> {
+    const routes = RegisteredTargets.forStand(runtime.stand);
+    const typeUrl = TypeUrls.derive(schema);
+    const target = routes?.find(typeUrl);
+    if (routes !== undefined && target === undefined)
+      throw new Error(`No bounded context registered query target "${typeUrl}".`);
+    if (target !== undefined && target.context.stand() !== runtime.stand) {
+      const visibility = target.repository.metadata.visibility;
+      if (visibility !== "query" && visibility !== "full")
+        throw new Error(`Query target "${typeUrl}" does not have query visibility.`);
+    }
+    const registeredSchema = target?.repository.stateSchema ?? schema;
+    if (target !== undefined) routes?.validate(target, plan);
+    const destination = EffectiveTenants.destination(
+      tenantId,
+      target?.context.isMultitenant ?? runtime.context.multitenant,
+    );
+    const results = await QueryReader.read(
+      target?.context.stand() ?? runtime.stand,
+      registeredSchema,
+      plan,
+      destination,
+      10_000,
+      query,
+    );
+    return Object.freeze(results.map((result) => clone(schema, result.state as never)));
   },
 });
 

@@ -1,6 +1,6 @@
 # Cross-context queries review log
 
-Status: implementation and preflight in progress; no code-review result claimed.
+Status: implementation and preflight complete; independent review in progress.
 
 ## Plan review
 
