@@ -1,6 +1,6 @@
 # Entity dependency configuration review
 
-Status: Earlier requested reviews and release checks passed. Constructor simplification and documentation corrections requested on 28 September await focused independent review and renewed verification. Snapshot-only publication is retained. No PR CI result exists for this branch.
+Status: Constructor simplification and documentation corrections requested on 28 September are implemented and independently reviewed; all accepted findings are resolved. Snapshot-only publication is retained. Latest-commit verification is available in [PR #11 checks](https://github.com/SpineEventEngine/spine-ts/pull/11/checks).
 Branch: `entity-dependency-configuration`.
 Base: `794bd524b8875f10a75777a41bbebe1dbece600b`.
 

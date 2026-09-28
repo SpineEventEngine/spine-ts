@@ -586,3 +586,11 @@ configured single test worker while CI verifies the same commit. The
 orchestrator-dispatched constructor_final_verification function uses explicit
 Luna/low, no edits or children, and writes logs under
 /tmp/spine-constructor-simplification.zYbTVX. Do not rerun other full profiles.
+
+Source correction `769a82a57` and record-format correction `5dc74cb43` were
+pushed immediately. Local release verification started on that unchanged source
+tree. Final record status links to PR #11 checks as the durable source of
+latest-commit CI results, avoiding a further commit solely to copy a successful
+CI result back into the repository. Local verification output remains in
+`/tmp/spine-constructor-simplification.zYbTVX/release.log`. The final status-only
+update changes no source, tests, configuration, examples, or public documentation.

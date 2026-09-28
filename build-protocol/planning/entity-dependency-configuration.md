@@ -1,6 +1,6 @@
 # Entity dependency configuration
 
-Status: Constructor simplification and plain-language documentation correction in progress after the earlier completed implementation, reviews and release verification. Snapshot-only publication is retained. No PR CI result is claimed.
+Status: Constructor simplification and plain-language documentation correction implemented and independently reviewed. Snapshot-only publication is retained. Verification for the latest commit is reported by [PR #11 checks](https://github.com/SpineEventEngine/spine-ts/pull/11/checks); the work log records local checks and their scope.
 Date: 27 September 2026.
 Branch: `entity-dependency-configuration`.
 Base: freshly fetched official `origin/master`,
