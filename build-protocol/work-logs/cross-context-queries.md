@@ -251,3 +251,31 @@ tests cover missing/malformed multitenant identity and explicit single-tenant
 identity. Main reran the combined 34-test coverage selection with both new
 runtime files included: 100% statements (45/45), branches (30/30), functions
 (10/10), and lines (41/41). The implementation is frozen for independent review.
+
+Checkpoint 78addab7a was pushed. The four independent review concerns were
+completed with explicit profiles and no inherited history/memory. Limited
+surface capacity required sequencing; the complete wave was collected before
+one correction batch. Findings: Proto/generated mask-name mismatch, missing
+actual PM query during shutdown, and missing persisted-work replay query.
+Documentation was clean. Details and acceptance are in the review log.
+
+The mask regression reproduced locally and across contexts with the existing
+ProjectProfileState mutable_note field and typed mask("mutableNote"). The
+correction validates Proto field names and applies translated property names
+after decoding state, not to the stored EntityRecord envelope. Both focused
+cases pass. Real paused-PM shutdown cases pass in both registration orders,
+with the separate direct-CommandBus race test retained. Recovery now closes one
+Server, resumes stored delivery in fresh contexts, and proves that existing PM
+state is restored (observed construction versions 0 then 1) before a foreign
+read. Stand's required TSDoc corrections are comment-only. A rejection-triggered
+query case is the remaining plan acceptance test before the correction freezes.
+
+The correction is frozen. The real ReviewRejected Event carries the rejected
+command context, and its PM handler declares a supported optional Command
+result. Its foreign read passes. Mask tests proved two successive failures:
+unknown Proto field before validation correction, then lost property before
+decoded-state masking correction. Both local/foreign cases are now green.
+The final affected PM/Stand suites pass 77 tests; tooling typecheck, scoped
+ESLint/Prettier, cleanup and TSDoc all pass. Only RegisteredTargets, Stand and
+the PM-query test changed in this correction. API/reliability re-review follows;
+no broad release profile has yet run.

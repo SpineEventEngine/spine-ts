@@ -13,13 +13,24 @@
  */
 
 import { create, type MessageShape } from "@bufbuild/protobuf";
-import { AnyMessages, EntityColumn, EntityQuery, TypeUrls } from "@spine-event-engine/core";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import {
+  AnyMessages,
+  EntityColumn,
+  EntityQuery,
+  Identifiers,
+  TypeUrls,
+} from "@spine-event-engine/core";
 import { GeneratedEntityColumns } from "@spine-event-engine/core/codegen";
 import {
   ActorContextSchema,
   CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
+  EventContextSchema,
+  EventIdSchema,
+  EventSchema,
+  RejectionEventContextSchema,
   TenantIdSchema,
   UserIdSchema,
   VersionSchema,
@@ -33,21 +44,28 @@ import {
   BoundedContext,
   type DescriptorMessageSchema,
   EntityHandlers,
+  type EntityHandlersMetadata,
   type EntityOptions,
   ProcessManager,
   Projection,
   Repository,
+  EventRouting,
+  HandlerRegistryIngestor,
   Server,
 } from "../../src/index.js";
 import { processManagerQueryAccess } from "../../src/entity/entity.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { QueryReader } from "../../src/services/query-reader.js";
 import { RegisteredTargets } from "../../src/services/registered-targets.js";
+import { Delivery } from "../../src/delivery/delivery.js";
+import { ShardIndex } from "../../src/delivery/shard-index.js";
 import {
   type ProjectState,
   ProjectStateSchema,
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
+  type ProjectProfileState,
+  ProjectProfileStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import { ProcessManagerStateSchema } from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
 import {
@@ -63,9 +81,14 @@ import {
   type CreateReviewProject,
   CreateReviewProjectSchema,
 } from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
+import {
+  type ReviewRejected,
+  ReviewRejectedSchema,
+} from "../../test-fixtures/generated/handler-registry/rejections_pb.js";
 
 const closePhase = vi.hoisted(() => ({
   onBegin: undefined as ((context: unknown) => void) | undefined,
+  onDetach: undefined as (() => void) | undefined,
 }));
 
 vi.mock("../../src/context/bounded-context.js", async (importOriginal) => {
@@ -77,6 +100,20 @@ vi.mock("../../src/context/bounded-context.js", async (importOriginal) => {
       beginClose(context: BoundedContext) {
         actual.boundedContextAccess.beginClose(context);
         closePhase.onBegin?.(context);
+      },
+    },
+  };
+});
+
+vi.mock("../../src/server/server-environment.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/server/server-environment.js")>();
+  return {
+    ...actual,
+    serverEnvironmentAccess: {
+      ...actual.serverEnvironmentAccess,
+      detach(...args: Parameters<typeof actual.serverEnvironmentAccess.detach>) {
+        closePhase.onDetach?.();
+        return actual.serverEnvironmentAccess.detach(...args);
       },
     },
   };
@@ -113,6 +150,58 @@ const reviewColumns = EntityColumn.register(
 class ProjectQueue extends ProcessManager<string, typeof ProjectQueueStateSchema> {}
 
 class ProjectReview extends ProcessManager<string, typeof ProjectReviewStateSchema> {}
+
+class ProjectProfile extends Projection<string, typeof ProjectProfileStateSchema> {}
+
+class MaskedProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSchema> {
+  static results: readonly ProjectProfileState[] = [];
+  static failure: unknown;
+
+  async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
+    try {
+      MaskedProjectLookup.results = await this.select(ProjectProfileStateSchema, {})
+        .byId(command.id)
+        .mask("mutableNote")
+        .read();
+    } catch (error) {
+      MaskedProjectLookup.failure = error;
+      throw error;
+    }
+    return create(ProjectionEventSchema, { id: command.id, name: "masked" });
+  }
+}
+
+class PausedProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSchema> {
+  static onEntered: (() => void) | undefined;
+  static wait: Promise<void> | undefined;
+  static results: readonly ProjectOverviewState[] = [];
+
+  async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
+    PausedProjectLookup.onEntered?.();
+    await PausedProjectLookup.wait;
+    PausedProjectLookup.results = await this.select(ProjectOverviewStateSchema, projectionColumns)
+      .byId(command.id)
+      .read();
+    return create(ProjectionEventSchema, { id: command.id, name: "resumed" });
+  }
+}
+
+class RejectionProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSchema> {
+  static results: readonly ProjectOverviewState[] = [];
+
+  async onRejected(rejection: ReviewRejected): Promise<CreateReviewProject | undefined> {
+    RejectionProjectLookup.results = await this.select(
+      ProjectOverviewStateSchema,
+      projectionColumns,
+    )
+      .byId(rejection.id)
+      .read();
+    this.update((draft) => {
+      draft.queue = `rejected ${String(RejectionProjectLookup.results.length)}`;
+    });
+    return undefined;
+  }
+}
 
 class HiddenLookup extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   static failure: unknown;
@@ -305,6 +394,87 @@ function hiddenLookupRepository(): Repository<typeof HiddenLookup> {
   });
 }
 
+function maskedLookupRepository(): Repository<typeof MaskedProjectLookup> {
+  return new Repository({
+    entityType: MaskedProjectLookup,
+    schema: ProcessManagerStateSchema,
+    handlers: HandlerMetadataValues.defineArity(
+      MaskedProjectLookup,
+      ProcessManagerStateSchema,
+      (builder) => [builder.assign(CreateReviewProjectSchema, "assign")],
+      [
+        {
+          kind: "command-assignment",
+          methodName: "assign",
+          parameterCount: 1,
+          origin: "domestic",
+          outcomes: { returned: [ProjectionEventSchema], thrown: [] },
+        },
+      ],
+    ),
+    events: [ProjectionEventSchema],
+  });
+}
+
+function pausedLookupRepository(): Repository<typeof PausedProjectLookup> {
+  return new Repository({
+    entityType: PausedProjectLookup,
+    schema: ProcessManagerStateSchema,
+    handlers: HandlerMetadataValues.defineArity(
+      PausedProjectLookup,
+      ProcessManagerStateSchema,
+      (builder) => [builder.assign(CreateReviewProjectSchema, "assign")],
+      [
+        {
+          kind: "command-assignment",
+          methodName: "assign",
+          parameterCount: 1,
+          origin: "domestic",
+          outcomes: { returned: [ProjectionEventSchema], thrown: [] },
+        },
+      ],
+    ),
+    events: [ProjectionEventSchema],
+  });
+}
+
+function rejectionLookupRepository(): Repository<typeof RejectionProjectLookup> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: RejectionProjectLookup,
+        stateSchema: ProcessManagerStateSchema,
+        handlers: [
+          {
+            kind: "command-reaction",
+            methodName: "onRejected",
+            input: { schema: ReviewRejectedSchema, origin: "domestic" },
+            outcomes: { returned: [CreateReviewProjectSchema], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<RejectionProjectLookup, typeof ProcessManagerStateSchema>;
+  return new Repository({
+    entityType: RejectionProjectLookup,
+    schema: ProcessManagerStateSchema,
+    handlers,
+    eventRouting: EventRouting.create<string>().route(ReviewRejectedSchema, (rejection) => [
+      rejection.id,
+    ]),
+  });
+}
+
+function profileRepository(): Repository<typeof ProjectProfile> {
+  return new Repository({
+    entityType: ProjectProfile,
+    schema: ProjectProfileStateSchema,
+    handlers: EntityHandlers.define(ProjectProfile, ProjectProfileStateSchema, () => []),
+  });
+}
+
 function queryCommand(id: string, name: string, tenant?: string, suffix?: string) {
   return create(CommandSchema, {
     id: create(CommandIdSchema, {
@@ -329,7 +499,78 @@ function queryCommand(id: string, name: string, tenant?: string, suffix?: string
   });
 }
 
+async function startPausedQueryServer(order: "target-first" | "handler-first") {
+  const projects = BoundedContext.singleTenant("PausedProjects")
+    .add(projectionRepository())
+    .build();
+  const workflows = BoundedContext.singleTenant("PausedWorkflows")
+    .add(pausedLookupRepository())
+    .build();
+  await projects
+    .stand()
+    .update(
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+    );
+  const contexts = order === "target-first" ? [projects, workflows] : [workflows, projects];
+  const server = Server.atPort(0);
+  for (const context of contexts) server.add(context);
+  return { projects, workflows, running: await server.start() };
+}
+
+function reviewRejectionEvent(id: string) {
+  return create(EventSchema, {
+    id: create(EventIdSchema, { value: `rejected-${id}` }),
+    context: create(EventContextSchema, {
+      producerId: Identifiers.pack("string", id),
+      timestamp: create(TimestampSchema, { seconds: 1n }),
+      version: create(VersionSchema, { number: 1 }),
+      rejection: create(RejectionEventContextSchema, {
+        command: queryCommand(id, "review"),
+      }),
+    }),
+    message: AnyMessages.pack(ReviewRejectedSchema, create(ReviewRejectedSchema, { id })),
+  });
+}
+
 describe("Process Manager querying", () => {
+  it.each(["local", "foreign"])(
+    "retains a masked camelCase state property on the %s registered route",
+    async (route) => {
+      MaskedProjectLookup.results = [];
+      MaskedProjectLookup.failure = undefined;
+      const workflowBuilder = BoundedContext.singleTenant(`MaskedWorkflows-${route}`).add(
+        maskedLookupRepository(),
+      );
+      if (route === "local") workflowBuilder.add(profileRepository());
+      const workflows = workflowBuilder.build();
+      const projects = BoundedContext.singleTenant(`MaskedProjects-${route}`)
+        .add(profileRepository())
+        .build();
+      const target = route === "local" ? workflows : projects;
+      await target
+        .stand()
+        .update(
+          ProjectProfileStateSchema,
+          create(ProjectProfileStateSchema, { id: "project-1", mutableNote: "visible" }),
+        );
+      const server = Server.atPort(0).add(workflows);
+      if (route === "foreign") server.add(projects);
+      const running = await server.start();
+
+      try {
+        await workflows.commandBus().post(queryCommand("project-1", "masked"));
+        await vi.waitFor(() => {
+          expect(MaskedProjectLookup.failure).toBeUndefined();
+          expect(MaskedProjectLookup.results).toHaveLength(1);
+        });
+        expect(MaskedProjectLookup.results[0]?.mutableNote).toBe("visible");
+      } finally {
+        await running.close();
+      }
+    },
+  );
+
   it("finds a registered Entity in another context of the same server", async () => {
     ProjectLookup.reset();
     const projects = BoundedContext.singleTenant("Projects").add(projectionRepository()).build();
@@ -391,6 +632,100 @@ describe("Process Manager querying", () => {
       await running.close();
     } finally {
       all.mockRestore();
+    }
+  });
+
+  it("replays persisted Process Manager work with a foreign state read after restart", async () => {
+    ProjectLookup.reset();
+    const factory = new InMemoryStorageFactory();
+    const createdVersions: number[] = [];
+    const buildContexts = () => {
+      const projects = BoundedContext.singleTenant("ReplayProjects")
+        .withStorageFactory(factory)
+        .add(projectionRepository())
+        .build();
+      const workflows = BoundedContext.singleTenant("ReplayWorkflows")
+        .withStorageFactory(factory)
+        .add(processManagerRepository(identityNameFilter, createdVersions))
+        .build();
+      return { projects, workflows };
+    };
+    const first = buildContexts();
+    await first.projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+      );
+    const initial = await Server.atPort(0).add(first.workflows).add(first.projects).start();
+    await first.workflows.commandBus().post(queryCommand("project-1", "ready"));
+    await vi.waitFor(async () => {
+      const current = await first.workflows.stand().read(ProcessManagerStateSchema, "project-1");
+      expect(current?.queue).toBe("read 1");
+    });
+    await initial.close();
+    ProjectLookup.reset();
+
+    const pending = queryCommand("project-1", "ready", undefined, "replay");
+    const delivery = new Delivery({
+      context: { name: "ReplayWorkflows", multitenant: false },
+      storageFactory: factory,
+    });
+    await delivery.inbox.receive({
+      inboxId: {
+        targetId: Identifiers.pack("string", "project-1"),
+        targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
+      },
+      signalId: pending.id?.uuid ?? "missing-command-id",
+      signal: AnyMessages.pack(CommandSchema, pending, { validate: false }),
+      label: "HANDLE_COMMAND",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      whenReceived: new Date(),
+      version: 1n,
+    });
+    const restarted = buildContexts();
+    const running = await Server.atPort(0).add(restarted.workflows).add(restarted.projects).start();
+
+    try {
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results).toEqual([
+          create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+        ]);
+      });
+      expect(ProjectLookup.failure).toBeUndefined();
+      expect(createdVersions).toEqual([0, 1]);
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("reads a foreign state while reacting to a rejected review command", async () => {
+    RejectionProjectLookup.results = [];
+    const projects = BoundedContext.singleTenant("RejectedProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.singleTenant("RejectedWorkflows")
+      .add(rejectionLookupRepository())
+      .build();
+    await projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+      );
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+
+    try {
+      await workflows.eventBus().post(reviewRejectionEvent("project-1"));
+      await vi.waitFor(() => {
+        expect(RejectionProjectLookup.results[0]?.name).toBe("ready");
+      });
+      await expect(
+        workflows.stand().read(ProcessManagerStateSchema, "project-1"),
+      ).resolves.toMatchObject({ queue: "rejected 1" });
+    } finally {
+      await running.close();
     }
   });
 
@@ -458,6 +793,48 @@ describe("Process Manager querying", () => {
         ]);
       } finally {
         closePhase.onBegin = undefined;
+        release();
+        await running.close();
+      }
+    },
+  );
+
+  it.each(["target-first", "handler-first"] as const)(
+    "completes a paused Process Manager select during %s shutdown",
+    async (order) => {
+      let enter!: () => void;
+      let release!: () => void;
+      let detach!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const resumed = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const detaching = new Promise<void>((resolve) => {
+        detach = resolve;
+      });
+      PausedProjectLookup.onEntered = enter;
+      PausedProjectLookup.wait = resumed;
+      PausedProjectLookup.results = [];
+      const { projects, workflows, running } = await startPausedQueryServer(order);
+      closePhase.onDetach = detach;
+
+      try {
+        await workflows.commandBus().post(queryCommand("project-1", "paused"));
+        await entered;
+        const closing = running.close();
+        await detaching;
+        expect(() => projects.stand().stateTypes()).not.toThrow();
+        release();
+        await vi.waitFor(() => {
+          expect(PausedProjectLookup.results[0]?.name).toBe("ready");
+        });
+        await closing;
+      } finally {
+        closePhase.onDetach = undefined;
+        PausedProjectLookup.onEntered = undefined;
+        PausedProjectLookup.wait = undefined;
         release();
         await running.close();
       }

@@ -118,7 +118,7 @@ export class RegisteredTargets {
       }
     }
     for (const path of plan.mask?.paths ?? []) {
-      if (!target.repository.stateSchema.fields.some((field) => field.localName === path)) {
+      if (!target.repository.stateSchema.fields.some((field) => field.name === path)) {
         throw new Error(`Query mask field "${path}" is not registered for "${target.typeUrl}".`);
       }
     }
