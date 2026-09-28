@@ -561,8 +561,7 @@ checking the implementation. Main made optional/defaulted parameters explicit
 for clarity anyway.
 
 GitHub now has human-created PR #11 for this branch. Its previous head
-`32b02d626bfed6892c25aff755a01e727b56a9aa` passed Build verify in run
-36409104223. That is not evidence for the pending correction. Attach the
+`32b02d626bfed6892c25aff755a01e727b56a9aa` passed Build verify in run 36409104223. That is not evidence for the pending correction. Attach the
 existing PR, push the correction and require green CI at its final SHA. The
 observed CI duration is about 20 minutes, additional to active correction work.
 
