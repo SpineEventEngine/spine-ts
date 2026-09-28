@@ -1,5 +1,89 @@
 # Entity dependency configuration work log
 
+## Process naming correction — 28 September 2026
+
+Status: naming changes implemented and independently reviewed; both wording
+findings resolved. Base: `e2c45f7ce68eb6786c90b96ba499dbd36246f757`.
+Final local verification is recorded in
+`/tmp/spine-process-names.GMToac/release.log`; final-commit CI is available through
+[PR #11 checks](https://github.com/SpineEventEngine/spine-ts/pull/11/checks).
+The human limited this correction to PR #11 and its description, retaining the
+framework `ProcessManager`. The plan's requirements ledger records the scope.
+
+Classification: standard bounded example/test naming correction. Rename
+`AssignmentManager` to `TaskAssignment` throughout its example schema, code,
+tests and current documentation. Rename the new process classes in this PR's
+server tests to domain names. Other existing process declarations are unchanged;
+moving their registrations does not make them new domain concepts. No framework
+runtime, public framework types, message fields, or handler behavior may change.
+The example's renamed Proto type gets a new type URL; it uses in-memory storage,
+and this correction provides no old-name aliases or migration infrastructure.
+
+Acceptance: matching source/schema/registration/docs names, preserved dependency
+injection and restoration tests, no new `Manager` process declarations in the
+PR, unchanged `ProcessManager`, and a short Markdown description without CI
+status. Existing tests are renamed first; the missing generated-schema export
+provides the initial failing check before source generation. No new behavior
+tests or naming-test infrastructure are required.
+
+Estimate: 0.3–0.5 hours active for naming, generation, focused verification,
+review, integration and description, plus approximately 20 minutes CI waiting.
+Use the same branch and checkout. Keep snapshot.16; this branch already has its
+required version-only commit. Do not publish or change npm tags.
+
+Skills: reread receiving-code-review, subagent-driven-development (including
+implementation template), requesting-code-review (including reviewer template),
+test-driven-development and verification-before-completion. Inventory checked
+against the exposed session catalog, expected-skills manifest, bounded
+`rg --files` of installed entrypoints and the installed skill lock. Use existing
+project logs, roles and bounded review rather than extra skill-specific records
+or worktrees. No library selection or JVM investigation is needed for a rename
+that leaves framework behavior unchanged.
+
+Assignments, recorded before dispatch: implementer `gpt-6-sol` / `medium`, one
+writer for example/schema/test/docs renames; TypeScript/API reviewer
+`gpt-6-sol` / `medium` for matching declarations, Proto names and registration;
+documentation reviewer `gpt-6-luna` / `medium` for current prose and snippet names;
+mechanical verification function `gpt-6-luna` / `low` for the final release profile.
+Desktop supports explicit model/reasoning dispatch. Each dispatch must specify
+both fields; actual runtime introspection is unavailable, so configured
+profiles are the acceptance evidence absent a reported mismatch. Children may
+not spawn children, commit, push, or change branches.
+
+Review dispositions: TypeScript/API and documentation review required. Style is
+checked through the naming rule and mechanical diff; no production structure
+changes. Reliability and security are N/A because dispatch, persistence and
+resource behavior are unchanged; the example type-URL rename remains explicitly
+in the TypeScript/API review scope. Run cheap formatting, Proto, compiler and
+focused checks first, then one `verify:release` profile. Inspection of
+`scripts/verify-task.mjs` showed that this branch's complete diff would make
+`verify:task` run all tests anyway; the release command already bounds that run
+to one worker and collects coverage. Run it alongside final-commit CI, not as a
+repeated diagnostic. Also rename the changed `QueryProcessManager` test class
+to `ProjectLookup`; its constructor was modified by this PR.
+
+Implementation evidence: renamed the Projects process, Proto state, generated
+references, registrations, topology assertions, current guide examples, and the
+five affected server test class declarations. Existing unrelated process
+declarations and the framework `ProcessManager` remain unchanged. The renamed
+topology test failed before generation because `TaskAssignmentSchema` was
+missing (two expected failures); after generation and rebuilding its registry,
+the focused Projects topology and four server suites passed 406/406 tests with
+one worker. The Projects Proto module passed 1/1; TypeScript build of server
+and Projects, `proto:lint`, TSDoc, formatting, and `git diff --check` passed.
+Two existing Proto formatting patterns in the changed Projects file required
+Buf's whole-file option layout, producing formatting-only lines beyond the
+rename. The two Proto workflow test files passed 133/133 under Vitest. An
+earlier direct Node test-runner invocation was invalid for those Vitest files;
+the corrected invocation passed. Full release verification remains with the
+orchestrator after review.
+
+Review correction: the Projects reference now names task assignment
+dependencies, and the registration helper's TSDoc states that only
+`TaskAssignment` receives the supplied dependency. These two prose findings
+required no runtime change; scoped formatting, TSDoc, and diff checks were
+rerun after correction.
+
 ## Implementation start — 27 September 2026
 
 Branch: `entity-dependency-configuration`.

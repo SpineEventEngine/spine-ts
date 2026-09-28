@@ -59,10 +59,7 @@ function expectRepositoryIdentityError(
 class TaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
 class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {}
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {}
-class RequiredServiceProcessManager extends ProcessManager<
-  string,
-  typeof ProcessManagerStateSchema
-> {
+class RequiredTaskAssignment extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   constructor(
     options: EntityOptions<string, typeof ProcessManagerStateSchema>,
     readonly service: string,
@@ -70,10 +67,7 @@ class RequiredServiceProcessManager extends ProcessManager<
     super(options);
   }
 }
-class OptionalServiceProcessManager extends ProcessManager<
-  string,
-  typeof ProcessManagerStateSchema
-> {
+class OptionalTaskAssignment extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   constructor(
     options: EntityOptions<string, typeof ProcessManagerStateSchema>,
     readonly service?: string,
@@ -662,27 +656,27 @@ describe("repository identity", () => {
       });
       // @ts-expect-error required service constructor needs onCreate.
       new Repository({
-        entityType: RequiredServiceProcessManager,
+        entityType: RequiredTaskAssignment,
         schema: ProcessManagerStateSchema,
       });
       new Repository({
-        entityType: RequiredServiceProcessManager,
+        entityType: RequiredTaskAssignment,
         schema: ProcessManagerStateSchema,
         onCreate(options) {
           expectTypeOf(options).toEqualTypeOf<
             EntityOptions<string, typeof ProcessManagerStateSchema>
           >();
-          return new RequiredServiceProcessManager(options, "ready");
+          return new RequiredTaskAssignment(options, "ready");
         },
       });
       new Repository({
-        entityType: OptionalServiceProcessManager,
+        entityType: OptionalTaskAssignment,
         schema: ProcessManagerStateSchema,
       });
       new Repository({
-        entityType: OptionalServiceProcessManager,
+        entityType: OptionalTaskAssignment,
         schema: ProcessManagerStateSchema,
-        onCreate: (options) => new OptionalServiceProcessManager(options, "optional"),
+        onCreate: (options) => new OptionalTaskAssignment(options, "optional"),
       });
       new Repository({
         entityType: TaskProcessManager,

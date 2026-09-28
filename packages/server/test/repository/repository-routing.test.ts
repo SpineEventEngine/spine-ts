@@ -320,7 +320,7 @@ class InjectedProjectProjection extends Projection<string, typeof ProjectOvervie
   }
 }
 
-class InjectedProjectManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
+class ProjectCreation extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   constructor(
     options: EntityOptions<string, typeof ProjectQueueStateSchema>,
     private readonly service: ProjectLabelService,
@@ -2133,10 +2133,10 @@ describe("repository signal routing", () => {
     const seen: number[] = [];
     const service: ProjectLabelService = { label: (name) => `${name} managed` };
     const repository = new Repository({
-      entityType: InjectedProjectManager,
+      entityType: ProjectCreation,
       schema: ProjectQueueStateSchema,
       handlers: HandlerMetadataValues.defineArity(
-        InjectedProjectManager,
+        ProjectCreation,
         ProjectQueueStateSchema,
         (builder) => [builder.assign(CreateProjectSchema, "createProject")],
         [
@@ -2151,7 +2151,7 @@ describe("repository signal routing", () => {
       events: [ProjectCreatedSchema],
       onCreate(options) {
         seen.push(options.version?.number ?? -1);
-        return new InjectedProjectManager(options, service);
+        return new ProjectCreation(options, service);
       },
     });
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();

@@ -67,7 +67,7 @@ They do not change how the example is deployed.
 
 ## Give a Process Manager an application service
 
-When a task is created, `AssignmentManager` adds its weight to a saved counter.
+When a task is created, `TaskAssignment` adds its weight to a saved counter.
 The application supplies the weight calculation through an
 `AssignmentWeightService`. This keeps the calculation separate from the
 Process Manager's stored state.
@@ -86,7 +86,7 @@ await context.close();
 ```
 
 Inside `createProjectManagementContext()`, registration uses
-`onCreate: (options) => new AssignmentManager(options, weights)`. Spine supplies
+`onCreate: (options) => new TaskAssignment(options, weights)`. Spine supplies
 the ID, state, version, and lifecycle options. The application adds its shared
 service. Each restored Process Manager receives that service again; the
 service itself is not saved in storage. The callback is synchronous. Prepare

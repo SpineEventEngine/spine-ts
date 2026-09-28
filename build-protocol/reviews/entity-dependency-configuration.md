@@ -1,10 +1,37 @@
 # Entity dependency configuration review
 
-Status: Constructor simplification and documentation corrections requested on 28 September are implemented and independently reviewed; all accepted findings are resolved. Snapshot-only publication is retained. Latest-commit verification is available in [PR #11 checks](https://github.com/SpineEventEngine/spine-ts/pull/11/checks).
+Status: Constructor simplification, documentation and process naming corrections requested on 28 September are implemented and independently reviewed; all accepted findings are resolved. Snapshot-only publication is retained. Latest-commit verification is available in [PR #11 checks](https://github.com/SpineEventEngine/spine-ts/pull/11/checks).
 Branch: `entity-dependency-configuration`.
 Base: `794bd524b8875f10a75777a41bbebe1dbece600b`.
 
-## 28 September correction review
+## Process naming correction review — 28 September
+
+Base: `e2c45f7ce68eb6786c90b96ba499dbd36246f757`. Scope and acceptance are
+recorded in the current plan ledger and work-log naming section. Fresh reviewers
+received only these requirements, the naming diff and relevant files, with no
+conversation history or memory. TypeScript/API reviewer `process_names_api_review`
+used explicit `gpt-6-sol` / `medium`; documentation reviewer
+`process_names_docs_review` used explicit `gpt-6-luna` / `medium`. Their dispatch
+fields match the recorded assignments; separate runtime introspection is not
+available, and neither reported a profile mismatch.
+
+The API review checked declarations, generated registry, example type-URL change,
+manifests and preserved tests. The documentation review checked current prose,
+TSDoc and the proposed PR text. Accepted batch: correct the stale Assignment
+Manager heading and narrow the registration comment because only
+`TaskAssignment` receives the assignment dependency. Other references and the
+PR description passed. Both findings are deterministic wording corrections;
+focused format/TSDoc checks confirm the fix without another review round.
+
+Style is covered by the naming rule and mechanically inspected rename; no
+production structure changes. Reliability and security are N/A because no
+dispatch, storage, concurrency or resource behavior changes. The example Proto
+name and type URL change is within the API review's explicit scope; no legacy
+aliases or storage migration are added for this in-memory example. Full local
+verification and exact-final-commit CI results remain required and are linked
+through PR #11 checks, avoiding a follow-up evidence-only commit.
+
+## 28 September constructor correction review
 
 Correction base: `32b02d626bfed6892c25aff755a01e727b56a9aa`.
 Requirements: remove unnecessary constructor type machinery while retaining

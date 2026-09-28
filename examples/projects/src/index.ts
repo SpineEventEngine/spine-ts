@@ -49,7 +49,7 @@ import {
 } from "../generated/spine/examples/projects/events_pb.js";
 import {
   ActivityFeedSchema,
-  AssignmentManagerSchema,
+  TaskAssignmentSchema,
   AssignmentViewSchema,
   AssigneeWorkloadSchema,
   AuditManagerSchema,
@@ -549,17 +549,17 @@ const unitAssignmentWeightService: AssignmentWeightService = Object.freeze({
 /**
  * Counts task assignments using an application-supplied weight service.
  */
-export class AssignmentManager extends ProcessManager<string, typeof AssignmentManagerSchema> {
+export class TaskAssignment extends ProcessManager<string, typeof TaskAssignmentSchema> {
   // prettier-ignore
 
   /**
-   * Initializes the manager with framework state and the shared assignment weight service.
+   * Initializes task assignment with framework state and the shared assignment weight service.
    *
    * @param options Identity, state, Version, and lifecycle supplied by the repository.
    * @param weights Application service used by task-created handlers.
    */
   constructor(
-    options: EntityOptions<string, typeof AssignmentManagerSchema>,
+    options: EntityOptions<string, typeof TaskAssignmentSchema>,
     private readonly weights: AssignmentWeightService,
   ) {
     super(options);
@@ -574,7 +574,7 @@ export class AssignmentManager extends ProcessManager<string, typeof AssignmentM
     this.update((draft) =>
       Object.assign(
         draft,
-        create(AssignmentManagerSchema, {
+        create(TaskAssignmentSchema, {
           id: this.id,
           updates: draft.updates + this.weights.weightFor(event),
         }),
@@ -842,7 +842,7 @@ export const projectManagementTopology: {
     })),
   ],
   processManagers: [
-    { name: "AssignmentManager", event: "TaskCreated", behavior: "increments workflow updates" },
+    { name: "TaskAssignment", event: "TaskCreated", behavior: "increments workflow updates" },
     { name: "DueDateManager", event: "TaskCreated", behavior: "increments workflow updates" },
     { name: "StatusManager", event: "TaskCreated", behavior: "increments workflow updates" },
     {
@@ -874,7 +874,7 @@ export const projectManagementTopology: {
 /**
  * Creates the fixed project-management topology with in-memory storage.
  *
- * @param weights Shared service used by each new or restored AssignmentManager instance.
+ * @param weights Shared service used by each new or restored TaskAssignment instance.
  * @returns The assembled bounded context.
  */
 export async function createProjectManagementContext(
@@ -885,7 +885,7 @@ export async function createProjectManagementContext(
     .add(ProjectAggregate)
     .add(TaskAggregate)
     .add(PersonAggregate);
-  return ProjectRegistration.managers(
+  return ProjectRegistration.processes(
     ProjectRegistration.projections(builder),
     weights,
   ).buildAsync();
@@ -926,19 +926,19 @@ const ProjectRegistration = {
   },
 
   /**
-   * Registers generated Process Managers with the assignment service.
+   * Registers the processes and supplies TaskAssignment with its dependency.
    *
    * @param builder Context builder receiving the Process Managers.
-   * @param weights Shared service passed to AssignmentManager instances.
+   * @param weights Shared service passed to TaskAssignment instances.
    * @returns The builder with its Process Managers registered.
    */
-  managers(
+  processes(
     builder: BoundedContextBuilder,
     weights: AssignmentWeightService,
   ): BoundedContextBuilder {
     return builder
-      .add(AssignmentManager, {
-        onCreate: (options) => new AssignmentManager(options, weights),
+      .add(TaskAssignment, {
+        onCreate: (options) => new TaskAssignment(options, weights),
       })
       .add(DueDateManager)
       .add(StatusManager)

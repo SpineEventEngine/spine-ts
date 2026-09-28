@@ -58,6 +58,9 @@ therefore includes those cleanup gates.
   frozen, and unchanged baseline code is excluded.
 - Keep names short and explicit. Avoid `Utils`. Avoid repeating domain context
   already fixed by the file, class, package, or subsystem.
+- Name application processes after their domain purpose, rather than adding
+  `Manager` to their names. Keep the framework type `ProcessManager`; its name
+  describes an established Spine concept.
 - Code names must have no more than four semantic components, counting each
   capitalized word boundary as a component. Prefer up to three components.
 - Callback names must start with `on`; callback type names must start with

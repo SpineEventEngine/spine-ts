@@ -54,15 +54,15 @@ uses an assignment-weight service:
 
 ```ts
 import { BoundedContext } from "@spine-event-engine/server";
-import { AssignmentManager, type AssignmentWeightService } from "../src/index.js";
+import { TaskAssignment, type AssignmentWeightService } from "../src/index.js";
 
 // Create shared services before starting the context.
 const weights: AssignmentWeightService = { weightFor: () => 2 };
 const builder = BoundedContext.singleTenant("Assignments")
   .withGeneratedRegistryRoot(new URL("..", import.meta.url))
-  .add(AssignmentManager, {
+  .add(TaskAssignment, {
     // Forward Spine's options and add the service required by the constructor.
-    onCreate: (options) => new AssignmentManager(options, weights),
+    onCreate: (options) => new TaskAssignment(options, weights),
   });
 ```
 

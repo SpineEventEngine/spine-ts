@@ -33,13 +33,13 @@ import { describe, expect, it, vi } from "vitest";
 import { CreateProjectSchema } from "../generated/spine/examples/projects/commands_pb.js";
 import { ProjectSummarySchema } from "../generated/spine/examples/projects/read_models_pb.js";
 import { CreateTaskSchema } from "../generated/spine/examples/projects/commands_pb.js";
-import { AssignmentManagerSchema } from "../generated/spine/examples/projects/read_models_pb.js";
+import { TaskAssignmentSchema } from "../generated/spine/examples/projects/read_models_pb.js";
 import { TaskSchema } from "../generated/spine/examples/projects/entities_pb.js";
 
 const metadata = new SignalMetadata();
 
 describe("project-management load example", () => {
-  it("passes one shared weight service to restored AssignmentManager instances", async () => {
+  it("passes one shared weight service to restored TaskAssignment instances", async () => {
     const { createProjectManagementContext } = await import("../dist/src/index.js");
     let weightCalls = 0;
     const weights = {
@@ -74,7 +74,7 @@ describe("project-management load example", () => {
         expect(weightCalls).toBe(2);
       });
       await expect(
-        context.stand().readVersioned(AssignmentManagerSchema, taskId),
+        context.stand().readVersioned(TaskAssignmentSchema, taskId),
       ).resolves.toMatchObject({ state: { updates: 6 }, version: { number: 2 } });
     } finally {
       await context.close();
@@ -102,7 +102,7 @@ describe("project-management load example", () => {
       }
 
       await vi.waitFor(async () => {
-        expect(await context.stand().readVersioned(AssignmentManagerSchema, taskId)).toMatchObject({
+        expect(await context.stand().readVersioned(TaskAssignmentSchema, taskId)).toMatchObject({
           state: { updates: 2 },
           version: { number: 2 },
         });

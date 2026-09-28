@@ -274,7 +274,7 @@ class GeneratedTaskProcessManager extends ProcessManager<string, typeof ProcessM
     });
   }
 }
-class InjectedGeneratedTaskProcessManager extends GeneratedTaskProcessManager {
+class ConfiguredTaskAssignment extends GeneratedTaskProcessManager {
   constructor(
     options: EntityOptions<string, typeof ProcessManagerStateSchema>,
     readonly service: string,
@@ -377,11 +377,11 @@ describe("BoundedContext assembly", () => {
   it("requires creation options for generated classes with required constructor services", () => {
     const assertGeneratedCreationTypes = () => {
       // @ts-expect-error the generated repository cannot construct the required service alone.
-      BoundedContext.singleTenant("Tasks").add(InjectedGeneratedTaskProcessManager);
-      BoundedContext.singleTenant("Tasks").add(InjectedGeneratedTaskProcessManager, {
-        onCreate: (options) => new InjectedGeneratedTaskProcessManager(options, "ready"),
+      BoundedContext.singleTenant("Tasks").add(ConfiguredTaskAssignment);
+      BoundedContext.singleTenant("Tasks").add(ConfiguredTaskAssignment, {
+        onCreate: (options) => new ConfiguredTaskAssignment(options, "ready"),
       });
-      BoundedContext.singleTenant("Tasks").add(InjectedGeneratedTaskProcessManager, {
+      BoundedContext.singleTenant("Tasks").add(ConfiguredTaskAssignment, {
         onCreate: () =>
           // @ts-expect-error generated onCreate must return the registered class.
           new GeneratedTaskProcessManager(
@@ -395,7 +395,7 @@ describe("BoundedContext assembly", () => {
   it("uses generated onCreate for a Process Manager constructor service", async () => {
     const registryRoot = createGeneratedRegistryRoot([
       {
-        entityType: InjectedGeneratedTaskProcessManager,
+        entityType: ConfiguredTaskAssignment,
         stateSchema: ProcessManagerStateSchema,
         handlers: [
           {
@@ -411,10 +411,10 @@ describe("BoundedContext assembly", () => {
     const seen: number[] = [];
     const context = await BoundedContext.singleTenant("Tasks")
       .withGeneratedRegistryRoot(registryRoot)
-      .add(InjectedGeneratedTaskProcessManager, {
+      .add(ConfiguredTaskAssignment, {
         onCreate(options) {
           seen.push(options.version?.number ?? -1);
-          return new InjectedGeneratedTaskProcessManager(options, " via client");
+          return new ConfiguredTaskAssignment(options, " via client");
         },
       })
       .buildAsync();

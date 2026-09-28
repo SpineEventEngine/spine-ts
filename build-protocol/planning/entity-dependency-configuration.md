@@ -1,6 +1,6 @@
 # Entity dependency configuration
 
-Status: Constructor simplification and plain-language documentation correction implemented and independently reviewed. Snapshot-only publication is retained. Verification for the latest commit is reported by [PR #11 checks](https://github.com/SpineEventEngine/spine-ts/pull/11/checks); the work log records local checks and their scope.
+Status: Constructor simplification, plain-language documentation and process naming corrections implemented and independently reviewed. Snapshot-only publication is retained. Verification for the latest commit is reported by [PR #11 checks](https://github.com/SpineEventEngine/spine-ts/pull/11/checks); the work log records local checks and their scope.
 Date: 27 September 2026.
 Branch: `entity-dependency-configuration`.
 Base: freshly fetched official `origin/master`,
@@ -8,6 +8,11 @@ Base: freshly fetched official `origin/master`,
 
 ## Human-Imposed Requirements Ledger
 
+- PR naming correction: keep the framework `ProcessManager` type, but replace
+  application and test process names introduced or changed by this PR that end
+  in `Manager`. Keep unrelated pre-existing examples outside this correction.
+  The PR description must use the corrected names, cover external dependencies
+  rather than services alone, and omit CI status. Return copy-pasteable Markdown.
 - Update local master, then use a new descriptive branch from that commit.
 - Investigate how repositories configure Entity instances in the latest Spine
   JVM and how applications supply external dependencies.

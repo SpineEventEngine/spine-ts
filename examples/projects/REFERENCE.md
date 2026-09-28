@@ -19,9 +19,9 @@ complete tenant to its configured database; Datastore routes it to a native
 namespace. Neither provider uses the Bounded Context name as a physical
 partition.
 
-## Assignment Manager dependency
+## Task assignment dependencies
 
-`AssignmentManager` takes `EntityOptions<string, typeof AssignmentManagerSchema>`
+`TaskAssignment` takes `EntityOptions<string, typeof TaskAssignmentSchema>`
 and an `AssignmentWeightService` in its constructor. Its `TaskCreated`
 handler asks `weightFor(event)` how much to add to its stored `updates`
 counter. `createProjectManagementContext(weights)` registers it through

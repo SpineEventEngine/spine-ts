@@ -239,7 +239,7 @@ its constructor, but Spine creates the Process Manager when a message arrives.
 Use `onCreate` to connect the two: Spine supplies the Entity's state, and your
 callback supplies the service.
 
-The Projects example's `AssignmentManager` takes an `AssignmentWeightService`
+The Projects example's `TaskAssignment` takes an `AssignmentWeightService`
 after its normal `EntityOptions`. Its handler asks that service for a task's
 weight and adds the result to its stored counter. Register it like this:
 
@@ -247,7 +247,7 @@ weight and adds the result to its stored counter. Register it like this:
 
 ```ts
 import { BoundedContext } from "@spine-event-engine/server";
-import { AssignmentManager, type AssignmentWeightService } from "../src/index.js";
+import { TaskAssignment, type AssignmentWeightService } from "../src/index.js";
 
 // Set up the service once, before the context starts receiving messages.
 const weights: AssignmentWeightService = {
@@ -256,9 +256,9 @@ const weights: AssignmentWeightService = {
 
 const builder = BoundedContext.singleTenant("Assignments")
   .withGeneratedRegistryRoot(new URL("..", import.meta.url))
-  .add(AssignmentManager, {
+  .add(TaskAssignment, {
     // Keep Spine's ID, state, version, and lifecycle options intact.
-    onCreate: (options) => new AssignmentManager(options, weights),
+    onCreate: (options) => new TaskAssignment(options, weights),
   });
 
 // buildAsync() loads the generated handler registry for this application.
