@@ -1,6 +1,7 @@
 # Process Manager queries across contexts
 
-Status: Approved plan; implementation in progress.
+Status: Implemented and independently reviewed; local release verification passed.
+GitHub CI awaits a human-created PR for this branch.
 Date: 28 September 2026.
 Branch: `cross-context-queries`.
 Base: official `origin/master`, `2324311be8c23024f66cb2ba702fbe99a99e7dfb`.

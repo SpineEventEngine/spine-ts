@@ -1,6 +1,7 @@
 # Cross-context queries review log
 
-Status: independent reviews complete; final release verification in progress.
+Status: independent reviews and local release verification complete; GitHub CI
+awaits a human-created PR.
 
 ## Plan review
 
@@ -226,3 +227,25 @@ The adjacent non-draining client stream test now awaits its close notification
 before unchanged assertions. All 201 tests in the two affected files pass,
 with tooling, lint, format, cleanup and TSDoc checks passing. The same independent
 reviewer rechecked the final diff and found no further reliability issue.
+
+## Final verification
+
+At code checkpoint `506b73018`, cheap preflight and `pnpm verify:release` pass
+(exit 0): 304 files and all 5,061 tests. Global coverage is 93.28% statements,
+90.06% branches, 93.12% functions and 94.43% lines. No threshold was lowered or
+coverage exclusion added. `node scripts/release-cli.mjs prepare --check` also
+passes (exit 0), including all 19 publishable package tarballs and consumer
+installation, compilation and imports. Nothing was published.
+
+New effective-tenant handling has 13/13 lines, 2/2 functions and 10/10 branches
+covered. RegisteredTargets has 38/40 lines, 10/10 functions and 23/26 branches;
+remaining installation collision guards are preceded by Server admission checks,
+and the defensive release identity mismatch is not exercised. The Orders example
+runs in two real-Server tests through its compiled JavaScript; authored-source
+LCOV reports zero hits, not source coverage. Runtime routing, tenant rejection,
+visibility, recovery, retryable cleanup and shutdown have focused regression
+tests in the passing suite.
+
+All accepted findings are resolved. GitHub reports no PR for this branch, and
+the Build workflow runs on PRs. Final-SHA CI is therefore unverified, not green.
+The human has been asked to open the PR; creating it is not authorized here.

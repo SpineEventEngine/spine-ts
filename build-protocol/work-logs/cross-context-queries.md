@@ -388,3 +388,40 @@ pass. Focused independent re-review is clean and confirms exact shutdown-order
 assertions remain. Commit and push the test-only correction, then run cheap
 preflight and the complete release profile again. The prior failed attempts
 remain recorded; none is claimed as successful coverage evidence.
+
+## Local verification complete
+
+Pushed code checkpoint `506b7301845999c2d675a4b16ad7fcce0a38d692` passes the
+mandatory cheap checks and full `pnpm verify:release` (exit 0). All 304 test
+files and 5,061 tests pass. Fresh coverage: statements 24,021/25,749 (93.28%),
+branches 14,134/15,693 (90.06%), functions 6,119/6,571 (93.12%), lines
+22,199/23,506 (94.43%). No thresholds or exclusions changed.
+
+`node scripts/release-cli.mjs prepare --check` passes (exit 0): all 19 package
+tarballs at `2.0.0-snapshot.17` pass consumer install, build and import checks.
+All 31 workspace versions were updated in the required version-only commit;
+dependency pins and lockfile changes were separate. No publication occurred.
+
+Fresh LCOV was inspected. EffectiveTenant is fully covered (13 lines, two
+functions, ten branches). RegisteredTargets covers 38/40 lines, 10/10 functions
+and 23/26 branches: remaining defensive installation guards are intercepted by
+Server admission, and release's defensive identity-mismatch branch is unhit.
+Server covers 356/363 lines, 80/80 functions and 125/142 branches; Stand covers
+268/274 lines, 64/64 functions and 124/140 branches. The larger Repository module
+covers 1,525/1,617 lines, 441/451 functions and 808/934 branches, with the new
+query route exercised. Two Orders tests execute the compiled example against
+a real Server; its authored-source LCOV entry has zero hits because the tests
+import compiled output. Do not describe that as source coverage.
+
+The verification function used explicit Luna/low as assigned; its raw results
+were independently checked by main. Current-run local logs and exit files are
+under `/tmp/spine-cross-context-queries.ef2mk2/release4-*`. Accepted independent
+review findings are resolved. The final update changes records only, so it needs
+format and diff checks, not another complete runtime test run.
+
+Remaining external step: open the feature PR and check CI for its final SHA.
+The public GitHub API still returns no PR for this branch, Build runs only on
+PRs, and the local GitHub CLI credentials return 401. SSH pushes and public
+read-only API access work. The human has been asked to open the PR; no PR
+creation, merge, publication or credential change is authorized. Local work is
+verified, but final-SHA CI and protocol completion are not claimed.

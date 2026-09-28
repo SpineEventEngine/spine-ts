@@ -18,7 +18,10 @@ Current approved work: [Process Manager queries across contexts](planning/cross-
 on `cross-context-queries`, based on official master `2324311be8`. Preserve the
 current effective tenant, reject duplicate Entity registrations and incompatible
 query destinations, and drain handlers before closing queried contexts. The
-work and review logs record implementation, verification and remaining checks.
+implementation, independent reviews, full release suite and package-consumer
+checks are complete. All 5,061 tests pass at code checkpoint `506b73018`; all
+coverage thresholds pass. GitHub CI awaits a human-created PR for the branch.
+The work and review logs record the evidence and this remaining check.
 
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
 remotely closed. The complete-replica deployment correction is closed through
