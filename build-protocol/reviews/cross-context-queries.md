@@ -151,3 +151,41 @@ fresh reliability recheck uses gpt-6-sol / medium. Both have no inherited
 history/memory and receive original requirements plus source/tests, not prior
 review conclusions as proof. Public APIs/docs have not changed in this fix;
 their prior clean dispositions stand. No full release check has run yet.
+
+Final security recheck identified two further startup cases: overlapping
+asynchronous builds can close a shared, not-yet-associated context; service
+construction can fail after attachment without cleanup. Main compared base
+2324311be8 and confirmed both underlying gaps predate this feature. They affect
+the new association lifecycle, so a bounded architecture consultation is
+required before choosing corrections or explicit scope dispositions. Existing
+requirements-splitter role is dispatched with explicit gpt-6-astra / high,
+no history/memory and no children, to inspect these two cases only and propose
+the smallest correction without a new lifecycle framework. No broad release
+check runs while this is unresolved.
+
+The Astra/high consultation confirms bounded scope: protect admitted prebuilt
+contexts before any awaited builder, reserve returned builder contexts, and
+hand off synchronously to installed routes. Keep partial-build cleanup in the
+existing retained FailedStartCleanup group, including retries. Cover services
+and HTTP adapter/listener construction inside the existing post-attachment
+cleanup boundary, not merely the listen call. Queue-limit coercion is existing
+valid behavior and must stay; invalid subscription limits throw. No environment
+generation, public API, tenant or Proto change is authorized. Main accepted this
+design and sent one implementation batch to the retained Sol/medium context.
+This resolves the demonstrated architecture uncertainty; no further broad
+architecture pass is planned absent a concrete new blocker.
+
+The bounded startup correction passes 325 PM/server/lifecycle/context tests,
+tooling typecheck, scoped lint/format, cleanup and TSDoc. It reserves all
+prebuilt contexts before builder awaits, reserves returned contexts, retains
+partial-build cleanup for retry, and covers service/listener construction in
+post-attachment cleanup. Tests reproduce and correct both admission ordering
+cases and service/adapter failure cleanup. One existing HTTP/2 session-order
+assertion failed once; isolated and identical combined reruns passed. This is
+recorded as intermittent evidence, not proof that the assertion is repaired.
+
+Fresh security recheck (gpt-6-sol / high) and reliability recheck (gpt-6-sol /
+medium) will inspect the final changed startup paths and relevant original
+requirements without history/memory. Their scope distinguishes introduced or
+affected defects from unrelated baseline limitations. No public API changes
+or reopened broad documentation work are part of this correction.

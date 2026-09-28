@@ -308,3 +308,15 @@ focused security/lifecycle scenarios and the combined 320-test PM/server/
 lifecycle/context suite pass. Tooling typecheck, scoped ESLint/Prettier,
 cleanup and TSDoc pass. Final fresh security and reliability rechecks follow
 this checkpoint; ordinary API/documentation claims remain unchanged.
+
+Checkpoint a7814bf09 was pushed. Security recheck identified assembly-time
+shared-context cleanup and post-attachment construction gaps. Base inspection
+confirmed both underlying paths predate the task. A bounded independent
+requirements-splitter consultation (explicit Astra/high, no history/memory)
+recommended private startup admission and extending existing retryable cleanup,
+without environment or public API changes. The retained implementer completed
+that correction with RED/GREEN tests. Final scoped verification passes 325
+tests, tooling typecheck, scoped lint/format, cleanup and TSDoc. One HTTP/2
+session-order assertion failed once and passed isolated/combined reruns; no
+unrelated implementation change was made for it. Final review and the broad
+release gate remain pending.

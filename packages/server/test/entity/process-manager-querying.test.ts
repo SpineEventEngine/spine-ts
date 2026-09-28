@@ -91,7 +91,20 @@ const closePhase = vi.hoisted(() => ({
   onDetach: undefined as (() => void) | undefined,
   pauseAttach: undefined as (() => Promise<void>) | undefined,
   failBuild: undefined as ((builder: unknown) => boolean) | undefined,
+  pauseBuild: undefined as ((builder: unknown) => Promise<void> | undefined) | undefined,
+  failAdapter: false,
 }));
+
+vi.mock("@connectrpc/connect-node", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@connectrpc/connect-node")>();
+  return {
+    ...actual,
+    connectNodeAdapter(...args: Parameters<typeof actual.connectNodeAdapter>) {
+      if (closePhase.failAdapter) throw new Error("HTTP adapter construction failed");
+      return actual.connectNodeAdapter(...args);
+    },
+  };
+});
 
 vi.mock("../../src/context/bounded-context.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/context/bounded-context.js")>();
@@ -101,7 +114,10 @@ vi.mock("../../src/context/bounded-context.js", async (importOriginal) => {
       ...actual.boundedContextAccess,
       build(...args: Parameters<typeof actual.boundedContextAccess.build>) {
         if (closePhase.failBuild?.(args[0])) throw new Error("context build failed");
-        return actual.boundedContextAccess.build(...args);
+        const pause = closePhase.pauseBuild?.(args[0]);
+        return pause === undefined
+          ? actual.boundedContextAccess.build(...args)
+          : pause.then(() => actual.boundedContextAccess.build(...args));
       },
       beginClose(context: BoundedContext) {
         actual.boundedContextAccess.beginClose(context);
@@ -762,6 +778,71 @@ describe("Process Manager querying", () => {
     }
   });
 
+  it.each(["before-builder", "after-builder"])(
+    "reserves all prebuilt contexts %s before awaiting a builder",
+    async (position) => {
+      ProjectLookup.reset();
+      const workflows = BoundedContext.singleTenant(`PendingWorkflows-${position}`)
+        .add(processManagerRepository())
+        .build();
+      const original = BoundedContext.singleTenant(`PendingProjects-${position}`)
+        .add(projectionRepository())
+        .build();
+      const intruder = BoundedContext.singleTenant(`PendingIntruder-${position}`)
+        .add(projectionRepository())
+        .build();
+      const delayed = BoundedContext.singleTenant(`DelayedBuilder-${position}`);
+      await original
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "shared", name: "original", priority: 1 }),
+        );
+      let entered!: () => void;
+      let resume!: () => void;
+      const building = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const released = new Promise<void>((resolve) => {
+        resume = resolve;
+      });
+      closePhase.pauseBuild = (builder) => {
+        if (builder !== delayed) return undefined;
+        entered();
+        return released;
+      };
+      const first = Server.atPort(0);
+      if (position === "before-builder") first.add(workflows).add(delayed).add(original);
+      else first.add(delayed).add(workflows).add(original);
+      const firstStart = first.start();
+      await building;
+      const secondStart = Server.atPort(0).add(workflows).add(intruder).start();
+
+      try {
+        await expect(secondStart).rejects.toThrow(/already associated|assembly/);
+        resume();
+        const running = await firstStart;
+        await workflows.commandBus().post(queryCommand("shared", "original"));
+        await vi.waitFor(() => {
+          expect(ProjectLookup.results[0]?.name).toBe("original");
+        });
+        expect(RegisteredTargets.forStand(intruder.stand())).toBeUndefined();
+        await running.close();
+      } finally {
+        closePhase.pauseBuild = undefined;
+        resume();
+        await secondStart.then(
+          (running) => running.close(),
+          () => undefined,
+        );
+        await firstStart.then(
+          (running) => running.close(),
+          () => undefined,
+        );
+      }
+    },
+  );
+
   it("retries failed second-Server cleanup without closing the live context", async () => {
     ProjectLookup.reset();
     const workflows = BoundedContext.singleTenant("RetainedWorkflows")
@@ -810,7 +891,7 @@ describe("Process Manager querying", () => {
     }
   });
 
-  it("preserves a live context when a later context build fails", async () => {
+  it("rejects a live context before invoking a later failing builder", async () => {
     ProjectLookup.reset();
     const workflows = BoundedContext.singleTenant("BuildGuardWorkflows")
       .add(processManagerRepository())
@@ -826,12 +907,18 @@ describe("Process Manager querying", () => {
       );
     const running = await Server.atPort(0).add(workflows).add(projects).start();
     const failing = BoundedContext.singleTenant("BuildGuardFailure");
-    closePhase.failBuild = (builder) => builder === failing;
+    let buildAttempts = 0;
+    closePhase.failBuild = (builder) => {
+      if (builder !== failing) return false;
+      buildAttempts += 1;
+      return true;
+    };
 
     try {
       await expect(Server.atPort(0).add(workflows).add(failing).start()).rejects.toThrow(
-        "context build failed",
+        /assembly/,
       );
+      expect(buildAttempts).toBe(0);
       await workflows.commandBus().post(queryCommand("shared", "ready"));
       await vi.waitFor(() => {
         expect(ProjectLookup.results[0]?.name).toBe("ready");
@@ -839,6 +926,102 @@ describe("Process Manager querying", () => {
     } finally {
       closePhase.failBuild = undefined;
       await running.close();
+    }
+  });
+
+  it("retains partial-build admissions until failed cleanup retries complete", async () => {
+    const projects = BoundedContext.singleTenant("PartialBuildProjects")
+      .add(projectionRepository())
+      .build();
+    const broken = BoundedContext.singleTenant("PartialBuildBroken");
+    closePhase.failBuild = (builder) => builder === broken;
+    let closes = 0;
+    const server = Server.atPort(0)
+      .add(projects)
+      .add(broken)
+      .addResource({
+        close() {
+          closes += 1;
+          if (closes === 1) throw new Error("resource cleanup failed");
+        },
+      });
+
+    try {
+      await expect(server.start()).rejects.toThrow(/cleanup/);
+      expect(closes).toBe(1);
+      expect(RegisteredTargets.forStand(projects.stand())).toBeUndefined();
+      await expect(Server.atPort(0).add(projects).start()).rejects.toThrow(/assembly/);
+      await expect(server.start()).rejects.toThrow(/deferred cleanup completed/);
+      expect(closes).toBe(2);
+      await expect(projects.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
+        "Stand is closed.",
+      );
+    } finally {
+      closePhase.failBuild = undefined;
+    }
+  });
+
+  it("detaches delivery and closes contexts after service option validation fails", async () => {
+    const projects = BoundedContext.singleTenant("InvalidServiceProjects")
+      .add(projectionRepository())
+      .build();
+    let detaches = 0;
+    let closes = 0;
+    closePhase.onDetach = () => {
+      detaches += 1;
+    };
+    const server = Server.atPort(0, { services: { subscriptionLimit: 0 } })
+      .add(projects)
+      .addResource({
+        close() {
+          closes += 1;
+        },
+      });
+
+    try {
+      await expect(server.start()).rejects.toThrow(/subscriptionLimit/);
+      expect(detaches).toBe(1);
+      expect(closes).toBe(1);
+      expect(RegisteredTargets.forStand(projects.stand())).toBeUndefined();
+      await expect(projects.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
+        "Stand is closed.",
+      );
+    } finally {
+      closePhase.onDetach = undefined;
+    }
+  });
+
+  it("retries adapter-construction cleanup without repeating completed phases", async () => {
+    const projects = BoundedContext.singleTenant("AdapterFailureProjects")
+      .add(projectionRepository())
+      .build();
+    let detaches = 0;
+    let closes = 0;
+    closePhase.onDetach = () => {
+      detaches += 1;
+    };
+    closePhase.failAdapter = true;
+    const server = Server.atPort(0)
+      .add(projects)
+      .addResource({
+        close() {
+          closes += 1;
+          if (closes === 1) throw new Error("resource cleanup failed");
+        },
+      });
+
+    try {
+      await expect(server.start()).rejects.toThrow(/cleanup/);
+      expect(detaches).toBe(1);
+      expect(closes).toBe(1);
+      expect(RegisteredTargets.forStand(projects.stand())).toBeDefined();
+      await expect(server.start()).rejects.toThrow(/deferred cleanup completed/);
+      expect(detaches).toBe(1);
+      expect(closes).toBe(2);
+      expect(RegisteredTargets.forStand(projects.stand())).toBeUndefined();
+    } finally {
+      closePhase.failAdapter = false;
+      closePhase.onDetach = undefined;
     }
   });
 
