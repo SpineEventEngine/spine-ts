@@ -46,14 +46,14 @@ describe("provider tenant index", () => {
     index.close();
   });
 
-  it("keeps the single-tenant index empty and rejects recording or later access", async () => {
+  it("reports SINGLE_TENANT without a storage partition and rejects recording or later access", async () => {
     const index = TenantIndexes.create({
       contextName: "Tasks",
       tenantMode: "single-tenant",
       storageFactory: new InMemoryStorageFactory(),
     });
 
-    await expect(index.all()).resolves.toEqual([]);
+    await expect(index.all()).resolves.toEqual([tenant("SINGLE_TENANT")]);
     await expect(index.keep(tenant("tenant-a"))).rejects.toThrow("does not accept");
     index.close();
     await expect(index.all()).rejects.toThrow("closed");

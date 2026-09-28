@@ -29,6 +29,7 @@ import {
   spineServicesAccess,
   type SpineServicesOptions,
 } from "../services/spine-services.js";
+import { RegisteredTargets } from "../services/registered-targets.js";
 import type {
   EnvironmentAttachmentHandle,
   EnvironmentOwnership,
@@ -274,6 +275,7 @@ export class Server {
     }
     let attachment: EnvironmentAttachmentHandle;
     try {
+      new RegisteredTargets(contexts).install(contexts);
       attachment = await serverEnvironmentAccess.attach(this.#environment, {
         ownership,
         descriptors: contexts.map((context) => boundedContextAccess.delivery(context)),

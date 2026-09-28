@@ -129,6 +129,8 @@ import {
 } from "../handler/event-handler-filter.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { QueryReader } from "../services/query-reader.js";
+import { RegisteredTargets } from "../services/registered-targets.js";
+import { EffectiveTenants } from "../context/effective-tenant.js";
 import {
   HandlerMetadataRegistry,
   HandlerMetadataValues,
@@ -3080,21 +3082,38 @@ const ProcessManagerQueries = Object.freeze({
       actorContext === undefined
         ? create(ActorContextSchema)
         : clone(ActorContextSchema, actorContext);
-    if (tenantId !== undefined) {
-      context.tenantId = RepositoryTenants.require(tenantId);
-    }
+    const effectiveTenant = EffectiveTenants.current(runtime.context.multitenant, tenantId);
+    context.tenantId = effectiveTenant;
     return processManagerQueryAccess.bind(
       entity,
       async (plan, schema, query) => {
+        const routes = RegisteredTargets.forStand(runtime.stand);
+        const typeUrl = TypeUrls.derive(schema);
+        const target = routes?.find(typeUrl);
+        if (routes !== undefined && target === undefined) {
+          throw new Error(`No bounded context registered query target "${typeUrl}".`);
+        }
+        if (target !== undefined && target.context.stand() !== runtime.stand) {
+          const visibility = target.repository.metadata.visibility;
+          if (visibility !== "query" && visibility !== "full") {
+            throw new Error(`Query target "${typeUrl}" does not have query visibility.`);
+          }
+        }
+        const registeredSchema = target?.repository.stateSchema ?? schema;
+        if (target !== undefined) routes?.validate(target, plan);
+        const destination = EffectiveTenants.destination(
+          effectiveTenant,
+          target?.context.isMultitenant ?? runtime.context.multitenant,
+        );
         const results = await QueryReader.read(
-          runtime.stand,
-          schema,
+          target?.context.stand() ?? runtime.stand,
+          registeredSchema,
           plan,
-          tenantId,
+          destination,
           10_000,
           query,
         );
-        return Object.freeze(results.map((result) => clone(schema, result.state)));
+        return Object.freeze(results.map((result) => clone(schema, result.state as never)));
       },
       context,
     );
@@ -5819,17 +5838,15 @@ const RepositoryTenants = {
    * @returns Tenant-aware storage context.
    */
   storageContextForCommand(context: StorageMode, command: Command): StorageContext {
-    if (!context.multitenant) {
-      return Object.freeze({ name: context.name, multitenant: false });
-    }
-
     const tenantId = RepositoryTenants.readCommandTenant(command);
-    if (tenantId === undefined)
+    if (context.multitenant && tenantId === undefined)
       throw new Error(`Multitenant command for "${context.name}" requires tenantId.`);
+    const effective = EffectiveTenants.current(context.multitenant, tenantId);
+    if (!context.multitenant) return Object.freeze({ name: context.name, multitenant: false });
     return Object.freeze({
       name: context.name,
       multitenant: true,
-      tenantId: RepositoryTenants.require(tenantId),
+      tenantId: effective,
     });
   },
 
@@ -5841,17 +5858,15 @@ const RepositoryTenants = {
    * @returns Tenant-aware storage context.
    */
   storageContextForEvent(context: StorageMode, event: Event): StorageContext {
-    if (!context.multitenant) {
-      return Object.freeze({ name: context.name, multitenant: false });
-    }
-
     const tenantId = RepositoryTenants.readEventTenant(event);
-    if (tenantId === undefined)
+    if (context.multitenant && tenantId === undefined)
       throw new Error(`Multitenant event for "${context.name}" requires tenantId.`);
+    const effective = EffectiveTenants.current(context.multitenant, tenantId);
+    if (!context.multitenant) return Object.freeze({ name: context.name, multitenant: false });
     return Object.freeze({
       name: context.name,
       multitenant: true,
-      tenantId: RepositoryTenants.require(tenantId),
+      tenantId: effective,
     });
   },
 
@@ -5863,13 +5878,14 @@ const RepositoryTenants = {
    * @returns Tenant-aware storage context.
    */
   storageContextForTenant(context: StorageMode, tenantId: TenantId | undefined): StorageContext {
-    if (!context.multitenant) return Object.freeze({ name: context.name, multitenant: false });
-    if (tenantId === undefined)
+    if (context.multitenant && tenantId === undefined)
       throw new Error(`Multitenant storage for "${context.name}" requires tenantId.`);
+    const effective = EffectiveTenants.current(context.multitenant, tenantId);
+    if (!context.multitenant) return Object.freeze({ name: context.name, multitenant: false });
     return Object.freeze({
       name: context.name,
       multitenant: true,
-      tenantId: RepositoryTenants.require(tenantId),
+      tenantId: effective,
     });
   },
 

@@ -100,3 +100,33 @@ offline frozen installation and release-policy validation pass. Lockfile-only
 resolution reports existing ESLint/glob/node-domexception deprecations; no
 dependency upgrade was made. Candidate registry checks covered all19 public
 packages. No npm tags or publications changed.
+
+Pins/lockfile commit 4e320831c was pushed immediately. Comparison with the prior
+lockfile proves changes are only snapshot.16 -> snapshot.17 substitutions.
+Main prepared the five public prose updates identified by the inventory and
+checked formatting/audience/whitespace; these claims await runtime completion
+and independent review. The implementer remains the only runtime/test writer.
+
+Focused implementation milestones: tenant mismatch before QueryReader and
+foreign SUBSCRIBE-only visibility rejection pass after failing assertions;
+registered schema is used without reference-identity restrictions. General
+SingleTenantIndex.all now reports SINGLE_TENANT and its focused test passes,
+while the existing storage partition key stays unchanged. TypeScript build
+passes after fixing two newly exposed declaration errors. These are narrow
+checks, not release or complete feature acceptance.
+
+## Query and tenant checkpoint
+
+The implementer reports `pnpm exec tsc -b --pretty false` exit 0 and
+`pnpm exec vitest run packages/server/test/entity/process-manager-querying.test.ts
+packages/server/test/context/tenant-index-direct.test.ts
+packages/server/test/services/spine-services.test.ts --maxWorkers=1` exit 0:
+3 files, 137 tests passed. Evidence is in the tool transcript; later verification
+captures logs under `/tmp/spine-cross-context-queries.ef2mk2`.
+
+Effective tenant handling now reaches repository command/event/storage-context
+boundaries, public reads, PM reads and the single-tenant index. The shared lookup
+is used for public state routing too. Query reads use registered schema/metadata,
+not schema-object-reference rejection. The implementer paused writes while main
+formats/lints and captures this intermediate checkpoint. Startup/shutdown tests,
+example, remaining TSDoc and full review/verification are still pending.

@@ -16,6 +16,7 @@ import type { TenantId } from "@spine-event-engine/proto";
 import { type StorageFactory } from "@spine-event-engine/storage";
 import type { TenantCatalog, TenantCatalogProvider } from "@spine-event-engine/storage/provider";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
+import { EffectiveTenants } from "./effective-tenant.js";
 
 type TenantMode = "single-tenant" | "multitenant";
 
@@ -84,7 +85,9 @@ class SingleTenantIndex implements TenantIndex {
 
   all(): Promise<readonly TenantId[]> {
     const closed = this.closedError();
-    return closed === undefined ? Promise.resolve(Object.freeze([])) : Promise.reject(closed);
+    return closed === undefined
+      ? Promise.resolve(Object.freeze([EffectiveTenants.current(false, undefined)]))
+      : Promise.reject(closed);
   }
 
   keep(): Promise<void> {

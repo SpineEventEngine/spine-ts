@@ -100,11 +100,13 @@ import {
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
+import { EffectiveTenants } from "../context/effective-tenant.js";
 import { CommandValidationError } from "../bus/command-errors.js";
 import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
 import { type StandReadResult, type StandUpdate } from "../stand/stand.js";
 import { QueryReader } from "./query-reader.js";
+import { RegisteredTargets } from "./registered-targets.js";
 import { emitServerWarning } from "../server/server-log.js";
 import { managedChildSubscriptionAccess } from "../server/managed-child-subscription.js";
 import {
@@ -180,6 +182,7 @@ export class SpineServices {
     this.#subscriptionLimit = ServiceValues.subscriptionLimit(
       options.subscriptionLimit ?? ServiceValues.defaultSubscriptionLimit,
     );
+    const targets = new RegisteredTargets(this.#contexts);
 
     for (const context of this.#contexts) {
       for (const typeUrl of context.commandBus().acceptedCommandTypes()) {
@@ -188,33 +191,31 @@ export class SpineServices {
         }
       }
 
-      for (const repository of context.registeredRepositories()) {
-        const schema = repository.stateSchema;
-        const typeUrl = TypeUrls.derive(schema);
-        const declaredColumns = repository.metadata.columns.map((column) => column.name);
-        const systemColumns = ["version", "archived", "deleted"];
-        this.#stateRoutes.set(typeUrl, {
-          allowedColumnNames: new Set([...declaredColumns, ...systemColumns]),
-          columnFields: new Map(
-            repository.metadata.columns.flatMap((column) => {
-              const field = schema.fields.find((candidate) => candidate.name === column.name);
-              return field === undefined ? [] : [[column.name, field] as const];
-            }),
-          ),
-          context,
-          entityFamily: repository.entityFamily,
-          idField: ServiceValues.stateRouteIdField(schema, repository.idField),
-          kind: "state",
-          schema,
-          typeUrl,
-        });
-      }
-
       for (const typeUrl of context.eventBus().acceptedEventTypes()) {
         if (!this.#eventRoutes.has(typeUrl)) {
           this.#eventRoutes.set(typeUrl, { context, kind: "event", typeUrl });
         }
       }
+    }
+    for (const { context, repository, typeUrl } of targets.all()) {
+      const schema = repository.stateSchema;
+      const declaredColumns = repository.metadata.columns.map((column) => column.name);
+      const systemColumns = ["version", "archived", "deleted"];
+      this.#stateRoutes.set(typeUrl, {
+        allowedColumnNames: new Set([...declaredColumns, ...systemColumns]),
+        columnFields: new Map(
+          repository.metadata.columns.flatMap((column) => {
+            const field = schema.fields.find((candidate) => candidate.name === column.name);
+            return field === undefined ? [] : [[column.name, field] as const];
+          }),
+        ),
+        context,
+        entityFamily: repository.entityFamily,
+        idField: ServiceValues.stateRouteIdField(schema, repository.idField),
+        kind: "state",
+        schema,
+        typeUrl,
+      });
     }
   }
 
@@ -317,7 +318,13 @@ export class SpineServices {
     }
 
     try {
-      return await this.#query(route, ServiceValues.createReadPlan(target, query, route), tenantId);
+      const effective = EffectiveTenants.current(route.context.isMultitenant, tenantId);
+      const destination = EffectiveTenants.destination(effective, route.context.isMultitenant);
+      return await this.#query(
+        route,
+        ServiceValues.createReadPlan(target, query, route),
+        destination,
+      );
     } catch {
       return ServiceValues.queryErrorResponse("QUERY_READ_ERROR", "Query read failed.");
     }
