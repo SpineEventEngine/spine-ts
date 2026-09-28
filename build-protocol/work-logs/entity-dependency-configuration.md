@@ -3,7 +3,9 @@
 ## Process naming correction — 28 September 2026
 
 Status: naming changes implemented and independently reviewed; both wording
-findings resolved. Base: `e2c45f7ce68eb6786c90b96ba499dbd36246f757`.
+findings resolved. Full local release verification passed: 5,010 tests in 302
+files; coverage statements 93.27%, branches 90.05%, functions 93.08%, lines
+94.42%. Base: `e2c45f7ce68eb6786c90b96ba499dbd36246f757`.
 Final local verification is recorded in
 `/tmp/spine-process-names.GMToac/release.log`; final-commit CI is available through
 [PR #11 checks](https://github.com/SpineEventEngine/spine-ts/pull/11/checks).
@@ -77,6 +79,13 @@ rename. The two Proto workflow test files passed 133/133 under Vitest. An
 earlier direct Node test-runner invocation was invalid for those Vitest files;
 the corrected invocation passed. Full release verification remains with the
 orchestrator after review.
+
+Final verification ran once and exited zero on `6576db6f8`, refreshing only the
+matching Projects manifest/marker generation IDs. Commit those generated IDs
+with this result; no runtime source changed after verification. Check another
+generation for stability and follow final-commit CI without rerunning the full
+local suite. All child dispatches used the recorded explicit profiles, with no
+reported mismatch. The PR description is supplied in chat, not edited remotely.
 
 Review correction: the Projects reference now names task assignment
 dependencies, and the registration helper's TSDoc states that only
