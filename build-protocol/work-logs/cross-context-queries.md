@@ -161,3 +161,22 @@ begin-close operation; no test-only production accessor remains. Main's scoped
 ESLint check then found four deterministic corrections, returned immediately to
 the retained implementer before pushing. Final TSDoc/size checks, example,
 independent review and release verification remain pending.
+
+Checkpoint 0c17c3553 was pushed immediately after the four lint corrections,
+repeat scoped lint/build/251 tests, formatting and whitespace checks passed.
+The implementer resumed in the same context. The approved Orders addition is
+a separate two-context composition, not a rewrite of the datastore benchmark:
+an OrderReview process queries Catalog SKU state by type and records its name.
+
+Proto generation exposed one remaining version-integration step: the nine
+spine-proto-manifest.json packageVersion fields still read snapshot.16. Main
+updated those fields to snapshot.17; subsequent generation must retain the
+corresponding generated IDs and metadata. These belong outside the version-only
+commit. No schema checksum or dependency version was changed by this correction.
+
+Additional focused query evidence passed: all three Entity families, equivalent
+descriptor instances, registered filter/order/mask validation, compound foreign
+queries and detached rereads (25 tests), followed by TypeScript build. Scoped
+lint caught repeated callback style and one non-null assertion in these tests;
+the implementer is correcting those before this checkpoint is pushed and will
+include lint in subsequent handoffs.

@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "generationId": "0cc60053-d763-4c81-a7f0-a7ad847d592b",
   "packageName": "@spine-event-engine/example-project-management",
-  "packageVersion": "2.0.0-snapshot.16",
+  "packageVersion": "2.0.0-snapshot.17",
   "protoFiles": [
     "spine/examples/projects/commands.proto",
     "spine/examples/projects/entities.proto",

@@ -44,11 +44,17 @@ import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { QueryReader } from "../../src/services/query-reader.js";
 import { RegisteredTargets } from "../../src/services/registered-targets.js";
 import {
+  type ProjectState,
+  ProjectStateSchema,
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import { ProcessManagerStateSchema } from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
-import { ProjectQueueStateSchema } from "../../test-fixtures/generated/repository-routing/project_states_pb.js";
+import {
+  type ProjectReviewState,
+  ProjectReviewStateSchema,
+  ProjectQueueStateSchema,
+} from "../../test-fixtures/generated/repository-routing/project_states_pb.js";
 import {
   type ProjectCreated as ProjectionEvent,
   ProjectCreatedSchema as ProjectionEventSchema,
@@ -83,15 +89,30 @@ const projectionColumns = EntityColumn.register(
     priority: { field: ProjectOverviewStateSchema.field.priority, comparison: "ordering" },
   }),
 );
+const equivalentProjectionSchema = { ...ProjectOverviewStateSchema };
 const selectedProjectionColumns: Pick<typeof projectionColumns, "priority"> = projectionColumns;
+const aggregateColumns = EntityColumn.register(
+  ProjectStateSchema,
+  GeneratedEntityColumns.define(ProjectStateSchema, {
+    name: { field: ProjectStateSchema.field.name, comparison: "ordering" },
+  }),
+);
 const queueColumns = EntityColumn.register(
   ProjectQueueStateSchema,
   GeneratedEntityColumns.define(ProjectQueueStateSchema, {
     queue: { field: ProjectQueueStateSchema.field.queue, comparison: "ordering" },
   }),
 );
+const reviewColumns = EntityColumn.register(
+  ProjectReviewStateSchema,
+  GeneratedEntityColumns.define(ProjectReviewStateSchema, {
+    queue: { field: ProjectReviewStateSchema.field.queue, comparison: "ordering" },
+  }),
+);
 
 class ProjectQueue extends ProcessManager<string, typeof ProjectQueueStateSchema> {}
+
+class ProjectReview extends ProcessManager<string, typeof ProjectReviewStateSchema> {}
 
 class HiddenLookup extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   static failure: unknown;
@@ -132,6 +153,8 @@ const identityNameFilter: ProjectionNameFilter = { match: (name) => name };
 
 class ProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   static results: readonly ProjectOverviewState[] = [];
+  static aggregateResults: readonly ProjectState[] = [];
+  static reviewResults: readonly ProjectReviewState[] = [];
   static predicate: unknown;
   static failure: unknown;
 
@@ -144,6 +167,8 @@ class ProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSch
 
   static reset(): void {
     this.results = [];
+    this.aggregateResults = [];
+    this.reviewResults = [];
     this.predicate = undefined;
     this.failure = undefined;
   }
@@ -153,18 +178,47 @@ class ProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSch
   }
 
   async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
-    const query = this.query();
     try {
-      if (ProjectLookup.predicate !== undefined) {
-        query.where(ProjectLookup.predicate as never);
+      if (command.name === "aggregate") {
+        ProjectLookup.aggregateResults = await this.select(ProjectStateSchema, aggregateColumns)
+          .byId(command.id)
+          .read();
+      } else if (command.name === "review") {
+        ProjectLookup.reviewResults = await this.select(ProjectReviewStateSchema, reviewColumns)
+          .byId(command.id)
+          .read();
+      } else if (command.name === "equivalent") {
+        ProjectLookup.results = await this.select(equivalentProjectionSchema, projectionColumns)
+          .byId(command.id)
+          .read();
+      } else if (command.name === "compound") {
+        ProjectLookup.results = await this.query()
+          .where(
+            EntityQuery.all(
+              EntityQuery.either(
+                EntityQuery.eq(projectionColumns.name, "ready"),
+                EntityQuery.eq(projectionColumns.name, "waiting"),
+              ),
+              EntityQuery.gt(projectionColumns.priority, 0),
+            ),
+          )
+          .orderBy(projectionColumns.priority, "desc")
+          .limit(1)
+          .mask("name")
+          .all();
+      } else {
+        const query = this.query();
+        if (ProjectLookup.predicate !== undefined) {
+          query.where(ProjectLookup.predicate as never);
+        }
+        ProjectLookup.results =
+          command.name === "all"
+            ? await query.all()
+            : await query
+                .byId(command.id)
+                .where(EntityQuery.eq(projectionColumns.name, this.nameFilter.match(command.name)))
+                .read();
       }
-      ProjectLookup.results =
-        command.name === "all"
-          ? await query.all()
-          : await query
-              .byId(command.id)
-              .where(EntityQuery.eq(projectionColumns.name, this.nameFilter.match(command.name)))
-              .read();
     } catch (error) {
       ProjectLookup.failure = error;
       throw error;
@@ -440,6 +494,185 @@ describe("Process Manager querying", () => {
         expect(ProjectLookup.results).toEqual([
           create(ProjectOverviewStateSchema, { id: "shared", name: "B", priority: 2 }),
         ]);
+      });
+      expect(ProjectLookup.failure).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("reads a query-visible Aggregate registered in another context", async () => {
+    ProjectLookup.reset();
+    class ProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
+    const projects = BoundedContext.singleTenant("AggregateProjects")
+      .add(
+        new Repository({
+          entityType: ProjectAggregate,
+          schema: ProjectStateSchema,
+          handlers: EntityHandlers.define(ProjectAggregate, ProjectStateSchema, () => []),
+        }),
+      )
+      .build();
+    const workflows = BoundedContext.singleTenant("AggregateWorkflows")
+      .add(processManagerRepository())
+      .build();
+    await projects
+      .stand()
+      .update(ProjectStateSchema, create(ProjectStateSchema, { id: "project-1", name: "ready" }));
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+
+    try {
+      await workflows.commandBus().post(queryCommand("project-1", "aggregate"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.aggregateResults).toHaveLength(1);
+      });
+      expect(ProjectLookup.aggregateResults[0]).toEqual(
+        create(ProjectStateSchema, { id: "project-1", name: "ready" }),
+      );
+      expect(ProjectLookup.failure).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("reads a query-visible Process Manager registered in another context", async () => {
+    ProjectLookup.reset();
+    const reviews = BoundedContext.singleTenant("ReviewProjects")
+      .add(
+        new Repository({
+          entityType: ProjectReview,
+          schema: ProjectReviewStateSchema,
+          handlers: EntityHandlers.define(ProjectReview, ProjectReviewStateSchema, () => []),
+        }),
+      )
+      .build();
+    const workflows = BoundedContext.singleTenant("ReviewWorkflows")
+      .add(processManagerRepository())
+      .build();
+    await reviews
+      .stand()
+      .update(
+        ProjectReviewStateSchema,
+        create(ProjectReviewStateSchema, { id: "project-1", queue: "ready" }),
+      );
+    const running = await Server.atPort(0).add(workflows).add(reviews).start();
+
+    try {
+      await workflows.commandBus().post(queryCommand("project-1", "review"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.reviewResults).toHaveLength(1);
+      });
+      expect(ProjectLookup.reviewResults[0]).toEqual(
+        create(ProjectReviewStateSchema, { id: "project-1", queue: "ready" }),
+      );
+      expect(ProjectLookup.failure).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("accepts an equivalent descriptor instance for a registered state type", async () => {
+    ProjectLookup.reset();
+    expect(equivalentProjectionSchema).not.toBe(ProjectOverviewStateSchema);
+    const projects = BoundedContext.singleTenant("EquivalentProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.singleTenant("EquivalentWorkflows")
+      .add(processManagerRepository())
+      .build();
+    await projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+      );
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+
+    try {
+      await workflows.commandBus().post(queryCommand("project-1", "equivalent"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results).toHaveLength(1);
+      });
+      expect(ProjectLookup.results[0]?.name).toBe("ready");
+      expect(ProjectLookup.failure).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("validates foreign query fields against the registered target", () => {
+    const projects = BoundedContext.singleTenant("ValidatedProjects")
+      .add(projectionRepository())
+      .build();
+    const targets = new RegisteredTargets([projects]);
+    const target = targets.find(TypeUrls.derive(ProjectOverviewStateSchema));
+    if (target === undefined) throw new Error("Projection registration was not found.");
+    const comparison = (column: string) => ({
+      kind: "comparison" as const,
+      column,
+      operator: "eq" as const,
+      value: "ready",
+    });
+
+    expect(() => {
+      targets.validate(target, {
+        predicate: {
+          kind: "all",
+          predicates: [
+            comparison("name"),
+            { kind: "either", predicates: [comparison("priority"), comparison("name")] },
+          ],
+        },
+        order: [{ column: "priority", direction: "desc" }],
+        mask: { paths: ["name"] },
+      });
+    }).not.toThrow();
+    expect(() => {
+      targets.validate(target, { predicate: comparison("other") });
+    }).toThrow('Query column "other" is not registered');
+    expect(() => {
+      targets.validate(target, { order: [{ column: "other", direction: "asc" }] });
+    }).toThrow('Query column "other" is not registered');
+    expect(() => {
+      targets.validate(target, { mask: { paths: ["other"] } });
+    }).toThrow('Query mask field "other" is not registered');
+  });
+
+  it("preserves compound filters, ordering, limit, mask, and detached results across contexts", async () => {
+    ProjectLookup.reset();
+    const projects = BoundedContext.singleTenant("QueryOptionsProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.singleTenant("QueryOptionsWorkflows")
+      .add(processManagerRepository())
+      .build();
+    for (const [id, name, priority] of [
+      ["one", "waiting", 1],
+      ["two", "ready", 2],
+      ["three", "excluded", 3],
+    ] as const) {
+      await projects
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id, name, priority }),
+        );
+    }
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+
+    try {
+      await workflows.commandBus().post(queryCommand("two", "compound"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results).toHaveLength(1);
+      });
+      expect(ProjectLookup.results[0]?.name).toBe("ready");
+      expect(ProjectLookup.results[0]?.priority).toBe(0);
+      const first = ProjectLookup.results[0];
+      if (first === undefined) throw new Error("The selected result was not returned.");
+      first.name = "changed";
+      await workflows.commandBus().post(queryCommand("two", "compound", undefined, "again"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results[0]?.name).toBe("ready");
       });
       expect(ProjectLookup.failure).toBeUndefined();
     } finally {

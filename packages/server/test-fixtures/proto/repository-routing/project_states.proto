@@ -66,6 +66,14 @@ message ProjectQueueState {
   string queue = 2 [(column) = true];
 }
 
+// Query-visible workflow state read by a Process Manager in another context.
+message ProjectReviewState {
+  option (entity).kind = PROCESS_MANAGER;
+  option (entity).visibility = QUERY;
+  string id = 1 [(set_once) = true];
+  string queue = 2 [(column) = true];
+}
+
 message SequencedProjectOverviewState {
   option (entity).kind = PROJECTION;
   ProjectSequenceId id = 1 [(set_once) = true];
