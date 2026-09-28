@@ -200,3 +200,10 @@ required roles; separate runtime metadata was unavailable. Style, API and
 documentation dispositions remain clean, with deterministic checks covering
 the final bounded startup extractions and TSDoc. Full release verification
 and exact-tarball consumer proof now run through a Luna/low mechanical function.
+
+Release checks exposed only deterministic integration omissions after review:
+one header, real-manifest test expectations still at snapshot.16, and a package
+README link escaping the tarball. These were corrected without runtime changes
+or weakening assertions. All six affected packaging/version test files pass
+78 tests, and cheap checks pass. Review dispositions stand; the full release
+check is rerun from the next clean checkpoint, with failed logs preserved.

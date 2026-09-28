@@ -173,7 +173,7 @@ context without naming that context. An Entity in another context must allow
 queries (`query` or `full` visibility). Registering the same Entity type in two
 contexts causes a startup error.
 
-The [Orders example](../../examples/orders/README.md#cross-context-order-review)
+The [Orders example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/orders/README.md#cross-context-order-review)
 shows this in an Event handler and includes a runnable integration test.
 
 Queries preserve the handler's actor and effective tenant; there is no tenant

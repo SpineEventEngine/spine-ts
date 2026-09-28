@@ -338,3 +338,20 @@ comment-only correction; repository-wide lint:copyright and diff checks pass.
 This check should have been included in cheap preflight for the new file.
 No runtime or review disposition changed. Resume the release profile after
 cheap preflight, preserving the failed attempt's logs and exit status.
+
+Release attempt two completed its suite: 298/304 files and 5,054/5,061 tests
+passed. All seven failures trace to integration omissions in main's version/
+documentation work: three tests still asserted snapshot.16, and four packaged
+consumer/release tests rejected the server README's relative link outside its
+tarball. Main corrected real-manifest assertions in four test files to .17 and
+changed the Orders link to the official repository URL, matching existing
+package documentation links. No runtime changes or relaxed assertions. These
+deterministic fixes require focused tests and package proof before the next
+full run, not another specialist review. The failed run did not retain a fresh
+coverage artifact; prior targeted coverage is not full-run evidence.
+
+Focused verification of all six failed files now passes 78/78 tests, including
+real package-consumer preparation. Copyright, cleanup, TSDoc and tooling
+typecheck pass. Main's scoped formatting and diff checks pass. Commit/push the
+version assertion and package-safe link corrections, then authorize release
+attempt three from the clean checkpoint. No runtime changes reopen review.
