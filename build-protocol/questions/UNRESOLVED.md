@@ -16,6 +16,12 @@ None as of 2026-06-27.
 
 ## Resolved In This Round
 
+- 2026-09-28, cross-context queries: search only contexts in the same Server;
+  duplicate Entity registration is an error; preserve the current effective
+  tenant and reject an incompatible destination before reading. Single-tenant
+  execution uses `SINGLE_TENANT`, never a tenant-free mode. No tenant-switching
+  API or remote discovery is requested. The standalone plan review found no
+  further product choices. See planning/cross-context-queries.md.
 - 2026-09-28, Entity dependency configuration: the human chose to advance only
   `snapshot` automatically and leave `latest` unchanged. This replaces the
   earlier two-tag requirement and closes the manual second-tag question.
