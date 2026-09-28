@@ -76,6 +76,22 @@ import { attachDurableSubscriptionCleanup } from "../../src/browser/durable-subs
 import { EnvironmentTests } from "../../src/server/environment.js";
 import type { ILogLayer } from "loglayer";
 
+const observeHttp2Server = vi.hoisted(() =>
+  vi.fn<(server: import("node:http2").Http2Server) => void>(),
+);
+
+vi.mock("node:http2", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:http2")>();
+  return {
+    ...actual,
+    createServer(...args: Parameters<typeof actual.createServer>) {
+      const server = actual.createServer(...args);
+      observeHttp2Server(server);
+      return server;
+    },
+  };
+});
+
 type AuthenticatedBrowserServerOptions = Extract<
   BrowserServerOptions,
   { readonly sessions: SessionResolver }
@@ -318,6 +334,7 @@ describe("Server", () => {
   });
   beforeEach(async () => {
     await resetServerEnvironmentForTest();
+    observeHttp2Server.mockReset();
   });
 
   afterEach(async () => {
@@ -2732,6 +2749,11 @@ describe("Server", () => {
 
   it("closes active HTTP/2 sessions before owned resources", async () => {
     const order: string[] = [];
+    observeHttp2Server.mockImplementationOnce((httpServer) => {
+      httpServer.on("session", (session) => {
+        session.on("close", () => order.push("session"));
+      });
+    });
     const server = await Server.atPort(0)
       .addResource({
         close() {
@@ -2741,12 +2763,13 @@ describe("Server", () => {
       .start();
     const session = http2.connect(server.baseUrl);
     session.on("error", () => undefined);
-    session.on("close", () => order.push("session"));
+    const clientClosed = once(session, "close");
     await once(session, "remoteSettings");
 
     await server.close();
 
     expect(order).toEqual(["session", "resource"]);
+    await clientClosed;
   });
 
   it("destroys non-draining HTTP/2 streams and still closes owned resources", async () => {
@@ -2769,6 +2792,7 @@ describe("Server", () => {
     });
     request.on("error", () => undefined);
     request.on("close", () => closed.push("stream"));
+    const streamClosed = once(request, "close");
     await once(session, "remoteSettings");
     request.write(Buffer.from([0]));
     await nextTurn();
@@ -2783,6 +2807,7 @@ describe("Server", () => {
       session.destroy();
       await close.catch(() => undefined);
     }
+    await streamClosed;
 
     expect(result).toBe("closed");
     expect(closed).toContain("stream");
@@ -2969,7 +2994,7 @@ describe("Server", () => {
     expect(closed).toEqual(["delivery", "tracer"]);
   });
 
-  it("closes singleton facilities only after server network sessions and resources", async () => {
+  it("closes resources before singleton facilities and disconnects clients", async () => {
     const closed: string[] = [];
     ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new CloseTrackingStorageFactory(closed),
@@ -2985,13 +3010,16 @@ describe("Server", () => {
     const session = http2.connect(server.baseUrl);
     session.on("error", () => undefined);
     session.on("close", () => closed.push("session"));
+    const clientClosed = once(session, "close");
     await once(session, "remoteSettings");
 
     await server.close();
-
-    expect(closed).toEqual(["session", "resource"]);
+    // The client close event may follow server-side network and resource cleanup.
+    expect(closed.filter((event) => event !== "session")).toEqual(["resource"]);
+    await clientClosed;
     await environment.close();
-    expect(closed).toEqual(["session", "resource", "storage"]);
+    expect(closed.filter((event) => event !== "session")).toEqual(["resource", "storage"]);
+    expect(closed.filter((event) => event === "session")).toEqual(["session"]);
   });
 
   it("cleans up owned resources but leaves the singleton open when listener open fails", async () => {

@@ -11,10 +11,13 @@ validation before attachment. No open product decisions remain.
 
 ## Required code-review concerns
 
-- Style/maintainability: pending; changed runtime structure and small methods.
-- Documentation: pending; user-facing workflow and example claims.
-- TypeScript/API docs: pending; query/tenant contracts and application snippets.
-- Performance/reliability: pending; tenant isolation, routing, startup and drain.
+- Style/maintainability: complete; accepted test coverage finding corrected.
+- Documentation: complete; guides and example claims match the implementation.
+- TypeScript/API docs: complete; mask findings corrected and rechecked.
+- Performance/reliability: complete; recovery, shutdown and startup findings
+  corrected and rechecked.
+- Final security: complete; Server isolation and failed-start cleanup findings
+  corrected and independently rechecked.
 
 Run independent relevant reviewers after preflight, with fresh contexts and the
 complete Human-Imposed Requirements Ledger. Aggregate findings before fixes.
@@ -207,3 +210,19 @@ README link escaping the tarball. These were corrected without runtime changes
 or weakening assertions. All six affected packaging/version test files pass
 78 tests, and cheap checks pass. Review dispositions stand; the full release
 check is rerun from the next clean checkpoint, with failed logs preserved.
+
+Release attempt three exposed an intermittent pre-existing HTTP/2 test observer
+race. A fresh performance/reliability reviewer (explicit gpt-6-sol / medium,
+without history or memory) confirmed that observing server-side session close
+for ordering and client close separately matches the runtime guarantee, without
+hiding a runtime defect. It found one additional test with the same client-side
+ordering assumption. The retained implementer receives that finding and checks
+the remaining related tests before the correction is accepted. No production
+runtime change is part of this correction.
+
+The residual finding is fixed with a scoped HTTP/2 listener observation hook,
+reset before every test. Exact server-session-before-resource order is retained.
+The adjacent non-draining client stream test now awaits its close notification
+before unchanged assertions. All 201 tests in the two affected files pass,
+with tooling, lint, format, cleanup and TSDoc checks passing. The same independent
+reviewer rechecked the final diff and found no further reliability issue.

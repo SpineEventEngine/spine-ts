@@ -261,6 +261,12 @@ describe("Server lifecycle integration", () => {
 
   it("closes sessions, attachment delivery, resources, and owned facilities in order", async () => {
     const events: string[] = [];
+    // Server-side session closure is the shutdown boundary; client notification may follow later.
+    createHttp2Server.mockImplementationOnce((httpServer) => {
+      httpServer.on("session", (session) => {
+        session.on("close", () => events.push("session"));
+      });
+    });
     const fixture = await lifecycleFixture({
       events,
       settings: {
@@ -288,10 +294,11 @@ describe("Server lifecycle integration", () => {
       const running = await starting;
       const session = http2.connect(running.baseUrl);
       session.on("error", () => undefined);
-      session.on("close", () => events.push("session"));
+      const clientClosed = once(session, "close");
       await once(session, "remoteSettings");
 
       await running.close();
+      await clientClosed;
       await running.close();
       await resetServerEnvironmentForTest();
 

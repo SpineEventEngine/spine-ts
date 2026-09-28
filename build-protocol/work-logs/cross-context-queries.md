@@ -355,3 +355,36 @@ real package-consumer preparation. Copyright, cleanup, TSDoc and tooling
 typecheck pass. Main's scoped formatting and diff checks pass. Commit/push the
 version assertion and package-safe link corrections, then authorize release
 attempt three from the clean checkpoint. No runtime changes reopen review.
+
+Release attempt three at ef56f0dec passed all deterministic gates, then finished
+with 303/304 files and 5,060/5,061 tests passing. The sole failure is the HTTP/2
+session-close ordering assertion previously observed intermittently. Its client
+`session` event was absent while subsequent server cleanup events were present.
+Do not retry merely for green. The retained implementer (explicit configured
+gpt-6-sol / medium) is investigating synchronization versus runtime ordering,
+with bounded reproduction and correction only. No fresh coverage was retained
+by this failed run, and the separate release package proof was not run.
+The public GitHub API still reports no PR for this branch; an asynchronous
+request asks the human to open one because CI runs on PRs only. No PR creation
+or publication is authorized.
+
+The lifecycle failure came from observing the client-side HTTP/2 close event
+as if it were the server-side close awaited by shutdown. Client notification
+can arrive later. The integration test now observes the real server session
+through the existing HTTP adapter test hook and retains the exact cleanup
+sequence; it awaits client disconnection separately. A sibling test with the
+same assumption keeps exact resource/facility sequences and confirms exactly
+one client close event. No runtime change. Both files pass all 201 tests;
+tooling typecheck, scoped lint/format, cleanup and TSDoc pass. A fresh existing
+performance/reliability reviewer is dispatched with explicit gpt-6-sol / medium,
+no inherited history or memory, to check the narrow test correction against
+actual shutdown behavior before another release run. Runtime metadata remains
+unavailable; the explicit configured profile is recorded.
+
+The reviewer found one residual client/server endpoint ordering assumption;
+the retained implementer corrected it and explicitly awaited an adjacent
+client-stream close notification. The final 201-test selection and cheap checks
+pass. Focused independent re-review is clean and confirms exact shutdown-order
+assertions remain. Commit and push the test-only correction, then run cheap
+preflight and the complete release profile again. The prior failed attempts
+remain recorded; none is claimed as successful coverage evidence.
