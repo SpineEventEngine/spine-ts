@@ -1,6 +1,6 @@
 # Entity dependency configuration
 
-Status: Entity implementation, requested reviews, full local release verification and audits complete. Dual-tag publication remains blocked by npm's supported authentication flow.
+Status: Entity implementation, requested reviews, full local release verification and audits complete. The human retained snapshot-only publication on 28 September; the tag-policy blocker is resolved. No PR CI result is claimed.
 Date: 27 September 2026.
 Branch: `entity-dependency-configuration`.
 Base: freshly fetched official `origin/master`,
@@ -18,9 +18,9 @@ Base: freshly fetched official `origin/master`,
   JVM syntax is not required. The preceding analysis is complete.
 - Continue in this chat and checkout; no additional chat or worktree, following
   the human's earlier explicit instruction.
-- Beginning with the next publication, both npm `latest` and `snapshot` must
-  point at the newest published snapshot. The human confirmed both must advance.
-  Do not mutate npm tags during this investigation.
+- Snapshot publications advance only npm `snapshot`; `latest` stays unchanged.
+  The human confirmed this on 28 September, replacing the earlier two-tag
+  requirement. Do not mutate npm tags during this task.
 - Use simple explanations and concrete examples. No new dependency container,
   speculative lifecycle system, or unrelated infrastructure.
 
@@ -65,12 +65,11 @@ immutable dispatch settings are the acceptance evidence absent a mismatch.
 
 ## Next publication
 
-The human's new tag policy is binding for the next publication: advance both
-snapshot and latest to the newly published snapshot. Implementation source
-checks found that the supported trusted-publishing flow sets one tag per
-publication. Verification of a supported way to advance both is pending in the
-work log; the desired policy is no longer an open question. Do not introduce private token
-handling or mutate live tags. Version preparation has advanced to snapshot.16.
+The human confirmed on 28 September that snapshot publications advance only
+`snapshot`, leaving `latest` where it is. Existing release code already does
+this; no publication change or manual second-tag step is required. Keep trusted
+publishing without stored npm credentials. Version preparation has advanced to
+snapshot.16. No live tags are changed by this task.
 
 ## Confirmed source findings
 
@@ -176,16 +175,11 @@ configuration. Neither is needed alongside the preferred constructor factory.
    client lifetime, and the unchanged rules for external effects in guides,
    TSDoc, and one existing example. No real external service is needed to test
    dependency passing.
-5. Separately update publication policy/workflow/tests before the next release
-   so `latest` advances to the new snapshot. Current
-   `scripts/release-policy.mjs:53` selects only `snapshot`, and
-   `.github/workflows/publish.yml:69` passes that selection to Lerna. Audit
-   current first-publish instructions and any opposite-tag assertions in
-   `scripts/release-publisher.mjs`; changing just the workflow is insufficient.
-   Keep trusted publishing, existing snapshot access, and rollback protection.
-   Resolve how both tags are set using the actual supported npm authorization
-   flow during that slice; do not assume separate tag mutation is authorized by
-   a publish-scoped credential.
+5. Retain the existing publication policy, as confirmed on 28 September:
+   `scripts/release-policy.mjs` selects `snapshot` for snapshot versions;
+   `.github/workflows/publish.yml` passes that selection to Lerna; and
+   `scripts/release-publisher.mjs` rejects changes to the opposite tag. Keep
+   trusted publishing and rollback protection. No release-code change is needed.
 
 ### Required behavioral evidence
 
@@ -204,8 +198,8 @@ configuration. Neither is needed alongside the preferred constructor factory.
   increment or produced signal; normal failure reporting still works.
 - History and Process Manager queries still work; state-only queries do not
   call the factory. Application clients never enter persisted state.
-- Release tests verify the new latest/snapshot policy for every publishable
-  package and preserve trusted publishing and partial-release safeguards.
+- Existing release checks preserve snapshot-only publication, the unchanged
+  `latest` tag, trusted publishing, and partial-release safeguards.
 
 No Proto, wire, storage format, package dependency, or generated-registry format
 change is expected. Existing one-options constructors need no migration. A

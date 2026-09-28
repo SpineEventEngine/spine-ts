@@ -1,6 +1,6 @@
 # Entity dependency configuration review
 
-Status: all requested reviews and corrections complete; full local release verification and audits pass. Dual-tag automation remains blocked by npm support. No PR CI result exists for this branch.
+Status: all requested reviews and corrections complete; full local release verification and audits pass. The human retained snapshot-only publication on 28 September, resolving the tag-policy blocker. No PR CI result exists for this branch.
 Branch: `entity-dependency-configuration`.
 Base: `794bd524b8875f10a75777a41bbebe1dbece600b`.
 
@@ -14,9 +14,10 @@ Entities, without changing stored messages, framework context bindings, or
 existing constructor/schema restrictions. Existing one-options constructors
 remain valid. The Projects example and public documentation teach the same API.
 
-The human confirmed that both publication tags must advance. Supported npm
-trusted publishing cannot automate the second tag update; a manual-step choice
-is pending. Do not treat the unimplemented amendment as completed behavior.
+On 28 September the human replaced the two-tag requirement: snapshot publication
+must advance only `snapshot` and leave `latest` unchanged. Existing release code
+already implements this. Earlier blocker references below describe the review
+history, not a remaining requirement.
 
 ## Independent assignments
 
@@ -184,5 +185,5 @@ the full suite. Final edits after that source commit record evidence only.
 
 GitHub reports no open PR for this branch, so local success is not described
 as green CI. No PR was created, package published, credential added, or npm tag
-changed. Do not treat the branch as publication-ready until the separate
-dual-tag authentication question is resolved.
+changed. The separate tag-policy question was resolved on 28 September by
+retaining the existing snapshot-only behavior; it no longer blocks publication.

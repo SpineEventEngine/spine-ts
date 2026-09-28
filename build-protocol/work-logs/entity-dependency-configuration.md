@@ -377,7 +377,8 @@ publication remains blocked: both tags must advance and npm trusted publishing
 cannot automate the second tag update. The human's answer on a manual
 authenticated second-tag step is still required. Do not merge for publication
 until that requirement is settled; do not introduce stored tokens or a private
-authentication workaround.
+authentication workaround. This historical blocker was resolved by the human's
+28 September decision recorded below.
 
 The independent review wave completed. Style and TypeScript/API found no
 issues. Reliability found no runtime defect but identified missing tests for
@@ -458,3 +459,29 @@ patch, custom OIDC credential reuse, or live tag mutation is introduced.
 The earlier asynchronous question offered latest-only publication or continued
 advancement of both tags. The human rejected latest-only; the remaining
 manual-step question and supported-flow limitation are recorded above.
+
+## Snapshot-only publication confirmed — 28 September 2026
+
+The human instructed: advance only `snapshot` automatically; leave `latest`
+unchanged. This replaces the earlier two-tag requirement and closes the
+publication-policy question. No manual second-tag step is required.
+
+This is a record-only correction to the existing task, implemented by the main
+agent. Estimate: 0.05–0.1 hours for updating the five existing records, checking
+their consistency and formatting, and committing and pushing. Acceptance:
+current records reflect the new instruction, historical decisions are marked
+as superseded, and release code and live npm tags remain unchanged.
+
+Source inspection confirmed `classifyReleaseVersion()` selects `snapshot` for
+snapshot versions and `publishRelease()` checks that the opposite tag is
+unchanged. No runtime, API, dependency, authentication, or workflow edit is
+needed. The verification-before-completion skill guides the focused checks.
+All specialist concerns are unchanged: this mechanically records the explicit
+human decision and restores the existing policy, so no review lane is reopened.
+The completed full release verification remains the source evidence; record
+checks do not claim new test or CI results.
+
+Verification: changed-file Prettier and `git diff --check` pass. Source and
+existing test inspection confirm snapshot selection, the workflow's single
+`--dist-tag`, and rejection when the opposite tag moves. Only five Markdown
+records changed. No build or test suite was rerun for this record correction.
