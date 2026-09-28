@@ -286,21 +286,21 @@ export class Server {
   async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
     const contexts = await this.#prepareContexts();
     const logger = serverEnvironmentAccess.loggerFor(this.#environment);
-    const attachment = await this.#attachContexts(contexts, ownership);
+    const { attachment, routes } = await this.#attachContexts(contexts, ownership);
     const closeables = [...contexts, ...this.#resources];
     const services = new SpineServices({
       contexts,
       ...this.#services,
     });
     spineServicesAccess.installLogger(services, logger);
-    const sessions = new Set<http2.ServerHttp2Session>();
-    const httpServer = ServerValues.createHttpServer(
-      services,
+    const { httpServer, sessions } = this.#createHttpListener(services);
+    const address = await this.#listenWithCleanup(
+      httpServer,
       sessions,
-      this.#readMaxBytes,
-      this.#writeMaxBytes,
+      attachment,
+      routes,
+      closeables,
     );
-    const address = await this.#listenWithCleanup(httpServer, sessions, attachment, closeables);
     const host = typeof address.address === "string" ? address.address : this.#host;
 
     const running = this.#createRunningServer({
@@ -308,6 +308,7 @@ export class Server {
       sessions,
       environment: this.#environment,
       attachment,
+      routes,
       services,
       host,
       port: address.port,
@@ -316,6 +317,26 @@ export class Server {
     });
     await this.#startLifecycles(running);
     return running;
+  }
+
+  /**
+   * Prepares an HTTP listener and its tracked sessions for startup.
+   *
+   * @param services Service routes exposed by the listener.
+   * @returns The unbound listener and its session set.
+   */
+  #createHttpListener(services: SpineServices): {
+    httpServer: http2.Http2Server;
+    sessions: Set<http2.ServerHttp2Session>;
+  } {
+    const sessions = new Set<http2.ServerHttp2Session>();
+    const httpServer = ServerValues.createHttpServer(
+      services,
+      sessions,
+      this.#readMaxBytes,
+      this.#writeMaxBytes,
+    );
+    return { httpServer, sessions };
   }
 
   /**
@@ -336,21 +357,12 @@ export class Server {
   }
 
   /**
-   * Builds contexts and attaches logging before delivery recovery begins.
+   * Builds contexts without mutating a reused context before route validation.
    *
    * @returns Prepared contexts for this Server.
    */
   async #prepareContexts(): Promise<readonly BoundedContext[]> {
-    const contexts = await ServerValues.buildContexts(
-      this.#contexts,
-      this.#environment.storageFactory,
-    );
-    const logger = serverEnvironmentAccess.loggerFor(this.#environment);
-    for (const context of contexts) {
-      boundedContextAccess.installLogger(context, logger);
-      serverEnvironmentAccess.warnVolatileRegistry(this.#environment, context);
-    }
-    return contexts;
+    return await ServerValues.buildContexts(this.#contexts, this.#environment.storageFactory);
   }
 
   /**
@@ -358,20 +370,31 @@ export class Server {
    *
    * @param contexts Built contexts for this Server.
    * @param ownership Environment attachment mode.
-   * @returns The environment attachment after routes are installed.
+   * @returns The environment attachment and its installed routes.
    */
   async #attachContexts(
     contexts: readonly BoundedContext[],
     ownership: EnvironmentOwnership,
-  ): Promise<EnvironmentAttachmentHandle> {
+  ): Promise<{ attachment: EnvironmentAttachmentHandle; routes: RegisteredTargets }> {
+    const freshContexts = contexts.filter(
+      (context) => RegisteredTargets.forStand(context.stand()) === undefined,
+    );
+    let routes: RegisteredTargets | undefined;
     try {
-      new RegisteredTargets(contexts).install(contexts);
-      return await serverEnvironmentAccess.attach(this.#environment, {
+      routes = new RegisteredTargets(contexts);
+      routes.install(contexts);
+      const logger = serverEnvironmentAccess.loggerFor(this.#environment);
+      for (const context of contexts) {
+        boundedContextAccess.installLogger(context, logger);
+        serverEnvironmentAccess.warnVolatileRegistry(this.#environment, context);
+      }
+      const attachment = await serverEnvironmentAccess.attach(this.#environment, {
         ownership,
         descriptors: contexts.map((context) => boundedContextAccess.delivery(context)),
       });
+      return { attachment, routes };
     } catch (error) {
-      await this.#cleanupFailedAttachment(contexts, error);
+      await this.#cleanupFailedAttachment(freshContexts, routes, error);
       throw error;
     }
   }
@@ -379,11 +402,13 @@ export class Server {
   /**
    * Retains retryable cleanup when route validation or attachment fails.
    *
-   * @param contexts Built contexts to close after failure.
+   * @param contexts Fresh contexts to close after failure.
+   * @param routes Routes installed by this attempt, if any.
    * @param error Original route or attachment failure.
    */
   async #cleanupFailedAttachment(
     contexts: readonly BoundedContext[],
+    routes: RegisteredTargets | undefined,
     error: unknown,
   ): Promise<void> {
     const closeGroup = new RetryableCloseGroup(
@@ -391,15 +416,16 @@ export class Server {
       "Server start cleanup failed while closing owned contexts/resources.",
     );
     if (serverEnvironmentAccess.failedStartRetryPending(this.#environment, error)) {
-      this.#failedStartCleanup = { closeGroup, failedStartRollback: { rejection: error } };
+      this.#failedStartCleanup = { closeGroup, failedStartRollback: { rejection: error }, routes };
       return;
     }
     try {
       await closeGroup.close();
     } catch (cleanupError) {
-      this.#failedStartCleanup = { closeGroup, failedStartRollback: undefined };
+      this.#failedStartCleanup = { closeGroup, failedStartRollback: undefined, routes };
       throw ServerValues.attachmentCleanupError(error, cleanupError);
     }
+    routes?.release();
     this.#failedStartConsumed = true;
   }
 
@@ -409,6 +435,7 @@ export class Server {
    * @param server Listener to open.
    * @param sessions Active HTTP/2 sessions.
    * @param attachment Environment delivery attachment.
+   * @param routes Installed state routes to release after cleanup.
    * @param closeables Contexts and resources to close after failure.
    * @returns Bound listener address.
    */
@@ -416,6 +443,7 @@ export class Server {
     server: http2.Http2Server,
     sessions: Set<http2.ServerHttp2Session>,
     attachment: EnvironmentAttachmentHandle,
+    routes: RegisteredTargets,
     closeables: readonly unknown[],
   ): Promise<AddressInfo> {
     try {
@@ -428,6 +456,7 @@ export class Server {
         ),
         network: { server, sessions },
         attachment,
+        routes,
         failedStartRollback: undefined,
       };
       this.#failedStartCleanup = cleanup;
@@ -487,7 +516,28 @@ export class Server {
     if (!(await this.#advanceFailedStartAttachment(cleanup, errors))) {
       return;
     }
+    await this.#retryFailedStartRollback(cleanup, errors);
+    let closeFailed = false;
+    try {
+      await cleanup.closeGroup.close();
+    } catch (error) {
+      closeFailed = true;
+      CloseErrors.collect(error, errors);
+    }
+    if (!closeFailed && cleanup.attachment === undefined && this.#failedStartCleanup === cleanup) {
+      cleanup.routes?.release();
+      this.#failedStartCleanup = undefined;
+      this.#failedStartConsumed = true;
+    }
+  }
 
+  /**
+   * Retries environment rollback before closing contexts from a failed start.
+   *
+   * @param cleanup Retained failed-start state.
+   * @param errors Errors collected across cleanup phases.
+   */
+  async #retryFailedStartRollback(cleanup: FailedStartCleanup, errors: unknown[]): Promise<void> {
     const failedStartRollback = cleanup.failedStartRollback;
     if (
       failedStartRollback !== undefined &&
@@ -509,18 +559,6 @@ export class Server {
         }
         CloseErrors.collect(error, errors);
       }
-    }
-
-    let closeFailed = false;
-    try {
-      await cleanup.closeGroup.close();
-    } catch (error) {
-      closeFailed = true;
-      CloseErrors.collect(error, errors);
-    }
-    if (!closeFailed && cleanup.attachment === undefined && this.#failedStartCleanup === cleanup) {
-      this.#failedStartCleanup = undefined;
-      this.#failedStartConsumed = true;
     }
   }
 
@@ -579,6 +617,7 @@ export class Server {
 interface FailedStartCleanup {
   readonly closeGroup: RetryableCloseGroup;
   readonly failedStartRollback: FailedStartRollbackCapability | undefined;
+  readonly routes?: RegisteredTargets | undefined;
   network?: FailedStartNetwork;
   attachment?: EnvironmentAttachmentHandle;
 }
@@ -765,6 +804,8 @@ class RunningHttp2Server implements RunningServer {
 
   readonly #attachment: EnvironmentAttachmentHandle;
 
+  readonly #routes: RegisteredTargets;
+
   readonly #services: SpineServices;
 
   readonly host: string;
@@ -794,6 +835,7 @@ class RunningHttp2Server implements RunningServer {
     this.#listenerLifecycles = options.listenerLifecycles;
     this.#environment = options.environment;
     this.#attachment = options.attachment;
+    this.#routes = options.routes;
     this.#services = options.services;
     this.host = options.host;
     this.port = options.port;
@@ -876,6 +918,7 @@ class RunningHttp2Server implements RunningServer {
     await this.#drainContexts();
     try {
       await this.#closeGroup.close();
+      this.#routes.release();
     } catch (error) {
       if (!detachRejected) throw error;
       CloseErrors.collect(error, detachErrors);
@@ -968,6 +1011,7 @@ interface RunningHttp2ServerOptions {
   readonly listenerLifecycles: readonly ListenerLifecycle[];
   readonly environment: ServerEnvironment;
   readonly attachment: EnvironmentAttachmentHandle;
+  readonly routes: RegisteredTargets;
   readonly services: SpineServices;
   readonly host: string;
   readonly port: number;
@@ -1079,8 +1123,11 @@ const ServerValues = Object.freeze({
     startError: unknown,
   ): Promise<void> {
     try {
+      const freshContexts = contexts.filter(
+        (context) => RegisteredTargets.forStand(context.stand()) === undefined,
+      );
       await new RetryableCloseGroup(
-        contexts,
+        freshContexts,
         "Server start cleanup failed while closing owned contexts/resources.",
       ).close();
     } catch (error) {

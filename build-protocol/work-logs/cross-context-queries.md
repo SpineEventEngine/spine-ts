@@ -287,3 +287,24 @@ the stored-record query. Six malformed-mask regressions and the full affected
 83-test PM/Stand selection pass. Tooling typecheck, scoped lint/format, cleanup
 and TSDoc also pass. Final API confirmation and security review precede the
 single full release verification profile.
+
+Checkpoint 88c385b2e was pushed and final API confirmation is clean. Security
+review found a real same-Server isolation defect: a second startup could replace
+an active context's query routes before rejecting reused delivery attachment.
+The implementer reproduced it with an actual paused PM query returning the
+second Server's `intruder` state instead of its original target. The approved
+bounded correction validates the complete route set synchronously before any
+route/logger mutation, excludes already-associated contexts from failed-start
+cleanup, and releases this attempt's routes only after successful existing
+close/rollback cleanup. Both registration-order regression cases now pass.
+Concurrent-start and cleanup-retry checks remain before the correction freezes.
+This security correction extends the initial estimate; release verification
+remains pending rather than being claimed against the previous checkpoint.
+
+Security correction is frozen: complete synchronous route validation precedes
+route/logger mutation, live contexts are excluded from failed-start/build
+cleanup, and route release is identity-checked after successful closure. Seven
+focused security/lifecycle scenarios and the combined 320-test PM/server/
+lifecycle/context suite pass. Tooling typecheck, scoped ESLint/Prettier,
+cleanup and TSDoc pass. Final fresh security and reliability rechecks follow
+this checkpoint; ordinary API/documentation claims remain unchanged.

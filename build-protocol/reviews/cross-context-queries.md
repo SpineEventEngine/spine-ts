@@ -121,3 +121,33 @@ now pass using existing StorageQueryPolicy validation. The final 83-test
 Stand/PM selection, tooling typecheck, scoped lint/format, cleanup and TSDoc
 pass. No new public API or duplicated validator was added. Fresh API confirmation
 uses the same explicitly configured gpt-6-sol / medium role and narrow diff.
+
+At 88c385b2e, final API confirmation is clean. Final security review used explicit
+gpt-6-sol / high with no inherited history/memory and found one P1: route
+installation overwrites the map for a running context before a second Server's
+attachment rejects reuse of that context. During the interval, the first
+Server can resolve a target from the second assembly. A narrow built-code map
+reproduction confirmed replacement; startup ordering establishes the access
+path. No other confirmed security finding. Release verification is held.
+
+Main accepted the finding and returned it to the same implementer. Reject
+already-associated contexts before any route mutation, install complete route
+sets synchronously, preserve the original Server's logging/routes/resources,
+clean up only the new assembly's contexts/resources, and release associations
+at the safe existing close/failed-start lifecycle point. Add an actual
+two-Server handler regression and preserve cleanup/retry guarantees. This is
+a demonstrated architecture-correctness blocker reviewed by the Astra/high
+main agent, not an opportunity for a new lifecycle framework.
+
+Security correction preflight is green: the actual paused-PM leak reproduced
+before the fix and passes afterward in both context orders. Additional tests
+prove exclusive concurrent startup, fresh-context cleanup, retry preservation
+of the first Server, protection when a later builder fails, and route release
+after normal close or successful failed-start retry. The combined PM/server/
+lifecycle/context selection passes 320 tests; tooling typecheck, scoped lint,
+formatting, cleanup and TSDoc pass. Production changes remain in Server and
+RegisteredTargets. Fresh final security recheck uses gpt-6-sol / high;
+fresh reliability recheck uses gpt-6-sol / medium. Both have no inherited
+history/memory and receive original requirements plus source/tests, not prior
+review conclusions as proof. Public APIs/docs have not changed in this fix;
+their prior clean dispositions stand. No full release check has run yet.

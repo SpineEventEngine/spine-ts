@@ -54,6 +54,8 @@ const standTargets = new WeakMap<Stand, RegisteredTargets>();
 export class RegisteredTargets {
   readonly #targets = new Map<string, RegisteredTarget>();
 
+  #installedStands: readonly Stand[] = [];
+
   /**
    * Validates and indexes the state types registered by the supplied contexts.
    *
@@ -139,7 +141,28 @@ export class RegisteredTargets {
    * @param contexts Contexts whose handlers use these routes.
    */
   install(contexts: readonly BoundedContext[]): void {
-    for (const context of contexts) standTargets.set(context.stand(), this);
+    const stands = contexts.map((context) => context.stand());
+    const distinct = new Set(stands);
+    if (distinct.size !== stands.length) {
+      throw new Error("A Stand cannot be registered twice in one Server.");
+    }
+    for (const stand of stands) {
+      if (standTargets.has(stand)) {
+        throw new Error("Stand is already associated with another Server.");
+      }
+    }
+    for (const stand of stands) standTargets.set(stand, this);
+    this.#installedStands = stands;
+  }
+
+  /**
+   * Removes only this Server's Stand routes after its contexts close.
+   */
+  release(): void {
+    for (const stand of this.#installedStands) {
+      if (standTargets.get(stand) === this) standTargets.delete(stand);
+    }
+    this.#installedStands = [];
   }
 
   /**

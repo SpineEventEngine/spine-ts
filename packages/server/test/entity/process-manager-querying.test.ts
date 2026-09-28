@@ -89,6 +89,8 @@ import {
 const closePhase = vi.hoisted(() => ({
   onBegin: undefined as ((context: unknown) => void) | undefined,
   onDetach: undefined as (() => void) | undefined,
+  pauseAttach: undefined as (() => Promise<void>) | undefined,
+  failBuild: undefined as ((builder: unknown) => boolean) | undefined,
 }));
 
 vi.mock("../../src/context/bounded-context.js", async (importOriginal) => {
@@ -97,6 +99,10 @@ vi.mock("../../src/context/bounded-context.js", async (importOriginal) => {
     ...actual,
     boundedContextAccess: {
       ...actual.boundedContextAccess,
+      build(...args: Parameters<typeof actual.boundedContextAccess.build>) {
+        if (closePhase.failBuild?.(args[0])) throw new Error("context build failed");
+        return actual.boundedContextAccess.build(...args);
+      },
       beginClose(context: BoundedContext) {
         actual.boundedContextAccess.beginClose(context);
         closePhase.onBegin?.(context);
@@ -111,6 +117,12 @@ vi.mock("../../src/server/server-environment.js", async (importOriginal) => {
     ...actual,
     serverEnvironmentAccess: {
       ...actual.serverEnvironmentAccess,
+      attach(...args: Parameters<typeof actual.serverEnvironmentAccess.attach>) {
+        const pause = closePhase.pauseAttach?.();
+        return pause === undefined
+          ? actual.serverEnvironmentAccess.attach(...args)
+          : pause.then(() => actual.serverEnvironmentAccess.attach(...args));
+      },
       detach(...args: Parameters<typeof actual.serverEnvironmentAccess.detach>) {
         closePhase.onDetach?.();
         return actual.serverEnvironmentAccess.detach(...args);
@@ -601,6 +613,280 @@ describe("Process Manager querying", () => {
     } finally {
       await running.close();
     }
+  });
+
+  it.each(["reused-first", "fresh-first"] as const)(
+    "keeps a live Server's PM route isolated when the rejected Server lists %s",
+    async (order) => {
+      let enter!: () => void;
+      let release!: () => void;
+      let attach!: () => void;
+      let resumeAttach!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const resumed = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const attaching = new Promise<void>((resolve) => {
+        attach = resolve;
+      });
+      const attachReleased = new Promise<void>((resolve) => {
+        resumeAttach = resolve;
+      });
+      PausedProjectLookup.onEntered = enter;
+      PausedProjectLookup.wait = resumed;
+      PausedProjectLookup.results = [];
+      const workflows = BoundedContext.singleTenant("IsolatedWorkflows")
+        .add(pausedLookupRepository())
+        .build();
+      const original = BoundedContext.singleTenant("OriginalProjects")
+        .add(projectionRepository())
+        .build();
+      const intruder = BoundedContext.singleTenant("IntruderProjects")
+        .add(projectionRepository())
+        .build();
+      await original
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "shared", name: "original", priority: 1 }),
+        );
+      await intruder
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "shared", name: "intruder", priority: 2 }),
+        );
+      const first = await Server.atPort(0).add(workflows).add(original).start();
+      let secondStart: Promise<unknown> | undefined;
+
+      try {
+        await workflows.commandBus().post(queryCommand("shared", "paused"));
+        await entered;
+        closePhase.pauseAttach = () => {
+          attach();
+          return attachReleased;
+        };
+        const second = Server.atPort(0);
+        if (order === "reused-first") second.add(workflows).add(intruder);
+        else second.add(intruder).add(workflows);
+        secondStart = second.start();
+        await Promise.race([
+          attaching,
+          secondStart.then(
+            () => {
+              return undefined;
+            },
+            () => {
+              return undefined;
+            },
+          ),
+        ]);
+        release();
+        await vi.waitFor(() => {
+          expect(PausedProjectLookup.results[0]?.name).toBe("original");
+        });
+        resumeAttach();
+        await expect(secondStart).rejects.toThrow();
+        await workflows.commandBus().post(queryCommand("shared", "paused", undefined, "again"));
+        await vi.waitFor(() => {
+          expect(PausedProjectLookup.results[0]?.name).toBe("original");
+        });
+        expect(() => original.stand().stateTypes()).not.toThrow();
+        await expect(intruder.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
+          "Stand is closed.",
+        );
+        expect(RegisteredTargets.forStand(intruder.stand())).toBeUndefined();
+      } finally {
+        closePhase.pauseAttach = undefined;
+        release();
+        resumeAttach();
+        PausedProjectLookup.onEntered = undefined;
+        PausedProjectLookup.wait = undefined;
+        await secondStart?.catch(() => undefined);
+        await first.close();
+      }
+    },
+  );
+
+  it("admits only one concurrent Server assembly for a shared context", async () => {
+    ProjectLookup.reset();
+    const workflows = BoundedContext.singleTenant("ConcurrentWorkflows")
+      .add(processManagerRepository())
+      .build();
+    const firstProjects = BoundedContext.singleTenant("ConcurrentFirstProjects")
+      .add(projectionRepository())
+      .build();
+    const secondProjects = BoundedContext.singleTenant("ConcurrentSecondProjects")
+      .add(projectionRepository())
+      .build();
+    await firstProjects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "shared", name: "first", priority: 1 }),
+      );
+    await secondProjects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "shared", name: "second", priority: 2 }),
+      );
+    const outcomes = await Promise.allSettled([
+      Server.atPort(0).add(workflows).add(firstProjects).start(),
+      Server.atPort(0).add(workflows).add(secondProjects).start(),
+    ]);
+    const accepted = outcomes.filter((result) => result.status === "fulfilled");
+    const rejected = outcomes.filter((result) => result.status === "rejected");
+    expect(accepted).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    const running = accepted[0]?.value;
+    if (running === undefined) throw new Error("A Server was not started.");
+    const target = outcomes[0].status === "fulfilled" ? firstProjects : secondProjects;
+    const unused = target === firstProjects ? secondProjects : firstProjects;
+
+    try {
+      await workflows
+        .commandBus()
+        .post(queryCommand("shared", target === firstProjects ? "first" : "second"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results[0]?.name).toBe(target === firstProjects ? "first" : "second");
+      });
+      expect(RegisteredTargets.forStand(unused.stand())).toBeUndefined();
+      await expect(unused.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
+        "Stand is closed.",
+      );
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("retries failed second-Server cleanup without closing the live context", async () => {
+    ProjectLookup.reset();
+    const workflows = BoundedContext.singleTenant("RetainedWorkflows")
+      .add(processManagerRepository())
+      .build();
+    const original = BoundedContext.singleTenant("RetainedProjects")
+      .add(projectionRepository())
+      .build();
+    const unused = BoundedContext.singleTenant("UnusedProjects")
+      .add(projectionRepository())
+      .build();
+    await original
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "shared", name: "original", priority: 1 }),
+      );
+    const first = await Server.atPort(0).add(workflows).add(original).start();
+    let closes = 0;
+    const second = Server.atPort(0)
+      .add(unused)
+      .add(workflows)
+      .addResource({
+        close() {
+          closes += 1;
+          if (closes === 1) throw new Error("resource close failed");
+        },
+      });
+
+    try {
+      await expect(second.start()).rejects.toThrow(/cleanup/);
+      expect(closes).toBe(1);
+      await expect(second.start()).rejects.toThrow(/deferred cleanup completed/);
+      expect(closes).toBe(2);
+      await workflows.commandBus().post(queryCommand("shared", "original"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results[0]?.name).toBe("original");
+      });
+      expect(
+        RegisteredTargets.forStand(workflows.stand())?.find(
+          TypeUrls.derive(ProjectOverviewStateSchema),
+        )?.context,
+      ).toBe(original);
+    } finally {
+      await first.close();
+    }
+  });
+
+  it("preserves a live context when a later context build fails", async () => {
+    ProjectLookup.reset();
+    const workflows = BoundedContext.singleTenant("BuildGuardWorkflows")
+      .add(processManagerRepository())
+      .build();
+    const projects = BoundedContext.singleTenant("BuildGuardProjects")
+      .add(projectionRepository())
+      .build();
+    await projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "shared", name: "ready", priority: 1 }),
+      );
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+    const failing = BoundedContext.singleTenant("BuildGuardFailure");
+    closePhase.failBuild = (builder) => builder === failing;
+
+    try {
+      await expect(Server.atPort(0).add(workflows).add(failing).start()).rejects.toThrow(
+        "context build failed",
+      );
+      await workflows.commandBus().post(queryCommand("shared", "ready"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results[0]?.name).toBe("ready");
+      });
+    } finally {
+      closePhase.failBuild = undefined;
+      await running.close();
+    }
+  });
+
+  it("releases routes after a completed Server close", async () => {
+    const context = BoundedContext.singleTenant("ReleasedProjects")
+      .add(projectionRepository())
+      .build();
+    const running = await Server.atPort(0).add(context).start();
+    expect(RegisteredTargets.forStand(context.stand())).toBeDefined();
+
+    await running.close();
+
+    expect(RegisteredTargets.forStand(context.stand())).toBeUndefined();
+  });
+
+  it("releases installed routes after attachment startup fails", async () => {
+    const projects = BoundedContext.singleTenant("FailedAttachProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.singleTenant("FailedAttachWorkflows")
+      .add(processManagerRepository())
+      .build();
+    let closes = 0;
+    const server = Server.atPort(0)
+      .add(projects)
+      .add(workflows)
+      .addResource({
+        close() {
+          closes += 1;
+          if (closes === 1) throw new Error("cleanup retry required");
+        },
+      });
+    closePhase.pauseAttach = () => Promise.reject(new Error("attachment blocked"));
+
+    try {
+      await expect(server.start()).rejects.toThrow(/cleanup/);
+    } finally {
+      closePhase.pauseAttach = undefined;
+    }
+    expect(closes).toBe(1);
+    expect(RegisteredTargets.forStand(projects.stand())).toBeDefined();
+    await expect(server.start()).rejects.toThrow(/deferred cleanup completed/);
+    expect(closes).toBe(2);
+    expect(RegisteredTargets.forStand(projects.stand())).toBeUndefined();
+    expect(RegisteredTargets.forStand(workflows.stand())).toBeUndefined();
+    await expect(projects.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
+      "Stand is closed.",
+    );
   });
 
   it("installs complete routes before recovery enumerates tenant work", async () => {
