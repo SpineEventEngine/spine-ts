@@ -1,8 +1,48 @@
 # Entity dependency configuration review
 
-Status: all requested reviews and corrections complete; full local release verification and audits pass. The human retained snapshot-only publication on 28 September, resolving the tag-policy blocker. No PR CI result exists for this branch.
+Status: Earlier requested reviews and release checks passed. Constructor simplification and documentation corrections requested on 28 September await focused independent review and renewed verification. Snapshot-only publication is retained. No PR CI result exists for this branch.
 Branch: `entity-dependency-configuration`.
 Base: `794bd524b8875f10a75777a41bbebe1dbece600b`.
+
+## 28 September correction review
+
+Correction base: `32b02d626bfed6892c25aff755a01e727b56a9aa`.
+Requirements: remove unnecessary constructor type machinery while retaining
+Entity/schema and callback checks; review all documentation in touched files
+and use plain explanations of purpose and behavior. The current plan ledger
+applies. Earlier review conclusions are not supplied to fresh reviewers.
+
+Explicit assignments: humane_docs_review, documentation reviewer, Luna/medium,
+for changed Markdown wording and accuracy; constructor_api_review,
+TypeScript/API reviewer, Sol/medium, for declarations, compile-time tests and
+TypeDoc; constructor_style_review, style reviewer, Sol/medium, for simplicity
+and source-comment clarity; lifecycle_wording_review, performance/reliability
+reviewer, Sol/medium, for rewritten lifecycle descriptions against source.
+Runtime code behavior is unchanged.
+Dispatch profiles are explicit; separate runtime introspection is unavailable.
+No security behavior changes, so the final-project security lane is not reopened.
+
+All four concerns completed with the explicit profiles above. Documentation
+found no remaining issue. TypeScript/API initially proposed rejecting broad
+handwritten constructor aliases, then withdrew the finding after verifying
+that two structurally identical Entity subclasses already passed the old
+static-marker check. The runtime class check remains necessary and unchanged;
+reintroducing an artificial alias restriction would not improve that guarantee.
+
+Accepted correction batch: reliability caught an overclaim that acknowledgement
+and worker-session validation were atomic together; they are separate. Style
+caught incorrect descriptions of Repository registration responsibilities and
+which code can correct a rejected transaction draft. Also clarify that the
+delivery guard precedes the Entity transaction commit, not the later durable
+storage write. Main corrects Markdown; the same implementer corrects source
+comments. The type simplification itself has no unresolved finding.
+
+The retained style and reliability reviewers confirmed all corrections in a
+narrow read-only follow-up. No finding remains. All dispatches explicitly used
+the recorded models/reasoning; no visible profile mismatch was reported.
+Focused compiler checks, 102 tests, ESLint, cleanup, TSDoc, formatting, snippet
+compilation, real TypeDoc generation, and the complete API-doc checker pass.
+Full release verification and CI are the remaining checks for this correction.
 
 ## Requirements and scope
 

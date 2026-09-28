@@ -92,7 +92,6 @@ import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../deli
 import { ShardIndex } from "../delivery/shard-index.js";
 import {
   Aggregate,
-  type EntityConstructorStatic,
   type EntityOptions,
   type EntityLifecycleFlags,
   ProcessManager,
@@ -158,7 +157,7 @@ type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = Descripto
   Aggregate<unknown, Schema> | Projection<unknown, Schema> | ProcessManager<unknown, Schema>;
 
 /**
- * Generated Protobuf-ES state schema carried by a repository entity constructor.
+ * Generated state schema declared by a repository's Entity class.
  *
  * @typeParam EntityType Entity constructor whose state schema is selected.
  */
@@ -226,11 +225,11 @@ type IsUnion<Type, Union = Type> = Type extends unknown
   : false;
 
 /**
- * Single concrete entity constructor accepted by repository identity metadata.
+ * Checks whether a repository binds one concrete Entity class and state schema.
  *
  * Concrete aggregate, projection, and process-manager classes satisfy this type naturally. Broad
  * constructor aliases, constructor unions, broad state schemas, and state-schema unions are
- * rejected so repository identities cannot erase which state schema the entity owns.
+ * rejected so a repository cannot lose its Entity class's state schema.
  *
  * @typeParam EntityType Candidate concrete Entity constructor.
  */
@@ -253,7 +252,7 @@ interface RuntimeRepositoryEntityType {
 }
 
 /**
- * Carries validated constructor and schema details into repository setup.
+ * Constructor and state schema selected for repository setup.
  *
  * @typeParam EntityType Concrete Entity constructor being registered.
  */
@@ -265,7 +264,7 @@ interface RepositoryDescription<EntityType extends RepositoryEntityType> {
 }
 
 /**
- * Describes an entity constructor accepted by repository identity metadata.
+ * Describes an Aggregate, Projection, or Process Manager class accepted by a repository.
  *
  * @typeParam Instance The aggregate, projection, or process-manager instance type.
  * @param args The constructor arguments accepted by the entity class.
@@ -273,23 +272,22 @@ interface RepositoryDescription<EntityType extends RepositoryEntityType> {
  */
 export type RepositoryEntityType<
   Instance extends RepositoryEntityInstance = RepositoryEntityInstance,
-> = (abstract new (...args: never[]) => Instance) &
-  EntityConstructorStatic & {
-    // prettier-ignore
+> = (abstract new (...args: never[]) => Instance) & {
+  // prettier-ignore
 
-    /**
-     * Prototype inspected for built-in entity family marker inheritance.
-     */
-    readonly prototype: Instance;
+  /**
+   * Prototype used to identify the Entity family and state schema.
+   */
+  readonly prototype: Instance;
 
-    /**
-     * Constructor name used in structured diagnostics.
-     */
-    readonly name: string;
-  };
+  /**
+   * Constructor name used in structured diagnostics.
+   */
+  readonly name: string;
+};
 
 /**
- * Options for constructing repository identity and context-owned registration.
+ * Entity class, state schema, and routing options for a repository.
  *
  * @typeParam EntityType A single concrete aggregate, projection, or process-manager constructor.
  * The constructor's prototype must carry one concrete generated state schema; broad constructor,
@@ -301,12 +299,12 @@ interface RepositoryOptionsBase<
   // prettier-ignore
 
   /**
-   * Entity constructor owned by this repository identity.
+   * Entity class constructed by this repository.
    */
   readonly entityType: EntityType;
 
   /**
-   * Generated Protobuf-ES schema for the entity state owned by this repository identity.
+   * Generated schema for this repository's Entity state.
    */
   readonly schema: RepositoryStateSchema<EntityType>;
 
@@ -431,27 +429,27 @@ export interface RepositoryIdentitySnapshot<
   // prettier-ignore
 
   /**
-   * Entity constructor owned by the repository.
+   * Entity class registered with the repository.
    */
   readonly entityType: EntityType;
 
   /**
-   * Entity family inferred from the constructor's built-in family marker base class.
+   * Aggregate, Projection, or Process Manager family of the Entity class.
    */
   readonly entityFamily: EntityFamily;
 
   /**
-   * Generated Protobuf-ES schema for the owned entity state.
+   * Generated schema for the Entity state.
    */
   readonly stateSchema: RepositoryStateSchema<EntityType>;
 
   /**
-   * Descriptor-derived metadata for the owned entity state.
+   * Descriptor metadata for the Entity state.
    */
   readonly metadata: EntityMetadata<RepositoryStateSchema<EntityType>>;
 
   /**
-   * Fully qualified Protobuf type name of the owned entity state.
+   * Fully qualified Protobuf name of the Entity state type.
    */
   readonly stateFullTypeName: RepositoryStateSchema<EntityType>["typeName"];
 
@@ -468,27 +466,27 @@ export interface RepositoryView {
   // prettier-ignore
 
   /**
-   * Entity constructor owned by the repository.
+   * Entity class registered with the repository.
    */
   readonly entityType: RepositoryEntityType;
 
   /**
-   * Entity family inferred from the constructor's built-in family marker base class.
+   * Aggregate, Projection, or Process Manager family of the Entity class.
    */
   readonly entityFamily: EntityFamily;
 
   /**
-   * Generated Protobuf-ES schema for the owned entity state.
+   * Generated schema for the Entity state.
    */
   readonly stateSchema: DescriptorMessageSchema;
 
   /**
-   * Descriptor-derived metadata for the owned entity state.
+   * Descriptor metadata for the Entity state.
    */
   readonly metadata: EntityMetadata;
 
   /**
-   * Fully qualified Protobuf type name of the owned entity state.
+   * Fully qualified Protobuf name of the Entity state type.
    */
   readonly stateFullTypeName: string;
 
@@ -539,7 +537,7 @@ interface EventRoutingRepository extends RepositoryView {
 export type RepositoryIdentityErrorCode = "ENTITY_SCHEMA_KIND_MISMATCH" | "UNSUPPORTED_ENTITY_TYPE";
 
 /**
- * Describes an error raised when repository identity metadata cannot be constructed.
+ * Error raised when an Entity class and state schema cannot form a repository.
  */
 export class RepositoryIdentityError extends Error {
   // prettier-ignore
@@ -564,30 +562,17 @@ export class RepositoryIdentityError extends Error {
 }
 
 /**
- * Repository identity and context-owned storage registration over one entity constructor and state schema.
+ * Configures storage and handlers for one Entity class.
  *
- * The class records the ownership facts bounded-context registration needs for
- * duplicate and conflict checks. Context assembly uses this metadata to attach
- * a repository to one built context and open state record storage. With
- * authentic explicit aggregate handler metadata, the built context can also
- * execute aggregate commands through repository-owned assignees and live
- * direct transactional handlers, persist the latest aggregate state plus a diagnostic event journal,
- * and hand already-stored events to the event bus. Aggregate and process-manager command
- * execution require `command.id` before routing or mutation so produced events
- * can carry a contract-valid command origin. With authentic projection
- * subscriber metadata, built contexts can also execute projection subscribers
- * and write changed projection state through the context-owned `Stand`. With
- * authentic process-manager metadata, built contexts can execute command
- * assignees, event reactors, and event-commanding handlers, storing changed
- * process-manager state through tenant-scoped Stand records with full Spine
- * Versions. The `events` option declares generated event schemas emitted by
- * aggregate and process-manager producer handlers. The repository surface still
- * does not expose direct entity lookup/storage APIs, inbox/delivery management,
- * caches, lifecycle monitors, or transport startup.
+ * Construction selects the Entity class, state schema, routing, and optional
+ * creation callback. A Bounded Context builder registers the repository. During
+ * context assembly, it opens record storage and installs handlers and Inbox
+ * targets. Aggregate handlers store state and a diagnostic event journal;
+ * Projection and Process Manager handlers store state in Stand. The `events`
+ * option lists generated event schemas that handlers may emit.
  *
- * @typeParam EntityType - A single concrete aggregate, projection, or process-manager constructor
- * with one concrete generated state schema. Broad constructor, constructor-union, broad-schema, and
- * schema-union bindings intentionally fail the public type constraint.
+ * @typeParam EntityType One concrete Aggregate, Projection, or Process Manager
+ * class with one generated state schema.
  */
 export class Repository<
   EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
@@ -634,9 +619,9 @@ export class Repository<
   }
 
   /**
-   * Returns the entity constructor owned by this repository identity.
+   * Returns the Entity class registered with this repository.
    *
-   * @returns The owned entity constructor.
+   * @returns The registered Entity class.
    */
   get entityType(): EntityType {
     return this.#entityType;
@@ -654,7 +639,7 @@ export class Repository<
   /**
    * Returns the generated schema for this repository's entity state.
    *
-   * @returns The owned state schema.
+   * @returns The Entity state schema.
    */
   get stateSchema(): RepositoryStateSchema<EntityType> {
     return this.#metadata.schema;
@@ -683,16 +668,16 @@ export class Repository<
   }
 
   /**
-   * Returns descriptor-derived metadata for the owned entity state.
+   * Returns descriptor metadata for this repository's Entity state.
    *
-   * @returns A metadata view for the owned state.
+   * @returns Descriptor metadata for the Entity state.
    */
   get metadata(): EntityMetadata<RepositoryStateSchema<EntityType>> {
     return this.#metadata;
   }
 
   /**
-   * Returns the fully qualified Protobuf name of the owned entity state.
+   * Returns the fully qualified Protobuf name of the Entity state.
    *
    * @returns The state message type name.
    */
@@ -995,7 +980,7 @@ export interface EntityInboxTarget {
 }
 
 /**
- * Defines context-owned Entity Inbox handoff operations.
+ * Operations the Bounded Context uses to deliver Entity Inbox messages.
  *
  * @internal
  */
@@ -1003,7 +988,7 @@ export interface EntityInbox {
   // prettier-ignore
 
   /**
-   * Returns the context-owned target-to-shard strategy.
+   * Returns the strategy that maps Entity Inbox targets to shards.
    *
    * @returns The immutable delivery strategy.
    */
@@ -1085,7 +1070,7 @@ export interface ProjectionInboxTarget {
 }
 
 /**
- * Defines context-owned projection subscriber inbox handoff operations.
+ * Operations the Bounded Context uses to deliver Projection Inbox messages.
  *
  * @internal
  */
@@ -1245,7 +1230,7 @@ export interface RepositoryAccess {
  */
 export const repositoryAccess: RepositoryAccess = Object.freeze({
   /**
-   * Checks whether a value has registered repository identity metadata.
+   * Checks whether a value is a registered Repository.
    *
    * @param repository Value to inspect.
    * @returns Whether the value is a repository view.
@@ -1255,7 +1240,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
   },
 
   /**
-   * Copies a repository's immutable identity metadata.
+   * Copies the Entity class, state schema, and ID details of a Repository.
    *
    * @param repository Repository to inspect.
    * @returns A copy-safe identity snapshot.
@@ -2135,7 +2120,7 @@ class AggregateCommandExecution {
   }
 
   /**
-   * Invokes an assignee in a fenced Entity transaction with output validation.
+   * Invokes an assignee, validates its output, and checks delivery before the Entity transaction commits.
    *
    * @param entity Aggregate instance to mutate.
    * @param handler Assignee declaration to invoke.
@@ -2501,11 +2486,11 @@ class AggregateEventExecution {
   }
 
   /**
-   * Applies a fenced Entity commit and raises transition rejection.
+   * Checks delivery immediately before the Entity transaction commits and raises transition rejection.
    *
    * @param entity Aggregate instance to commit.
    * @param producedEvents Whether reactors produced Events.
-   * @returns Completion after a successful fenced commit.
+   * @returns Completion after a successful commit.
    */
   async #commitEntity(entity: object, producedEvents: boolean): Promise<void> {
     const commit = await commitFenced(entity, (current) =>
@@ -3595,7 +3580,7 @@ class ProcessManagerCommandExecution {
   }
 
   /**
-   * Invokes the Command handler in a fenced Entity transaction.
+   * Invokes a Command handler and checks delivery before the Entity transaction commits.
    *
    * @param entity Process Manager instance to mutate.
    * @param assignee Registered Command handler.
@@ -4079,11 +4064,11 @@ class ProcessManagerEventExecution {
   }
 
   /**
-   * Applies a fenced Entity commit and raises transition rejection.
+   * Checks delivery immediately before the Entity transaction commits and raises transition rejection.
    *
    * @param entity Process Manager instance to commit.
    * @param producedEvents Whether handlers produced Events.
-   * @returns Completion after a successful fenced commit.
+   * @returns Completion after a successful commit.
    */
   async #commitEntity(entity: object, producedEvents: boolean): Promise<void> {
     const commit = await commitFenced(entity, (current) =>
@@ -4317,7 +4302,7 @@ const RepositoryIdentity = {
    * Validates and returns Aggregate, Projection, or Process Manager inheritance.
    *
    * @param entityType Validated class constructor.
-   * @returns The Entity family marker.
+   * @returns Aggregate, Projection, or Process Manager.
    */
   requireEntityFamily(entityType: RuntimeRepositoryEntityType): EntityFamily {
     const family = RepositoryIdentity.resolveRepositoryEntityFamily(entityType);

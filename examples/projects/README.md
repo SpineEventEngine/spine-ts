@@ -62,7 +62,8 @@ createProject(command: CreateProject): ProjectCreated {
 
 `ProjectSummaryProjection` observes `ProjectCreated` to make a queryable
 summary. The additional Aggregates, Process Managers, and Projections give the
-load topology realistic fan-out; they do not add a production deployment.
+example several handlers for each Event, as a larger application would have.
+They do not change how the example is deployed.
 
 ## Give a Process Manager an application service
 
@@ -91,18 +92,17 @@ service. Each restored Process Manager receives that service again; the
 service itself is not saved in storage. The callback is synchronous. Prepare
 async clients before creating the context and close them after context shutdown.
 
-Without an argument, the example uses weight one, so its existing load scenario
-is unchanged. The focused example test supplies weight three, posts two
-`CreateTask` Commands, handles the resulting `TaskCreated` Events, and checks
-a saved total of six at version two. This checks both the first object and a
-later object restored from its saved state.
+Without an argument, each task counts as one unit of work. With the service
+above, two `CreateTask` Commands produce two `TaskCreated` Events and a saved
+total of six. The second Event is handled by an object restored from storage;
+`onCreate` supplies the same service again. The example tests check this flow.
 See the [Entity dependency guide](../../docs/USER_GUIDE.md#give-an-entity-an-application-service)
 for the general API.
 
 ## 🗄️ Add persistence deliberately
 
 This example keeps its local run in memory. A durable application supplies a
-storage factory at composition time; domain handlers continue to work with
+storage factory when building the context; domain handlers continue to work with
 typed IDs and messages, not MySQL rows or Datastore entities. Mark a Proto
 field `(column)` only when a read model needs it for filtering or sorting. The
 [storage guide](../../packages/storage/README.md) explains the shared query

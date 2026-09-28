@@ -15,7 +15,7 @@
 import { getOption, hasOption } from "@bufbuild/protobuf";
 import type { DescField, DescFile, Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import type { EntityConstructorStatic } from "./entity.js";
+import type { Entity } from "./entity.js";
 import {
   column,
   entity,
@@ -31,11 +31,15 @@ import {
 export type DescriptorMessageSchema = GenMessage<Message>;
 
 /**
- * Constructible class from the Spine Entity family.
+ * Describes an Entity class, including one that requires application services.
  *
  * @internal
+ * @param args Constructor arguments supplied by the repository or application.
+ * @returns An Entity instance.
  */
-export type EntityConstructor = EntityConstructorStatic;
+export type EntityConstructor = abstract new (
+  ...args: never[]
+) => Entity<unknown, DescriptorMessageSchema>;
 
 const entitySchema = Symbol("spine-ts.entity-schema");
 
@@ -43,7 +47,7 @@ const entitySchema = Symbol("spine-ts.entity-schema");
  * Attaches generated state-schema metadata directly to an Entity class.
  *
  * @internal
- * @param entityType The Entity class that owns the schema metadata.
+ * @param entityType The Entity class to associate with the schema.
  * @param schema The generated Entity state schema.
  */
 export function attachEntitySchema(

@@ -155,19 +155,21 @@ context creation should fail deterministically before any handler is invoked.
 ## Entity constructor dependencies
 
 Both `new Repository({ entityType, schema, onCreate })` and
-`builder.add(EntityClass, { onCreate })` accept an application constructor
-callback. Its input is the framework's typed `EntityOptions`; its result is an
-instance of the registered Entity class. The callback can pass additional
-required constructor arguments without exposing those dependencies in generated
-metadata or changing the Entity's two generic parameters. A constructor that
-cannot accept the framework options alone requires this callback.
+`builder.add(EntityClass, { onCreate })` let the application construct an Entity
+with services it needs. Spine passes `EntityOptions` to `onCreate`; the callback
+returns `new EntityClass(options, service)`. Supply this callback whenever the
+constructor requires arguments beyond `EntityOptions`; optional parameters and
+parameters with defaults do not require it. Services are not stored
+in generated metadata, and the Entity still has two type parameters: its ID and
+state schema.
 
 Use constructor injection rather than assigning dependencies after creation.
 The callback runs for new and restored objects, not merely for new domain IDs.
-Default construction remains available for existing classes. History, query,
-transaction and handler setup remain framework-controlled. State-only queries
-do not construct Entities. A callback exception follows the existing failure
-path before handler invocation or Entity commit, not a domain rejection path.
+Classes that need only `EntityOptions` require no callback. Spine still sets up
+history access, queries, transactions and handlers. Queries of stored state do
+not construct Entities. If the callback throws, the handler does not run and no
+Entity changes are committed; Spine reports a processing failure, not a domain
+rejection.
 
 ## Handler Decorators
 

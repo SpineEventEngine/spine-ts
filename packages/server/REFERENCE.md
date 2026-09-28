@@ -1,6 +1,8 @@
 # @spine-event-engine/server reference
 
-This reference describes the public server contracts for coding agents.
+This reference gives application developers and coding agents the detailed
+server contracts. For an introduction and examples, start with the
+[server README](README.md).
 
 ## Testing entry point
 
@@ -44,12 +46,12 @@ on a best-effort basis; this is not an exactly-once contract.
 
 Supply `onCreate` when an Entity constructor needs an application service:
 `new Repository({ entityType, schema, onCreate })` for an explicit repository,
-or `.add(EntityClass, { onCreate })` for generated repository assembly. The
+or `.add(EntityClass, { onCreate })` when Spine creates the repository. The
 callback receives `EntityOptions` with the registered class's exact identifier
 and state-schema types. Its result must be an instance of that class.
 
 `onCreate` is required when the class cannot be constructed with framework
-options alone. It is optional for existing one-options constructors and for
+options alone. It is optional for constructors that need only `EntityOptions`, or
 constructors whose additional parameters are optional or have defaults.
 
 For each new object, the callback must synchronously return a fresh instance
@@ -67,8 +69,10 @@ rejected. Services are neither serialized nor closed by Spine; close them in
 application shutdown after closing the context.
 
 Spine still connects Entity history and Process Manager queries. A constructor
-callback has no active handler actor or tenant; handler queries retain their
-normal context. This feature adds no dependency container or storage format.
+callback does not receive the current actor or tenant. Pass these to a service
+from the handler when needed. Queries made through the Process Manager still
+use the handler's context. Services are passed directly; no dependency container
+is required, and the storage format is unchanged.
 
 See the [Entity dependency guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/USER_GUIDE.md#give-an-entity-an-application-service)
 and the [Projects example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/projects/README.md).
@@ -79,8 +83,8 @@ Each `BoundedContext` creates and closes exactly one private integration broker.
 The broker has distinct status, configuration, and event exchanges. Event
 export is requested-only: a context installs a domestic publisher only for
 event types requested by another context, and withdrawal removes only that
-requester's interest. The broker does not enforce ownership; the supported
-shape is many consumers and one domain producer per event type at a time.
+requester's interest. Each event type should have one producing domain and may
+have many consumers; the broker does not enforce that producer restriction.
 
 The status exchange announces `BoundedContextOnline`; observing a foreign
 announcement resends the local complete wanted-event document. The
@@ -166,9 +170,9 @@ To override the default channel factory, add
 
 ## Routing lifecycle
 
-Event, command, and state-update routing accepts exact schemas and nominal
-message-interface tokens. It selects exact, first registered matching token,
-then replacement/default. The route runs once at accepted admission; its
+Event, command, and state-update routing accepts exact schemas and generated
+message-interface tokens. It selects an exact schema first, then the first
+matching token, then the replacement or default route. The route runs when the message is accepted; its
 validated typed targets are stored and reused for retries. The legacy-named
 local `catchUpReadSide()` helper is unrelated to retry: it resets and replays
 the whole local read side, and is not Projection catch-up.
@@ -510,7 +514,7 @@ the builder on the first build attempt.
 
 `SubscriptionService` streams are live best-effort notifications, not replay,
 ordering, or completeness contracts. A standalone Server defaults to the
-persistent registry. In a managed complete-replica cohort, the framework starts
+persistent registry. In a group of managed server replicas, the framework starts
 and closes each child Server and accepts only every context's actual
 `InMemorySubscriptionRegistry`; a persistent or custom registry is rejected
 and the assembled child is closed before READY. Durable logical bindings remain
@@ -652,8 +656,8 @@ signal or explicit-close retry, and sets `process.exitCode` to `1` after a
 signal-driven failure.
 
 `ManagedServerApplication.run()` is the Node-only deployment entrypoint for a
-complete-replica process cohort when the framework handles process shutdown.
-`ManagedServerApplication.start()` starts the same cohort for an embedding host
+group of complete server replicas when the framework handles process shutdown.
+`ManagedServerApplication.start()` starts the same group for an embedding host
 and installs no process signal handlers; that host closes the returned handle.
 Both require a positive safe-integer
 `processCount` and an ESM `moduleUrl`; it never derives a process count from
@@ -741,7 +745,7 @@ native backend. Concurrent calls share an attempt; a failed unfinished phase
 can be retried without repeating completed native cleanup.
 
 Browser subscription bindings are separate from service subscription records.
-`BrowserAdmission` selects their ownership. Authenticated mode supplies
+`BrowserAdmission` determines who configures and manages them. Authenticated mode supplies
 `sessions` and may supply `BrowserServerOptions.bindings`; production then
 requires `DurableSubscriptionBindings` from `@spine-event-engine/server/browser` and rejects a
 missing or in-memory binding store before listener open. Public mode supplies
@@ -760,7 +764,7 @@ inside the stored Topic and are checked for Activate and Cancel. Create assigns
 the public ID directly; no quota, reservation, fingerprint, or lease is
 persisted. Cleanup remains bounded and restart-safe at the record level. It
 cleans the backend definition before deleting its record. It is not a cleaner
-lease or fence: this direct store supports one Gateway process. Active streams do not resume,
+lock between Gateway processes: this store supports one Gateway process. Active streams do not resume,
 updates are not replayed, and the registry provides neither exactly-once
 delivery, global update ordering, nor cluster-complete notification delivery.
 
@@ -779,10 +783,10 @@ rows are direct records; a delivered row is the deduplication fact. A handler
 effect and the exact pending-to-delivered compare-and-set are not one
 transaction, so a lost acknowledgement can redeliver after restart. Downstream
 signal handling must be idempotent. A customized `DeliveryWorkRegistry`
-implements `validateOwnership()` so delivery can validate before dispatch, at
-repository commit time, and before acknowledgement. Validation is a fence
-against an observed takeover, not a distributed transaction with handler
-storage.
+implements `validateOwnership()` so delivery can validate before dispatch, before
+the Entity transaction commit, and before acknowledgement. These checks stop a worker
+after it detects that another worker has taken the shard. They do not make
+delivery and handler storage part of one distributed transaction.
 
 `keepUntil` is the optional deduplication-protection deadline, not a second
 retention setting. A delivered row is cleanup-eligible when that deadline is

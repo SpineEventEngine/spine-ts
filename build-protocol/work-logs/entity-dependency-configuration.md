@@ -485,3 +485,105 @@ Verification: changed-file Prettier and `git diff --check` pass. Source and
 existing test inspection confirm snapshot selection, the workflow's single
 `--dist-tag`, and rejection when the opposite tag moves. Only five Markdown
 records changed. No build or test suite was rerun for this record correction.
+
+## Constructor types and documentation correction — 28 September 2026
+
+The human requests implementation now: simplify the constructor types and
+review all documentation in the branch's touched files, not only the quoted
+comments. Correction base: `32b02d626bfed6892c25aff755a01e727b56a9aa`.
+Estimate: 0.4–0.7 hours, including type simplification, documentation audit,
+focused verification, independent review, fixes and push. This remains within
+the existing public-contract task; it changes no dependency-injection behavior.
+
+Acceptance: no unnecessary ambient class, alias chain, lint exception, or
+TypeDoc plugin; preserve concrete Entity/schema pairing, required onCreate,
+wrong result and async result rejection; document purpose and behavior plainly
+throughout touched files. Any existing type test that merely requires an
+implementation trick must be distinguished from a real application guarantee.
+No library, publishing change, new worktree, or PR creation is needed.
+
+Main re-read the protocol and quality rules. Selected local skills:
+codebase-design, typescript-advanced-types, test-driven-development,
+subagent-driven-development, requesting-code-review and verification-before-
+completion. The session catalog and expected-skill manifest were inspected;
+installed entrypoints were listed with rg. Existing task skill-source evidence
+is reused. Project roles, retained implementation context, plain wording and
+the user's existing-checkout instruction supersede conflicting skill defaults.
+Existing regression tests guide this behavior-preserving refactor; add failing
+tests first for any newly exposed behavioral gap rather than artificial tests
+for source spelling.
+
+Desktop supports explicit model/reasoning dispatch. Planned assignments:
+implementer: Sol/medium for type changes and source documentation corrections;
+read-only documentation inventory: Luna/medium; mechanical verification:
+Luna/low; TypeScript/API and style reviews: Sol/medium; documentation review:
+Luna/medium. All children receive explicit profiles, fresh contexts, no memory,
+and no permission to spawn children. Main manages records, Git, and Markdown
+corrections. No overlapping production writers. Runtime introspection is not
+exposed; dispatch metadata supplies the profile evidence.
+
+Verification starts with focused compiler/tests and actual TypeDoc output plus
+formatting, TSDoc and audience checks. After review convergence, run the release
+profile once if public declarations or shared documentation tooling changed.
+No redundant full baseline run. Reliability review checks changed lifecycle
+claims if any; no new lifecycle behavior or security behavior is planned.
+
+Main rechecked the official JVM source already pinned by this task at
+`ea3067b137938ac0beb6920c39d11e300976fcc9`, ProcessManagerRepository.kt lines
+277–309: construction and restoration call configure, which connects queries.
+The correction changes only TS type descriptions and wording, not that behavior.
+
+Assignments started with explicit profiles: constructor_simplification uses
+the existing implementer role, Sol/medium; touched_documentation_audit uses
+the existing documentation reviewer, Luna/medium. The latter completed its
+read-only inventory with no onCreate behavior contradiction. Its wording
+suggestions were incorporated. Its proposed removal of docs-snippet-path was
+rejected: docs/check-typescript-snippets.mjs uses that hidden directive to
+resolve imports while compiling an example, not as a claim that the example
+was copied verbatim from the named file. The reference continues to serve
+coding agents as required, while now explicitly welcoming developers too.
+Changed Markdown formatting and the audience checker pass.
+
+Compiler evidence for simplification: returning a nominal Entity instance from
+the constructor type rejects unrelated classes without a separate static
+marker. Only two existing subclass declarations relied on that marker to reject
+handwritten aliases of concrete constructors. Those aliases do not weaken
+state-schema checks; they may be accepted with the same callback requirements.
+Replace marker-specific assertions with positive and negative application
+examples. Preserve all actual schema and callback safeguards.
+
+Focused evidence: 102 repository/context tests pass; TypeDoc generates its real
+HTML without the deleted plugin and without the removed helper names. TSDoc,
+changed-source formatting, Markdown audience checks and snippet compilation
+pass. The independent humane_docs_review completed under explicit Luna/medium
+with no findings; a provisional constructor wording concern was withdrawn after
+checking the implementation. Main made optional/defaulted parameters explicit
+for clarity anyway.
+
+GitHub now has human-created PR #11 for this branch. Its previous head
+`32b02d626bfed6892c25aff755a01e727b56a9aa` passed Build verify in run
+36409104223. That is not evidence for the pending correction. Attach the
+existing PR, push the correction and require green CI at its final SHA. The
+observed CI duration is about 20 minutes, additional to active correction work.
+
+Correction reviews converged. Main checked the API review's proposed regression
+against two empty same-schema subclasses already compatible under the old
+static marker; the reviewer withdrew it. The existing runtime instanceof check
+remains unchanged. The three accepted documentation findings and commit wording
+clarification were corrected, then the same style/reliability reviewers
+confirmed them resolved. No source or runtime changes followed the successful
+compiler and 102-test run; only comments changed. ESLint, cleanup, TSDoc,
+formatting, Markdown audience/snippet checks and docs:api:check all pass.
+
+The correction removes two plugin files and their configuration, the ambient
+class, the alias chain and unused static marker. It reviews TSDoc throughout
+the four touched server source files and the Projects example, plus the touched
+guides/references. The example's source comments needed no change. The deleted
+plugin tests are no longer relevant; runtime and type-safety tests remain.
+No packages, dependencies, version numbers, or publication policy were changed.
+
+Commit and push this reviewed correction, then run one verify:release with its
+configured single test worker while CI verifies the same commit. The
+orchestrator-dispatched constructor_final_verification function uses explicit
+Luna/low, no edits or children, and writes logs under
+/tmp/spine-constructor-simplification.zYbTVX. Do not rerun other full profiles.

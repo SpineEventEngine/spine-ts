@@ -288,7 +288,7 @@ export class ProcessManagerQuery<
 const rejectedCommits = new WeakMap<object, RejectedCommitSnapshot>();
 
 /**
- * Lifecycle flags carried by a common entity shell.
+ * Whether an Entity has been archived or deleted.
  */
 export interface EntityLifecycleFlags {
   // prettier-ignore
@@ -396,30 +396,21 @@ export interface EntityOptions<Id, Schema extends DescriptorMessageSchema> {
 }
 
 /**
- * Public entity family marker exposed by Spine server entity base classes.
+ * The three kinds of Entity supported by server repositories.
  */
 export type EntityFamily = "aggregate" | "projection" | "process-manager";
 
 /**
  * Identity, state, version, and lifecycle of one server-side Entity.
  *
- * The shell exposes identity, descriptor-derived metadata, cloned state
- * snapshots, Spine Version snapshots, and lifecycle flags. It does not
- * invoke handlers, create transactions, write repositories or storage, dispatch
- * messages, increment versions, route IDs, query read models, start buses, or
- * mutate process-wide runtime state.
+ * Keeps the Entity ID, state schema, state, Spine Version, and lifecycle flags.
+ * State and Version accessors return copies, and lifecycle access returns a
+ * separate flag object. Repositories run handlers and manage storage.
  *
  * @typeParam Id Domain identifier type.
  * @typeParam Schema Generated schema describing the Entity state.
  */
 export abstract class Entity<Id, Schema extends DescriptorMessageSchema> {
-  // prettier-ignore
-
-  /**
-   * @hidden
-   */
-  declare protected static readonly spineTsEntityConstructor: true;
-
   readonly #id: Id;
 
   readonly #schema: Schema;
@@ -435,7 +426,7 @@ export abstract class Entity<Id, Schema extends DescriptorMessageSchema> {
   #lifecycleFlagsChanged = false;
 
   /**
-   * Creates an entity shell from caller-provided state and metadata inputs.
+   * Initializes an Entity from its ID, schema, state, Version, and lifecycle flags.
    *
    * @param options Identity, schema, state, version, and lifecycle inputs.
    */
@@ -620,30 +611,6 @@ export abstract class Entity<Id, Schema extends DescriptorMessageSchema> {
   }
 }
 
-/* eslint-disable @typescript-eslint/no-unused-vars -- Ambient nominal constructor shape emits no JS. */
-
-/**
- * Describes the static Entity family marker without restricting application constructors.
- *
- * @internal
- */
-declare abstract class EntityConstructorShape extends Entity<unknown, DescriptorMessageSchema> {
-  /**
-   * Accepts concrete Entity constructors with application-supplied arguments.
-   *
-   * @param args Constructor arguments supplied by a repository callback.
-   */
-  constructor(...args: never[]);
-}
-/* eslint-enable @typescript-eslint/no-unused-vars */
-
-/**
- * Preserves the protected Entity family marker while allowing constructor dependencies.
- *
- * @internal
- */
-export type EntityConstructorStatic = typeof EntityConstructorShape;
-
 interface BoundEntityHistory {
   readonly stateAt: (time: Timestamp) => Promise<unknown>;
   readonly states: (depth: number) => Promise<readonly unknown[]>;
@@ -812,14 +779,10 @@ const EntityHistory = Object.freeze({
 /**
  * Entity base with one active transaction draft.
  *
- * The transaction scope is backed by {@link EntityTransaction}. Subclasses can
- * start one active draft, mutate draft state and lifecycle through protected
- * helpers, and then commit or roll back the scope. Accepted commits replace this
- * Entity's state, framework-calculated Spine Version, and lifecycle flags.
- * Rejected commits leave the transaction active so subclass code can correct the
- * draft or roll it back explicitly. This base does not write repositories,
- * emit events, dispatch handlers, or manage global
- * transaction state.
+ * Repository dispatch starts and finishes each transaction. Entity handlers
+ * change the draft state or lifecycle through protected helpers. A successful
+ * commit updates state, Spine Version, and lifecycle flags. A rejected commit
+ * leaves the draft active until the framework rolls it back.
  *
  * @typeParam Id Domain identifier type.
  * @typeParam Schema Generated schema describing the Entity state.
@@ -1228,8 +1191,8 @@ export abstract class Aggregate<
 /**
  * Base class for Projections with transactional state.
  *
- * Provides Projection family identity. Repositories and bounded contexts invoke
- * Event handlers and persist their state changes with the Projection's Version.
+ * Repositories and Bounded Contexts invoke Event handlers and persist state
+ * changes with the Projection's Version.
  * Projections do not expose the diagnostic history methods of other families.
  *
  * @typeParam Id Domain identifier type.
@@ -1352,10 +1315,10 @@ export abstract class ProcessManager<
  */
 const EntityFamilies = Object.freeze({
   /**
-   * Sets an immutable family marker on an Entity instance.
+   * Records whether an Entity is an Aggregate, Projection, or Process Manager.
    *
    * @param entity Instance being constructed.
-   * @param family Aggregate, Projection, or Process Manager family marker.
+   * @param family Kind of Entity being constructed.
    */
   mark(entity: object, family: EntityFamily): void {
     Object.defineProperty(entity, "entityFamily", {

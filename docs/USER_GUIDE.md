@@ -89,12 +89,11 @@ commands, events, and entity state there. A command says what a caller wants;
 an event records a fact that happened; entity state is the current readable
 form of an Aggregate, Projection, or Process Manager.
 
-Keep each Bounded Context's domain language in its own model package. The server
-application composes the top-level Proto modules for all assembled contexts
-into one deterministic application `TypeRegistry`; a client application
-depends on and composes the published context model modules it needs. This is
-explicit build/application composition, not runtime package scanning or mutable
-global schema registration.
+Keep each Bounded Context's domain language in its model package. The server
+application combines the contexts' Proto modules into one `TypeRegistry`.
+A client imports only the published model modules it needs. Register these
+modules explicitly when setting up the application; Spine does not discover
+them by scanning installed packages.
 
 Keep the identifier as the first field of a command and the entity state. That
 is the implicit default target ID for Spine TS: it needs no extra routing
@@ -122,7 +121,7 @@ non-OK command responses, while a handled domain rejection rolls back the
 state change and is published independently on a best-effort event path.
 
 Mark only fields that must be queried or sorted with `(column)`. The complete
-Proto record remains authoritative bytes; a field does not become a physical
+Proto record is still stored in full; a field does not become a physical
 provider column simply because it appears in a message.
 
 Continue with the [Proto model reference](../packages/proto/REFERENCE.md) for
@@ -458,7 +457,7 @@ replay, deduplication, or durable queue, so consumers should re-query or make
 effects idempotent when appropriate.
 
 For one process, the default `InMemoryTransportFactory` is sufficient.
-`ServerEnvironment` owns one shared factory for all local contexts and closes it
+`ServerEnvironment` uses one shared factory for all local contexts and closes it
 once when the environment closes. IntegrationBroker exchange is process-local
 through this message-channel factory. In production, configure
 `ServerEnvironment` with storage, optional `integrationChannelFactory`, and

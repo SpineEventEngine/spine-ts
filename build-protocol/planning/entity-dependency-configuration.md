@@ -1,6 +1,6 @@
 # Entity dependency configuration
 
-Status: Entity implementation, requested reviews, full local release verification and audits complete. The human retained snapshot-only publication on 28 September; the tag-policy blocker is resolved. No PR CI result is claimed.
+Status: Constructor simplification and plain-language documentation correction in progress after the earlier completed implementation, reviews and release verification. Snapshot-only publication is retained. No PR CI result is claimed.
 Date: 27 September 2026.
 Branch: `entity-dependency-configuration`.
 Base: freshly fetched official `origin/master`,
@@ -23,6 +23,11 @@ Base: freshly fetched official `origin/master`,
   requirement. Do not mutate npm tags during this task.
 - Use simple explanations and concrete examples. No new dependency container,
   speculative lifecycle system, or unrelated infrastructure.
+- 28 September correction: simplify the Entity constructor typing and remove
+  unnecessary helper types and supporting documentation machinery. Review all
+  documentation in files touched by this branch, including internal comments
+  and generic parameters, and use plain explanations of purpose and behavior.
+  Preserve valid dependency-injection use and useful compile-time checks.
 
 ## Completed analysis
 

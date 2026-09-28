@@ -71,7 +71,7 @@ fresh or restored Entity object, not just once per ID. It also works for
 Aggregates and Projections, including Projection rebuilds. Return a fresh
 instance synchronously and pass the supplied options unchanged. Application
 services are not persisted; the application manages their initialization and
-shutdown. Existing one-options constructors need no callback.
+shutdown. Constructors that need only `EntityOptions` require no callback.
 
 Explicit repositories accept `onCreate` in their options too. See the
 [guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/USER_GUIDE.md#give-an-entity-an-application-service) for the

@@ -95,28 +95,32 @@ Entity versions manually.
 Applications may supply a synchronous `onCreate(options)` callback when
 registering an Entity class or an explicit Repository. It constructs the
 registered Entity with the supplied `EntityOptions` and application dependencies.
-The callback is required when the constructor needs arguments that the default
-one-options construction cannot supply. Ordinary Entity constructors need no
-callback. Keep the existing concrete ID/state-schema type checks.
+The callback is required when the constructor needs arguments beyond
+`EntityOptions`. Constructors that need only those options require no callback;
+additional optional parameters or parameters with defaults are also allowed
+without one.
+Registration must still check the Entity's ID and state-schema types.
 
-The repository calls the callback when constructing an object for handling,
+The repository calls the callback when constructing an object to handle a message,
 including restoration from stored state and Projection rebuilds. It is not a
 notification of the first creation of a persistent Entity ID. The callback must
 return a fresh instance of the registered class synchronously and pass the
 framework's state, Version, and lifecycle options through unchanged. Returning
 a result of the wrong class or a Promise, or throwing an error, prevents handler
-invocation and business-state commit. Freshness and forwarding unchanged options
-are application responsibilities; normal infrastructure failure reporting
-remains in place.
+invocation and business-state commit. The application must create a new object
+on each call and forward the options unchanged; Spine does not check those two
+requirements. Construction failures use the normal processing-error reports.
 
-Framework history and Process Manager query bindings remain separate from
-application construction. Dependencies are ordinary application objects, never
-Proto state or generated registry data. Applications initialize shared clients
+Spine still sets up history access and Process Manager queries after the
+application constructs the Entity. Dependencies are ordinary application objects,
+not Proto state or generated registry data. Applications initialize shared clients
 before building the context and close them during application shutdown. The
 factory does not receive tenant or actor information; tenant-aware services
-receive validated context through their handler calls. Dependency injection
-adds no external-side-effect rollback, async constructor, disposal hook, cache,
-container, or wire/storage format.
+receive validated context through their handler calls. Passing a service into
+an Entity does not make external calls transactional: a failed handler cannot
+undo a request already sent to another service. The callback is synchronous,
+and the application remains responsible for creating and closing shared services.
+Wire and storage formats are unchanged.
 
 ## End-User Handler API Invariants
 

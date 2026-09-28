@@ -359,15 +359,6 @@ describe("repository identity", () => {
     }
   });
 
-  it("keeps internal constructor markers out of the runtime constructor shape", () => {
-    expect("__spineTsBuiltInEntityConstructor" in Aggregate).toBe(false);
-    expect("__spineTsBuiltInEntityConstructor" in Projection).toBe(false);
-    expect("__spineTsBuiltInEntityConstructor" in ProcessManager).toBe(false);
-    expect("spineTsEntityConstructor" in Aggregate).toBe(false);
-    expect("spineTsEntityConstructor" in Projection).toBe(false);
-    expect("spineTsEntityConstructor" in ProcessManager).toBe(false);
-  });
-
   it("uses one captured entity type display name per rejected identity diagnostic", () => {
     let nameReadCount = 0;
     const volatileNamedEntityType = {
@@ -766,34 +757,32 @@ describe("repository identity", () => {
           schema: ProjectStateSchema,
         };
       void concreteSchemaFamilyBroadAnnotatedOptions;
-      type ManuallySpelledFamilyBroadAggregateInstance = Aggregate<
-        string,
-        typeof ProjectStateSchema
-      >;
-      type ManuallySpelledFamilyBroadAggregateEntityType = (abstract new (
+      type TaskConstructorAlias = (abstract new (
         options: EntityOptions<string, typeof ProjectStateSchema>,
-      ) => ManuallySpelledFamilyBroadAggregateInstance) & {
+      ) => TaskAggregate) & {
         readonly name: string;
-        readonly prototype: ManuallySpelledFamilyBroadAggregateInstance;
+        readonly prototype: TaskAggregate;
       };
-      // @ts-expect-error manually spelled family-broad constructor shapes must not satisfy repository options.
-      const manuallySpelledFamilyBroadOptions: RepositoryOptions<ManuallySpelledFamilyBroadAggregateEntityType> =
-        {
-          entityType: TaskAggregate,
-          schema: ProjectStateSchema,
-        };
-      void manuallySpelledFamilyBroadOptions;
-      type PublicStringBrandFamilyBroadAggregateEntityType =
-        ManuallySpelledFamilyBroadAggregateEntityType & {
-          readonly __spineTsEntityConstructorBrand: true;
-        };
-      // @ts-expect-error callers must not satisfy repository options by spelling the old public string brand.
-      const publicStringBrandFamilyBroadOptions: RepositoryOptions<PublicStringBrandFamilyBroadAggregateEntityType> =
-        {
-          entityType: undefined as unknown as PublicStringBrandFamilyBroadAggregateEntityType,
-          schema: ProjectStateSchema,
-        };
-      void publicStringBrandFamilyBroadOptions;
+      const aliasedOptions: RepositoryOptions<TaskConstructorAlias> = {
+        entityType: TaskAggregate,
+        schema: ProjectStateSchema,
+        onCreate: (options) => new TaskAggregate(options),
+      };
+      void aliasedOptions;
+      const wrongAliasedSchema: RepositoryOptions<TaskConstructorAlias> = {
+        entityType: TaskAggregate,
+        // @ts-expect-error an alias cannot pair this Entity with a different state schema.
+        schema: ProjectOverviewStateSchema,
+        onCreate: (options) => new TaskAggregate(options),
+      };
+      void wrongAliasedSchema;
+      const asyncAliasedCreation: RepositoryOptions<TaskConstructorAlias> = {
+        entityType: TaskAggregate,
+        schema: ProjectStateSchema,
+        // @ts-expect-error an alias still requires synchronous Entity creation.
+        onCreate: (options) => Promise.resolve(new TaskAggregate(options)),
+      };
+      void asyncAliasedCreation;
       type SchemaUnionAggregateEntityType = RepositoryEntityType<
         Aggregate<unknown, typeof ProjectStateSchema | typeof ProjectOverviewStateSchema>
       >;
@@ -827,17 +816,6 @@ describe("repository identity", () => {
         ConcreteSchemaFamilyBroadAggregateEntityType
       > {}
       void ConcreteSchemaFamilyBroadRepositorySubclass;
-      abstract class ManuallySpelledFamilyBroadRepositorySubclass extends Repository<
-        // @ts-expect-error subclasses must not bind manually spelled family-broad constructor shapes.
-        ManuallySpelledFamilyBroadAggregateEntityType
-      > {}
-      void ManuallySpelledFamilyBroadRepositorySubclass;
-      abstract class PublicStringBrandFamilyBroadRepositorySubclass extends Repository<
-        // @ts-expect-error subclasses must not bind manually spelled constructor
-        // shapes by spelling the old public string brand.
-        PublicStringBrandFamilyBroadAggregateEntityType
-      > {}
-      void PublicStringBrandFamilyBroadRepositorySubclass;
       abstract class SchemaUnionRepositorySubclass extends Repository<
         // @ts-expect-error subclasses must not bind schema-union repository entity constructor types.
         SchemaUnionAggregateEntityType

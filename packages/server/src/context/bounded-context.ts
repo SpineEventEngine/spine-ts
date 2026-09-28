@@ -181,7 +181,7 @@ interface SystemPairingSnapshot {
 }
 
 /**
- * Minimal repository owner marker retained after registration.
+ * Bounded Context associated with a registered repository.
  */
 interface RepositoryOwner {
   // prettier-ignore
@@ -193,7 +193,7 @@ interface RepositoryOwner {
 }
 
 /**
- * Context-owned storage data needed while repositories register.
+ * Storage and delivery services supplied when a repository registers.
  */
 interface RepositoryRegistration {
   // prettier-ignore
@@ -214,22 +214,22 @@ interface RepositoryRegistration {
   readonly storageFactory: StorageFactory;
 
   /**
-   * Context-owned read-side Stand used by framework repository dispatch.
+   * Stand that stores read-side state for this context.
    */
   readonly stand: Stand;
 
   /**
-   * Context-owned Entity Inbox handoff for Aggregate and Process Manager work.
+   * Entity Inbox that delivers Aggregate and Process Manager work.
    */
   readonly entityInbox: EntityInbox;
 
   /**
-   * Context-owned local projection subscriber inbox handoff.
+   * Projection Inbox that delivers local subscriber work.
    */
   readonly projectionInbox: ProjectionInbox;
 
   /**
-   * Context-owned contained publisher for signals produced by repository work.
+   * Publisher for signals produced by repository handlers.
    */
   readonly publisher: SignalPublisher;
 
@@ -339,10 +339,10 @@ export interface ContextDeliveryDescriptor {
   onReady(onReady: OnDeliveryReady): () => void;
 
   /**
-   * Updates readiness ownership to use configured delivery routes.
+   * Routes readiness notifications through the configured delivery routes.
    *
    * @param scopes Lists routes that may receive buffered readiness.
-   * @param onReady Observes readiness after routed ownership begins.
+   * @param onReady Observes readiness after routing changes.
    * @param options Allows an empty route set when `allowEmpty` is true.
    * @returns A promise that resolves after the readiness transition completes.
    */
@@ -380,7 +380,7 @@ export interface CommandEndpoint {
   acceptedCommandTypes(): readonly string[];
 
   /**
-   * Posts a command into the context-owned command bus.
+   * Posts a command to this context's command bus.
    *
    * @param command Contains the command to dispatch.
    * @returns A promise that settles after queued command dispatch completes and may reject.
@@ -402,7 +402,7 @@ export interface EventEndpoint {
   acceptedEventTypes(): readonly string[];
 
   /**
-   * Posts an event into the context-owned event bus.
+   * Posts an event to this context's event bus.
    *
    * @param event Contains the event to dispatch.
    * @returns A promise that settles after persistence and dispatch complete and may reject.
@@ -748,7 +748,7 @@ export class BoundedContext {
   }
 
   /**
-   * Creates a framework-owned bounded context.
+   * Creates a Bounded Context from its prepared framework services.
    *
    * @param snapshot Contains the immutable context metadata.
    * @param commandBus Dispatches commands accepted by this context.
@@ -757,7 +757,7 @@ export class BoundedContext {
    * @param publisher Publishes signals produced by context handlers.
    * @param stand Stores read-side state for this context.
    * @param systemStand Stores read-side state for the paired System Context.
-   * @param subscriptionRuntime Coordinates pair-owned subscription delivery.
+   * @param subscriptionRuntime Coordinates subscriptions for the paired contexts.
    * @param systemSpec Contains paired System Context metadata.
    * @param storageFactory Creates context storage.
    * @param repositories Lists repositories to register.
@@ -989,7 +989,7 @@ export class BoundedContext {
   }
 
   /**
-   * Returns the command endpoint owned by this context.
+   * Returns this context's command endpoint.
    *
    * @returns Returns the context command endpoint.
    */
@@ -998,7 +998,7 @@ export class BoundedContext {
   }
 
   /**
-   * Returns the event endpoint owned by this context.
+   * Returns this context's event endpoint.
    *
    * @returns Returns the context event endpoint.
    */
@@ -1007,7 +1007,7 @@ export class BoundedContext {
   }
 
   /**
-   * Returns the context-owned read-side Stand.
+   * Returns the Stand that stores this context's read-side state.
    *
    * @returns Returns the read-side state store.
    */
@@ -1092,14 +1092,14 @@ export class BoundedContext {
   }
 
   /**
-   * Closes context-owned buses, Stand, and repository storage/runtime bindings.
+   * Closes this context's buses, Stand, and repository storage and runtime bindings.
    *
    * Close is idempotent and returns the same close outcome on repeated calls.
-   * The context attempts every owned close hook; when any hook fails, the
+   * The context attempts every close hook; when any hook fails, the
    * returned promise rejects with an `AggregateError` after the remaining hooks
    * have also been attempted.
    *
-   * @returns A promise that settles after all owned resources close.
+   * @returns A promise that settles after all resources close.
    */
   close(): Promise<void> {
     closingContexts.add(this);
@@ -1313,7 +1313,7 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
  * `onCreate` passes the framework's Entity options to an application constructor callback.
  * It is required when the Entity class has additional required constructor arguments.
  *
- * @typeParam EntityType - The Entity class added to a Bounded Context builder.
+ * @typeParam EntityType The Entity class added to a Bounded Context builder.
  */
 export type GeneratedRepositoryOptions<
   EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
@@ -1413,7 +1413,7 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Creates a framework-owned context builder.
+   * Creates a builder from a prepared context specification.
    *
    * @param specSnapshot Contains the initial context specification.
    * @param token Proves framework-controlled construction.
@@ -1648,7 +1648,7 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Sets the target-to-shard strategy for the context-owned Entity Inbox.
+   * Sets how Entity Inbox targets are assigned to shards.
    *
    * @param strategy Selects the durable shard for Aggregate and Process Manager targets.
    * @returns Returns this builder for further configuration.
@@ -2019,7 +2019,7 @@ export class ContextSpec {
   }
 
   /**
-   * Creates a framework-owned context specification.
+   * Creates a context specification from prepared values.
    *
    * @param snapshot Contains immutable specification values.
    * @param token Proves framework-controlled construction.

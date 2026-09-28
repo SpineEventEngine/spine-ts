@@ -12,7 +12,7 @@ points fit together and records cross-package API limits.
 `.route(Schema, via)` for one generated schema and `.route(Token, via)` for a
 generated message-interface token. Exact schema wins; otherwise the first
 registered matching token wins; otherwise the replacement/default applies.
-Routes execute at accepted admission and retries use stored typed targets.
+Routes run when a message is accepted; retries use the targets saved with it.
 The legacy-named local `catchUpReadSide()` reset/replay helper reruns current
 Projection subscriptions; it is not Projection catch-up. The [To-Do
 guide](../../examples/todo/USER_GUIDE.md) contains executable source-linked
@@ -54,13 +54,13 @@ The generated TypeDoc reference contains the curated
 `@spine-event-engine/proto` root API for copied Spine contracts, the `@spine-event-engine/core`
 metadata/type registry and validation facade APIs, the `@spine-event-engine/server`
 descriptor-derived entity metadata, the browser-safe injected-transport
-`@spine-event-engine/client-web` protocol kernel (with explicit gRPC-Web and
+`@spine-event-engine/client-web` client API (with explicit gRPC-Web and
 Connect factories plus synchronous per-call metadata), the
 `@spine-event-engine/client-node` Node transport factory and descriptor-backed query helpers,
 context `Repository` registration,
 set-once transition validation, explicit handler metadata APIs,
-command/event bus exports, the server runtime lifecycle/async queue
-kernel, write-side signal intake result exports, the real Connect/Node
+command/event bus exports, the server runtime lifecycle and async queue,
+signal-submission results, the Connect/Node
 `SpineServices` route registrar for the raw Spine
 command/query/subscription services with storage-backed Stand subscription
 definitions and local active streams, a small local `Server` lifecycle owner for real
@@ -69,23 +69,23 @@ contracts, `@spine-event-engine/storage` contracts, and the minimal
 `@spine-event-engine/testing` BlackBox test boundary, optional Datastore storage, and
 the MySQL and PostgreSQL RDBMS storage factory, errors, and options.
 
-For managed Server cohorts, `SubscriptionService` is a live best-effort stream:
+For groups of managed Server processes, `SubscriptionService` is a live best-effort stream:
 it has no replay or cluster-completeness guarantee. The Gateway alone keeps
-durable logical bindings and rehydrates them on restart. A Coordinator fans one
-binding to READY complete replicas, merges their updates, and propagates
+saved subscription bindings and restores them on restart. A Coordinator sends each
+subscription to all READY replicas, merges their updates, and propagates
 cancellation without putting subscription payloads on parent/child IPC. Late
 and replacement replicas synchronize retained definitions before they become
-eligible. Standalone Servers retain the persistent registry default; framework-
-owned managed children require each actual context registry to be
+eligible. Standalone Servers retain the persistent registry default; child
+processes started by the framework require each context registry to be
 `InMemorySubscriptionRegistry`, rejecting and closing persistent or custom
-registries before READY. Active definitions attach before admission; inactive
+registries before READY. Active subscriptions attach before accepting requests; inactive
 definitions do not block readiness. Each child observes application-configured
-remote/shared Delivery directly. DRAINING stops new unary and shard admission,
+remote/shared Delivery directly. DRAINING stops accepting new unary calls and shard work,
 retains subscription relays through active work, and closes the child after the
-final updates. The application owns Delivery facility and shard-strategy
-selection; managed mode does not infer or certify their provenance.
+final updates. The application selects its Delivery service and shard strategy;
+managed mode does not choose them or check where they came from.
 
-The reference has 15 entry points, including `@spine-event-engine/client-web`,
+The reference includes entry points for `@spine-event-engine/client-web`,
 `@spine-event-engine/client-node`, `@spine-event-engine/delivery-client`, and
 `@spine-event-engine/delivery-server`. The latter is a listener-free, in-memory simple
 server core; constructing a replacement core intentionally loses its state.
@@ -98,7 +98,7 @@ delivery ports; generated delivery RPC clients remain internal.
 routing declarations. Each accepts an exact generated schema or a generated
 interface token. Matching selects exact schema, then the first registered
 matching token, then the replacement/default route. Route functions are
-deterministic and side-effect-free during accepted admission, while durable
+deterministic and side-effect-free when accepting a message, while durable
 replay uses stored typed targets rather than calculating them again.
 
 TypeScript consumes `ts_type` and ignores Java-only option fields. Frozen Proto
@@ -253,7 +253,7 @@ and `build()` returns a
 internally while exposing a post-only `CommandEndpoint` and an event
 listing/posting `EventEndpoint` through `commandBus()` and `eventBus()`, plus a
 direct `Stand` for the context
-through `stand()`. The shell validates
+through `stand()`. The context builder validates
 non-empty/non-blank names outside the reserved `__spine/` framework namespace
 and records tenant mode. `builder.add(repository)` /
 `builder.remove(repository)` maintain
@@ -519,13 +519,13 @@ delivery-topology configuration; it intentionally exposes this one JVM-style
 global process environment configuration.
 
 `ServerEnvironmentSettings` also accepts the optional `integrationChannelFactory`.
-It is the message-channel factory used by each context-owned integration broker;
-when omitted, all local contexts use the same environment-owned
+It is the message-channel factory used by each context's integration broker;
+when omitted, all local contexts use the environment's shared
 `InMemoryTransportFactory`. `typeRegistry` remains the complete application
 schema lookup used by `ThirdPartyContext`. Local/test resolution supplies
 in-memory storage and `spineCoreRegistry` when omitted. Production resolution
 rejects omitted storage or type registry, so production applications must
-compose and configure their own schema universe (for example with
+register all application message schemas (for example with
 `TypeRegistry.from(...)`). Commands, queries, and subscriptions enter through
 the normal generated services and their Buses; the integration channel factory
 does not provide another application-signal ingress path.
@@ -594,7 +594,7 @@ Durable-delivery exports include the `Delivery` interface created by the builder
 `InboxStorageOptions`, `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`,
 `ShardSession`, `ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`.
 `DeliveryBuilder` snapshots storage, node, shard strategy, monitor, and bounded
-read options. A run picks up one shard with complete `WorkerId` fencing and
+read options. A run takes one shard, checks the complete `WorkerId`, and
 reads direct pending rows in bounded, stable order. It neither exposes pages or
 retained summaries nor creates guard records, per-message claims, attempt
 history, a retry policy, or a scheduler. Direct inbox writes require
@@ -603,9 +603,12 @@ deduplication fact. Framework replay handles `HANDLE_COMMAND`,
 `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; `CATCH_UP` remains pending and
 `IMPORT_EVENT` fails closed as storage corruption.
 
-Pickup, renewal, acknowledgement, and release use compare-and-set fencing at
-each operation. A completed `WorkerId` can recover its own unexpired session;
-a different worker is excluded until it expires, and a stale owner cannot
+Pickup, renewal, and release each check and update the stored worker session
+atomically. Before acknowledging delivery, the worker validates or renews its
+session, then marks the Inbox row delivered in a separate operation. Another
+worker may take the shard between those operations. The same complete `WorkerId`
+can recover its unexpired session;
+a different worker is excluded until it expires, and a previous worker cannot
 release a newer session. `DeliveryMonitor` contains reception failures: by
 default it marks the row delivered and continues independent targets; an
 application may choose immediate repeat dispatch instead. There is no
@@ -621,8 +624,8 @@ must be idempotent. The delivery model has no attempt history, exhaustion,
 claims, quarantine, receipts, markers, timers, backoff, dead-letter storage,
 or scheduler persistence.
 The package does not expose a raw worker callback API; framework replay
-stays behind validated endpoints. Renewal is checked through shard fencing at
-protected delivery operations rather than by a timer around callbacks.
+uses the framework's validated endpoints. Delivery operations check that the
+worker still holds the shard, rather than renewing it on a timer around callbacks.
 `InboxReadOptions.limit` remains the page-size control for a single ordered
 inbox read and must be positive and at most `1000`.
 `InboxReadContinuation` names the stable row key used to read the next ordered
@@ -656,7 +659,7 @@ validation exports include `validateEntityStateTransition()`,
 from descriptor metadata and shaped through the core transition validation
 facade. Repeated, map-valued, and explicit optional `(set_once)` fields are
 unsupported here and fail closed with field-specific validation
-violations. The transaction kernel exports `EntityTransaction`,
+violations. The transaction API exports `EntityTransaction`,
 `createEntityTransaction()`, typed draft/commit/rollback result contracts,
 Spine `Version` result contracts, lifecycle flags, status/mutator/helper operation
 types, `EntityTransactionStateError`, and
@@ -912,12 +915,9 @@ Spine fan-out semantics and do not reject multiple receivers for the same event
 type. Origin classification is retained in each handler record: unmarked
 handlers are domestic and canonical first-parameter `External<T>` handlers are
 external. The readiness view exposes the complete event schema set and the
-external subset used by the context-owned integration broker to publish wanted
-events. It is not an event bus, integration
-broker, import bus, event store, delivery mechanism, stand, subscription
-service, command-result subscription, dispatcher, router, event posting API,
-validator, repository dispatcher, storage writer, transport adapter, handler
-invoker, or Spine `Ack` producer.
+external subset used by the context's integration broker to request events.
+This is a read-only view of handler registration; it does not invoke handlers,
+store events, or deliver messages.
 Bus exports include `CommandBus`, `CommandDispatcher`, `EventBus`, and
 `EventDispatcher`. `CommandBus` accepts generated Spine `Command` envelopes,
 queues accepted work asynchronously, and routes by enclosed message type URL to
@@ -939,11 +939,11 @@ Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
 `ServerRuntimeStateOperation`, `ServerRuntimeRejectedState`,
 `RuntimeStateErrorCode`, and `ServerRuntimeStateError` for the first
-single-process lifecycle and async queue kernel. The lifecycle state machine is
+single-process lifecycle and async work queue. The lifecycle state machine is
 deterministic: `created -> running` on
 `start()`, `created -> closed` when closed before start, and
 `running -> closing -> closed` when close drains already accepted work.
-`ServerRuntimeStateError.code` is stable taxonomy
+`ServerRuntimeStateError.code` is always
 `"INVALID_RUNTIME_STATE"`; the rejected runtime condition is exposed separately
 as `state`. `close()` is idempotent, prevents new intake, and waits for
 previously accepted work to settle. `enqueue()` accepts work only while the
@@ -953,21 +953,17 @@ server work only. The queue has no timeout, cancellation, fairness, queue
 bound, or hostile-callback protection, so non-settling work can keep `close()`
 pending. Same-runtime reentrant `enqueue()` and `close()` calls from active work
 are rejected with `state: "running-work"` to avoid queue self-deadlocks. This
-surface is a server-runtime kernel only; it is not a process-wide singleton,
-process supervisor, generic job framework, command/event/import bus, durable
-storage or inbox, read-side stand, repository dispatcher, integration broker,
-broad gRPC server lifecycle, or worker-process runtime.
+runtime manages one in-process work queue. It does not start network listeners
+or child processes, persist work, or perform message dispatch.
 Runtime metadata exports include `SignalMetadata`, `Clock`,
 `SystemClock`, `FixedClock`, `SignalMetadataOptions`, `ActorContextInput`,
 `CommandContextInput`, and `EventContextInput`. `SignalMetadata` creates
 generated command IDs, event IDs, timestamps, actor/tenant command context,
 source-command/source-event origin chains, primitive (`string | number |
 boolean`) producer IDs, and validated int32 `Version` metadata through one
-small shared policy surface. Generated IDs use Node secure UUIDs; deterministic
-tests inject `Clock` and use fixed source envelopes. This seam is
-local runtime metadata only; it does not discover handlers, load generated
-registries, materialize application handlers, manage transport, storage, tracing,
-or end-user envelope APIs.
+implementation. Generated IDs use Node secure UUIDs; tests can supply a fixed
+`Clock` and source envelopes. This API prepares signal metadata; it does not
+discover or invoke handlers, deliver messages, or save them.
 Existing Command and Event envelopes retain their supplied IDs without UUID-format
 validation; the UUID guarantee applies to newly generated IDs, not to decoding,
 transport, or retransmission of an existing envelope.
@@ -982,7 +978,7 @@ exports with `BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
 `CommandRegistrationReadiness`, and `EventRegistrationReadiness` to prove the
 metadata and lifecycle interfaces fit together. The public `Server` export is
 a separate local HTTP/2 service host over `SpineServices`; it does not broaden
-the runtime kernel into command/event/import bus behavior, handler invocation,
+the work queue into command/event/import bus behavior, handler invocation,
 read-side execution, delivery, integration-broker behavior, or Spine `Ack`
 mapping.
 Write-side signal intake exports include `SignalKind`, `SignalIntakeResult`,
@@ -1051,7 +1047,7 @@ and append with one captured storage context. It does not dispatch events,
 manage delivery, or fan out to subscribers.
 
 The transport package exports only the private integration message-channel
-contracts used by context-owned integration brokers: `MessageChannel`,
+contracts used by each context's integration broker: `MessageChannel`,
 `Publisher`, `Subscriber`, `ExternalMessageConsumer`, `ConsumerHandle`, and
 `TransportFactory`, plus `InMemoryTransportFactory`. Generated `ChannelId`
 comes from `@spine-event-engine/proto`. Channels carry exact generated

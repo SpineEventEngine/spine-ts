@@ -9,12 +9,12 @@ The fixed registry contains three Aggregates (`Project`, `Task`, and `Person`),
 twenty Projections, and ten Process Managers: thirty-three repositories. Proto
 and handler registries are generated artifacts and must not be edited.
 
-The local topology does not select a durable provider. In a durable composition,
+The example uses in-memory storage. With a durable storage provider,
 providers can push down record IDs and declared `(column)` filters or sort
 fields, but `RecordQuery<I>` statically types IDs only. The descriptor and
 column mapping behavior is provider-specific: for example, MySQL validates
 declared columns while Datastore maps filter values and preserves requested sort
-field names. Unmarked fields remain in authoritative bytes. MySQL routes a
+field names. Fields without `(column)` are still saved in the complete Proto record. MySQL routes a
 complete tenant to its configured database; Datastore routes it to a native
 namespace. Neither provider uses the Bounded Context name as a physical
 partition.
@@ -23,16 +23,16 @@ partition.
 
 `AssignmentManager` takes `EntityOptions<string, typeof AssignmentManagerSchema>`
 and an `AssignmentWeightService` in its constructor. Its `TaskCreated`
-reaction asks `weightFor(event)` for the increment to its stored `updates`
+handler asks `weightFor(event)` how much to add to its stored `updates`
 counter. `createProjectManagementContext(weights)` registers it through
 `onCreate`, forwarding the framework options and the same application service
 for every fresh or restored object. Omitting the argument uses weight one.
 
 The `@React` handler declares `undefined`: it changes state without producing
-another Event. The service is a synchronous application dependency, not Entity state. This
-example makes no external network calls and adds no dependency container.
-The topology test supplies a fixed weight of three and verifies two deliveries
-produce stored updates six and version two. The existing load runner continues
+another Event. The service calculates a weight synchronously and is not saved
+as Entity state. This example makes no external network calls.
+The topology test supplies a fixed weight of three and verifies that two deliveries
+leave `updates` at six and the Entity version at two. The existing load runner continues
 to exercise project creation, not task assignment.
 
 ## Load-runner behavior
