@@ -152,6 +152,25 @@ receiver records to their instances.
 If the registry is missing, stale, malformed, or rejected during ingestion,
 context creation should fail deterministically before any handler is invoked.
 
+## Entity constructor dependencies
+
+Both `new Repository({ entityType, schema, onCreate })` and
+`builder.add(EntityClass, { onCreate })` let the application construct an Entity
+with services it needs. Spine passes `EntityOptions` to `onCreate`; the callback
+returns `new EntityClass(options, service)`. Supply this callback whenever the
+constructor requires arguments beyond `EntityOptions`; optional parameters and
+parameters with defaults do not require it. Services are not stored
+in generated metadata, and the Entity still has two type parameters: its ID and
+state schema.
+
+Use constructor injection rather than assigning dependencies after creation.
+The callback runs for new and restored objects, not merely for new domain IDs.
+Classes that need only `EntityOptions` require no callback. Spine still sets up
+history access, queries, transactions and handlers. Queries of stored state do
+not construct Entities. If the callback throws, the handler does not run and no
+Entity changes are committed; Spine reports a processing failure, not a domain
+rejection.
+
 ## Handler Decorators
 
 Initial decorator set:

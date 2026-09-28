@@ -31,11 +31,15 @@ import {
 export type DescriptorMessageSchema = GenMessage<Message>;
 
 /**
- * Constructible class from the Spine Entity family.
+ * Describes an Entity class, including one that requires application services.
  *
  * @internal
+ * @param args Constructor arguments supplied by the repository or application.
+ * @returns An Entity instance.
  */
-export type EntityConstructor = typeof Entity;
+export type EntityConstructor = abstract new (
+  ...args: never[]
+) => Entity<unknown, DescriptorMessageSchema>;
 
 const entitySchema = Symbol("spine-ts.entity-schema");
 
@@ -43,7 +47,7 @@ const entitySchema = Symbol("spine-ts.entity-schema");
  * Attaches generated state-schema metadata directly to an Entity class.
  *
  * @internal
- * @param entityType The Entity class that owns the schema metadata.
+ * @param entityType The Entity class to associate with the schema.
  * @param schema The generated Entity state schema.
  */
 export function attachEntitySchema(
@@ -106,6 +110,8 @@ export type DescriptorMetadataErrorCode =
 
 /**
  * Descriptor-derived metadata for one Protobuf field.
+ *
+ * @typeParam Field Descriptor type retained for the field identity and names.
  */
 export interface DescriptorFieldMetadata<Field extends DescField = DescField> {
   // prettier-ignore
@@ -138,6 +144,8 @@ export interface DescriptorFieldMetadata<Field extends DescField = DescField> {
 
 /**
  * Hint for later default command/event routing by the first declared field.
+ *
+ * @typeParam Field Descriptor type of the routing field.
  */
 export interface FirstFieldRoutingHint<Field extends DescField = DescField> {
   // prettier-ignore
@@ -155,6 +163,8 @@ export interface FirstFieldRoutingHint<Field extends DescField = DescField> {
 
 /**
  * Descriptor-derived entity metadata used by handler, repository, and context assembly.
+ *
+ * @typeParam Schema Entity-state schema whose descriptor supplies the metadata.
  */
 export interface EntityMetadata<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> {
   // prettier-ignore
@@ -265,6 +275,7 @@ export function isEntitySchema(schema: DescriptorMessageSchema): boolean {
 /**
  * Describes deterministic entity metadata from a Protobuf-ES schema descriptor.
  *
+ * @typeParam Schema Entity-state schema whose descriptor is described.
  * @param schema Generated entity-state schema to describe.
  * @returns Frozen metadata derived from the schema descriptor.
  */
@@ -325,6 +336,13 @@ export function describeEntityMetadata<Schema extends DescriptorMessageSchema>(
  * Normalizes private descriptors used to build entity metadata.
  */
 const EntityDescriptors = Object.freeze({
+  /**
+   * Captures descriptor identity and generated names for one Protobuf field.
+   *
+   * @typeParam Field Descriptor type retained in the returned metadata.
+   * @param field Protobuf field descriptor to capture.
+   * @returns Frozen field metadata retaining the descriptor type.
+   */
   field<Field extends DescField>(field: Field): DescriptorFieldMetadata<Field> {
     return Object.freeze({
       descriptor: field,
@@ -334,6 +352,14 @@ const EntityDescriptors = Object.freeze({
       number: field.number,
     });
   },
+
+  /**
+   * Resolves the declared entity kind to a supported repository family.
+   *
+   * @param schema Entity schema used to identify an unsupported declaration.
+   * @param value Entity kind declared in its Protobuf option.
+   * @returns Supported entity kind, or throws for an unknown value.
+   */
   kind(schema: DescriptorMessageSchema, value: EntityOption["kind"]): EntityKind {
     switch (value) {
       case EntityOption_Kind.AGGREGATE:
@@ -352,6 +378,14 @@ const EntityDescriptors = Object.freeze({
         );
     }
   },
+
+  /**
+   * Resolves the declared visibility option without applying family defaults.
+   *
+   * @param schema Entity schema used to identify an unsupported declaration.
+   * @param value Visibility declared in its Protobuf option.
+   * @returns Declared visibility, including the default marker.
+   */
   visibility(
     schema: DescriptorMessageSchema,
     value: EntityOption["visibility"],
@@ -374,9 +408,25 @@ const EntityDescriptors = Object.freeze({
         );
     }
   },
+
+  /**
+   * Applies the entity-family default when visibility was not explicit.
+   *
+   * @param kind Entity family selected by the schema.
+   * @param declared Visibility declared in the schema option.
+   * @returns Effective visibility used for registration.
+   */
   resolvedVisibility(kind: EntityKind, declared: DeclaredEntityVisibility): EntityVisibility {
     return declared === "default" ? (kind === "projection" ? "full" : "none") : declared;
   },
+
+  /**
+   * Lists singular indexed columns for a Projection or Process Manager.
+   *
+   * @param schema Entity schema containing the column declarations.
+   * @param kind Entity family that determines column support.
+   * @returns Frozen metadata for supported column fields.
+   */
   columns(schema: DescriptorMessageSchema, kind: EntityKind): readonly DescriptorFieldMetadata[] {
     if (kind !== "projection" && kind !== "process-manager") return Object.freeze([]);
     return Object.freeze(

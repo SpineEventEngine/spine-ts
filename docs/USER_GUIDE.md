@@ -89,12 +89,11 @@ commands, events, and entity state there. A command says what a caller wants;
 an event records a fact that happened; entity state is the current readable
 form of an Aggregate, Projection, or Process Manager.
 
-Keep each Bounded Context's domain language in its own model package. The server
-application composes the top-level Proto modules for all assembled contexts
-into one deterministic application `TypeRegistry`; a client application
-depends on and composes the published context model modules it needs. This is
-explicit build/application composition, not runtime package scanning or mutable
-global schema registration.
+Keep each Bounded Context's domain language in its model package. The server
+application combines the contexts' Proto modules into one `TypeRegistry`.
+A client imports only the published model modules it needs. Register these
+modules explicitly when setting up the application; Spine does not discover
+them by scanning installed packages.
 
 Keep the identifier as the first field of a command and the entity state. That
 is the implicit default target ID for Spine TS: it needs no extra routing
@@ -122,7 +121,7 @@ non-OK command responses, while a handled domain rejection rolls back the
 state change and is published independently on a best-effort event path.
 
 Mark only fields that must be queried or sorted with `(column)`. The complete
-Proto record remains authoritative bytes; a field does not become a physical
+Proto record is still stored in full; a field does not become a physical
 provider column simply because it appears in a message.
 
 Continue with the [Proto model reference](../packages/proto/REFERENCE.md) for
@@ -231,6 +230,59 @@ a failed operation or a no-op. Application code does not increment it manually.
 The Entity, its stored record, and notifications of its state carry the same
 committed Version. A Projection advances its own version instead of copying
 the source Event's producer version.
+
+### Give an Entity an application service
+
+Suppose an assignment Process Manager needs your application's service to
+decide how much work a newly created task represents. That service belongs in
+its constructor, but Spine creates the Process Manager when a message arrives.
+Use `onCreate` to connect the two: Spine supplies the Entity's state, and your
+callback supplies the service.
+
+The Projects example's `TaskAssignment` takes an `AssignmentWeightService`
+after its normal `EntityOptions`. Its handler asks that service for a task's
+weight and adds the result to its stored counter. Register it like this:
+
+<!-- docs-snippet-path: examples/projects/test/topology.test.ts -->
+
+```ts
+import { BoundedContext } from "@spine-event-engine/server";
+import { TaskAssignment, type AssignmentWeightService } from "../src/index.js";
+
+// Set up the service once, before the context starts receiving messages.
+const weights: AssignmentWeightService = {
+  weightFor: () => 2,
+};
+
+const builder = BoundedContext.singleTenant("Assignments")
+  .withGeneratedRegistryRoot(new URL("..", import.meta.url))
+  .add(TaskAssignment, {
+    // Keep Spine's ID, state, version, and lifecycle options intact.
+    onCreate: (options) => new TaskAssignment(options, weights),
+  });
+
+// buildAsync() loads the generated handler registry for this application.
+const context = await builder.buildAsync();
+await context.close();
+```
+
+When another message arrives for a saved Process Manager, Spine loads its
+state and calls `onCreate` again for the new object. The service is supplied
+again; it is not saved in the database. The same mechanism works for Aggregates
+and Projections, including Projection rebuilds.
+
+The callback must return a fresh instance synchronously. Initialize an async
+client before building the context, rather than returning a promise from
+`onCreate`. Pass the supplied options unchanged. Put business work in handlers:
+a construction failure prevents the handler from running and is not a domain
+rejection. If a shared service needs closing, your application closes it after
+the context shuts down.
+
+Existing Entities that need only `EntityOptions` require no change. If a
+constructor requires another argument, TypeScript requires `onCreate` at
+registration. An explicit repository accepts the same callback alongside
+`entityType` and `schema`; see the
+[server reference](../packages/server/REFERENCE.md#entity-constructor-dependencies).
 
 ### Route messages to the right Entity
 
@@ -405,7 +457,7 @@ replay, deduplication, or durable queue, so consumers should re-query or make
 effects idempotent when appropriate.
 
 For one process, the default `InMemoryTransportFactory` is sufficient.
-`ServerEnvironment` owns one shared factory for all local contexts and closes it
+`ServerEnvironment` uses one shared factory for all local contexts and closes it
 once when the environment closes. IntegrationBroker exchange is process-local
 through this message-channel factory. In production, configure
 `ServerEnvironment` with storage, optional `integrationChannelFactory`, and

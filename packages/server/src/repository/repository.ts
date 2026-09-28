@@ -92,7 +92,7 @@ import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../deli
 import { ShardIndex } from "../delivery/shard-index.js";
 import {
   Aggregate,
-  type Entity,
+  type EntityOptions,
   type EntityLifecycleFlags,
   ProcessManager,
   Projection,
@@ -107,7 +107,6 @@ import {
   type DescriptorFieldMetadata,
   type DescriptorMessageSchema,
   type EntityMetadata,
-  type EntityConstructor,
   type FirstFieldRoutingHint,
 } from "../entity/entity-metadata.js";
 import {
@@ -158,7 +157,7 @@ type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = Descripto
   Aggregate<unknown, Schema> | Projection<unknown, Schema> | ProcessManager<unknown, Schema>;
 
 /**
- * Generated Protobuf-ES state schema carried by a repository entity constructor.
+ * Generated state schema declared by a repository's Entity class.
  *
  * @typeParam EntityType Entity constructor whose state schema is selected.
  */
@@ -226,11 +225,11 @@ type IsUnion<Type, Union = Type> = Type extends unknown
   : false;
 
 /**
- * Single concrete entity constructor accepted by repository identity metadata.
+ * Checks whether a repository binds one concrete Entity class and state schema.
  *
  * Concrete aggregate, projection, and process-manager classes satisfy this type naturally. Broad
  * constructor aliases, constructor unions, broad state schemas, and state-schema unions are
- * rejected so repository identities cannot erase which state schema the entity owns.
+ * rejected so a repository cannot lose its Entity class's state schema.
  *
  * @typeParam EntityType Candidate concrete Entity constructor.
  */
@@ -253,7 +252,19 @@ interface RuntimeRepositoryEntityType {
 }
 
 /**
- * Describes an entity constructor accepted by repository identity metadata.
+ * Constructor and state schema selected for repository setup.
+ *
+ * @typeParam EntityType Concrete Entity constructor being registered.
+ */
+interface RepositoryDescription<EntityType extends RepositoryEntityType> {
+  readonly entityType: EntityType;
+  readonly entityFamily: EntityFamily;
+  readonly schema: RepositoryStateSchema<EntityType>;
+  readonly metadata: EntityMetadata<RepositoryStateSchema<EntityType>>;
+}
+
+/**
+ * Describes an Aggregate, Projection, or Process Manager class accepted by a repository.
  *
  * @typeParam Instance The aggregate, projection, or process-manager instance type.
  * @param args The constructor arguments accepted by the entity class.
@@ -261,44 +272,56 @@ interface RuntimeRepositoryEntityType {
  */
 export type RepositoryEntityType<
   Instance extends RepositoryEntityInstance = RepositoryEntityInstance,
-> = (abstract new (...args: never[]) => Instance) &
-  // `any` erases the Entity constructor parameters while preserving its protected static origin.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  typeof Entity<any, DescriptorMessageSchema> & {
-    // prettier-ignore
+> = (abstract new (...args: never[]) => Instance) & {
+  // prettier-ignore
 
-    /**
-     * Prototype inspected for built-in entity family marker inheritance.
-     */
-    readonly prototype: Instance;
+  /**
+   * Prototype used to identify the Entity family and state schema.
+   */
+  readonly prototype: Instance;
 
-    /**
-     * Constructor name used in structured diagnostics.
-     */
-    readonly name: string;
-  };
+  /**
+   * Constructor name used in structured diagnostics.
+   */
+  readonly name: string;
+};
 
 /**
- * Options for constructing repository identity and context-owned registration.
+ * Entity class, state schema, and routing options for a repository.
  *
  * @typeParam EntityType A single concrete aggregate, projection, or process-manager constructor.
  * The constructor's prototype must carry one concrete generated state schema; broad constructor,
  * constructor-union, broad-schema, and schema-union bindings are rejected at compile time.
  */
-export interface RepositoryOptions<
+interface RepositoryOptionsBase<
   EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
 > {
   // prettier-ignore
 
   /**
-   * Entity constructor owned by this repository identity.
+   * Entity class constructed by this repository.
    */
   readonly entityType: EntityType;
 
   /**
-   * Generated Protobuf-ES schema for the entity state owned by this repository identity.
+   * Generated schema for this repository's Entity state.
    */
   readonly schema: RepositoryStateSchema<EntityType>;
+
+  /**
+   * Constructs each new or restored Entity with application dependencies.
+   *
+   * The callback receives the framework's ID, schema, state, Version, and lifecycle options.
+   * It must synchronously return a fresh instance of `entityType` that passes those options to
+   * the Entity base constructor. Shared services should be created before context startup and
+   * closed by the application after context shutdown.
+   *
+   * @param options Framework identity, state, Version, and lifecycle values.
+   * @returns A synchronous instance of the registered Entity class.
+   */
+  readonly onCreate?: (
+    options: EntityOptions<RepositoryEntityId<EntityType>, RepositoryStateSchema<EntityType>>,
+  ) => InstanceType<EntityType>;
 
   /**
    * Explicit handler metadata used to register repository command and event routing.
@@ -356,6 +379,44 @@ export interface RepositoryOptions<
 }
 
 /**
+ * Requires a creation callback when the Entity constructor needs application arguments.
+ *
+ * @typeParam EntityType Concrete Entity constructor configured by this repository.
+ */
+type RepositoryCreationOption<EntityType extends RepositoryEntityType> = [EntityType] extends [
+  new (
+    options: EntityOptions<RepositoryEntityId<EntityType>, RepositoryStateSchema<EntityType>>,
+  ) => InstanceType<EntityType>,
+]
+  ? { readonly onCreate?: OnCreate<EntityType> }
+  : { readonly onCreate: OnCreate<EntityType> };
+
+/**
+ * Constructs the registered Entity from framework-supplied options.
+ *
+ * @typeParam EntityType Concrete Entity constructor configured by the repository.
+ * @param options Framework identity, state, Version, and lifecycle values.
+ * @returns One new Entity instance.
+ */
+type OnCreate<EntityType extends RepositoryEntityType> = (
+  options: EntityOptions<RepositoryEntityId<EntityType>, RepositoryStateSchema<EntityType>>,
+) => InstanceType<EntityType>;
+
+/**
+ * Configures repository identity, routing, and optional Entity constructor injection.
+ *
+ * `onCreate` is required when `EntityType` needs constructor arguments beyond framework
+ * `EntityOptions`. The callback runs for new and restored instances before handlers; it receives
+ * the authoritative options and must return a synchronous instance of the registered class.
+ * Framework history, queries, transactions, and persistence remain configured separately.
+ *
+ * @typeParam EntityType A single concrete Entity constructor and state schema.
+ */
+export type RepositoryOptions<
+  EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
+> = RepositoryOptionsBase<EntityType> & RepositoryCreationOption<EntityType>;
+
+/**
  * Immutable copy-safe repository identity snapshot.
  *
  * @typeParam EntityType The concrete entity constructor represented by the repository. The snapshot's
@@ -368,27 +429,27 @@ export interface RepositoryIdentitySnapshot<
   // prettier-ignore
 
   /**
-   * Entity constructor owned by the repository.
+   * Entity class registered with the repository.
    */
   readonly entityType: EntityType;
 
   /**
-   * Entity family inferred from the constructor's built-in family marker base class.
+   * Aggregate, Projection, or Process Manager family of the Entity class.
    */
   readonly entityFamily: EntityFamily;
 
   /**
-   * Generated Protobuf-ES schema for the owned entity state.
+   * Generated schema for the Entity state.
    */
   readonly stateSchema: RepositoryStateSchema<EntityType>;
 
   /**
-   * Descriptor-derived metadata for the owned entity state.
+   * Descriptor metadata for the Entity state.
    */
   readonly metadata: EntityMetadata<RepositoryStateSchema<EntityType>>;
 
   /**
-   * Fully qualified Protobuf type name of the owned entity state.
+   * Fully qualified Protobuf name of the Entity state type.
    */
   readonly stateFullTypeName: RepositoryStateSchema<EntityType>["typeName"];
 
@@ -405,27 +466,27 @@ export interface RepositoryView {
   // prettier-ignore
 
   /**
-   * Entity constructor owned by the repository.
+   * Entity class registered with the repository.
    */
   readonly entityType: RepositoryEntityType;
 
   /**
-   * Entity family inferred from the constructor's built-in family marker base class.
+   * Aggregate, Projection, or Process Manager family of the Entity class.
    */
   readonly entityFamily: EntityFamily;
 
   /**
-   * Generated Protobuf-ES schema for the owned entity state.
+   * Generated schema for the Entity state.
    */
   readonly stateSchema: DescriptorMessageSchema;
 
   /**
-   * Descriptor-derived metadata for the owned entity state.
+   * Descriptor metadata for the Entity state.
    */
   readonly metadata: EntityMetadata;
 
   /**
-   * Fully qualified Protobuf type name of the owned entity state.
+   * Fully qualified Protobuf name of the Entity state type.
    */
   readonly stateFullTypeName: string;
 
@@ -476,7 +537,7 @@ interface EventRoutingRepository extends RepositoryView {
 export type RepositoryIdentityErrorCode = "ENTITY_SCHEMA_KIND_MISMATCH" | "UNSUPPORTED_ENTITY_TYPE";
 
 /**
- * Describes an error raised when repository identity metadata cannot be constructed.
+ * Error raised when an Entity class and state schema cannot form a repository.
  */
 export class RepositoryIdentityError extends Error {
   // prettier-ignore
@@ -501,30 +562,17 @@ export class RepositoryIdentityError extends Error {
 }
 
 /**
- * Repository identity and context-owned storage registration over one entity constructor and state schema.
+ * Configures storage and handlers for one Entity class.
  *
- * The class records the ownership facts bounded-context registration needs for
- * duplicate and conflict checks. Context assembly uses this metadata to attach
- * a repository to one built context and open state record storage. With
- * authentic explicit aggregate handler metadata, the built context can also
- * execute aggregate commands through repository-owned assignees and live
- * direct transactional handlers, persist the latest aggregate state plus a diagnostic event journal,
- * and hand already-stored events to the event bus. Aggregate and process-manager command
- * execution require `command.id` before routing or mutation so produced events
- * can carry a contract-valid command origin. With authentic projection
- * subscriber metadata, built contexts can also execute projection subscribers
- * and write changed projection state through the context-owned `Stand`. With
- * authentic process-manager metadata, built contexts can execute command
- * assignees, event reactors, and event-commanding handlers, storing changed
- * process-manager state through tenant-scoped Stand records with full Spine
- * Versions. The `events` option declares generated event schemas emitted by
- * aggregate and process-manager producer handlers. The repository surface still
- * does not expose direct entity lookup/storage APIs, inbox/delivery management,
- * caches, lifecycle monitors, or transport startup.
+ * Construction selects the Entity class, state schema, routing, and optional
+ * creation callback. A Bounded Context builder registers the repository. During
+ * context assembly, it opens record storage and installs handlers and Inbox
+ * targets. Aggregate handlers store state and a diagnostic event journal;
+ * Projection and Process Manager handlers store state in Stand. The `events`
+ * option lists generated event schemas that handlers may emit.
  *
- * @typeParam EntityType - A single concrete aggregate, projection, or process-manager constructor
- * with one concrete generated state schema. Broad constructor, constructor-union, broad-schema, and
- * schema-union bindings intentionally fail the public type constraint.
+ * @typeParam EntityType One concrete Aggregate, Projection, or Process Manager
+ * class with one generated state schema.
  */
 export class Repository<
   EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
@@ -543,63 +591,10 @@ export class Repository<
    * @param options The entity constructor, state schema, and optional routing configuration.
    */
   constructor(options: RepositoryOptions<EntityType>) {
-    if (!RepositoryIdentity.isRepositoryOptionsObject(options)) {
-      throw new RepositoryIdentityError(
-        "UNSUPPORTED_ENTITY_TYPE",
-        "Repository options must be a non-null object with an entity type class constructor " +
-          "extending Aggregate, Projection, or ProcessManager.",
-      );
-    }
-
-    const entityType = RepositoryIdentity.readEntityTypeOption(options);
-    const entityTypeDisplayName = RepositoryIdentity.entityTypeName(entityType);
-
-    if (typeof entityType !== "function" || !RepositoryIdentity.isClassConstructor(entityType)) {
-      throw new RepositoryIdentityError(
-        "UNSUPPORTED_ENTITY_TYPE",
-        `Repository entity type "${entityTypeDisplayName}" must be a class constructor ` +
-          "extending Aggregate, Projection, or ProcessManager.",
-      );
-    }
-
-    const entityFamily = RepositoryIdentity.resolveRepositoryEntityFamily(entityType);
-
-    if (entityFamily === undefined) {
-      throw new RepositoryIdentityError(
-        "UNSUPPORTED_ENTITY_TYPE",
-        `Repository entity type "${entityTypeDisplayName}" must extend Aggregate, Projection, or ProcessManager.`,
-      );
-    }
-
-    const schema = RepositoryIdentity.readRepositorySchemaOption(
-      options,
-      entityTypeDisplayName,
-      entityFamily,
-    ) as RepositoryStateSchema<EntityType>;
-
-    const metadata = RepositoryIdentity.describeRepositoryEntityMetadata(
-      entityTypeDisplayName,
-      entityFamily,
-      schema,
-    );
-
-    if (metadata.kind !== entityFamily) {
-      throw new RepositoryIdentityError(
-        "ENTITY_SCHEMA_KIND_MISMATCH",
-        `Repository entity type "${entityTypeDisplayName}" does not match ` +
-          "the supplied state schema.",
-      );
-    }
-    if (options.stateUpdateRouting !== undefined && entityFamily !== "projection") {
-      throw new RepositoryIdentityError(
-        "UNSUPPORTED_ENTITY_TYPE",
-        "State-update routing is supported only by Projection repositories.",
-      );
-    }
-
-    attachEntitySchema(entityType as EntityConstructor, schema);
-
-    this.#entityType = entityType as EntityType;
+    const { entityType, entityFamily, schema, metadata } =
+      RepositoryIdentity.describeOptions(options);
+    attachEntitySchema(entityType, schema);
+    this.#entityType = entityType;
     this.#entityFamily = entityFamily;
     this.#metadata = metadata;
     this.#routing = RepositoryRoutes.createRepositoryRouting(
@@ -613,49 +608,20 @@ export class Repository<
       StateUpdateRoutingInternals.snapshot(options.stateUpdateRouting),
       new StringifierRegistry(options.stringifierRegistry),
     );
-    repositoryRoutings.set(this, this.#routing);
-    repositoryProducedEventSchemas.set(
+    RepositoryRegistration.install(
       this,
-      Object.freeze([...this.#routing.producedEventSchemas]),
-    );
-    repositoryHistoryConfigurations.set(
-      this,
-      RepositoryStorage.readHistoryConfiguration(options, this.#entityFamily),
-    );
-    repositorySnapshots.set(
-      this,
-      RepositoryIdentity.createRepositorySnapshot(
-        this.#entityType,
-        this.#entityFamily,
-        this.#metadata,
-      ),
-    );
-    repositoryDispatchers.set(
-      this,
-      RepositoryDispatch.createRepositoryDispatchers(this, this.#routing),
-    );
-    const entityInboxTarget = RepositoryDispatch.createEntityInboxTarget(this, this.#routing);
-    const projectionInboxTarget = RepositoryDispatch.createProjectionInboxTarget(
-      this,
+      options,
       this.#routing,
+      entityType,
+      entityFamily,
+      metadata,
     );
-
-    if (entityInboxTarget !== undefined) {
-      repositoryEntityInboxTargets.set(this, entityInboxTarget);
-    }
-    if (projectionInboxTarget !== undefined) {
-      repositoryProjectionInboxTargets.set(this, projectionInboxTarget);
-      repositoryProjectionDirect.set(
-        this,
-        RepositoryDispatch.createProjectionDirectDispatch(this, this.#routing),
-      );
-    }
   }
 
   /**
-   * Returns the entity constructor owned by this repository identity.
+   * Returns the Entity class registered with this repository.
    *
-   * @returns The owned entity constructor.
+   * @returns The registered Entity class.
    */
   get entityType(): EntityType {
     return this.#entityType;
@@ -673,7 +639,7 @@ export class Repository<
   /**
    * Returns the generated schema for this repository's entity state.
    *
-   * @returns The owned state schema.
+   * @returns The Entity state schema.
    */
   get stateSchema(): RepositoryStateSchema<EntityType> {
     return this.#metadata.schema;
@@ -702,16 +668,16 @@ export class Repository<
   }
 
   /**
-   * Returns descriptor-derived metadata for the owned entity state.
+   * Returns descriptor metadata for this repository's Entity state.
    *
-   * @returns A metadata view for the owned state.
+   * @returns Descriptor metadata for the Entity state.
    */
   get metadata(): EntityMetadata<RepositoryStateSchema<EntityType>> {
     return this.#metadata;
   }
 
   /**
-   * Returns the fully qualified Protobuf name of the owned entity state.
+   * Returns the fully qualified Protobuf name of the Entity state.
    *
    * @returns The state message type name.
    */
@@ -843,6 +809,11 @@ interface RepositoryStateUpdateRoute<Id = unknown> extends RepositoryEventRoute<
 }
 
 const repositorySnapshots = new WeakMap<RepositoryView, RepositoryIdentitySnapshot>();
+
+const repositoryCreators = new WeakMap<
+  RepositoryView,
+  (options: AggregateConstructorOptions) => object
+>();
 const repositoryRoutings = new WeakMap<RepositoryView, RepositoryRouting>();
 const repositoryProducedEventSchemas = new WeakMap<RepositoryView, readonly MessageSchema[]>();
 const repositoryDispatchers = new WeakMap<RepositoryView, RepositoryDispatchers>();
@@ -894,6 +865,78 @@ interface RepositoryDispatchGuards {
   readonly order: string[];
 }
 const repositoryDispatchGuards = new WeakMap<RepositoryView, RepositoryDispatchGuards>();
+
+/**
+ * Installs repository routing, history, and callback state after identity validation.
+ */
+const RepositoryRegistration = {
+  /**
+   * Registers framework dispatch and application construction for one repository.
+   *
+   * @typeParam EntityType Concrete Entity class registered by the repository.
+   * @param repository Validated repository instance.
+   * @param options Registration options captured at construction.
+   * @param routing Resolved handler routes.
+   * @param entityType Validated Entity constructor.
+   * @param entityFamily Validated Entity family.
+   * @param metadata Validated descriptor metadata.
+   */
+  install<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
+    repository: Repository<EntityType>,
+    options: RepositoryOptions<EntityType>,
+    routing: RepositoryRouting,
+    entityType: EntityType,
+    entityFamily: EntityFamily,
+    metadata: EntityMetadata<RepositoryStateSchema<EntityType>>,
+  ): void {
+    if (options.onCreate !== undefined) {
+      repositoryCreators.set(
+        repository,
+        options.onCreate as unknown as (options: AggregateConstructorOptions) => object,
+      );
+    }
+    repositoryRoutings.set(repository, routing);
+    repositoryProducedEventSchemas.set(
+      repository,
+      Object.freeze([...routing.producedEventSchemas]),
+    );
+    repositoryHistoryConfigurations.set(
+      repository,
+      RepositoryStorage.readHistoryConfiguration(options, entityFamily),
+    );
+    repositorySnapshots.set(
+      repository,
+      RepositoryIdentity.createRepositorySnapshot(entityType, entityFamily, metadata),
+    );
+    repositoryDispatchers.set(
+      repository,
+      RepositoryDispatch.createRepositoryDispatchers(repository, routing),
+    );
+    RepositoryRegistration.installTargets(repository, routing);
+  },
+
+  /**
+   * Registers durable Entity and direct Projection delivery targets.
+   *
+   * @param repository Repository receiving delivery targets.
+   * @param routing Resolved handler routes.
+   */
+  installTargets(
+    repository: CommandRoutingRepository & EventRoutingRepository,
+    routing: RepositoryRouting,
+  ): void {
+    const entityTarget = RepositoryDispatch.createEntityInboxTarget(repository, routing);
+    const projectionTarget = RepositoryDispatch.createProjectionInboxTarget(repository, routing);
+    if (entityTarget !== undefined) repositoryEntityInboxTargets.set(repository, entityTarget);
+    if (projectionTarget === undefined) return;
+    repositoryProjectionInboxTargets.set(repository, projectionTarget);
+    repositoryProjectionDirect.set(
+      repository,
+      RepositoryDispatch.createProjectionDirectDispatch(repository, routing),
+    );
+  },
+};
+Object.freeze(RepositoryRegistration);
 Object.freeze(Repository);
 
 type EntityInboxLabel = "HANDLE_COMMAND" | "REACT_UPON_EVENT";
@@ -937,7 +980,7 @@ export interface EntityInboxTarget {
 }
 
 /**
- * Defines context-owned Entity Inbox handoff operations.
+ * Operations the Bounded Context uses to deliver Entity Inbox messages.
  *
  * @internal
  */
@@ -945,7 +988,7 @@ export interface EntityInbox {
   // prettier-ignore
 
   /**
-   * Returns the context-owned target-to-shard strategy.
+   * Returns the strategy that maps Entity Inbox targets to shards.
    *
    * @returns The immutable delivery strategy.
    */
@@ -1027,7 +1070,7 @@ export interface ProjectionInboxTarget {
 }
 
 /**
- * Defines context-owned projection subscriber inbox handoff operations.
+ * Operations the Bounded Context uses to deliver Projection Inbox messages.
  *
  * @internal
  */
@@ -1187,7 +1230,7 @@ export interface RepositoryAccess {
  */
 export const repositoryAccess: RepositoryAccess = Object.freeze({
   /**
-   * Checks whether a value has registered repository identity metadata.
+   * Checks whether a value is a registered Repository.
    *
    * @param repository Value to inspect.
    * @returns Whether the value is a repository view.
@@ -1197,7 +1240,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
   },
 
   /**
-   * Copies a repository's immutable identity metadata.
+   * Copies the Entity class, state schema, and ID details of a Repository.
    *
    * @param repository Repository to inspect.
    * @returns A copy-safe identity snapshot.
@@ -1567,6 +1610,30 @@ interface AggregateConstructorOptions {
   };
 }
 
+/**
+ * Creates a repository Entity from framework options and an optional application constructor callback.
+ */
+const RepositoryCreation = {
+  /**
+   * Creates one Entity and rejects wrong-class or Promise results before handler execution.
+   *
+   * @param repository The registered constructor and callback.
+   * @param options Framework values for this new or restored instance.
+   * @returns The registered Entity instance.
+   */
+  create(repository: RepositoryView, options: AggregateConstructorOptions): object {
+    const onCreate = repositoryCreators.get(repository);
+    const entityType = repository.entityType as unknown as new (
+      options: AggregateConstructorOptions,
+    ) => object;
+    const entity = onCreate === undefined ? new entityType(options) : onCreate(options);
+    if (entity instanceof entityType) return entity;
+    throw new TypeError(
+      `Repository onCreate must synchronously return a ${entityType.name} instance.`,
+    );
+  },
+};
+
 interface LoadedRepositoryEntity {
   readonly commits: EntityCommitStorage;
   readonly current: EntityRecord | undefined;
@@ -1841,9 +1908,6 @@ class AggregateExecutionSupport {
    * @returns The constructed Aggregate instance.
    */
   #instantiateAggregate(entityId: unknown, current: AggregateSnapshot | undefined): object {
-    const entityType = this.#repository.entityType as unknown as new (
-      options: AggregateConstructorOptions,
-    ) => object;
     const options: AggregateConstructorOptions = {
       id: entityId,
       schema: this.#repository.stateSchema,
@@ -1855,7 +1919,7 @@ class AggregateExecutionSupport {
       options.lifecycle = { archived: current.archived, deleted: current.deleted };
     }
 
-    return new entityType(options);
+    return RepositoryCreation.create(this.#repository, options);
   }
 
   /**
@@ -2056,7 +2120,7 @@ class AggregateCommandExecution {
   }
 
   /**
-   * Invokes an assignee in a fenced Entity transaction with output validation.
+   * Invokes an assignee, validates its output, and checks delivery before the Entity transaction commits.
    *
    * @param entity Aggregate instance to mutate.
    * @param handler Assignee declaration to invoke.
@@ -2422,11 +2486,11 @@ class AggregateEventExecution {
   }
 
   /**
-   * Applies a fenced Entity commit and raises transition rejection.
+   * Checks delivery immediately before the Entity transaction commits and raises transition rejection.
    *
    * @param entity Aggregate instance to commit.
    * @param producedEvents Whether reactors produced Events.
-   * @returns Completion after a successful fenced commit.
+   * @returns Completion after a successful commit.
    */
   async #commitEntity(entity: object, producedEvents: boolean): Promise<void> {
     const commit = await commitFenced(entity, (current) =>
@@ -3516,7 +3580,7 @@ class ProcessManagerCommandExecution {
   }
 
   /**
-   * Invokes the Command handler in a fenced Entity transaction.
+   * Invokes a Command handler and checks delivery before the Entity transaction commits.
    *
    * @param entity Process Manager instance to mutate.
    * @param assignee Registered Command handler.
@@ -4000,11 +4064,11 @@ class ProcessManagerEventExecution {
   }
 
   /**
-   * Applies a fenced Entity commit and raises transition rejection.
+   * Checks delivery immediately before the Entity transaction commits and raises transition rejection.
    *
    * @param entity Process Manager instance to commit.
    * @param producedEvents Whether handlers produced Events.
-   * @returns Completion after a successful fenced commit.
+   * @returns Completion after a successful commit.
    */
   async #commitEntity(entity: object, producedEvents: boolean): Promise<void> {
     const commit = await commitFenced(entity, (current) =>
@@ -4171,6 +4235,85 @@ interface RepositoryEntityStorage<I, S extends Message> {
  * Internal repository identity operations.
  */
 const RepositoryIdentity = {
+  /**
+   * Validates constructor, family, and state metadata from repository options.
+   *
+   * @typeParam EntityType Concrete Entity constructor being registered.
+   * @param options Repository configuration to validate.
+   * @returns The validated Entity identity and descriptor metadata.
+   */
+  describeOptions<
+    EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
+  >(options: RepositoryOptions<EntityType>): RepositoryDescription<EntityType> {
+    const entityType = RepositoryIdentity.requireEntityType(options) as EntityType;
+    const entityFamily = RepositoryIdentity.requireEntityFamily(entityType);
+    const displayName = RepositoryIdentity.entityTypeName(entityType);
+    const schema = RepositoryIdentity.readRepositorySchemaOption(
+      options,
+      displayName,
+      entityFamily,
+    ) as RepositoryStateSchema<EntityType>;
+    const metadata = RepositoryIdentity.describeRepositoryEntityMetadata(
+      displayName,
+      entityFamily,
+      schema,
+    );
+    if (metadata.kind !== entityFamily) {
+      throw new RepositoryIdentityError(
+        "ENTITY_SCHEMA_KIND_MISMATCH",
+        `Repository entity type "${displayName}" does not match the supplied state schema.`,
+      );
+    }
+    if (options.stateUpdateRouting !== undefined && entityFamily !== "projection") {
+      throw new RepositoryIdentityError(
+        "UNSUPPORTED_ENTITY_TYPE",
+        "State-update routing is supported only by Projection repositories.",
+      );
+    }
+    return { entityType, entityFamily, schema, metadata };
+  },
+
+  /**
+   * Validates and returns a readable Entity class constructor in repository options.
+   *
+   * @param options Repository configuration to inspect.
+   * @returns The supplied Entity constructor.
+   */
+  requireEntityType(options: unknown): RuntimeRepositoryEntityType {
+    if (!RepositoryIdentity.isRepositoryOptionsObject(options)) {
+      throw new RepositoryIdentityError(
+        "UNSUPPORTED_ENTITY_TYPE",
+        "Repository options must be a non-null object with an entity type class constructor " +
+          "extending Aggregate, Projection, or ProcessManager.",
+      );
+    }
+    const entityType = RepositoryIdentity.readEntityTypeOption(options);
+    if (typeof entityType !== "function" || !RepositoryIdentity.isClassConstructor(entityType)) {
+      throw new RepositoryIdentityError(
+        "UNSUPPORTED_ENTITY_TYPE",
+        `Repository entity type "${RepositoryIdentity.entityTypeName(entityType)}" must be a class constructor ` +
+          "extending Aggregate, Projection, or ProcessManager.",
+      );
+    }
+    return entityType;
+  },
+
+  /**
+   * Validates and returns Aggregate, Projection, or Process Manager inheritance.
+   *
+   * @param entityType Validated class constructor.
+   * @returns Aggregate, Projection, or Process Manager.
+   */
+  requireEntityFamily(entityType: RuntimeRepositoryEntityType): EntityFamily {
+    const family = RepositoryIdentity.resolveRepositoryEntityFamily(entityType);
+    if (family !== undefined) return family;
+    throw new RepositoryIdentityError(
+      "UNSUPPORTED_ENTITY_TYPE",
+      `Repository entity type "${RepositoryIdentity.entityTypeName(entityType)}" must extend ` +
+        "Aggregate, Projection, or ProcessManager.",
+    );
+  },
+
   /**
    * Creates a frozen identity snapshot from validated Entity metadata.
    *
@@ -4642,15 +4785,8 @@ const RepositoryEntities = {
       | undefined,
     resetDeleted: boolean,
   ): object {
-    const entityType = repository.entityType as unknown as new (options: {
-      readonly id: unknown;
-      readonly schema: DescriptorMessageSchema;
-      readonly state: unknown;
-      readonly version: Version;
-      readonly lifecycle: EntityLifecycleFlags;
-    }) => object;
     const fresh = stored === undefined || resetDeleted;
-    return new entityType({
+    return RepositoryCreation.create(repository, {
       id: entityId,
       schema: repository.stateSchema,
       state: fresh

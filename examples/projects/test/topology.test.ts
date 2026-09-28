@@ -28,14 +28,90 @@ import { SignalMetadata } from "@spine-event-engine/server";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { CreateProjectSchema } from "../generated/spine/examples/projects/commands_pb.js";
 import { ProjectSummarySchema } from "../generated/spine/examples/projects/read_models_pb.js";
+import { CreateTaskSchema } from "../generated/spine/examples/projects/commands_pb.js";
+import { TaskAssignmentSchema } from "../generated/spine/examples/projects/read_models_pb.js";
+import { TaskSchema } from "../generated/spine/examples/projects/entities_pb.js";
 
 const metadata = new SignalMetadata();
 
 describe("project-management load example", () => {
+  it("passes one shared weight service to restored TaskAssignment instances", async () => {
+    const { createProjectManagementContext } = await import("../dist/src/index.js");
+    let weightCalls = 0;
+    const weights = {
+      weightFor() {
+        weightCalls++;
+        return 3;
+      },
+    };
+    const context = await createProjectManagementContext(weights);
+    const taskId = "weighted-task";
+    const actorContext = metadata.actorContext({
+      actor: create(UserIdSchema, { value: "weighted-user" }),
+    });
+
+    try {
+      await context.commandBus().post(
+        SignalEnvelopes.command({
+          context: metadata.commandContext({ actorContext }),
+          schema: CreateTaskSchema,
+          message: create(CreateTaskSchema, { id: taskId, projectId: "weighted-project" }),
+        }),
+      );
+      await expect(context.stand().read(TaskSchema, taskId)).resolves.toBeDefined();
+      await context.commandBus().post(
+        SignalEnvelopes.command({
+          context: metadata.commandContext({ actorContext }),
+          schema: CreateTaskSchema,
+          message: create(CreateTaskSchema, { id: taskId, projectId: "weighted-project" }),
+        }),
+      );
+      await vi.waitFor(() => {
+        expect(weightCalls).toBe(2);
+      });
+      await expect(
+        context.stand().readVersioned(TaskAssignmentSchema, taskId),
+      ).resolves.toMatchObject({ state: { updates: 6 }, version: { number: 2 } });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("uses the default assignment weight for new and restored managers", async () => {
+    const { createProjectManagementContext } = await import("../dist/src/index.js");
+    const context = await createProjectManagementContext();
+    const taskId = "default-weight-task";
+    const actorContext = metadata.actorContext({
+      actor: create(UserIdSchema, { value: "default-weight-user" }),
+    });
+
+    try {
+      for (let index = 0; index < 2; index++) {
+        await context.commandBus().post(
+          SignalEnvelopes.command({
+            context: metadata.commandContext({ actorContext }),
+            schema: CreateTaskSchema,
+            message: create(CreateTaskSchema, { id: taskId, projectId: "default-project" }),
+          }),
+        );
+        await expect(context.stand().read(TaskSchema, taskId)).resolves.toBeDefined();
+      }
+
+      await vi.waitFor(async () => {
+        expect(await context.stand().readVersioned(TaskAssignmentSchema, taskId)).toMatchObject({
+          state: { updates: 2 },
+          version: { number: 2 },
+        });
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
   it("provides the generated-domain runtime", () => {
     const modulePath = fileURLToPath(new URL("../dist/src/index.js", import.meta.url));
 

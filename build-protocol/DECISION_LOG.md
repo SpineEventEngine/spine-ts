@@ -5632,6 +5632,30 @@ Date: 2026-08-24
 
 Task: T-0220 GitHub Actions NPM publishing
 
+### Current snapshot tag decision — 28 September 2026
+
+The human chose to retain automatic advancement of `snapshot` only and leave
+`latest` unchanged during snapshot publication. This supersedes the 27 September
+amendment below and restores the original snapshot policy. Existing release
+code already implements it. No separate tag-update step, stored npm credential,
+or live registry change is required. Stable-version publication remains outside
+this task and retains the original rule below.
+
+### Superseded snapshot tag amendment — 27 September 2026
+
+The human requires both npm `latest` and `snapshot` to point to the newest
+published snapshot, beginning with the next publication. The human explicitly
+confirmed that both tags must advance; leaving `snapshot` behind is not an
+accepted alternative. This supersedes the original rule below that snapshot publication
+must leave `latest` unchanged. Other publication controls, including trusted
+publishing and protection against version rollback, remain in effect.
+
+Status: superseded on 28 September before implementation. No live npm tag was
+changed by recording this decision. The implementation plan is tracked in
+[Entity dependency configuration](planning/entity-dependency-configuration.md).
+
+### Original decision
+
 Context:
 
 - The first public snapshot was published manually through a disposable

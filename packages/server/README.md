@@ -43,6 +43,41 @@ Add generated entities with `BoundedContext.add(...)` and use
 context is single-tenant or multitenant by construction; select that mode
 before registering application handlers and storage.
 
+## Give an Entity an application service
+
+Spine normally constructs an Entity with its ID, state, version, and lifecycle
+options. If your constructor also needs a service, supply `onCreate` when
+registering the class. For example, the Projects application's Process Manager
+uses an assignment-weight service:
+
+<!-- docs-snippet-path: examples/projects/test/topology.test.ts -->
+
+```ts
+import { BoundedContext } from "@spine-event-engine/server";
+import { TaskAssignment, type AssignmentWeightService } from "../src/index.js";
+
+// Create shared services before starting the context.
+const weights: AssignmentWeightService = { weightFor: () => 2 };
+const builder = BoundedContext.singleTenant("Assignments")
+  .withGeneratedRegistryRoot(new URL("..", import.meta.url))
+  .add(TaskAssignment, {
+    // Forward Spine's options and add the service required by the constructor.
+    onCreate: (options) => new TaskAssignment(options, weights),
+  });
+```
+
+Call `builder.buildAsync()` to assemble the context. The callback runs for each
+fresh or restored Entity object, not just once per ID. It also works for
+Aggregates and Projections, including Projection rebuilds. Return a fresh
+instance synchronously and pass the supplied options unchanged. Application
+services are not persisted; the application manages their initialization and
+shutdown. Constructors that need only `EntityOptions` require no callback.
+
+Explicit repositories accept `onCreate` in their options too. See the
+[guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/USER_GUIDE.md#give-an-entity-an-application-service) for the
+full story and the [reference](REFERENCE.md#entity-constructor-dependencies)
+for the exact contract.
+
 ## Async handlers and Process Manager queries
 
 An `@Assign`, `@Command`, `@React`, or `@Subscribe` handler may return its

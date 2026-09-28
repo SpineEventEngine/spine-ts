@@ -32,6 +32,7 @@ import {
   BoundedContext,
   type DescriptorMessageSchema,
   EntityHandlers,
+  type EntityOptions,
   ProcessManager,
   Projection,
   Repository,
@@ -77,10 +78,23 @@ class QueryProjection extends Projection<string, typeof ProjectOverviewStateSche
   }
 }
 
-class QueryProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {
+interface ProjectionNameFilter {
+  match(name: string): string;
+}
+
+const identityNameFilter: ProjectionNameFilter = { match: (name) => name };
+
+class ProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   static results: readonly ProjectOverviewState[] = [];
   static predicate: unknown;
   static failure: unknown;
+
+  constructor(
+    options: EntityOptions<string, typeof ProcessManagerStateSchema>,
+    private readonly nameFilter: ProjectionNameFilter,
+  ) {
+    super(options);
+  }
 
   static reset(): void {
     this.results = [];
@@ -95,27 +109,27 @@ class QueryProcessManager extends ProcessManager<string, typeof ProcessManagerSt
   async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
     const query = this.query();
     try {
-      if (QueryProcessManager.predicate !== undefined) {
-        query.where(QueryProcessManager.predicate as never);
+      if (ProjectLookup.predicate !== undefined) {
+        query.where(ProjectLookup.predicate as never);
       }
-      QueryProcessManager.results =
+      ProjectLookup.results =
         command.name === "all"
           ? await query.all()
           : await query
               .byId(command.id)
-              .where(EntityQuery.eq(projectionColumns.name, command.name))
+              .where(EntityQuery.eq(projectionColumns.name, this.nameFilter.match(command.name)))
               .read();
     } catch (error) {
-      QueryProcessManager.failure = error;
+      ProjectLookup.failure = error;
       throw error;
     }
     this.update((draft) => {
-      draft.queue = `read ${String(QueryProcessManager.results.length)}`;
+      draft.queue = `read ${String(ProjectLookup.results.length)}`;
     });
     return create(ProjectionEventSchema, {
       id: command.id,
-      name: QueryProcessManager.results[0]?.name ?? "none",
-      priority: QueryProcessManager.results[0]?.priority ?? 0,
+      name: ProjectLookup.results[0]?.name ?? "none",
+      priority: ProjectLookup.results[0]?.priority ?? 0,
     });
   }
 }
@@ -140,12 +154,15 @@ function projectionRepository(): Repository<typeof QueryProjection> {
   });
 }
 
-function processManagerRepository(): Repository<typeof QueryProcessManager> {
+function processManagerRepository(
+  nameFilter: ProjectionNameFilter = identityNameFilter,
+  createdVersions?: number[],
+): Repository<typeof ProjectLookup> {
   return new Repository({
-    entityType: QueryProcessManager,
+    entityType: ProjectLookup,
     schema: ProcessManagerStateSchema,
     handlers: HandlerMetadataValues.defineArity(
-      QueryProcessManager,
+      ProjectLookup,
       ProcessManagerStateSchema,
       (builder) => [builder.assign(CreateReviewProjectSchema, "assign")],
       [
@@ -159,6 +176,10 @@ function processManagerRepository(): Repository<typeof QueryProcessManager> {
       ],
     ),
     events: [ProjectionEventSchema],
+    onCreate(options) {
+      createdVersions?.push(options.version?.number ?? -1);
+      return new ProjectLookup(options, nameFilter);
+    },
   });
 }
 
@@ -188,24 +209,27 @@ function queryCommand(id: string, name: string, tenant?: string, suffix?: string
 
 describe("Process Manager querying", () => {
   it("offers a typed, read-only query only during handler execution", async () => {
-    const manager = new QueryProcessManager({
-      id: "process-1",
-      schema: ProcessManagerStateSchema,
-      state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
-      version: create(VersionSchema, { number: 1 }),
-      lifecycle: { archived: false, deleted: false },
-    });
+    const lookup = new ProjectLookup(
+      {
+        id: "process-1",
+        schema: ProcessManagerStateSchema,
+        state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
+        version: create(VersionSchema, { number: 1 }),
+        lifecycle: { archived: false, deleted: false },
+      },
+      identityNameFilter,
+    );
 
-    expect(() => manager.query()).toThrow(
+    expect(() => lookup.query()).toThrow(
       "Process Manager queries are available only during repository handler execution.",
     );
 
     const release = processManagerQueryAccess.bind(
-      manager,
+      lookup,
       () => Promise.resolve(Object.freeze([])),
       create(ActorContextSchema),
     );
-    const query = manager
+    const query = lookup
       .query()
       .byId("projection-1")
       .where(EntityQuery.eq(projectionColumns.name, "waiting"))
@@ -235,13 +259,16 @@ describe("Process Manager querying", () => {
   });
 
   it("caps an unlimited read at 1,000 states", async () => {
-    const manager = new QueryProcessManager({
-      id: "process-1",
-      schema: ProcessManagerStateSchema,
-      state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
-      version: create(VersionSchema, { number: 1 }),
-      lifecycle: { archived: false, deleted: false },
-    });
+    const lookup = new ProjectLookup(
+      {
+        id: "process-1",
+        schema: ProcessManagerStateSchema,
+        state: create(ProcessManagerStateSchema, { id: "process-1", queue: "waiting" }),
+        version: create(VersionSchema, { number: 1 }),
+        lifecycle: { archived: false, deleted: false },
+      },
+      identityNameFilter,
+    );
     const states = Object.freeze(
       Array.from({ length: 1_001 }, (_, index) =>
         create(ProjectOverviewStateSchema, {
@@ -252,7 +279,7 @@ describe("Process Manager querying", () => {
       ),
     );
     const release = processManagerQueryAccess.bind(
-      manager,
+      lookup,
       <Schema extends DescriptorMessageSchema>(
         _plan: import("@spine-event-engine/core/spi/entity-query-plan").EntityQueryPlan,
         schema: Schema,
@@ -265,15 +292,23 @@ describe("Process Manager querying", () => {
       create(ActorContextSchema),
     );
 
-    await expect(manager.query().all()).resolves.toHaveLength(1_000);
+    await expect(lookup.query().all()).resolves.toHaveLength(1_000);
     release();
   });
 
   it("reads only projection state from the active tenant", async () => {
-    QueryProcessManager.reset();
+    ProjectLookup.reset();
+    const matchedNames: string[] = [];
+    const createdVersions: number[] = [];
+    const nameFilter: ProjectionNameFilter = {
+      match(name) {
+        matchedNames.push(name);
+        return name;
+      },
+    };
     const context = BoundedContext.multitenant("ProcessManagerQueries")
       .add(projectionRepository())
-      .add(processManagerRepository())
+      .add(processManagerRepository(nameFilter, createdVersions))
       .build();
     const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } });
     const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-b" } });
@@ -295,21 +330,28 @@ describe("Process Manager querying", () => {
         );
 
       await context.commandBus().post(queryCommand("shared", "A", "tenant-a"));
-      expect(QueryProcessManager.results).toEqual([
+      expect(ProjectLookup.results).toEqual([
         create(ProjectOverviewStateSchema, { id: "shared", name: "A", priority: 1 }),
       ]);
 
       await context.commandBus().post(queryCommand("shared", "B", "tenant-b"));
-      expect(QueryProcessManager.results).toEqual([
+      expect(ProjectLookup.results).toEqual([
         create(ProjectOverviewStateSchema, { id: "shared", name: "B", priority: 2 }),
       ]);
+
+      await context.commandBus().post(queryCommand("shared", "A", "tenant-a", "restored"));
+      expect(ProjectLookup.results).toEqual([
+        create(ProjectOverviewStateSchema, { id: "shared", name: "A", priority: 1 }),
+      ]);
+      expect(createdVersions).toEqual([0, 0, 1]);
+      expect(matchedNames).toEqual(["A", "B", "A"]);
     } finally {
       await context.close();
     }
   });
 
   it("passes the signal actor, tenant, and zone to the query", async () => {
-    QueryProcessManager.reset();
+    ProjectLookup.reset();
     const context = BoundedContext.multitenant("ProcessManagerQueries")
       .add(projectionRepository())
       .add(processManagerRepository())
@@ -367,8 +409,8 @@ describe("Process Manager querying", () => {
       message: "Entity query predicate exceeds maximum node count 10000.",
     },
   ])("rejects a $name predicate before reading storage", async ({ predicate, message }) => {
-    QueryProcessManager.reset();
-    QueryProcessManager.predicate = predicate;
+    ProjectLookup.reset();
+    ProjectLookup.predicate = predicate;
     const context = BoundedContext.singleTenant("ProcessManagerQueries")
       .add(projectionRepository())
       .add(processManagerRepository())
@@ -380,7 +422,7 @@ describe("Process Manager querying", () => {
 
     try {
       await context.commandBus().post(queryCommand("query-id", "invalid"));
-      expect(QueryProcessManager.failure).toMatchObject({ message });
+      expect(ProjectLookup.failure).toMatchObject({ message });
       expect(reads).toBe(0);
     } finally {
       observation.close();
@@ -389,7 +431,7 @@ describe("Process Manager querying", () => {
   });
 
   it("includes archived state, excludes deleted state, and returns clones", async () => {
-    QueryProcessManager.reset();
+    ProjectLookup.reset();
     const context = BoundedContext.singleTenant("ProcessManagerQueries")
       .add(projectionRepository())
       .add(processManagerRepository())
@@ -418,16 +460,13 @@ describe("Process Manager querying", () => {
         );
 
       await context.commandBus().post(queryCommand("manager", "all", undefined, "second"));
-      expect(QueryProcessManager.results.map((state) => state.name).sort()).toEqual([
-        "archived",
-        "live",
-      ]);
-      const live = QueryProcessManager.results.find((state) => state.id === "live");
+      expect(ProjectLookup.results.map((state) => state.name).sort()).toEqual(["archived", "live"]);
+      const live = ProjectLookup.results.find((state) => state.id === "live");
       if (live === undefined) throw new Error("Expected live query result.");
       live.name = "changed by handler";
 
       await context.commandBus().post(queryCommand("manager", "all"));
-      expect(QueryProcessManager.results.find((state) => state.id === "live")).toEqual(
+      expect(ProjectLookup.results.find((state) => state.id === "live")).toEqual(
         create(ProjectOverviewStateSchema, { id: "live", name: "live", priority: 1 }),
       );
     } finally {

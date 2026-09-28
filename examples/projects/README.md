@@ -10,6 +10,7 @@ creation event through a query-side Projection subscription.
 - ✅ How generated handlers connect commands and events to domain code.
 - ✅ How a Node client posts `CreateProject`, queries `ProjectSummary`, and
   observes an update.
+- ✅ How to give a Process Manager an application service through its constructor.
 - ✅ How to run a bounded, repeatable local load scenario.
 
 ## 🚀 Run it
@@ -61,12 +62,47 @@ createProject(command: CreateProject): ProjectCreated {
 
 `ProjectSummaryProjection` observes `ProjectCreated` to make a queryable
 summary. The additional Aggregates, Process Managers, and Projections give the
-load topology realistic fan-out; they do not add a production deployment.
+example several handlers for each Event, as a larger application would have.
+They do not change how the example is deployed.
+
+## Give a Process Manager an application service
+
+When a task is created, `TaskAssignment` adds its weight to a saved counter.
+The application supplies the weight calculation through an
+`AssignmentWeightService`. This keeps the calculation separate from the
+Process Manager's stored state.
+
+<!-- docs-snippet-path: examples/projects/test/topology.test.ts -->
+
+```ts
+import { createProjectManagementContext, type AssignmentWeightService } from "../src/index.js";
+
+// This example service counts each task as three units of work.
+const weights: AssignmentWeightService = { weightFor: () => 3 };
+const context = await createProjectManagementContext(weights);
+
+// Use the context to handle messages, then close it during shutdown.
+await context.close();
+```
+
+Inside `createProjectManagementContext()`, registration uses
+`onCreate: (options) => new TaskAssignment(options, weights)`. Spine supplies
+the ID, state, version, and lifecycle options. The application adds its shared
+service. Each restored Process Manager receives that service again; the
+service itself is not saved in storage. The callback is synchronous. Prepare
+async clients before creating the context and close them after context shutdown.
+
+Without an argument, each task counts as one unit of work. With the service
+above, two `CreateTask` Commands produce two `TaskCreated` Events and a saved
+total of six. The second Event is handled by an object restored from storage;
+`onCreate` supplies the same service again. The example tests check this flow.
+See the [Entity dependency guide](../../docs/USER_GUIDE.md#give-an-entity-an-application-service)
+for the general API.
 
 ## 🗄️ Add persistence deliberately
 
 This example keeps its local run in memory. A durable application supplies a
-storage factory at composition time; domain handlers continue to work with
+storage factory when building the context; domain handlers continue to work with
 typed IDs and messages, not MySQL rows or Datastore entities. Mark a Proto
 field `(column)` only when a read model needs it for filtering or sorting. The
 [storage guide](../../packages/storage/README.md) explains the shared query

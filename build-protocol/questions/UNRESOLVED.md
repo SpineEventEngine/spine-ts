@@ -8,7 +8,7 @@ Template: `build-protocol/templates/UNRESOLVED_QUESTIONS_TEMPLATE.md`.
 
 ## Blocking Questions
 
-None.
+None as of 2026-09-28.
 
 ## Non-Blocking Questions
 
@@ -16,6 +16,11 @@ None as of 2026-06-27.
 
 ## Resolved In This Round
 
+- 2026-09-28, Entity dependency configuration: the human chose to advance only
+  `snapshot` automatically and leave `latest` unchanged. This replaces the
+  earlier two-tag requirement and closes the manual second-tag question.
+  Existing publication code already implements this policy; no stored token,
+  manual tag update, or live registry change is needed.
 - 2026-08-06, T-0120: Wave 7 Q&A is complete. Each GCE application process
   maintains its own leased registration; private addresses are the default;
   and the Gateway continues serving every discovered node when the configured

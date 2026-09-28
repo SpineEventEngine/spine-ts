@@ -67,6 +67,7 @@ import {
   type EventEndpoint,
   type EventDispatcher,
   type RepositoryView,
+  type EntityOptions,
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
@@ -273,6 +274,22 @@ class GeneratedTaskProcessManager extends ProcessManager<string, typeof ProcessM
     });
   }
 }
+class ConfiguredTaskAssignment extends GeneratedTaskProcessManager {
+  constructor(
+    options: EntityOptions<string, typeof ProcessManagerStateSchema>,
+    readonly service: string,
+  ) {
+    super(options);
+  }
+
+  override assignTask(command: AssignReviewTask): ReviewTaskAssigned {
+    const event = super.assignTask(command);
+    this.update((draft) => {
+      draft.queue += this.service;
+    });
+    return event;
+  }
+}
 
 class ReplayTaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   assignTask(command: ScheduleReviewTask): ReviewStarted {
@@ -357,6 +374,66 @@ function internalDeliveryDescriptor(context: BoundedContext): InternalDeliveryDe
 }
 
 describe("BoundedContext assembly", () => {
+  it("requires creation options for generated classes with required constructor services", () => {
+    const assertGeneratedCreationTypes = () => {
+      // @ts-expect-error the generated repository cannot construct the required service alone.
+      BoundedContext.singleTenant("Tasks").add(ConfiguredTaskAssignment);
+      BoundedContext.singleTenant("Tasks").add(ConfiguredTaskAssignment, {
+        onCreate: (options) => new ConfiguredTaskAssignment(options, "ready"),
+      });
+      BoundedContext.singleTenant("Tasks").add(ConfiguredTaskAssignment, {
+        onCreate: () =>
+          // @ts-expect-error generated onCreate must return the registered class.
+          new GeneratedTaskProcessManager(
+            {} as EntityOptions<string, typeof ProcessManagerStateSchema>,
+          ),
+      });
+    };
+    expectTypeOf(assertGeneratedCreationTypes).not.toBeAny();
+  });
+
+  it("uses generated onCreate for a Process Manager constructor service", async () => {
+    const registryRoot = createGeneratedRegistryRoot([
+      {
+        entityType: ConfiguredTaskAssignment,
+        stateSchema: ProcessManagerStateSchema,
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "assignTask",
+            input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+            outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      },
+    ]);
+    const seen: number[] = [];
+    const context = await BoundedContext.singleTenant("Tasks")
+      .withGeneratedRegistryRoot(registryRoot)
+      .add(ConfiguredTaskAssignment, {
+        onCreate(options) {
+          seen.push(options.version?.number ?? -1);
+          return new ConfiguredTaskAssignment(options, " via client");
+        },
+      })
+      .buildAsync();
+
+    try {
+      await context
+        .commandBus()
+        .post(createAggregateCommand("generated-service-1", "generated-service"));
+      await context
+        .commandBus()
+        .post(createAggregateCommand("generated-service-2", "generated-service"));
+      expect(seen).toEqual([0, 1]);
+      await expect(
+        context.stand().read(ProcessManagerStateSchema, "generated-service"),
+      ).resolves.toMatchObject({ queue: "Task Ready assigned via client" });
+    } finally {
+      await context.close();
+    }
+  });
   it("does not expose a logger before package-private installation", () => {
     const context = BoundedContext.singleTenant("Logger").build();
 
