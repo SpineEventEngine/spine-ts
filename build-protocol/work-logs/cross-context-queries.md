@@ -279,3 +279,11 @@ The final affected PM/Stand suites pass 77 tests; tooling typecheck, scoped
 ESLint/Prettier, cleanup and TSDoc all pass. Only RegisteredTargets, Stand and
 the PM-query test changed in this correction. API/reliability re-review follows;
 no broad release profile has yet run.
+
+Checkpoint cc2a90994 was pushed. Reliability re-review is clean. API re-review
+caught a skipped malformed-mask validation path; the retained implementer
+restored existing StorageQueryPolicy validation before stripping the mask from
+the stored-record query. Six malformed-mask regressions and the full affected
+83-test PM/Stand selection pass. Tooling typecheck, scoped lint/format, cleanup
+and TSDoc also pass. Final API confirmation and security review precede the
+single full release verification profile.

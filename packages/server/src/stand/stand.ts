@@ -25,6 +25,7 @@ import {
   RecordColumn,
   RecordMask,
   RecordQuery,
+  StorageQueryPolicy,
   type NormalizedQueryPlan,
   type StorageContext,
   type StorageMode,
@@ -479,6 +480,9 @@ export class Stand {
       const storage = this.#leaseCurrent(registration, tenantId);
       try {
         const { mask, ...storagePlan } = plan;
+        if (mask !== undefined) {
+          StorageQueryPolicy.validate({ mask }, { comparisons: [], features: ["mask"] });
+        }
         const maskPaths = mask?.paths.map(
           (path) =>
             registration.schema.fields.find((field) => field.name === path)?.localName ?? path,

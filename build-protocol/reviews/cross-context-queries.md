@@ -98,3 +98,26 @@ gpt-6-sol / medium: existing API reviewer for the mask correction and Stand
 contract/docs; existing reliability reviewer for real recovery/shutdown tests
 and changed masking. Neither receives prior reviewer history or memory. They
 read original requirements and current source/tests independently.
+
+At cc2a90994, fresh reliability re-review is clean; its 31-test focused run also
+passes. The actual PM shutdown, rejection, restored-state and pending-delivery
+tests now meet the required behavior. This also resolves the original style
+review's test-quality finding. API re-review found one remaining P2: removing
+the provider mask bypassed existing normalized-mask validation. Empty or invalid
+paths must still fail rather than silently returning unmasked state. Returned
+to the retained implementer with instructions to reuse StorageQueryPolicy,
+preserve decoded-state masking, and add malformed-mask regression tests.
+
+After this bounded correction passes preflight and API confirmation, the final
+release-readiness security reviewer will run with explicit gpt-6-sol / high,
+without history/memory, focusing on same-Server routing, tenant isolation,
+visibility, startup/shutdown, and query validation. Mechanical final release
+verification remains an orchestrator-dispatched gpt-6-luna / low function;
+run verify:release and release-cli prepare --check only after convergence.
+
+The final API correction has RED/GREEN evidence: five malformed-mask cases
+previously read unmasked or failed with incidental JS errors; all six cases
+now pass using existing StorageQueryPolicy validation. The final 83-test
+Stand/PM selection, tooling typecheck, scoped lint/format, cleanup and TSDoc
+pass. No new public API or duplicated validator was added. Fresh API confirmation
+uses the same explicitly configured gpt-6-sol / medium role and narrow diff.

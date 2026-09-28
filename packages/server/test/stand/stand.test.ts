@@ -869,6 +869,46 @@ describe("Stand", () => {
     ]);
   });
 
+  it.each([
+    ["empty", { paths: [] }, /field mask must not be empty/],
+    ["blank", { paths: [" "] }, /field-mask paths must not be blank/],
+    ["missing paths", {}, /field-mask paths must be an array/],
+    ["non-string", { paths: [42] }, /field-mask paths must be strings/],
+    [
+      "sparse",
+      { paths: Object.assign([] as string[], { length: 1 }) },
+      /field-mask paths must be strings/,
+    ],
+  ])("rejects a %s normalized mask before returning state", async (_case, mask, error) => {
+    const stand = new Stand({
+      context: { name: "MaskedTasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    stand.register(ProjectOverviewStateSchema);
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Visible"));
+
+    await expect(
+      stand.queryPlanVersioned(ProjectOverviewStateSchema, {
+        mask: mask as NonNullable<NormalizedQueryPlan<unknown>["mask"]>,
+      }),
+    ).rejects.toThrow(error);
+    await stand.close();
+  });
+
+  it("applies a valid normalized mask to the decoded state", async () => {
+    const stand = new Stand({
+      context: { name: "MaskedTasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    stand.register(ProjectOverviewStateSchema);
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Visible"));
+
+    await expect(
+      stand.queryPlanVersioned(ProjectOverviewStateSchema, { mask: { paths: ["name"] } }),
+    ).resolves.toEqual([{ state: create(ProjectOverviewStateSchema, { name: "Visible" }) }]);
+    await stand.close();
+  });
+
   it("returns one authoritative current state and version when the query index is stale", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const stand = new Stand({
