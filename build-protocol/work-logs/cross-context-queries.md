@@ -63,3 +63,40 @@ in progress. The implementer waits for build completion before production edits.
 
 Architecture-decision-records guidance was read for the existing decision-log
 entry; reuse this project's record format, with no new ADR tooling or directory.
+
+Preparation completed: frozen install, Proto generation and TypeScript build
+passed. The setup child reverted only its generated tracked-manifest changes;
+main records and the implementer's test remain. Record formatting, whitespace
+and document audience checks passed. Plan checkpoint b2b6f9f98 was pushed to
+origin immediately. No PR was created.
+
+Initial cross-context failure was timing-ambiguous because Server delivery is
+asynchronous. The corrected test waits for completion. Conclusive RED/GREEN:
+temporarily restoring only the original local Stand query call fails with
+StandStateTypeError for ProjectOverviewState; restoring routing passes 1/1.
+Next RED confirms named-tenant to single-tenant rejection occurs after QueryReader
+is entered; the correction must reject before any read. Full output is retained
+in the implementation report under the task's temporary evidence directory.
+
+CLI dist exists after build. A frozen reinstall completed without warnings but
+did not recreate the two workspace CLI shims; no shim repair is claimed. No
+current focused test depends on them. Check actual final verification needs
+before expanding setup work.
+
+Read-only documentation inventory assignment, before dispatch: existing
+documentation reviewer gpt-6-luna / medium. Inspect only user-facing query/tenant
+claims and example options, report affected files and concrete update suggestions;
+no edits, builds/tests, prior reviews/memory or children.
+
+Documentation inventory completed under the explicit Luna/medium profile with
+no visible mismatch. Affected guidance: server README/REFERENCE, framework
+USER_GUIDE, API and architecture overviews. Orders is the smallest suggested
+two-context example; broad docs/example edits follow stabilized runtime.
+
+Version-only commit 2ff068cce updates all31 workspace top-level versions to
+2.0.0-snapshot.17 and was pushed immediately. JSON comparison proved no other
+manifest fields changed in that commit. Pins and lockfile are updated separately;
+offline frozen installation and release-policy validation pass. Lockfile-only
+resolution reports existing ESLint/glob/node-domexception deprecations; no
+dependency upgrade was made. Candidate registry checks covered all19 public
+packages. No npm tags or publications changed.
