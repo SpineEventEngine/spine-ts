@@ -1,6 +1,6 @@
 # Cross-context queries review log
 
-Status: implementation and preflight complete; independent review in progress.
+Status: independent reviews complete; final release verification in progress.
 
 ## Plan review
 
@@ -189,3 +189,14 @@ medium) will inspect the final changed startup paths and relevant original
 requirements without history/memory. Their scope distinguishes introduced or
 affected defects from unrelated baseline limitations. No public API changes
 or reopened broad documentation work are part of this correction.
+
+At 478a530f8, fresh security recheck (Sol/high) is clean and its eight focused
+startup/cleanup tests pass. Fresh reliability recheck (Sol/medium) is clean:
+prebuilt and returned contexts are admitted at the correct points, conflicts
+are excluded from cleanup, handoff to routes is synchronous, retries retain
+the required exclusions, and accepted work drains before Stand closure.
+No remaining accepted finding. All explicit dispatch profiles matched the
+required roles; separate runtime metadata was unavailable. Style, API and
+documentation dispositions remain clean, with deterministic checks covering
+the final bounded startup extractions and TSDoc. Full release verification
+and exact-tarball consumer proof now run through a Luna/low mechanical function.

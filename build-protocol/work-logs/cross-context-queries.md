@@ -320,3 +320,21 @@ tests, tooling typecheck, scoped lint/format, cleanup and TSDoc. One HTTP/2
 session-order assertion failed once and passed isolated/combined reruns; no
 unrelated implementation change was made for it. Final review and the broad
 release gate remain pending.
+
+Checkpoint 478a530f8 was pushed. Final independent security (Sol/high) and
+reliability (Sol/medium) rechecks are clean; security additionally ran eight
+focused startup/cleanup tests successfully. All four canonical concerns and
+final security are resolved. Main dispatches a fresh mechanical verification
+function with explicit gpt-6-luna / low: cheap preflight, one verify:release
+run with the configured single worker, then release-cli prepare --check.
+Capture actual output and exit statuses; no fixes, commits, publishing, or PR
+creation are delegated. Any failure returns for scoped diagnosis rather than
+blind repetition. Authored code is frozen at 478a530f8.
+
+The first release command stopped before the full test suite: the new
+effective-tenant.test.ts copyright text was wrapped differently from the
+required header. Main applied the exact existing header as a deterministic
+comment-only correction; repository-wide lint:copyright and diff checks pass.
+This check should have been included in cheap preflight for the new file.
+No runtime or review disposition changed. Resume the release profile after
+cheap preflight, preserving the failed attempt's logs and exit status.
