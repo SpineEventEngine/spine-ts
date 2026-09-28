@@ -343,6 +343,7 @@ export class Server {
       services,
       host,
       port: address.port,
+      contexts,
       closeables,
       listenerLifecycles: this.#listenerLifecycles,
     });
@@ -656,6 +657,7 @@ class RunningHttp2Server implements RunningServer {
   readonly #server: http2.Http2Server;
   readonly #sessions: Set<http2.ServerHttp2Session>;
   readonly #closeables: readonly unknown[];
+  readonly #contexts: readonly BoundedContext[];
   readonly #listenerLifecycles: readonly { close(): unknown }[];
   readonly #startedLifecycles: { close(): unknown }[] = [];
   readonly #environment: ServerEnvironment;
@@ -673,6 +675,7 @@ class RunningHttp2Server implements RunningServer {
     this.#server = options.server;
     this.#sessions = options.sessions;
     this.#closeables = options.closeables;
+    this.#contexts = options.contexts;
     this.#listenerLifecycles = options.listenerLifecycles;
     this.#environment = options.environment;
     this.#attachment = options.attachment;
@@ -777,6 +780,16 @@ class RunningHttp2Server implements RunningServer {
         }
       }
     }
+    for (const context of this.#contexts) boundedContextAccess.beginClose(context);
+    const drained = await Promise.allSettled(
+      this.#contexts.map((context) => boundedContextAccess.drainWork(context)),
+    );
+    const drainErrors = drained.flatMap((result) =>
+      result.status === "rejected" ? [result.reason as unknown] : [],
+    );
+    if (drainErrors.length > 0) {
+      throw new AggregateError(drainErrors, "Server close failed while draining contexts.");
+    }
     try {
       await this.#closeGroup.close();
     } catch (error) {
@@ -800,6 +813,7 @@ interface RunningHttp2ServerOptions {
   readonly server: http2.Http2Server;
   readonly sessions: Set<http2.ServerHttp2Session>;
   readonly closeables: readonly unknown[];
+  readonly contexts: readonly BoundedContext[];
   readonly listenerLifecycles: readonly { start(): unknown; close(): unknown }[];
   readonly environment: ServerEnvironment;
   readonly attachment: EnvironmentAttachmentHandle;

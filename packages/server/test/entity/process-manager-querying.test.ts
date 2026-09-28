@@ -13,7 +13,7 @@
  */
 
 import { create, type MessageShape } from "@bufbuild/protobuf";
-import { AnyMessages, EntityColumn, EntityQuery } from "@spine-event-engine/core";
+import { AnyMessages, EntityColumn, EntityQuery, TypeUrls } from "@spine-event-engine/core";
 import { GeneratedEntityColumns } from "@spine-event-engine/core/codegen";
 import {
   ActorContextSchema,
@@ -26,6 +26,7 @@ import {
   ZoneIdSchema,
 } from "@spine-event-engine/proto";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
 import {
   Aggregate,
@@ -41,6 +42,7 @@ import {
 import { processManagerQueryAccess } from "../../src/entity/entity.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { QueryReader } from "../../src/services/query-reader.js";
+import { RegisteredTargets } from "../../src/services/registered-targets.js";
 import {
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
@@ -55,6 +57,24 @@ import {
   type CreateReviewProject,
   CreateReviewProjectSchema,
 } from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
+
+const closePhase = vi.hoisted(() => ({
+  onBegin: undefined as ((context: unknown) => void) | undefined,
+}));
+
+vi.mock("../../src/context/bounded-context.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/context/bounded-context.js")>();
+  return {
+    ...actual,
+    boundedContextAccess: {
+      ...actual.boundedContextAccess,
+      beginClose(context: BoundedContext) {
+        actual.boundedContextAccess.beginClose(context);
+        closePhase.onBegin?.(context);
+      },
+    },
+  };
+});
 
 const projectionColumns = EntityColumn.register(
   ProjectOverviewStateSchema,
@@ -288,6 +308,108 @@ describe("Process Manager querying", () => {
     }
   });
 
+  it("installs complete routes before recovery enumerates tenant work", async () => {
+    const factory = new InMemoryStorageFactory();
+    const projects = BoundedContext.multitenant("RecoverProjects")
+      .withStorageFactory(factory)
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.multitenant("RecoverWorkflows")
+      .withStorageFactory(factory)
+      .add(processManagerRepository())
+      .build();
+    const catalog = factory.tenantCatalog();
+    const originalAll = catalog.all.bind(catalog);
+    let recoveryScopes = 0;
+    const all = vi.spyOn(catalog, "all").mockImplementation(() => {
+      recoveryScopes += 1;
+      expect(
+        RegisteredTargets.forStand(workflows.stand())?.find(
+          TypeUrls.derive(ProjectOverviewStateSchema),
+        )?.context,
+      ).toBe(projects);
+      return originalAll();
+    });
+
+    try {
+      const running = await Server.atPort(0).add(workflows).add(projects).start();
+      expect(recoveryScopes).toBeGreaterThan(0);
+      await running.close();
+    } finally {
+      all.mockRestore();
+    }
+  });
+
+  it.each(["target-first", "handler-first"])(
+    "drains accepted cross-context handler reads during %s shutdown",
+    async (order) => {
+      let enter!: () => void;
+      let release!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const projects = BoundedContext.singleTenant("ClosingProjects")
+        .add(projectionRepository())
+        .build();
+      const results: ProjectOverviewState[][] = [];
+      const workflows = BoundedContext.singleTenant("ClosingWorkflows")
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateReviewProjectSchema],
+          async dispatch() {
+            enter();
+            await released;
+            const states = await projects.stand().readAllVersioned(ProjectOverviewStateSchema);
+            results.push(states.map((result) => result.state));
+          },
+        })
+        .build();
+      await projects
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+        );
+      const contexts = order === "target-first" ? [projects, workflows] : [workflows, projects];
+      const server = Server.atPort(0);
+      for (const context of contexts) server.add(context);
+      const running = await server.start();
+      let began!: () => void;
+      const sourceClosing = new Promise<void>((resolve) => {
+        began = resolve;
+      });
+      closePhase.onBegin = (context) => {
+        if (context === workflows) began();
+      };
+
+      try {
+        const posting = workflows
+          .commandBus()
+          .post(queryCommand("project-1", "ready"))
+          .then(
+            () => undefined,
+            (error: unknown) => error,
+          );
+        await entered;
+        const closing = running.close();
+        await sourceClosing;
+        expect(() => projects.stand().stateTypes()).not.toThrow();
+        release();
+        expect(await posting).toBeUndefined();
+        await closing;
+        expect(results).toEqual([
+          [create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 })],
+        ]);
+      } finally {
+        closePhase.onBegin = undefined;
+        release();
+        await running.close();
+      }
+    },
+  );
+
   it("reads the same named tenant in a multitenant destination", async () => {
     ProjectLookup.reset();
     const projects = BoundedContext.multitenant("TenantProjects")
@@ -366,16 +488,70 @@ describe("Process Manager querying", () => {
   ])("rejects duplicate state registration in %s then %s", async (first, second) => {
     const firstContext = BoundedContext.singleTenant(first).add(projectionRepository()).build();
     const secondContext = BoundedContext.singleTenant(second).add(projectionRepository()).build();
+    let closedResources = 0;
+    let startedLifecycles = 0;
+    const server = Server.atPort(0)
+      .add(firstContext)
+      .add(secondContext)
+      .addResource({
+        close: () => {
+          closedResources += 1;
+        },
+      })
+      .addListenerLifecycle({
+        start: () => {
+          startedLifecycles += 1;
+        },
+        close: () => undefined,
+      });
 
-    await expect(Server.atPort(0).add(firstContext).add(secondContext).start()).rejects.toThrow(
+    await expect(server.start()).rejects.toThrow(
       new RegExp(`ProjectOverviewState.*${first}.*${second}`),
     );
+    expect(closedResources).toBe(1);
+    expect(startedLifecycles).toBe(0);
     await expect(firstContext.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
       "Stand is closed.",
     );
     await expect(
       secondContext.stand().readAllVersioned(ProjectOverviewStateSchema),
     ).rejects.toThrow("Stand is closed.");
+  });
+
+  it("retries failed cleanup after duplicate registration without starting delivery", async () => {
+    const first = BoundedContext.singleTenant("RetryProjectsOne")
+      .add(projectionRepository())
+      .build();
+    const second = BoundedContext.singleTenant("RetryProjectsTwo")
+      .add(projectionRepository())
+      .build();
+    let closes = 0;
+    const server = Server.atPort(0)
+      .add(first)
+      .add(second)
+      .addResource({
+        close() {
+          closes += 1;
+          if (closes === 1) throw new Error("resource close failed");
+        },
+      });
+
+    let rejected: unknown;
+    try {
+      await server.start();
+    } catch (error) {
+      rejected = error;
+    }
+    expect(rejected).toBeInstanceOf(AggregateError);
+    if (!(rejected instanceof AggregateError)) throw new Error("Expected failed cleanup causes.");
+    const messages = rejected.errors.map((error: unknown) =>
+      error instanceof Error ? error.message : String(error),
+    );
+    expect(messages[0]).toContain("ProjectOverviewState");
+    expect(messages[1]).toBe("resource close failed");
+    expect(closes).toBe(1);
+    await expect(server.start()).rejects.toThrow(/deferred cleanup completed/);
+    expect(closes).toBe(2);
   });
 
   it("does not discover targets attached to another Server", async () => {

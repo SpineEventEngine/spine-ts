@@ -422,10 +422,27 @@ The Entity transaction stays open until the promise settles. A rejected promise
 rolls back framework state and produced output, but it cannot undo an HTTP call
 or another external side effect already started by the handler.
 
-Only a Process Manager may use its protected `select()` read API. It reads an
-eventually consistent Projection, so an Aggregate must never use that data for
-an invariant. Order a bounded query before applying `limit()`; Process Manager
-reads have a maximum of 1,000 results.
+Only a Process Manager may use its protected `select()` read API. It reads
+eventually consistent Entity state, so an Aggregate must never use that data
+for an invariant. Order a bounded query before applying `limit()`; Process
+Manager reads have a maximum of 1,000 results.
+
+For example, an order process can read a product registered in a catalogue
+context. Register both contexts with the same `Server`; the queried Entity type
+identifies the destination, without adding a context name to `select()`. The
+destination Entity must have `query` or `full` visibility for a cross-context
+read. Registering the same Entity type in two contexts is an error, rather than
+a choice determined by registration order. Separately running servers are not
+searched. A context used without a Server continues to query its local state.
+
+The query keeps the triggering signal's actor and effective tenant. An Acme
+process reads only Acme's data in a multitenant destination; querying a
+single-tenant destination instead is a tenant mismatch and fails before a read.
+Single-tenant execution uses the built-in `SINGLE_TENANT` identity even when
+the request omits a tenant field. It can read another single-tenant context or
+the `SINGLE_TENANT` partition of a multitenant context. There is no tenant override.
+No matching records means an empty result, not a tenant mismatch. Finding the
+right context does not wait for its read-side to catch up with recent Events.
 
 ## 7a. Connect bounded contexts with external events
 

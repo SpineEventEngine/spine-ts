@@ -228,17 +228,40 @@ Nested promises and structural or imported thenable lookalikes are rejected duri
 The entity transaction remains open until that promise settles; rejection rolls
 back framework state and suppresses produced output, but cannot undo external
 side effects. Process Managers may use their protected read-only query surface
-for eventually consistent projection state during a handler. Aggregates must
-not use projection reads for invariants.
+for eventually consistent Entity state during a handler. Aggregates must not
+use these reads for invariants.
 
 `select(schema, columns)` supports `byId`, typed `where`, `mask`, `orderBy`,
 `limit`, `read`, `findById`, and `all`. A Process Manager query returns at most
-1,000 states. `all()` is a convenience and can be costly on a large Projection;
+1,000 states. `all()` is a convenience and can be costly on a large read model;
 prefer an ID-targeted or ordered bounded query.
 
 Use `EntityQuery.all(...)` to require every predicate and `EntityQuery.either(...)`
 to accept any branch. Query execution inherits the active handler's actor and
-tenant; the protected read-only facade has no tenant override.
+effective tenant; the protected read-only facade has no tenant override.
+
+For contexts registered with one `Server`, the target Entity's type URL selects
+its context. No context name or network request is required. The Server rejects
+duplicate Entity type registrations before starting delivery recovery or
+listening, identifying the type and both contexts. Contexts used without a
+Server retain local querying; separate Servers do not share query routes.
+
+Cross-context targets must declare `query` or `full` visibility. This applies
+to any Entity family with queryable state. Unknown targets, foreign targets
+without query visibility, and tenant mismatches produce errors before storage
+reads. Existing local and public-query visibility behavior is unchanged.
+
+Single-tenant execution resolves to the built-in `SINGLE_TENANT` identity;
+omitting the wire tenant field does not create tenant-free execution. Named
+tenants can query their corresponding multitenant partition, not a single-tenant
+destination. `SINGLE_TENANT` can query a single-tenant destination or its same
+partition in a multitenant destination. The query never replaces the tenant to
+suit the target. A valid query with no matching record keeps its ordinary empty
+result (`undefined` from `findById()`). Reads remain eventually consistent.
+
+Routes are available before recovered handlers execute. Server shutdown drains
+accepted handlers across contexts before closing any target read-side; failed
+startup validation participates in context and resource cleanup.
 
 ```ts
 import type { Message } from "@bufbuild/protobuf";

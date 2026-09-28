@@ -394,7 +394,14 @@ readonly `entityFamily` property typed by `EntityFamily`. Every family uses
 the generated Spine `Version`; application code supplies no third version type.
 Repository and bounded-context collaborators perform handler dispatch,
 transactions, persistence, Event publication, and produced-Command delivery.
-Process Managers also expose protected `select()` reads of Projections.
+Process Managers also expose protected `select()` reads of Entity state.
+One Server resolves each queried Entity type to its registered context and
+rejects duplicate type registrations. Queries preserve the handler's effective
+tenant, reject incompatible destinations before reading, and require query
+visibility for foreign targets. Routes are installed before recovery; shutdown
+drains accepted handlers across contexts before closing any target read-side.
+See the [query contract](../../packages/server/REFERENCE.md#handler-routing-and-operations)
+for the single-tenant identity and the limits of eventually consistent reads.
 Aggregates and Process Managers provide protected Event-history reads backed
 by their repositories.
 These classes do not give application code public transaction controls.

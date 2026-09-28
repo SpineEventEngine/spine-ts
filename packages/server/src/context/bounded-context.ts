@@ -502,6 +502,10 @@ const contextLoggers = new WeakMap<BoundedContext, ILogLayer>();
 const contextSignalPublishers = new WeakMap<BoundedContext, SignalPublisher>();
 const contextEventBuses = new WeakMap<BoundedContext, readonly [EventBus, EventBus]>();
 const closingContexts = new WeakSet<BoundedContext>();
+const contextClosePhases = new WeakMap<
+  BoundedContext,
+  { readonly begin: () => void; readonly drain: () => Promise<void> }
+>();
 const contextIntegrations = new WeakMap<
   BoundedContext,
   { readonly broker: IntegrationBroker; readonly ready: Promise<void> }
@@ -513,6 +517,21 @@ const builderBuilds = new WeakMap<
 >();
 
 interface BoundedContextAccess {
+  /**
+   * Stops new work admission before a Server drains all its contexts.
+   *
+   * @param context Built context entering shutdown.
+   */
+  beginClose(context: BoundedContext): void;
+
+  /**
+   * Waits for accepted work while every Stand remains available.
+   *
+   * @param context Built context whose work must settle.
+   * @returns Completion after the context's accepted work drains.
+   */
+  drainWork(context: BoundedContext): Promise<void>;
+
   /**
    * Checks whether a value is a builder created by this module.
    *
@@ -829,6 +848,12 @@ export class BoundedContext {
     contextStorageFactories.set(this, storageFactory);
     contextSubscriptionRuntimes.set(this, subscriptionRuntime);
     contextSignalPublishers.set(this, publisher);
+    contextClosePhases.set(this, {
+      begin: () => {
+        this.#beginClose();
+      },
+      drain: () => this.#drainWork(),
+    });
     contextDeliveryDescriptors.set(
       this,
       ContextParts.createDeliveryDescriptor(
@@ -1102,20 +1127,30 @@ export class BoundedContext {
    * @returns A promise that settles after all resources close.
    */
   close(): Promise<void> {
+    this.#beginClose();
+    this.#closed ??= this.#closeOnce();
+    return this.#closed;
+  }
+
+  /**
+   * Stops admission to this context's signal and bus work.
+   */
+  #beginClose(): void {
     closingContexts.add(this);
     this.#publisher.beginClose();
     commandBusAccess.beginClose(this.#commandBus);
     eventBusAccess.beginClose(this.#eventBus);
     eventBusAccess.beginClose(this.#systemEventBus);
-    this.#closed ??= this.#closeOnce();
-    return this.#closed;
   }
 
-  async #closeOnce(): Promise<void> {
+  /**
+   * Closes integration intake and drains accepted context work before Stand close.
+   *
+   * @returns Completion after the context's accepted work settles.
+   */
+  async #drainWork(): Promise<void> {
     const errors: unknown[] = [];
-
     await ContextParts.closeContextPart(() => ContextParts.closeIntegration(this), errors);
-
     await ContextParts.closeContextPart(
       () =>
         ContextParts.drainContextWork(
@@ -1126,6 +1161,13 @@ export class BoundedContext {
         ),
       errors,
     );
+    if (errors.length > 0) throw new AggregateError(errors, "BoundedContext drain failed.");
+  }
+
+  async #closeOnce(): Promise<void> {
+    const errors: unknown[] = [];
+
+    await ContextParts.closeContextPart(() => this.#drainWork(), errors);
     this.#publisher.finishClose();
     await ContextParts.closeContextPart(
       () => commandBusAccess.finishClose(this.#commandBus),
@@ -1164,6 +1206,19 @@ export class BoundedContext {
  * Exposes framework-only operations for built contexts and their builders.
  */
 export const boundedContextAccess: BoundedContextAccess = Object.freeze({
+  beginClose(context: BoundedContext): void {
+    const phase = contextClosePhases.get(context);
+    if (phase === undefined) throw new TypeError("Close phase requires a built BoundedContext.");
+    phase.begin();
+  },
+
+  drainWork(context: BoundedContext): Promise<void> {
+    const phase = contextClosePhases.get(context);
+    if (phase === undefined)
+      return Promise.reject(new TypeError("Drain requires a built BoundedContext."));
+    return phase.drain();
+  },
+
   installLogger(context: BoundedContext, logger: ILogLayer): void {
     if (!contextStorageFactories.has(context)) {
       throw new TypeError("Context logger requires a built BoundedContext instance.");

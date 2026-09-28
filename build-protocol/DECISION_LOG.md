@@ -6,6 +6,7 @@ Navigation: [README](README.md)
 
 Status: Accepted; implementation in progress, 28 September 2026.
 
+This extends the Process Manager query scope recorded in D-0120.
 Process Manager queries resolve Entity types across the contexts of one Server,
 without context names or remote discovery. The Server rejects duplicate Entity
 type registrations before starting processing, naming both contexts.

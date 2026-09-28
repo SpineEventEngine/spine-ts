@@ -14,6 +14,12 @@ evidence of completed work and are not current operating instructions. Every
 future `master` merge triggers NPM publication and therefore carries a new
 common workspace version under D-0115.
 
+Current approved work: [Process Manager queries across contexts](planning/cross-context-queries.md)
+on `cross-context-queries`, based on official master `2324311be8`. Preserve the
+current effective tenant, reject duplicate Entity registrations and incompatible
+query destinations, and drain handlers before closing queried contexts. The
+work and review logs record implementation, verification and remaining checks.
+
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
 remotely closed. The complete-replica deployment correction is closed through
 T-0213. The subsequent beginner-example and public-subscription corrections are

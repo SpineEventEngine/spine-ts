@@ -262,7 +262,7 @@ repositories with the built context after opening state record storage through
 the context `StorageFactory`; registered repositories also make their entity
 state schemas known to the context `Stand`. Built contexts also create the
 internal system-pairing metadata and a framework tenant index:
-single-tenant contexts use a constant index, and multitenant contexts use the
+single-tenant contexts list the built-in `SINGLE_TENANT` identity, and multitenant contexts use the
 configured provider's tenant catalog. MySQL enumerates configured
 tenant/database entries, Datastore enumerates native namespaces, and memory
 enumerates tenant slices; no generic `TenantId` record is persisted. These
@@ -356,7 +356,11 @@ Repositories and bounded contexts handle dispatch, persistence, and message
 publication; these classes do not expose public transaction controls.
 Aggregates and Process Managers provide the protected, repository-bound
 event-history methods documented below; Projections intentionally do not.
-Process Managers also provide protected `select()` reads of Projections.
+Process Managers also provide protected `select()` reads of Entity state.
+The target type identifies its context among those registered with the same
+`Server`, while the query preserves the handler's effective tenant. See the
+[query contract](../../packages/server/REFERENCE.md#handler-routing-and-operations)
+for visibility, tenant compatibility, result limits and eventual consistency.
 To pass an application service to an Entity constructor, supply `onCreate` in
 `RepositoryOptions`, or in the second argument of
 `BoundedContextBuilder.add(EntityClass, options)`. Spine supplies typed

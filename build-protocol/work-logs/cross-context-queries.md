@@ -130,3 +130,34 @@ is used for public state routing too. Query reads use registered schema/metadata
 not schema-object-reference rejection. The implementer paused writes while main
 formats/lints and captures this intermediate checkpoint. Startup/shutdown tests,
 example, remaining TSDoc and full review/verification are still pending.
+
+Read-only test-evidence inventory assignment, before dispatch: orchestrator
+function using gpt-6-luna / medium. Compare the approved acceptance cases with
+current focused tests; report concrete gaps without edits, test execution,
+memory, or child dispatch. This is preparation, not final correctness review.
+
+The shutdown regression separates two paths: environment detachment already
+drains Inbox delivery, but an accepted direct CommandBus handler can outlive a
+different context's Stand. Target-first registration reproduced `Stand is
+closed`; the all-context drain correction passes both registration orders.
+The existing server lifecycle suite then passed 150 tests with one worker.
+
+An early deterministic TSDoc check failed on undocumented declarations in
+touched files, including existing private methods. Full diagnostics are in
+`/tmp/spine-cross-context-queries.ef2mk2/tsdoc-preflight.log`; these and the four
+known callable-size findings go to the retained implementer before review.
+No full release test run has started.
+
+Read-only test inventory completed under the explicit Luna/medium profile,
+without a reported mismatch. It confirmed tenant, visibility, duplicate,
+separate-Server and local-query cases, and identified focused evidence still
+needed for other Entity families, equivalent descriptors and recovery ordering.
+
+Recovery-order RED/GREEN: moving route installation after delivery attachment
+makes the startup probe fail; restoring pre-attachment installation passes.
+The lifecycle checkpoint passed TypeScript build and 251 tests across the PM
+query, server and bounded-context suites. The shutdown test observes the actual
+begin-close operation; no test-only production accessor remains. Main's scoped
+ESLint check then found four deterministic corrections, returned immediately to
+the retained implementer before pushing. Final TSDoc/size checks, example,
+independent review and release verification remain pending.
