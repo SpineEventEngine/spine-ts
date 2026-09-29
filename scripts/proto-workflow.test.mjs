@@ -309,10 +309,6 @@ function todoTransactionFixture() {
   writeFileSync(join(todo, "package.json"), '{"name":"@example/todo","version":"1.0.0"}\n');
   writeFileSync(join(todo, "spine-proto.json"), "{}\n");
   writeFileSync(join(todo, "proto/todo.proto"), 'syntax = "proto3";\n');
-  writeFileSync(
-    join(todo, "buf.gen.custom.yaml"),
-    "version: v2\nplugins:\n  - local: test\n    out: examples/todo/generated\n",
-  );
   for (const path of ["packages/proto/generated", "examples/todo/generated"]) {
     mkdirSync(join(repoRoot, path), { recursive: true });
     writeFileSync(join(repoRoot, path, "previous.txt"), `${path}\n`);
@@ -428,13 +424,6 @@ function todoStageCommand(failure, writeManifest = true, configure) {
     }
     if (label === failure) return 1;
     if (label.endsWith("source-view publication revalidation")) return 0;
-    if (label === "Todo companion generation") {
-      const template = readFileSync(args.at(-1), "utf8");
-      const output = template.match(/^\s*out:\s*(.+)$/mu)?.[1];
-      mkdirSync(output, { recursive: true });
-      writeFileSync(join(output, "companion.txt"), "companion\n");
-      return 0;
-    }
     const output = args[args.indexOf("--out") + 1];
     mkdirSync(dirname(output), { recursive: true });
     writeFileSync(output, "handler\n");
@@ -1455,60 +1444,53 @@ describe("proto-workflow", () => {
     }
   });
 
-  it.each([
-    "Todo companion generation",
-    "Todo handler registry post-step",
-    "Todo source-view publication revalidation",
-  ])("%s preserves live Todo and root artifacts when its staged post-step fails", (failure) => {
-    const repoRoot = todoTransactionFixture();
-    expect(
-      generateTargets({
-        repoRoot,
-        runCommand: rootStageCommand,
-        runModelCommand: todoStageCommand(failure),
-      }),
-    ).toBe(1);
-    expect(readFileSync(join(repoRoot, "examples/todo/generated/previous.txt"), "utf8")).toBe(
-      "examples/todo/generated\n",
-    );
-    expect(readFileSync(join(repoRoot, "examples/todo/spine-proto-manifest.json"), "utf8")).toBe(
-      todoManifest("todo-live"),
-    );
-    expect(readFileSync(join(repoRoot, "packages/proto/generated/previous.txt"), "utf8")).toBe(
-      "packages/proto/generated\n",
-    );
-    expect(readFileSync(join(repoRoot, "packages/proto/spine-proto-manifest.json"), "utf8")).toBe(
-      rootManifest("root-live"),
-    );
-    expect(
-      readdirSync(join(repoRoot, "examples/todo")).some((name) => name.startsWith(".generated-")),
-    ).toBe(false);
-    expect(readdirSync(repoRoot).some((name) => name.startsWith(".spine-proto-"))).toBe(false);
-  });
+  it.each(["Todo handler registry post-step", "Todo source-view publication revalidation"])(
+    "%s preserves live Todo and root artifacts when its staged post-step fails",
+    (failure) => {
+      const repoRoot = todoTransactionFixture();
+      expect(
+        generateTargets({
+          repoRoot,
+          runCommand: rootStageCommand,
+          runModelCommand: todoStageCommand(failure),
+        }),
+      ).toBe(1);
+      expect(readFileSync(join(repoRoot, "examples/todo/generated/previous.txt"), "utf8")).toBe(
+        "examples/todo/generated\n",
+      );
+      expect(readFileSync(join(repoRoot, "examples/todo/spine-proto-manifest.json"), "utf8")).toBe(
+        todoManifest("todo-live"),
+      );
+      expect(readFileSync(join(repoRoot, "packages/proto/generated/previous.txt"), "utf8")).toBe(
+        "packages/proto/generated\n",
+      );
+      expect(readFileSync(join(repoRoot, "packages/proto/spine-proto-manifest.json"), "utf8")).toBe(
+        rootManifest("root-live"),
+      );
+      expect(
+        readdirSync(join(repoRoot, "examples/todo")).some((name) => name.startsWith(".generated-")),
+      ).toBe(false);
+      expect(readdirSync(repoRoot).some((name) => name.startsWith(".spine-proto-"))).toBe(false);
+    },
+  );
 
-  it("uses the supplied root Buf executable for Todo companion generation", () => {
+  it("uses normal Todo model generation without an extra Buf companion step", () => {
     const repoRoot = todoTransactionFixture();
-    const localBuf = join(
-      repoRoot,
-      "node_modules/.bin",
-      process.platform === "win32" ? "buf.cmd" : "buf",
-    );
-    mkdirSync(dirname(localBuf), { recursive: true });
-    writeFileSync(localBuf, "fixture Buf\n");
-    let companionExecutable;
+    const labels = [];
 
     try {
       const staged = stageGeneratedTargets({
         repoRoot,
         runCommand: rootStageCommand,
         runModelCommand(label, executable, args, cwd) {
-          if (label === "Todo companion generation") companionExecutable = executable;
+          labels.push(label);
           return todoStageCommand(undefined)(label, executable, args, cwd);
         },
       });
 
       expect(staged.status).toBe(0);
-      expect(companionExecutable).toBe(localBuf);
+      expect(labels).toContain("Todo model generation");
+      expect(labels).not.toContain("Todo companion generation");
       cleanupStagedTargets(staged.stagedTargets);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
@@ -1520,7 +1502,7 @@ describe("proto-workflow", () => {
     const todoRoot = join(repoRoot, "examples/todo");
     try {
       rmSync(join(todoRoot, "generated"), { recursive: true, force: true });
-      writeTodoGenerationState(todoRoot, "todo-live", { companion: true, handler: true });
+      writeTodoGenerationState(todoRoot, "todo-live", { handler: true });
 
       expect(
         generateTargets({
@@ -2448,9 +2430,6 @@ describe("proto-workflow", () => {
     );
     expect(readFileSync("examples/todo/spine-proto.json", "utf8")).toContain(
       '"moduleExport": "todoProtoModule"',
-    );
-    expect(readFileSync("examples/todo/buf.gen.custom.yaml", "utf8")).not.toContain(
-      "protoc-gen-es",
     );
   });
 

@@ -23,7 +23,7 @@ import {
   type OrderReviewed,
   OrderReviewedSchema,
 } from "../generated/spine/examples/orders/events_pb.js";
-import { SkuCatalogSchema } from "../generated/spine/examples/orders/read_models_pb.js";
+import { SkuCatalogQuery } from "../generated/spine/examples/orders/read_models_query.js";
 
 /**
  * Reviews each order using the catalog available when its creation event arrives.
@@ -42,10 +42,9 @@ export class OrderReview extends ProcessManager<string, typeof OrderReviewSchema
    * @returns An Event recording the name captured in the review.
    */
   @React async onOrderCreated(event: OrderCreated): Promise<OrderReviewed> {
-    // An ID lookup needs no declared filter columns.
-    const catalog = await this.select(SkuCatalogSchema, {})
-      .byId(event.skuId)
-      .read();
+    // The generated import registers columns; this handler supplies its tenant at read time.
+    const query = SkuCatalogQuery.create().byId(event.skuId).build();
+    const catalog = await this.select(query).read();
     const skuName = catalog[0]?.value ?? "";
     this.update((draft) => {
       Object.assign(draft, create(OrderReviewSchema, {

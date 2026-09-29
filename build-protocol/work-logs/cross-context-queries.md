@@ -1098,3 +1098,118 @@ using the prepared brief and read-only map, without additional branches/worktree
 Expected remaining example/docs work and focused review: 0.5–0.8 hours; final app,
 security, release and package-consumer checks follow. Keep the prior routing
 implementation context available for any routing-specific correction.
+
+Routing checkpoint 423a34ebda0fe27847a4181d2df04bb13bfd022b was committed,
+pushed immediately to origin/cross-context-queries, and verified by ls-remote.
+The checkout was clean before the next writer started. Distinct example/docs
+implementation session 01a0ee86-8137-7912-8717-84089f8a3f13 confirms explicit
+Sol/medium in its configured header, with no visible fallback; separate runtime
+identity is not exposed. It has the complete ledger, prepared example brief,
+read-only source map and required skills. It is the sole source/docs writer;
+main handles task records. Retain this context for its review corrections. No
+database runner, extra worktree, dependency change or full release run is active.
+
+Example phase reports passing builds, 50 focused behavior tests and 129 broader
+scoped tests; the final workflow-only rerun also passes 112 tests after obsolete
+Todo template fixtures are removed. Executed compiled example coverage is 92%
+statements, 100% branches, 94.73% functions and 100% lines. Authored-source-only
+coverage initially measured zero because these tests import dist modules; it is
+not reported as runtime failure or passing authored-source coverage. Snippets,
+audience, TSDoc, cleanup, Proto lint, formatting and whitespace checks pass.
+After the writer stops, run the prepared live Todo smoke function explicitly
+Luna/low against memory and four retained SQL services, sequentially with clean
+test databases and no overlapping test runner. In parallel, fresh independent
+API (Sol/medium) and documentation (Luna/medium) reviews may read the frozen slice.
+Then use available slots for reliability and style reviews, both Sol/medium.
+All use the examples-review-brief.md and full ledger; collect the complete wave
+and live evidence before returning one correction batch to the example author.
+
+Live smoke session 01a0ee99-0799-7f00-9f4b-b9be48645835 confirms explicit
+Luna/low. All five modes pass the existing Todo smoke with exit 0: memory,
+MySQL 8.4.10, MariaDB 11.4, PostgreSQL 16.15 and PostgreSQL 18.6. Each SQL engine
+uses a dedicated fresh spine_todo_query_smoke database in the task container.
+The helper runs children asynchronously, closes each app in finally, and confirms
+no app/smoke process remains. Containers/databases remain for final cleanup.
+Provisioning initially returned an overall failure after PostgreSQL databases
+were created; existence checks confirmed them, and no application correction was
+needed. Exact logs/commands remain in the temporary todo-live-smoke-report.md;
+disposable credentials are not copied into project records. Independent API and
+documentation sessions explicitly use Sol/medium and Luna/medium respectively;
+API completed, documentation and the remaining technical concerns are pending.
+
+The full example review wave is collected; its accepted remaining corrections
+are test/documentation-only. Final security can review stable framework runtime
+in parallel without another production writer. Dispatch the existing security
+reviewer explicitly Sol/high, fresh without memory/history, using
+extension-security-brief.md. Main read security-best-practices/SKILL.md in full
+for this protocol-required release concern. Its reference inventory has no guide
+for this custom TypeScript server/SQL/generator stack; Express/Next/React/DOM
+guides do not match the changed surfaces and are not loaded. Apply the skill's
+general trust-boundary guidance and concrete code evidence. The user-approved
+autonomous protocol governs correction authority over the skill's generic offer-
+to-fix step: in-scope confirmed findings may be fixed; unrelated expansion still
+requires approval. No new TLS policy, identifier validation or recipient cap is
+authorized. The report belongs in the existing task review record after acceptance.
+
+Dispatch an independent read-only release-state function explicitly Luna/medium
+while the security review and test/docs correction run. Verify common workspace
+version and the version-only commit, internal pins/release metadata with existing
+non-mutating checks, unused registry versions for each publishable package, and
+public GitHub PR/Actions state for this official branch. Do not publish, alter tags,
+modify credentials, create a PR, fetch/modify a branch, run builds/tests or change
+versions. Public unauthenticated GitHub reads avoid the known gh HTTP401 problem.
+This does not replace exact-tarball proof or final-SHA CI after the final push.
+
+Example corrections are accepted: settled delivery proves both manual filtering
+and no-match behavior without state/Version changes; the exact documented Node
+reader invocation passed; later-registration wording now matches the example.
+Normal generation, affected builds, tooling types, snippets, audience, Proto lint,
+generated cleanliness, formatting and whitespace checks pass. No runtime change
+followed the five successful live Todo checks. Final security session
+01a0eea0-8945-7ee0-ae3c-25bfb49d2c17 explicitly confirms Sol/high and reports no
+actionable findings. Release-state session
+01a0eea1-85b2-72c2-81a4-ba275deeb8be explicitly confirms Luna/medium; its local
+version checks pass but sandbox DNS prevented registry/GitHub checks. Main can
+reach the registry, so retry those read-only checks on the capable surface rather
+than treating the sandbox limit as external unavailability. Separate backend
+profile metadata is unavailable; no configured mismatch or fallback is visible.
+
+Remaining estimate: 0.5–1 hour for cheap preflight completion, one converged
+release gate, exact-package consumer proofs, immediate feature-branch pushes,
+remote checks and disposable-container cleanup. Dispatch mechanical preflight
+explicitly Luna/low, and registry/GitHub verification explicitly Luna/medium,
+with no source edits or children. The former runs only outstanding ESLint,
+TSDoc/cleanup, API/audience, logging, production-dependency and release-readiness
+checks plus changed formatting/whitespace. Existing focused tests/builds remain
+valid. After clean preflight and commit, dispatch the prepared final verification
+brief explicitly Luna/low. Never overlap test runners or claim CI without the
+exact remote commit's results.
+
+Final preflight session 01a0eea6-e41c-7e20-be3a-eb2d6389b048 confirms explicit
+Luna/low. ESLint catches two unused smoke imports and a static-only TaskListReader
+class. Return these deterministic corrections to the same example implementer,
+explicit Sol/medium, estimate 0.05–0.1 hours. Preserve the reader's documented
+call shape using the project's documented object-method style, update its copied
+snippet/wording, then affected tests/build/snippet checks and complete cheap
+preflight. No runtime contracts change, so no new specialist wave. Prettier's
+initial command had incorrect argument splitting and included deleted files;
+those are checker-invocation errors, not source formatting findings.
+
+Network verification session 01a0eea6-e890-71b1-a3bf-0ae9c2a73bae confirms
+explicit Luna/medium. All 31 workspace versions agree at snapshot.17. Official
+GitHub reports no open PR, no check runs/statuses and no Actions runs for this
+branch. Its registry report incorrectly included private server-blackbox-tests
+in a fallback scan, so main rejected that inventory conclusion and used
+expectedReleaseModel(readReleaseManifests(process.cwd())) directly. All 19 actual
+public package exact-version registry requests returned HTTP 404 successfully;
+snapshot.17 remains unused. No package/tag/authentication writes occurred.
+
+Mechanical example correction is verified: remove unused imports and replace
+the static-only reader class with a documented frozen object, preserving both
+method call signatures. Affected Todo build, both reader tests and exact guide
+invocation pass. Complete cheap preflight passes: tooling types, ESLint, cleanup,
+TSDoc, API docs, audience/snippets, logging, dependency policy, release readiness,
+changed formatting and whitespace. Prior normal generation/Proto checks and
+live-provider evidence remain applicable. Commit/push this example slice now;
+then run the prepared full-release and exact-tarball brief once, explicit
+Luna/low, without live database environment variables or overlapping tests.

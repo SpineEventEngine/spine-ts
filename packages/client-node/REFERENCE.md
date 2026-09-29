@@ -11,12 +11,22 @@ The returned kernel supports `asGuest()` and `onBehalfOf(user)` request scopes. 
 
 ## Entity query API
 
-`EntityColumn.register(schema, definition)` validates and binds generated columns to one Entity schema. The generated `EntityColumnDefinition` comes from the package's `./codegen` entry point. `EntityQuery.select({ schema, columns, context })` starts a builder. It supports `where`, `orderBy`, `limit`, and `build`, plus static predicates `eq`, `gt`, `lt`, `ge`, `le`, `all`, and `either`.
+Normal model generation emits a `_query.ts` companion for each eligible Entity
+state. Import its named query, for example `TaskListQuery`, then call
+`TaskListQuery.create().openTaskCount().isAtLeast(1).build()`. The import
+registers its declared columns automatically. The built query contains no actor
+or tenant; `request.send(query)` binds both at execution.
+
+`EntityColumn.register(schema, definition)` and `EntityQuery.select(...)` remain
+available for existing low-level callers. Their schema-and-columns setup is not
+required when using a generated query.
 
 Predicates accept only columns registered for the selected Entity. `limit()` requires at least one order clause. The compiler packs declared values and the `version`, `archived`, and `deleted` system columns into the wire query. Builders and columns are immutable, so a predicate cannot be reused for a different Entity target.
 
 ## Code generation
 
-Use `protoc-gen-spine-entity-columns` or the `@spine-event-engine/client-node/codegen` entry point only from a model-generation workflow. Generated code uses `GeneratedEntityColumns`; application code should import the generated definition, register it, and construct queries through the public API above.
+Run the model package's normal `spine-proto generate` command. It emits the
+query companion and column registration together; application code imports the
+named query without a second generation command or manual registration.
 
 This package is Node-only because it imports Node HTTP/2 and code-generation dependencies. Browser applications use `@spine-event-engine/client-web`.

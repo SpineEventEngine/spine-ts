@@ -20,9 +20,11 @@ import type { TaskListId } from "../../generated/spine/examples/todo/task_id_pb.
 import { TaskAssignmentEvent as TaskAssignmentEventToken } from "../../generated/interfaces/task-assignment-event.js";
 import { TaskEvent } from "../../generated/interfaces/task-event.js";
 
+// Task Events already include the intended list ID, so this route needs no repository read.
 const taskListRouting = EventRouting.create<TaskListId>().route(TaskEvent, (event) =>
   event.taskListId === undefined ? [] : [event.taskListId],
 );
+// Reassignment names both recipients; its exact route takes precedence over the interface route.
 const assigneeRouting = EventRouting.create<UserId>()
   .route(TaskAssignmentEventToken, (event) =>
     event.assignee === undefined ? [] : [event.assignee],

@@ -152,9 +152,11 @@ import type { TaskListId } from "../../generated/spine/examples/todo/task_id_pb.
 import { TaskAssignmentEvent as TaskAssignmentEventToken } from "../../generated/interfaces/task-assignment-event.js";
 import { TaskEvent } from "../../generated/interfaces/task-event.js";
 
+// Task Events already include the intended list ID, so this route needs no repository read.
 const taskListRouting = EventRouting.create<TaskListId>().route(TaskEvent, (event) =>
   event.taskListId === undefined ? [] : [event.taskListId],
 );
+// Reassignment names both recipients; its exact route takes precedence over the interface route.
 const assigneeRouting = EventRouting.create<UserId>()
   .route(TaskAssignmentEventToken, (event) =>
     event.assignee === undefined ? [] : [event.assignee],
@@ -180,6 +182,14 @@ Routing runs once when an accepted event is admitted. The framework stores the
 typed targets with that accepted work, so retry replays those stored targets
 without calling the route again. Read-side catch-up intentionally rebuilds
 from events and may evaluate routing again to construct its view.
+
+The Events here already name their recipients. See the separate
+[Orders query-routing example](../orders/src/query-routing.ts) for a route that
+must look up saved receiving-repository state to discover the affected cards.
+Routing reads run when the Event is admitted; they do not run handlers or save
+changes, and later delivery is not atomic with the read. A Command route must
+choose exactly one recipient. Event and state routes may choose several; more
+than 1,000 final distinct recipients produce a warning without dropping any.
 
 ## Run the assignment routing journey
 
@@ -313,218 +323,103 @@ example data fresh after updating.
 
 ## Query task lists
 
-Every `TaskList` projection row has the task-list ID as its projection ID. The
-following complete ESM client factors the shared client, target, read, and
-decode setup while executing all-row, exact-ID, and declared-column queries.
-First run `pnpm typecheck:build` from the repository root, then save the module
-as `examples/todo/scripts/query-client.mjs`. Start `pnpm --filter
-@spine-event-engine/example-todo start` in terminal one. In terminal two, seed one open
-task and copy the task ID printed after `to-do smoke ok:`:
+Every `TaskList` row uses its typed `TaskListId` as the Projection ID. Normal
+generation creates `TaskListQuery` with its declared columns. Import that one
+module and build the query; no second generator or column registration is needed.
+The existing smoke command posts a task and reads its list through the selected
+memory, MySQL, or PostgreSQL storage:
 
 ```bash
 pnpm --filter @spine-event-engine/example-todo smoke
 ```
 
-Pass that complete ID as `SPINE_TODO_TASK_ID` when running the saved query
-module from the repository root. For example, replace `smoke-...` below with
-the ID just printed:
+From the repository root, build with `pnpm typecheck:build`, start the app in
+another terminal with `pnpm --filter @spine-event-engine/example-todo start`,
+then run the smoke command above. Copy the full ID printed after `to-do smoke
+ok:` into this invocation of the reader. Replace `smoke-...` with that ID:
 
 ```bash
-SPINE_TODO_TASK_ID='smoke-...' pnpm --filter @spine-event-engine/example-todo exec node scripts/query-client.mjs
+SPINE_TODO_TASK_ID='smoke-...' pnpm --dir examples/todo exec node --input-type=module -e '
+import { TaskListReader } from "./dist/src/docs/query-client.js";
+const rows = await TaskListReader.readOpen(
+  process.env.SPINE_TODO_BASE_URL ?? "http://127.0.0.1:8080",
+  process.env.SPINE_TODO_TASK_ID,
+);
+if (rows.length !== 1) throw new Error("Expected one open TaskList.");
+console.log(rows[0].id.value, rows[0].tasks[0]?.title);
+'
 ```
 
-The exact-ID result must contain the seeded row, and the module enforces that
-proof. All-row and `open_task_count = 1` reads are bounded demonstrations: they
-request at most 16 rows and may omit the seed when more matching rows tie on the
-declared `open_task_count` ordering column. Their summaries report the requested
-limit, whether the returned page contains the seed, capped IDs, unavailable
-rows, and rows omitted by the client-side decoder. The exact-ID query requests
-one row. The client independently inspects at most 16 returned rows.
+This command calls `TaskListReader` directly. The smoke program uses direct gRPC
+and does not use that object.
 
-```js
-import { log } from "node:console";
-import { randomUUID } from "node:crypto";
-import process from "node:process";
-import { clearTimeout, setTimeout } from "node:timers";
+The following complete object reads an open list through the Node client.
+`send(query)` binds the actor and effective tenant when it executes the query.
+The result contains complete generated state messages. A filter chooses rows,
+not fields; incoming wire field masks are ignored.
 
+<!-- docs-snippet-path: examples/todo/src/docs/query-client.ts -->
+
+```ts
 import { create } from "@bufbuild/protobuf";
-import { Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { createClient } from "@connectrpc/connect";
-import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
-import { UserIdSchema } from "@spine-event-engine/proto";
-import {
-  CompositeFilter_CompositeOperator,
-  CompositeFilterSchema,
-  Filter_Operator,
-  FilterSchema,
-  OrderBySchema,
-  OrderBy_Direction,
-  QueryIdSchema,
-  QuerySchema,
-  QueryService,
-  ResponseFormatSchema,
-  TargetFiltersSchema,
-  TargetSchema,
-} from "@spine-event-engine/proto/client";
-import { SignalMetadata } from "@spine-event-engine/server";
+import { Client } from "@spine-event-engine/client-node";
+import { AnyMessages } from "@spine-event-engine/core";
+import type { QueryResponse } from "@spine-event-engine/proto/client";
 
-import { TaskListSchema } from "../dist/generated/spine/examples/todo/task_list_pb.js";
+import { TaskListIdSchema } from "../../generated/spine/examples/todo/task_id_pb.js";
+import { TaskListSchema, type TaskList } from "../../generated/spine/examples/todo/task_list_pb.js";
+import { TaskListQuery } from "../../generated/spine/examples/todo/task_list_query.js";
 
-const baseUrl = process.env.SPINE_TODO_BASE_URL ?? "http://127.0.0.1:8080";
-const taskId = process.env.SPINE_TODO_TASK_ID?.trim();
-if (taskId === undefined || taskId === "") {
-  throw new Error("Set SPINE_TODO_TASK_ID to the complete task ID printed by package smoke.");
-}
-const querySuffix = randomUUID();
-const maxQueryRows = 16;
-const maxLoggedIdLength = 64;
-const session = new Http2SessionManager(baseUrl);
-const transport = createGrpcTransport({ baseUrl, sessionManager: session });
-const queries = createClient(QueryService, transport);
-const metadata = new SignalMetadata();
-const actorContext = metadata.actorContext({
-  actor: create(UserIdSchema, { value: "todo-query-user" }),
-});
-
-try {
-  const all = await readTaskLists(
-    taskListQuery(`query-all-${querySuffix}`, { case: "includeAll", value: true }),
-  );
-  const exact = await readTaskLists(
-    taskListQuery(
-      `query-exact-${querySuffix}`,
-      {
-        case: "filters",
-        value: create(TargetFiltersSchema, {
-          idFilter: {
-            id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: taskId }))],
-          },
-        }),
-      },
-      1,
-    ),
-  );
-  const oneOpenTask = await readTaskLists(
-    taskListQuery(`query-one-open-task-${querySuffix}`, {
-      case: "filters",
-      value: create(TargetFiltersSchema, {
-        filter: [
-          create(CompositeFilterSchema, {
-            filter: [
-              create(FilterSchema, {
-                fieldPath: { fieldName: ["open_task_count"] },
-                value: AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 1 })),
-                operator: Filter_Operator.EQUAL,
-              }),
-            ],
-            operator: CompositeFilter_CompositeOperator.ALL,
-          }),
-        ],
-      }),
-    }),
-  );
-
-  requireTask(exact, "exact-ID query");
-  log({
-    all: resultSummary(all),
-    exact: resultSummary(exact),
-    oneOpenTask: resultSummary(oneOpenTask),
-  });
-} finally {
-  session.abort();
-}
-
-function requireTask(result, label) {
-  if (!result.taskLists.some((list) => list.id === taskId)) {
-    throw new Error(`${label} did not return the requested smoke task.`);
-  }
-}
-
-function resultSummary(result) {
-  return {
-    requestedLimit: result.requestedLimit,
-    containsSeededTask: result.taskLists.some((list) => list.id === taskId),
-    taskIds: result.taskLists.map((list) => list.id.slice(0, maxLoggedIdLength)),
-    unavailableRows: result.unavailableRows,
-    decoderOmittedRows: result.omittedRows,
-  };
-}
-
-function taskListQuery(id, criterion, limit = maxQueryRows) {
-  return create(QuerySchema, {
-    id: create(QueryIdSchema, { value: id }),
-    target: create(TargetSchema, {
-      type: TypeUrls.derive(TaskListSchema),
-      criterion,
-    }),
-    context: actorContext,
-    format: create(ResponseFormatSchema, {
-      limit,
-      orderBy: [
-        create(OrderBySchema, {
-          column: "open_task_count",
-          direction: OrderBy_Direction.ASCENDING,
-        }),
-      ],
-    }),
-  });
-}
-
-async function readTaskLists(query) {
-  const response = await withTimeout(queries.read(query), `query ${query.id?.value}`, 1_000);
-  if (response.response?.status?.status.case !== "ok") {
-    throw new Error(`Query ${query.id?.value ?? "<missing>"} was not acknowledged.`);
-  }
-  return {
-    ...decodeTaskLists(response),
-    requestedLimit: query.format?.limit ?? 0,
-  };
-}
-
-function decodeTaskLists(response) {
-  const maxDecodedRows = 16;
-  const taskLists = [];
-  let unavailableRows = 0;
-  const inspectedRows = response.message.slice(0, maxDecodedRows);
-  for (const row of inspectedRows) {
-    if (row.state === undefined) {
-      unavailableRows += 1;
-      continue;
-    }
+/**
+ * Groups the actor-bound generated-query example methods.
+ */
+export const TaskListReader: Readonly<{
+  readOpen(baseUrl: string, taskId: string): Promise<readonly TaskList[]>;
+  states(response: QueryResponse): readonly TaskList[];
+}> = Object.freeze({
+  /**
+   * Reads complete TaskList states through the Node client.
+   *
+   * @param baseUrl The running To-Do server URL.
+   * @param taskId The TaskList ID printed by the smoke command.
+   * @returns Complete matching state messages.
+   */
+  async readOpen(baseUrl, taskId) {
+    const client = Client.connectTo(baseUrl);
     try {
-      const list = AnyMessages.unpack(row.state, TaskListSchema);
-      if (list !== undefined) {
-        taskLists.push(list);
-      } else {
-        unavailableRows += 1;
-      }
-    } catch {
-      // Skip malformed matching-type bytes just like absent or mismatched rows.
-      unavailableRows += 1;
+      // The generated import registers columns. Build without an actor or tenant.
+      const query = TaskListQuery.create()
+        .byId(create(TaskListIdSchema, { value: taskId }))
+        .openTaskCount()
+        .isAtLeast(1)
+        .build();
+      // The request binds actor and tenant at execution.
+      const response = await client.onBehalfOf("todo-query-user").send(query);
+      return TaskListReader.states(response);
+    } finally {
+      await client.close();
     }
-  }
-  return {
-    taskLists,
-    unavailableRows,
-    omittedRows: Math.max(0, response.message.length - inspectedRows.length),
-  };
-}
+  },
 
-async function withTimeout(promise, label, timeoutMs) {
-  let timeout;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        timeout = setTimeout(() => reject(new Error(`${label} timed out.`)), timeoutMs);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
+  /**
+   * Decodes complete TaskList states from a query response.
+   *
+   * @param response The query response to inspect.
+   * @returns Recognized TaskList states, omitting absent or foreign states.
+   */
+  states(response) {
+    return response.message.flatMap((row) => {
+      const state =
+        row.state === undefined ? undefined : AnyMessages.unpack(row.state, TaskListSchema);
+      return state === undefined ? [] : [state];
+    });
+  },
+});
 ```
+
+For a live view, subscription recovery can use the same built query as its
+`authoritativeQuery`; recovery binds the subscription actor and tenant and
+returns complete state before live updates resume.
 
 An OK command Ack does not make projection delivery synchronous. When a query
 waits for a command consequence, repeat the bounded read only until an overall
@@ -562,7 +457,6 @@ import process from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
 
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
@@ -578,7 +472,10 @@ import {
 import { SignalMetadata } from "@spine-event-engine/server";
 
 import { CreateTaskSchema } from "../dist/generated/spine/examples/todo/task_commands_pb.js";
-import { TaskIdSchema } from "../dist/generated/spine/examples/todo/task_id_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../dist/generated/spine/examples/todo/task_id_pb.js";
 import { TaskListSchema } from "../dist/generated/spine/examples/todo/task_list_pb.js";
 
 const baseUrl = process.env.SPINE_TODO_BASE_URL ?? "http://127.0.0.1:8080";
@@ -598,7 +495,7 @@ const target = create(TargetSchema, {
     case: "filters",
     value: create(TargetFiltersSchema, {
       idFilter: {
-        id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: taskId }))],
+        id: [AnyMessages.pack(TaskListIdSchema, create(TaskListIdSchema, { value: taskId }))],
       },
     }),
   },
@@ -646,10 +543,10 @@ try {
     if (list === undefined) {
       throw new Error("Subscription update did not contain TaskList state.");
     }
-    if (list.id !== taskId) {
-      throw new Error(`Expected TaskList ${taskId}, received ${list.id}.`);
+    if (list.id?.value !== taskId) {
+      throw new Error(`Expected TaskList ${taskId}, received ${list.id?.value ?? "<missing>"}.`);
     }
-    log(`subscription update: ${list.id}`);
+    log(`subscription update: ${list.id.value}`);
 
     const cancel = await withTimeout(
       subscriptions.cancel(subscription),

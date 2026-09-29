@@ -677,3 +677,51 @@ changed for this test. All accepted routing findings are resolved; API,
 reliability, style and narrow documentation concerns have accepted dispositions.
 Commit and immediately push this checkpoint. Final security review and the full
 extension coverage/release gate remain after example/documentation completion.
+
+## Query examples and documentation
+
+Frozen base 423a34ebd; focused and mechanical evidence preceded this wave. Fresh
+sessions: API 01a0ee99-06b5-7aa1-b471-943d56079380 (Sol/medium), documentation
+01a0ee99-06b5-7b82-b9b1-84a9054c7155 (Luna/medium), reliability
+01a0ee9a-c973-7a53-8365-d37d1cc5e839 (Sol/medium), style
+01a0ee9b-3de6-7d70-aa12-3fc7bfa7d0d2 (Sol/medium). Main confirms each explicit
+configured profile; backend identity is not separately exposed. All were fresh,
+read-only and independent; no prior implementation/review conclusions supplied.
+
+Complete wave accepts three deduplicated P2 corrections: demonstrate filtering
+matching cards whose names are already current and wait before negative delivery
+assertions; provide runnable TaskListReader instructions rather than implying the
+smoke runs that class; narrow current/latest-name claims to later registrations
+received after cards exist. Fix tests and wording, not additional catalog features.
+
+Reject the duplicated snippet-path finding from API/docs/style. The hidden
+docs-snippet-path selects compiler context, not source attribution:
+docs/check-typescript-snippets.mjs:99–107 documents that contract and :169–181
+replaces the virtual source file with snippet text. The README's visible link
+already points to query-routing.ts. Making that the virtual context would replace
+the module imported by the snippet and cause a self-import diagnostic. No user
+link is wrong and no new documentation file/checker change is justified.
+
+Return the accepted batch to the same example author, explicitly Sol/medium,
+using examples-corrections.md; estimate 0.1–0.2 hours. Tests/wording-only fixes
+do not reopen specialist lanes unless they expose a substantive runtime change.
+All five live Todo modes pass independently; preserve that evidence if runtime
+remains unchanged. Final security and full release/package checks remain pending.
+
+All three accepted example findings are resolved with focused evidence: the
+negative routes drain before assertions and preserve complete versioned state;
+the documented TaskListReader command executes successfully; documentation and
+Proto/class comments describe later registrations only. No runtime correction
+was needed, so the four concern dispositions are accepted without another wave.
+
+Final independent security review: session
+01a0eea0-8945-7ee0-ae3c-25bfb49d2c17, explicit Sol/high, fresh ephemeral session
+with memory disabled and no prior review conclusions. Configured header verified;
+separate runtime identity unavailable. No actionable findings in extension
+runtime through 423a34ebd and the example/build changes. Reviewed tenant/type and
+visibility boundaries, routing read expiry, SQL parameter binding, generated
+source escaping, ignored wire masks and resource handling. Unlimited trusted
+repository results are approved behavior. The separately disclosed Datastore
+history trim failure remains unmodified pending scope approval. The security
+skill focused this review on actual trust boundaries, without inventing new
+validation, authentication or result-limit requirements.

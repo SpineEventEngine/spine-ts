@@ -71,7 +71,6 @@ export const modelAtomicTargets = [
     displayPath: "examples/todo/generated",
     packagePath: "examples/todo",
     moduleName: "Todo",
-    templatePath: "examples/todo/buf.gen.custom.yaml",
     handlerProjectPath: "examples/todo/tsconfig.json",
   },
   {

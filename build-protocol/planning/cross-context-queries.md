@@ -7,11 +7,14 @@ execution, including subscriptions; ignore mask fields in incoming Protobufs.
 No product questions remain.
 The complete corrected plan received a fresh standalone review without memory;
 its three implementation-plan findings are incorporated below.
-Extension implementation is underway. Masking removal passed focused verification
-and independent API, reliability, style and documentation review; accepted findings
-are fixed. Shared typed queries and normal DSL generation passed independent
-review and focused verification; all accepted corrections are resolved.
-Repository reads and asynchronous routing follow.
+Extension implementation and example migration are complete. Masking removal,
+shared typed queries, normal DSL generation, repository reads and asynchronous
+routing passed focused verification and independent specialist reviews; accepted
+findings are fixed. Final security review reports no actionable findings. Real
+query checks pass on MySQL, MariaDB, PostgreSQL 16/18 and Datastore. Todo smoke
+passes on memory and all four SQL engines. A separate unchanged Datastore history
+trim test hangs; further work on it awaits scope approval. The complete release
+and packaged-consumer verification remain in progress.
 GitHub CI remains unverified.
 Updated: 29 September 2026.
 Branch: `cross-context-queries`.
