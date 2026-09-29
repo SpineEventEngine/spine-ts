@@ -1,7 +1,8 @@
 # Cross-context queries work log
 
 Started: 28 September 2026. Status: original implementation locally verified;
-repository-query and generated-DSL extension in planning as of 29 September.
+repository-query and generated-DSL plan reviewed as of 29 September; one
+field-selection decision remains before implementation.
 Task/branch: `cross-context-queries`.
 Worktree: `/Users/armiol/.codex/worktrees/cross-context-queries/spine-ts`.
 Base: `2324311be8c23024f66cb2ba702fbe99a99e7dfb` from freshly fetched official origin.
@@ -455,3 +456,17 @@ official JVM source; identify contradictions, missing decisions and small fixes.
 No files may be changed and no builds/tests or child agents may be launched by
 the reviewer. Desktop supports the explicit profile; separate actual runtime
 metadata is unavailable. Planning estimate given: 0.2–0.35 hours.
+
+The standalone plan review completed with six accepted findings. The plan now
+specifies class-aware routing types, exhaustive reads in all four providers,
+JVM repository lifecycle selection, shared query execution and copied inputs,
+routing-bound read access, and generation edge cases. The independent reviewer
+used the explicitly requested profile without inherited history or memory;
+see the review log for acceptance and source details. One user question remains
+about complete Entities when a query selects only some fields. No production
+code was changed and no runtime tests or builds were requested or run in this
+planning turn. The first plan checkpoint was pushed as `7dd649583`.
+
+Planning-document verification passed: Prettier on the five changed Markdown
+files, `node scripts/check-doc-audience.mjs`, and `git diff --check` (exit 0).
+These checks validate the documents only, not the unimplemented extension.

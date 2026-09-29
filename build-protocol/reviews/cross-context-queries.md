@@ -1,7 +1,8 @@
 # Cross-context queries review log
 
 Status: original runtime reviews and local release verification complete; the
-repository-query and generated-DSL plan extension awaits standalone review.
+repository-query and generated-DSL plan extension has received standalone review.
+Its findings are incorporated; one field-selection decision awaits the human.
 GitHub CI remains unverified.
 
 ## Plan review
@@ -253,7 +254,7 @@ The human has been asked to open the PR; creating it is not authorized here.
 
 ## Repository-query and DSL plan review (29 September)
 
-Planned independent assignment: existing requirements splitter as a senior
+Completed independent assignment: existing requirements splitter as a senior
 engineer reviewing public query design, explicit gpt-6-astra / high, with
 `fork_turns: none` and no memory/history. This is the architecture pass for the
 material extension, not another review of unchanged completed code. Inputs:
@@ -266,3 +267,32 @@ No child dispatch, editing, builds or tests. Actual runtime metadata is not
 separately exposed; accept the immutable explicitly configured profile unless
 a mismatch is visible. Existing runtime review dispositions above apply only
 to the original completed slice, not the unimplemented extension.
+
+The standalone reviewer `/root/repository_query_plan_review` used the expected
+requirements-splitter role with both gpt-6-astra and high explicitly dispatched.
+No history or memory was supplied. It inspected current code and official JVM
+HEAD `ea3067b137938ac0beb6920c39d11e300976fcc9`. No visible profile mismatch was
+reported; separate runtime metadata was unavailable. No builds/tests were run.
+
+Accepted findings and plan corrections:
+
+1. An ID-only routing factory cannot infer application Entity methods. Specify
+   class-aware routing, exact result types and compile-time inference tests.
+2. Existing memory, shared query-policy and Datastore bounds can truncate or
+   reject large searches. Specify exhaustive repository execution across all
+   four providers, sparse-match tests and complete batched delivery; preserve
+   public/PM limits rather than disable them globally.
+3. Specify JVM's repository lifecycle defaults, their ID/predicate exceptions,
+   and filtering before ordering/limits. Preserve other query paths' behavior.
+4. Define the shared typed query before its consumers. Specify PM/client entry
+   points, execution-time identity and copied mutable query inputs.
+5. Keep repository reads bound to one routing invocation. Test expired access,
+   concurrent tenants and asynchronous direct-route/shutdown behavior.
+6. Include nested models, name collisions and non-`id` identifier fields in
+   generation and consumer tests, with normal output cleanup and fingerprints.
+
+One product question remains: whether `find()` ignores field selection to
+restore complete Entities. The recommendation and JVM alternative are recorded
+in the plan and unresolved-questions log, pending the user's decision. All other
+findings are incorporated as implementation requirements, not claimed as fixed
+runtime behavior. This review does not replace later implementation reviews.

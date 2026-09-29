@@ -1,8 +1,9 @@
 # Entity queries and signal routing
 
 Status: Original cross-context work is implemented and locally release-verified.
-The approved repository-query and generated-DSL extension is being planned and
-independently reviewed; it is not implemented. GitHub CI remains unverified.
+The approved repository-query and generated-DSL extension has received standalone
+plan review. One field-selection decision remains; the extension is not
+implemented. GitHub CI remains unverified.
 Updated: 29 September 2026.
 Branch: `cross-context-queries`.
 Base: official `origin/master`, `2324311be8c23024f66cb2ba702fbe99a99e7dfb`.
@@ -172,7 +173,7 @@ constructing Entities. `find(query)` returns correctly restored instances of
 the receiving repository's Entity class. The latter permits application filtering:
 
 ```typescript
-const routing = EventRouting.create<string>().route(
+const routing = EventRouting.create(OrderCard).route(
   CustomerNameChangedSchema,
   async (event, context, repository) => {
     // Query the receiving repository using the Event's tenant automatically.
@@ -185,9 +186,27 @@ const routing = EventRouting.create<string>().route(
 );
 ```
 
-This is approved intended syntax, not currently working code. The schema, query
-and Entity names describe an illustrative order-card model. Concrete examples
-must supply its generated imports and domain-correct Proto declarations.
+This is proposed syntax, not currently working code. Passing the application
+Entity class lets TypeScript infer its ID, state and application methods; an ID
+type alone cannot describe the instances returned by `find()`. Preserve existing
+ID-only routing declarations for callbacks that do not use repository queries.
+The schema, query and Entity names describe an illustrative order-card model.
+Concrete examples must supply its generated imports and domain-correct Proto
+declarations. Compile-time tests must prove that `find()` retains application
+methods and rejects queries for a different receiving Entity type.
+
+The third argument provides reads bound to this routing invocation:
+
+- `findIds(query)`: `Promise<readonly Id[]>`.
+- `findStates(query)`: `Promise<readonly State[]>`.
+- `find(query)`: `Promise<readonly InstanceType<EntityClass>[]>`.
+
+These names stand for types inferred from the supplied Entity class, not extra
+type arguments application code must provide. Do not expose unrelated repository
+maintenance or write operations. Once routing finishes, a retained reference
+must not start new reads. No general tenant-selecting repository API is required.
+Returned Entities are not running inside a handler transaction; reading them
+does not persist application changes or invoke signal handlers.
 
 The same built query may be passed to any of the three methods. Reject queries
 for another Entity type, even if its fields happen to have compatible shapes.
@@ -210,6 +229,20 @@ the query. Await the entire route before handing off recipients. Pending routes
 must participate in existing shutdown draining and failure handling. Do not
 introduce an outbox or claim new crash-atomic multi-recipient delivery guarantees.
 
+Direct `routeCommand()` and `routeEvent()` calls must await asynchronous routing
+too. Continuing to accept synchronous callbacks does not make those execution
+methods synchronous. Document and update their call sites and test both direct
+routing and signal admission while a lookup is pending.
+
+For the new repository methods, follow JVM's stored-record lifecycle selection:
+exclude archived and deleted records by default only when neither IDs nor
+lifecycle conditions are specified. Explicit IDs or lifecycle predicates,
+including nested conditions, suppress that implicit filter. Apply lifecycle
+selection before sorting and any requested limit. Preserve restored flags; a
+read must never revive an Entity. Keep existing Process Manager and public-query
+defaults unchanged: this policy belongs to repository execution, not to the
+shared query description.
+
 After validation and stable deduplication, warn once per routing evaluation
 when more than 1,000 recipients remain, identifying signal, repository and count.
 Keep warning policy out of `find*()` and do not repeat routing just to warn on
@@ -218,12 +251,29 @@ result slicing so an existing storage/query bound does not silently defeat this
 requirement. Bounded internal batches are acceptable; dropping later batches or
 imposing a replacement total-result ceiling is not.
 
+Use an explicit exhaustive-read policy for receiving-repository lookups. Merely
+omitting `candidateLimit` is insufficient: current policy defaults to 10,000
+candidates, memory has its own scan bound, and Datastore has a configured bound.
+Cover memory, PostgreSQL, MySQL and supported Datastore query shapes. Across
+internal pages, apply filtering, sorting and an explicit application limit to
+the complete result, not independently to each page. Unsupported query shapes
+must fail clearly, never produce partial results. Preserve existing bounded
+public/PM queries and transport batch sizes; split larger recipient sets into
+as many transport batches as needed. Test later-batch failure using existing
+recorded-target delivery guarantees, without promising new all-or-nothing
+multi-recipient delivery.
+
 ### Generated query interface
 
 Generate a companion for each eligible state, for example an `OrderCardQuery`
 export in `order_cards_query.ts`, corresponding to `order_cards.proto`.
 One module may export multiple named Entity queries when the Proto file contains
 multiple Entity states. The ordinary generation command includes this output.
+Discover eligible nested messages too. Generate deterministic names and detect
+collisions between model names and query operations; do not silently omit a
+column named `build`, `either` or `constructor`. Use a documented escaped
+accessor where needed. Preserve existing rejection of reserved system column
+names. Test nested-name collisions and identifiers such as `order_id`.
 
 Importing the query module registers its columns and binds its schema. It does
 not access storage, choose a tenant or execute a query. Repeated imports and
@@ -232,9 +282,12 @@ Keep generated registration connected to the used query export so package
 bundling does not accidentally remove necessary initialization.
 
 `create()` returns a fresh builder. `build()` returns a typed, independent query
-description that later builder edits cannot change. Do not put actor or tenant
-selection into this description. Infer the Entity ID, state and column types;
-users should not have to repeat schema or column type arguments.
+description that later builder edits cannot change. Copy mutable input values
+such as message IDs, timestamps, versions and byte arrays when building it, so
+later changes to those inputs cannot change the query either. Do not put actor
+or tenant selection into this description. Infer the Entity ID, state and column
+types; users should not have to repeat schema or column type arguments. Use the
+repository's canonical ID-field definition, not a property assumed to be `id`.
 
 Generate field accessors and only valid comparison methods:
 
@@ -260,48 +313,64 @@ consistent. Query generation must work in an external model package too.
 Repository execution obtains its context from the current routing invocation.
 PM execution continues using the current handler context and the approved
 cross-context rules. Client execution obtains context from its existing caller
-configuration. Define the smallest integration into those existing entry points
-so all accept the same generated query, without inventing a second routing DSL.
+configuration. Define the common query value before implementing its consumers:
+the repository methods, `this.select(query).read()` in a Process Manager, and
+the existing client request's `send(query)` accept that same value. Preserve
+existing supported overloads. Build actor, tenant and wire-request metadata at
+execution, not in the shared description. Test reuse of one query concurrently
+in different tenants and preserve each execution path's visibility and limits.
+This extends existing entry points rather than adding another query engine.
 
-### Points for the independent reviewer to resolve
+### Remaining user decision: selected fields and complete Entities
 
-Review the actual code and latest JVM source before assuming these details:
+A query may request only some state fields. Should `find(query)` nevertheless
+restore complete Entities? Recommendation, pending user approval: yes.
+`findStates(query)` would return only the selected fields; `findIds(query)`
+would ignore state-field selection; `find(query)` would restore full state and
+explicitly document that it ignores field selection.
 
-- How to expose the three repository methods outside routing, if existing public
-  repository usage requires it, without an implicit or changeable tenant.
-- Existing default treatment of archived/deleted records and the behavior of a
-  field mask with `find()` returning full application Entity instances.
-- Exact PM/client acceptance of the generated typed query, preserving valid
-  existing call sites without unnecessary snapshot-version compatibility layers.
-- Names that collide with builder operations (`build`, `either`, etc.) and
-  Proto nested Entity declarations: choose a predictable generation rule rather
-  than silently omit valid fields or model types.
-- The concrete existing storage limits and delivery paths that must change to
-  support all matches. Distinguish user-visible policy questions from ordinary
-  implementation decisions and explain any genuine question in simple words.
+For example, a query selecting only a customer's name must not accidentally
+leave out the saved delivery address that `OrderCard.canShip()` needs. The
+alternative is to follow JVM's masked-record restoration, returning Entities
+with omitted fields represented by Protobuf defaults; application methods and
+state validation can then encounter incomplete state. This is a visible
+behavioral choice, not an implementation detail. Record the user's answer before
+implementation and test the selected behavior for all three find methods.
 
 ### Remaining implementation sequence and tests
 
-1. Freeze the typed query contract after this standalone plan review. Add
-   focused compile-time and runtime tests for the shared builder and generated
-   field methods, query independence, supported comparisons and name conflicts.
+1. Freeze the typed query and class-aware routing contracts after the remaining
+   user decision. Define PM/client acceptance alongside repository acceptance.
+   Test ID/state/application-method inference, supported existing overloads,
+   foreign-Entity rejection and independent queries, including mutable inputs.
 2. Integrate automatic query generation and registration into the normal model
    pipeline. Test all Entity families, fresh external consumers, repeated imports,
    package exports, browser-safe dependencies and regeneration after Proto edits.
-3. Implement the three receiving-repository reads with tenant isolation, exact
+   Include nested Entities, accessor/name collisions, non-`id` identifier fields,
+   stale-output cleanup, failed-generation rollback and output fingerprints.
+3. Implement exhaustive repository-query execution and lifecycle selection in
+   memory, PostgreSQL, MySQL and supported Datastore paths. Test more than 10,000
+   matches, a sparse match after 10,000 candidates, Datastore reads spanning its
+   current 1,000 bound, global ordering/explicit limits across pages, archived
+   and deleted records, explicit IDs and nested lifecycle conditions. Preserve
+   existing PM/public query limits and lifecycle behavior.
+4. Implement the three receiving-repository reads with tenant isolation, exact
    return types, detached states and normal Entity restoration/constructor hooks.
    Test empty results, query failures, wrong Entity queries, Version/lifecycle,
-   application read methods and no unexpected handlers or writes.
-4. Connect asynchronous exact-schema, interface and default routes, including
+   application read methods, selected-field behavior and no unexpected handlers
+   or writes. Test missing runtime binding, overlapping tenants and attempts to
+   reuse routing read access after the callback has finished.
+5. Connect asynchronous exact-schema, interface and default routes, including
    state updates, to direct dispatch, acceptance and durable Inbox delivery.
    Test every legal Entity/signal pairing, sync compatibility, overlapping tenant
    requests, failure before delivery, recovery and shutdown while a query waits.
-5. Remove recipient ceilings and handle complete query results. Test 0, 1, 1,000,
+   Remove recipient ceilings and handle complete query results. Test 0, 1, 1,000,
    1,001 and more than the existing storage candidate bound, duplicate IDs, manual
    filtering below the warning threshold, one warning above it, and replay with
-   recorded recipients after stored data changes. Include supported SQL-provider
-   paths where query execution changes; no silent adapter-dependent truncation.
-6. Integrate the generated query with PM and client execution, update Todo and
+   recorded recipients after stored data changes. Cover local and remote delivery
+   exceeding one transport batch, including later-batch failure. No silent
+   adapter-dependent truncation or new multi-recipient atomicity claim.
+6. Complete PM/client integration using the contract fixed in step 1, update Todo and
    the routing example, and remove manual registration from affected application
    code. Update guides and all touched TSDocs with real generated imports and
    commented examples. Explain Entities versus state messages and query timing.
@@ -315,7 +384,7 @@ Review the actual code and latest JVM source before assuming these details:
 
 This extension is high-risk because it changes public generated contracts,
 asynchronous routing, tenant-scoped storage reads and delivery. One existing
-requirements splitter will perform the independent architecture/plan pass with
+requirements splitter completed the independent architecture/plan pass with
 explicit Astra/high and no inherited history or memory. Implementation later
 uses one Sol/medium writer; scoped mechanical checks use Luna/low or medium;
 relevant specialist profiles remain as specified above. No child spawns children.
@@ -345,3 +414,19 @@ Event/state-update callbacks reject more than 1,000 IDs. Existing PM reads also
 have a separate 1,000-result slice; do not reuse that execution path for uncapped
 repository routing queries or silently extend the routing decision to unrelated
 APIs without recording the intended scope.
+
+The independent review checked these execution details in particular:
+
+- `packages/storage/src/query/query-policy.ts:231` and
+  `packages/storage/src/record/record-storage.ts:188`: candidate policy.
+- `packages/storage/src/memory/in-memory-entity-history.ts:375` and
+  `packages/storage-datastore/src/datastore/record-storage.ts:553`: provider
+  bounds that must be accounted for, not assumed removed by the routing change.
+- Latest JVM
+  [EntityRecordStorage.java](https://github.com/SpineEventEngine/core-jvm/blob/ea3067b137938ac0beb6920c39d11e300976fcc9/server/src/main/java/io/spine/server/entity/storage/EntityRecordStorage.java#L264):
+  lifecycle defaults and explicit-ID/lifecycle-condition exceptions.
+- Latest JVM
+  [ToEntityRecordQuery.java](https://github.com/SpineEventEngine/core-jvm/blob/ea3067b137938ac0beb6920c39d11e300976fcc9/server/src/main/java/io/spine/server/entity/storage/ToEntityRecordQuery.java#L95)
+  and
+  [RecordBasedRepository.java](https://github.com/SpineEventEngine/core-jvm/blob/ea3067b137938ac0beb6920c39d11e300976fcc9/server/src/main/java/io/spine/server/entity/RecordBasedRepository.java#L310):
+  field selection and Entity restoration relevant to the remaining question.

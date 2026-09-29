@@ -8,7 +8,13 @@ Template: `build-protocol/templates/UNRESOLVED_QUESTIONS_TEMPLATE.md`.
 
 ## Blocking Questions
 
-None as of 2026-09-28.
+- 2026-09-29, repository-query extension: when a query requests only some state
+  fields, should `find(query)` still restore complete Entities? Recommended:
+  yes, so application methods can use all saved fields. `findStates(query)`
+  would honor field selection; `findIds(query)` would ignore it. The alternative
+  follows JVM's masked-record restoration, which can leave Entity methods with
+  incomplete state. User decision is pending; do not treat the recommendation
+  as approved. See planning/cross-context-queries.md.
 
 ## Non-Blocking Questions
 
@@ -16,6 +22,14 @@ None as of 2026-06-27.
 
 ## Resolved In This Round
 
+- 2026-09-29, repository queries and generated DSL: routing searches only the
+  receiving repository. More than 1,000 distinct final recipients produces a
+  console warning in routing, never a rejection or a warning in find methods.
+  Provide `findIds(query)`, `findStates(query)` and `find(query)` returning actual
+  Entity instances. Generate a JVM-like typed DSL through the normal model
+  workflow and register columns automatically when its module is imported.
+  Application code must not manually register columns. See the extension in
+  planning/cross-context-queries.md for the complete approved requirements.
 - 2026-09-28, cross-context queries: search only contexts in the same Server;
   duplicate Entity registration is an error; preserve the current effective
   tenant and reject an incompatible destination before reading. Single-tenant
