@@ -1213,3 +1213,16 @@ changed formatting and whitespace. Prior normal generation/Proto checks and
 live-provider evidence remain applicable. Commit/push this example slice now;
 then run the prepared full-release and exact-tarball brief once, explicit
 Luna/low, without live database environment variables or overlapping tests.
+
+Example checkpoint bc53aeaba9aebde8eff282e712159fa5e33601bb pushed immediately
+and exact remote SHA confirmed. Final verification session
+01a0eeab-9813-72e2-a16d-33e0bceccdb3 confirms explicit Luna/low. First release
+attempt stopped before Vitest at the full formatter: proto-tools bootstrap
+tsconfig's new generator entry needs multiline formatting. Earlier changed-file
+format checks omitted that committed configuration path. Main applies Prettier
+only, a micro correction with no semantic change; estimate 0.05–0.1 hours to
+format and complete preflight. No reviewer lane reopens. Preserve first-attempt
+logs; package proof was not run. The child accidentally wrote its scratch report
+at the worktree root; main moves it to the designated temporary evidence folder.
+Run the complete cheap preflight before a second release attempt; use full
+format checking so committed slice configuration is included.
