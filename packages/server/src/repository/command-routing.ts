@@ -15,6 +15,11 @@
 import type { MessageShape } from "@bufbuild/protobuf";
 import { type MessageInterface, type MessageSchema } from "@spine-event-engine/core";
 import type { CommandContext } from "@spine-event-engine/proto";
+import type {
+  RepositoryEntityType,
+  RepositoryReadQueries,
+  RepositoryEntityId,
+} from "./repository.js";
 import {
   RoutingDeclarations,
   type InterfaceRouteSchemas,
@@ -26,70 +31,128 @@ import {
 /**
  * Calculates one Entity ID for a Command message.
  *
- * @typeParam Id Entity ID type owned by the receiving repository.
+ * @typeParam Id Entity ID type used by the receiving repository.
  * @typeParam Schema Generated Command message schema.
+ * @typeParam EntityType Registered application Entity class for repository reads.
  * @param message Unpacked Command message.
  * @param context Normalized Command context. When the signal omits its context,
  *   the framework supplies the default generated `CommandContext` value.
+ * @param repository Invocation-scoped read-only access to the receiving repository.
  * The route must be deterministic and side-effect-free. The framework invokes
  * it once for each accepted admission, and durable replay uses the stored
  * target instead of invoking it again.
  *
  * @returns Target Entity ID.
  */
-export type CommandRoute<Id, Schema extends MessageSchema = MessageSchema> = (
+export type CommandRoute<
+  Id,
+  Schema extends MessageSchema = MessageSchema,
+  EntityType extends RepositoryEntityType = RepositoryEntityType,
+> = (
   message: MessageShape<Schema>,
   context: CommandContext,
-) => Id;
+  repository: RepositoryReadQueries<EntityType>,
+) => Id | Promise<Id>;
 
+/**
+ * Stores mutable Command declarations before repository construction.
+ *
+ * @typeParam Id Target Entity ID type.
+ */
 type CommandRoutingState<Id> = RoutingDeclarationState<CommandRoute<Id>>;
 
 const routingStates = new WeakMap<object, CommandRoutingState<unknown>>();
+const routingEntityTypes = new WeakMap<object, RepositoryEntityType>();
 
 /**
  * Mutable Command route declarations that repositories snapshot at construction.
  *
- * @typeParam Id Entity ID type owned by the receiving repository.
+ * @typeParam Id Entity ID type used by the receiving repository.
+ * @typeParam EntityType Registered application Entity class for repository reads.
  */
-export class CommandRouting<Id> {
+export class CommandRouting<Id, EntityType extends RepositoryEntityType = RepositoryEntityType> {
+  /**
+   * Records the selected Entity class in emitted declarations so a different
+   * repository class fails type checking. This adds no runtime field.
+   *
+   * @param entity Entity class type checked at assignment.
+   * @returns The same Entity class type for the assignment check.
+   */
+  declare protected readonly entityClassType: (entity: EntityType) => EntityType;
   // prettier-ignore
 
   /**
    * Creates empty mutable Command route declarations.
+   *
+   * @param entityType Application Entity constructor, when class-aware.
    */
-  private constructor() {
+  private constructor(entityType?: EntityType) {
     routingStates.set(this, RoutingDeclarations.create<CommandRoute<Id>>());
+    if (entityType !== undefined) routingEntityTypes.set(this, entityType);
   }
 
   /**
    * Creates empty Command route declarations.
    *
-   * @typeParam Id Entity ID type owned by the receiving repository.
+   * @typeParam EntityType Registered application Entity class inferred from the supplied constructor.
+   * @param entityType Application Entity constructor for typed repository reads.
    * @returns Mutable Command route declarations.
    */
-  static create<Id>(): CommandRouting<Id> {
-    return new CommandRouting<Id>();
+  static create<EntityType extends RepositoryEntityType>(
+    entityType: EntityType,
+  ): CommandRouting<RepositoryEntityId<EntityType>, EntityType>;
+
+  /**
+   * Creates ID-only Command route declarations.
+   *
+   * @typeParam Id Target Entity ID type.
+   * @returns Mutable route declarations.
+   */
+  static create<Id>(): CommandRouting<Id>;
+
+  /**
+   * Creates mutable Command route declarations for either factory overload.
+   *
+   * @typeParam Id Target Entity ID type.
+   * @typeParam EntityType Selected application Entity class.
+   * @param entityType Application Entity constructor, when class-aware.
+   * @returns Mutable route declarations.
+   */
+  static create<Id, EntityType extends RepositoryEntityType = RepositoryEntityType>(
+    entityType?: EntityType,
+  ): CommandRouting<Id, EntityType> {
+    return new CommandRouting<Id, EntityType>(entityType);
   }
 
   /**
    * Registers a route for one exact generated Command schema.
    *
+   * @typeParam Schema Generated Command schema.
    * @param schemaOrToken Generated Command schema.
    * @param via Route that calculates the target Entity ID.
    * @returns These mutable route declarations.
    */
-  route<Schema extends MessageSchema>(schemaOrToken: Schema, via: CommandRoute<Id, Schema>): this;
+  route<Schema extends MessageSchema>(
+    schemaOrToken: Schema,
+    via: CommandRoute<Id, Schema, EntityType>,
+  ): this;
 
   /**
    * Registers a route for a nominal Command message-interface token.
    *
+   * @typeParam TInterface Declared Command interface.
+   * @typeParam Schemas Schemas implementing the interface.
    * @param schemaOrToken Generated Command message-interface token.
    * @param via Route that calculates the target Entity ID.
    * @returns These mutable route declarations.
    */
   route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
     schemaOrToken: MessageInterface<TInterface, Schemas>,
-    via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: CommandContext) => Id,
+    via: (
+      message: InterfaceRouteMessage<TInterface, Schemas>,
+      context: CommandContext,
+      repository: RepositoryReadQueries<EntityType>,
+    ) => Id | Promise<Id>,
   ): this;
 
   /**
@@ -136,7 +199,7 @@ export class CommandRouting<Id> {
    * @param via Route that calculates the target Entity ID.
    * @returns These mutable route declarations.
    */
-  replaceDefault(via: CommandRoute<Id>): this {
+  replaceDefault(via: CommandRoute<Id, MessageSchema, EntityType>): this {
     if (typeof via !== "function")
       throw new TypeError("Command routing requires a route function.");
     RoutingDeclarations.default(CommandRoutingInternals.state(this), via);
@@ -150,20 +213,76 @@ export class CommandRouting<Id> {
  * @internal
  */
 export const CommandRoutingInternals: Readonly<{
-  state<Id>(routing: CommandRouting<Id>): CommandRoutingState<Id>;
-  snapshot<Id>(
-    routing: CommandRouting<Id> | undefined,
+  /**
+   * Returns the Entity constructor selected for class-aware declarations, if any.
+   *
+   * @param routing Route declarations, when configured.
+   * @returns Selected Entity constructor, if any.
+   */
+  entityType(routing: object | undefined): RepositoryEntityType | undefined;
+
+  /**
+   * Finds mutable Command declaration state.
+   *
+   * @typeParam Id Target Entity ID type.
+   * @typeParam EntityType Selected application Entity class.
+   * @param routing Route declarations.
+   * @returns Mutable declaration state.
+   */
+  state<Id, EntityType extends RepositoryEntityType>(
+    routing: CommandRouting<Id, EntityType>,
+  ): CommandRoutingState<Id>;
+
+  /**
+   * Copies declarations for repository construction.
+   *
+   * @typeParam Id Target Entity ID type.
+   * @typeParam EntityType Selected application Entity class.
+   * @param routing Route declarations, when configured.
+   * @returns Immutable declaration snapshot.
+   */
+  snapshot<Id, EntityType extends RepositoryEntityType>(
+    routing: CommandRouting<Id, EntityType> | CommandRouting<Id> | undefined,
   ): RoutingDeclarationSnapshot<CommandRoute<Id>>;
 }> = Object.freeze({
-  state<Id>(routing: CommandRouting<Id>): CommandRoutingState<Id> {
+  /**
+   * Returns the Entity constructor selected for class-aware declarations, if any.
+   *
+   * @param routing Route declarations, when configured.
+   * @returns Selected Entity constructor, if any.
+   */
+  entityType(routing: object | undefined): RepositoryEntityType | undefined {
+    return routing === undefined ? undefined : routingEntityTypes.get(routing);
+  },
+
+  /**
+   * Finds mutable Command declaration state.
+   *
+   * @typeParam Id Target Entity ID type.
+   * @typeParam EntityType Selected application Entity class.
+   * @param routing Route declarations.
+   * @returns Mutable declaration state.
+   */
+  state<Id, EntityType extends RepositoryEntityType>(
+    routing: CommandRouting<Id, EntityType>,
+  ): CommandRoutingState<Id> {
     return routingStates.get(routing) as CommandRoutingState<Id>;
   },
-  snapshot<Id>(
-    routing: CommandRouting<Id> | undefined,
+
+  /**
+   * Copies declarations for repository construction.
+   *
+   * @typeParam Id Target Entity ID type.
+   * @typeParam EntityType Selected application Entity class.
+   * @param routing Route declarations, when configured.
+   * @returns Immutable declaration snapshot.
+   */
+  snapshot<Id, EntityType extends RepositoryEntityType>(
+    routing: CommandRouting<Id, EntityType> | CommandRouting<Id> | undefined,
   ): RoutingDeclarationSnapshot<CommandRoute<Id>> {
     if (routing === undefined) {
       return RoutingDeclarations.snapshot(RoutingDeclarations.create<CommandRoute<Id>>());
     }
-    return RoutingDeclarations.snapshot(CommandRoutingInternals.state(routing));
+    return RoutingDeclarations.snapshot(routingStates.get(routing) as CommandRoutingState<Id>);
   },
 });

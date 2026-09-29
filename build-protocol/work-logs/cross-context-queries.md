@@ -1010,3 +1010,91 @@ Only one production writer runs at a time. Main keeps protocol records current;
 no worktree/branch/PR changes. Read the full approved ledger and call-site map,
 preserve all current query semantics, and do not expand into history cleanup
 without the pending human scope decision.
+
+Provider checkpoint `d7c795f2bc29cd2e2704741c41cc8be88a7ca9ba` was committed,
+pushed immediately to official origin/cross-context-queries, and verified by
+ls-remote. Worktree was clean before the next implementation dispatch. The
+asynchronous routing implementer is now running with explicit Sol/medium, no
+memory, no child agents and no Git mutations; main will record its configured
+session header before accepting work. Provider live containers remain available
+for later app checks. The human's history-cleanup scope answer is still pending.
+
+Routing session `01a0ee3d-b929-7140-b6ba-de5a77e7cff5` confirms explicit
+Sol/medium in its CLI header, with no visible fallback; separate runtime metadata
+is not exposed. Inspection confirms synchronous direct/admission paths and
+pre-deduplication 1,000-target rejection. The implementer estimates 1–2 hours
+for this broader call-site change and focused verification. Main revised the
+remaining whole-task estimate to 2–3 hours including routing, examples/docs,
+reviews and final verification, excluding any newly approved history-cleanup work.
+
+Routing implementation has stopped writing and reports 331 focused tests passing
+in five files, plus production/test typechecks, ESLint, TSDoc, cleanup, formatting
+and whitespace checks. Main also ran logging containment, documentation audience
+and generated API checks successfully. Before specialist review, dispatch the
+mechanical coverage function explicitly Luna/medium: one focused coverage run for
+the four changed routing sources, changed-line/branch inspection against d7c795f2b,
+and a factual report without source edits or another full suite. Runtime review
+will use the frozen diff; any missing behavior evidence goes back to the same
+implementation session before acceptance. The full release gate remains later.
+
+Coverage session 01a0ee5e-a54d-7ef0-acec-6b797d82957e confirms explicit
+Luna/medium in its configured header; independent runtime identity is unavailable.
+Its one run passes 331 tests; statements 90.21%, lines 91.29%, functions 95.60%,
+branches 80.92% (configured 90% branch gate fails). Three changed statements and
+three changed branch outcomes are uncovered, with most uncovered branches in
+unchanged repository paths. Main also found absent explicit acceptance tests for
+async interface/default route callbacks and filtering a large find result below
+the warning threshold. Before reviewers, return these deterministic coverage/test
+gaps to the retained Sol/medium author; estimate 0.15–0.25 hours. Do not rewrite
+unreachable legacy paths or claim the focused coverage threshold passes.
+
+While only the routing author writes/tests, dispatch one independent read-only
+example/documentation map, explicitly Luna/medium. Identify the exact Todo and
+routing-example generation, registration, query and smoke entrypoints for the
+already-approved final migration; report paths and existing executable checks.
+This is preparation, not a new review or source-writing stream. The browser
+testing skill was inspected: current app checks are the existing headless gRPC
+smoke and integration harnesses, not browser UI changes, so its Playwright helper
+does not apply. Reconsider it only if a changed UI actually requires browser tests.
+
+Read-only mapping 01a0ee61-494e-7d70-89d4-a24853699907 finished; its header
+confirms explicit Luna/medium. It identified Todo's manual entity-columns source,
+custom generation configuration, TaskListQuery output, snippet/tests and SQL smoke
+entrypoints. Main rejects its optional suggestion to select Todo recipients by
+open-task count: that changes the Event's intended recipients. The implementation
+brief instead uses the existing orders example for a small, separate OrderCard
+demonstration with existing OrderCreated/SkuRegistered Events and an indexed SKU
+field. This supplies the concrete domain model expressly allowed in the accepted
+plan without modifying load-demo topology or adding another workspace package.
+Todo retains meaningful existing routing and adopts the generated query imports.
+
+Routing correction session resumes with explicit Sol/medium confirmed. Its first
+red test reproduces wrong-class route attachment. The implementer estimates
+0.5–0.8 hours because constructor identity must be retained through declarations
+and repository option types without breaking ID-only declarations; main relayed
+the revised correction estimate, replacing the initial 0.25–0.4 hours. No scope
+expansion or new public concept is approved. Batch allocation, Event/state shutdown
+tests and helper simplification remain in the same accepted correction batch.
+
+The correction passes 341 focused routing tests and cheap checks. Main then
+verified the built server declarations and found that private field type erasure
+removed the source-only class constraint. The same retained implementation
+context corrected it and added a built-declaration regression with six rejected
+wrong-class cases and valid matching/ID-only cases. Follow-up build and 330 tests
+in three files pass, as do the API-documentation and audience checks. The current
+runtime coverage evidence remains 90.47% statements, 91.48% lines, 96.01% functions,
+81.42% branches for the focused four-file subset; full-project coverage is not
+yet claimed. Targeted fresh API/reliability/style reviews are running against the
+correction diff, each explicit Sol/medium and no memory. Examples remain next.
+
+Routing review converged. The final accepted test-only finding is verified for
+Command, Event and state routing with distinct constructors of identical static
+shape. Affected cheap checks pass; no runtime edits followed the 341-test focused
+run, only emitted-type protection, consumer tests and this runtime identity test.
+The six-case built-declaration regression passes. Commit/push the routing slice
+now, preserving the explicit focused branch-coverage limitation until the final
+release suite. Next: a distinct bounded Sol/medium example/documentation phase
+using the prepared brief and read-only map, without additional branches/worktrees.
+Expected remaining example/docs work and focused review: 0.5–0.8 hours; final app,
+security, release and package-consumer checks follow. Keep the prior routing
+implementation context available for any routing-specific correction.

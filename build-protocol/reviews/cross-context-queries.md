@@ -560,3 +560,120 @@ human's asynchronous answer, not as an accepted query-runtime defect. Final SQL
 all-result assertions pass on all four SQL engines, and Datastore's large-query
 assertions pass. All accepted query-slice review findings are resolved. Final
 release coverage remains required; the separate full Datastore suite is not green.
+
+Final SQL correctness corrections introduced logical/physical-type helper methods
+after the original style review. Dispatch a focused existing style/maintainability
+reviewer, explicit Sol/medium, fresh read-only without memory, on only those
+committed MySQL/PostgreSQL helpers and their regression tests (f675c3437..d7c795f2b).
+This is a substantive changed concern, not another whole-change wave. It runs
+independently while the sole writer implements routing in different files. Any
+accepted findings will join a correction batch at the next writing checkpoint.
+
+The first focused style request (`01a0ee41-059c-71f1-9bf4-a5eec802bbf9`,
+explicit Sol/medium) made no source-reading progress for five minutes and logged
+an HTTP503 service error during startup. Main canceled only that read-only process
+and retried once with the same explicit profile and scope. No review result from
+the stalled request is accepted; implementation continues independently.
+
+Retry `01a0ee45-ffb9-78d2-8ccc-37f40b8aa3d8` completed with no
+style/maintainability findings in the committed SQL
+helpers or regression tests. It confirmed the provider-specific parallel helpers
+use their respective table metadata and checked tests for exhaustive fallback,
+order, limits and live reads. Main verified explicit Sol/medium in the retry's
+configured header. No source edits/builds/tests or routing-file inspection occurred.
+Provider query review concerns are now fully resolved; no extra correction batch
+is needed for this concern.
+
+After the asynchronous-routing author finishes focused verification and the
+changed-source coverage inspection, freeze that slice against d7c795f2b. Dispatch
+the existing TypeScript/API, performance/reliability and style/maintainability
+reviewers independently, each explicitly Sol/medium, without conversation history
+or memory. Dispatch the documentation reviewer explicitly Luna/medium when a
+slot becomes available. Their input is the full human ledger plus the bounded
+async-routing-review-brief.md; earlier accepted provider slices are not reopened.
+Collect the complete wave before returning one correction batch to routing
+implementation session 01a0ee3d-b929-7140-b6ba-de5a77e7cff5. Record configured
+headers and exact findings before accepting results; final release verification
+and security review still follow examples and documentation.
+
+Routing pre-review corrections are complete without production changes: 338
+focused tests pass; typechecks, lint, formatting, cleanup and whitespace pass.
+Updated focused coverage is 90.37% statements, 91.40% lines, 96.00% functions,
+81.12% branches (subset branch threshold remains failed). Reachable changed
+paths are covered. The remaining changed gaps are existing replay/family fallback
+paths with no current legal caller; the author records exact call sites in the
+temporary report. Do not waive the final full-project coverage gate. Now freeze
+and dispatch the three recorded Sol/medium concerns in parallel, followed by
+Luna/medium documentation as capacity permits. Reviewers examine staged source
+and tests independently, not the author's conclusions or earlier reviews.
+
+Fresh review sessions all completed with explicit Sol/medium configured headers:
+API 01a0ee67-c4bd-79a1-a4e7-8d43fb9a28d6, reliability
+01a0ee67-c5a3-7c32-8b17-f0f510387c50, style
+01a0ee67-c4bd-7632-8abe-695b8e210a57. No separate backend runtime identity is
+exposed. Main confirms their concrete findings in the frozen source: the
+class-aware factory discards its constructor and RepositoryOptions checks only
+ID type; Process Manager handoff allocates all packed inputs before slicing;
+new Event/state-route shutdown tests are missing; three new target helpers only
+forward default-versus-custom selection. These are accepted P1/P2 corrections,
+with simplification still required to obey the 35-line method rule. No fixes
+start until the complete wave is collected. Documentation review
+01a0ee6a-68ed-76f2-aba1-947dddf5225a is running, explicit Luna/medium confirmed.
+
+Documentation completed with no findings in the bounded staged prose/TSDoc.
+The complete wave accepts four findings: P1 class/instance type mismatch;
+P2 eager packed-input allocation; P2 Event/state-update shutdown test gaps;
+P2 unnecessary target forwarding layers. Return this single batch to retained
+routing implementer 01a0ee3d-b929-7140-b6ba-de5a77e7cff5, explicitly Sol/medium,
+using routing-corrections.md. Estimated correction and focused verification:
+0.25–0.4 hours. Re-review API and reliability substantively changed contracts;
+style simplification will be checked against the exact concern and mechanical
+method-length gate, not another undifferentiated whole-codebase review.
+
+Corrections pass 341 focused tests and cheap checks. Main's package-declaration
+check found a further concrete P1 contract gap before re-review: `tsc -b
+packages/server` emits `private readonly entityClassType;`, discarding the
+function type used to constrain the selected Entity class. An in-memory TypeScript
+consumer with two different Entity classes reports TS2322 for both an explicitly
+typed RepositoryOptions assignment and a normal Repository constructor when
+importing source, but zero diagnostics for the same built dist imports. Runtime
+identity checks still reject the attachment. Return this narrow packaging defect
+to the retained Sol/medium author; estimate 0.1–0.2 hours for emitted-declaration
+correction and a domain-correct consumer regression. Keep existing checks and
+runtime behavior. Main also requests plain wording for the type-only field's
+comment instead of relying on the unexplained word `invariant`. Targeted reviews
+wait for this deterministic contract correction; no additional full review wave.
+
+The built-declaration regression now passes after package emission, covering six
+wrong-class cases plus matching and ID-only declarations for all route families.
+The narrow three-file follow-up passes 330 tests; the preceding full focused
+routing set passes 341. No runtime behavior changed in the private-to-protected
+type-only member correction. Main reran API documentation and audience checks:
+both pass. Freeze the correction diff (unstaged relative to the first-review
+staged snapshot, including the new built-declaration test). Dispatch fresh existing
+API, reliability and style reviewers explicitly Sol/medium on only the corrected
+contracts and affected paths, without history/memory or previous reports. Style
+includes the newly necessary emitted type constraint and helper removal. No broad
+documentation lane reopens: changes clarify the existing class-match contract;
+the upcoming examples/docs phase receives its separate documentation review.
+
+Targeted sessions, all explicit Sol/medium confirmed from configured headers:
+API 01a0ee81-77f9-7bc0-a753-5a53e78dfb06, reliability
+01a0ee81-78de-7df2-9aa8-4a3b63f9edb1, style
+01a0ee81-77f9-7f43-bb21-4358492e07eb. Reliability and style return no findings.
+API accepts the correction but raises one P2 coverage gap: different constructors
+with identical TypeScript shapes must exercise the runtime identity rejection.
+Accept this deterministic regression addition; return it to the retained author,
+explicit Sol/medium, estimate 0.05–0.1 hours. No runtime rewrite is expected and no
+review lane reopens solely for this test addition. Preserve exact positive and
+ID-only cases plus the built-declaration regression. Remote checkpoint follows
+the test/check result; examples and full release verification still follow.
+
+The final deterministic regression passes: distinct but structurally identical
+Aggregate/Projection constructors compile without casts, and all three route
+families reject the different constructor at repository construction. Affected
+TypeScript, ESLint, Prettier and whitespace checks pass. No production code was
+changed for this test. All accepted routing findings are resolved; API,
+reliability, style and narrow documentation concerns have accepted dispositions.
+Commit and immediately push this checkpoint. Final security review and the full
+extension coverage/release gate remain after example/documentation completion.

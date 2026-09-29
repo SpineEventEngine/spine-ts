@@ -35,8 +35,12 @@ normal DSL generation are also reviewed and verified, with corrections resolved.
 Exhaustive repository reads are implemented and reviewed; query checks pass on
 memory, MySQL, MariaDB, PostgreSQL 16/18 and the Datastore emulator. A separate
 Datastore history-trimming test times out; its scope decision and diagnostic
-evidence are recorded in the work log. Asynchronous routing is next. The full
-extension is not yet release-verified.
+evidence are recorded in the work log. Asynchronous routing is implemented and
+independently reviewed. All accepted findings are fixed, including published
+declaration safety and runtime checks for different Entity constructors. Focused
+tests and cheap checks pass; the focused coverage subset does not replace the
+still-required full-project coverage gate. Examples and final documentation are
+next, followed by the full extension release gate.
 
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
 remotely closed. The complete-replica deployment correction is closed through

@@ -291,6 +291,15 @@ Use an exact route when the first field is not the correct target. `CommandRouti
 `.route(Token, via)`. Selection is exact schema, then the first registered
 matching token, then the replacement/default route. Route functions run once at
 accepted admission and stored typed targets are replayed on retry. The
+callback may be asynchronous. Pass the receiving Entity class to `create()` to
+receive typed `findIds`, `findStates`, and `find` reads as the callback's third
+argument. Use the same Entity constructor when registering the repository;
+a different class is rejected even if its ID and state types match. A query reads
+the receiving repository in the incoming signal's tenant;
+the read access expires after the route completes. Await direct
+`repository.routeCommand()` and `repository.routeEvent()` calls. Commands must
+select one ID. Event and state-update routes may select any number of distinct
+IDs; more than 1,000 emits a warning without dropping recipients. The
 legacy-named local `catchUpReadSide()` helper resets and replays the entire
 process-local read side; it is not Projection catch-up.
 
