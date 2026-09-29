@@ -1226,3 +1226,34 @@ logs; package proof was not run. The child accidentally wrote its scratch report
 at the worktree root; main moves it to the designated temporary evidence folder.
 Run the complete cheap preflight before a second release attempt; use full
 format checking so committed slice configuration is included.
+
+Formatting-only checkpoint 73565932516c797c1f23b6643d228ecf57cc928f pushed and
+remote SHA verified. Preflight session 01a0eeae-c291-70f2-b6f5-6d0a1974eb56,
+explicit Luna/low, passes all cheap checks and 48 focused example tests. Second
+release session 01a0eeb2-7b0b-7ee3-b228-53295dd9116a confirms explicit Luna/low.
+All pre-test gates pass; 305 of 306 test files and 5,126 of 5,127 tests pass.
+The sole failure is the existing package-boundary guard: repository-routing.test
+imports the private InMemoryEntityStorage implementation from storage/src.
+Main reproduced the exact guard result without another test runner and reread
+systematic-debugging guidance. Coverage is not reported on this failed run;
+package proof remains unexecuted. No running test process remains.
+
+Return this test-only correction to the retained repository-read implementer
+01a0ed61-8899-76f2-ba6a-e5438eded07e, explicitly Sol/medium. Replace the private
+concrete test type with supported storage contracts or a narrow test-local shape;
+do not expose a private class, weaken the guard or change runtime. Preserve read,
+write-count and handle-close assertions. One source writer, no children/Git or
+full profile. Run the failing guard and affected repository tests, then complete
+cheap preflight. No specialist lane reopens for a type-only test import correction.
+Additional estimate 0.3–0.5 hours, mostly the required final verification rerun.
+
+The retained Sol/medium implementer replaces the private import with the public
+EntityStorageConformance provider type plus required close() in the test-local
+alias. All runtime code and assertions are unchanged. The package guard and
+repository-routing suite pass together, 334 tests in two files. Affected build,
+tooling types, full ESLint/formatting, cleanup/TSDoc, API/audience/snippets, Proto
+lint/current output, logging/dependencies/release readiness and whitespace checks
+pass. Commit and immediately push this test-only correction, then dispatch final
+release verification explicitly Luna/low, preserving prior logs and using one
+test worker. Exact-tarball proof follows only a successful release gate. No
+additional specialist review is required for the test type import correction.

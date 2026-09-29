@@ -83,9 +83,11 @@ import {
   type RecordSpec,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
+import type {
+  EntityStorageConformance,
+  EntityStorageInput,
+} from "@spine-event-engine/storage/provider";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import type { InMemoryEntityStorage } from "../../../storage/src/memory/in-memory-entity-history.js";
 import type {
   EntityCommitInput,
   EntityCommitResult,
@@ -14821,6 +14823,8 @@ class CurrentRecordTestStorage<S extends Message = Message> {
   }
 }
 
+type ReadEntityStorage = EntityStorageConformance<unknown, Message> & { close(): void };
+
 class ObservedReadStorageFactory extends InMemoryStorageFactory {
   readonly plans: NormalizedQueryPlan<unknown>[] = [];
   commitCreations = 0;
@@ -14835,7 +14839,7 @@ class ObservedReadStorageFactory extends InMemoryStorageFactory {
   }
 
   override createEntityStorage(input: unknown): unknown {
-    const storage = super.createEntityStorage(input) as InMemoryEntityStorage<unknown, Message>;
+    const storage = super.createEntityStorage(input) as ReadEntityStorage;
     return {
       current: {
         read: (id: unknown) => storage.current.read(id),
@@ -14870,7 +14874,7 @@ class FailingReadStorageFactory extends InMemoryStorageFactory {
   }
 
   override createEntityStorage(input: unknown): unknown {
-    const storage = super.createEntityStorage(input) as InMemoryEntityStorage<unknown, Message>;
+    const storage = super.createEntityStorage(input) as ReadEntityStorage;
     return {
       current: {
         read: (id: unknown) => storage.current.read(id),
