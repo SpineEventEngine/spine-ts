@@ -321,22 +321,24 @@ Default command routing follows the Spine JVM first-field convention.
 - Generated or registered routing metadata must preserve Protobuf declaration
   order so the first-field route cannot accidentally become field-number based.
 
-## Complete Query Results
+## Complete Query And Subscription Results
 
 Accepted on 29 September 2026; implementation is planned in
 [Entity queries and signal routing](planning/cross-context-queries.md).
 
-Entity queries return complete state. Conditions select which Entities match;
-they do not select which state fields are returned. Query builders, storage
-query plans and query execution must not support field masking. This requirement
+Entity queries and subscriptions return complete state. Conditions select which
+Entities match; they do not select which state fields are returned. No framework
+API or execution path may support masking, including query/subscription builders,
+storage reads, services and subscription recovery. This requirement
 supersedes earlier query-mask support described in the decision log, including
 D-0120. `find()` restores complete Entity instances, `findStates()` returns
 complete detached state messages, and `findIds()` returns typed identifiers.
 
-Keep the imported Protobuf wire definitions unchanged. Reject non-empty query
-field masks as unsupported rather than applying or silently ignoring them.
-Absent or empty masks mean full-state results. Subscription field masks are a
-separate contract and are not removed by this query-engine change.
+Keep the imported Protobuf wire definitions unchanged. Ignore their mask fields,
+including non-empty `ResponseFormat.field_mask` and `Topic.field_mask`. Do not
+apply masks, validate their paths or reject a request because it has a mask.
+This applies to Event topics as well as Entity-state subscriptions. Initial
+results, live state updates and reconnection reads all return complete state.
 
 ## High-Level Architecture
 

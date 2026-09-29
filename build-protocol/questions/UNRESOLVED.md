@@ -8,9 +8,9 @@ Template: `build-protocol/templates/UNRESOLVED_QUESTIONS_TEMPLATE.md`.
 
 ## Blocking Questions
 
-None recorded. On 29 September the human resolved the remaining field-selection
-question by directing removal of masking from the query engine. The revised plan
-recheck found no further product questions. Implementation is still pending.
+None recorded. On 29 September the human resolved field selection: no masking
+in any API, including subscriptions; ignore mask fields in incoming Protobufs.
+Implementation is still pending.
 
 ## Non-Blocking Questions
 
@@ -18,11 +18,12 @@ None as of 2026-06-27.
 
 ## Resolved In This Round
 
-- 2026-09-29, query masking: remove it from the query engine altogether, rather
+- 2026-09-29, masking: remove it from all APIs, including subscriptions, rather
   than choose different mask behavior for Entity and state results. `find()`
   returns complete Entities; `findStates()` returns complete state messages.
-  Remove existing query APIs and execution support, not merely the new DSL
-  option. The next requested step is plan reanalysis, not implementation.
+  Remove existing masking APIs and execution support, not merely the new DSL
+  option. Ignore mask fields in incoming Protobufs instead of applying or
+  rejecting them. The next requested step is plan reanalysis, not implementation.
 - 2026-09-29, repository queries and generated DSL: routing searches only the
   receiving repository. More than 1,000 distinct final recipients produces a
   console warning in routing, never a rejection or a warning in find methods.

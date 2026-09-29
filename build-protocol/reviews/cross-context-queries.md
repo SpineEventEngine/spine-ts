@@ -2,8 +2,9 @@
 
 Status: original runtime reviews and local release verification complete; the
 repository-query and generated-DSL plan extension has received standalone review.
-Its findings are incorporated. The human resolved field selection by removing
-query masking. The focused plan follow-up is complete; no product questions remain.
+Its findings are incorporated. The human resolved field selection: remove all
+masking APIs, including subscriptions, and ignore incoming Protobuf mask fields.
+The earlier follow-up's subscription exception is superseded. No questions remain.
 GitHub CI remains unverified.
 
 ## Plan review
@@ -300,6 +301,9 @@ runtime behavior. This review does not replace later implementation reviews.
 
 ### Follow-up after the human removed query masking
 
+Historical outcome below is superseded where it retained subscription masking
+or rejected incoming query masks; see the human correction after this section.
+
 The retained requirements splitter reviewed the revised plan under its original
 explicit gpt-6-astra / high configuration. This was a focused follow-up retaining
 the prior review context, not a new no-history round: a fresh dispatch failed
@@ -319,3 +323,18 @@ accepted after the focused architecture follow-up; documentation checked for
 consistent full-state claims and superseded requirements. Production style is
 N/A because only Markdown requirements and records changed. Implementation
 reviews remain required after the feature is written. No builds/tests executed.
+
+### Human correction of the masking scope
+
+The author incorrectly narrowed the no-masking instruction to queries. The human
+explicitly corrected that interpretation: no masks anywhere in the API, including
+subscriptions; mask fields present in Protobufs must be ignored. The active plan
+and specification now remove all pruning, mask-path validation and mask-specific
+rejections, while leaving copied wire definitions unchanged. Acceptance tests
+require complete query, live-subscription and recovery results even when incoming
+Protobufs contain masks. No subscription-only masking helper remains planned.
+
+This is the human's binding clarification, not another product choice. Checked
+the active records for the removed subscription exception and mask-rejection
+requirements. No additional independent review or runtime verification is claimed
+for this documentation correction; implementation review is still required.

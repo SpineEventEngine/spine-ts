@@ -2,7 +2,8 @@
 
 Started: 28 September 2026. Status: original implementation locally verified;
 repository-query and generated-DSL plan reviewed as of 29 September. The human
-resolved field selection by removing query masking; plan reanalysis is complete.
+resolved field selection: remove all masking APIs, including subscriptions, and
+ignore Protobuf mask fields. The corrected plan is ready; implementation is pending.
 Task/branch: `cross-context-queries`.
 Worktree: `/Users/armiol/.codex/worktrees/cross-context-queries/spine-ts`.
 Base: `2324311be8c23024f66cb2ba702fbe99a99e7dfb` from freshly fetched official origin.
@@ -511,3 +512,23 @@ checks. Updated the governing specification and resolved-questions record.
 No runtime files changed. Final checks passed (exit 0): Prettier for the six
 changed Markdown files, `node scripts/check-doc-audience.mjs`, and
 `git diff --check`. Implementation remains pending.
+
+### Human correction: subscriptions too; ignore wire masks
+
+The prior plan checkpoint `48730a1dc` was pushed before the human corrected its
+scope. It incorrectly retained subscription masking and rejected query masks.
+The explicit rule is now recorded throughout the active plan and specification:
+no masking in any API or execution path; ignore mask fields in incoming Protobufs.
+Do not validate mask paths or reject Event topics, queries or state subscriptions
+because a mask is present. Complete results apply to live delivery and recovery.
+
+Remove the shared pruning helper instead of moving it into subscriptions. Replace
+the previous acceptance scenario with full-state query and subscription results
+despite incoming wire masks. This correction changes only the plan/specification
+and records. Estimate: 0.05–0.1 hours for edits, focused checks and push. The
+earlier follow-up's subscription exception is superseded, not an accepted rule.
+
+Correction checks passed (exit 0): changed-document Prettier check, documentation
+audience check and `git diff --check`. A targeted scan confirmed the active plan,
+specification and questions log contain no requirement to retain masking or reject
+wire masks. No production code or runtime tests changed.

@@ -26,8 +26,9 @@ The work and review logs record the evidence and this remaining check. On
 queries during routing, warning-only handling above 1,000 recipients, and a
 generated JVM-like query DSL with automatic column registration. That extension
 has received standalone plan review. Accepted findings are included in the plan.
-The human resolved its last question by removing query masking altogether;
-the focused plan recheck is complete with no remaining product questions.
+The human resolved its last question: no masking in any API, including
+subscriptions, and ignore mask fields in incoming Protobufs. The revised plan
+has no remaining product questions.
 The extension is not implemented
 or covered by the original passing checks.
 

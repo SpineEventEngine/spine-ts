@@ -2,8 +2,9 @@
 
 Status: Original cross-context work is implemented and locally release-verified.
 The approved repository-query and generated-DSL extension has received standalone
-plan review. The human resolved the field-selection question by removing query
-masking. The revised plan recheck is complete; no product questions remain.
+plan review. The human resolved field selection: remove all masking APIs and
+execution, including subscriptions; ignore mask fields in incoming Protobufs.
+No product questions remain.
 The extension is not implemented.
 GitHub CI remains unverified.
 Updated: 29 September 2026.
@@ -46,11 +47,13 @@ Base: official `origin/master`, `2324311be8c23024f66cb2ba702fbe99a99e7dfb`.
   typed Entity query. Return typed IDs, generated state messages and actual
   application Entity instances respectively. Never substitute state messages
   or wrapper objects for Entity instances returned by `find()`.
-- Remove field masking from the query engine altogether. `find()` restores
+- Remove field masking from every framework API and execution path, including
+  queries and subscriptions. Ignore mask fields in incoming Protobufs; never
+  apply them or reject a request because it contains a mask. `find()` restores
   complete Entities and `findStates()` returns complete state messages.
   Filters choose matching Entities, never which fields survive in their state.
-  Remove existing query masking APIs and execution, not just the generated DSL
-  option. This supersedes earlier mask-preservation requirements in this plan.
+  Remove existing masking APIs and execution, not just the generated DSL option.
+  This supersedes earlier mask-preservation and mask-rejection requirements.
 - Permit application code to inspect returned Entities and filter them before
   returning recipient IDs. Restore Entities using normal construction, configured
   dependencies, stored Version and lifecycle; finding them must not invoke signal
@@ -330,10 +333,11 @@ execution, not in the shared description. Test reuse of one query concurrently
 in different tenants and preserve each execution path's visibility and limits.
 This extends existing entry points rather than adding another query engine.
 
-### Resolved decision: queries return complete state
+### Resolved decision: no masking in any API
 
-On 29 September the human directed removal of masking from the query engine
-altogether. There is no partial-state option and no difference between the three
+On 29 September the human directed removal of masking altogether and explicitly
+clarified that this includes subscriptions. Mask fields in Protobuf messages
+must be ignored. There is no partial-state option or difference between the three
 find methods to negotiate on that point. Filtering by `customerId` still returns
 each matching order's name, address and other saved fields. `findIds()` returns
 only identifiers by definition; it does not use a field mask to construct them.
@@ -350,44 +354,38 @@ Remove masking end to end before adding the generated query API:
    special decoded-state pruning that currently avoids pruning EntityRecord
    envelopes. Remove query-only path validators and obsolete tests/helpers.
 4. Remove masking from remote QueryService execution and documented client query
-   usage. The imported `ResponseFormat.field_mask` wire field stays in the
-   upstream Proto definition; do not fork that definition or renumber fields.
-   Reject a non-empty incoming query mask as unsupported before reading storage,
-   rather than silently returning more fields than the caller requested. An
-   absent or empty mask is ordinary full-state querying. Preserve ordering and
-   limits in the same response format. Internal normalized plans with removed
-   mask properties fail existing unknown-property validation.
-5. Update current API guides, examples, package references, TSDocs and tests.
+   usage. Keep the imported `ResponseFormat.field_mask` wire field unchanged and
+   ignore it, whether absent, empty or non-empty. Do not validate mask paths,
+   issue mask-specific errors or prune fields. Preserve normal validation of
+   the request itself, ordering and limits.
+5. Remove masking from local and remote subscriptions, subscription builders,
+   activation and reconnect/recovery paths. Ignore `Topic.field_mask` too,
+   including on Event topics; it must not trigger mask-specific rejection.
+   Filter against complete state and deliver complete matching state copies.
+   Preserve stored state and `noLongerMatching` notifications. Recovery queries
+   and resumed live updates obey the same complete-state rule.
+6. Delete `RecordMask`, its exports and query/subscription pruning helpers once
+   all consumers are removed. Do not relocate them or retain a masking option
+   under another name. Keep copied Proto definitions and Protobuf's general
+   `FieldMask` message type unchanged; their presence is not framework support
+   for applying a mask. Unrelated message-serialization tests may remain.
+7. Update current API guides, examples, package references, TSDocs and tests.
    The new no-masking requirement supersedes older decision-log descriptions of
    query mask support. Preserve historical records as history, not active rules.
 
-Subscriptions have a separate `Topic.field_mask` contract; this query-engine
-decision does not remove that unrelated subscription behavior. The current
-`RecordMask` helper is shared with subscriptions. Remove its storage export and
-query dependencies; retain only the existing subscription-specific operation
-internally in the server. Do not remove Protobuf's general `FieldMask` type or
-its unrelated serialization tests. Test subscriptions after changing the shared
-helper so query cleanup cannot accidentally break them.
-
-Cover local and remote subscriptions: filter against complete state, then mask
-only outgoing copies. Preserve stored state and `noLongerMatching` notifications.
-Client reconnection performs an authoritative query; test a masked live update,
-reconnection using an unmasked query that returns complete recovery states,
-then resumed masked live updates. An authoritative recovery query containing a
-non-empty mask must receive the ordinary unsupported-query error, not bypass
-the rule because it is used by a subscription.
-
 Acceptance tests must prove complete nested/scalar state through repository,
-PM, local Stand, remote query and each storage-provider path, plus detached
-results and preserved Version/lifecycle data. Test that the builder has no
-masking API, old normalized mask options are rejected, non-empty wire masks
-fail without storage access, empty wire masks return full state, and filters,
-ordering and explicit limits still work. No stored-data migration, compatibility
+PM, local Stand, remote query, subscriptions and each storage-provider path,
+plus detached results and preserved Version/lifecycle data. Test that authored
+query/subscription builders and storage contracts have no masking API. Incoming
+query and subscription Protobufs with empty, non-empty or nonexistent-field mask
+paths must behave like the same requests without masks. Include Event topics,
+initial subscription delivery, reconnect queries and resumed live updates.
+Filters, ordering and explicit limits must still work. No stored-data migration, compatibility
 shim or replacement field-selection feature is needed in this snapshot project.
 
 ### Remaining implementation sequence and tests
 
-1. Remove query masking across the existing API, storage and service paths, with
+1. Remove all masking across query, subscription, storage and service paths, with
    the focused regressions above. Freeze the typed query and class-aware routing
    contracts. Define PM/client acceptance alongside repository acceptance.
    Test ID/state/application-method inference, supported existing overloads,
@@ -485,7 +483,7 @@ Mask-removal source checks: core `query/entity-query.ts`, server `entity/entity.
 `services/registered-targets.ts`, `stand/stand.ts` and `services/spine-services.ts`;
 storage `query/query-policy.ts`, `record/record-query.ts`, `record/record-storage.ts`
 and all provider capability declarations. `stand/subscription-observer.ts` and
-the subscription path in `spine-services.ts` also use `RecordMask`, independently
-of queries. The upstream field is declared in
-`packages/proto/proto/spine/client/query.proto`; ordinary query-mask removal must
-not edit that copied wire contract.
+the subscription path in `spine-services.ts` also use `RecordMask`; all of those
+consumers must be removed. The upstream query field is declared in
+`packages/proto/proto/spine/client/query.proto`. Keep copied wire contracts
+unchanged and ignore their mask fields in framework execution.
