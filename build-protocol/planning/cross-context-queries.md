@@ -1,6 +1,6 @@
 # Entity queries and signal routing
 
-Status: Original cross-context work is implemented and locally release-verified.
+Status: The complete approved task is implemented and locally release-verified.
 The approved repository-query and generated-DSL extension has received standalone
 plan review. The human resolved field selection: remove all masking APIs and
 execution, including subscriptions; ignore mask fields in incoming Protobufs.
@@ -13,9 +13,10 @@ routing passed focused verification and independent specialist reviews; accepted
 findings are fixed. Final security review reports no actionable findings. Real
 query checks pass on MySQL, MariaDB, PostgreSQL 16/18 and Datastore. Todo smoke
 passes on memory and all four SQL engines. A separate unchanged Datastore history
-trim test hangs; further work on it awaits scope approval. The complete release
-and packaged-consumer verification remain in progress.
-GitHub CI remains unverified.
+trim test hangs; further work on it awaits scope approval. Final release checks
+pass on ed2374619: 5,127 tests in 306 files and all four coverage thresholds.
+All 19 package tarballs pass the separate consumer proof. GitHub CI remains
+unverified because this branch has no PR; creating one remains the human's step.
 Updated: 29 September 2026.
 Branch: `cross-context-queries`.
 Base: official `origin/master`, `2324311be8c23024f66cb2ba702fbe99a99e7dfb`.

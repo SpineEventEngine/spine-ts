@@ -1,9 +1,9 @@
 # Cross-context queries work log
 
-Started: 28 September 2026. Status: original implementation locally verified;
-repository-query and generated-DSL plan reviewed as of 29 September. The human
-resolved field selection: remove all masking APIs, including subscriptions, and
-ignore Protobuf mask fields. Extension implementation is now authorized and underway.
+Started: 28 September 2026. Status: complete approved implementation and extension
+locally release-verified on 29 September; GitHub CI awaits a human-created PR.
+The implementation includes complete states with no masking APIs, generated
+queries, tenant-preserving cross-context reads and receiving-repository routing.
 Task/branch: `cross-context-queries`.
 Worktree: `/Users/armiol/.codex/worktrees/cross-context-queries/spine-ts`.
 Base: `2324311be8c23024f66cb2ba702fbe99a99e7dfb` from freshly fetched official origin.
@@ -1257,3 +1257,42 @@ pass. Commit and immediately push this test-only correction, then dispatch final
 release verification explicitly Luna/low, preserving prior logs and using one
 test worker. Exact-tarball proof follows only a successful release gate. No
 additional specialist review is required for the test type import correction.
+
+## Final local acceptance
+
+Correction checkpoint ed2374619bc3f75e069bf382f2d81192d9ca8f23 was pushed
+immediately and its exact remote SHA confirmed. Final mechanical session
+01a0eec3-14e0-7bc1-b2a2-5b1381df6b16 explicitly confirms Luna/low, with no visible
+fallback; separate backend metadata is unavailable. The complete release command
+exits 0: 306 files and 5,127 tests pass, with no skips reported by that suite.
+Test duration is 614.63 seconds, separate from preliminary build/document checks.
+Coverage: statements 93.21%, branches 90.00%, functions 92.99%, lines 94.40%.
+The separate non-publishing release prepare --check exits 0 and proves all 19
+exact package tarballs in an external consumer. No verification process remains;
+the verified code checkout is clean. Final record-only edits do not change that
+runtime, test or package tree and do not require another full release run.
+
+The focused and independent review evidence above covers masking, common query
+types/generation/consumers, repository/provider reads, routing/delivery, examples
+and documentation. All accepted findings are resolved. Final security reports no
+actionable findings; later changes are mechanical example shape, JSON formatting
+and a test-only import correction, with their focused checks recorded above.
+All participating CLI workers have exited. No further approved implementation
+work remains; CI still requires a PR, which this task is not authorized to create.
+
+Live verification is separate from the default suite: query checks pass on
+MySQL 8.4, MariaDB 11.4, PostgreSQL 16/18 and the Datastore emulator, including
+10,002 matching rows and late/global query cases. Todo smoke passes on memory and
+the four SQL engines. Do not claim the entire Datastore integration suite passes:
+its unchanged history trim path hangs after all appends, as documented earlier.
+The question whether to expand scope to fix that path remains unanswered; no
+history runtime change is included. Keep diagnostic logs for later investigation.
+
+Cleanup removed only the five task-created containers with suffix
+20260929-174955 and their inspected anonymous database volumes. Their disposable
+test data is deleted; diagnostic logs remain. No existing containers, images or
+shared resources were removed. Final registry check at 20:18 UTC confirms
+snapshot.17 is unused for all 19 public packages. Final record formatting,
+documentation-audience and whitespace checks pass. The branch/worktree remains
+available for the human's PR; no PR, merge, package publication or npm tag change
+was performed.
