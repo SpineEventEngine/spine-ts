@@ -26,7 +26,7 @@ The `spine-proto` binary is the primary public API. Run it from the package
 whose `spine-proto.json` it should read:
 
 - `spine-proto generate` accepts only model configuration and generates model
-  outputs and the manifest;
+  outputs and the manifest, including `_query.ts` companions for eligible Entity states;
 - `spine-proto compose` accepts only application configuration and writes the
   configured model registry source;
 - `spine-proto handlers` accepts an application package and writes
@@ -58,8 +58,11 @@ version, sorted Proto files in the package, generated exports, direct
 dependencies, the module export, and a generation ID. Byte-identical staged
 output reuses its committed ID; changed output receives a new opaque ID. A model
 with a top-level `*rejections.proto` also gets a
-typed same-directory rejection companion. When such a companion is produced,
-the model must directly depend on `@spine-event-engine/core`.
+typed same-directory rejection companion. An eligible Entity state gets a
+same-directory `_query.ts` companion. Either companion imports core at runtime,
+so the model must declare `@spine-event-engine/core` in its direct runtime
+`package.json` dependencies when either is generated. Models with neither
+companion do not need this dependency for generation.
 
 For a cross-model Proto import, declare the other model in both `package.json`
 and `spine-proto.json`; import the other model's canonical package path. The

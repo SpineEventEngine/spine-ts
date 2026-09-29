@@ -31,7 +31,9 @@ subscriptions, and ignore mask fields in incoming Protobufs. The revised plan
 has no remaining product questions.
 Implementation is underway. Masking removal is independently reviewed with its
 accepted findings fixed and focused checks passing. Shared typed queries and
-normal DSL generation are next. The full extension is not yet release-verified.
+normal DSL generation are also reviewed and verified, with corrections resolved.
+Exhaustive repository reads and asynchronous routing are next. The full extension
+is not yet release-verified.
 
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
 remotely closed. The complete-replica deployment correction is closed through

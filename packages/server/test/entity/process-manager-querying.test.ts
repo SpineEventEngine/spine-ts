@@ -64,9 +64,14 @@ import {
   ProjectStateSchema,
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
+  ProjectOverviewIdSchema,
   type ProjectProfileState,
   ProjectProfileStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import {
+  ProjectOverviewStateQuery,
+  ProjectPortfolioStateQuery,
+} from "../../test-fixtures/generated/entity-metadata/project_states_query.js";
 import { ProcessManagerStateSchema } from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
 import {
   type ProjectReviewState,
@@ -156,6 +161,12 @@ const projectionColumns = EntityColumn.register(
 );
 const equivalentProjectionSchema = { ...ProjectOverviewStateSchema };
 const selectedProjectionColumns: Pick<typeof projectionColumns, "priority"> = projectionColumns;
+const sharedQuery = ProjectOverviewStateQuery.create()
+  .name()
+  .is("ready")
+  .orderBy("priority", "desc")
+  .limit(1)
+  .build();
 const aggregateColumns = EntityColumn.register(
   ProjectStateSchema,
   GeneratedEntityColumns.define(ProjectStateSchema, {
@@ -293,6 +304,10 @@ class ProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSch
     return this.select(ProjectOverviewStateSchema, projectionColumns);
   }
 
+  queryShared(query: typeof sharedQuery = sharedQuery) {
+    return this.select(query);
+  }
+
   async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
     try {
       if (command.name === "aggregate") {
@@ -321,6 +336,8 @@ class ProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSch
           .orderBy(projectionColumns.priority, "desc")
           .limit(1)
           .all();
+      } else if (command.name === "shared") {
+        ProjectLookup.results = await this.select(sharedQuery).read();
       } else {
         const query = this.query();
         if (ProjectLookup.predicate !== undefined) {
@@ -560,6 +577,25 @@ function reviewRejectionEvent(id: string) {
 }
 
 describe("Process Manager querying", () => {
+  it("copies a generated message ID from the canonical first field", () => {
+    const id = create(ProjectOverviewIdSchema, { value: "portfolio-1" });
+    const query = ProjectPortfolioStateQuery.create().byId(id).build();
+    id.value = "changed";
+    expect(query.buildPlan().predicate).toMatchObject({
+      kind: "ids",
+      ids: [{ value: "portfolio-1" }],
+    });
+    expect(query.build().context).toBeUndefined();
+    expect(() =>
+      ProjectPortfolioStateQuery.create()
+        .byId("wrong" as never)
+        .build(),
+    ).toThrow(/wrong type/u);
+    type Id = Parameters<ReturnType<typeof ProjectPortfolioStateQuery.create>["byId"]>[0];
+    type RejectsStringId = string extends Id ? false : true;
+    const rejectsStringId: RejectsStringId = true;
+    expect(rejectsStringId).toBe(true);
+  });
   it.each(["local", "foreign"])(
     "retains complete camelCase state on the %s registered route",
     async (route) => {
@@ -1520,6 +1556,33 @@ describe("Process Manager querying", () => {
     }
   });
 
+  it("executes a context-free generated query in a foreign Process Manager read", async () => {
+    ProjectLookup.reset();
+    const projects = BoundedContext.singleTenant("SharedQueryProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.singleTenant("SharedQueryWorkflows")
+      .add(processManagerRepository())
+      .build();
+    await projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "shared", name: "ready", priority: 2 }),
+      );
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+    try {
+      await workflows.commandBus().post(queryCommand("shared", "shared"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results).toHaveLength(1);
+      });
+      expect(ProjectLookup.results[0]?.id).toBe("shared");
+      expect(sharedQuery.build().context).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+
   it("uses SINGLE_TENANT in a multitenant destination", async () => {
     ProjectLookup.reset();
     const projects = BoundedContext.multitenant("TenantProjects")
@@ -1762,6 +1825,19 @@ describe("Process Manager querying", () => {
       "select",
     );
     expect(() => query.limit(1_001)).toThrow("Process Manager query limit may be at most 1000.");
+    const manyIds = Array.from({ length: 1_001 }, (_, index) => `item-${String(index)}`);
+    await expect(
+      lookup
+        .query()
+        .byId(...manyIds)
+        .read(),
+    ).rejects.toThrow("Process Manager query ID filter may contain at most 1000 IDs.");
+    const detached = ProjectOverviewStateQuery.create()
+      .byId(...manyIds)
+      .build();
+    await expect(lookup.queryShared(detached).read()).rejects.toThrow(
+      "Process Manager query ID filter may contain at most 1000 IDs.",
+    );
 
     release();
     await expect(query.read()).rejects.toThrow(
@@ -1856,6 +1932,26 @@ describe("Process Manager querying", () => {
       ]);
       expect(createdVersions).toEqual([0, 0, 1]);
       expect(matchedNames).toEqual(["A", "B", "A"]);
+
+      await context
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "shared-query", name: "ready", priority: 4 }),
+          { tenantId: tenantA },
+        );
+      await context
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "shared-query", name: "ready", priority: 7 }),
+          { tenantId: tenantB },
+        );
+      await context.commandBus().post(queryCommand("shared-query", "shared", "tenant-a"));
+      expect(ProjectLookup.results[0]?.priority).toBe(4);
+      await context.commandBus().post(queryCommand("shared-query", "shared", "tenant-b"));
+      expect(ProjectLookup.results[0]?.priority).toBe(7);
+      expect(sharedQuery.build().context).toBeUndefined();
     } finally {
       await context.close();
     }

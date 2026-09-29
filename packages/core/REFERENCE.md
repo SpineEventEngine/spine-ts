@@ -24,6 +24,17 @@ from the root: generated model code imports it from
 `@spine-event-engine/core/codegen`. `@spine-event-engine/client-node` retains
 its compatibility exports and its `/codegen` forwarding entry point.
 
+Normal Proto generation emits `_query.ts` companions for eligible Entity states, including nested
+states. Their exported `StateQuery.create()` methods expose marked columns and the `version`,
+`archived`, and `deleted` system columns. `build()` returns an independent query description with
+no actor or tenant context; it can be reused by a Process Manager, browser client, or subscription.
+Successive comparisons form a conjunction, and `either(...)` combines synchronous condition-only
+callback branches as a disjunction. Apply IDs, ordering, limits, and build to the outer query.
+Generated field methods that conflict with `build`, `either`, `byId`, `orderBy`,
+`limit`, `create`, `constructor`, or JavaScript object methods receive a `Column` suffix; a
+numeric suffix resolves a further collision. Nested query exports join message names with `_`.
+The first declared state field supplies the ID type even when its name is not `id`.
+
 ## Subscription lifecycle SPI
 
 Framework integrations that coordinate subscription activation import

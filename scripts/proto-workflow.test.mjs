@@ -1,4 +1,6 @@
 import {
+  chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -34,7 +36,107 @@ import {
   writeStagedTemplate,
   withCopyrightHeader,
 } from "./proto-workflow.mjs";
+import { fixtureRunner, generateProtoFixtures } from "./generate-proto-fixtures.mjs";
 import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
+
+describe("internal fixture Buf boundary", () => {
+  it.each(["core", "server"])(
+    "keeps negative descriptors while selecting %s query paths",
+    (fixture) => {
+      const root = mkdtempSync(join(tmpdir(), "spine-fixture-boundary-"));
+      try {
+        writeFileSync(
+          join(root, "buf.gen.yaml"),
+          [
+            "version: v2",
+            "plugins:",
+            "  - local: protoc-gen-es",
+            "    out: output",
+            "  - local:",
+            "      - node",
+            "      - rejection-generator.js",
+            "    out: output",
+            "  - local:",
+            "      - node",
+            "      - entity-query-generator.js",
+            "    out: output",
+            "",
+          ].join("\n"),
+        );
+        const executable = join(root, "record-buf.mjs");
+        writeFileSync(
+          executable,
+          '#!/usr/bin/env node\nimport { appendFileSync } from "node:fs";\n' +
+            'appendFileSync("calls.jsonl", JSON.stringify(process.argv.slice(2)) + "\\n");\n',
+        );
+        chmodSync(executable, 0o755);
+        const result = fixtureRunner(fixture)(
+          executable,
+          [
+            "generate",
+            "--template",
+            "buf.gen.yaml",
+            "--path",
+            "entity-metadata/invalid-column.proto",
+            "--path",
+            "entity-metadata/project_states.proto",
+          ],
+          { cwd: root, encoding: "utf8", timeout: 10_000, maxBuffer: 1_000_000 },
+        );
+        expect(result.status).toBe(0);
+        const calls = readFileSync(join(root, "calls.jsonl"), "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line));
+        expect(calls[0]).toContain("entity-metadata/invalid-column.proto");
+        expect(readFileSync(join(root, "buf.fixtures.base.yaml"), "utf8")).not.toContain(
+          "entity-query-generator",
+        );
+        if (fixture === "core") {
+          expect(calls).toHaveLength(1);
+        } else {
+          expect(calls).toHaveLength(2);
+          expect(calls[1]).toContain("entity-metadata/project_states.proto");
+          expect(calls[1]).not.toContain("entity-metadata/invalid-column.proto");
+        }
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("rolls back a different invalid server fixture column", async () => {
+    const root = process.cwd();
+    const live = join(root, "packages/server/test-fixtures");
+    const stage = mkdtempSync(join(live, ".fixture-query-test-"));
+    const executable = prepareProtoToolsBootstrap(root);
+    try {
+      for (const name of ["package.json", "spine-proto.json", "proto"])
+        cpSync(join(live, name), join(stage, name), { recursive: true });
+      await generateProtoFixtures(executable, stage, stage, "server");
+      const manifest = readFileSync(join(stage, "spine-proto-manifest.json"), "utf8");
+      const query = join(stage, "generated/entity-metadata/project_states_query.ts");
+      const priorQuery = readFileSync(query, "utf8");
+      expect(existsSync(join(stage, "generated/entity-metadata/invalid-column_pb.ts"))).toBe(true);
+      expect(existsSync(join(stage, "generated/entity-metadata/invalid-column_query.ts"))).toBe(
+        false,
+      );
+      const invalid = readFileSync(
+        join(stage, "proto/entity-metadata/invalid-column.proto"),
+        "utf8",
+      ).replace("InvalidColumnState", "AnotherInvalidColumnState");
+      writeFileSync(join(stage, "proto/entity-metadata/another-invalid-column.proto"), invalid);
+      await expect(generateProtoFixtures(executable, stage, stage, "server")).rejects.toThrow(
+        /column "tags" must be singular/u,
+      );
+      expect(readFileSync(join(stage, "spine-proto-manifest.json"), "utf8")).toBe(manifest);
+      expect(readFileSync(query, "utf8")).toBe(priorQuery);
+    } finally {
+      releaseProtoToolsBootstrap(root);
+      rmSync(stage, { recursive: true, force: true });
+    }
+  }, 120_000);
+});
 
 describe("clean proto-tools bootstrap", () => {
   it("generates through the bootstrap when the compiled proto-tools output is absent", () => {
@@ -1039,6 +1141,9 @@ describe("proto-workflow", () => {
       expect(existsSync(join(dirname(executable), "../generation/rejection-generator.js"))).toBe(
         true,
       );
+      expect(existsSync(join(dirname(executable), "../generation/entity-query-generator.js"))).toBe(
+        true,
+      );
       expect(existsSync(join(dirname(executable), "../generation/interface-generator.js"))).toBe(
         true,
       );
@@ -1117,6 +1222,15 @@ describe("proto-workflow", () => {
     expect(
       existsSync("packages/server/test-fixtures/generated/entity-metadata/project_commands_pb.ts"),
     ).toBe(true);
+    expect(
+      existsSync("packages/server/test-fixtures/generated/entity-metadata/invalid-column_pb.ts"),
+    ).toBe(true);
+    expect(
+      existsSync("packages/server/test-fixtures/generated/entity-metadata/invalid-column_query.ts"),
+    ).toBe(false);
+    expect(
+      existsSync("packages/server/test-fixtures/generated/entity-metadata/project_states_query.ts"),
+    ).toBe(true);
   });
 
   it("generates core and testing fixtures from package-local Proto sources", () => {
@@ -1135,6 +1249,8 @@ describe("proto-workflow", () => {
     expect(existsSync("packages/core/test-fixtures/proto/project_states.proto")).toBe(true);
     expect(existsSync("packages/testing/test-fixtures/proto/project_commands.proto")).toBe(true);
     expect(existsSync("packages/core/test-fixtures/generated/project_commands_pb.ts")).toBe(true);
+    expect(existsSync("packages/core/test-fixtures/generated/project_states_pb.ts")).toBe(true);
+    expect(existsSync("packages/core/test-fixtures/generated/project_states_query.ts")).toBe(false);
     expect(existsSync("packages/testing/test-fixtures/generated/project_states_pb.ts")).toBe(true);
   });
 

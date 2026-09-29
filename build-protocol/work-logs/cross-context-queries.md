@@ -573,9 +573,10 @@ approved Astra/high architecture review is complete; do not repeat it absent
 a material contract change or demonstrated blocker. Estimate remains 4.5–6.5
 hours, excluding CI queue time; detailed breakdown is in the plan.
 
-Progress: masking removal in progress; generated queries/consumers, complete
-repository reads, async routing, broad examples/docs and final verification
-pending. Preserve original cross-context implementation and its regressions.
+Progress: masking removal is reviewed, verified and pushed; generated queries
+and their consumers are in progress. Complete repository reads, async routing,
+broad examples/docs and final verification are pending. Preserve original
+cross-context implementation and its regressions.
 Use `verify:release` once after the reviewed slices converge, because shared
 runtime/contracts change; run cheap checks and focused coverage before reviews.
 Do not start a redundant full baseline run. Current prior release evidence is
@@ -704,3 +705,122 @@ for invalid masks and corrected RecordValues documentation. Final service suite:
 TSDoc and whitespace checks all pass. No runtime change in the review correction.
 Main checked the new assertions and accepted each finding as resolved. The next
 slice is the shared context-free query, normal generated DSL and existing consumers.
+Committed and immediately pushed the accepted masking checkpoint as `30539151f`
+to official `origin/cross-context-queries`; push exited 0. Next assignment is the
+existing implementer, explicit gpt-6-sol / medium, retained session
+`01a0ed61-8899-76f2-ba6a-e5438eded07e`, for shared context-free queries, normal
+generated DSL and existing PM/client/recovery consumers. Main remains responsible
+for protocol records. No repository-read/provider/routing implementation yet.
+Use `shared-query-brief.md` and the completed source-seam scan. One production
+writer; focused red/green checks, no child agents and no full release rerun.
+Shared-query contract spelling: inclusive comparisons use `isAtLeast()` and
+`isAtMost()` rather than the longer draft spellings. Main accepts this bounded
+naming adjustment to satisfy the existing semantic-name limit and keep the DSL
+plain. Predicate semantics, types and architecture are unchanged; update plan,
+generated examples and tests consistently, without an extra architecture wave.
+Main read the complete TypeScript advanced-types skill for the generated DSL's
+mapped/conditional types. Its relevant guidance is to verify inference and invalid
+calls with compile-time tests, without complex assertions hiding a runtime mismatch.
+No optional reference was needed. Main inspected the generated builder and found
+an actual mismatch: either() callbacks accepted root ID/order/limit operations
+while combining only predicates, and unknown return types also admitted async
+callbacks. These could silently omit requested criteria. Interrupted only the
+active implementation process and resumed the same explicit Sol/medium context
+with a condition-only branch correction and focused tests. The plan now clarifies
+the existing grouping semantics; no ID-in-OR wire feature or new product decision.
+
+The continuation brief also requires the full already-approved generator evidence
+(nested/collision/non-id cases, invalid column handling, repeated registration,
+external imports and generation rollback), not only a source-text assertion. New
+source files must be staged before review and included in git diff from `30539151f`.
+Demonstrated generation design problem: ordinary query generation must reject
+invalid/reserved column annotations, while internal negative fixtures must still
+produce their Protobuf messages. The in-progress implementation now uses package-
+name exceptions in the published generator. Main does not accept that as the
+final separation. Dispatch one bounded existing requirements-splitter pass,
+explicit gpt-6-astra / high, fresh read-only without memory, to select the smallest
+existing test-generation seam. This is not a repeated whole-plan architecture
+review: it resolves a concrete build/validation conflict. No edits or children.
+The bounded requirements-splitter pass completed without edits/tests. Its header
+confirms gpt-6-astra / high, fresh and read-only. Accepted recommendation in
+`fixture-generation-design.md`: use a repository-local runner and existing
+GenerationOperations.runProcess; do not override runBuf because that disables
+the default interface phase. Generate all descriptors, omit core fixture queries,
+and run strict server query generation excluding only invalid-column.proto. Remove
+published-generator package-name branches and the validation-allowance option.
+Tradeoff: one extra server-fixture Buf invocation and a tested internal-template
+dependency. No public configuration or altered negative Proto declarations.
+
+Returned the accepted design to the same explicit Sol/medium session, retaining
+all valid changes. The continuation must finish generator/consumer acceptance and
+cheap checks before review. The existing clean-bootstrap test archives HEAD;
+record its limitation now and run it against the implemented checkpoint after
+commit rather than presenting a prior-HEAD pass as proof of these changes.
+Metadata scope for all app-bundled CLI assignments above: execution headers
+establish the explicitly configured model and reasoning effort. The surface does
+not expose a separate provider-internal runtime identity. No visible mismatch or
+fallback was reported. Acceptance uses the immutable configured role/profile and
+records this limitation; it does not rely on a model's self-description.
+
+Main read the complete receiving-code-review skill before the shared-query review
+wave. It requires checking each finding against the accepted requirements and
+actual implementation, then returning one confirmed correction batch to the
+retained implementer. Repository review sequencing takes precedence over the
+skill's generic suggestion to react to findings individually.
+
+Shared-query implementation returned with focused evidence: 147 tests in five
+query/PM/client/generator/external-consumer files, nine fixture/bootstrap tests,
+normal generation, sequential build/tooling typechecks, generated-current,
+cleanup, TSDoc, copyright, changed-file ESLint/Prettier and full generated-doc
+checks passed. An earlier broader workflow run had one test setup failure; the
+corrected rollback case passed. The clean-bootstrap test still needs the new
+committed HEAD. Main staged all new source/test/script files before review and
+confirmed the complete staged diff passes whitespace checking.
+
+Fresh independent API, reliability and style reviews dispatched concurrently
+with explicit gpt-6-sol / medium, memory disabled and read-only. Each uses its
+existing configured role and the shared-query brief against `30539151f`. Docs
+review, explicit Luna/medium, follows when a slot is free. Source changes are
+paused until the complete concern wave is collected. No later slice is complete.
+
+All shared-query reviewers completed. Main verified and accepted three concrete
+corrections (one deduplicated recovery-test gap, generated runtime dependency
+validation, and ordered-positive-limit documentation), and rejected the mistaken
+snippet-marker extraction claim using the checker implementation. Returned one
+batch to the retained explicit Sol/medium implementer, with coverage inspection
+missing from its first report. Estimate for this correction/check wave: 0.17–0.33
+hours active work. No full release gate or additional whole review wave yet.
+
+To prepare approved local provider verification, main started Docker Desktop
+using `open -a Docker` after the capability checks found its daemon unavailable.
+No test containers or volumes have been created yet and no application/production
+database is in scope. Use dedicated task resources for later live checks.
+The app remains in `starting`; engine info/container-list requests return HTTP 500. Main read systematic-debugging fully and inspected only status, processes
+and startup logs. No root cause is established from those logs; no reset,
+update, container removal or alternate database was attempted. A nonblocking
+question asks the human to check for a Docker startup prompt. Code work continues.
+
+Shared-query corrections returned. The external packed query-only model proves
+missing direct core dependency fails before output replacement, then succeeds
+when declared. The internal testing fixture needed the same direct dependency;
+its manifest and lockfile now include it, and frozen offline install plus
+production-dependency checks pass. The two-tenant recovery test proves forced
+reconnect, complete authoritative state and complete resumed updates.
+
+Focused coverage initially failed at 86.34% branches despite 145 passing tests.
+After additional behavior cases, 149 tests pass with 93.67% statements, 90.77%
+branches, 93.68% functions and 96.66% lines across the shared query, generated
+runtime and plugin. Individual branch coverage: 89.44%, 96%, 92.42%; no thresholds
+were weakened. The report lists remaining uncovered shared-query/fallback paths.
+Final normal generation, build then tooling typechecks, generated-current,
+cleanup/TSDoc/copyright, changed-file lint/format, generated-doc checks and the
+six-test external consumer/generator subset pass. Independent targeted API
+follow-up dispatched explicitly Sol/medium; source held unchanged until its result.
+
+Independent targeted API session `01a0ede1-455d-7050-a6bd-262eddbe8169` returned
+no findings; configured Sol/medium header confirmed. Main accepts the shared-query
+slice after all four concern dispositions and the focused checks above. Next:
+commit/push checkpoint, verify clean-HEAD generation, then exhaustive provider and
+receiving-repository reads with the retained Sol/medium implementer. Clean-HEAD
+verification is a mechanical function explicitly dispatched Luna/low, isolated
+from the writer. It must not modify production files or run a full release gate.

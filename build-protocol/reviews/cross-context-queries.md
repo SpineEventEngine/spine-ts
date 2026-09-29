@@ -434,3 +434,53 @@ passes 117 tests; both typechecks, affected ESLint/Prettier, TSDoc, cleanup and
 whitespace checks pass. All four review concerns have a clean or resolved
 disposition. No additional broad review wave is needed for these test/comment
 corrections. Final task-wide release/security acceptance remains pending.
+
+## Shared generated query checkpoint
+
+Review converged; corrections verified. Base: `30539151f`; include staged new files and
+all current changes against that commit. Concern assignments: existing
+TypeScript/API-docs, performance/reliability and style/maintainability reviewers,
+each explicit gpt-6-sol / medium; documentation reviewer, explicit gpt-6-luna /
+medium. Fresh read-only sessions, memories/multi-agent/fast mode disabled, no
+inherited chat or previous review conclusions. Confirm each execution header.
+Inputs are the human ledger, source/diff, focused evidence and the concern-specific
+brief. Collect the complete wave before one correction batch to the same retained
+implementer. Headers confirmed all explicitly configured models and efforts;
+the same runtime-identity limitation recorded above applies.
+
+Focus includes typed condition-only branches, query/input independence, ID limits
+at execution, consumer actor/tenant binding, actual external generated imports,
+name collisions/non-id fields, and strict/atomic generation with fixture selection
+outside published-generator policy. Future provider/read/routing slices are not
+claimed complete. Existing final release/security acceptance remains pending.
+
+Completed fresh review sessions: API `01a0edd3-394f-7bc3-8caf-3b47d4894cca`,
+reliability `01a0edd3-3865-7b61-898f-1068b79adac7`, style
+`01a0edd3-3864-7dc1-8135-fd3345146635`, documentation
+`01a0edd5-226c-7202-8ad5-196a1f463481`. All exited without edits or tests.
+
+Accepted one batch: API P2 requires validating core runtime dependency for query
+companions, not only rejection companions; reliability/style duplicate P2 requires
+complete generated-query recovery and resumed updates, not just activation/context
+assertions; docs P2 clarifies positive ordered limits. Main confirmed these against
+generator.ts and client.test.ts. Documentation's source-marker finding is rejected:
+docs/check-typescript-snippets.mjs uses it as the compilation context and replaces
+that virtual source with the snippet; it is not a claim of verbatim extraction.
+Same implementer receives the confirmed batch and changed-source coverage work.
+Only the substantive dependency validation needs targeted API re-review.
+
+Expected targeted follow-up assignment: existing TypeScript/API-docs reviewer,
+fresh gpt-6-sol / medium, no memory, read-only. Scope is companion runtime
+dependency validation, atomic failure, real external consumer and corresponding
+fixture dependency/docs only. Main separately verifies recovery-test assertions
+and deterministic documentation corrections; these do not reopen whole lanes.
+
+Targeted API session `01a0ede1-455d-7050-a6bd-262eddbe8169` completed with no
+findings. Header confirmed explicit Sol/medium, fresh read-only without memory.
+It checked the dependency gate, pre-publication failure, external consumer,
+fixture dependency/lockfile and public reference. Main accepted the resolved
+recovery and documentation findings after checking assertions and mechanical
+evidence. All four canonical concerns are clean or resolved. Scoped coverage
+passes unchanged aggregate thresholds; detailed per-file limits are in the work
+log. Commit/push and clean-HEAD bootstrap check follow; full release acceptance
+remains pending for the complete task.

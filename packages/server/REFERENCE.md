@@ -233,7 +233,9 @@ use these reads for invariants.
 
 `select(schema, columns)` supports `byId`, typed `where`, `orderBy`,
 `limit`, `read`, `findById`, and `all`. A Process Manager query returns at most
-1,000 states. `all()` is a convenience and can be costly on a large read model;
+1,000 states and accepts at most 1,000 explicit IDs at execution. A generated
+`StateQuery.create()...build()` value also works with `this.select(query).read()`; its read
+binds the current handler actor and tenant. `all()` is a convenience and can be costly on a large read model;
 prefer an ID-targeted or ordered bounded query.
 
 Use `EntityQuery.all(...)` to require every predicate and `EntityQuery.either(...)`

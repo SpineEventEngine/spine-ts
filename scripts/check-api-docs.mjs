@@ -297,7 +297,11 @@ const expectedCoreExports = [
 const expectedCoreCodegenExports = [
   "EntityColumnDefinition",
   "EntityColumnDefinitionEntry",
+  "EntityQueryDescription",
+  "EntityQueryDraft",
   "GeneratedEntityColumns",
+  "GeneratedEntityQueries",
+  "GeneratedQueryBuilder",
 ];
 const expectedClientExports = [
   "Client",

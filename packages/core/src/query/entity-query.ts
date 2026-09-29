@@ -15,6 +15,7 @@
 import {
   clone,
   create,
+  fromBinary,
   getOption,
   hasOption,
   ScalarType,
@@ -63,6 +64,7 @@ import {
   type EntityColumnOperator,
   type EntityColumnValue,
 } from "../entity/entity-column.js";
+import { EntityFieldClassification } from "./entity-field-classification.js";
 
 /**
  * Registered Entity columns available to a query for one state schema.
@@ -98,7 +100,16 @@ export type ColumnName<Column> =
 
 const maximumPredicateDepth = 64;
 const maximumPredicateNodes = 10_000;
-const maximumEntityQueryIds = 1_000;
+const queryHost = globalThis as typeof globalThis & {
+  /**
+   * Copies a query plan including message values, bigint values, and bytes.
+   *
+   * @typeParam Value Type of the copied plan value.
+   * @param value Plan value to copy.
+   * @returns Independent structured clone.
+   */
+  structuredClone<Value>(value: Value): Value;
+};
 
 /**
  * Extracts the identifier value declared by an Entity state schema.
@@ -310,11 +321,6 @@ export class EntityQueryBuilder<
     if (ids.length === 0 || ids.some((id) => id === undefined)) {
       throw new TypeError("Entity query ID filter must not be empty.");
     }
-    if (this.#ids.length + ids.length > maximumEntityQueryIds) {
-      throw new TypeError(
-        `Entity query ID filter may contain at most ${String(maximumEntityQueryIds)} identifiers.`,
-      );
-    }
     this.#ids.push(...ids);
     return this;
   }
@@ -479,6 +485,169 @@ export class EntityQueryBuilder<
 }
 
 /**
+ * Context-free Entity query that can be executed by different actor and tenant scopes.
+ *
+ * @typeParam Schema Generated state schema selected by this query.
+ * @typeParam Id Identifier type declared by the state's first field.
+ */
+export class EntityQueryDescription<Schema extends GenMessage<Message>, Id> {
+  readonly #wire: Uint8Array;
+
+  readonly #plan: EntityQueryPlan;
+
+  readonly #schema: Schema;
+
+  declare private readonly schemaType: (schema: Schema) => Schema;
+
+  declare private readonly idType: (id: Id) => Id;
+
+  /**
+   * Captures the compiled wire query and storage plan without execution context.
+   *
+   * @param schema Generated state schema selected by the query.
+   * @param wire Compiled wire query without actor context or request ID.
+   * @param plan Compiled storage-neutral query plan.
+   */
+  constructor(schema: Schema, wire: Query, plan: EntityQueryPlan) {
+    this.#schema = schema;
+    this.#wire = toBinary(QuerySchema, wire);
+    this.#plan = queryHost.structuredClone(plan);
+    Object.freeze(this);
+  }
+
+  /**
+   * Returns the generated state schema selected by this query.
+   *
+   * @returns Generated state schema.
+   */
+  get schema(): Schema {
+    return this.#schema;
+  }
+
+  /**
+   * Creates a fresh wire query without an actor or tenant context.
+   *
+   * @returns Wire query with a new request ID.
+   */
+  build(): Query {
+    const wire = fromBinary(QuerySchema, this.#wire);
+    wire.id = create(QueryIdSchema, { value: EntityQueryWire.nextId() });
+    return wire;
+  }
+
+  /**
+   * Returns a detached storage-neutral plan for local execution.
+   *
+   * @returns Independent copy of the compiled plan.
+   */
+  buildPlan(): EntityQueryPlan {
+    return queryHost.structuredClone(this.#plan);
+  }
+}
+
+/**
+ * Builds an Entity query without selecting an actor or tenant.
+ *
+ * @typeParam Schema Generated Entity state schema.
+ * @typeParam Columns Registered columns for that schema.
+ * @typeParam Name Local name of the canonical first identifier field.
+ */
+export class EntityQueryDraft<
+  Schema extends GenMessage<Message>,
+  Columns extends EntityColumnCollection<Schema>,
+  Name extends keyof MessageShape<Schema> & string,
+> {
+  readonly #schema: Schema;
+
+  readonly #builder: EntityQueryBuilder<Schema, Columns>;
+
+  /**
+   * Creates a context-free draft for one registered Entity state.
+   *
+   * @param input State schema, columns, and canonical identifier field name.
+   */
+  constructor(input: {
+    readonly schema: Schema;
+    readonly columns: Columns;
+    readonly idField: Name;
+  }) {
+    if (input.schema.fields[0]?.localName !== input.idField) {
+      throw new TypeError("Entity query ID field must be the state's first declared field.");
+    }
+    this.#schema = input.schema;
+    this.#builder = new EntityQueryBuilder({
+      schema: input.schema,
+      columns: input.columns,
+      context: create(ActorContextSchema),
+    });
+  }
+
+  /**
+   * Adds typed identifiers to the query target.
+   *
+   * @param ids Identifier values declared by the first state field.
+   * @returns This draft.
+   */
+  byId(...ids: readonly Exclude<MessageShape<Schema>[Name], undefined>[]): this {
+    this.#builder.byId(...(ids as readonly EntityQueryIdentifier<Schema>[]));
+    return this;
+  }
+
+  /**
+   * Adds a typed comparison or group predicate.
+   *
+   * @typeParam Predicate Predicate checked against the registered columns.
+   * @param predicate Predicate to append with conjunction.
+   * @returns This draft.
+   */
+  where<Predicate extends EntityPredicate>(
+    predicate: EntityQueryPredicateFor<Schema, Columns, Predicate>,
+  ): this {
+    this.#builder.where(predicate);
+    return this;
+  }
+
+  /**
+   * Adds ordering by a registered ordered column.
+   *
+   * @typeParam Column Registered ordered column type.
+   * @param column Ordered column.
+   * @param direction Ascending or descending direction.
+   * @returns This draft.
+   */
+  orderBy<Column extends Columns[keyof Columns]>(
+    column: "greaterThan" extends EntityColumnOperator<Column> ? Column : never,
+    direction: "asc" | "desc" = "asc",
+  ): this {
+    this.#builder.orderBy(column, direction);
+    return this;
+  }
+
+  /**
+   * Sets a positive result limit that requires ordering.
+   *
+   * @param value Maximum number of matching states.
+   * @returns This draft.
+   */
+  limit(value: number): this {
+    this.#builder.limit(value);
+    return this;
+  }
+
+  /**
+   * Builds an independent query description for later execution.
+   *
+   * @returns Context-free query value with detached wire and plan copies.
+   */
+  build(): EntityQueryDescription<Schema, Exclude<MessageShape<Schema>[Name], undefined>> {
+    const wire = this.#builder.build();
+    wire.context = undefined;
+    wire.id = undefined;
+    return new EntityQueryDescription(this.#schema, wire, this.#builder.buildPlan());
+  }
+}
+
+/**
  * Creates typed predicates and builders for Entity queries.
  */
 export const EntityQuery: Readonly<{
@@ -593,6 +762,25 @@ export const EntityQuery: Readonly<{
     readonly columns: Columns;
     readonly context: ActorContext;
   }): EntityQueryBuilder<Schema, Columns>;
+
+  /**
+   * Creates a context-free query draft for a state and its registered columns.
+   *
+   * @typeParam Schema Generated Entity state schema.
+   * @typeParam Columns Registered columns for that schema.
+   * @typeParam Name Local name of the state's first identifier field.
+   * @param input State schema, columns, and canonical identifier field name.
+   * @returns New context-free query draft.
+   */
+  describe<
+    Schema extends GenMessage<Message>,
+    Columns extends EntityColumnCollection<Schema>,
+    Name extends keyof MessageShape<Schema> & string,
+  >(input: {
+    readonly schema: Schema;
+    readonly columns: Columns;
+    readonly idField: Name;
+  }): EntityQueryDraft<Schema, Columns, Name>;
 }> = Object.freeze({
   /**
    * Creates a validated equality comparison for a registered column.
@@ -734,6 +922,27 @@ export const EntityQuery: Readonly<{
     readonly context: ActorContext;
   }): EntityQueryBuilder<Schema, Columns> {
     return new EntityQueryBuilder(input);
+  },
+
+  /**
+   * Creates a context-free draft bound to the state's first identifier field.
+   *
+   * @typeParam Schema Generated Entity state schema.
+   * @typeParam Columns Registered columns for that schema.
+   * @typeParam Name Local name of the state's first identifier field.
+   * @param input State schema, columns, and canonical identifier field name.
+   * @returns New context-free query draft.
+   */
+  describe<
+    Schema extends GenMessage<Message>,
+    Columns extends EntityColumnCollection<Schema>,
+    Name extends keyof MessageShape<Schema> & string,
+  >(input: {
+    readonly schema: Schema;
+    readonly columns: Columns;
+    readonly idField: Name;
+  }): EntityQueryDraft<Schema, Columns, Name> {
+    return new EntityQueryDraft(input);
   },
 });
 
@@ -1057,6 +1266,7 @@ const EntityQueryWire = Object.freeze({
    */
   packField(field: EntityColumn["descriptor"], value: unknown) {
     if (field === undefined) throw new TypeError("Entity query field descriptor is required.");
+    EntityQueryWire.requireFieldValue(field, value);
     if (field.fieldKind === "message") {
       return EntityQueryWire.packMessage(field.message as GenMessage<Message>, value as never);
     }
@@ -1070,6 +1280,28 @@ const EntityQueryWire = Object.freeze({
       throw new TypeError("Entity query field kind is unsupported.");
     const schema = EntityQueryWire.scalarSchema(field.scalar);
     return EntityQueryWire.packMessage(schema, create(schema, { value } as never));
+  },
+
+  /**
+   * Checks an ID or column operand against its declared Protobuf field kind.
+   *
+   * @param field Declared state field used by the query.
+   * @param value Operand to validate before wire packing.
+   */
+  requireFieldValue(field: NonNullable<EntityColumn["descriptor"]>, value: unknown): void {
+    const facts = EntityFieldClassification.classify(field);
+    if (!facts.supported) throw new TypeError(`Entity query field "${field.name}" is unsupported.`);
+    const valid =
+      facts.valueKind === "message"
+        ? typeof value === "object" &&
+          value !== null &&
+          Reflect.get(value, "$typeName") === facts.messageType
+        : facts.valueKind === "bytes"
+          ? value instanceof Uint8Array
+          : facts.valueKind === "enum" || facts.valueKind === "number"
+            ? typeof value === "number" && Number.isFinite(value)
+            : typeof value === facts.valueKind;
+    if (!valid) throw new TypeError(`Entity query value for "${field.name}" has the wrong type.`);
   },
 
   /**

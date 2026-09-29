@@ -243,6 +243,60 @@ const bufTimeoutMs = 300_000;
 const bufMaxBuffer = 1_048_576;
 
 /**
+ * Builds Buf configuration for the staged Proto generation transaction.
+ */
+const BufTemplate = Object.freeze({
+  /**
+   * Resolves a plugin beside Proto Tools source or build output.
+   *
+   * @param name Plugin module basename.
+   * @returns Absolute module path passed to Buf.
+   */
+  pluginPath(name: string): string {
+    const extension = import.meta.url.endsWith(".ts") ? "ts" : "js";
+    return fileURLToPath(new URL(`./${name}.${extension}`, import.meta.url));
+  },
+
+  /**
+   * Describes one TypeScript plugin for Buf's generation template.
+   *
+   * @param executable Direct executable or Node plugin module.
+   * @param node Whether Node must launch the module.
+   * @returns YAML lines for the plugin.
+   */
+  plugin(executable: string, node: boolean): readonly string[] {
+    return [
+      node ? "  - local:" : `  - local: ${executable}`,
+      ...(node ? [`      - ${process.execPath}`, `      - ${executable}`] : []),
+      "    out: output",
+      "    opt:",
+      "      - target=ts",
+      "      - import_extension=js",
+    ];
+  },
+
+  /**
+   * Writes the normal Buf template with query generation for model packages.
+   *
+   * @param moduleRoot Staged Buf module directory.
+   * @param protocGenEs Protobuf-ES generator executable.
+   */
+  write(moduleRoot: string, protocGenEs: string): void {
+    writeFileSync(join(moduleRoot, "buf.yaml"), "version: v2\nmodules:\n  - path: .\n", "utf8");
+    const plugins = [
+      ...BufTemplate.plugin(protocGenEs, false),
+      ...BufTemplate.plugin(BufTemplate.pluginPath("rejection-generator"), true),
+      ...BufTemplate.plugin(BufTemplate.pluginPath("entity-query-generator"), true),
+    ];
+    writeFileSync(
+      join(moduleRoot, "buf.gen.yaml"),
+      ["version: v2", "plugins:", ...plugins, ""].join("\n"),
+      "utf8",
+    );
+  },
+});
+
+/**
  * Bounded seams for atomic application-registry publication failures.
  */
 export interface CompositionOperations {
@@ -332,12 +386,29 @@ function removeSnapshotClaim(
 /**
  * Reports Proto artifact generation failures.
  */
-const ProtoGenerationErrors: Readonly<{ fail(owner: string, message: string): never }> =
-  Object.freeze({
-    fail(owner: string, message: string): never {
-      throw new Error(`spine-proto: ${owner}: ${message}`);
-    },
-  });
+interface ProtoGenerationFailure {
+  /**
+   * Throws a package-scoped Proto generation error.
+   *
+   * @param owner Package or tool reporting the failure.
+   * @param message Specific failure detail.
+   * @returns Never; this method always throws.
+   */
+  fail(owner: string, message: string): never;
+}
+
+const ProtoGenerationErrors: Readonly<ProtoGenerationFailure> = Object.freeze({
+  /**
+   * Throws a package-scoped Proto generation error.
+   *
+   * @param owner Package or tool reporting the failure.
+   * @param message Specific failure detail.
+   * @returns Never; this method always throws.
+   */
+  fail(owner: string, message: string): never {
+    throw new Error(`spine-proto: ${owner}: ${message}`);
+  },
+});
 
 /**
  * Generates and composes deterministic Protobuf package artifacts.
@@ -461,6 +532,14 @@ const protoGeneration = Object.freeze({
     }
   },
 
+  /**
+   * Creates a generation claim after removing dead claims and rejecting live ones.
+   *
+   * @param packageRoot Package directory containing claim files.
+   * @param packageName Package named in claim errors.
+   * @param operations Filesystem and liveness seams.
+   * @returns Claim to release after generation.
+   */
   acquireLock(
     packageRoot: string,
     packageName: string,
@@ -519,6 +598,13 @@ const protoGeneration = Object.freeze({
     return { path: lock, token };
   },
 
+  /**
+   * Removes a generation claim after checking its token.
+   *
+   * @param lock Claim created by acquireLock.
+   * @param packageName Package named in cleanup errors.
+   * @param operations Filesystem seams used for cleanup.
+   */
   releaseLock(
     lock: GenerationLock,
     packageName: string,
@@ -595,6 +681,14 @@ const protoGeneration = Object.freeze({
     ManifestFile.writeAtomically(target, source, operations.registryOperations);
   },
 
+  /**
+   * Copies regular Proto sources into the staged Buf module.
+   *
+   * @param packageRoot Model package directory.
+   * @param protoRoot Proto directory inside the package.
+   * @param destination Staged Buf module directory.
+   * @param protoFiles Manifest paths belonging to this model.
+   */
   copyOwnedSources(
     packageRoot: string,
     protoRoot: string,
@@ -610,8 +704,18 @@ const protoGeneration = Object.freeze({
     }
   },
 
+  /**
+   * Checks for a direct core runtime dependency when query or rejection code was generated.
+   *
+   * @param packageRoot Model package directory containing package.json.
+   * @param packageName Package named in dependency errors.
+   * @param output Staged generated files inspected for query or rejection companions.
+   */
   assertRejectionRuntimeDependency(packageRoot: string, packageName: string, output: string): void {
-    if (!protoGeneration.files(output).some((file) => file.endsWith("rejections.ts"))) return;
+    const files = protoGeneration.files(output);
+    const rejections = files.some((file) => file.endsWith("rejections.ts"));
+    const queries = files.some((file) => file.endsWith("_query.ts"));
+    if (!rejections && !queries) return;
     let dependencies: unknown;
     try {
       const packageJson: unknown = JSON.parse(
@@ -624,6 +728,12 @@ const protoGeneration = Object.freeze({
     } catch {
       ProtoGenerationErrors.fail(packageName, "cannot read package runtime dependencies");
     }
+    const requirement =
+      rejections && queries
+        ? "rejection and Entity query generation require"
+        : rejections
+          ? "rejection generation requires"
+          : "Entity query generation requires";
     if (
       dependencies === null ||
       typeof dependencies !== "object" ||
@@ -631,10 +741,16 @@ const protoGeneration = Object.freeze({
     )
       ProtoGenerationErrors.fail(
         packageName,
-        "rejection generation requires direct runtime dependency @spine-event-engine/core",
+        `${requirement} direct runtime dependency @spine-event-engine/core`,
       );
   },
 
+  /**
+   * Copies a direct dependency's exported Proto sources into the staged module.
+   *
+   * @param model Dependency name and installed root.
+   * @param destination Staged Buf module directory.
+   */
   copyDependencySources(
     model: { readonly name: string; readonly root: string },
     destination: string,
@@ -649,6 +765,13 @@ const protoGeneration = Object.freeze({
     }
   },
 
+  /**
+   * Resolves a model package's exported manifest through package exports.
+   *
+   * @param packageRoot Installed package directory.
+   * @param packageName Model package name.
+   * @returns Resolved manifest path.
+   */
   resolveExportedManifest(packageRoot: string, packageName: string): string {
     try {
       return createRequire(join(packageRoot, "package.json")).resolve(
@@ -659,6 +782,14 @@ const protoGeneration = Object.freeze({
     }
   },
 
+  /**
+   * Resolves one exported Proto source through a dependency's package exports.
+   *
+   * @param requesterRoot Requesting model package directory.
+   * @param packageName Dependency package name.
+   * @param protoPath Exported Proto path.
+   * @returns Resolved Proto source path.
+   */
   resolveExportedProto(requesterRoot: string, packageName: string, protoPath: string): string {
     try {
       return createRequire(join(requesterRoot, "package.json")).resolve(
@@ -672,6 +803,12 @@ const protoGeneration = Object.freeze({
     }
   },
 
+  /**
+   * Rejects missing, symbolic, and nonregular exported Proto sources.
+   *
+   * @param path Source path to inspect.
+   * @param owner Package named in the failure.
+   */
   assertRegularFile(path: string, owner: string): void {
     try {
       const entry = lstatSync(path);
@@ -681,6 +818,15 @@ const protoGeneration = Object.freeze({
     }
   },
 
+  /**
+   * Executes staged Protobuf, rejection, and eligible query generation and validates descriptors.
+   *
+   * @param moduleRoot Staged Buf module directory.
+   * @param output Staged generated-output directory.
+   * @param owned Proto paths belonging to the model.
+   * @param packageName Package named in Buf failures.
+   * @param runner Subprocess seam used for Buf invocations.
+   */
   runBuf(
     moduleRoot: string,
     output: string,
@@ -690,34 +836,7 @@ const protoGeneration = Object.freeze({
       spawnSync(command, arguments_, options),
   ): void {
     const protocGenEs = protoGeneration.resolveTool("@bufbuild/protoc-gen-es/bin/protoc-gen-es");
-    const rejectionGenerator = fileURLToPath(
-      new URL(
-        import.meta.url.endsWith(".ts") ? "./rejection-generator.ts" : "./rejection-generator.js",
-        import.meta.url,
-      ),
-    );
-    writeFileSync(join(moduleRoot, "buf.yaml"), "version: v2\nmodules:\n  - path: .\n", "utf8");
-    writeFileSync(
-      join(moduleRoot, "buf.gen.yaml"),
-      [
-        "version: v2",
-        "plugins:",
-        `  - local: ${protocGenEs}`,
-        "    out: output",
-        "    opt:",
-        "      - target=ts",
-        "      - import_extension=js",
-        "  - local:",
-        `      - ${process.execPath}`,
-        `      - ${rejectionGenerator}`,
-        "    out: output",
-        "    opt:",
-        "      - target=ts",
-        "      - import_extension=js",
-        "",
-      ].join("\n"),
-      "utf8",
-    );
+    BufTemplate.write(moduleRoot, protocGenEs);
     const buf = protoGeneration.resolveTool("@bufbuild/buf/bin/buf");
     const generated = runner(
       buf,
@@ -741,6 +860,16 @@ const protoGeneration = Object.freeze({
       ProtoGenerationErrors.fail(packageName, "Buf generated no owned output");
   },
 
+  /**
+   * Creates interface companions after primary Proto generation.
+   *
+   * @param moduleRoot Staged Buf module directory.
+   * @param output Staged generated-output directory.
+   * @param owned Proto paths belonging to the model.
+   * @param packageName Package named in interface generation failures.
+   * @param sourceView Authored-source view passed to the companion plugin.
+   * @param runner Subprocess seam used for Buf invocation.
+   */
   runInterfacePhase(
     moduleRoot: string,
     output: string,
@@ -791,6 +920,13 @@ const protoGeneration = Object.freeze({
     protoGeneration.assertBufResult(packageName, "interface generation", generated);
   },
 
+  /**
+   * Converts a failed Buf subprocess result into a package-scoped error.
+   *
+   * @param packageName Package named in the error.
+   * @param phase Generation or descriptor-validation phase.
+   * @param result Subprocess exit and diagnostic result.
+   */
   assertBufResult(
     packageName: string,
     phase: "generation" | "interface generation" | "validation",
@@ -815,6 +951,12 @@ const protoGeneration = Object.freeze({
       );
   },
 
+  /**
+   * Resolves a packaged Buf or Protobuf-ES executable.
+   *
+   * @param specifier Package subpath of the executable.
+   * @returns Resolved executable path.
+   */
   resolveTool(specifier: string): string {
     try {
       return createRequire(import.meta.url).resolve(specifier);
@@ -826,6 +968,14 @@ const protoGeneration = Object.freeze({
     }
   },
 
+  /**
+   * Replaces direct dependency schema imports with their exported model paths.
+   *
+   * @param output Staged generated-output directory.
+   * @param owners Model package and export for each Proto source.
+   * @param currentPackage Package being generated.
+   * @param directDependencies Dependencies permitted in generated imports.
+   */
   rewriteDependencyImports(
     output: string,
     owners: Readonly<
@@ -859,6 +1009,14 @@ const protoGeneration = Object.freeze({
     }
   },
 
+  /**
+   * Writes the Proto module registry from generated schemas and direct dependencies.
+   *
+   * @param output Staged generated-output directory.
+   * @param exportName Name exported by the module descriptor.
+   * @param packageName Model package represented by the descriptor.
+   * @param dependencies Direct model dependencies included in the registry.
+   */
   writeModule(
     output: string,
     exportName: string,
@@ -919,6 +1077,16 @@ const protoGeneration = Object.freeze({
     writeFileSync(join(output, "proto-module.ts"), source, "utf8");
   },
 
+  /**
+   * Publishes staged output and its manifest, restoring both after a failure.
+   *
+   * @param packageRoot Model package directory.
+   * @param generatedRoot Generated directory relative to that package.
+   * @param output Staged generated-output directory.
+   * @param manifest New manifest content.
+   * @param onRename Filesystem rename seam.
+   * @param manifestOperations Atomic manifest-write seams.
+   */
   publish(
     packageRoot: string,
     generatedRoot: string,
@@ -956,6 +1124,15 @@ const protoGeneration = Object.freeze({
     }
   },
 
+  /**
+   * Returns an existing generation ID when staged output matches published output.
+   *
+   * @param packageRoot Model package directory.
+   * @param target Published generated-output directory.
+   * @param output Staged generated-output directory.
+   * @param manifest Proposed manifest containing the generation ID.
+   * @returns Existing generation ID when output is equivalent.
+   */
   reusableGenerationId(
     packageRoot: string,
     target: string,
@@ -970,6 +1147,12 @@ const protoGeneration = Object.freeze({
     );
   },
 
+  /**
+   * Lists regular generated files under bounded depth and entry counts.
+   *
+   * @param root Generated directory to traverse.
+   * @returns File paths beneath the root.
+   */
   files(root: string): string[] {
     const output: string[] = [];
     const pending: (readonly [string, number])[] = [[root, 0]];

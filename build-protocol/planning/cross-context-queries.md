@@ -9,7 +9,9 @@ The complete corrected plan received a fresh standalone review without memory;
 its three implementation-plan findings are incorporated below.
 Extension implementation is underway. Masking removal passed focused verification
 and independent API, reliability, style and documentation review; accepted findings
-are fixed. Shared typed queries and normal DSL generation are next.
+are fixed. Shared typed queries and normal DSL generation passed independent
+review and focused verification; all accepted corrections are resolved.
+Repository reads and asynchronous routing follow.
 GitHub CI remains unverified.
 Updated: 29 September 2026.
 Branch: `cross-context-queries`.
@@ -315,10 +317,15 @@ repository's canonical ID-field definition, not a property assumed to be `id`.
 Generate field accessors and only valid comparison methods:
 
 - `customerId().is(value)` for equality.
-- `totalAmount().isGreaterThan(value)`, `isGreaterOrEqualTo(value)`,
-  `isLessThan(value)` and `isLessOrEqualTo(value)` for ordered values.
+- `totalAmount().isGreaterThan(value)`, `isAtLeast(value)`,
+  `isLessThan(value)` and `isAtMost(value)` for ordered values. The inclusive
+  comparisons use these short names to meet the repository's naming rule;
+  their planned greater-or-equal/less-or-equal behavior is unchanged.
 - Successive conditions mean AND; `either((q) => ..., (q) => ...)` means OR,
   including nested combinations supported by the existing query representation.
+  Branch callbacks build conditions synchronously. IDs, ordering, result limits
+  and `build()` stay on the outer query; reject these operations inside branches
+  in types and at runtime instead of silently ignoring them.
 - Preserve ID filtering, ordering, explicit positive limits, and the
   version/archived/deleted columns without exposing raw metadata. Do not generate
   field-selection methods: every returned state is complete.
@@ -333,6 +340,13 @@ support, not on the server or a Node-only client. Move the column generation
 work into the normal `proto-tools` flow rather than retain a Todo-only workaround.
 Keep public package exports, generated declarations and generation fingerprints
 consistent. Query generation must work in an external model package too.
+
+Keep deliberate invalid metadata fixtures outside the normal query request using
+the existing test subprocess hook and a repository-local fixture runner. Generate
+all their Protobuf descriptors, omit query output for core's mixed negative
+fixtures, and exclude only server's explicit `invalid-column.proto` from its
+strict query pass. The published generator has no fixture package-name exceptions
+or validation-bypass option. Preserve interface generation and atomic publication.
 
 Repository execution obtains its context from the current routing invocation.
 PM execution continues using the current handler context and the approved

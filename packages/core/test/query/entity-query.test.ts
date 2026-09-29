@@ -25,12 +25,13 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { EntityColumn, EntityQuery } from "../../src/index.js";
-import { GeneratedEntityColumns } from "../../src/codegen/index.js";
+import { GeneratedEntityColumns, GeneratedEntityQueries } from "../../src/codegen/index.js";
 import {
   ProjectStatus,
   ProjectOverviewStateSchema,
   ProjectOverviewWithMetricsStateSchema,
 } from "../../test-fixtures/entity-column-fixtures.js";
+import { ProjectLeadSchema } from "../../test-fixtures/generated/project_states_pb.js";
 
 const columns = EntityColumn.register(
   ProjectOverviewStateSchema,
@@ -92,6 +93,231 @@ const scalarColumns = EntityColumn.register(
 const selectedColumns: Pick<typeof columns, "priority" | "status"> = columns;
 
 describe("EntityQuery", () => {
+  it("builds nested generated-style conditions with typed ordered and lifecycle columns", () => {
+    const generated = GeneratedEntityQueries.define({
+      schema: ProjectOverviewStateSchema,
+      columns,
+      idField: "id",
+      accessors: {
+        title: "title",
+        priority: "priority",
+        status: "status",
+        archived: "archived",
+        version: "version",
+      },
+    });
+    const query = generated
+      .create()
+      .title()
+      .is("Open")
+      .either(
+        (branch) => branch.priority().isGreaterThan(2).status().is(ProjectStatus.OPEN),
+        (branch) => branch.archived().is(false),
+      )
+      .version()
+      .isAtLeast(create(VersionSchema, { number: 2 }))
+      .orderBy("priority", "desc")
+      .limit(4)
+      .build();
+
+    expect(query.buildPlan()).toMatchObject({
+      predicate: {
+        kind: "all",
+        predicates: [
+          { kind: "comparison", column: "title", operator: "equal", value: "Open" },
+          { kind: "either" },
+          { kind: "comparison", column: "version", operator: "greaterOrEqual" },
+        ],
+      },
+      order: [{ column: "priority", direction: "desc" }],
+      limit: 4,
+    });
+    const builder = generated.create();
+    const status = builder.status();
+    expect(status).toBeDefined();
+    type StatusCannotOrder = "isGreaterThan" extends keyof typeof status ? false : true;
+    type MissingAccessor = "missing" extends keyof typeof builder ? false : true;
+    const statusCannotOrder: StatusCannotOrder = true;
+    const missingAccessor: MissingAccessor = true;
+    expect([statusCannotOrder, missingAccessor]).toEqual([true, true]);
+  });
+
+  it("keeps either branches synchronous and limited to conditions", () => {
+    const generated = GeneratedEntityQueries.define({
+      schema: ProjectOverviewStateSchema,
+      columns,
+      idField: "id",
+      accessors: { title: "title", priority: "priority" },
+    });
+    const query = generated
+      .create()
+      .byId("task-1")
+      .either(
+        (branch) =>
+          branch
+            .title()
+            .is("Open")
+            .either(
+              (nested) => nested.priority().isAtLeast(2),
+              (nested) => {
+                nested.title().is("Pending");
+              },
+            ),
+        (branch) => {
+          branch.priority().isAtMost(5);
+        },
+      )
+      .orderBy("priority")
+      .limit(3)
+      .build();
+    expect(query.buildPlan()).toMatchObject({
+      predicate: { kind: "all", predicates: [{ kind: "ids" }, { kind: "either" }] },
+      order: [{ column: "priority", direction: "asc" }],
+      limit: 3,
+    });
+    expect(() =>
+      generated.create().either(
+        (branch) => {
+          (branch as unknown as { byId(id: string): void }).byId("task-2");
+        },
+        (branch) => branch.title().is("Open"),
+      ),
+    ).toThrow(/branch.*byId/u);
+    for (const operation of ["orderBy", "limit", "build"] as const) {
+      expect(() =>
+        generated.create().either(
+          (branch) => {
+            const afterComparison = branch.title().is("Open") as unknown as Record<
+              string,
+              (...args: never[]) => unknown
+            >;
+            afterComparison[operation]?.("priority" as never);
+          },
+          (branch) => branch.title().is("Pending"),
+        ),
+      ).toThrow(new RegExp(`branch.*${operation}`, "u"));
+    }
+    expect(() =>
+      generated.create().either(
+        (async () => {
+          await Promise.resolve();
+        }) as never,
+        (branch) => branch.title().is("Open"),
+      ),
+    ).toThrow(/synchronous/u);
+    const checkBranchTypes = () => {
+      generated.create().either(
+        (branch) => {
+          const conditions = branch.title().is("Open");
+          expect(conditions).toBeDefined();
+          type BranchOnly =
+            Extract<keyof typeof conditions, "byId" | "orderBy" | "limit" | "build"> extends never
+              ? true
+              : false;
+          const branchOnly: BranchOnly = true;
+          expect(branchOnly).toBe(true);
+        },
+        (branch) => branch.title().is("Pending"),
+      );
+      generated.create().either(
+        // @ts-expect-error Async branches cannot finish after query construction.
+        async (branch) => {
+          await Promise.resolve();
+          branch.title().is("Open");
+        },
+        (branch) => branch.title().is("Pending"),
+      );
+    };
+    expect(checkBranchTypes).toBeDefined();
+  });
+
+  it("rejects malformed dynamic generated accessors and empty OR branches", () => {
+    expect(() =>
+      GeneratedEntityQueries.define({
+        schema: ProjectOverviewStateSchema,
+        columns,
+        idField: "id",
+        accessors: { build: "title" } as never,
+      }).create(),
+    ).toThrow(/accessor "build" is invalid/u);
+    expect(() =>
+      GeneratedEntityQueries.define({
+        schema: ProjectOverviewStateSchema,
+        columns,
+        idField: "id",
+        accessors: { title: "missing" } as never,
+      }).create(),
+    ).toThrow(/accessor "title" is invalid/u);
+    const generated = GeneratedEntityQueries.define({
+      schema: ProjectOverviewStateSchema,
+      columns,
+      idField: "id",
+      accessors: { title: "title" },
+    });
+    expect(() => generated.create().either((branch) => branch.title().is("Open"))).toThrow(
+      /requires two branches/u,
+    );
+    expect(() =>
+      generated.create().either(
+        () => undefined,
+        (branch) => branch.title().is("Open"),
+      ),
+    ).toThrow(/branch has no conditions/u);
+  });
+
+  it("builds an independent context-free description for later execution", () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const owner = create(ProjectLeadSchema, { value: "first" });
+    const dueAt = create(TimestampSchema, { seconds: 12n });
+    const draft = EntityQuery.describe({
+      schema: ProjectOverviewStateSchema,
+      columns,
+      idField: "id",
+    })
+      .byId(...Array.from({ length: 1_201 }, (_, index) => `task-${String(index)}`))
+      .where(EntityQuery.eq(columns.fingerprint, bytes))
+      .where(EntityQuery.eq(columns.owner, owner))
+      .where(EntityQuery.ge(columns.dueAt, dueAt))
+      .orderBy(columns.priority)
+      .limit(5);
+    const built = draft.build();
+    bytes[0] = 9;
+    owner.value = "later";
+    dueAt.seconds = 99n;
+    draft.where(EntityQuery.eq(columns.title, "Later"));
+
+    expect(built.build().context).toBeUndefined();
+    expect(built.build().target?.criterion.case).toBe("filters");
+    const plan = built.buildPlan();
+    expect(plan.predicate?.kind).toBe("all");
+    if (plan.predicate?.kind !== "all") throw new Error("Expected combined predicates.");
+    expect(plan.predicate.predicates[0]).toMatchObject({ kind: "ids" });
+    expect(
+      plan.predicate.predicates[0]?.kind === "ids" ? plan.predicate.predicates[0].ids : [],
+    ).toHaveLength(1_201);
+    expect(plan.predicate.predicates[1]).toEqual({
+      kind: "comparison",
+      column: "fingerprint",
+      operator: "equal",
+      value: new Uint8Array([1, 2, 3]),
+    });
+    expect(plan.predicate.predicates[2]).toMatchObject({
+      kind: "comparison",
+      column: "owner",
+      value: { value: "first" },
+    });
+    expect(plan.predicate.predicates[3]).toMatchObject({
+      kind: "comparison",
+      column: "due_at",
+      value: { seconds: 12n },
+    });
+    expect(built.buildPlan()).toEqual(plan);
+    if (plan.predicate.predicates[1]?.kind === "comparison") {
+      (plan.predicate.predicates[1].value as Uint8Array)[0] = 8;
+    }
+    expect(built.buildPlan().predicate).not.toEqual(plan.predicate);
+  });
+
   it("compiles the shared DSL to a storage-neutral execution plan", () => {
     const plan = EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
       .byId("task-1")
@@ -210,11 +436,6 @@ describe("EntityQuery", () => {
         undefined as never,
       ),
     ).toThrow("must not be empty");
-    expect(() =>
-      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context }).byId(
-        ...Array.from({ length: 1_001 }, (_, index) => `task-${String(index)}`),
-      ),
-    ).toThrow("at most 1000");
   });
 
   it("types ID filters from the selected Entity state", () => {

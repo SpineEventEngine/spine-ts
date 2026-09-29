@@ -30,7 +30,11 @@ import {
   type EntityPredicate,
   type EntityQueryBuilder,
 } from "@spine-event-engine/core";
-import type { EntityQueryPlan } from "@spine-event-engine/core/spi/entity-query-plan";
+import { EntityQueryDescription } from "@spine-event-engine/core/codegen";
+import type {
+  EntityQueryPlan,
+  EntityQueryPlanPredicate,
+} from "@spine-event-engine/core/spi/entity-query-plan";
 import {
   type ConstraintViolation,
   type Event,
@@ -93,6 +97,37 @@ interface ProcessManagerQueryCapability {
 }
 
 const processManagerQueries = new WeakMap<object, ProcessManagerQueryCapability>();
+
+/**
+ * Keeps Process Manager execution limits at the read boundary.
+ */
+const ProcessManagerQueryLimits = Object.freeze({
+  /**
+   * Rejects plans that exceed Process Manager result or explicit-ID limits.
+   *
+   * @param plan Compiled query plan to execute.
+   */
+  check(plan: EntityQueryPlan): void {
+    if (plan.limit !== undefined && plan.limit > 1_000) {
+      throw new TypeError("Process Manager query limit may be at most 1000.");
+    }
+    if (plan.predicate !== undefined && this.ids(plan.predicate) > 1_000) {
+      throw new TypeError("Process Manager query ID filter may contain at most 1000 IDs.");
+    }
+  },
+
+  /**
+   * Returns the number of explicit IDs in a compiled predicate tree.
+   *
+   * @param predicate Compiled filter node.
+   * @returns Number of explicit IDs in that node.
+   */
+  ids(predicate: EntityQueryPlanPredicate): number {
+    if (predicate.kind === "ids") return predicate.ids.length;
+    if (predicate.kind === "comparison") return 0;
+    return predicate.predicates.reduce((total, child) => total + this.ids(child), 0);
+  },
+});
 
 /**
  * Binds the repository-scoped query capability for one Process Manager invocation.
@@ -241,11 +276,9 @@ export class ProcessManagerQuery<
    */
   async read(): Promise<readonly MessageShape<Schema>[]> {
     const capability = processManagerQueryAccess.require(this.#entity);
-    const states = await capability.execute(
-      this.#builder.buildPlan(),
-      this.#schema,
-      this.#builder.build(),
-    );
+    const plan = this.#builder.buildPlan();
+    ProcessManagerQueryLimits.check(plan);
+    const states = await capability.execute(plan, this.#schema, this.#builder.build());
     return Object.freeze(states.slice(0, 1_000));
   }
 
@@ -1273,29 +1306,71 @@ export abstract class ProcessManager<
   }
 
   /**
-   * Starts a typed, eventually consistent read-side query during handler execution.
+   * Binds a detached query for a read in the active Process Manager handler.
    *
-   * The repository binds this capability only while it invokes a Process Manager
-   * handler. Reads use that signal's actor and tenant; they cannot mutate state
-   * or select a different tenant. A target in another context must be registered
-   * by the same Server, visible for queries, and compatible with the effective
-   * operation tenant.
+   * @typeParam QuerySchema Queried Entity state schema.
+   * @typeParam Id State identifier type carried by the query.
+   * @param query Context-free query to execute with the handler actor and tenant.
+   * @returns Read facade for the active handler scope.
+   */
+  protected select<QuerySchema extends DescriptorMessageSchema, Id>(
+    query: EntityQueryDescription<QuerySchema, Id>,
+  ): Readonly<{ read(): Promise<readonly MessageShape<QuerySchema>[]> }>;
+
+  /**
+   * Starts the existing schema-and-columns query builder for the active handler.
    *
-   * @typeParam QuerySchema Generated query-visible Entity state schema to query.
-   * @typeParam Columns Descriptor-backed columns available for that schema.
-   * @param schema Query-visible Entity state schema to query.
-   * @param columns Generated descriptor-backed columns for `schema`.
-   * @returns A read-only Entity query.
+   * @typeParam QuerySchema Queried Entity state schema.
+   * @typeParam Columns Registered columns selected for the builder.
+   * @param schema Query-visible Entity state schema.
+   * @param columns Registered columns for that schema.
+   * @returns Read-only Process Manager query builder.
    */
   protected select<
     QuerySchema extends DescriptorMessageSchema,
     Columns extends ProcessManagerQueryColumns<QuerySchema>,
-  >(schema: QuerySchema, columns: Columns): ProcessManagerQuery<QuerySchema, Columns> {
+  >(schema: QuerySchema, columns: Columns): ProcessManagerQuery<QuerySchema, Columns>;
+
+  /**
+   * Binds either query form to the active handler capability.
+   *
+   * @typeParam QuerySchema Queried Entity state schema.
+   * @typeParam Columns Registered columns for the legacy builder.
+   * @typeParam Id Identifier type of a detached query.
+   * @param schemaOrQuery State schema or built context-free query.
+   * @param columns Columns required with a state schema.
+   * @returns Legacy builder or detached-query read facade.
+   */
+  protected select<
+    QuerySchema extends DescriptorMessageSchema,
+    Columns extends ProcessManagerQueryColumns<QuerySchema>,
+    Id,
+  >(
+    schemaOrQuery: QuerySchema | EntityQueryDescription<QuerySchema, Id>,
+    columns?: Columns,
+  ):
+    | ProcessManagerQuery<QuerySchema, Columns>
+    | Readonly<{ read(): Promise<readonly MessageShape<QuerySchema>[]> }> {
     const capability = processManagerQueryAccess.require(this);
+    if (schemaOrQuery instanceof EntityQueryDescription) {
+      const query = schemaOrQuery;
+      return Object.freeze({
+        read: async (): Promise<readonly MessageShape<QuerySchema>[]> => {
+          const active = processManagerQueryAccess.require(this);
+          const plan = query.buildPlan();
+          ProcessManagerQueryLimits.check(plan);
+          const wire = query.build();
+          wire.context = clone(ActorContextSchema, active.actorContext);
+          const states = await active.execute(plan, query.schema, wire);
+          return Object.freeze(states.slice(0, 1_000));
+        },
+      });
+    }
+    if (columns === undefined) throw new TypeError("Process Manager query columns are required.");
     return new ProcessManagerQuery(
       this,
-      schema,
-      EntityQuery.select({ schema, columns, context: capability.actorContext }),
+      schemaOrQuery,
+      EntityQuery.select({ schema: schemaOrQuery, columns, context: capability.actorContext }),
     );
   }
 }

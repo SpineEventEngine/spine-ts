@@ -41,6 +41,8 @@ import {
   SubscriptionSchema,
   SubscriptionIdSchema,
   SubscriptionUpdateSchema,
+  EntityUpdatesSchema,
+  EntityStateUpdateSchema,
   TopicIdSchema,
   TargetSchema,
   type Topic,
@@ -56,6 +58,10 @@ import {
   type SubscriptionRetryPolicy,
 } from "../src/index.js";
 import { ProjectOverviewStateSchema } from "../../server/test-fixtures/generated/entity-metadata/project_states_pb.js";
+// prettier-ignore
+import {
+  ProjectOverviewStateQuery,
+} from "../../server/test-fixtures/generated/entity-metadata/project_states_query.js";
 
 const browserFactories = vi.hoisted(() => ({
   connect: vi.fn(),
@@ -2833,6 +2839,198 @@ describe("Client", () => {
     expect(reads).toBe(1);
     await client.close();
     await expect(client.asGuest().send(query)).rejects.toThrow("client is closing");
+  });
+
+  it("reuses one generated query in concurrent tenant-scoped sends", async () => {
+    const shared = ProjectOverviewStateQuery.create().name().is("ready").build();
+    const seen: { readonly tenant: string | undefined; readonly actor: string | undefined }[] = [];
+    const clientFor = (tenant: string) =>
+      Client.usingTransport(
+        {
+          transport: unaryTransport((method, input) => {
+            if (method.name === "Read") {
+              const query = input as Query;
+              const tenant = query.context?.tenantId?.kind;
+              seen.push({
+                tenant: tenant?.case === "value" ? tenant.value : undefined,
+                actor: query.context?.actor?.value,
+              });
+            }
+            return create(QueryResponseSchema);
+          }),
+        },
+        { tenant },
+      );
+    const first = clientFor("tenant-a");
+    const second = clientFor("tenant-b");
+    try {
+      await Promise.all([
+        first.onBehalfOf("alice").send(shared),
+        second.onBehalfOf("bob").send(shared),
+      ]);
+      expect(seen).toEqual(
+        expect.arrayContaining([
+          { tenant: "tenant-a", actor: "alice" },
+          { tenant: "tenant-b", actor: "bob" },
+        ]),
+      );
+      expect(shared.build().context).toBeUndefined();
+    } finally {
+      await Promise.all([first.close(), second.close()]);
+    }
+  });
+
+  it("reuses one authoritative generated query across subscription tenants", async () => {
+    const shared = ProjectOverviewStateQuery.create().build();
+    const seen: Query[] = [];
+    const attempts = new Map<string, { subscribes: number; streams: number }>();
+    const clientFor = (tenant: string) => {
+      const current = { subscribes: 0, streams: 0 };
+      attempts.set(tenant, current);
+      let acceptedTopic: Topic | undefined;
+      return Client.usingTransport(
+        {
+          transport: unaryTransport(
+            (method, input) => {
+              if (method.name !== "Subscribe") return create(ResponseSchema);
+              current.subscribes++;
+              acceptedTopic = input as Topic;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, {
+                  value: `${tenant}-${String(current.subscribes)}`,
+                }),
+                topic: acceptedTopic,
+              });
+            },
+            (query) => {
+              seen.push(query as Query);
+              return create(QueryResponseSchema, {
+                response: create(ResponseSchema, {
+                  status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+                }),
+                message: [
+                  create(EntityStateWithVersionSchema, {
+                    state: AnyMessages.pack(
+                      ProjectOverviewStateSchema,
+                      create(ProjectOverviewStateSchema, {
+                        id: tenant,
+                        name: `recovered-${tenant}`,
+                        priority: 7,
+                      }),
+                    ),
+                  }),
+                ],
+              });
+            },
+            () => {
+              current.streams++;
+              if (current.streams === 1) return emptyUpdates();
+              return (async function* () {
+                yield create(SubscriptionUpdateSchema, {
+                  subscription: create(SubscriptionSchema, {
+                    id: create(SubscriptionIdSchema, { value: `${tenant}-2` }),
+                    topic: requireValue(acceptedTopic, "accepted topic"),
+                  }),
+                  update: {
+                    case: "entityUpdates",
+                    value: create(EntityUpdatesSchema, {
+                      update: [
+                        create(EntityStateUpdateSchema, {
+                          kind: {
+                            case: "state",
+                            value: AnyMessages.pack(
+                              ProjectOverviewStateSchema,
+                              create(ProjectOverviewStateSchema, {
+                                id: tenant,
+                                name: `live-${tenant}`,
+                                priority: 8,
+                              }),
+                            ),
+                          },
+                        }),
+                      ],
+                    }),
+                  },
+                });
+                await never<undefined>();
+              })();
+            },
+          ),
+        },
+        {
+          tenant,
+          subscriptions: {
+            retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+            scheduler: immediateScheduler(),
+          },
+        },
+      );
+    };
+    const first = clientFor("tenant-a");
+    const second = clientFor("tenant-b");
+    const firstSubscription = await first
+      .onBehalfOf("alice")
+      .createSubscription(create(TopicSchema, { target: shared.build().target }), {
+        kind: "entity",
+        authoritativeQuery: () => shared,
+      });
+    const secondSubscription = await second
+      .onBehalfOf("bob")
+      .createSubscription(create(TopicSchema, { target: shared.build().target }), {
+        kind: "entity",
+        authoritativeQuery: () => shared,
+      });
+    try {
+      await Promise.all([firstSubscription.activate(), secondSubscription.activate()]);
+      const [firstUpdates, secondUpdates] = [
+        firstSubscription.updates[Symbol.asyncIterator](),
+        secondSubscription.updates[Symbol.asyncIterator](),
+      ];
+      for (const [tenant, updates] of [
+        ["tenant-a", firstUpdates],
+        ["tenant-b", secondUpdates],
+      ] as const) {
+        const recovered = await updates.next();
+        if (recovered.done || recovered.value.kind !== "resynchronization")
+          throw new Error(`Expected ${tenant} resynchronization`);
+        const state = recovered.value.response.message[0]?.state;
+        if (state === undefined) throw new Error(`Missing ${tenant} recovered state`);
+        expect(AnyMessages.unpack(state, ProjectOverviewStateSchema)).toEqual(
+          create(ProjectOverviewStateSchema, {
+            id: tenant,
+            name: `recovered-${tenant}`,
+            priority: 7,
+          }),
+        );
+        const live = await updates.next();
+        if (
+          live.done ||
+          live.value.kind !== "update" ||
+          live.value.update.update.case !== "entityUpdates"
+        )
+          throw new Error(`Expected ${tenant} live Entity update`);
+        const liveState = live.value.update.update.value.update[0]?.kind;
+        if (liveState?.case !== "state") throw new Error(`Missing ${tenant} live state`);
+        expect(AnyMessages.unpack(liveState.value, ProjectOverviewStateSchema)).toEqual(
+          create(ProjectOverviewStateSchema, { id: tenant, name: `live-${tenant}`, priority: 8 }),
+        );
+        expect(attempts.get(tenant)).toEqual({ subscribes: 2, streams: 2 });
+      }
+      await vi.waitFor(() => {
+        expect(seen.some((query) => query.context?.actor?.value === "alice")).toBe(true);
+        expect(seen.some((query) => query.context?.actor?.value === "bob")).toBe(true);
+      });
+      expect(
+        seen.find((query) => query.context?.actor?.value === "alice")?.context?.tenantId?.kind,
+      ).toMatchObject({ case: "value", value: "tenant-a" });
+      expect(
+        seen.find((query) => query.context?.actor?.value === "bob")?.context?.tenantId?.kind,
+      ).toMatchObject({ case: "value", value: "tenant-b" });
+      expect(shared.build().context).toBeUndefined();
+    } finally {
+      await Promise.all([firstSubscription.cancel(), secondSubscription.cancel()]);
+      await Promise.all([first.close(), second.close()]);
+    }
   });
 
   it("allows pre-activation iteration and validates subscription topic and delivered identity", async () => {
