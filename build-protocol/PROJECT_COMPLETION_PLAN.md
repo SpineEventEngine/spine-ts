@@ -21,7 +21,11 @@ query destinations, and drain handlers before closing queried contexts. The
 implementation, independent reviews, full release suite and package-consumer
 checks are complete. All 5,061 tests pass at code checkpoint `506b73018`; all
 coverage thresholds pass. GitHub CI awaits a human-created PR for the branch.
-The work and review logs record the evidence and this remaining check.
+The work and review logs record the evidence and this remaining check. On
+29 September the human extended this same task with receiving-repository
+queries during routing, warning-only handling above 1,000 recipients, and a
+generated JVM-like query DSL with automatic column registration. That extension
+is in plan review, not implemented or covered by the original passing checks.
 
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
 remotely closed. The complete-replica deployment correction is closed through

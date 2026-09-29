@@ -1,6 +1,7 @@
 # Cross-context queries work log
 
-Started: 28 September 2026. Status: implementation in progress.
+Started: 28 September 2026. Status: original implementation locally verified;
+repository-query and generated-DSL extension in planning as of 29 September.
 Task/branch: `cross-context-queries`.
 Worktree: `/Users/armiol/.codex/worktrees/cross-context-queries/spine-ts`.
 Base: `2324311be8c23024f66cb2ba702fbe99a99e7dfb` from freshly fetched official origin.
@@ -425,3 +426,32 @@ PRs, and the local GitHub CLI credentials return 401. SSH pushes and public
 read-only API access work. The human has been asked to open the PR; no PR
 creation, merge, publication or credential change is authorized. Local work is
 verified, but final-SHA CI and protocol completion are not claimed.
+
+## Repository queries and generated DSL: plan extension
+
+The human approved receiving-repository-only queries during routing, all three
+methods (`findIds`, `findStates`, `find`), real Entity instances from `find`,
+asynchronous routing, and automatic generated query registration with a JVM-like
+fluent interface. More than 1,000 distinct final recipients must warn, not fail;
+the find methods must not warn. This adds work to the existing branch; it does
+not invalidate the recorded original verification but requires new verification
+after future implementation. Current authorization is written plan and review
+only, not implementation.
+
+Selected skills fully read: doc-coauthoring, planning-with-files and
+verification-before-completion. Session inventory and targeted `rg --files`
+confirm their installed entrypoints; expected-skill manifest and readable local
+skill-lock header were inspected. Use existing canonical plan/work/review files
+instead of the planning skill's duplicate root files or chat-memory catch-up.
+The human already supplied context and approved the proposal, so skip redundant
+interview/brainstorming steps from doc-coauthoring and proceed to fresh-reader
+review. No skill authorizes a broader change or automatic implementation.
+
+Main updates the plan and current status, then runs Markdown/whitespace checks.
+Expected standalone assignment: existing requirements splitter, explicit
+gpt-6-astra / high, fresh context with no chat history or memory. Review the
+complete requirements ledger and extended plan against current code and latest
+official JVM source; identify contradictions, missing decisions and small fixes.
+No files may be changed and no builds/tests or child agents may be launched by
+the reviewer. Desktop supports the explicit profile; separate actual runtime
+metadata is unavailable. Planning estimate given: 0.2–0.35 hours.

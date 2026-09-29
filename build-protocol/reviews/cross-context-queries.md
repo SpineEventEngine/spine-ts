@@ -1,7 +1,8 @@
 # Cross-context queries review log
 
-Status: independent reviews and local release verification complete; GitHub CI
-awaits a human-created PR.
+Status: original runtime reviews and local release verification complete; the
+repository-query and generated-DSL plan extension awaits standalone review.
+GitHub CI remains unverified.
 
 ## Plan review
 
@@ -249,3 +250,19 @@ tests in the passing suite.
 All accepted findings are resolved. GitHub reports no PR for this branch, and
 the Build workflow runs on PRs. Final-SHA CI is therefore unverified, not green.
 The human has been asked to open the PR; creating it is not authorized here.
+
+## Repository-query and DSL plan review (29 September)
+
+Planned independent assignment: existing requirements splitter as a senior
+engineer reviewing public query design, explicit gpt-6-astra / high, with
+`fork_turns: none` and no memory/history. This is the architecture pass for the
+material extension, not another review of unchanged completed code. Inputs:
+the complete updated plan and requirements ledger, applicable protocol, current
+code/tests and latest official JVM sources. The reviewer must distinguish
+approved user choices from implementation details, give actionable findings,
+and ask only genuine unresolved product questions in simple language.
+
+No child dispatch, editing, builds or tests. Actual runtime metadata is not
+separately exposed; accept the immutable explicitly configured profile unless
+a mismatch is visible. Existing runtime review dispositions above apply only
+to the original completed slice, not the unimplemented extension.
