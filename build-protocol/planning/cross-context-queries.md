@@ -232,6 +232,17 @@ implicitly require public query visibility on the receiving repository.
 Use the existing repository storage/query facilities rather than routing these
 local reads through public Stand services or the cross-context PM lookup.
 
+Implementation evidence identified an existing server metadata exclusion of
+Aggregate columns. Include Aggregate `(column)` declarations alongside Projection
+and Process Manager declarations in descriptor-driven metadata. Do not make
+storage metadata depend on the query module's import order. Preserve generic
+`ENTITY` behavior outside these three families. Pass predicates, ordering and
+explicit limits to storage; exhaustive results do not require unconditional
+full-table scans. Preserve supported SQL filtering and explicit limits, and apply
+limits after full selection when residual evaluation is required. Existing durable
+Aggregate storage definitions may need the declared columns added through normal
+schema management; automatic migration is not part of this task.
+
 Resolve and validate the incoming tenant before any query. Bind it separately
 for each asynchronous routing invocation; never change a shared repository's
 current tenant. Empty results are legitimate; database or query failures are

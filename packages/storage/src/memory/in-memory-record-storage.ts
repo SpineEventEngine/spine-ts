@@ -111,9 +111,14 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
     return Promise.resolve(
-      this.records().queryEntries(this.recordSpec, {
-        limit: (plan.candidateLimit ?? defaultQueryCandidateLimit) + 1,
-      }),
+      this.records().queryEntries(
+        this.recordSpec,
+        plan.exhaustive
+          ? {}
+          : {
+              limit: (plan.candidateLimit ?? defaultQueryCandidateLimit) + 1,
+            },
+      ),
     );
   }
 

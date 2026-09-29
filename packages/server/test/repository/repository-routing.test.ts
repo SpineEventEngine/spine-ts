@@ -79,11 +79,13 @@ import {
   ColumnTypes,
   RecordColumn,
   RecordStorage,
+  type NormalizedQueryPlan,
   type RecordSpec,
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import type { InMemoryEntityStorage } from "../../../storage/src/memory/in-memory-entity-history.js";
 import type {
   EntityCommitInput,
   EntityCommitResult,
@@ -136,7 +138,16 @@ import {
 } from "../../src/entity/entity-storage-descriptor.js";
 import { standAccess } from "../../src/stand/stand.js";
 import { SystemClock } from "../../src/runtime/signal-metadata.js";
-import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
+import {
+  repositoryAccess,
+  repositoryReadAccess,
+  type RepositoryView,
+} from "../../src/repository/repository.js";
+import { EntityQueryDescription } from "@spine-event-engine/core/codegen";
+import {
+  ProjectStateQuery,
+  RegisteredProjectStateQuery,
+} from "../../test-fixtures/generated/repository-routing/project_states_query.js";
 import {
   type AddProjectMilestone,
   AddProjectMilestoneSchema,
@@ -286,6 +297,10 @@ class InjectedProjectAggregate extends Aggregate<string, typeof ProjectStateSche
       draft.name = this.service.label(command.name);
     });
     return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
+  }
+
+  labelForRead(name: string): string {
+    return this.service.label(name);
   }
 
   async createProjectWithHistory(command: CreateProject): Promise<ProjectCreated> {
@@ -1901,6 +1916,374 @@ class SplitRouteProcessManager extends ProcessManager<string, typeof ProjectQueu
 }
 
 describe("repository signal routing", () => {
+  it("reads complete repository states and application instances without routing handlers", async () => {
+    const callsBefore = InjectedProjectAggregate.calls;
+    const service: ProjectLabelService = { label: (name) => `${name} injected` };
+    const repository = new Repository({
+      entityType: InjectedProjectAggregate,
+      schema: ProjectStateSchema,
+      onCreate: (options) => new InjectedProjectAggregate(options, service),
+    });
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("RepositoryReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    try {
+      await context
+        .stand()
+        .update(ProjectStateSchema, create(ProjectStateSchema, { id: "active", name: "Ready" }), {
+          version: create(VersionSchema, { number: 7 }),
+        });
+      await context
+        .stand()
+        .update(ProjectStateSchema, create(ProjectStateSchema, { id: "deleted", name: "Gone" }), {
+          version: create(VersionSchema, { number: 8 }),
+          lifecycle: { archived: true, deleted: true },
+        });
+      const reads = repositoryReadAccess.bind(repository);
+      const all = ProjectStateQuery.create().build();
+      expectTypeOf(reads.findIds(all)).toEqualTypeOf<Promise<readonly string[]>>();
+      expectTypeOf(reads.find(all)).toEqualTypeOf<Promise<readonly InjectedProjectAggregate[]>>();
+      expect(await reads.findIds(all)).toEqual(["active"]);
+      const compound = new EntityQueryDescription(ProjectStateSchema, all.build(), {
+        predicate: {
+          kind: "all",
+          predicates: [
+            { kind: "comparison", column: "name", operator: "equal", value: "Ready" },
+            { kind: "comparison", column: "name", operator: "equal", value: "Ready" },
+          ],
+        },
+      });
+      expect(await reads.findIds(compound)).toEqual(["active"]);
+      expect(
+        await reads.findIds(ProjectStateQuery.create().orderBy("name", "asc").limit(1).build()),
+      ).toEqual(["active"]);
+      const states = await reads.findStates(all);
+      expect(states).toMatchObject([{ id: "active", name: "Ready" }]);
+      const firstState = states[0];
+      if (firstState === undefined) throw new Error("Expected one current state.");
+      firstState.name = "mutated";
+      expect((await reads.findStates(all))[0]?.name).toBe("Ready");
+      const included = ProjectStateQuery.create().byId("deleted").build();
+      const entities = await reads.find(included);
+      expect(entities).toHaveLength(1);
+      expect(entities[0]).toBeInstanceOf(InjectedProjectAggregate);
+      expect(entities[0]?.labelForRead("Dependency")).toBe("Dependency injected");
+      expect(entities[0]?.version.number).toBe(8);
+      expect(entities[0]?.lifecycle).toEqual({ archived: true, deleted: true });
+      expect(InjectedProjectAggregate.calls).toBe(callsBefore);
+      await expect(
+        context.stand().readVersioned(ProjectStateSchema, "active"),
+      ).resolves.toMatchObject({
+        version: { number: 7 },
+        state: { name: "Ready" },
+      });
+      expect(await reads.findIds(ProjectStateQuery.create().archived().is(true).build())).toEqual([
+        "deleted",
+      ]);
+      const nested = new EntityQueryDescription(ProjectStateSchema, all.build(), {
+        predicate: {
+          kind: "either",
+          predicates: [
+            {
+              kind: "all",
+              predicates: [
+                { kind: "comparison", column: "deleted", operator: "equal", value: true },
+              ],
+            },
+            { kind: "comparison", column: "name", operator: "equal", value: "absent" },
+          ],
+        },
+      });
+      expect(await reads.findIds(nested)).toEqual(["deleted"]);
+      await expect(
+        reads.findIds(RegisteredProjectStateQuery.create().build() as never),
+      ).rejects.toThrow("receiving Entity");
+      expect((await reads.findStates(included))[0]?.name).toBe("Gone");
+      expect(() => repositoryReadAccess.bind(repository, createTenantId("unexpected"))).toThrow(
+        "does not accept tenantId",
+      );
+      reads.close();
+      await expect(reads.findIds(all)).rejects.toThrow("finished");
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("reads every match beyond 10,000 records and finds a late sparse match", async () => {
+    const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    const factory = new ObservedReadStorageFactory();
+    const spec = SpecScanner.scan(ProjectAggregate);
+    expect(spec.columns.map((column) => column.name)).toContain("name");
+    expect(
+      spec
+        .materialize(
+          EntityRecords.pack(
+            ProjectStateSchema,
+            "materialized",
+            create(ProjectStateSchema, { id: "materialized", name: "Indexed" }),
+            1n,
+            { archived: false, deleted: false },
+          ),
+        )
+        .columns.get("name"),
+    ).toBe("Indexed");
+    const context = BoundedContext.singleTenant("LargeRepositoryReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = factory.createEntityStorage(
+      entityStorageDescriptor(
+        { name: "LargeRepositoryReads", multitenant: false },
+        SpecScanner.scan(ProjectAggregate),
+      ),
+    ) as { current: { write(record: EntityRecord): Promise<void> }; close(): void };
+    try {
+      await Promise.all(
+        Array.from({ length: 10_002 }, (_, index) => {
+          const id = `item-${String(index).padStart(5, "0")}`;
+          return storage.current.write(
+            EntityRecords.pack(
+              ProjectStateSchema,
+              id,
+              create(ProjectStateSchema, { id, name: index === 10_001 ? "late" : "ordinary" }),
+              1n,
+              { archived: false, deleted: false },
+            ),
+          );
+        }),
+      );
+      const reads = repositoryReadAccess.bind(repository);
+      expect(await reads.findIds(ProjectStateQuery.create().build())).toHaveLength(10_002);
+      const late = ProjectStateQuery.create()
+        .name()
+        .is("late")
+        .orderBy("name", "asc")
+        .limit(1)
+        .build();
+      expect(late.buildPlan()).toMatchObject({
+        predicate: { kind: "comparison", column: "name", value: "late" },
+      });
+      expect(await reads.findIds(late)).toEqual(["item-10001"]);
+      const beforeRead = {
+        commits: factory.commitCreations,
+        writes: factory.writeCalls,
+        closes: factory.readCloses,
+      };
+      const compound = new EntityQueryDescription(ProjectStateSchema, late.build(), {
+        predicate: {
+          kind: "all",
+          predicates: [
+            { kind: "comparison", column: "name", operator: "equal", value: "late" },
+            { kind: "comparison", column: "name", operator: "equal", value: "late" },
+          ],
+        },
+      });
+      expect(await reads.findIds(compound)).toEqual(["item-10001"]);
+      expect(factory.commitCreations).toBe(0);
+      expect(factory.commitCreations).toBe(beforeRead.commits);
+      expect(factory.writeCalls).toBe(beforeRead.writes);
+      expect(factory.readCloses).toBe(beforeRead.closes + 1);
+      expect(factory.plans.at(-1)?.predicate).toMatchObject({
+        kind: "all",
+        predicates: [
+          { column: "name", value: "late" },
+          { column: "name", value: "late" },
+          { column: "archived", value: false },
+          { column: "deleted", value: false },
+        ],
+      });
+      expect(factory.plans.at(-2)).toMatchObject({
+        exhaustive: true,
+        order: [{ column: "name", direction: "asc" }],
+        limit: 1,
+        predicate: {
+          kind: "all",
+          predicates: [
+            { kind: "comparison", column: "name", operator: "equal", value: "late" },
+            { kind: "comparison", column: "archived", operator: "equal", value: false },
+            { kind: "comparison", column: "deleted", operator: "equal", value: false },
+          ],
+        },
+      });
+      reads.close();
+    } finally {
+      storage.close();
+      await context.close();
+    }
+  });
+
+  it("accepts more than 1,000 explicit IDs in every repository read method", async () => {
+    const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("ManyRepositoryIds")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = factory.createEntityStorage(
+      entityStorageDescriptor(
+        { name: "ManyRepositoryIds", multitenant: false },
+        SpecScanner.scan(ProjectAggregate),
+      ),
+    ) as { current: { write(record: EntityRecord): Promise<void> }; close(): void };
+    const ids = Array.from(
+      { length: 1_001 },
+      (_, index) => `item-${String(index).padStart(5, "0")}`,
+    );
+    try {
+      await Promise.all(
+        ids.map((id) =>
+          storage.current.write(
+            EntityRecords.pack(
+              ProjectStateSchema,
+              id,
+              create(ProjectStateSchema, { id, name: "selected" }),
+              1n,
+              { archived: false, deleted: false },
+            ),
+          ),
+        ),
+      );
+      const reads = repositoryReadAccess.bind(repository);
+      const selected = ProjectStateQuery.create()
+        .byId(...ids)
+        .build();
+      expect(await reads.findIds(selected)).toHaveLength(1_001);
+      expect(await reads.findStates(selected)).toHaveLength(1_001);
+      expect(await reads.find(selected)).toHaveLength(1_001);
+      expect(await reads.findIds(ProjectStateQuery.create().name().is("absent").build())).toEqual(
+        [],
+      );
+      reads.close();
+    } finally {
+      storage.close();
+      await context.close();
+    }
+  });
+
+  it("reads a repository without public query visibility", async () => {
+    const repository = createRegisteredProjectAggregateRepository();
+    expect(repository.metadata.visibility).toBe("none");
+    const factory = new ObservedReadStorageFactory();
+    const context = BoundedContext.singleTenant("PrivateRepositoryReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const id = create(ProjectIdSchema, { value: "private" });
+    const handle = factory.createEntityStorage(
+      entityStorageDescriptor(
+        { name: "PrivateRepositoryReads", multitenant: false },
+        SpecScanner.scan(RegisteredProjectAggregate),
+      ),
+    ) as { current: { write(record: EntityRecord): Promise<void> }; close(): void };
+    try {
+      await handle.current.write(
+        EntityRecords.pack(
+          RegisteredProjectStateSchema,
+          id,
+          create(RegisteredProjectStateSchema, { id, name: "Private", priority: 4 }),
+          3n,
+          { archived: false, deleted: false },
+        ),
+      );
+      const reads = repositoryReadAccess.bind(repository);
+      const query = RegisteredProjectStateQuery.create().byId(id).build();
+      expect(await reads.findIds(query)).toEqual([id]);
+      expect((await reads.findStates(query))[0]?.priority).toBe(4);
+      expect((await reads.find(query))[0]).toBeInstanceOf(RegisteredProjectAggregate);
+      const compound = RegisteredProjectStateQuery.create()
+        .name()
+        .is("Private")
+        .priority()
+        .is(4)
+        .build();
+      expect(await reads.findIds(compound)).toEqual([id]);
+      expect(factory.plans.at(-1)?.predicate).toMatchObject({
+        kind: "all",
+        predicates: [
+          { column: "name", value: "Private" },
+          { column: "priority", value: 4 },
+          { column: "archived", value: false },
+          { column: "deleted", value: false },
+        ],
+      });
+      reads.close();
+    } finally {
+      handle.close();
+      await context.close();
+    }
+  });
+
+  it("binds independent tenant reads and rejects missing runtime or tenant identity", async () => {
+    const unbound = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    expect(() => repositoryReadAccess.bind(unbound)).toThrow("runtime binding");
+    const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.multitenant("TenantRepositoryReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    try {
+      expect(() => repositoryReadAccess.bind(repository)).toThrow("requires tenantId");
+      const firstTenant = createTenantId("first");
+      const secondTenant = createTenantId("second");
+      for (const [tenantId, name] of [
+        [firstTenant, "First"],
+        [secondTenant, "Second"],
+      ] as const) {
+        const handle = factory.createEntityStorage(
+          entityStorageDescriptor(
+            { name: "TenantRepositoryReads", multitenant: true, tenantId },
+            SpecScanner.scan(ProjectAggregate),
+          ),
+        ) as { current: { write(record: EntityRecord): Promise<void> }; close(): void };
+        await handle.current.write(
+          EntityRecords.pack(
+            ProjectStateSchema,
+            "same",
+            create(ProjectStateSchema, { id: "same", name }),
+            1n,
+            { archived: false, deleted: false },
+          ),
+        );
+        handle.close();
+      }
+      const first = repositoryReadAccess.bind(repository, firstTenant);
+      const second = repositoryReadAccess.bind(repository, secondTenant);
+      const query = ProjectStateQuery.create().build();
+      const [firstStates, secondStates] = await Promise.all([
+        first.findStates(query),
+        second.findStates(query),
+      ]);
+      expect(firstStates[0]?.name).toBe("First");
+      expect(secondStates[0]?.name).toBe("Second");
+      first.close();
+      second.close();
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("propagates current-record provider failures from repository reads", async () => {
+    const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    const factory = new FailingReadStorageFactory();
+    const context = BoundedContext.singleTenant("FailingRepositoryReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    try {
+      const reads = repositoryReadAccess.bind(repository);
+      await expect(reads.findIds(ProjectStateQuery.create().build())).rejects.toThrow(
+        "current-record provider failed",
+      );
+      expect(factory.commitCreations).toBe(0);
+      expect(factory.readCloses).toBe(1);
+      reads.close();
+    } finally {
+      await context.close();
+    }
+  });
   it("keeps constructor services separate for the same Entity class in two contexts", async () => {
     const handlers = HandlerMetadataValues.defineArity(
       InjectedProjectAggregate,
@@ -13663,6 +14046,72 @@ class CurrentRecordTestStorage<S extends Message = Message> {
         backward(id: unknown, depth: number): Promise<readonly EntityRecord[]>;
       };
       close(): void;
+    };
+  }
+}
+
+class ObservedReadStorageFactory extends InMemoryStorageFactory {
+  readonly plans: NormalizedQueryPlan<unknown>[] = [];
+  commitCreations = 0;
+  writeCalls = 0;
+  readCloses = 0;
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    this.commitCreations += 1;
+    return super.createEntityCommitStorage(input);
+  }
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as InMemoryEntityStorage<unknown, Message>;
+    return {
+      current: {
+        read: (id: unknown) => storage.current.read(id),
+        write: (record: EntityRecord) => {
+          this.writeCalls += 1;
+          return storage.current.write(record);
+        },
+        query: (plan: NormalizedQueryPlan<unknown>) => {
+          this.plans.push(plan);
+          return storage.current.query(plan);
+        },
+      },
+      events: storage.events,
+      states: storage.states,
+      close: () => {
+        this.readCloses += 1;
+        storage.close();
+      },
+    };
+  }
+}
+
+class FailingReadStorageFactory extends InMemoryStorageFactory {
+  commitCreations = 0;
+  readCloses = 0;
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    this.commitCreations += 1;
+    return super.createEntityCommitStorage(input);
+  }
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as InMemoryEntityStorage<unknown, Message>;
+    return {
+      current: {
+        read: (id: unknown) => storage.current.read(id),
+        write: (record: EntityRecord) => storage.current.write(record),
+        query: () => Promise.reject(new Error("current-record provider failed")),
+      },
+      events: storage.events,
+      states: storage.states,
+      close: () => {
+        this.readCloses += 1;
+        storage.close();
+      },
     };
   }
 }

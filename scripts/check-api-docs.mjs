@@ -690,6 +690,7 @@ const expectedServerExports = [
   "RepositoryIdentityErrorCode",
   "RepositoryIdentitySnapshot",
   "RepositoryOptions",
+  "RepositoryReadQueries",
   "RepositoryCommandRoute",
   "RepositoryEventRoute",
   "RepositoryRouteInvocation",

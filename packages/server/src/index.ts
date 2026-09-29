@@ -254,6 +254,7 @@ export {
   type RepositoryIdentityErrorCode,
   type RepositoryIdentitySnapshot,
   type RepositoryOptions,
+  type RepositoryReadQueries,
   type RepositoryRouteInvocation,
   type RepositoryStateSchema,
   type RepositoryView,

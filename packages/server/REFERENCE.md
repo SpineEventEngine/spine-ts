@@ -242,6 +242,13 @@ Use `EntityQuery.all(...)` to require every predicate and `EntityQuery.either(..
 to accept any branch. Query execution inherits the active handler's actor and
 effective tenant; the protected read-only facade has no tenant override.
 
+`RepositoryReadQueries<EntityType>` describes the receiving repository's typed
+`findIds`, `findStates`, and `find` reads. A read returns all matches unless the
+shared generated query sets a limit. States are detached messages; `find`
+restores application Entity instances with stored Version and lifecycle flags.
+The framework binds each read scope to the incoming signal tenant. Routing
+callback injection of this scope follows in the next slice.
+
 For contexts registered with one `Server`, the target Entity's type URL selects
 its context. No context name or network request is required. The Server rejects
 duplicate Entity type registrations before starting delivery recovery or

@@ -377,8 +377,7 @@ for lifecycle and failure behavior.
 `RepositoryIdentitySnapshot`, `RepositoryIdentityError`,
 `RepositoryIdentityErrorCode`, `RepositoryCommandRoute`,
 `RepositoryEventRoute`, `RepositoryRouteInvocation`, and `RepositoryView` form
-the repository
-identity and context registration seam. A repository records one
+the repository identity and context registration seam. A repository records one
 entity constructor, the inferred aggregate/projection/process-manager family,
 the matching descriptor-backed state schema, descriptor metadata, state full
 type name, and ID-field metadata. Snapshots are frozen fresh-copy values for
@@ -392,7 +391,9 @@ prototype metadata, so alias imports, member expressions, intermediate domain
 base classes, and explicitly reparented ES classes with matching same-realm
 prototype chains are treated as metadata. It opens state record storage only
 through `BoundedContextBuilder.build()`; direct repository registration is not
-public API. When explicit handler metadata is supplied, repository routing
+public API. `RepositoryReadQueries<EntityType>` declares typed read results for
+the receiving repository; routing callback injection follows in a later slice.
+When explicit handler metadata is supplied, repository routing
 calculates command and event routes by generated message full type name,
 readiness metadata, producer ID, or first-field ID. Built bounded contexts
 register repository dispatcher adapters internally so aggregate commands can

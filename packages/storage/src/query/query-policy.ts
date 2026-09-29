@@ -119,6 +119,13 @@ export interface NormalizedQueryPlan<Id> {
    * be positive safe integers; the default and inclusive maximum are 10,000.
    */
   readonly candidateLimit?: number;
+
+  /**
+   * Evaluates the complete result without a candidate cap. Providers may push
+   * down predicates, ordering, and limits when they preserve evaluator semantics.
+   * Reserved for repository reads; bounded service queries omit this flag.
+   */
+  readonly exhaustive?: true;
 }
 
 /**
@@ -153,7 +160,13 @@ const knownComparisons = new Set<NormalizedComparisonOperator>([
   "lessOrEqual",
 ]);
 const knownFeatures = new Set<StorageQueryFeature>(["either", "nested", "order", "limit"]);
-const knownPlanProperties = new Set(["predicate", "order", "limit", "candidateLimit"]);
+const knownPlanProperties = new Set([
+  "predicate",
+  "order",
+  "limit",
+  "candidateLimit",
+  "exhaustive",
+]);
 
 /**
  * Shared fail-fast validation for normalized plans before provider execution.
@@ -195,6 +208,10 @@ export const StorageQueryPolicy: Readonly<{
     QueryPlanValidator.validateOrder(normalizedPlan.order, requirements);
     QueryPlanValidator.validateLimit(normalizedPlan.limit, normalizedPlan.order, requirements);
     QueryPlanValidator.validateCandidateLimit(normalizedPlan.candidateLimit);
+    if (normalizedPlan.exhaustive !== undefined && normalizedPlan.exhaustive !== true)
+      throw new TypeError("query exhaustive policy must be true when supplied.");
+    if (normalizedPlan.exhaustive && normalizedPlan.candidateLimit !== undefined)
+      throw new TypeError("exhaustive queries cannot set a candidate limit.");
     QueryCapabilities.admit(requirements, comparisons, features);
   },
 });

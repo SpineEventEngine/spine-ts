@@ -484,3 +484,79 @@ evidence. All four canonical concerns are clean or resolved. Scoped coverage
 passes unchanged aggregate thresholds; detailed per-file limits are in the work
 log. Commit/push and clean-HEAD bootstrap check follow; full release acceptance
 remains pending for the complete task.
+
+## Receiving-repository reads checkpoint
+
+Expected concern assignments after mechanical evidence is assessed: existing
+TypeScript/API-docs, performance/reliability and style/maintainability reviewers,
+each explicitly gpt-6-sol / medium; documentation reviewer explicitly gpt-6-luna /
+medium. Fresh read-only sessions without memory/history, no children, source
+edits or broad tests. Source baseline `f675c3437`; stage new files before review.
+Main collects the complete wave and returns one accepted batch to the retained
+implementer. These are planned assignments, not completed review outcomes.
+
+Review scope is exhaustive provider execution, real Entity restoration, effective
+tenant binding, lifecycle defaults and descriptor-based Aggregate columns. Keep
+filtering/order/application limits in storage where supported. Asynchronous route
+integration and broad examples follow later; their absence is not claimed as a
+finished feature. Docker was initially unavailable; the human restored it during
+review and dedicated test containers are being prepared. Reviewer evidence must
+distinguish actual DB execution from fake drivers and import-only tests. Full
+release coverage/CI remain pending.
+
+Completed API session `01a0ee0e-00fc-74e2-8d0b-af1fab7c951a`, reliability
+`01a0ee0d-ffe5-7d50-8037-cd7c3ec7ed55`, style
+`01a0ee0d-ffd6-74d3-a973-6398c6d85310` (all explicit Sol/medium), and docs
+`01a0ee10-e143-75d1-b53e-21bf4ad37c92` (explicit Luna/medium). Configured CLI
+headers confirm the requested profiles; separate backend runtime metadata is not
+exposed. All reviewed independently without memory or edits.
+
+Main accepts one correction batch: flatten supported Datastore conjunctions;
+prevent MySQL collation differences from dropping exhaustive results before global
+filtering/order/limit; open only Entity storage for read scopes, avoiding unused
+commit handles and their partial-open leak; correct exhaustive-query and lifecycle
+comments. The resource findings are one correction. Documentation has no further
+findings. Source inspection confirms each accepted issue. Preserve SQL pushdown
+where its semantics are valid; do not replace every query with a blanket scan.
+Expected correction estimate: 0.2–0.4 hours including focused tests and targeted
+reliability re-review (explicit Sol/medium). Same implementation session continues.
+
+Targeted fresh reliability session `01a0ee1f-e880-7680-879c-fcfd890ad9f8`
+confirmed explicit Sol/medium and found two remaining completeness defects:
+recursive conjunction rewrites can restore removed unsafe children, and custom
+SQL numeric columns are not checked against their logical comparison type. Main
+accepts both as P1/P2 correctness corrections, with exact recursive/type regressions.
+The mechanical live session `01a0ee1f-ecd1-7ba1-9b35-632a77f1e014` confirmed
+explicit Luna/low. PostgreSQL 16/18 passed (10 each, four conditional skips each).
+MySQL and MariaDB each had five schema failures, nine passes and four skips;
+Datastore had one missing-type-registry failure, five passes and four skips.
+Neither failed suite is accepted. Return one batch to the retained writer; inspect
+test isolation and actual underlying errors before correcting them. Source-level
+review of the new SQL order optimization also requires checking nullable numeric
+PostgreSQL order against the shared missing-value comparator. Expected correction
+and focused/live rerun work: 0.2–0.4 hours. No full whole-change review is restarted.
+
+With the writer paused for a Datastore transaction-test scope investigation,
+dispatch one fresh focused performance/reliability check, explicit Sol/medium,
+for the corrected MySQL/PostgreSQL exhaustive predicate/order/limit code and its
+unit/live assertions only. No repository APIs, old Datastore transaction logic,
+or whole-change review is reopened. Collect this result and the independent
+Astra/high Datastore classification before resuming any correction work.
+
+SQL review `01a0ee31-4adf-7923-83e3-d70ffa7f716a` (explicit Sol/medium)
+found no remaining runtime defect. Accepted P2: both SQL live tests must assert
+all 10,002 matching results, not only a late filtered row and 1,001 IDs. This is
+a deterministic assertion addition with focused live reruns, not another review
+wave. Architecture session `01a0ee30-bd17-7a33-bb3d-b074dc9478ed` (explicit
+Astra/high) identifies unchanged concurrent Entity commits as the likely source
+of the Datastore timeout, but asks for one baseline/stage-trace diagnostic before
+calling it a baseline limitation. Do not increase timeout, serialize away the
+race, add retries or redesign transactions. Query cases pass independently.
+
+The bounded trace disproves the suspected commit stall: concurrency completes;
+the later states.trim call hangs after successful appends. No transaction code
+is changed. Main treats history cleanup as a separate scope question pending the
+human's asynchronous answer, not as an accepted query-runtime defect. Final SQL
+all-result assertions pass on all four SQL engines, and Datastore's large-query
+assertions pass. All accepted query-slice review findings are resolved. Final
+release coverage remains required; the separate full Datastore suite is not green.

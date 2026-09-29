@@ -32,8 +32,11 @@ has no remaining product questions.
 Implementation is underway. Masking removal is independently reviewed with its
 accepted findings fixed and focused checks passing. Shared typed queries and
 normal DSL generation are also reviewed and verified, with corrections resolved.
-Exhaustive repository reads and asynchronous routing are next. The full extension
-is not yet release-verified.
+Exhaustive repository reads are implemented and reviewed; query checks pass on
+memory, MySQL, MariaDB, PostgreSQL 16/18 and the Datastore emulator. A separate
+Datastore history-trimming test times out; its scope decision and diagnostic
+evidence are recorded in the work log. Asynchronous routing is next. The full
+extension is not yet release-verified.
 
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
 remotely closed. The complete-replica deployment correction is closed through

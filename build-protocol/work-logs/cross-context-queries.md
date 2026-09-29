@@ -824,3 +824,189 @@ commit/push checkpoint, verify clean-HEAD generation, then exhaustive provider a
 receiving-repository reads with the retained Sol/medium implementer. Clean-HEAD
 verification is a mechanical function explicitly dispatched Luna/low, isolated
 from the writer. It must not modify production files or run a full release gate.
+
+Committed shared-query checkpoint `f675c34371fdbd3b78cf5e6c33042a3a8355c622`
+and immediately pushed to official origin; both commands exited 0 and the tree
+was clean. Dispatched the exact clean-bootstrap test to fresh Luna/low. Resumed
+the retained implementer session `01a0ed61-8899-76f2-ba6a-e5438eded07e`, explicit
+Sol/medium, for the approved exhaustive provider/repository read slice using
+repository-reads-brief.md and the completed seam map. No asynchronous routing or
+broad example migration yet. Docker startup remains unresolved; live evidence
+must be distinguished from driver mocks. No product scope or estimate change.
+
+Fresh mechanical session `01a0ede3-ab6b-7690-b09a-ebd56a4b89bf` confirmed the
+explicit Luna/low profile and exact HEAD. The clean-bootstrap test passed:
+one test, 112 skipped, 34.25 seconds, command exit 0. It generated from a temporary
+clean checkout of `f675c3437` without compiled proto-tools output. No matching
+temporary clean-bootstrap worktree remains. This closes the shared-query
+checkpoint's previously recorded clean-HEAD evidence gap.
+
+CI access check during implementation: authenticated `gh pr list` still returns
+HTTP 401. Unauthenticated official GitHub REST reads succeed and show no open PR
+for `SpineEventEngine:cross-context-queries` and zero workflow runs for this branch.
+Public REST is therefore an available read-only route for later CI inspection,
+but there is no CI result to claim yet. No PR was created or credentials changed.
+
+Repository implementation hit a concrete registration discrepancy: the generated
+ProjectState query includes name, while the ProjectAggregate spec used by the
+large-read test lists only lifecycle/version columns. Main paused only its own
+active implementation CLI process before accepting a proposed universal
+complete-state scan. This is a demonstrated architecture/correctness question,
+not a repeated whole-plan review. Dispatch fresh read-only requirements splitter,
+explicit Astra/high, to distinguish invalid fixture setup from runtime metadata
+registration and choose the smallest correction preserving provider queries.
+Expected investigation and integration: 0.1–0.25 hours active work, within the
+original overall range. Main and reviewer do not write production code.
+
+Requirements-splitter session `01a0edef-dce6-7821-a9ed-3e00fa5f23bc` completed,
+explicit Astra/high header confirmed. It traced the production defect to
+EntityDescriptors.columns(): only Projection/Process Manager declarations are
+included, whereas generated query/core registration accepts Aggregate too.
+SpecScanner consumes descriptors directly; this is not an import timing issue.
+Main accepts the narrow metadata correction and preserving generic ENTITY policy.
+Remove the unfinished whole-state scan; pass the compiled plan to current.query.
+Retain valid SQL predicate/order/application-limit execution independently from
+exhaustive candidate policy. Add regression assertions for materialized Aggregate
+columns and preserved provider criteria, not only a matching result count.
+Existing durable Aggregate definitions may require normal schema management;
+no automatic migration or new registration dependency is authorized. Returned
+this batch to the same Sol/medium implementation context; work continues.
+
+Repository/provider implementation returned: 466 tests in six affected unit files
+and five selected PM/public regressions pass, along with package builds,
+test-inclusive typechecking, cleanup, TSDoc, formatting and whitespace checks.
+Real-provider cases are added but not executed; an import-only run intentionally
+skipped 23 tests and is not live evidence. Main does not yet accept readiness:
+the report omits mandatory measured coverage, ESLint and generated-doc checks.
+Dispatch explicit Luna/low mechanical verification for those bounded gaps, with
+the writer paused and thresholds unchanged. Return deterministic failures to the
+retained writer before specialist review. No full release gate in this preflight.
+
+Mechanical session `01a0edff-1c22-7342-811e-3ad2b2813293` completed with explicit
+Luna/low header: nine ESLint errors (non-null assertions/unsafe mock access/void
+expressions), missing API-doc inventory entry for RepositoryReadQueries, and a
+coverage-run timeout in the large-read case. There were 476 passes and one timeout
+at 7.56 seconds against the default five-second limit; no coverage summary was
+produced. The scan also missed the Entity-history test's entity/ path. Main returned
+all deterministic findings to the same Sol/medium implementer before specialist
+review. Use the normal release verification 15-second allowance, unchanged
+coverage thresholds and correct test path; preserve the >10,000 boundary. Estimate
+for this focused correction/check step: 0.1–0.2 hours active work.
+
+Preflight corrections are complete. Affected ESLint, generated API/audience/snippet
+docs, cleanup/TSDoc, formatting, sequential package builds and test-inclusive
+typechecking pass. The >10,000 test keeps its full population; large explicit-ID
+assertions use a separate fixture to avoid repeatedly scanning that population.
+Nine focused unit files pass 509 tests with the existing 15-second release test
+allowance. Scoped coverage across the nine selected broad source files reports
+90.24% statements, 83.11% branches, 92.19% functions and 91.56% lines; command exit
+1 is solely the unchanged 90% branch threshold. This is NOT a passing coverage
+gate. LCOV against changed lines records 102/102 executable lines, 138/138 branches
+and 29/29 functions hit. Remaining misses are older paths outside this test
+selection; final verify:release must still prove >=90% project-wide coverage.
+Main accepts this as the required pre-review changed-source inspection, not final
+task acceptance, and will not expand an inner-loop run into the full release gate.
+
+The nine tests cover repository routing, server index/metadata, memory record and
+Entity history storage, common query policy/evaluation, and MySQL/PostgreSQL/
+Datastore record storage. New targeted cases additionally exercise invalid
+exhaustive policy input, nested large-ID plans, lifecycle tree traversal and
+Datastore cursor handling. Real-provider tests remain pending. Source is paused
+for the recorded independent concern wave against `f675c3437`.
+
+The human restored Docker after its crash. Main verified engine 29.6.2 responds
+and no containers are running. Cached MySQL 8.4, MariaDB 11.4, PostgreSQL 16/18
+and Datastore emulator images are available. Dispatch Luna/low mechanical setup
+to prepare dedicated local test containers, with no source edits or tests yet;
+record exact resources and connection settings in the temporary report. Live
+verification follows the accepted provider corrections. Setup is expected to
+take 0.05–0.1 hours, excluding image startup waiting.
+
+The three technical reviewers completed with explicit Sol/medium profiles.
+Their API, reliability and style findings concern nested Datastore conjunctions,
+MySQL collation-sensitive limit pushdown, unused commit handles during reads,
+handle cleanup if opening commit storage fails, and two inaccurate comments.
+The remaining documentation concern is dispatched explicitly as Luna/medium;
+collect that result before returning one deduplicated correction batch.
+
+Docker setup session `01a0ee11-3ae8-7721-bebe-5336f2cf4270` completed with an
+explicit Luna/low header. Five dedicated containers, all with suffix
+`20260929-174955`, are ready: `spine-query-test-mysql` (port 52392),
+`spine-query-test-mariadb` (52393), `spine-query-test-postgres16` (52395),
+`spine-query-test-postgres18` (52396), and `spine-query-test-datastore` (52397).
+SQL containers have separate main/tenant-A/tenant-B test databases. Credentials
+are disposable and retained only in the temporary setup report. No existing
+resources were changed. This establishes readiness, not passing integration
+tests; run those after provider corrections, and remove only these test resources
+when all affected app/provider checks finish.
+
+Provider corrections now pass 511 tests in the nine-file measured selection and
+455 tests in the final seven-file focused selection. Type/build, lint, formatting,
+cleanup, TSDoc and generated documentation checks pass. Scoped aggregate coverage
+still fails unchanged thresholds (89.85% statements, 82.19% branches); this is not
+the final release gate. Changed-source inspection and the correction report are
+being finalized. Dispatch after source freezes: focused performance/reliability
+review, fresh Sol/medium, and mechanical real-provider verification, Luna/low,
+sequential engines and one test worker. Both profiles must be explicit. Live
+tests cover the task-created MySQL/MariaDB/PostgreSQL16/18/Datastore instances;
+leave them available for later Todo smoke. Expected live waiting: 0.1–0.3 hours.
+
+The first live pass finished in under a minute of suite time. PostgreSQL 16/18
+each passed ten cases (four other-provider cleanup skips). MySQL/MariaDB each
+passed nine and failed five; Datastore passed five and failed one, with four
+conditional skips each. The new ungrouped MySQL scale fixture shares its table
+with existing Entity tests and adds a conflicting column; use test isolation,
+not relaxed production schema validation. Datastore's Entity-family fixture lacks
+the StringValue schema in its ID-encoding registry. The retained implementer is
+diagnosing/correcting this setup alongside the two accepted SQL logic findings.
+PostgreSQL explicitly emits NULLS FIRST/LAST already; the additional ordering
+concern is resolved by inspection and regression coverage, not a new runtime fix.
+The complete live/review correction batch and 0.2–0.4 hour estimate are recorded
+in the review log. Containers remain ready and no other test runner is active.
+
+Correction reruns now pass MySQL/MariaDB (14 each) and PostgreSQL16/18 (10 each),
+each with four conditional other-provider skips. Datastore's new 10,002-row case
+passes, but its pre-existing Entity/history case times out even in a fresh emulator
+project; server logs report transaction locks. This is a demonstrated boundary
+beyond read-only query changes. Main paused the sole writer before transaction
+runtime changes and dispatches the existing requirements splitter explicitly as
+Astra/high, read-only, to classify fixture misuse versus baseline/new runtime
+defect and the smallest justified action. No redesign or new feature is approved.
+Expected investigation: 0.05–0.1 hours. Current query fixes remain preserved.
+
+The stage trace corrected the initial contention hypothesis: initial/conflict/
+replay and both concurrent commits finish; one aborted transaction retries and
+returns the expected conflict. All 128 history appends finish, then states.trim
+hangs. Trace is retained in the temporary datastore-stage-trace.log. No baseline
+checkout execution is claimed. Entity-history source is unchanged even against
+original task base 2324311; its provider-page trim path does not call the new
+normalized exhaustive query path. Main asked the human asynchronously whether
+to include this separate history-cleanup issue. Without expansion approval,
+continue the agreed routing task and record the unresolved live-suite limitation;
+no transaction redesign, serialized-away assertion or longer timeout is accepted.
+Temporary tracing is removed and the original 30-second test timeout restored.
+
+Explicit all-10,002-result SQL assertions now pass on MySQL, MariaDB and both
+PostgreSQL majors; the Datastore 10,002-result case passes too. Earlier complete
+SQL suite results remain valid with only those assertion additions. Query-scope
+checks are distinct from the still-failing Datastore history-cleanup case.
+
+Provider/query checkpoint acceptance: 515 focused tests pass; affected build and
+test typechecks, lint, formatting, TSDoc, cleanup, generated docs and whitespace
+checks pass. Scoped coverage is 90.29% statements, 82.52% branches, 92.56% functions,
+91.74% lines (branch-threshold failure remains explicit). All changed executable
+lines are hit except one repository factory guard; SQL alternate guard branches
+are partly uncovered. Full release coverage is still required after routing and
+examples. Independent query-slice findings are resolved, including final complete
+SQL result assertions. Commit/push this checkpoint without claiming the separate
+Datastore history suite or whole extension is green.
+
+Next phase: asynchronous query-based routing and complete recipient delivery,
+estimated 0.8–1.2 hours for implementation, focused tests and concern-specific
+review. Assign the existing implementer role explicitly Sol/medium in a fresh
+bounded implementation context for this distinct phase; retain it for its fixes.
+The completed provider context remains available for provider-specific followups.
+Only one production writer runs at a time. Main keeps protocol records current;
+no worktree/branch/PR changes. Read the full approved ledger and call-site map,
+preserve all current query semantics, and do not expand into history cleanup
+without the pending human scope decision.

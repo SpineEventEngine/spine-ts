@@ -116,6 +116,15 @@ describe("InMemoryEntityHistory", () => {
         })
       ).map((entry) => entry.id),
     ).toEqual(["active"]);
+    expect((await current.query({ candidateLimit: 4 })).map((entry) => entry.id)).toEqual([
+      "active",
+      "archived",
+    ]);
+    expect((await current.query({ exhaustive: true })).map((entry) => entry.id)).toEqual([
+      "active",
+      "archived",
+      "deleted",
+    ]);
     await expect(
       current.write(create(EntityRecordSchema, { entityId: create(AnySchema) })),
     ).rejects.toThrow(/ID schema/);

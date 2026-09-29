@@ -400,7 +400,7 @@ export class MemoryEntityRecordStorage<I> implements EntityRecordStorage<I> {
   }
 
   /**
-   * Returns non-deleted current records matching the normalized plan.
+   * Returns matching current records; exhaustive plans may select deleted records.
    *
    * @param plan Supplies the normalized record-query plan.
    * @returns Resolves to ordered matching current-record entries.
@@ -414,10 +414,10 @@ export class MemoryEntityRecordStorage<I> implements EntityRecordStorage<I> {
       comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
       features: ["either", "nested", "order", "limit"],
     });
-    const limit = plan.candidateLimit ?? 10_000;
+    const limit = plan.exhaustive ? Number.POSITIVE_INFINITY : (plan.candidateLimit ?? 10_000);
     const candidates: EntityRecord[] = [];
     for (const record of this.#records.values()) {
-      if (record.lifecycleFlags?.deleted) continue;
+      if (!plan.exhaustive && record.lifecycleFlags?.deleted) continue;
       candidates.push(record);
       if (candidates.length > limit) break;
     }

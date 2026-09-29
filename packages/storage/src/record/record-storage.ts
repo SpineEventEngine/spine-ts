@@ -189,7 +189,7 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     StorageQueryPolicy.validate(plan, this.queryCapabilities());
     const candidates = await this.queryPlanRecordEntries(plan);
     const candidateLimit = plan.candidateLimit ?? defaultQueryCandidateLimit;
-    if (candidates.length > candidateLimit) {
+    if (!plan.exhaustive && candidates.length > candidateLimit) {
       throw new QueryCandidateLimitError(candidateLimit);
     }
     const materialized = candidates.map((entry) => {

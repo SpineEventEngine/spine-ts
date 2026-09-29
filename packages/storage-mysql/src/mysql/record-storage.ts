@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { StringifierRegistry } from "@spine-event-engine/core";
@@ -907,29 +907,170 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    */
   private planSql(plan: NormalizedQueryPlan<I>): { sql: string; values: unknown[] } {
     const values: unknown[] = [];
+    const safePredicate = plan.exhaustive
+      ? this.exhaustivePredicate(plan.predicate)
+      : plan.predicate;
+    const scanAll =
+      plan.exhaustive && this.planBindCount(safePredicate) >= maximumNormalizedPlanBinds;
     const predicate =
-      plan.predicate === undefined ? undefined : this.planPredicate(plan.predicate, values);
+      safePredicate === undefined || scanAll
+        ? undefined
+        : this.planPredicate(safePredicate, values);
     if (values.length >= maximumNormalizedPlanBinds) {
       throw new MysqlStorageOperationError(
         `MySQL normalized query exceeds the ${String(maximumNormalizedPlanBinds)}-parameter bind budget.`,
       );
     }
-    const order = [
-      ...(plan.order ?? []).map(
-        (item) => `${this.planColumn(item.column)} ${item.direction === "desc" ? "DESC" : "ASC"}`,
-      ),
-      "ID ASC",
-    ];
     const candidateLimit = plan.candidateLimit ?? defaultQueryCandidateLimit;
-    const limit = Math.min(plan.limit ?? Number.MAX_SAFE_INTEGER, candidateLimit + 1);
-    values.push(limit);
+    const limit = plan.exhaustive
+      ? plan.limit
+      : Math.min(plan.limit ?? Number.MAX_SAFE_INTEGER, candidateLimit + 1);
+    const exactLimit =
+      !plan.exhaustive ||
+      (!scanAll && safePredicate === plan.predicate && this.exhaustiveOrderMatches(plan));
+    if (limit !== undefined && exactLimit) values.push(limit);
+    const limitClause = limit !== undefined && exactLimit ? " LIMIT ?" : "";
     return {
       sql:
         `SELECT ID, bytes FROM \`${this.table.tableName}\` ` +
         (predicate === undefined ? "" : `WHERE ${predicate} `) +
-        `ORDER BY ${order.join(", ")} LIMIT ?`,
+        `ORDER BY ${this.planOrder(plan)}` +
+        limitClause,
       values,
     };
+  }
+
+  /**
+   * Builds provider ordering with a deterministic ID tie-break.
+   *
+   * @param plan Supplies the requested column directions.
+   * @returns SQL ordering terms.
+   */
+  private planOrder(plan: NormalizedQueryPlan<I>): string {
+    return [
+      ...(plan.order ?? []).map(
+        (item) => `${this.planColumn(item.column)} ${item.direction === "desc" ? "DESC" : "ASC"}`,
+      ),
+      "ID ASC",
+    ].join(", ");
+  }
+
+  /**
+   * Returns only exhaustive filters with the same truth value in SQL and the evaluator.
+   * Text and nullable comparisons use provider collation or NULL semantics, so an
+   * unsafe branch of a disjunction requires a complete scan.
+   *
+   * @param predicate Predicate to inspect for safe SQL narrowing.
+   * @returns A safe necessary condition, or undefined for a complete scan.
+   */
+  private exhaustivePredicate(
+    predicate: NormalizedQueryPredicate<I> | undefined,
+  ): NormalizedQueryPredicate<I> | undefined {
+    if (predicate === undefined) return undefined;
+    if (predicate.kind === "ids") {
+      const sqlType = this.tableSpec.columns.find((column) => column.name === "ID")?.mysqlType;
+      return (sqlType === "INT" && this.recordSpec.idType === "int32") ||
+        (sqlType === "BIGINT" && this.recordSpec.idType === "int64")
+        ? predicate
+        : undefined;
+    }
+    if (predicate.kind === "comparison") {
+      return this.exhaustiveComparisonSafe(predicate) ? predicate : undefined;
+    }
+    const children = predicate.predicates.map((child) => this.exhaustivePredicate(child));
+    if (predicate.kind === "either")
+      return children.every((child, index) => child === predicate.predicates[index])
+        ? predicate
+        : undefined;
+    const retained = children.filter(
+      (child): child is NormalizedQueryPredicate<I> => child !== undefined,
+    );
+    if (retained.length === 0) return undefined;
+    return children.every((child, index) => child === predicate.predicates[index])
+      ? predicate
+      : { kind: "all", predicates: retained };
+  }
+
+  /**
+   * Checks one comparison against both physical and logical column types.
+   *
+   * @param predicate Comparison to consider for SQL narrowing.
+   * @returns Whether MySQL and the evaluator compare its values alike.
+   */
+  private exhaustiveComparisonSafe(
+    predicate: Extract<NormalizedQueryPredicate<I>, { kind: "comparison" }>,
+  ): boolean {
+    this.planColumn(predicate.column);
+    const sqlType = this.tableSpec.columns.find(
+      (column) => column.name === predicate.column,
+    )?.mysqlType;
+    const value = predicate.value;
+    return (
+      this.columnSemanticsMatch(predicate.column, sqlType) &&
+      (sqlType === "BOOLEAN"
+        ? predicate.operator === "equal" && typeof value === "boolean"
+        : sqlType === "BIGINT"
+          ? typeof value === "bigint"
+          : typeof value === "number" && Number.isSafeInteger(value))
+    );
+  }
+
+  /**
+   * Checks whether provider ordering can select the same limited prefix as the evaluator.
+   *
+   * @param plan Exhaustive plan with an application limit.
+   * @returns Whether numeric SQL ordering and the ID tie-break are equivalent.
+   */
+  private exhaustiveOrderMatches(plan: NormalizedQueryPlan<I>): boolean {
+    const idType = this.tableSpec.columns.find((column) => column.name === "ID")?.mysqlType;
+    if (!(
+      (idType === "INT" && this.recordSpec.idType === "int32") ||
+      (idType === "BIGINT" && this.recordSpec.idType === "int64")
+    ))
+      return false;
+    return (plan.order ?? []).every((item) => {
+      const sqlType = this.tableSpec.columns.find(
+        (column) => column.name === item.column,
+      )?.mysqlType;
+      return (
+        (sqlType === "INT" || sqlType === "BIGINT") &&
+        this.columnSemanticsMatch(item.column, sqlType)
+      );
+    });
+  }
+
+  /**
+   * Checks that a physical numeric or Boolean column preserves its logical value type.
+   *
+   * @param column Declared query column.
+   * @param sqlType Physical MySQL column type.
+   * @returns Whether SQL comparison can agree with the shared evaluator.
+   */
+  private columnSemanticsMatch(column: string, sqlType: string | undefined): boolean {
+    const type = this.recordSpec.columns.find((candidate) => candidate.name === column)?.type;
+    if (sqlType === "INT" && type?.kind === "enum") return true;
+    if (type?.kind !== "scalar") return false;
+    if (sqlType === "BOOLEAN") return type.scalar === ScalarType.BOOL;
+    if (sqlType === "INT")
+      return [ScalarType.INT32, ScalarType.SINT32, ScalarType.SFIXED32].includes(type.scalar);
+    return (
+      sqlType === "BIGINT" &&
+      !type.longAsString &&
+      [ScalarType.INT64, ScalarType.SINT64, ScalarType.SFIXED64].includes(type.scalar)
+    );
+  }
+
+  /**
+   * Calculates predicate binds before selecting the complete-scan fallback.
+   *
+   * @param predicate Predicate tree whose leaves contribute bound values.
+   * @returns Number of SQL parameters required by the predicate.
+   */
+  private planBindCount(predicate: NormalizedQueryPredicate<I> | undefined): number {
+    if (predicate === undefined) return 0;
+    if (predicate.kind === "ids") return predicate.ids.length;
+    if (predicate.kind === "comparison") return 1;
+    return predicate.predicates.reduce((count, child) => count + this.planBindCount(child), 0);
   }
 
   /**

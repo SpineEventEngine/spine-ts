@@ -21,6 +21,7 @@ import {
   type MessageShape,
 } from "@bufbuild/protobuf";
 import type { EntityQueryPlan } from "@spine-event-engine/core/spi/entity-query-plan";
+import type { EntityQueryDescription } from "@spine-event-engine/core/codegen";
 import {
   AnySchema,
   Int32ValueSchema,
@@ -67,6 +68,9 @@ import {
   type StorageContext,
   type StorageFactory,
   type StorageMode,
+  type NormalizedQueryPlan,
+  type NormalizedQueryEntry,
+  StorageQueryPolicy,
 } from "@spine-event-engine/storage";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import type {
@@ -194,6 +198,53 @@ type RepositoryEntityId<EntityType extends RepositoryEntityType> =
       : EntityType["prototype"] extends ProcessManager<infer Id, DescriptorMessageSchema>
         ? Id
         : never;
+
+/**
+ * Read operations available for one receiving repository and incoming signal tenant.
+ * The routing invocation closes this access when it finishes.
+ *
+ * @typeParam EntityType Registered application Entity class.
+ */
+export interface RepositoryReadQueries<EntityType extends RepositoryEntityType> {
+  /**
+   * Returns matching typed IDs in query order.
+   *
+   * @param query Query for this repository's state schema.
+   * @returns Every matching ID unless the query sets a limit.
+   */
+  findIds(
+    query: EntityQueryDescription<
+      RepositoryStateSchema<EntityType>,
+      RepositoryEntityId<EntityType>
+    >,
+  ): Promise<readonly RepositoryEntityId<EntityType>[]>;
+
+  /**
+   * Returns independent complete generated state messages.
+   *
+   * @param query Query for this repository's state schema.
+   * @returns Detached states in query order.
+   */
+  findStates(
+    query: EntityQueryDescription<
+      RepositoryStateSchema<EntityType>,
+      RepositoryEntityId<EntityType>
+    >,
+  ): Promise<readonly MessageShape<RepositoryStateSchema<EntityType>>[]>;
+
+  /**
+   * Restores application Entity instances with stored versions and lifecycle flags.
+   *
+   * @param query Query for this repository's state schema.
+   * @returns Registered application instances in query order.
+   */
+  find(
+    query: EntityQueryDescription<
+      RepositoryStateSchema<EntityType>,
+      RepositoryEntityId<EntityType>
+    >,
+  ): Promise<readonly InstanceType<EntityType>[]>;
+}
 
 /**
  * Describes handler metadata compatible with an Entity constructor.
@@ -1642,6 +1693,247 @@ const RepositoryCreation = {
     throw new TypeError(
       `Repository onCreate must synchronously return a ${entityType.name} instance.`,
     );
+  },
+};
+
+/**
+ * Binds repository queries to a single routing invocation's tenant and lifetime.
+ * Routing integration closes the returned access after its callback settles.
+ *
+ * @internal
+ */
+export const repositoryReadAccess: Readonly<{
+  /**
+   * Binds one repository and incoming signal tenant to a read-only scope.
+   *
+   * @typeParam EntityType Registered application Entity class.
+   * @param repository Receiving repository with an active runtime.
+   * @param tenantId Signal tenant for a multitenant context.
+   * @returns Read methods and the invocation close operation.
+   */
+  bind<EntityType extends RepositoryEntityType>(
+    repository: RepositoryView & { readonly entityType: EntityType },
+    tenantId?: TenantId,
+  ): RepositoryReadQueries<EntityType> & { close(): void };
+}> = Object.freeze({
+  /**
+   * Creates read-only access for a registered repository with an active runtime.
+   *
+   * @typeParam EntityType The receiving repository's application Entity class.
+   * @param repository Receiving repository.
+   * @param tenantId Tenant carried by the incoming signal, if multitenant.
+   * @returns Bound reads and a close operation for the invocation boundary.
+   */
+  bind<EntityType extends RepositoryEntityType>(
+    repository: RepositoryView & { readonly entityType: EntityType },
+    tenantId?: TenantId,
+  ): RepositoryReadQueries<EntityType> & { close(): void } {
+    const runtime = repositoryRuntimes.get(repository);
+    if (runtime === undefined)
+      throw new Error("Repository reads require an active runtime binding.");
+    return new RepositoryReadScope(repository, runtime, tenantId);
+  },
+});
+
+/**
+ * Selects the shared query description compatible with a repository Entity.
+ *
+ * @typeParam EntityType Registered application Entity class.
+ */
+type RepositoryReadQuery<EntityType extends RepositoryEntityType> = EntityQueryDescription<
+  RepositoryStateSchema<EntityType>,
+  RepositoryEntityId<EntityType>
+>;
+
+/**
+ * Executes read-only queries within one receiving repository and tenant scope.
+ *
+ * @typeParam EntityType Registered application Entity class.
+ */
+class RepositoryReadScope<
+  EntityType extends RepositoryEntityType,
+> implements RepositoryReadQueries<EntityType> {
+  readonly #repository: RepositoryView & { readonly entityType: EntityType };
+
+  readonly #runtime: RepositoryRuntime;
+
+  readonly #context: StorageContext;
+
+  #active = true;
+
+  /**
+   * Captures the runtime and validates the incoming signal's effective tenant.
+   *
+   * @param repository Receiving repository.
+   * @param runtime Active repository runtime.
+   * @param tenantId Tenant from the signal, when the context is multitenant.
+   */
+  constructor(
+    repository: RepositoryView & { readonly entityType: EntityType },
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+  ) {
+    this.#repository = repository;
+    this.#runtime = runtime;
+    this.#context = RepositoryTenants.storageContextForTenant(runtime.context, tenantId);
+  }
+
+  /**
+   * Reads the typed IDs of all matching current records.
+   *
+   * @param query Description for the registered state schema.
+   * @returns Matching IDs in query order.
+   */
+  async findIds(
+    query: RepositoryReadQuery<EntityType>,
+  ): Promise<readonly RepositoryEntityId<EntityType>[]> {
+    return (await this.read(query)).map((entry) => entry.id as RepositoryEntityId<EntityType>);
+  }
+
+  /**
+   * Returns cloned complete states from matching current records.
+   *
+   * @param query Description for the registered state schema.
+   * @returns Independent generated state messages in query order.
+   */
+  async findStates(
+    query: RepositoryReadQuery<EntityType>,
+  ): Promise<readonly MessageShape<RepositoryStateSchema<EntityType>>[]> {
+    const schema = this.#repository.stateSchema;
+    return (await this.read(query)).map((entry) =>
+      clone(schema, EntityRecords.unpack(schema, entry.record).state as never),
+    ) as unknown as readonly MessageShape<RepositoryStateSchema<EntityType>>[];
+  }
+
+  /**
+   * Restores each matching application Entity through the repository hook.
+   *
+   * @param query Description for the registered state schema.
+   * @returns Instances with stored Version and lifecycle flags.
+   */
+  async find(query: RepositoryReadQuery<EntityType>): Promise<readonly InstanceType<EntityType>[]> {
+    const repository = this.#repository;
+    return (await this.read(query)).map((entry) => {
+      const stored = EntityRecords.unpack(repository.stateSchema, entry.record);
+      return RepositoryCreation.create(repository, {
+        id: entry.id,
+        schema: repository.stateSchema,
+        state: clone(repository.stateSchema, stored.state as never),
+        version: stored.versionMessage,
+        lifecycle: { archived: stored.archived, deleted: stored.deleted },
+      }) as InstanceType<EntityType>;
+    });
+  }
+
+  /**
+   * Closes this routing invocation's read access to new operations.
+   */
+  close(): void {
+    this.#active = false;
+  }
+
+  /**
+   * Reads current storage with the complete normalized plan.
+   *
+   * @param query Description for the registered state schema.
+   * @returns Matching stored records and typed IDs.
+   */
+  private async read(
+    query: RepositoryReadQuery<EntityType>,
+  ): Promise<readonly NormalizedQueryEntry<unknown, EntityRecord>[]> {
+    if (!this.#active || repositoryRuntimes.get(this.#repository) !== this.#runtime)
+      throw new Error("Repository read access has finished.");
+    if (query.schema !== this.#repository.stateSchema)
+      throw new TypeError("Repository query must select the receiving Entity state schema.");
+    const plan = RepositoryReadPredicates.plan(query.buildPlan());
+    const storage = RepositoryStorage.openReadEntityStorage(
+      this.#runtime.storageFactory,
+      RepositoryStorage.entityStorageInput(this.#repository, this.#context),
+    );
+    try {
+      return await storage.current.query(plan);
+    } finally {
+      storage.close();
+    }
+  }
+}
+
+/**
+ * Applies repository lifecycle defaults only when IDs and lifecycle filters are absent.
+ */
+const RepositoryReadPredicates = {
+  /**
+   * Builds an exhaustive normalized plan and validates it before provider access.
+   *
+   * @param compiled Storage-neutral query plan from the shared description.
+   * @returns Plan with repository lifecycle selection and explicit application bounds.
+   */
+  plan(compiled: EntityQueryPlan): NormalizedQueryPlan<unknown> {
+    const predicate = this.flattenConjunctions(this.withLifecycleDefault(compiled.predicate));
+    const plan: NormalizedQueryPlan<unknown> = {
+      predicate,
+      ...(compiled.order === undefined ? {} : { order: compiled.order }),
+      ...(compiled.limit === undefined ? {} : { limit: compiled.limit }),
+      exhaustive: true,
+    };
+    StorageQueryPolicy.validate(plan, {
+      comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
+      features: ["either", "nested", "order", "limit"],
+    });
+    return plan;
+  },
+
+  /**
+   * Adds active-record filters when no ID or lifecycle clause occurs in the tree.
+   *
+   * @param predicate Compiled query predicate, when present.
+   * @returns Predicate selected for repository reads.
+   */
+  withLifecycleDefault(
+    predicate: EntityQueryPlan["predicate"],
+  ): NonNullable<NormalizedQueryPlan<unknown>["predicate"]> {
+    if (predicate !== undefined && this.explicitSelection(predicate)) return predicate;
+    const active = [
+      { kind: "comparison", column: "archived", operator: "equal", value: false },
+      { kind: "comparison", column: "deleted", operator: "equal", value: false },
+    ] as const;
+    return {
+      kind: "all",
+      predicates: predicate === undefined ? active : [predicate, ...active],
+    };
+  },
+
+  /**
+   * Normalizes adjacent conjunctions so providers that require flat filters can admit them.
+   *
+   * @param predicate Compiled predicate after lifecycle selection.
+   * @returns Equivalent predicate with no directly nested conjunctions.
+   */
+  flattenConjunctions(
+    predicate: NonNullable<NormalizedQueryPlan<unknown>["predicate"]>,
+  ): NonNullable<NormalizedQueryPlan<unknown>["predicate"]> {
+    if (predicate.kind === "comparison" || predicate.kind === "ids") return predicate;
+    const children = predicate.predicates.map((child) => this.flattenConjunctions(child));
+    return {
+      kind: predicate.kind,
+      predicates:
+        predicate.kind === "all"
+          ? children.flatMap((child) => (child.kind === "all" ? child.predicates : [child]))
+          : children,
+    };
+  },
+
+  /**
+   * Checks for an explicit ID or lifecycle clause at any predicate depth.
+   *
+   * @param predicate Compiled predicate to inspect.
+   * @returns Whether the application selected IDs or lifecycle state explicitly.
+   */
+  explicitSelection(predicate: NonNullable<EntityQueryPlan["predicate"]>): boolean {
+    if (predicate.kind === "ids") return true;
+    if (predicate.kind === "comparison")
+      return predicate.column === "archived" || predicate.column === "deleted";
+    return predicate.predicates.some((child) => this.explicitSelection(child));
   },
 };
 
@@ -7469,6 +7761,25 @@ Object.freeze(RepositoryRoutes);
  * Internal repository storage operations.
  */
 const RepositoryStorage = {
+  /**
+   * Opens provider Entity storage for one read scope without a commit handle.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Generated Entity state type.
+   * @param factory Provider storage factory.
+   * @param input Entity storage location and schema.
+   * @returns The independently closeable Entity storage ports.
+   */
+  openReadEntityStorage<I, S extends Message>(
+    factory: StorageFactory,
+    input: EntityStorageInput<I, S>,
+  ): ReturnType<EntityStorageFactory["createEntityStorage"]> {
+    const candidate = factory as StorageFactory & Partial<EntityStorageFactory>;
+    if (candidate.createEntityStorage === undefined)
+      throw new Error("StorageFactory does not provide Entity storage for repository reads.");
+    return candidate.createEntityStorage(input);
+  },
+
   /**
    * Opens Entity storage and an atomic commit port from a storage factory.
    *

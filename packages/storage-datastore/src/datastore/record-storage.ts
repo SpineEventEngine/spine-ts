@@ -655,19 +655,66 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   protected override async queryPlanRecordEntries(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
-    if (plan.predicate !== undefined && DatastoreQueryPushdown.legal(plan) === undefined)
+    const legal = DatastoreQueryPushdown.legal(plan);
+    if (
+      plan.predicate !== undefined &&
+      legal === undefined &&
+      !(plan.exhaustive && DatastoreQueryPushdown.largeIdSet(plan.predicate))
+    )
       throw new TypeError(
         "Datastore normalized query has an illegal predicate or inequality ordering.",
       );
     for (const order of plan.order ?? []) this.#codec.columnProperty(order.column);
-    const query = this.#codec.createQuery(this.client);
-    DatastoreQueryPushdown.plan(
-      query,
-      plan,
-      (id) => this.#codec.key(this.client, id),
-      (column) => this.#codec.columnProperty(column),
-      (column, value) => this.#codec.columnValue(column, value),
-    );
+    if (plan.exhaustive)
+      return this.exhaustivePlanEntries(plan, legal !== undefined || plan.predicate === undefined);
+    return this.boundedPlanEntries(plan);
+  }
+
+  /**
+   * Reads every provider page before storage applies the global query semantics.
+   *
+   * @param plan Validated normalized query plan.
+   * @param pushdown Whether the provider can apply the predicate and ordering.
+   * @returns Every candidate entry in provider page order.
+   */
+  private async exhaustivePlanEntries(
+    plan: NormalizedQueryPlan<I>,
+    pushdown: boolean,
+  ): Promise<readonly RecordEntry<I, R>[]> {
+    const entries: RecordEntry<I, R>[] = [];
+    let cursor: Buffer | string | undefined;
+    const seen = new Set<string>();
+    for (;;) {
+      const query = this.planQuery(plan, pushdown);
+      query.limit(128);
+      if (cursor !== undefined) query.start(cursor);
+      const response = await this.provider(() => this.client.runQuery(query, wrappedReadOptions));
+      entries.push(
+        ...DatastoreResults.entities(response).map((entity) => ({
+          id: this.#codec.id(entity, this.client),
+          record: this.#codec.decode(entity),
+        })),
+      );
+      const info = DatastoreResults.queryInfo(response);
+      if (!info.more) return entries;
+      const next = info.cursor;
+      const key = typeof next === "string" ? next : next.toString("base64");
+      if (seen.has(key)) throw new Error("Datastore query continuation did not advance.");
+      seen.add(key);
+      cursor = next;
+    }
+  }
+
+  /**
+   * Reads one bounded provider result for public and Process Manager plans.
+   *
+   * @param plan Validated normalized query plan.
+   * @returns Candidate entries within the provider's configured bound.
+   */
+  private async boundedPlanEntries(
+    plan: NormalizedQueryPlan<I>,
+  ): Promise<readonly RecordEntry<I, R>[]> {
+    const query = this.planQuery(plan, true);
     const providerLimit = Math.min(
       this.#codec.queryLimit(),
       plan.limit ?? Number.POSITIVE_INFINITY,
@@ -684,6 +731,30 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       id: this.#codec.id(entity, this.client),
       record: this.#codec.decode(entity),
     }));
+  }
+
+  /**
+   * Builds one Datastore query with safe predicate and order pushdown.
+   *
+   * @param plan Normalized query plan to translate.
+   * @param pushdown Whether the plan is legal for provider filtering.
+   * @returns Query without a page bound or cursor.
+   */
+  private planQuery(
+    plan: NormalizedQueryPlan<I>,
+    pushdown: boolean,
+  ): ReturnType<Datastore["createQuery"]> {
+    const query = this.#codec.createQuery(this.client);
+    if (pushdown)
+      DatastoreQueryPushdown.plan(
+        query,
+        plan,
+        (id) => this.#codec.key(this.client, id),
+        (column) => this.#codec.columnProperty(column),
+        (column, value) => this.#codec.columnValue(column, value),
+      );
+    if (plan.exhaustive && (!pushdown || (plan.order?.length ?? 0) === 0)) query.order("__key__");
+    return query;
   }
 
   /**
@@ -1038,6 +1109,19 @@ class DatastoreQueryPushdownHelper {
   }
 
   /**
+   * Checks whether an ID predicate exceeds Datastore's IN filter width.
+   *
+   * @typeParam I Identifier type in the predicate.
+   * @param predicate Predicate tree to inspect.
+   * @returns Whether a nested ID set requires a complete scan.
+   */
+  largeIdSet<I>(predicate: NormalizedQueryPredicate<I>): boolean {
+    if (predicate.kind === "ids") return predicate.ids.length > 30;
+    if (predicate.kind === "comparison") return false;
+    return predicate.predicates.some((child) => this.largeIdSet(child));
+  }
+
+  /**
    * Adds one already-legal normalized predicate to the provider query.
    *
    * @typeParam I Record identifier type in ID predicates.
@@ -1373,10 +1457,11 @@ class DatastoreResultsHelper {
    * @param response Raw provider query response.
    * @returns Validated cursor and whether another page exists.
    */
-  queryInfo(response: unknown): {
-    readonly cursor: Buffer | string | undefined;
-    readonly more: boolean;
-  } {
+  queryInfo(
+    response: unknown,
+  ):
+    | { readonly cursor: Buffer | string; readonly more: true }
+    | { readonly cursor: Buffer | string | undefined; readonly more: false } {
     if (!Array.isArray(response) || typeof response[1] !== "object" || response[1] === null)
       throw new Error("Datastore returned an invalid query response.");
     const info = response[1] as Record<string, unknown>;
@@ -1390,11 +1475,14 @@ class DatastoreResultsHelper {
       throw new Error("Datastore returned an invalid query response.");
     const more =
       moreResults === "MORE_RESULTS_AFTER_LIMIT" || moreResults === "MORE_RESULTS_AFTER_CURSOR";
-    if (more && !(cursor instanceof Buffer || typeof cursor === "string"))
-      throw new Error("Datastore returned an invalid query response.");
+    if (more) {
+      if (!(cursor instanceof Buffer || typeof cursor === "string"))
+        throw new Error("Datastore returned an invalid query response.");
+      return { cursor, more: true };
+    }
     return {
       cursor: cursor instanceof Buffer || typeof cursor === "string" ? cursor : undefined,
-      more,
+      more: false,
     };
   }
 

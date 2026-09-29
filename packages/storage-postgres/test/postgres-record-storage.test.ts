@@ -15,7 +15,13 @@
 import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
-import { ColumnTypes, RecordColumn, RecordSpec, StorageGroup } from "@spine-event-engine/storage";
+import {
+  ColumnTypes,
+  RecordColumn,
+  RecordSpec,
+  StorageGroup,
+  type NormalizedQueryPlan,
+} from "@spine-event-engine/storage";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 interface QueryResult {
@@ -77,6 +83,8 @@ vi.mock("pg", () => ({ Pool: driver.Pool }));
 
 import { PostgresStorageFactory } from "../src/index.js";
 import { PostgresClientDisposal, PostgresTransactionErrors } from "../src/postgres/errors.js";
+import { PostgresRecordStorage } from "../src/postgres/record-storage.js";
+import { PostgresTableSpecs } from "../src/postgres/table-spec.js";
 
 describe("Postgres record storage", () => {
   beforeEach(() => {
@@ -756,6 +764,162 @@ describe("Postgres record storage", () => {
 
     expect(driver.connect).not.toHaveBeenCalled();
     expect(driver.calls).toEqual([]);
+  });
+
+  it("runs exhaustive plans without a provider limit and scans for oversized ID sets", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    driver.calls.length = 0;
+    await storage.queryPlan({
+      exhaustive: true,
+      predicate: { kind: "comparison", column: "value", operator: "greaterThan", value: "a" },
+      order: [{ column: "value", direction: "asc" }],
+      limit: 1,
+    });
+    let query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).not.toContain("WHERE");
+    expect(query?.sql).toContain('ORDER BY "value" ASC NULLS FIRST, "ID" ASC');
+    expect(query?.sql).not.toContain("LIMIT");
+    expect(query?.values).toEqual([]);
+
+    driver.calls.length = 0;
+    await storage.queryPlan({
+      exhaustive: true,
+      predicate: {
+        kind: "ids",
+        ids: Array.from({ length: 1_001 }, (_, index) => String(index)),
+      },
+    });
+    query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).not.toContain("WHERE");
+    expect(query?.sql).not.toContain("LIMIT");
+
+    driver.calls.length = 0;
+    await storage.queryPlan({
+      exhaustive: true,
+      predicate: {
+        kind: "all",
+        predicates: [
+          { kind: "comparison", column: "value", operator: "equal", value: "one" },
+          { kind: "ids", ids: Array.from({ length: 1_001 }, (_, index) => String(index)) },
+        ],
+      },
+    });
+    query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).not.toContain("WHERE");
+
+    driver.calls.length = 0;
+    await storage.queryPlan({ exhaustive: true });
+    query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).not.toContain("LIMIT");
+  });
+
+  it("keeps rewritten nested filters and aligns nullable numeric order with the evaluator", () => {
+    const spec = new RecordSpec<number, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "int32",
+      extractId: (record) => Number(record.value),
+      columns: [
+        new RecordColumn("number", ColumnTypes.scalar(ScalarType.INT32), (record) =>
+          Number(record.value),
+        ),
+        new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
+      ],
+    });
+    const table = PostgresTableSpecs.resolvedPostgresTableSpec({
+      schema: "spine",
+      tableName: "numeric_records",
+      sourceType: spec.sourceType,
+      recordType: spec.recordType,
+      idType: spec.idType,
+      declaredColumns: spec.columns,
+    });
+    const storage = new PostgresRecordStorage(
+      { name: "numeric-records", multitenant: false },
+      spec,
+      table,
+      { databaseName: "test", schema: "spine", acquire: () => driver.connect() as never },
+      () => undefined,
+    );
+    const compiler = storage as unknown as {
+      planQuery(plan: NormalizedQueryPlan<number>): { sql: string; values: readonly unknown[] };
+    };
+    const number = { kind: "comparison", column: "number", operator: "equal", value: 2 } as const;
+    const text = { kind: "comparison", column: "value", operator: "equal", value: "a" } as const;
+    const nested = compiler.planQuery({
+      exhaustive: true,
+      predicate: {
+        kind: "all",
+        predicates: [{ kind: "all", predicates: [number, text] }, { ...number }],
+      },
+    });
+    expect(nested.sql).toContain(
+      'WHERE (("number" IS NOT DISTINCT FROM $1) AND "number" IS NOT DISTINCT FROM $2)',
+    );
+    expect(nested.sql).not.toContain('"value"');
+    expect(nested.values).toEqual([2, 2]);
+    const either = compiler.planQuery({
+      exhaustive: true,
+      predicate: {
+        kind: "all",
+        predicates: [number, { kind: "either", predicates: [{ ...number }, text] }],
+      },
+    });
+    expect(either.sql).toContain('WHERE ("number" IS NOT DISTINCT FROM $1)');
+    expect(either.sql).not.toContain(" OR ");
+    expect(either.values).toEqual([2]);
+    for (const [direction, nulls] of [
+      ["asc", "ASC NULLS FIRST"],
+      ["desc", "DESC NULLS LAST"],
+    ] as const) {
+      const ordered = compiler.planQuery({
+        exhaustive: true,
+        order: [{ column: "number", direction }],
+        limit: 1,
+      });
+      expect(ordered.sql).toContain(`"number" ${nulls}, "ID" ASC LIMIT $1`);
+    }
+  });
+
+  it("does not push custom numeric SQL mappings for logical strings or string IDs", () => {
+    const spec = recordSpec();
+    const canonical = PostgresTableSpecs.resolvedPostgresTableSpec({
+      schema: "spine",
+      tableName: "custom_numeric",
+      sourceType: spec.sourceType,
+      recordType: spec.recordType,
+      idType: spec.idType,
+      declaredColumns: spec.columns,
+    });
+    const storage = new PostgresRecordStorage(
+      { name: "custom-numeric", multitenant: false },
+      spec,
+      {
+        ...canonical,
+        columns: canonical.columns.map((column) =>
+          column.name === "ID" || column.name === "value"
+            ? { ...column, postgresType: "INT" }
+            : column,
+        ),
+      },
+      { databaseName: "test", schema: "spine", acquire: () => driver.connect() as never },
+      () => undefined,
+    );
+    const compiler = storage as unknown as {
+      planQuery(plan: NormalizedQueryPlan<string>): { sql: string; values: readonly unknown[] };
+    };
+    const plan = compiler.planQuery({
+      exhaustive: true,
+      predicate: { kind: "comparison", column: "value", operator: "equal", value: "2" },
+      order: [{ column: "value", direction: "asc" }],
+      limit: 1,
+    });
+    expect(plan.sql).not.toContain(" WHERE ");
+    expect(plan.sql).not.toContain(" LIMIT ");
+    expect(
+      compiler.planQuery({ exhaustive: true, predicate: { kind: "ids", ids: ["2"] } }).sql,
+    ).not.toContain(" WHERE ");
   });
 
   it("accepts 999 normalized ID binds and reserves the final bind for the candidate bound", async () => {

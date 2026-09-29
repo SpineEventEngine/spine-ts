@@ -16,6 +16,7 @@ import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
 import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
+import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -95,10 +96,63 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
         Array.from({ length: 1_001 }, (_, index) => message(`scan-${String(index)}`)),
       );
       await expect(records.query()).rejects.toEqual(new DatastoreQueryLimitError(1_000));
+      await expect(
+        records.queryPlan({
+          exhaustive: true,
+          predicate: {
+            kind: "ids",
+            ids: Array.from({ length: 1_001 }, (_, index) => `scan-${String(index)}`),
+          },
+        }),
+      ).resolves.toHaveLength(1_001);
+      await expect(
+        records.queryPlan({
+          exhaustive: true,
+          order: [{ column: "value", direction: "desc" }],
+          limit: 1,
+        }),
+      ).resolves.toEqual([message("scan-999")]);
     } finally {
       await deleteKind(client, kind);
     }
   }, 30_000);
+
+  it("reads every exhaustive match and finds a late ordered match beyond 10,000 rows", async () => {
+    const client = datastore();
+    const kind = unique("ExhaustiveRows");
+    const records = DatastoreStorageFactory.newBuilder()
+      .setClient(client)
+      .organizeRecords(StringValueSchema, { kind })
+      .build()
+      .createRecordStorage({ name: unique("exhaustive"), multitenant: false }, stringSpec());
+    const values = Array.from(
+      { length: 10_002 },
+      (_, index) => `item-${String(index).padStart(5, "0")}`,
+    );
+    try {
+      for (let offset = 0; offset < values.length; offset += 500) {
+        await records.writeAll(values.slice(offset, offset + 500).map(message));
+      }
+      await expect(records.query()).rejects.toEqual(new DatastoreQueryLimitError(1_000));
+      await expect(records.queryPlan({ exhaustive: true })).resolves.toHaveLength(10_002);
+      await expect(
+        records.queryPlan({
+          exhaustive: true,
+          predicate: {
+            kind: "comparison",
+            column: "value",
+            operator: "greaterThan",
+            value: "item-10000",
+          },
+          order: [{ column: "value", direction: "asc" }],
+          limit: 1,
+        }),
+      ).resolves.toEqual([message("item-10001")]);
+    } finally {
+      records.close();
+      await deleteKind(client, kind);
+    }
+  }, 120_000);
 
   it("shares context-neutral families while groups and tenant namespaces isolate", async () => {
     const client = datastore();
@@ -167,10 +221,15 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
   });
 
   it("keeps Entity current, histories, and Event Store in separate physical families", async () => {
-    const client = datastore();
+    const client = new Datastore({ projectId: unique("entity-project").toLowerCase() });
     const context = { name: unique("entity"), multitenant: false } as const;
     const entity = entityInput(context, true);
-    const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client)
+      .setStringifierRegistry(stringifiers)
+      .build();
     const handle = factory.createEntityStorage(entity);
     const first = entityRecord("current", 1);
 
@@ -368,7 +427,8 @@ async function rows(client: Datastore, kind: string, namespace?: string): Promis
 async function deleteKind(client: Datastore, kind: string, namespace?: string): Promise<void> {
   const found = await rows(client, kind, namespace);
   const keys = found.map((row) => row.key).filter((key) => key !== undefined);
-  if (keys.length > 0) await client.delete(keys);
+  for (let offset = 0; offset < keys.length; offset += 500)
+    await client.delete(keys.slice(offset, offset + 500));
 }
 
 interface PhysicalRow {

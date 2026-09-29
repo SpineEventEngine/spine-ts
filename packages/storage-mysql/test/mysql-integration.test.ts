@@ -126,6 +126,119 @@ live("MySQL-family record layout", () => {
     storage.close();
   });
 
+  it("reads an exhaustive late match and a large explicit ID set through live SQL", async () => {
+    const spec = new RecordSpec<string, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+      columns: [
+        new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
+      ],
+    });
+    const group = new StorageGroup(`repository_reads_${String(Date.now())}`);
+    const storage = factory.createRecordStorage(
+      { name: `repository_reads_${String(Date.now())}`, multitenant: false },
+      spec,
+      group,
+    );
+    const values = Array.from(
+      { length: 10_002 },
+      (_, index) => `item-${String(index).padStart(5, "0")}`,
+    );
+    try {
+      for (let offset = 0; offset < values.length; offset += 500) {
+        await storage.writeAll(
+          values.slice(offset, offset + 500).map((value) => create(StringValueSchema, { value })),
+        );
+      }
+      expect(
+        (
+          await storage.queryPlan({
+            exhaustive: true,
+            order: [{ column: "value", direction: "asc" }],
+          })
+        ).map((record) => record.value),
+      ).toEqual(values);
+      await expect(
+        storage.queryPlan({
+          exhaustive: true,
+          predicate: {
+            kind: "comparison",
+            column: "value",
+            operator: "greaterThan",
+            value: "item-10000",
+          },
+          order: [{ column: "value", direction: "asc" }],
+          limit: 1,
+        }),
+      ).resolves.toEqual([create(StringValueSchema, { value: "item-10001" })]);
+      await expect(
+        storage.queryPlan({
+          exhaustive: true,
+          predicate: { kind: "ids", ids: values.slice(0, 1_001) },
+        }),
+      ).resolves.toHaveLength(1_001);
+    } finally {
+      storage.close();
+    }
+  }, 120_000);
+
+  it("evaluates exhaustive text comparisons and ordering across provider collation differences", async () => {
+    const ids = new Map(["A", "a", "á", "a ", "B"].map((value, index) => [value, index]));
+    const spec = new RecordSpec<number, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "int32",
+      extractId: (record) => {
+        const id = ids.get(record.value);
+        if (id === undefined) throw new Error("Unexpected collation fixture value.");
+        return id;
+      },
+      columns: [
+        new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
+      ],
+    });
+    const group = new StorageGroup(`repository_collation_${String(Date.now())}`);
+    const storage = factory.createRecordStorage(
+      { name: `repository_collation_${String(Date.now())}`, multitenant: false },
+      spec,
+      group,
+    );
+    if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
+    const pool = createPool(url);
+    try {
+      await storage.writeAll(
+        ["A", "a", "á", "a ", "B"].map((value) => create(StringValueSchema, { value })),
+      );
+      await pool.query(
+        `ALTER TABLE \`${mysqlRecordTableName(spec, group)}\` MODIFY COLUMN \`value\` ` +
+          "TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL",
+      );
+      for (const value of ["a", "á", "a "]) {
+        await expect(
+          storage.queryPlan({
+            exhaustive: true,
+            predicate: { kind: "comparison", column: "value", operator: "equal", value },
+            order: [{ column: "value", direction: "asc" }],
+            limit: 1,
+          }),
+        ).resolves.toEqual([create(StringValueSchema, { value })]);
+      }
+      await expect(
+        storage.queryPlan({
+          exhaustive: true,
+          order: [{ column: "value", direction: "asc" }],
+          limit: 2,
+        }),
+      ).resolves.toEqual([
+        create(StringValueSchema, { value: "A" }),
+        create(StringValueSchema, { value: "B" }),
+      ]);
+    } finally {
+      await pool.end();
+      storage.close();
+    }
+  });
+
   it("accepts the configured transactional or nontransactional engine", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     const pool = createPool(url);

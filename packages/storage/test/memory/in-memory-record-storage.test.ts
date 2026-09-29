@@ -1013,6 +1013,39 @@ describe("InMemoryRecordStorage", () => {
 
     expect(records.queries).toEqual([{ limit: 10_001 }]);
   });
+
+  it("scans beyond the bounded candidate sentinel for an exhaustive read", async () => {
+    const records = new ObservingTenantRecords<EventId, Event>();
+    const storage = new InMemoryRecordStorage(
+      { name: "Tasks", multitenant: false },
+      createSpec(),
+      () => records,
+    );
+    await storage.writeAll(
+      Array.from({ length: 10_002 }, (_, index) =>
+        createEvent(
+          `event-${String(index).padStart(5, "0")}`,
+          "type.spine.io/tasks.TaskCreated",
+          BigInt(index),
+        ),
+      ),
+    );
+
+    const result = await storage.queryPlan({
+      exhaustive: true,
+      predicate: {
+        kind: "comparison",
+        column: "timestamp",
+        operator: "greaterThan",
+        value: 10_000n,
+      },
+      order: [{ column: "timestamp", direction: "asc" }],
+      limit: 1,
+    });
+
+    expect(result.map((event) => event.id?.value)).toEqual(["event-10001"]);
+    expect(records.queries).toEqual([{}]);
+  });
 });
 
 class ObservedInMemoryStorage extends InMemoryRecordStorage<string, StringValue> {
