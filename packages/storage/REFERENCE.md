@@ -6,7 +6,7 @@ This reference is for agents working with the Spine TS storage contract.
 
 Import public types from `@spine-event-engine/storage`. The entry point exports
 `StorageFactory`, `RecordStorage`, `RecordSpec`, `RecordSpecOptions`, `RecordColumn`, `RecordQuery`,
-`RecordMask`, `StorageGroup`, `ColumnTypes`, `ColumnMappings`, the exported
+`StorageGroup`, `ColumnTypes`, `ColumnMappings`, the exported
 column-mapping contracts, `InMemoryStorageFactory`,
 `InMemoryStorageBackend`, event-store types, normalized query policy/evaluator
 types, and entity history interfaces.
@@ -78,9 +78,9 @@ name validation from the common query shape.
 
 The normalized-plan matrix is intentionally provider-specific. MySQL admits
 IDs; equality and the five comparisons on mapped orderable columns; nested
-`all` and `either`; declared-column ordering; positive limits; and masks.
+`all` and `either`; declared-column ordering; and positive limits.
 Datastore admits only IDs, equality, one provider-legal inequality column, flat
-`all`, compatible ordering, limits, and masks. Both reject unsupported shapes
+`all`, compatible ordering, and limits. Both reject unsupported shapes
 before provider access. Normalized plans never include offset: the existing
 `RecordQuery.offset` path is separate. MySQL executes every admitted predicate,
 order, and finite bound in contained parameterized SQL; Datastore executes only

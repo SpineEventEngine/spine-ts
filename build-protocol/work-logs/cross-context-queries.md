@@ -3,7 +3,7 @@
 Started: 28 September 2026. Status: original implementation locally verified;
 repository-query and generated-DSL plan reviewed as of 29 September. The human
 resolved field selection: remove all masking APIs, including subscriptions, and
-ignore Protobuf mask fields. The corrected plan is ready; implementation is pending.
+ignore Protobuf mask fields. Extension implementation is now authorized and underway.
 Task/branch: `cross-context-queries`.
 Worktree: `/Users/armiol/.codex/worktrees/cross-context-queries/spine-ts`.
 Base: `2324311be8c23024f66cb2ba702fbe99a99e7dfb` from freshly fetched official origin.
@@ -563,3 +563,144 @@ Post-review document checks passed (exit 0): Prettier on the three changed files
 documentation audience checks and `git diff --check`. The review process exited
 normally; no reviewer process is left running. Ready to push this plan update
 and give the requested simple summary, without claiming feature implementation.
+
+## Approved extension implementation
+
+Started 29 September 2026 from `d37ca8179` in the existing task worktree/branch.
+The human authorized the whole reviewed extension. High-risk: shared public
+query contracts, storage behavior, asynchronous routing and delivery. The
+approved Astra/high architecture review is complete; do not repeat it absent
+a material contract change or demonstrated blocker. Estimate remains 4.5–6.5
+hours, excluding CI queue time; detailed breakdown is in the plan.
+
+Progress: masking removal in progress; generated queries/consumers, complete
+repository reads, async routing, broad examples/docs and final verification
+pending. Preserve original cross-context implementation and its regressions.
+Use `verify:release` once after the reviewed slices converge, because shared
+runtime/contracts change; run cheap checks and focused coverage before reviews.
+Do not start a redundant full baseline run. Current prior release evidence is
+recorded above. Every feature commit must be pushed immediately by main.
+
+Main reread AGENTS and BUILD_PROTOCOL. Selected skills: subagent-driven-development,
+test-driven-development, verification-before-completion, using-git-worktrees,
+requesting-code-review; full skill instructions and dispatch templates read.
+Session inventory, installed entrypoints and repo expected-skill manifest checked;
+installed-lock source was inspected during this task. Use existing plan/work/review
+records rather than another skill ledger. Repo-specific role routing, retained
+implementer corrections, concern-specific review waves, and one final release
+gate supersede generic skill instructions to create new fixers or run full suites
+per slice. Missing writing-plans/finishing skill names use the canonical reviewed
+plan and repo workflow instead; no new worktree, branch or dependency installation.
+
+Expected implementation assignment: existing implementer role, explicit
+gpt-6-sol / medium, one production writer for all masking-related source, tests
+and narrow API documentation. Main retains these protocol records. Agents are
+not alone in the checkout and must preserve unrelated edits. Desktop agent
+capacity is exhausted; the already-verified app-bundled CLI supports explicit
+profiles. Use a fresh CLI session and retain it for corrections/follow-on slices,
+with memory and child-agent creation disabled. No new user chat is created.
+Mechanical checks use Luna/low; documentation review Luna/medium; API, style and
+reliability reviewers Sol/medium, each fresh and independent. Record actual
+execution headers before accepting work; separate runtime metadata may be absent.
+
+Masking slice brief/report/logs are under `/tmp/spine-query-implementation.NI6cD6/`.
+Main dispatched the app-bundled CLI with explicit gpt-6-sol / medium, memories,
+multi-agent and fast mode disabled. This implementation session is retained for
+corrections. Its assigned source/test/doc scope excludes main's protocol records.
+Focused tests are constrained to run mode and one worker; do not launch watch
+processes. Repository origin/master was fetched and remains at the original base
+`2324311be8`; no merge or branch replacement is needed.
+
+Independent read-only preparation for the next slice: orchestrator-dispatched
+code/API scanning function, explicit gpt-6-luna / medium. Map existing generator
+integration and typed-query consumer seams into a compact report for the retained
+implementer. No edits, tests, builds or child agents; do not duplicate masking
+implementation exploration. This is a mechanical/API verification function, not
+a new project role.
+
+Execution headers confirm the implementer session `01a0ed61-8899-76f2-ba6a-e5438eded07e`
+uses gpt-6-sol/medium and the read-only scan uses gpt-6-luna/medium. Main verified
+official core-jvm HEAD with `git ls-remote`: still
+`ea3067b137938ac0beb6920c39d11e300976fcc9`. The implementer inspected its
+ToEntityRecordQuery source; explicit human no-masking behavior supersedes that
+JVM feature. Expected failing query and local/remote subscription tests were
+observed before source changes; their commands/output are in the slice log.
+
+The Luna/medium read-only scan completed (exit 0) without edits or tests. Accepted
+the explicit configured profile confirmed in its execution header. Its report
+`query-seams.md` maps normal proto-tools staging/import rewriting/fingerprints,
+existing column plugin, core builder/compiler, canonical ID-field inference,
+and PM/client/recovery consumers for the next slice. Use it to avoid repeating
+that source discovery; implementing repository searches remains a later slice.
+Next-slice preparation: a second independent read-only scanning assignment uses
+explicit gpt-6-luna / medium to map provider query limits, Entity restoration and
+async routing/admission call sites. It must not edit files, run tests or overlap
+the completed generation/consumer scan. This is the orchestrator's scanning
+function, not a new project role. Its compact report will support the retained
+implementer after generated-query contracts stabilize.
+The provider/routing scan completed with exit 0; its execution header confirms
+gpt-6-luna / medium. Accepted report: `provider-routing-seams.md` beside the
+generation scan. It identifies each provider's candidate limit, normal Entity
+restoration, routing admission and recorded-target replay. No source edits or
+tests were performed by that scanning function.
+
+Masking preflight is not yet accepted: focused tests passed (latest 469 tests in
+11 files), but cleanup rejects the modified ServiceValues closure and touched-file
+TSDoc/spacing checks require correction. These are implementation work, not waived
+baseline limitations. Main prepared a correction brief for the retained Sol
+session; do not start specialist review or claim this slice ready before they pass.
+The first implementation session returned DONE_WITH_CONCERNS. Accepted its test
+and behavior evidence, but not slice completion: cleanup and touched-file TSDoc
+failures must be resolved. Resumed the same session with explicit gpt-6-sol / medium;
+the new execution header confirms both. The correction brief requires a small
+behavior-preserving removal of the oversized wrapper, all required documentation
+and spacing fixes, no checker exemptions, and reuse of unaffected test evidence.
+Main formatted its protocol records. Specialist review remains pending.
+Cleanup now passes after unwrapping the service helper closure and shortening
+three affected helpers. During documentation drafting, main rejected a temporary
+name-based comment generator before its proposed prose reached source files:
+generic parameter/result guesses were not acceptable documentation. Interrupted
+only that task's CLI process, then resumed the same explicit Sol/medium session
+with instructions to inspect each declaration and write accurate comments.
+No source work was discarded; no enforcement rule was weakened. The temporary
+drafting script is outside the repository and will not be committed.
+Independent final-verification preparation is assigned as a read-only mechanical
+function with explicit gpt-6-luna / low. Inspect existing real-database/emulator
+test commands, example smoke commands, Docker availability and task/release
+preflight configuration. No test/build/container startup, installs, source edits
+or child agents. This avoids discovering environmental requirements at release
+time; it does not authorize changing the shared environment.
+The live-verification preparation completed, exit 0, with gpt-6-luna / low
+confirmed in the header. Accepted `live-verification-seams.md`: current real SQL
+and Datastore commands, Todo smoke configuration, and release/tarball entry points.
+It found the Docker client installed but the daemon unavailable; no resources
+were started or modified. Main notified the human to start Docker before live
+provider verification. Code work can continue; do not claim mocked-provider tests
+as live database evidence. Current integration fixtures need explicit large-read
+cases to establish exhaustive provider behavior.
+Masking correction completed. Final report: `masking-report.md` in the task's
+temporary evidence directory. Final cheap checks pass: cleanup, TSDoc, changed
+source/script ESLint and Prettier, generated build typecheck then tooling
+typecheck, API-documentation inventory and `git diff --check`. No checker
+exemptions were added. Reused the prior 469-test focused masking coverage, and
+reran 115 service tests after unwrapping helpers plus 62 core tests after the
+documented private rejection-factory correction; all passed. Datastore helper
+class expressions were named without changing their frozen-instance behavior.
+These small code changes are explicitly included in independent review.
+
+Started fresh API, reliability and style reviews, each explicit Sol/medium with
+confirmed execution metadata; documentation will follow as Luna/medium within
+the available capacity. Hold production source unchanged until the complete
+wave has been collected. Review evidence and final acceptance belong in the
+review log. Full release verification and live database evidence remain pending.
+During the held-source review wave, a mechanical verification function uses
+explicit gpt-6-luna / low for generated documentation/snippet checks, repository
+format and whitespace checks. No source edits or production builds; reuse current
+generated outputs. These supplement the implementer's touched-source preflight.
+Accepted the complete masking checkpoint after all review corrections. The same
+Sol/medium session added real activation and complete Event/state delivery tests
+for invalid masks and corrected RecordValues documentation. Final service suite:
+117/117; generated build and tooling typechecks, affected ESLint/Prettier, cleanup,
+TSDoc and whitespace checks all pass. No runtime change in the review correction.
+Main checked the new assertions and accepted each finding as resolved. The next
+slice is the shared context-free query, normal generated DSL and existing consumers.

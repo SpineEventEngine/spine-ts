@@ -844,7 +844,6 @@ describe("Postgres record storage", () => {
           },
         ],
       },
-      mask: { paths: ["value"] },
       order: [{ column: "value", direction: "desc" }],
       limit: 8,
       candidateLimit: 2,

@@ -141,7 +141,7 @@ also call `setTypeRegistry()` with the application's generated `TypeRegistry`.
 ## Query Projection state
 
 `EntityQuery` is the canonical typed query builder for descriptor-backed Entity state. Register
-only the generated columns a caller may use, then build predicates, masks, ordering, and an
+only the generated columns a caller may use, then build predicates, ordering, and an
 optional limit from that collection. The generated-column helper is intentionally generator-only:
 
 ```ts

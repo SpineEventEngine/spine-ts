@@ -7,7 +7,9 @@ execution, including subscriptions; ignore mask fields in incoming Protobufs.
 No product questions remain.
 The complete corrected plan received a fresh standalone review without memory;
 its three implementation-plan findings are incorporated below.
-The extension is not implemented.
+Extension implementation is underway. Masking removal passed focused verification
+and independent API, reliability, style and documentation review; accepted findings
+are fixed. Shared typed queries and normal DSL generation are next.
 GitHub CI remains unverified.
 Updated: 29 September 2026.
 Branch: `cross-context-queries`.
@@ -461,9 +463,11 @@ explicit Astra/high and no inherited history or memory. Implementation later
 uses one Sol/medium writer; scoped mechanical checks use Luna/low or medium;
 relevant specialist profiles remain as specified above. No child spawns children.
 
-Current authorization is to reanalyze and update this plan after the human's
-masking decision, not implement the extension in this turn. Reanalysis estimate:
-0.15–0.25 hours. Provide a detailed implementation estimate before implementation.
+The human authorized implementation on 29 September. Remaining estimate:
+4.5–6.5 hours of uninterrupted agent work, excluding CI queue time. Breakdown:
+masking 0.4–0.6; shared query/DSL generation 1.0–1.4; consumers 0.4–0.6;
+repository reads/providers 0.9–1.3; routing/delivery 0.8–1.2; examples/docs
+0.3–0.4; reviews/corrections 0.5–0.7; final verification/handoff 0.2–0.3.
 
 ### Extension source evidence
 

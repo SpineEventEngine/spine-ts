@@ -99,8 +99,7 @@ that column's descriptor. Missing materialized columns do not match; dotted
 payload paths are rejected. Large offsets can be expensive.
 
 Normalized projection plans compile IDs, equality, all five comparisons, nested
-`all` / `either`, ordering, limits, and masks to one parameterized SQL statement.
-A mask is applied only after an otherwise fully bounded complete-record fetch.
+`all` / `either`, ordering, and limits to one parameterized SQL statement.
 Normalized plans have no offset; `RecordQuery.offset` remains separate. The selected
 tenant pool is acquired before the resolved family table is accessed; only that
 validated table and declared columns are interpolated, while IDs, operands, and

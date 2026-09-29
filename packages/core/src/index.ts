@@ -99,7 +99,6 @@ export {
   EntityQueryBuilder,
   type EntityComparisonPredicate,
   type EntityGroup,
-  type EntityQueryMaskPath,
   type EntityQueryIdentifier,
   type EntityQueryPredicateFor,
   type EntityPredicate,
@@ -123,6 +122,12 @@ export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
 export type MessageSchema = GenMessage<Message>;
 
 type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
+
+/**
+ * Extracts a member message shape from an interface schema tuple.
+ *
+ * @typeParam Schemas Nonempty tuple of member message schemas.
+ */
 type InterfaceMember<Schemas extends InterfaceSchemas> = MessageShape<Schemas[number]>;
 interface SecureRandomCrypto {
   readonly randomUUID?: () => string;
@@ -234,9 +239,17 @@ function isMessageSchema(value: unknown): value is MessageSchema {
  * Creates and validates nominal generated message-interface tokens.
  */
 export const MessageInterfaces: Readonly<{
-  readonly define: <TInterface extends object, const Schemas extends InterfaceSchemas>(
+  /**
+   * Defines a nominal interface token from its member schemas.
+   *
+   * @typeParam TInterface Shape shared by member messages.
+   * @typeParam Schemas Nonempty tuple of generated member schemas.
+   * @param schemas Member schemas accepted by the interface shape.
+   * @returns Immutable nominal interface token.
+   */
+  define<TInterface extends object, const Schemas extends InterfaceSchemas>(
     schemas: InterfaceMember<Schemas> extends TInterface ? Schemas : never,
-  ) => MessageInterface<TInterface, Schemas>;
+  ): MessageInterface<TInterface, Schemas>;
   readonly is: (value: unknown) => value is MessageInterface<object, InterfaceSchemas>;
 }> = Object.freeze({
   // prettier-ignore
@@ -331,6 +344,8 @@ export type MessageValidationResult =
 
 /**
  * Framework-owned state transition validation request.
+ *
+ * @typeParam Schema Generated schema shared by both state values.
  */
 export interface TransitionValidationRequest<Schema extends MessageSchema = MessageSchema> {
   // prettier-ignore
@@ -353,6 +368,8 @@ export interface TransitionValidationRequest<Schema extends MessageSchema = Mess
 
 /**
  * Rule adapter for stateful validation such as Spine `(set_once)`.
+ *
+ * @typeParam Schema Generated schema of the transition states.
  */
 export interface TransitionValidationRule<Schema extends MessageSchema = MessageSchema> {
   // prettier-ignore
@@ -380,6 +397,7 @@ export class ValidationException extends Error {
    * Constraint violations captured from the structured validation error.
    */
   readonly violations: readonly ConstraintViolation[];
+
   readonly #messageData: ValidationError;
 
   /**
@@ -405,6 +423,14 @@ export class ValidationException extends Error {
   }
 }
 
+/**
+ * Constructs a rejection after its generated message has been validated.
+ *
+ * @typeParam Schema Generated rejection message schema.
+ * @param schema Schema used to snapshot the message.
+ * @param messageData Validated rejection message.
+ * @returns Nominal rejection throwable.
+ */
 let instantiateRejection: <Schema extends MessageSchema>(
   schema: Schema,
   messageData: MessageShape<Schema>,
@@ -412,11 +438,21 @@ let instantiateRejection: <Schema extends MessageSchema>(
 
 /**
  * A nominal domain rejection carrying its generated Protobuf message.
+ *
+ * @typeParam Schema Generated schema of the rejection message.
  */
 export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> extends Error {
   readonly #schema: Schema;
+
   readonly #messageData: MessageShape<Schema>;
 
+  /**
+   * Captures a validated rejection through the private factory token.
+   *
+   * @param schema Generated rejection message schema.
+   * @param messageData Validated rejection message to snapshot.
+   * @param token Token restricting construction to the factory.
+   */
   private constructor(
     schema: Schema,
     messageData: MessageShape<Schema>,
@@ -435,10 +471,23 @@ export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> ex
   }
 
   static {
-    instantiateRejection = <CreatedSchema extends MessageSchema>(
-      schema: CreatedSchema,
-      messageData: MessageShape<CreatedSchema>,
-    ) => new RejectionThrowable<CreatedSchema>(schema, messageData, REJECTION_CONSTRUCTOR);
+    instantiateRejection = (schema, messageData) =>
+      RejectionThrowable.instantiate(schema, messageData);
+  }
+
+  /**
+   * Creates a typed rejection through the private constructor.
+   *
+   * @typeParam CreatedSchema Generated rejection message schema.
+   * @param schema Schema used to snapshot the message.
+   * @param messageData Validated rejection message.
+   * @returns Nominal rejection throwable.
+   */
+  private static instantiate<CreatedSchema extends MessageSchema>(
+    schema: CreatedSchema,
+    messageData: MessageShape<CreatedSchema>,
+  ): RejectionThrowable<CreatedSchema> {
+    return new RejectionThrowable<CreatedSchema>(schema, messageData, REJECTION_CONSTRUCTOR);
   }
 
   /**
@@ -467,6 +516,7 @@ export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> ex
 
   /**
    * Creates a nominal throwable from a validated generated rejection message.
+   * @typeParam Schema Generated rejection message schema.
    * @param schema The generated rejection schema.
    * @param input The rejection message fields.
    * @returns The validated nominal rejection throwable.
@@ -488,6 +538,11 @@ export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> ex
     return typeof value === "object" && value !== null && REJECTION_THROWABLES.has(value);
   }
 
+  /**
+   * Validates that a schema is a top-level message from a rejection schema file.
+   *
+   * @param schema Candidate generated rejection schema.
+   */
   private static assertSchema(schema: MessageSchema): void {
     const basename = schema.file.proto.name.split("/").at(-1);
     const rejectionSource =
@@ -499,6 +554,14 @@ export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> ex
     }
   }
 
+  /**
+   * Copies a rejection message through its binary representation.
+   *
+   * @typeParam Schema Generated rejection message schema.
+   * @param schema Schema used to encode and decode the message.
+   * @param message Rejection message to copy.
+   * @returns Independent message snapshot.
+   */
   private static snapshot<Schema extends MessageSchema>(
     schema: Schema,
     message: MessageShape<Schema>,
@@ -524,6 +587,7 @@ export const Validate = {
 
   /**
    * Validates one Protobuf message through the Spine TS validation facade.
+   * @typeParam Schema Generated schema of the message being validated.
    * @param schema The message schema.
    * @param message The message to validate.
    * @returns The sanitized validation result.
@@ -547,6 +611,7 @@ export const Validate = {
 
   /**
    * Validates one Protobuf message and throws for constraint violations.
+   * @typeParam Schema Generated schema of the message being validated.
    * @param schema The message schema.
    * @param message The message to validate.
    * @returns The validated message.
@@ -562,6 +627,7 @@ export const Validate = {
 
   /**
    * Validates a previous/next state pair with framework-owned transition rules.
+   * @typeParam Schema Generated schema shared by both states.
    * @param request The state transition.
    * @param rules The rules to apply.
    * @returns The sanitized transition result.
@@ -606,6 +672,8 @@ export interface RegisterTypeOptions {
 
 /**
  * Descriptor-backed metadata for a registered Protobuf message schema.
+ *
+ * @typeParam Schema Generated schema represented by this metadata.
  */
 export interface TypeMetadata<Schema extends MessageSchema = MessageSchema> {
   // prettier-ignore
@@ -657,6 +725,7 @@ export interface TypeMetadata<Schema extends MessageSchema = MessageSchema> {
 
   /**
    * Checks whether a file option is set on this schema's file descriptor.
+   * @typeParam Value Value type declared by the option extension.
    * @param option The file option extension.
    * @returns Whether the option is present.
    */
@@ -664,6 +733,7 @@ export interface TypeMetadata<Schema extends MessageSchema = MessageSchema> {
 
   /**
    * Reads a file option from this schema's file descriptor.
+   * @typeParam Value Value type declared by the option extension.
    * @param option The file option extension.
    * @returns The extension value.
    */
@@ -672,6 +742,8 @@ export interface TypeMetadata<Schema extends MessageSchema = MessageSchema> {
 
 /**
  * Protobuf extension descriptor whose extendee is `google.protobuf.FileOptions`.
+ *
+ * @typeParam Value Value type stored by this file option.
  */
 export type FileOptionExtension<Value = unknown> = GenExtension<FileOptions, Value>;
 
@@ -697,6 +769,7 @@ export interface TypeRegistryLookup {
 
   /**
    * Finds metadata by generated schema identity.
+   * @typeParam Schema Generated schema used as the lookup key.
    * @param schema The generated message schema.
    * @returns Matching metadata, if registered.
    */
@@ -718,6 +791,7 @@ export interface TypeRegistryLookup {
 
   /**
    * Gets metadata by generated schema identity or throws a descriptive error.
+   * @typeParam Schema Generated schema used as the lookup key.
    * @param schema The generated message schema.
    * @returns The registered metadata.
    */
@@ -761,6 +835,8 @@ export interface PackAnyOptions {
 
 /**
  * Input for creating a generated Spine `Command` envelope from a domain message.
+ *
+ * @typeParam Schema Generated schema of the enclosed domain command.
  */
 export interface PackCommandInput<
   Schema extends MessageSchema = MessageSchema,
@@ -785,6 +861,8 @@ export interface PackCommandInput<
 
 /**
  * Input for creating a generated Spine `Event` envelope from a domain message.
+ *
+ * @typeParam Schema Generated schema of the enclosed domain event.
  */
 export interface PackEventInput<
   Schema extends MessageSchema = MessageSchema,
@@ -875,6 +953,7 @@ export const AnyMessages = {
 
   /**
    * Packs a message into `Any`, omitting unknown fields from binary output.
+   * @typeParam Schema Generated schema of the enclosed message.
    * @param schema The message schema.
    * @param message The message to pack.
    * @param options The packing options.
@@ -894,6 +973,7 @@ export const AnyMessages = {
 
   /**
    * Unpacks an `Any` when its type URL exactly matches the requested schema.
+   * @typeParam Schema Generated schema expected in the envelope.
    * @param packed The packed message.
    * @param schema The expected schema.
    * @returns The unpacked message, when valid.
@@ -930,6 +1010,8 @@ Object.freeze(AnyMessages);
 
 /**
  * Converts one value to and from its stable string representation.
+ *
+ * @typeParam T Runtime value type converted by this stringifier.
  */
 export interface Stringifier<T> {
   // prettier-ignore
@@ -953,12 +1035,27 @@ function isProtobufRegistry(types: TypeRegistryLookup | Registry): types is Regi
   return "kind" in types;
 }
 
+/**
+ * Creates reversible compact Proto JSON conversion for a generated message.
+ *
+ * @typeParam Schema Generated schema used for conversion.
+ * @param schema Message schema used for Proto JSON.
+ * @param registry Optional registry for expanding packed Any messages.
+ * @param typeUrls Canonical URLs restored on parsed Any messages.
+ * @returns Schema-bound stringifier.
+ */
 function defaultMessageStringifier<Schema extends MessageSchema>(
   schema: Schema,
   registry: Registry | undefined,
   typeUrls: ReadonlyMap<string, string>,
 ): Stringifier<MessageShape<Schema>> {
   return Object.freeze({
+    /**
+     * Parses compact Proto JSON and restores canonical Any type URLs.
+     *
+     * @param value Compact Proto JSON text.
+     * @returns Parsed generated message.
+     */
     fromString(value: string): MessageShape<Schema> {
       const message =
         registry === undefined
@@ -967,6 +1064,13 @@ function defaultMessageStringifier<Schema extends MessageSchema>(
       restoreAnyTypeUrls(message, typeUrls);
       return message;
     },
+
+    /**
+     * Serializes a generated message as compact Proto JSON.
+     *
+     * @param value Generated message to serialize.
+     * @returns Compact Proto JSON text.
+     */
     toString(value: MessageShape<Schema>): string {
       return registry === undefined
         ? toJsonString(schema, value)
@@ -993,6 +1097,13 @@ function restoreAnyTypeUrls(value: unknown, typeUrls: ReadonlyMap<string, string
 }
 
 const FieldStringifiers = Object.freeze({
+  /**
+   * Returns reversible conversion for one singular message, enum, or scalar field.
+   *
+   * @param field Generated descriptor of the field.
+   * @param messageStringifier Resolves conversion for message-valued fields.
+   * @returns Stringifier for the field's runtime value.
+   */
   create(
     field: DescField,
     messageStringifier: (schema: MessageSchema) => Stringifier<unknown>,
@@ -1010,8 +1121,20 @@ const FieldStringifiers = Object.freeze({
     }
   },
 
+  /**
+   * Creates enum conversion using declared names and valid numeric values.
+   *
+   * @param field Generated enum field descriptor.
+   * @returns Reversible enum stringifier.
+   */
   enum(field: Extract<DescField, { fieldKind: "enum" }>): Stringifier<unknown> {
     return Object.freeze({
+      /**
+       * Parses a declared enum name or valid integer text.
+       *
+       * @param value Enum name or canonical numeric text.
+       * @returns Enum numeric value.
+       */
       fromString(value: string): unknown {
         const named = field.enum.values.find((candidate) => candidate.name === value);
         return (
@@ -1019,6 +1142,13 @@ const FieldStringifiers = Object.freeze({
           Number(FieldStringifiers.integerText(value, -(2n ** 31n), 2n ** 31n - 1n))
         );
       },
+
+      /**
+       * Formats an enum number as its declared name or integer text.
+       *
+       * @param value Valid enum numeric value.
+       * @returns Declared name when available, otherwise numeric text.
+       */
       toString(value: unknown): string {
         if (typeof value !== "number" || !Number.isInteger(value)) {
           throw new TypeError("Enum field value must be an integer number.");
@@ -1034,6 +1164,12 @@ const FieldStringifiers = Object.freeze({
     });
   },
 
+  /**
+   * Returns conversion and range rules for a Protobuf scalar field.
+   *
+   * @param field Generated scalar field descriptor.
+   * @returns Reversible scalar stringifier.
+   */
   scalar(field: Extract<DescField, { fieldKind: "scalar" }>): Stringifier<unknown> {
     switch (field.scalar) {
       case ScalarType.STRING:
@@ -1064,9 +1200,22 @@ const FieldStringifiers = Object.freeze({
   },
 
   string: Object.freeze({
+    /**
+     * Accepts a string field without changing its text.
+     *
+     * @param value Stored string text.
+     * @returns The same string value.
+     */
     fromString(value: string): unknown {
       return value;
     },
+
+    /**
+     * Checks and returns a string field value.
+     *
+     * @param value Runtime string field value.
+     * @returns The same string text.
+     */
     toString(value: unknown): string {
       if (typeof value !== "string") throw new TypeError("Field value must be a string.");
       return value;
@@ -1074,11 +1223,24 @@ const FieldStringifiers = Object.freeze({
   }),
 
   boolean: Object.freeze({
+    /**
+     * Parses canonical boolean text.
+     *
+     * @param value Text required to be `true` or `false`.
+     * @returns Decoded boolean value.
+     */
     fromString(value: string): unknown {
       if (value === "true") return true;
       if (value === "false") return false;
       throw new Error("Field value must be a canonical boolean.");
     },
+
+    /**
+     * Formats a boolean as canonical text.
+     *
+     * @param value Runtime boolean field value.
+     * @returns `true` or `false`.
+     */
     toString(value: unknown): string {
       if (typeof value !== "boolean") throw new TypeError("Field value must be a boolean.");
       return value ? "true" : "false";
@@ -1086,6 +1248,12 @@ const FieldStringifiers = Object.freeze({
   }),
 
   bytes: Object.freeze({
+    /**
+     * Decodes a canonical standard-base64 byte field.
+     *
+     * @param value Canonical base64 text.
+     * @returns Decoded bytes.
+     */
     fromString(value: string): unknown {
       let decoded: Uint8Array;
       try {
@@ -1098,6 +1266,13 @@ const FieldStringifiers = Object.freeze({
       }
       return decoded;
     },
+
+    /**
+     * Encodes a byte field as standard base64.
+     *
+     * @param value Runtime byte array.
+     * @returns Canonical base64 text.
+     */
     toString(value: unknown): string {
       if (!(value instanceof Uint8Array)) {
         throw new TypeError("Field value must be a byte array.");
@@ -1107,6 +1282,12 @@ const FieldStringifiers = Object.freeze({
   }),
 
   number: Object.freeze({
+    /**
+     * Parses canonical finite numeric text, preserving negative zero.
+     *
+     * @param value Canonical finite number text.
+     * @returns Parsed finite number.
+     */
     fromString(value: string): unknown {
       const parsed = Number(value);
       if (!Number.isFinite(parsed)) throw new Error("Field value must be a finite number.");
@@ -1114,6 +1295,13 @@ const FieldStringifiers = Object.freeze({
       if (canonical !== value) throw new Error("Field value must be a canonical number.");
       return parsed;
     },
+
+    /**
+     * Formats a finite number canonically, preserving negative zero.
+     *
+     * @param value Runtime finite number.
+     * @returns Canonical numeric text.
+     */
     toString(value: unknown): string {
       if (typeof value !== "number" || !Number.isFinite(value)) {
         throw new TypeError("Field value must be a finite number.");
@@ -1123,6 +1311,12 @@ const FieldStringifiers = Object.freeze({
   }),
 
   float: Object.freeze({
+    /**
+     * Parses canonical binary32 text and rejects values outside its range.
+     *
+     * @param value Canonical binary32 number text.
+     * @returns Rounded binary32 number.
+     */
     fromString(value: string): unknown {
       const parsed = Number(value);
       if (!Number.isFinite(parsed)) throw new Error("Field value must be a finite number.");
@@ -1135,6 +1329,13 @@ const FieldStringifiers = Object.freeze({
       }
       return restored;
     },
+
+    /**
+     * Converts a finite number to canonical binary32 text.
+     *
+     * @param value Runtime finite number.
+     * @returns Canonical binary32 number text.
+     */
     toString(value: unknown): string {
       if (typeof value !== "number" || !Number.isFinite(value)) {
         throw new TypeError("Field value must be a finite number.");
@@ -1147,6 +1348,12 @@ const FieldStringifiers = Object.freeze({
     },
   }),
 
+  /**
+   * Finds the shortest decimal text that round-trips to a binary32 value.
+   *
+   * @param value Finite binary32 number to format.
+   * @returns Canonical short decimal text.
+   */
   floatText(value: number): string {
     if (Object.is(value, -0)) return "-0";
     if (value === 0) return "0";
@@ -1157,12 +1364,26 @@ const FieldStringifiers = Object.freeze({
     throw new Error("Unable to format the float32 field value.");
   },
 
+  /**
+   * Creates range-checked integer conversion for a declared runtime representation.
+   *
+   * @param min Smallest integer accepted by the field.
+   * @param max Largest integer accepted by the field.
+   * @param representation Runtime number, bigint, or string representation.
+   * @returns Reversible bounded integer stringifier.
+   */
   integer(
     min: bigint,
     max: bigint,
     representation: "number" | "bigint" | "string",
   ): Stringifier<unknown> {
     return Object.freeze({
+      /**
+       * Parses bounded canonical integer text into the declared runtime form.
+       *
+       * @param value Canonical integer text.
+       * @returns Number, bigint, or string required by the field.
+       */
       fromString(value: string): unknown {
         const restored = FieldStringifiers.integerText(value, min, max);
         switch (representation) {
@@ -1174,6 +1395,13 @@ const FieldStringifiers = Object.freeze({
             return restored.toString();
         }
       },
+
+      /**
+       * Checks a runtime integer and formats it as canonical decimal text.
+       *
+       * @param value Integer in the field's runtime representation.
+       * @returns Canonical decimal text.
+       */
       toString(value: unknown): string {
         const restored = FieldStringifiers.integerValue(value, min, max, representation);
         return restored.toString();
@@ -1181,6 +1409,14 @@ const FieldStringifiers = Object.freeze({
     });
   },
 
+  /**
+   * Parses canonical decimal integer text within the field's bounds.
+   *
+   * @param value Canonical integer text.
+   * @param min Smallest allowed integer.
+   * @param max Largest allowed integer.
+   * @returns Parsed bounded integer.
+   */
   integerText(value: string, min: bigint, max: bigint): bigint {
     if (!/^(?:0|-?[1-9]\d*)$/u.test(value)) {
       throw new Error("Field value must be a canonical integer.");
@@ -1193,6 +1429,15 @@ const FieldStringifiers = Object.freeze({
     return restored;
   },
 
+  /**
+   * Converts a runtime integer to bigint after representation and range checks.
+   *
+   * @param value Integer value to validate.
+   * @param min Smallest allowed integer.
+   * @param max Largest allowed integer.
+   * @param representation Required runtime representation.
+   * @returns Bounded bigint value.
+   */
   integerValue(
     value: unknown,
     min: bigint,
@@ -1230,6 +1475,7 @@ export const Stringifiers = {
 
   /**
    * Creates the default compact Proto JSON stringifier for a message schema.
+   * @typeParam Schema Generated schema used for Proto JSON conversion.
    * @param schema The generated message schema.
    * @param types The optional generated-type registry used to expand `Any` values.
    * @returns A reversible schema-bound stringifier.
@@ -1273,7 +1519,9 @@ Object.freeze(Stringifiers);
  */
 export class StringifierRegistry {
   readonly #registered = new Map<string, Stringifier<Message>>();
+
   #types: Registry | undefined;
+
   #typeUrls = new Map<string, string>();
 
   /**
@@ -1293,6 +1541,7 @@ export class StringifierRegistry {
 
   /**
    * Registers or replaces the stringifier for one generated message type.
+   * @typeParam Schema Generated schema of the custom stringifier's message.
    * @param schema The generated message schema.
    * @param stringifier The reversible stringifier.
    */
@@ -1316,6 +1565,7 @@ export class StringifierRegistry {
 
   /**
    * Returns the custom stringifier or the default compact Proto JSON mapping.
+   * @typeParam Schema Generated schema of the requested stringifier.
    * @param schema The generated message schema.
    * @returns The schema-bound stringifier.
    */
@@ -1354,6 +1604,7 @@ interface IdentifierCodec {
   /**
    * Packs a message-valued identifier.
    *
+   * @typeParam Schema Generated schema of the identifier message.
    * @param schema The generated identifier schema.
    * @param value The identifier value.
    * @returns The packed identifier.
@@ -1390,6 +1641,7 @@ interface IdentifierCodec {
   /**
    * Unpacks a message-valued identifier.
    *
+   * @typeParam Schema Generated schema of the expected identifier message.
    * @param schema The generated identifier schema.
    * @param value The packed identifier.
    * @returns The decoded identifier, or `undefined` for another type.
@@ -1446,6 +1698,12 @@ export const Identifiers: IdentifierCodec = {
 Object.freeze(Identifiers);
 
 const IdentifierValues = Object.freeze({
+  /**
+   * Validates a signed 32-bit numeric identifier.
+   *
+   * @param value Candidate numeric identifier.
+   * @returns Integer within the signed 32-bit range.
+   */
   int32(value: unknown): number {
     if (
       typeof value !== "number" ||
@@ -1458,6 +1716,12 @@ const IdentifierValues = Object.freeze({
     return value;
   },
 
+  /**
+   * Validates a signed 64-bit bigint identifier.
+   *
+   * @param value Candidate bigint identifier.
+   * @returns Bigint within the signed 64-bit range.
+   */
   int64(value: unknown): bigint {
     if (typeof value !== "bigint" || value < -(1n << 63n) || value >= 1n << 63n) {
       throw new RangeError("Identifier is outside the int64 range.");
@@ -1469,6 +1733,7 @@ const IdentifierValues = Object.freeze({
 /**
  * Packs a supported typed identifier.
  *
+ * @typeParam Schema Generated schema of a message-valued identifier.
  * @param schema The generated schema or supported primitive kind.
  * @param value The identifier value.
  * @returns The packed identifier.
@@ -1511,6 +1776,7 @@ function packIdentifier(
 /**
  * Unpacks a supported typed identifier.
  *
+ * @typeParam Schema Generated schema of the expected message identifier.
  * @param schema The generated schema or supported primitive kind.
  * @param value The packed identifier.
  * @returns The decoded identifier, or `undefined` for another type.
@@ -1563,6 +1829,7 @@ export const SignalEnvelopes = {
 
   /**
    * Packs a generated Spine command envelope with a fresh secure ID.
+   * @typeParam Schema Generated schema of the domain command.
    * @param input The command envelope input.
    * @returns The packed command.
    */
@@ -1576,6 +1843,7 @@ export const SignalEnvelopes = {
 
   /**
    * Packs a generated Spine event envelope with a fresh secure ID.
+   * @typeParam Schema Generated schema of the domain event.
    * @param input The event envelope input.
    * @returns The packed event.
    */
@@ -1594,8 +1862,11 @@ Object.freeze(SignalEnvelopes);
  */
 export class TypeRegistry {
   readonly #byFullName = new Map<string, TypeMetadata>();
+
   readonly #byTypeUrl = new Map<string, TypeMetadata>();
+
   readonly #bySchema = new WeakMap<object, TypeMetadata>();
+
   readonly #bySchemaDescriptor = new WeakMap<object, TypeMetadata>();
 
   /**
@@ -1666,6 +1937,7 @@ export class TypeRegistry {
 
   /**
    * Registers one schema and returns its immutable metadata.
+   * @typeParam Schema Generated schema to register.
    * @param schema The generated message schema.
    * @param options Optional explicit type URL.
    * @returns The registered schema metadata.
@@ -1738,6 +2010,7 @@ export class TypeRegistry {
 
   /**
    * Finds metadata by generated schema identity.
+   * @typeParam Schema Generated schema used as the lookup key.
    * @param schema The generated message schema.
    * @returns Matching metadata, if registered.
    */
@@ -1777,6 +2050,7 @@ export class TypeRegistry {
 
   /**
    * Gets metadata by generated schema identity or throws a descriptive error.
+   * @typeParam Schema Generated schema used as the lookup key.
    * @param schema The generated message schema.
    * @returns The registered metadata.
    */
@@ -1804,6 +2078,12 @@ const RegistryLookups = {
 
   /**
    * Composes modules in deterministic dependency-first order.
+   *
+   * @param root Module whose dependency graph is traversed.
+   * @param definitions Seen module definitions keyed by name.
+   * @param visiting Names on the current dependency path for cycle detection.
+   * @param verified Module objects already checked and appended.
+   * @param schemas Output list of schemas in dependency-first order.
    */
   compose(
     root: ProtoModule,
@@ -1862,6 +2142,10 @@ const RegistryLookups = {
 
   /**
    * Compares two module definitions for same-name conflicts.
+   *
+   * @param left Previously seen module definition.
+   * @param right Candidate definition with the same name.
+   * @returns True when names, schemas, and dependency names agree.
    */
   sameModule(left: ProtoModule, right: ProtoModule): boolean {
     if (left === right) {
@@ -1886,6 +2170,11 @@ const RegistryLookups = {
 
   /**
    * Creates immutable descriptor-backed schema metadata.
+   *
+   * @typeParam Schema Generated schema represented by the metadata.
+   * @param schema Generated message schema being registered.
+   * @param typeUrl Canonical URL assigned to the schema.
+   * @returns Frozen descriptor-backed metadata.
    */
   metadata<Schema extends MessageSchema>(schema: Schema, typeUrl: string): TypeMetadata<Schema> {
     const firstField = schema.fields[0];
@@ -1899,9 +2188,25 @@ const RegistryLookups = {
       typeUrlPrefix: typeUrl.slice(0, typeUrl.length - schema.typeName.length - 1),
       firstField,
       firstFieldName: firstField?.name,
+
+      /**
+       * Checks whether the schema file declares a given option.
+       *
+       * @typeParam Value Value type declared by the extension.
+       * @param option File-option extension to test.
+       * @returns True when the option is present.
+       */
       hasFileOption<Value>(option: FileOptionExtension<Value>): boolean {
         return hasOption(schema.file, option);
       },
+
+      /**
+       * Reads a declared option from the schema file.
+       *
+       * @typeParam Value Value type declared by the extension.
+       * @param option File-option extension to read.
+       * @returns Decoded option value.
+       */
       getFileOption<Value>(option: FileOptionExtension<Value>): Value {
         return getOption(schema.file, option);
       },
@@ -1910,15 +2215,38 @@ const RegistryLookups = {
 
   /**
    * Creates an immutable registry lookup view.
+   *
+   * @param registry Mutable registry exposed through read-only operations.
+   * @returns Frozen lookup facade.
    */
   lookup(registry: TypeRegistry): TypeRegistryLookup {
     return Object.freeze({
       findByFullName: (fullTypeName: string) => registry.findByFullName(fullTypeName),
       findByTypeUrl: (typeUrl: string) => registry.findByTypeUrl(typeUrl),
-      findBySchema: <Schema extends MessageSchema>(schema: Schema) => registry.findBySchema(schema),
+
+      /**
+       * Finds registered metadata by generated schema identity.
+       *
+       * @typeParam Schema Generated schema used as the lookup key.
+       * @param schema Generated schema to find.
+       * @returns Matching metadata, if registered.
+       */
+      findBySchema<Schema extends MessageSchema>(schema: Schema) {
+        return registry.findBySchema(schema);
+      },
       getByFullName: (fullTypeName: string) => registry.getByFullName(fullTypeName),
       getByTypeUrl: (typeUrl: string) => registry.getByTypeUrl(typeUrl),
-      getBySchema: <Schema extends MessageSchema>(schema: Schema) => registry.getBySchema(schema),
+
+      /**
+       * Gets registered metadata by generated schema identity.
+       *
+       * @typeParam Schema Generated schema used as the lookup key.
+       * @param schema Generated schema to require.
+       * @returns Registered metadata.
+       */
+      getBySchema<Schema extends MessageSchema>(schema: Schema) {
+        return registry.getBySchema(schema);
+      },
       list: () => registry.list(),
     });
   },
@@ -1955,21 +2283,49 @@ interface SanitizableConstraintViolation {
  * Constructs and sanitizes internal message-validation results.
  */
 const ValidationResults = {
+  /**
+   * Builds a structured validation result from sanitized violations.
+   *
+   * @param violations Sanitized constraint violations.
+   * @returns Valid result when empty, otherwise an error with violations.
+   */
   from(violations: readonly ConstraintViolation[]): MessageValidationResult {
     if (violations.length === 0)
       return { valid: true, violations: EMPTY_VIOLATIONS, error: undefined };
     const nonEmpty = violations as readonly [ConstraintViolation, ...ConstraintViolation[]];
     return { valid: false, violations: nonEmpty, error: ValidationResults.error(nonEmpty) };
   },
+
+  /**
+   * Packs constraint violations into a generated validation error.
+   *
+   * @param violations Violations to include in the error.
+   * @returns Generated validation error message.
+   */
   error(violations: readonly ConstraintViolation[]): ValidationError {
     return create(ValidationErrorSchema, { constraintViolation: [...violations] });
   },
+
+  /**
+   * Creates a runtime-failure violation without exposing the caught error.
+   *
+   * @param typeName Protobuf type being validated.
+   * @param message Stable public failure text.
+   * @returns Generated constraint violation.
+   */
   failure(typeName: string, message: string): ConstraintViolation {
     return create(ConstraintViolationSchema, {
       typeName,
       message: create(TemplateStringSchema, { withPlaceholders: message }),
     });
   },
+
+  /**
+   * Copies a violation while redacting placeholder values.
+   *
+   * @param violation Violation supplied by a validation rule.
+   * @returns Sanitized generated constraint violation.
+   */
   violation(violation: SanitizableConstraintViolation): ConstraintViolation {
     return create(ConstraintViolationSchema, {
       message:
@@ -1986,6 +2342,13 @@ const ValidationResults = {
           : create(FieldPathSchema, { fieldName: [...violation.fieldPath.fieldName] }),
     });
   },
+
+  /**
+   * Replaces every template placeholder value with stable redaction text.
+   *
+   * @param values Placeholder values to suppress.
+   * @returns Placeholder keys mapped to redaction text.
+   */
   redact(values: Record<string, string> | undefined): Record<string, string> {
     return Object.fromEntries(
       Object.keys(values ?? {}).map((key) => [key, REDACTED_VALIDATION_DETAIL]),

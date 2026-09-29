@@ -66,6 +66,8 @@ import {
 
 /**
  * Registered Entity columns available to a query for one state schema.
+ *
+ * @typeParam Schema Generated state schema that declares the columns.
  */
 export type EntityColumnCollection<Schema extends GenMessage<Message>> = Readonly<
   Record<string, EntityColumn<Schema>>
@@ -73,17 +75,23 @@ export type EntityColumnCollection<Schema extends GenMessage<Message>> = Readonl
 
 /**
  * Extracts the column type used by a query predicate.
+ *
+ * @typeParam Predicate Predicate whose column type is extracted.
  */
 export type PredicateColumn<Predicate> =
   Predicate extends EntityPredicate<infer Column> ? Column : never;
 
 /**
  * Extracts the state schema that declares an Entity column.
+ *
+ * @typeParam Column Column whose state schema is extracted.
  */
 export type ColumnSchema<Column> = Column extends EntityColumn<infer Schema> ? Schema : never;
 
 /**
  * Extracts the generated field name declared by an Entity column.
+ *
+ * @typeParam Column Column whose field name is extracted.
  */
 export type ColumnName<Column> =
   Column extends EntityColumn<GenMessage<Message>, infer Name> ? Name : never;
@@ -94,21 +102,18 @@ const maximumEntityQueryIds = 1_000;
 
 /**
  * Extracts the identifier value declared by an Entity state schema.
+ *
+ * @typeParam Schema Generated state schema with an ID field.
  */
 export type EntityQueryIdentifier<Schema extends GenMessage<Message>> =
   MessageShape<Schema> extends { readonly id: infer Identifier } ? Identifier : never;
 
 /**
- * A generated state-field property name that can be returned by a query mask.
- */
-export type EntityQueryMaskPath<Schema extends GenMessage<Message>> = Exclude<
-  keyof MessageShape<Schema>,
-  "$typeName" | "$unknown"
-> &
-  string;
-
-/**
  * A predicate whose columns belong to one query schema and registered column collection.
+ *
+ * @typeParam Schema Generated state schema selected by the query.
+ * @typeParam Columns Registered columns for that state schema.
+ * @typeParam Predicate Predicate checked against the registered columns.
  */
 export type EntityQueryPredicateFor<
   Schema extends GenMessage<Message>,
@@ -123,6 +128,8 @@ export type EntityQueryPredicateFor<
 
 /**
  * Represents one typed leaf comparison in an Entity query predicate.
+ *
+ * @typeParam Column Column compared by this predicate.
  */
 export interface EntityComparisonPredicate<Column extends EntityColumn = EntityColumn> {
   // prettier-ignore
@@ -150,6 +157,8 @@ export interface EntityComparisonPredicate<Column extends EntityColumn = EntityC
 
 /**
  * Represents a nested conjunction or disjunction in an Entity query predicate.
+ *
+ * @typeParam Column Column type accepted by nested predicates.
  */
 export interface EntityGroup<Column extends EntityColumn = EntityColumn> {
   // prettier-ignore
@@ -167,6 +176,8 @@ export interface EntityGroup<Column extends EntityColumn = EntityColumn> {
 
 /**
  * Represents a typed predicate accepted by the Entity query builder.
+ *
+ * @typeParam Column Column type accepted by the comparison or group.
  */
 export type EntityPredicate<Column extends EntityColumn = EntityColumn> =
   EntityComparisonPredicate<Column> | EntityGroup<Column>;
@@ -189,11 +200,6 @@ export interface EntityQueryPlan {
    * Optional ordered columns used to arrange matching states.
    */
   readonly order?: readonly { readonly column: string; readonly direction: "asc" | "desc" }[];
-
-  /**
-   * Optional state-field paths included in each returned state.
-   */
-  readonly mask?: { readonly paths: readonly string[] };
 
   /**
    * Optional maximum number of states returned by the read.
@@ -257,18 +263,26 @@ export type EntityQueryPlanPredicate =
 
 /**
  * Builds a typed Entity query for the frozen Spine wire contract.
+ *
+ * @typeParam Schema Generated Entity state schema selected by the query.
+ * @typeParam Columns Registered columns for that state schema.
  */
 export class EntityQueryBuilder<
   Schema extends GenMessage<Message>,
   Columns extends EntityColumnCollection<Schema>,
 > {
   readonly #schema: Schema;
+
   readonly #context: ActorContext;
+
   readonly #columns: Columns;
+
   readonly #ids: EntityQueryIdentifier<Schema>[] = [];
+
   readonly #predicates: EntityPredicate[] = [];
-  readonly #mask: string[] = [];
+
   readonly #order: { readonly column: EntityColumn; readonly direction: "asc" | "desc" }[] = [];
+
   #limit: number | undefined;
 
   /**
@@ -308,6 +322,7 @@ export class EntityQueryBuilder<
   /**
    * Adds a typed predicate. Repeated calls are combined with `ALL`.
    *
+   * @typeParam Predicate Predicate type checked against the registered columns.
    * @param predicate Predicate owned by this builder's registered columns.
    * @returns This builder.
    */
@@ -324,25 +339,9 @@ export class EntityQueryBuilder<
   }
 
   /**
-   * Adds top-level state fields returned by the server.
-   *
-   * @param paths Generated property names of state fields.
-   * @returns This builder.
-   */
-  mask(...paths: readonly EntityQueryMaskPath<Schema>[]): this {
-    for (const path of paths) {
-      const field = EntityQueryWire.findField(this.#schema, path);
-      if (field === undefined) {
-        throw new TypeError(`Entity query mask path "${path}" is not a state field.`);
-      }
-      this.#mask.push(field.name);
-    }
-    return this;
-  }
-
-  /**
    * Adds one ordering clause in caller order.
    *
+   * @typeParam Column Registered ordered column type.
    * @param column Ordered column owned by this builder's Entity schema.
    * @param direction Sort direction, ascending by default.
    * @returns This builder.
@@ -423,9 +422,6 @@ export class EntityQueryBuilder<
           : Object.freeze({ kind: "all" as const, predicates: Object.freeze(all) });
     return Object.freeze({
       ...(predicate === undefined ? {} : { predicate }),
-      ...(this.#mask.length === 0
-        ? {}
-        : { mask: Object.freeze({ paths: Object.freeze([...this.#mask]) }) }),
       ...(this.#order.length === 0
         ? {}
         : {
@@ -462,12 +458,14 @@ export class EntityQueryBuilder<
     });
   }
 
+  /**
+   * Builds wire ordering and limit settings when the query uses them.
+   */
   #format() {
-    if (this.#mask.length === 0 && this.#order.length === 0 && this.#limit === undefined) {
+    if (this.#order.length === 0 && this.#limit === undefined) {
       return undefined;
     }
     return create(ResponseFormatSchema, {
-      ...(this.#mask.length === 0 ? {} : { fieldMask: { paths: [...this.#mask] } }),
       orderBy: this.#order.map(({ column, direction }) =>
         create(OrderBySchema, {
           column: column.name,
@@ -489,6 +487,7 @@ export const EntityQuery: Readonly<{
   /**
    * Creates an equality predicate for a descriptor-backed Entity column.
    *
+   * @typeParam Column Column type used by the comparison.
    * @param column Column to compare.
    * @param value Value to match.
    * @returns Immutable equality predicate.
@@ -501,6 +500,7 @@ export const EntityQuery: Readonly<{
   /**
    * Creates a greater-than predicate for an ordered Entity column.
    *
+   * @typeParam Column Ordered column type used by the comparison.
    * @param column Ordered column to compare.
    * @param value Lower exclusive bound.
    * @returns Immutable greater-than predicate.
@@ -513,6 +513,7 @@ export const EntityQuery: Readonly<{
   /**
    * Creates a less-than predicate for an ordered Entity column.
    *
+   * @typeParam Column Ordered column type used by the comparison.
    * @param column Ordered column to compare.
    * @param value Upper exclusive bound.
    * @returns Immutable less-than predicate.
@@ -525,6 +526,7 @@ export const EntityQuery: Readonly<{
   /**
    * Creates a greater-than-or-equal predicate for an ordered Entity column.
    *
+   * @typeParam Column Ordered column type used by the comparison.
    * @param column Ordered column to compare.
    * @param value Lower inclusive bound.
    * @returns Immutable inclusive lower-bound predicate.
@@ -537,6 +539,7 @@ export const EntityQuery: Readonly<{
   /**
    * Creates a less-than-or-equal predicate for an ordered Entity column.
    *
+   * @typeParam Column Ordered column type used by the comparison.
    * @param column Ordered column to compare.
    * @param value Upper inclusive bound.
    * @returns Immutable inclusive upper-bound predicate.
@@ -549,6 +552,8 @@ export const EntityQuery: Readonly<{
   /**
    * Combines predicates conjunctively.
    *
+   * @typeParam First Type of the required first predicate.
+   * @typeParam Rest Tuple of additional predicate types.
    * @param first First predicate in the group.
    * @param rest Remaining predicates in the group.
    * @returns Immutable conjunction predicate.
@@ -561,6 +566,8 @@ export const EntityQuery: Readonly<{
   /**
    * Combines predicates disjunctively.
    *
+   * @typeParam First Type of the required first predicate.
+   * @typeParam Rest Tuple of additional predicate types.
    * @param first First predicate in the group.
    * @param rest Remaining predicates in the group.
    * @returns Immutable disjunction predicate.
@@ -573,6 +580,8 @@ export const EntityQuery: Readonly<{
   /**
    * Creates a builder for one Entity schema.
    *
+   * @typeParam Schema Generated state schema selected by the builder.
+   * @typeParam Columns Registered columns for that state schema.
    * @param input Schema, registered columns, and actor context for the query.
    * @returns A mutable query builder.
    */
@@ -585,12 +594,29 @@ export const EntityQuery: Readonly<{
     readonly context: ActorContext;
   }): EntityQueryBuilder<Schema, Columns>;
 }> = Object.freeze({
+  /**
+   * Creates a validated equality comparison for a registered column.
+   *
+   * @typeParam Column Column type used by the comparison.
+   * @param column Column to compare.
+   * @param value Value to match.
+   * @returns Immutable equality predicate.
+   */
   eq<Column extends EntityColumn>(
     column: Column,
     value: Exclude<EntityColumnValue<Column>, undefined>,
   ): EntityComparisonPredicate<Column> {
     return EntityQueryCompiler.comparison(column, "equal" as EntityColumnOperator<Column>, value);
   },
+
+  /**
+   * Creates a validated exclusive lower-bound comparison.
+   *
+   * @typeParam Column Ordered column type used by the comparison.
+   * @param column Ordered column to compare.
+   * @param value Exclusive lower bound.
+   * @returns Immutable greater-than predicate.
+   */
   gt<Column extends EntityColumn>(
     column: "greaterThan" extends EntityColumnOperator<Column> ? Column : never,
     value: Exclude<EntityColumnValue<Column>, undefined>,
@@ -601,6 +627,15 @@ export const EntityQuery: Readonly<{
       value,
     );
   },
+
+  /**
+   * Creates a validated exclusive upper-bound comparison.
+   *
+   * @typeParam Column Ordered column type used by the comparison.
+   * @param column Ordered column to compare.
+   * @param value Exclusive upper bound.
+   * @returns Immutable less-than predicate.
+   */
   lt<Column extends EntityColumn>(
     column: "lessThan" extends EntityColumnOperator<Column> ? Column : never,
     value: Exclude<EntityColumnValue<Column>, undefined>,
@@ -611,6 +646,15 @@ export const EntityQuery: Readonly<{
       value,
     );
   },
+
+  /**
+   * Creates a validated inclusive lower-bound comparison.
+   *
+   * @typeParam Column Ordered column type used by the comparison.
+   * @param column Ordered column to compare.
+   * @param value Inclusive lower bound.
+   * @returns Immutable greater-or-equal predicate.
+   */
   ge<Column extends EntityColumn>(
     column: "greaterOrEqual" extends EntityColumnOperator<Column> ? Column : never,
     value: Exclude<EntityColumnValue<Column>, undefined>,
@@ -621,6 +665,15 @@ export const EntityQuery: Readonly<{
       value,
     );
   },
+
+  /**
+   * Creates a validated inclusive upper-bound comparison.
+   *
+   * @typeParam Column Ordered column type used by the comparison.
+   * @param column Ordered column to compare.
+   * @param value Inclusive upper bound.
+   * @returns Immutable less-or-equal predicate.
+   */
   le<Column extends EntityColumn>(
     column: "lessOrEqual" extends EntityColumnOperator<Column> ? Column : never,
     value: Exclude<EntityColumnValue<Column>, undefined>,
@@ -631,18 +684,47 @@ export const EntityQuery: Readonly<{
       value,
     );
   },
+
+  /**
+   * Combines a required predicate and the remaining predicates with conjunction.
+   *
+   * @typeParam First Type of the required first predicate.
+   * @typeParam Rest Tuple of additional predicate types.
+   * @param first Required first predicate.
+   * @param rest Additional predicates in caller order.
+   * @returns Immutable conjunction group.
+   */
   all<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
     first: First,
     ...rest: Rest
   ): EntityGroup<PredicateColumn<First | Rest[number]>> {
     return EntityQueryCompiler.group("all", first, rest);
   },
+
+  /**
+   * Combines a required predicate and the remaining predicates with disjunction.
+   *
+   * @typeParam First Type of the required first predicate.
+   * @typeParam Rest Tuple of additional predicate types.
+   * @param first Required first predicate.
+   * @param rest Additional predicates in caller order.
+   * @returns Immutable disjunction group.
+   */
   either<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
     first: First,
     ...rest: Rest
   ): EntityGroup<PredicateColumn<First | Rest[number]>> {
     return EntityQueryCompiler.group("either", first, rest);
   },
+
+  /**
+   * Creates a query builder bound to a state schema, its columns, and actor context.
+   *
+   * @typeParam Schema Generated Entity state schema.
+   * @typeParam Columns Registered columns for that schema.
+   * @param input Schema, columns, and actor context for the query.
+   * @returns A mutable typed query builder.
+   */
   select<
     Schema extends GenMessage<Message>,
     Columns extends EntityColumnCollection<Schema>,
@@ -659,6 +741,15 @@ export const EntityQuery: Readonly<{
  * Internal compiler for predicates, descriptors, and wire query messages.
  */
 const EntityQueryCompiler = Object.freeze({
+  /**
+   * Validates predicate graphs and compiles them to storage-neutral plan nodes.
+   *
+   * @typeParam Schema Generated Entity state schema.
+   * @param roots Top-level predicates in query order.
+   * @param schema State schema selected by the query.
+   * @param columns Registered columns allowed in comparisons.
+   * @returns Validated immutable plan predicates.
+   */
   compilePlanGroups<Schema extends GenMessage<Message>>(
     roots: readonly EntityPredicate[],
     schema: Schema,
@@ -673,6 +764,15 @@ const EntityQueryCompiler = Object.freeze({
     );
   },
 
+  /**
+   * Converts a validated predicate tree to a storage-neutral plan node.
+   *
+   * @typeParam Schema Generated Entity state schema.
+   * @param value Predicate tree to convert.
+   * @param schema State schema selected by the query.
+   * @param columns Registered columns allowed in comparisons.
+   * @returns Immutable comparison or logical group plan.
+   */
   compilePlanPredicate<Schema extends GenMessage<Message>>(
     value: unknown,
     schema: Schema,
@@ -702,6 +802,15 @@ const EntityQueryCompiler = Object.freeze({
     });
   },
 
+  /**
+   * Validates a comparison operator and value before freezing its predicate.
+   *
+   * @typeParam Column Column type used by the comparison.
+   * @param column Column that supports the selected operator.
+   * @param operator Comparison supported by the column.
+   * @param value Typed comparison value.
+   * @returns Immutable comparison predicate.
+   */
   comparison<Column extends EntityColumn>(
     column: Column,
     operator: EntityColumnOperator<Column>,
@@ -714,6 +823,16 @@ const EntityQueryCompiler = Object.freeze({
     return Object.freeze({ kind: "comparison", column, operator, value });
   },
 
+  /**
+   * Builds an immutable conjunction or disjunction in caller order.
+   *
+   * @typeParam First Type of the required first predicate.
+   * @typeParam Rest Tuple of additional predicate types.
+   * @param kind Logical operation for the group.
+   * @param first Required first predicate.
+   * @param rest Additional predicates.
+   * @returns Immutable typed predicate group.
+   */
   group<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
     kind: "all" | "either",
     first: First,
@@ -725,6 +844,15 @@ const EntityQueryCompiler = Object.freeze({
     }) as EntityGroup<PredicateColumn<First | Rest[number]>>;
   },
 
+  /**
+   * Validates a predicate graph and encodes it as wire composite filters.
+   *
+   * @typeParam Schema Generated Entity state schema.
+   * @param roots Top-level predicates in query order.
+   * @param schema State schema selected by the query.
+   * @param columns Registered columns allowed in comparisons.
+   * @returns Composite filters for the wire query.
+   */
   compileGroups<Schema extends GenMessage<Message>>(
     roots: readonly EntityPredicate[],
     schema: Schema,
@@ -835,6 +963,12 @@ type CompiledPredicate =
  * Validates and compiles Entity query details.
  */
 const EntityQueryWire = Object.freeze({
+  /**
+   * Checks the shape and kind of a predicate supplied at runtime.
+   *
+   * @param value Value to validate as a predicate.
+   * @returns Validated comparison or group predicate.
+   */
   requirePredicate(value: unknown): EntityPredicate {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       throw new TypeError("Entity query predicate must be an object.");
@@ -855,6 +989,12 @@ const EntityQueryWire = Object.freeze({
     return predicate as EntityGroup;
   },
 
+  /**
+   * Encodes a leaf comparison as a wire filter.
+   *
+   * @param predicate Validated column comparison.
+   * @returns Wire filter with packed value and operator.
+   */
   compileComparison(predicate: EntityComparisonPredicate) {
     return create(FilterSchema, {
       fieldPath: { fieldName: [predicate.column.name] },
@@ -863,6 +1003,12 @@ const EntityQueryWire = Object.freeze({
     });
   },
 
+  /**
+   * Maps a supported column comparison to its wire enum value.
+   *
+   * @param operator Comparison operator to encode.
+   * @returns Matching wire filter operator.
+   */
   wireOperator(operator: string): Filter_Operator {
     switch (operator) {
       case "equal":
@@ -880,6 +1026,13 @@ const EntityQueryWire = Object.freeze({
     }
   },
 
+  /**
+   * Packs a system or application column value into a wire Any message.
+   *
+   * @param column Column whose value is being encoded.
+   * @param value Typed comparison value.
+   * @returns Packed wire value for the column.
+   */
   packColumn(column: EntityColumn, value: unknown) {
     if (column.source === "system") {
       if (column.name === "version")
@@ -895,6 +1048,13 @@ const EntityQueryWire = Object.freeze({
     return EntityQueryWire.packField(column.descriptor, value);
   },
 
+  /**
+   * Packs a descriptor field value using its message, enum, or scalar wrapper.
+   *
+   * @param field Descriptor for the compared state field.
+   * @param value Field value to encode.
+   * @returns Packed wire value for the field.
+   */
   packField(field: EntityColumn["descriptor"], value: unknown) {
     if (field === undefined) throw new TypeError("Entity query field descriptor is required.");
     if (field.fieldKind === "message") {
@@ -912,6 +1072,12 @@ const EntityQueryWire = Object.freeze({
     return EntityQueryWire.packMessage(schema, create(schema, { value } as never));
   },
 
+  /**
+   * Returns the Protobuf wrapper schema for a scalar field type.
+   *
+   * @param scalar Protobuf scalar type of the field.
+   * @returns Wrapper schema used for its query value.
+   */
   scalarSchema(scalar: ScalarType): GenMessage<Message> {
     switch (scalar) {
       case ScalarType.BOOL:
@@ -939,6 +1105,14 @@ const EntityQueryWire = Object.freeze({
     }
   },
 
+  /**
+   * Verifies that a column is registered for the selected state schema.
+   *
+   * @typeParam Schema Generated Entity state schema.
+   * @param schema State schema selected by the query.
+   * @param columns Registered columns for that schema.
+   * @param column Column referenced by a predicate or order clause.
+   */
   requireOwnedColumn<Schema extends GenMessage<Message>>(
     schema: Schema,
     columns: EntityColumnCollection<Schema>,
@@ -952,6 +1126,12 @@ const EntityQueryWire = Object.freeze({
     }
   },
 
+  /**
+   * Validates a comparison value against its column's declared value kind.
+   *
+   * @param column Column that declares the required value kind.
+   * @param value Comparison value to validate.
+   */
   requireValue(column: EntityColumn, value: unknown): void {
     const valid =
       value !== undefined &&
@@ -967,14 +1147,32 @@ const EntityQueryWire = Object.freeze({
     if (!valid) throw new TypeError(`Entity query value for "${column.name}" has the wrong type.`);
   },
 
+  /**
+   * Finds a generated field by wire or local name.
+   *
+   * @param schema Message schema to search.
+   * @param name Wire or local field name.
+   * @returns Matching field descriptor, if present.
+   */
   findField(schema: GenMessage<Message>, name: string) {
     return schema.fields.find((field) => field.name === name || field.localName === name);
   },
 
+  /**
+   * Creates a time-prefixed random identifier for a wire query.
+   *
+   * @returns New query ID string.
+   */
   nextId(): string {
     return `query-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   },
 
+  /**
+   * Builds a type URL from a schema's configured prefix and type name.
+   *
+   * @param schema Message schema whose URL is required.
+   * @returns Fully qualified Protobuf type URL.
+   */
   typeUrl(schema: GenMessage<Message>): string {
     const prefix = hasOption(schema.file, type_url_prefix)
       ? getOption(schema.file, type_url_prefix)
@@ -982,6 +1180,14 @@ const EntityQueryWire = Object.freeze({
     return `${prefix.replace(/\/+$/u, "")}/${schema.typeName}`;
   },
 
+  /**
+   * Serializes a message value into a wire Any without unknown fields.
+   *
+   * @typeParam Schema Generated schema of the message value.
+   * @param schema Schema used to serialize the value.
+   * @param value Message value matching the schema.
+   * @returns Any message containing the type URL and binary value.
+   */
   packMessage<Schema extends GenMessage<Message>>(schema: Schema, value: MessageShape<Schema>) {
     return create(AnySchema, {
       typeUrl: EntityQueryWire.typeUrl(schema),

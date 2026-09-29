@@ -389,3 +389,48 @@ Earlier explicitly recorded JVM evidence remains the plan's source; the human's
 no-masking decision overrides JVM masking behavior. This limitation raises no
 new product question. Current synchronous routing and masking code are planned
 implementation work, not additional defects in this plan review.
+
+## Masking removal review checkpoint
+
+Review started after cheap checks passed. Baseline for this slice:
+`d37ca81793569cf0516ab8d667e96feb928c2cd6`; review the working-tree diff, not
+future planned features. The existing TypeScript/API-docs, performance/reliability
+and style/maintainability reviewers will each use explicit `gpt-6-sol` / `medium`.
+The existing documentation reviewer will use explicit `gpt-6-luna` / `medium`.
+Each assignment is a fresh read-only app-bundled CLI process with memory,
+multi-agent and fast mode disabled. No inherited conversation or previous review
+conclusions. Confirm execution headers before accepting results. Collect the
+whole review wave and return one confirmed correction batch to the retained
+implementer. This records dispatched assignments, not completed reviews.
+
+First three fresh processes are API, reliability and style, each with explicit
+gpt-6-sol / medium confirmed in its execution header. Documentation follows when
+a slot is free, with its separately recorded Luna/medium profile. Source is held
+unchanged during review. No reviewer receives previous conversation or review
+conclusions; requirements, current diff and mechanical evidence are provided.
+API and reliability returned no actionable findings (read-only source/test
+review; neither reran suites). Style returned an accepted P2: invalid-mask
+subscription cases should activate and prove full state/Event delivery rather
+than stop at registration. Accepted its small P3 correction to the RecordValues
+description as well. Documentation is still independently reviewing with explicit
+Luna/medium; do not send a partial correction batch before its result arrives.
+The full masking wave is complete. Documentation returned no actionable findings;
+its explicit Luna/medium execution profile was verified. API/reliability/style
+profiles were verified as Sol/medium. All were fresh, read-only and without memory
+or inherited chat. No reviewer reran broad suites. Accepted the style P2/P3 batch
+described above and returned it to the retained Sol/medium implementation session.
+The correction adds regression proof and fixes one comment; no runtime change is
+requested. Deterministically verifiable test/comment corrections do not reopen
+unaffected review lanes. Final acceptance awaits the focused correction checks.
+
+Separate Luna/low mechanical verification passed generated documentation, audience
+and TypeScript snippets, root formatting, and whitespace checks (all exit 0),
+using the existing build outputs. Its explicit profile was confirmed as well.
+Masking checkpoint accepted: the P2 correction activates real Event and Projection
+subscriptions with unknown/malformed mask paths and asserts the complete delivered
+Event/state. The P3 description now accurately describes value/payload comparisons.
+No runtime behavior changed in the correction. The full affected service suite
+passes 117 tests; both typechecks, affected ESLint/Prettier, TSDoc, cleanup and
+whitespace checks pass. All four review concerns have a clean or resolved
+disposition. No additional broad review wave is needed for these test/comment
+corrections. Final task-wide release/security acceptance remains pending.

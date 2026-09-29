@@ -96,7 +96,6 @@ describe("EntityQuery", () => {
     const plan = EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
       .byId("task-1")
       .where(EntityQuery.eq(columns.title, "Awaiting"))
-      .mask("title")
       .orderBy(columns.priority, "desc")
       .limit(10)
       .buildPlan();
@@ -109,13 +108,12 @@ describe("EntityQuery", () => {
           { kind: "comparison", column: "title", operator: "equal", value: "Awaiting" },
         ],
       },
-      mask: { paths: ["title"] },
       order: [{ column: "priority", direction: "desc" }],
       limit: 10,
     });
   });
 
-  it("compiles IDs, nested predicates, masks, repeated ordering, and a limit", () => {
+  it("compiles IDs, nested predicates, repeated ordering, and a limit", () => {
     const query = EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
       .byId("task-1", "task-2")
       .where(
@@ -127,7 +125,6 @@ describe("EntityQuery", () => {
           ),
         ),
       )
-      .mask("id", "title", "priority")
       .orderBy(columns.priority, "desc")
       .orderBy(columns.title, "asc")
       .limit(10)
@@ -148,7 +145,7 @@ describe("EntityQuery", () => {
     expect(filters.value.filter[0]?.compositeFilter[0]?.operator).toBe(
       CompositeFilter_CompositeOperator.EITHER,
     );
-    expect(roundTripped.format?.fieldMask?.paths).toEqual(["id", "title", "priority"]);
+    expect(roundTripped.format?.fieldMask).toBeUndefined();
     expect(roundTripped.format?.orderBy).toEqual([
       expect.objectContaining({ column: "priority", direction: OrderBy_Direction.DESCENDING }),
       expect.objectContaining({ column: "title", direction: OrderBy_Direction.ASCENDING }),
@@ -195,15 +192,10 @@ describe("EntityQuery", () => {
     expect(documented.target?.criterion.case).toBe("filters");
   });
 
-  it("rejects invalid runtime limits and authored masks before wire compilation", () => {
+  it("rejects invalid runtime limits before wire compilation", () => {
     expect(() =>
       EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context }).limit(1).build(),
     ).toThrow("Entity query limit requires ordering.");
-    expect(() =>
-      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context })
-        .mask("missing" as "title")
-        .buildPlan(),
-    ).toThrow('Entity query mask path "missing" is not a state field.');
     expect(() =>
       EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context }).limit(0),
     ).toThrow("positive integer");
@@ -248,11 +240,10 @@ describe("EntityQuery", () => {
           EntityQuery.eq(columns.deleted, false),
         ),
       )
-      .mask("title")
       .build();
 
     expect(query.target?.criterion.case).toBe("filters");
-    expect(query.format?.fieldMask?.paths).toEqual(["title"]);
+    expect(query.format?.fieldMask).toBeUndefined();
     if (query.target?.criterion.case !== "filters") throw new Error("Expected filters.");
     expect(query.target.criterion.value.filter[0]?.filter).toHaveLength(8);
   });
@@ -420,8 +411,6 @@ describe("EntityQuery", () => {
       gt(columns.status, ProjectStatus.OPEN);
       // @ts-expect-error numeric columns reject string values.
       eq(columns.priority, "high");
-      // @ts-expect-error masks accept only state field names.
-      EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context }).mask("missing");
       const builder = EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context });
       // @ts-expect-error equality-only enum columns cannot be used for ordering.
       builder.orderBy(columns.status);
@@ -441,5 +430,10 @@ describe("EntityQuery", () => {
       selectedBuilder.orderBy(columns.title);
     };
     void compileAssertions;
+  });
+
+  it("offers no field-selection method on the authored builder", () => {
+    const builder = EntityQuery.select({ schema: ProjectOverviewStateSchema, columns, context });
+    expect("mask" in builder).toBe(false);
   });
 });

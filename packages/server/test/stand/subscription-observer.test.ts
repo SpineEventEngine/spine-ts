@@ -95,7 +95,7 @@ describe("SubscriptionObservers", () => {
     ]);
   });
 
-  it("renders a masked matching state then a no-longer-matching state from the local EventBus", async () => {
+  it("ignores a topic mask and renders complete matching state before removal", async () => {
     const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const subscription = create(SubscriptionSchema, {
@@ -152,7 +152,7 @@ describe("SubscriptionObservers", () => {
     expect(first?.kind.case).toBe("state");
     if (first?.kind.case === "state") {
       expect(AnyMessages.unpack(first.kind.value, ProjectOverviewStateSchema)).toEqual(
-        create(ProjectOverviewStateSchema, { name: "Open" }),
+        createState("task-1", "Open", 1),
       );
     }
     const second =
@@ -162,7 +162,7 @@ describe("SubscriptionObservers", () => {
     await bus.close();
   });
 
-  it("matches EITHER criteria after an ID filter and leaves an explicit empty mask unprojected", async () => {
+  it("matches EITHER criteria after an ID filter with an empty wire mask", async () => {
     const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const observer = observeSubscription(

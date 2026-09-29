@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
+import { clone, type Message, type MessageShape } from "@bufbuild/protobuf";
 import { type MessageSchema, TypeUrls } from "@spine-event-engine/core";
 import {
   TenantIdSchema,
@@ -23,9 +23,7 @@ import {
 import {
   ColumnTypes,
   RecordColumn,
-  RecordMask,
   RecordQuery,
-  StorageQueryPolicy,
   type NormalizedQueryPlan,
   type StorageContext,
   type StorageMode,
@@ -447,9 +445,7 @@ export class Stand {
       const storage = this.#leaseCurrent(registration, tenantId);
       try {
         const stored = await storage.current.query(Stand.#legacyPlan(query));
-        const results = stored.map((entry) =>
-          this.#entryResult(registration, entry.record, query.mask),
-        );
+        const results = stored.map((entry) => this.#entryResult(registration, entry.record));
         return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
       } finally {
         storage.release();
@@ -479,19 +475,8 @@ export class Stand {
       const tenantId = this.#tenantId(options.tenantId);
       const storage = this.#leaseCurrent(registration, tenantId);
       try {
-        const { mask, ...storagePlan } = plan;
-        if (mask !== undefined) {
-          StorageQueryPolicy.validate({ mask }, { comparisons: [], features: ["mask"] });
-        }
-        const maskPaths = mask?.paths.map(
-          (path) =>
-            registration.schema.fields.find((field) => field.name === path)?.localName ?? path,
-        );
-        // Storage sees an EntityRecord envelope; its record mask cannot project decoded state fields.
-        const stored = await storage.current.query(storagePlan);
-        const results = stored.map((entry) =>
-          this.#entryResult(registration, entry.record, maskPaths),
-        );
+        const stored = await storage.current.query(plan);
+        const results = stored.map((entry) => this.#entryResult(registration, entry.record));
         return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
       } finally {
         storage.release();
@@ -849,18 +834,16 @@ export class Stand {
   }
 
   /**
-   * Decodes a current record and applies a state-property mask.
+   * Decodes a complete current state and its version.
    *
    * @typeParam Schema The decoded state schema.
    * @param registration State registration.
    * @param current Stored Entity record.
-   * @param maskPaths Decoded state-property paths to retain.
    * @returns Current state and version unless deleted.
    */
   #entryResult<Schema extends MessageSchema>(
     registration: Registration<Schema>,
     current: EntityRecord,
-    maskPaths?: readonly string[],
   ): StandReadResult<Schema> | undefined {
     const value = EntityRecords.unpack(registration.schema, current);
     if (value.deleted) return undefined;
@@ -870,19 +853,13 @@ export class Stand {
         : value.versionMessage;
 
     return Object.freeze({
-      state: Object.assign(
-        create(registration.schema),
-        RecordMask.apply(
-          clone(registration.schema, value.state as MessageShape<Schema>),
-          maskPaths,
-        ),
-      ),
+      state: clone(registration.schema, value.state as MessageShape<Schema>),
       ...(version === undefined ? {} : { version: clone(VersionSchema, version) }),
     });
   }
 
   /**
-   * Decodes an unmasked current record.
+   * Decodes a complete current record.
    *
    * @typeParam Schema The decoded state schema.
    * @param registration State registration.
@@ -1091,7 +1068,6 @@ export class Stand {
               .map((sort) => ({ field: sort.field, direction: sort.direction ?? "asc" }))
               .map(({ field, direction }) => ({ column: field, direction })),
           }),
-      ...(query.mask === undefined ? {} : { mask: { paths: query.mask } }),
       ...(query.limit === undefined ? {} : { limit: query.limit }),
       candidateLimit: 10_000,
     };

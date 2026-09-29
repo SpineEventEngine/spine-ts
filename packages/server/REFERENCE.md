@@ -231,7 +231,7 @@ side effects. Process Managers may use their protected read-only query surface
 for eventually consistent Entity state during a handler. Aggregates must not
 use these reads for invariants.
 
-`select(schema, columns)` supports `byId`, typed `where`, `mask`, `orderBy`,
+`select(schema, columns)` supports `byId`, typed `where`, `orderBy`,
 `limit`, `read`, `findById`, and `all`. A Process Manager query returns at most
 1,000 states. `all()` is a convenience and can be costly on a large read model;
 prefer an ID-targeted or ordered bounded query.

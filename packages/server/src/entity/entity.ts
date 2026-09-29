@@ -25,7 +25,6 @@ import {
   EntityQuery,
   type EntityColumn,
   type EntityColumnOperator,
-  type EntityQueryMaskPath,
   type EntityQueryIdentifier,
   type EntityQueryPredicateFor,
   type EntityPredicate,
@@ -202,17 +201,6 @@ export class ProcessManagerQuery<
     predicate: EntityQueryPredicateFor<Schema, Columns, Predicate>,
   ): this {
     this.#builder.where(predicate);
-    return this;
-  }
-
-  /**
-   * Sets the state fields returned by the server.
-   *
-   * @param paths Generated state-field property names to include.
-   * @returns This query for fluent configuration.
-   */
-  mask(...paths: readonly EntityQueryMaskPath<Schema>[]): this {
-    this.#builder.mask(...paths);
     return this;
   }
 

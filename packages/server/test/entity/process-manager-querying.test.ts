@@ -189,7 +189,6 @@ class MaskedProjectLookup extends ProcessManager<string, typeof ProcessManagerSt
     try {
       MaskedProjectLookup.results = await this.select(ProjectProfileStateSchema, {})
         .byId(command.id)
-        .mask("mutableNote")
         .read();
     } catch (error) {
       MaskedProjectLookup.failure = error;
@@ -321,7 +320,6 @@ class ProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSch
           )
           .orderBy(projectionColumns.priority, "desc")
           .limit(1)
-          .mask("name")
           .all();
       } else {
         const query = this.query();
@@ -563,7 +561,7 @@ function reviewRejectionEvent(id: string) {
 
 describe("Process Manager querying", () => {
   it.each(["local", "foreign"])(
-    "retains a masked camelCase state property on the %s registered route",
+    "retains complete camelCase state on the %s registered route",
     async (route) => {
       MaskedProjectLookup.results = [];
       MaskedProjectLookup.failure = undefined;
@@ -1470,7 +1468,6 @@ describe("Process Manager querying", () => {
           ],
         },
         order: [{ column: "priority", direction: "desc" }],
-        mask: { paths: ["name"] },
       });
     }).not.toThrow();
     expect(() => {
@@ -1479,12 +1476,9 @@ describe("Process Manager querying", () => {
     expect(() => {
       targets.validate(target, { order: [{ column: "other", direction: "asc" }] });
     }).toThrow('Query column "other" is not registered');
-    expect(() => {
-      targets.validate(target, { mask: { paths: ["other"] } });
-    }).toThrow('Query mask field "other" is not registered');
   });
 
-  it("preserves compound filters, ordering, limit, mask, and detached results across contexts", async () => {
+  it("preserves compound filters, ordering, limit, and detached results across contexts", async () => {
     ProjectLookup.reset();
     const projects = BoundedContext.singleTenant("QueryOptionsProjects")
       .add(projectionRepository())
@@ -1512,7 +1506,7 @@ describe("Process Manager querying", () => {
         expect(ProjectLookup.results).toHaveLength(1);
       });
       expect(ProjectLookup.results[0]?.name).toBe("ready");
-      expect(ProjectLookup.results[0]?.priority).toBe(0);
+      expect(ProjectLookup.results[0]?.priority).toBe(2);
       const first = ProjectLookup.results[0];
       if (first === undefined) throw new Error("The selected result was not returned.");
       first.name = "changed";

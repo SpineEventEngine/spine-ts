@@ -14,9 +14,11 @@
 
 /**
  * Defines a deterministic record query by IDs, columns, sorting, continuations,
- * offsets, limits, and masks.
+ * offsets, and limits.
+ *
+ * @typeParam I The storage slot identifier type.
  */
-export interface RecordQuery<I> extends RecordReadOptions {
+export interface RecordQuery<I> {
   // prettier-ignore
 
   /**
@@ -54,12 +56,21 @@ export interface RecordQuery<I> extends RecordReadOptions {
  * Provides record-query validation operations.
  */
 export const RecordQuery: Readonly<{
+  /**
+   * Checks limits, offsets, and continuation fields before a record query runs.
+   *
+   * @typeParam I The storage slot identifier type.
+   * @param query The query to validate.
+   */
   validate<I>(query: RecordQuery<I>): void;
 }> = Object.freeze({
   // prettier-ignore
 
   /**
-   * Validate a record query before execution.
+   * Checks limits, offsets, and continuation fields before provider execution.
+   *
+   * @typeParam I The storage slot identifier type.
+   * @param query The query to validate.
    */
   validate<I>(query: RecordQuery<I>): void {
     if (
@@ -89,18 +100,6 @@ export const RecordQuery: Readonly<{
 });
 
 /**
- * Read-time options for one record fetch.
- */
-export interface RecordReadOptions {
-  // prettier-ignore
-
-  /**
-   * Optional simple mask applied to the cloned result.
-   */
-  readonly mask?: import("./record-mask.js").RecordMask;
-}
-
-/**
  * Query sort order against one stored column, `id`, or a dotted record path.
  */
 export interface RecordOrder {
@@ -123,6 +122,8 @@ export interface RecordOrder {
  * `values` must name the same fields, in the same order, as `RecordQuery.sort`.
  * `id` is the actual storage slot identifier for the row and breaks any
  * remaining ties.
+ *
+ * @typeParam I The storage slot identifier type.
  */
 export interface RecordContinuation<I> {
   // prettier-ignore

@@ -286,7 +286,6 @@ describe("MysqlEntityStorage history behavior", () => {
     });
     await storage.current.query({
       order: [{ column: "ID", direction: "asc" }],
-      mask: { paths: ["state"] },
       limit: 1,
       candidateLimit: 2,
     });

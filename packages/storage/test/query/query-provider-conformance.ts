@@ -56,7 +56,6 @@ export async function assertQueryProviderConformance(
       ],
     },
     order: [{ column: "group", direction: "desc" }],
-    mask: { paths: ["value"] },
     limit: 2,
   });
 

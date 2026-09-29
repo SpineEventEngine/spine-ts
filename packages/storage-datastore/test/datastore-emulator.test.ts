@@ -66,7 +66,6 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
             value: "b",
           },
           order: [{ column: "value", direction: "asc" }],
-          mask: { paths: ["value"] },
           limit: 2,
         }),
       ).resolves.toEqual([message("beta"), message("bravo")]);

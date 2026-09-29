@@ -445,12 +445,13 @@ routes. `QueryService.Read` supports ID-filter reads for any registered state
 route and projection-state `Target.include_all = true` reads, packing
 `EntityStateWithVersion` replies from
 `Stand.queryVersioned()`. Projection queries also support top-level `EQUAL`
-filters over declared projection `(column)` proto field names, field masks,
+filters over declared projection `(column)` proto field names,
 repeated ordering directives over declared proto column names, and positive
 limits when ordering is present. Absent or zero wire limits use an implicit
 1,000-row cap without requiring ordering; only a positive limit without
 ordering returns `INVALID_QUERY`. Use proto column names such as
 `open_task_count`, not generated TS local names such as `openTaskCount`.
+The imported `ResponseFormat.field_mask` field is ignored; reads return complete states.
 Undeclared columns, unsupported operators, nested or `EITHER` composites, limits
 with a positive value but without ordering, missing criteria, and `include_all = false` return
 `INVALID_QUERY` before reading Stand storage.
@@ -470,7 +471,7 @@ distributed quota. `SpineServices.queueLimit` defaults to 100 queued updates
 per active local stream and closes slow delivery when exhausted.
 `Subscribe` accepts registered state targets and event targets exposed by
 built-context event dispatchers. It rejects unknown/private targets, invalid
-criteria, unsupported comparison operators, event filters, event field masks,
+criteria, unsupported comparison operators, event filters,
 and unknown subscription field paths with `INVALID_ARGUMENT` before creating an
 definition or attaching a listener. State `Target.include_all = true`
 delivers every activated update. State `Target.filters` supports an optional ID filter plus
@@ -478,7 +479,7 @@ delivers every activated update. State `Target.filters` supports an optional ID 
 fields, including nested message fields; missing ID filters match all IDs.
 Filtered topics deliver matching new states and emit `no_longer_matching` when
 the previous state matched but the new state does not. `Topic.field_mask` is
-applied to delivered states, not to `no_longer_matching` updates. Event topics
+ignored; delivered states contain every saved field. Event topics
 support `include_all = true` in this runtime implementation and stream wire-level
 `event_updates` with cloned framework `Event` envelopes. Application handlers
 continue to receive generated domain event messages; framework envelopes remain
@@ -1006,14 +1007,14 @@ Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
 `StorageGroup`,
 `RecordStorage`, `RecordEntry`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
 `RecordContinuation`, `RecordContinuationValue`, `RecordFilter`,
-`RecordOrder`, `RecordReadOptions`, `RecordMask`, `InMemoryStorageFactory`,
+`RecordOrder`, `InMemoryStorageFactory`,
 `InMemoryStorageBackend`, `InMemoryRecordStorage`, `EventStore`,
 `OnEventAccepted`, `EntityStateHistoryStorage`, and `EntityEventStorage`.
 `StorageFactory` defines one mandatory adapter seam,
 `createRecordStorage(context, spec, group?)`.
 `RecordStorage` persists identified Protobuf records with deterministic
 ID/column/path queries, stable continuations after sorted row keys,
-non-negative offsets, positive limits, and simple field masks over cloned
+non-negative offsets, positive limits, and complete cloned
 results. The in-memory adapter is process-local, tenant-aware through
 `StorageContext`, and non-durable. A factory without an
 `InMemoryStorageBackend` provides an isolated backend; independently constructed

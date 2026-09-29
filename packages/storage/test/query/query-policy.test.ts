@@ -22,7 +22,7 @@ import {
 
 const completeCapabilities = Object.freeze<StorageQueryCapabilities>({
   comparisons: Object.freeze(["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"]),
-  features: Object.freeze(["either", "nested", "order", "mask", "limit"]),
+  features: Object.freeze(["either", "nested", "order", "limit"]),
 });
 
 describe("StorageQueryPolicy", () => {
@@ -45,7 +45,6 @@ describe("StorageQueryPolicy", () => {
         { column: "priority", direction: "desc" },
         { column: "id", direction: "asc" },
       ],
-      mask: { paths: ["id", "title", "status"] },
       limit: 25,
     };
 
@@ -70,7 +69,6 @@ describe("StorageQueryPolicy", () => {
             ],
           },
           order: [{ column: "priority", direction: "asc" }],
-          mask: { paths: ["title"] },
           limit: 5,
         },
         equalityOnly,
@@ -95,9 +93,6 @@ describe("StorageQueryPolicy", () => {
         equalityOnly,
       );
     }).toThrow(/provider does not support ordering/);
-    expect(() => {
-      StorageQueryPolicy.validate({ mask: { paths: ["title"] } }, equalityOnly);
-    }).toThrow(/provider does not support field masks/);
     expect(() => {
       StorageQueryPolicy.validate(
         { order: [{ column: "id", direction: "asc" }], limit: 2 },
@@ -145,9 +140,6 @@ describe("StorageQueryPolicy", () => {
       );
     }).toThrow(/query limit must be a positive integer/);
     expect(() => {
-      StorageQueryPolicy.validate({ mask: { paths: ["id", " "] } }, completeCapabilities);
-    }).toThrow(/field-mask paths must not be blank/);
-    expect(() => {
       StorageQueryPolicy.validate(
         { order: [{ column: " ", direction: "asc" }] },
         completeCapabilities,
@@ -156,9 +148,6 @@ describe("StorageQueryPolicy", () => {
     expect(() => {
       StorageQueryPolicy.validate({ order: [] }, completeCapabilities);
     }).toThrow(/query order must not be empty/);
-    expect(() => {
-      StorageQueryPolicy.validate({ mask: { paths: [] } }, completeCapabilities);
-    }).toThrow(/field mask must not be empty/);
     expect(() => {
       StorageQueryPolicy.validate({ candidateLimit: 0 }, completeCapabilities);
     }).toThrow(/candidate limit must be a positive safe integer/);
@@ -258,9 +247,7 @@ describe("StorageQueryPolicy", () => {
       { order: [{ column: "id", direction: "sideways" }] },
       /direction must be asc or desc/,
     );
-    malformed({ mask: [] }, /field mask must be an object/);
-    malformed({ mask: { paths: "id" } }, /field-mask paths must be an array/);
-    malformed({ mask: { paths: [1] } }, /field-mask paths must be strings/);
+    malformed({ mask: { paths: ["id"] } }, /query plan property must be recognized/);
   });
 
   it.each([
@@ -280,11 +267,6 @@ describe("StorageQueryPolicy", () => {
         completeCapabilities,
       );
     }).toThrow(/ID predicate entries must be defined/);
-
-    const sparseMask = Array<string>(1);
-    expect(() => {
-      StorageQueryPolicy.validate({ mask: { paths: sparseMask } }, completeCapabilities);
-    }).toThrow(/field-mask paths must be strings/);
 
     const sparseOrder = Array(1);
     expect(() => {

@@ -13,7 +13,7 @@
  */
 
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { FieldMaskSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Interceptor, Transport, UnaryRequest, UnaryResponse } from "@connectrpc/connect";
 import { AnyMessages } from "@spine-event-engine/core";
 import {
@@ -32,6 +32,7 @@ import {
 } from "@spine-event-engine/proto";
 import {
   QueryResponseSchema,
+  EntityStateWithVersionSchema,
   QueryIdSchema,
   type Query,
   QuerySchema,
@@ -54,6 +55,7 @@ import {
   type SubscriptionLifecycle,
   type SubscriptionRetryPolicy,
 } from "../src/index.js";
+import { ProjectOverviewStateSchema } from "../../server/test-fixtures/generated/entity-metadata/project_states_pb.js";
 
 const browserFactories = vi.hoisted(() => ({
   connect: vi.fn(),
@@ -408,7 +410,7 @@ describe("Client", () => {
     await client.close();
   });
 
-  it("resynchronizes an Entity subscription before delivering an update held during Read", async () => {
+  it("resynchronizes complete Entity state before delivering an update held during Read", async () => {
     let subscribes = 0;
     let active = 0;
     let topic: Topic | undefined;
@@ -418,10 +420,13 @@ describe("Client", () => {
     let queryFactoryCalls = 0;
     let builtQuery: Message | undefined;
     const target = create(TargetSchema, {
-      type: "type.example/Entity",
+      type: "type.googleapis.com/entity_metadata.ProjectOverviewState",
       criterion: { case: "includeAll", value: true },
     });
-    const entityTopic = create(TopicSchema, { target });
+    const entityTopic = create(TopicSchema, {
+      target,
+      fieldMask: create(FieldMaskSchema, { paths: ["name"] }),
+    });
     const client = Client.usingTransport(
       {
         transport: unaryTransport(
@@ -445,6 +450,18 @@ describe("Client", () => {
                   response: create(ResponseSchema, {
                     status: create(StatusSchema, { status: { case: "ok", value: {} } }),
                   }),
+                  message: [
+                    create(EntityStateWithVersionSchema, {
+                      state: AnyMessages.pack(
+                        ProjectOverviewStateSchema,
+                        create(ProjectOverviewStateSchema, {
+                          id: "task-1",
+                          name: "Complete",
+                          priority: 7,
+                        }),
+                      ),
+                    }),
+                  ],
                 });
                 expect(response.response?.status?.status.case).toBe("ok");
                 resolve(response);
@@ -481,7 +498,10 @@ describe("Client", () => {
           return (builtQuery = create(QuerySchema, {
             id: create(QueryIdSchema, { value: "authoritative-query" }),
             target,
-            format: create(ResponseFormatSchema, { limit: 7 }),
+            format: create(ResponseFormatSchema, {
+              limit: 7,
+              fieldMask: create(FieldMaskSchema, { paths: ["does_not_exist"] }),
+            }),
           }));
         },
       }),
@@ -520,6 +540,15 @@ describe("Client", () => {
     const resynchronization = await updates.next();
     expect(resynchronization).toMatchObject({ value: { kind: "resynchronization" } });
     if (!resynchronization.done && resynchronization.value.kind === "resynchronization") {
+      const recovered = resynchronization.value.response.message[0]?.state;
+      if (recovered === undefined) throw new Error("Expected recovered Entity state.");
+      expect(AnyMessages.unpack(recovered, ProjectOverviewStateSchema)).toEqual(
+        create(ProjectOverviewStateSchema, {
+          id: "task-1",
+          name: "Complete",
+          priority: 7,
+        }),
+      );
       expect(Object.isFrozen(resynchronization.value)).toBe(true);
       expect(Object.isFrozen(resynchronization.value.response)).toBe(true);
       expect(Object.isFrozen(resynchronization.value.response.response)).toBe(true);

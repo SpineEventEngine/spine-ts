@@ -121,7 +121,7 @@ describe("MysqlRecordStorage", () => {
     }
   });
 
-  it("pushes flat and nested ALL/EITHER plans with masks into parenthesized SQL", async () => {
+  it("pushes flat and nested ALL/EITHER plans into parenthesized SQL", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
     const storage = schemaStorage(
       readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never,
@@ -146,7 +146,6 @@ describe("MysqlRecordStorage", () => {
           },
         ],
       },
-      mask: { paths: ["value"] },
       order: [{ column: "value", direction: "desc" }],
       limit: 8,
       candidateLimit: 2,

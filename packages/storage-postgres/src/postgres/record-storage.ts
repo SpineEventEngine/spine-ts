@@ -355,7 +355,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   protected override queryCapabilities(): StorageQueryCapabilities {
     return {
       comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
-      features: ["either", "nested", "order", "mask", "limit"],
+      features: ["either", "nested", "order", "limit"],
     };
   }
 

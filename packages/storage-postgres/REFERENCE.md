@@ -49,7 +49,7 @@ provider does not invent a JavaScript-compatible collation.
 
 Normalized plans support IDs; equal, greater-than, less-than, greater-or-equal,
 and less-or-equal comparisons; nested all/either predicates; declared-column
-ordering; masks; and finite limits. They do not support normalized offsets:
+ordering; and finite limits. They do not support normalized offsets:
 `RecordQuery.offset` is the separate provider-side pagination feature.
 
 `Timestamp` values are stored as epoch nanoseconds in `BIGINT`; `Version` is

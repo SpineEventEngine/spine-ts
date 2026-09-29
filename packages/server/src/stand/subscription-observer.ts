@@ -51,7 +51,6 @@ import {
   type SubscriptionUpdate,
 } from "@spine-event-engine/proto/client";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
-import { RecordMask } from "@spine-event-engine/storage";
 
 import { eventBusAccess, type EventBus, type EventSubscription } from "../bus/event-bus.js";
 import type { StandUpdate } from "./stand.js";
@@ -78,7 +77,12 @@ export interface StandObservedState {
 }
 
 interface StateMatcher {
-  readonly mask: readonly string[] | undefined;
+  /**
+   * Determines state delivery or removal from the update and topic filters.
+   *
+   * @param update The complete state change to inspect.
+   * @returns The delivery kind, or nothing when the update does not match.
+   */
   match(update: StandUpdate): "state" | "noLongerMatching" | undefined;
 }
 
@@ -364,11 +368,9 @@ export class SubscriptionObservers {
                   match === "state"
                     ? {
                         case: "state",
-                        value: AnyMessages.pack(
-                          state.schema,
-                          RecordMask.apply(clone(state.schema, update.state), matcher.mask),
-                          { validate: false },
-                        ),
+                        value: AnyMessages.pack(state.schema, clone(state.schema, update.state), {
+                          validate: false,
+                        }),
                       }
                     : { case: "noLongerMatching", value: true },
               }),
@@ -437,8 +439,7 @@ export class SubscriptionObservers {
 
   static #createMatcher(subscription: Subscription, state: StandObservedState): StateMatcher {
     const target = subscription.topic?.target;
-    const mask = SubscriptionObservers.#localMask(subscription, state.schema);
-    if (target?.criterion.case !== "filters") return { mask, match: () => "state" };
+    if (target?.criterion.case !== "filters") return { match: () => "state" };
     const filters = target.criterion.value;
     const idField = SubscriptionObservers.#findField(state.schema, state.idField);
     const ids = filters.idFilter?.id.map((value) =>
@@ -446,7 +447,6 @@ export class SubscriptionObservers {
     );
     const predicate = SubscriptionObservers.#createPredicate(filters.filter, state.schema);
     return {
-      mask,
       match(update) {
         if (
           ids !== undefined &&
@@ -498,18 +498,6 @@ export class SubscriptionObservers {
         expected,
         path.leaf?.message,
       );
-  }
-
-  static #localMask(
-    subscription: Subscription,
-    schema: MessageSchema,
-  ): readonly string[] | undefined {
-    const paths = subscription.topic?.fieldMask?.paths ?? [];
-    return paths.length === 0
-      ? undefined
-      : paths.map((path) =>
-          SubscriptionObservers.#resolvePath(schema, path.split(".")).local.join("."),
-        );
   }
 
   static #resolvePath(schema: MessageSchema, names: readonly string[]): ResolvedPath {
