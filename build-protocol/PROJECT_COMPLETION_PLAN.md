@@ -25,10 +25,11 @@ The work and review logs record the evidence and this remaining check. On
 29 September the human extended this same task with receiving-repository
 queries during routing, warning-only handling above 1,000 recipients, and a
 generated JVM-like query DSL with automatic column registration. That extension
-has received standalone plan review. Accepted findings are included in the
-plan; one question about selected fields versus complete Entity instances awaits
-the human's answer. The extension is not implemented or covered by the original
-passing checks.
+has received standalone plan review. Accepted findings are included in the plan.
+The human resolved its last question by removing query masking altogether;
+the focused plan recheck is complete with no remaining product questions.
+The extension is not implemented
+or covered by the original passing checks.
 
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
 remotely closed. The complete-replica deployment correction is closed through

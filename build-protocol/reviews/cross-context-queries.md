@@ -2,7 +2,8 @@
 
 Status: original runtime reviews and local release verification complete; the
 repository-query and generated-DSL plan extension has received standalone review.
-Its findings are incorporated; one field-selection decision awaits the human.
+Its findings are incorporated. The human resolved field selection by removing
+query masking. The focused plan follow-up is complete; no product questions remain.
 GitHub CI remains unverified.
 
 ## Plan review
@@ -291,8 +292,30 @@ Accepted findings and plan corrections:
 6. Include nested models, name collisions and non-`id` identifier fields in
    generation and consumer tests, with normal output cleanup and fingerprints.
 
-One product question remains: whether `find()` ignores field selection to
+At that review, one product question remained: whether `find()` ignores field selection to
 restore complete Entities. The recommendation and JVM alternative are recorded
 in the plan and unresolved-questions log, pending the user's decision. All other
 findings are incorporated as implementation requirements, not claimed as fixed
 runtime behavior. This review does not replace later implementation reviews.
+
+### Follow-up after the human removed query masking
+
+The retained requirements splitter reviewed the revised plan under its original
+explicit gpt-6-astra / high configuration. This was a focused follow-up retaining
+the prior review context, not a new no-history round: a fresh dispatch failed
+because the execution surface had reached its agent limit. No external memory
+or chat retrieval was used. Separate runtime metadata remains unavailable.
+
+Outcome: no remaining human decision or contradictory active requirement.
+One P2 acceptance gap was accepted and incorporated: subscription recovery runs
+an authoritative query and must obey the same no-masking rule. The plan now
+tests complete recovery states between masked live updates, rejects a masked
+recovery query, and preserves full-state subscription filtering, stored state
+and `noLongerMatching` behavior on local and remote paths. This adds test
+requirements only, not an exception or new runtime design.
+
+Review dispositions for this revision: public API and reliability plan concerns
+accepted after the focused architecture follow-up; documentation checked for
+consistent full-state claims and superseded requirements. Production style is
+N/A because only Markdown requirements and records changed. Implementation
+reviews remain required after the feature is written. No builds/tests executed.

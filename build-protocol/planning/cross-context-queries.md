@@ -2,8 +2,10 @@
 
 Status: Original cross-context work is implemented and locally release-verified.
 The approved repository-query and generated-DSL extension has received standalone
-plan review. One field-selection decision remains; the extension is not
-implemented. GitHub CI remains unverified.
+plan review. The human resolved the field-selection question by removing query
+masking. The revised plan recheck is complete; no product questions remain.
+The extension is not implemented.
+GitHub CI remains unverified.
 Updated: 29 September 2026.
 Branch: `cross-context-queries`.
 Base: official `origin/master`, `2324311be8c23024f66cb2ba702fbe99a99e7dfb`.
@@ -44,6 +46,11 @@ Base: official `origin/master`, `2324311be8c23024f66cb2ba702fbe99a99e7dfb`.
   typed Entity query. Return typed IDs, generated state messages and actual
   application Entity instances respectively. Never substitute state messages
   or wrapper objects for Entity instances returned by `find()`.
+- Remove field masking from the query engine altogether. `find()` restores
+  complete Entities and `findStates()` returns complete state messages.
+  Filters choose matching Entities, never which fields survive in their state.
+  Remove existing query masking APIs and execution, not just the generated DSL
+  option. This supersedes earlier mask-preservation requirements in this plan.
 - Permit application code to inspect returned Entities and filter them before
   returning recipient IDs. Restore Entities using normal construction, configured
   dependencies, stored Version and lifecycle; finding them must not invoke signal
@@ -91,8 +98,9 @@ bindings. Standalone contexts retain local reads; separate Servers stay isolated
 Foreign targets require `query` or `full` visibility, checked before storage.
 Existing local/public visibility behavior is outside this scoped correction.
 Unknown, hidden and tenant-incompatible targets are errors, not empty results.
-Preserve actor context, query predicates, masks, ordering, limits, lifecycle
-filtering, cloned results and handler-scoped read-only access.
+Preserve actor context, query predicates, ordering, limits, lifecycle filtering,
+cloned results and handler-scoped read-only access. The original implementation
+also preserved masking; the later human decision below explicitly removes it.
 
 Startup duplicate validation and partial route installation belong inside
 retryable cleanup for constructed contexts/resources. During shutdown, stop
@@ -168,7 +176,7 @@ should find matching cards and deliver the Event to their IDs. A Command may
 similarly carry an external order reference rather than an Aggregate ID.
 
 `findIds(query)` returns matching IDs without constructing application Entities.
-`findStates(query)` returns detached generated state messages, also without
+`findStates(query)` returns complete, detached generated state messages, without
 constructing Entities. `find(query)` returns correctly restored instances of
 the receiving repository's Entity class. The latter permits application filtering:
 
@@ -296,8 +304,9 @@ Generate field accessors and only valid comparison methods:
   `isLessThan(value)` and `isLessOrEqualTo(value)` for ordered values.
 - Successive conditions mean AND; `either((q) => ..., (q) => ...)` means OR,
   including nested combinations supported by the existing query representation.
-- Preserve ID filtering, ordering, explicit positive limits, returned-state
-  fields, and the version/archived/deleted columns without exposing raw metadata.
+- Preserve ID filtering, ordering, explicit positive limits, and the
+  version/archived/deleted columns without exposing raw metadata. Do not generate
+  field-selection methods: every returned state is complete.
 - Reject wrong value types and foreign-Entity columns at compile time and check
   malformed inputs at runtime. Reuse existing supported column kinds; this task
   does not add joins, collection columns or full-text search.
@@ -321,26 +330,66 @@ execution, not in the shared description. Test reuse of one query concurrently
 in different tenants and preserve each execution path's visibility and limits.
 This extends existing entry points rather than adding another query engine.
 
-### Remaining user decision: selected fields and complete Entities
+### Resolved decision: queries return complete state
 
-A query may request only some state fields. Should `find(query)` nevertheless
-restore complete Entities? Recommendation, pending user approval: yes.
-`findStates(query)` would return only the selected fields; `findIds(query)`
-would ignore state-field selection; `find(query)` would restore full state and
-explicitly document that it ignores field selection.
+On 29 September the human directed removal of masking from the query engine
+altogether. There is no partial-state option and no difference between the three
+find methods to negotiate on that point. Filtering by `customerId` still returns
+each matching order's name, address and other saved fields. `findIds()` returns
+only identifiers by definition; it does not use a field mask to construct them.
 
-For example, a query selecting only a customer's name must not accidentally
-leave out the saved delivery address that `OrderCard.canShip()` needs. The
-alternative is to follow JVM's masked-record restoration, returning Entities
-with omitted fields represented by Protobuf defaults; application methods and
-state validation can then encounter incomplete state. This is a visible
-behavioral choice, not an implementation detail. Record the user's answer before
-implementation and test the selected behavior for all three find methods.
+Remove masking end to end before adding the generated query API:
+
+1. Remove `.mask()`, mask-specific types/exports, compiled-plan fields and mask
+   serialization from core queries and the Process Manager query wrapper. New
+   generated queries must not expose an equivalent under another name.
+2. Remove mask options from normalized storage plans, record queries and direct
+   record reads; remove provider mask-capability flags and query-time pruning.
+   Keep complete-record cloning, stored Versions and detached result behavior.
+3. Remove mask handling from registered targets and Stand reads, including the
+   special decoded-state pruning that currently avoids pruning EntityRecord
+   envelopes. Remove query-only path validators and obsolete tests/helpers.
+4. Remove masking from remote QueryService execution and documented client query
+   usage. The imported `ResponseFormat.field_mask` wire field stays in the
+   upstream Proto definition; do not fork that definition or renumber fields.
+   Reject a non-empty incoming query mask as unsupported before reading storage,
+   rather than silently returning more fields than the caller requested. An
+   absent or empty mask is ordinary full-state querying. Preserve ordering and
+   limits in the same response format. Internal normalized plans with removed
+   mask properties fail existing unknown-property validation.
+5. Update current API guides, examples, package references, TSDocs and tests.
+   The new no-masking requirement supersedes older decision-log descriptions of
+   query mask support. Preserve historical records as history, not active rules.
+
+Subscriptions have a separate `Topic.field_mask` contract; this query-engine
+decision does not remove that unrelated subscription behavior. The current
+`RecordMask` helper is shared with subscriptions. Remove its storage export and
+query dependencies; retain only the existing subscription-specific operation
+internally in the server. Do not remove Protobuf's general `FieldMask` type or
+its unrelated serialization tests. Test subscriptions after changing the shared
+helper so query cleanup cannot accidentally break them.
+
+Cover local and remote subscriptions: filter against complete state, then mask
+only outgoing copies. Preserve stored state and `noLongerMatching` notifications.
+Client reconnection performs an authoritative query; test a masked live update,
+reconnection using an unmasked query that returns complete recovery states,
+then resumed masked live updates. An authoritative recovery query containing a
+non-empty mask must receive the ordinary unsupported-query error, not bypass
+the rule because it is used by a subscription.
+
+Acceptance tests must prove complete nested/scalar state through repository,
+PM, local Stand, remote query and each storage-provider path, plus detached
+results and preserved Version/lifecycle data. Test that the builder has no
+masking API, old normalized mask options are rejected, non-empty wire masks
+fail without storage access, empty wire masks return full state, and filters,
+ordering and explicit limits still work. No stored-data migration, compatibility
+shim or replacement field-selection feature is needed in this snapshot project.
 
 ### Remaining implementation sequence and tests
 
-1. Freeze the typed query and class-aware routing contracts after the remaining
-   user decision. Define PM/client acceptance alongside repository acceptance.
+1. Remove query masking across the existing API, storage and service paths, with
+   the focused regressions above. Freeze the typed query and class-aware routing
+   contracts. Define PM/client acceptance alongside repository acceptance.
    Test ID/state/application-method inference, supported existing overloads,
    foreign-Entity rejection and independent queries, including mutable inputs.
 2. Integrate automatic query generation and registration into the normal model
@@ -357,7 +406,7 @@ implementation and test the selected behavior for all three find methods.
 4. Implement the three receiving-repository reads with tenant isolation, exact
    return types, detached states and normal Entity restoration/constructor hooks.
    Test empty results, query failures, wrong Entity queries, Version/lifecycle,
-   application read methods, selected-field behavior and no unexpected handlers
+   application read methods, complete state and no unexpected handlers
    or writes. Test missing runtime binding, overlapping tenants and attempts to
    reuse routing read access after the callback has finished.
 5. Connect asynchronous exact-schema, interface and default routes, including
@@ -389,10 +438,9 @@ explicit Astra/high and no inherited history or memory. Implementation later
 uses one Sol/medium writer; scoped mechanical checks use Luna/low or medium;
 relevant specialist profiles remain as specified above. No child spawns children.
 
-Current authorization is to write and review this plan, then ask remaining
-questions; it does not authorize implementing the extension in this turn.
-Planning/review estimate: 0.2–0.35 hours. The implementation estimate will be
-broken down after review resolves any material contract choices.
+Current authorization is to reanalyze and update this plan after the human's
+masking decision, not implement the extension in this turn. Reanalysis estimate:
+0.15–0.25 hours. Provide a detailed implementation estimate before implementation.
 
 ### Extension source evidence
 
@@ -429,4 +477,15 @@ The independent review checked these execution details in particular:
   [ToEntityRecordQuery.java](https://github.com/SpineEventEngine/core-jvm/blob/ea3067b137938ac0beb6920c39d11e300976fcc9/server/src/main/java/io/spine/server/entity/storage/ToEntityRecordQuery.java#L95)
   and
   [RecordBasedRepository.java](https://github.com/SpineEventEngine/core-jvm/blob/ea3067b137938ac0beb6920c39d11e300976fcc9/server/src/main/java/io/spine/server/entity/RecordBasedRepository.java#L310):
-  field selection and Entity restoration relevant to the remaining question.
+  field selection and Entity restoration that motivated the now-resolved
+  question. The human's no-masking decision deliberately overrides this JVM
+  behavior for queries.
+
+Mask-removal source checks: core `query/entity-query.ts`, server `entity/entity.ts`,
+`services/registered-targets.ts`, `stand/stand.ts` and `services/spine-services.ts`;
+storage `query/query-policy.ts`, `record/record-query.ts`, `record/record-storage.ts`
+and all provider capability declarations. `stand/subscription-observer.ts` and
+the subscription path in `spine-services.ts` also use `RecordMask`, independently
+of queries. The upstream field is declared in
+`packages/proto/proto/spine/client/query.proto`; ordinary query-mask removal must
+not edit that copied wire contract.

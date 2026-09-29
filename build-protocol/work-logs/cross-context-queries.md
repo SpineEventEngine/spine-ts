@@ -1,8 +1,8 @@
 # Cross-context queries work log
 
 Started: 28 September 2026. Status: original implementation locally verified;
-repository-query and generated-DSL plan reviewed as of 29 September; one
-field-selection decision remains before implementation.
+repository-query and generated-DSL plan reviewed as of 29 September. The human
+resolved field selection by removing query masking; plan reanalysis is complete.
 Task/branch: `cross-context-queries`.
 Worktree: `/Users/armiol/.codex/worktrees/cross-context-queries/spine-ts`.
 Base: `2324311be8c23024f66cb2ba702fbe99a99e7dfb` from freshly fetched official origin.
@@ -470,3 +470,44 @@ planning turn. The first plan checkpoint was pushed as `7dd649583`.
 Planning-document verification passed: Prettier on the five changed Markdown
 files, `node scripts/check-doc-audience.mjs`, and `git diff --check` (exit 0).
 These checks validate the documents only, not the unimplemented extension.
+
+## Reanalysis after removing query masking
+
+The human directed removal of masking from the query engine altogether, then
+asked for plan reanalysis. This resolves the last question: Entity/state queries
+return complete state. Current work is analysis and documentation only; no
+implementation was started before the reanalysis request. Estimate: 0.15–0.25
+hours for tracing affected paths, revising records, focused independent plan
+review, document checks and push. No builds or runtime tests are needed here.
+
+The public-contract change requires a focused architecture recheck, not a new
+full implementation review. Expected assignment: existing requirements splitter,
+explicit gpt-6-astra / high, fresh context and no memory, read-only review of the
+revised plan against current query paths. No child agents, edits, builds or tests.
+Desktop supports the required explicit profile; independent runtime metadata is
+not exposed. Record actual dispatch and findings before accepting the result.
+
+Re-read AGENTS and BUILD_PROTOCOL. Selected doc-coauthoring and
+verification-before-completion skills were read fully; session inventory,
+expected-skill manifest and readable installed lock are available. Use the
+existing plan and logs, skip redundant interviews and scope-unrelated skill
+steps, and run a single focused fresh-reader pass. Implementation and test-first
+skills were inspected before the user narrowed this step to reanalysis; they do
+not authorize production changes now. No new library or infrastructure is needed.
+
+The attempted fresh requirements-splitter dispatch explicitly supplied Astra/high
+and `fork_turns: none`, but the surface rejected it because the agent thread
+limit was reached. Use the retained `/root/repository_query_plan_review` for this
+focused follow-up under its unchanged, originally explicit Astra/high profile.
+This is independent from the author but not a new no-history review; do not claim
+otherwise. It must re-read the updated files, not use external memory or chat
+retrieval. No additional review roles are needed for this plan-only correction.
+
+The focused review confirmed complete removal coverage and no remaining product
+questions. Accepted its one P2 finding: specify subscription recovery tests that
+use complete authoritative-query results while preserving separately masked live
+updates. The plan now includes that sequence and local/remote filter-before-mask
+checks. Updated the governing specification and resolved-questions record.
+No runtime files changed. Final checks passed (exit 0): Prettier for the six
+changed Markdown files, `node scripts/check-doc-audience.mjs`, and
+`git diff --check`. Implementation remains pending.
