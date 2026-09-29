@@ -338,3 +338,54 @@ This is the human's binding clarification, not another product choice. Checked
 the active records for the removed subscription exception and mask-rejection
 requirements. No additional independent review or runtime verification is claimed
 for this documentation correction; implementation review is still required.
+
+### Requested standalone review of the complete corrected plan
+
+The human requested a new review without memory, followed by remaining questions
+or a simple summary. Expected assignment: existing requirements splitter, explicit
+gpt-6-astra / high, new context without inherited chat history, prior review
+conclusions or memory retrieval. Read the complete current plan and requirements
+ledger, governing specification and relevant current source. Do not edit, build,
+test, implement or create child agents. No product decision is assumed unresolved
+in advance. Record the actual execution surface and profile before acceptance.
+
+The fresh Desktop dispatch explicitly supplied the expected role, model,
+reasoning and `fork_turns: none`, but failed at the surface's agent limit. The
+installed CLI is now 0.144.1 and supports fresh ephemeral execution, explicit
+model/reasoning and read-only sandboxing. Dispatch the same existing role's
+read-only planning remit there with gpt-6-astra/high, memories and multi-agent
+disabled, fast mode disabled, and no resumed session or prior review input.
+Validate reported model/reasoning in its execution header before acceptance.
+
+CLI 0.144.1 was rejected by the model service as too old for Astra; no review
+result came from it. Selected the already-installed app-bundled CLI at
+`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`, version
+0.158.0-alpha.2.1, with the same explicit restrictions and no software update.
+Execution evidence is in `/tmp/spine-query-plan-review.nROe5z/`; the bundled
+attempt uses `bundled-execution.log` and writes the final review to `result.md`.
+
+Completed successfully (exit 0). The execution header confirms gpt-6-astra,
+high reasoning and read-only sandboxing; separate inference-runtime metadata
+was not exposed. This was a new ephemeral session with memories disabled, not
+a continuation of any earlier reviewer. No changes, builds or tests were made.
+
+Verdict: feasible plan, no unresolved user decisions. Accepted all three P2
+findings and incorporated their smallest corrections:
+
+1. Separate the shared builder's current 1,000-ID input ceiling from repository
+   execution. Test more than 1,000 explicit IDs in all three find methods and
+   retain applicable PM/public limits at execution boundaries.
+2. Include subscription `authoritativeQuery` recovery among common typed-query
+   consumers. Test the same generated query for initial reads and reconnection,
+   preserving actor/tenant context and complete recovered/live state.
+3. Add focused review checkpoints after masking removal, shared-query generation
+   and consumers, exhaustive repository reads, and asynchronous routing. Keep
+   one final release verification after convergence, with no extra branches or
+   routine approval pauses.
+
+The reviewer verified current TS paths and did not claim freshly verified JVM
+parity because latest-HEAD JVM access was unavailable in that read-only process.
+Earlier explicitly recorded JVM evidence remains the plan's source; the human's
+no-masking decision overrides JVM masking behavior. This limitation raises no
+new product question. Current synchronous routing and masking code are planned
+implementation work, not additional defects in this plan review.

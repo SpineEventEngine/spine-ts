@@ -532,3 +532,34 @@ Correction checks passed (exit 0): changed-document Prettier check, documentatio
 audience check and `git diff --check`. A targeted scan confirmed the active plan,
 specification and questions log contain no requirement to retain masking or reject
 wire masks. No production code or runtime tests changed.
+
+## Complete standalone plan review requested by the human
+
+Scope: review the complete corrected plan without memory or inherited history,
+report genuine remaining questions, then summarize if none remain. Estimate:
+0.1–0.2 hours for independent source checks, any bounded plan corrections,
+documentation verification and reporting. No runtime implementation or builds.
+The doc-coauthoring fresh-reader stage applies; use one independent complete
+review, not repeated brainstorming or review of earlier conclusions.
+
+The Desktop fresh-agent limit prevented dispatch. CLI 0.144.1 was rejected by
+the model service before review began. A new ephemeral read-only process uses
+the already-installed app-bundled CLI 0.158.0-alpha.2.1 with explicit Astra/high,
+the existing requirements-splitter remit, memories/multi-agent/fast mode disabled,
+and no resumed session. The execution header confirms gpt-6-astra, high and
+read-only. No prior chat or work/review-log conclusions were supplied. Evidence:
+`/tmp/spine-query-plan-review.nROe5z/bundled-execution.log` and `result.md`.
+The initial plan/document formatting and whitespace checks passed. No software
+was installed or configuration changed. The separate review log tracks outcome.
+
+The fresh standalone review completed successfully with no remaining user
+questions. Accepted three P2 plan findings: remove the builder's explicit-ID
+ceiling for repository execution; adapt subscription recovery to common generated
+queries; and add focused review checkpoints between major runtime slices. All
+are incorporated into the written plan. Read-only review did not independently
+refresh JVM HEAD, and made no new JVM-parity claim. No implementation occurred.
+
+Post-review document checks passed (exit 0): Prettier on the three changed files,
+documentation audience checks and `git diff --check`. The review process exited
+normally; no reviewer process is left running. Ready to push this plan update
+and give the requested simple summary, without claiming feature implementation.

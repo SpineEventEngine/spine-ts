@@ -5,6 +5,8 @@ The approved repository-query and generated-DSL extension has received standalon
 plan review. The human resolved field selection: remove all masking APIs and
 execution, including subscriptions; ignore mask fields in incoming Protobufs.
 No product questions remain.
+The complete corrected plan received a fresh standalone review without memory;
+its three implementation-plan findings are incorporated below.
 The extension is not implemented.
 GitHub CI remains unverified.
 Updated: 29 September 2026.
@@ -274,6 +276,14 @@ as many transport batches as needed. Test later-batch failure using existing
 recorded-target delivery guarantees, without promising new all-or-nothing
 multi-recipient delivery.
 
+The shared query builder currently rejects more than 1,000 explicit IDs before
+execution. Remove that construction-time obstacle for receiving-repository
+queries too: selecting 1,200 known order IDs must work just like finding 1,200
+orders by customer. Apply any retained PM/public ID-count limits at their
+execution boundaries, not in the common query description. Test more than
+1,000 explicit IDs through all three repository find methods and preserve
+applicable remote-request limits.
+
 ### Generated query interface
 
 Generate a companion for each eligible state, for example an `OrderCardQuery`
@@ -327,11 +337,15 @@ PM execution continues using the current handler context and the approved
 cross-context rules. Client execution obtains context from its existing caller
 configuration. Define the common query value before implementing its consumers:
 the repository methods, `this.select(query).read()` in a Process Manager, and
-the existing client request's `send(query)` accept that same value. Preserve
+the existing client request's `send(query)` and subscription recovery's
+`authoritativeQuery` accept that same value. Preserve
 existing supported overloads. Build actor, tenant and wire-request metadata at
 execution, not in the shared description. Test reuse of one query concurrently
 in different tenants and preserve each execution path's visibility and limits.
-This extends existing entry points rather than adding another query engine.
+Test a generated query used for both initial reads and reconnection: recovery
+binds the subscription's actor and tenant, returns complete state, then resumes
+complete live updates. This extends existing entry points rather than adding
+another query engine.
 
 ### Resolved decision: no masking in any API
 
@@ -386,15 +400,19 @@ shim or replacement field-selection feature is needed in this snapshot project.
 ### Remaining implementation sequence and tests
 
 1. Remove all masking across query, subscription, storage and service paths, with
-   the focused regressions above. Freeze the typed query and class-aware routing
-   contracts. Define PM/client acceptance alongside repository acceptance.
-   Test ID/state/application-method inference, supported existing overloads,
+   the focused regressions above. Run cheap checks and relevant focused review;
+   resolve its findings before proceeding to the next runtime slice.
+2. Freeze the typed query and class-aware routing contracts. Define repository,
+   PM, client request and subscription-recovery acceptance together. Test
+   ID/state/application-method inference, supported existing overloads,
    foreign-Entity rejection and independent queries, including mutable inputs.
-2. Integrate automatic query generation and registration into the normal model
+   Integrate automatic query generation and registration into the normal model
    pipeline. Test all Entity families, fresh external consumers, repeated imports,
    package exports, browser-safe dependencies and regeneration after Proto edits.
    Include nested Entities, accessor/name collisions, non-`id` identifier fields,
    stale-output cleanup, failed-generation rollback and output fingerprints.
+   Implement the shared-query consumers, including subscription recovery. Run
+   cheap checks and a focused API/generation review before provider work.
 3. Implement exhaustive repository-query execution and lifecycle selection in
    memory, PostgreSQL, MySQL and supported Datastore paths. Test more than 10,000
    matches, a sparse match after 10,000 candidates, Datastore reads spanning its
@@ -407,6 +425,8 @@ shim or replacement field-selection feature is needed in this snapshot project.
    application read methods, complete state and no unexpected handlers
    or writes. Test missing runtime binding, overlapping tenants and attempts to
    reuse routing read access after the callback has finished.
+   Review the complete provider/read slice after cheap checks, covering lifecycle,
+   restoration, tenant isolation and exhaustive explicit-ID/condition searches.
 5. Connect asynchronous exact-schema, interface and default routes, including
    state updates, to direct dispatch, acceptance and durable Inbox delivery.
    Test every legal Entity/signal pairing, sync compatibility, overlapping tenant
@@ -417,12 +437,17 @@ shim or replacement field-selection feature is needed in this snapshot project.
    recorded recipients after stored data changes. Cover local and remote delivery
    exceeding one transport batch, including later-batch failure. No silent
    adapter-dependent truncation or new multi-recipient atomicity claim.
-6. Complete PM/client integration using the contract fixed in step 1, update Todo and
+   Review async routing and delivery after focused checks; resolve findings in
+   this slice before broad documentation and final verification.
+6. Update Todo and
    the routing example, and remove manual registration from affected application
    code. Update guides and all touched TSDocs with real generated imports and
    commented examples. Explain Entities versus state messages and query timing.
-7. Run scoped checks and changed-source coverage, then relevant independent
-   reviews. Return one accepted finding batch to the retained implementer. After
+7. Complete scoped checks and changed-source coverage, plus remaining relevant
+   documentation review. Runtime/API reviews occur at the checkpoints above,
+   not as one mixed package at the end. Each checkpoint collects its complete
+   relevant review wave and returns one accepted finding batch to the retained
+   implementer. Do not create extra branches or human-approval pauses. After
    corrections converge, run `verify:release` and exact-tarball consumer checks.
    Preserve the original cross-context regressions; its earlier passing result
    is not evidence that this extension is verified. Confirm final-SHA CI when
