@@ -20,5 +20,6 @@ jobs:
           node-version-file: .node-version
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit:release
       - run: pnpm verify:release
       - run: node scripts/release-cli.mjs prepare --check
