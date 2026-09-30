@@ -5,13 +5,18 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  brace-expansion@2.1.2: 2.1.4
-  brace-expansion@5.0.8: 5.0.9
+  brace-expansion@1.1.18: 1.1.21
+  brace-expansion@2.1.2: 2.1.7
+  brace-expansion@5.0.8: 5.0.12
+  ip-address@10.5.0: 10.7.1
   js-yaml: 4.3.2
+  markdown-it@14.2.0: 14.3.1
   nanoid: 3.3.18
   pacote: 21.5.1
   postcss: 8.5.23
   smol-toml: 1.7.1
+  undici@6.28.0: 6.28.1
+  undici@8.9.0: 8.10.2
 
 importers:
 
@@ -104,41 +109,41 @@ importers:
         specifier: 3.3.0
         version: 3.3.0(@google-cloud/logging@12.0.1)
       '@spine-event-engine/auth':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../../packages/auth
       '@spine-event-engine/client-node':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../../packages/client-node
       '@spine-event-engine/core':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../../packages/core
       '@spine-event-engine/delivery-client':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../../packages/delivery-client
       '@spine-event-engine/deployment-gke':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../../packages/deployment-gke
       '@spine-event-engine/example-message-board-model':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../model
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../../packages/proto
       '@spine-event-engine/server':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../../packages/server
       '@spine-event-engine/storage':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../../packages/storage
       '@spine-event-engine/storage-datastore':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../../packages/storage-datastore
       loglayer:
         specifier: 9.4.0
         version: 9.4.0
     devDependencies:
       '@spine-event-engine/proto-tools':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../../packages/proto-tools
 
   examples/message-board/model:
@@ -147,14 +152,14 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
       '@spine-event-engine/core':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../../packages/core
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../../packages/proto
     devDependencies:
       '@spine-event-engine/proto-tools':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../../packages/proto-tools
 
   examples/message-board/web:
@@ -248,7 +253,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../packages/proto
       '@spine-event-engine/server':
         specifier: workspace:*
@@ -261,7 +266,7 @@ importers:
         version: link:../../packages/storage-datastore
     devDependencies:
       '@spine-event-engine/proto-tools':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../packages/proto-tools
 
   examples/projects:
@@ -282,14 +287,14 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../packages/proto
       '@spine-event-engine/server':
         specifier: workspace:*
         version: link:../../packages/server
     devDependencies:
       '@spine-event-engine/proto-tools':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../packages/proto-tools
 
   examples/todo:
@@ -316,7 +321,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/delivery-client
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../packages/proto
       '@spine-event-engine/server':
         specifier: workspace:*
@@ -335,7 +340,7 @@ importers:
         version: link:../../packages/storage-postgres
     devDependencies:
       '@spine-event-engine/proto-tools':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../packages/proto-tools
       '@spine-event-engine/testing':
         specifier: workspace:*
@@ -350,13 +355,13 @@ importers:
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)
       '@spine-event-engine/core':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../core
       '@spine-event-engine/deployment':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../deployment
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../proto
       jose:
         specifier: 6.2.4
@@ -380,13 +385,13 @@ importers:
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       '@spine-event-engine/client-web':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../client-web
       '@spine-event-engine/core':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../core
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../proto
     devDependencies:
       '@spine-event-engine/server':
@@ -417,10 +422,10 @@ importers:
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       '@spine-event-engine/core':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../core
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../proto
 
   packages/core:
@@ -429,7 +434,7 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../proto
       '@spine-event-engine/validation':
         specifier: 2.0.0-snapshot.7
@@ -441,7 +446,7 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../proto
 
   packages/delivery-client:
@@ -456,10 +461,10 @@ importers:
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../proto
       '@spine-event-engine/server':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../server
     devDependencies:
       '@spine-event-engine/core':
@@ -487,7 +492,7 @@ importers:
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../proto
       loglayer:
         specifier: 9.4.0
@@ -586,7 +591,7 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../proto
       semver:
         specifier: 7.8.5
@@ -611,22 +616,22 @@ importers:
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       '@spine-event-engine/auth':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../auth
       '@spine-event-engine/core':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../core
       '@spine-event-engine/deployment':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../deployment
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../proto
       '@spine-event-engine/storage':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../storage
       '@spine-event-engine/transport':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../transport
       loglayer:
         specifier: 9.4.0
@@ -645,13 +650,13 @@ importers:
         specifier: workspace:*
         version: link:../proto-tools
       '@spine-event-engine/storage-datastore':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../storage-datastore
       '@spine-event-engine/storage-mysql':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../storage-mysql
       '@spine-event-engine/storage-postgres':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../storage-postgres
       mysql2:
         specifier: 3.23.1
@@ -666,7 +671,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../proto
       '@spine-event-engine/server':
         specifier: workspace:*
@@ -681,10 +686,10 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
       '@spine-event-engine/core':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../core
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../proto
 
   packages/storage:
@@ -693,7 +698,7 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../proto
 
   packages/storage-datastore:
@@ -705,13 +710,13 @@ importers:
         specifier: 10.1.1
         version: 10.1.1
       '@spine-event-engine/core':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../core
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../proto
       '@spine-event-engine/storage':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../storage
 
   packages/storage-mysql:
@@ -777,10 +782,10 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
       '@spine-event-engine/core':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../core
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../../proto
 
   packages/transport:
@@ -789,7 +794,7 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
       '@spine-event-engine/proto':
-        specifier: 2.0.0-snapshot.17
+        specifier: 2.0.0-snapshot.18
         version: link:../proto
 
 packages:
@@ -2105,14 +2110,14 @@ packages:
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
 
-  brace-expansion@1.1.18:
-    resolution: {integrity: sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw==}
+  brace-expansion@1.1.21:
+    resolution: {integrity: sha512-9zeA+KLZNNzglF2TPKRQEDyx6Yby7daAkuy8MiPzpXPsYDWi/DRM8jmwUDxokQjYqBpv5DgPiwD4h4ZZSy1Ujw==}
 
-  brace-expansion@2.1.4:
-    resolution: {integrity: sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg==}
+  brace-expansion@2.1.7:
+    resolution: {integrity: sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g==}
 
-  brace-expansion@5.0.9:
-    resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
+  brace-expansion@5.0.12:
+    resolution: {integrity: sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ==}
     engines: {node: 20 || >=22}
 
   buffer-equal-constant-time@1.0.1:
@@ -2848,8 +2853,8 @@ packages:
       '@types/node':
         optional: true
 
-  ip-address@10.5.0:
-    resolution: {integrity: sha512-R5SnVLJmgYYvf2F2ZgwSBnelz5G4q5AxIC277GDfUaNbrZKNANcBC7RHqYYePlszf4kBolVkJauG0ZjHHFh55g==}
+  ip-address@10.7.1:
+    resolution: {integrity: sha512-4OUAqU9Z1i3vCnS05hzGiFnEMDpQ+62pAD/MVQOp83fYyNC8GleCqaS0QikQBmcWCrKFiUs/B8ztRRiYOAXuCA==}
     engines: {node: '>= 12'}
 
   is-arrayish@0.2.1:
@@ -3192,8 +3197,8 @@ packages:
     resolution: {integrity: sha512-Je0fLJ0F5atA7F+eIlLzk+Wkcl57JDf4kf+EW8xiP5E31xOQxkIxTbgf1Oi1Lw9tRI9UEMRdI5Vz2xTzoNU1Jw==}
     engines: {node: ^20.17.0 || >=22.9.0}
 
-  markdown-it@14.2.0:
-    resolution: {integrity: sha512-1TGiQiJVRQ3NPmZH6sx5Cfnmg6GQm9jvC1ch4TK511NjSJvjzKLzn5pPfZRNZkRPZP0HqCioSndqH8v2nRaWVQ==}
+  markdown-it@14.3.1:
+    resolution: {integrity: sha512-4Ej49aYTDFIQ+uBkfX8GBvJGccoARxxPep+7aWTs55ozbjQJpW9M26Fe53vnGgvLeVzva/amzjQQaQu9w0vMhA==}
     hasBin: true
 
   math-intrinsics@1.1.0:
@@ -4057,12 +4062,12 @@ packages:
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
-  undici@6.28.0:
-    resolution: {integrity: sha512-LIY910g9TI13YS95lrMFrs8Rm/u/irgHeTWoKCoteeJ04CUJ92eEfj0rVn+7VKMPBpUPiUoBKfhNyLI23EE/KA==}
+  undici@6.28.1:
+    resolution: {integrity: sha512-zWpdTVD54H48CIybL0rWQ3ukpb9d23wM7eH5RtfdmeP70cWHNjtfo7P4vZX+5CoDcO53J4Pu5uXp7lNfjc6DRA==}
     engines: {node: '>=18.17'}
 
-  undici@8.9.0:
-    resolution: {integrity: sha512-aWZpUj7XoGonMClx4gdDRfgBjqeA+F473aDmROQQbM9n6PRfK/u1q/a0X4wMTgcHfT8H6fpbt98PFuDUwFg2YA==}
+  undici@8.10.2:
+    resolution: {integrity: sha512-/y4/bH9YNU5hi9NIrpOuvGXFcxrj3CMrV+/AYpowAYTpHn8gX/XPFjNy766FPoYY0miQhdW977JFWKGNhBdwyQ==}
     engines: {node: '>=22.19.0'}
 
   universal-user-agent@6.0.1:
@@ -5626,16 +5631,16 @@ snapshots:
       inherits: 2.0.4
       readable-stream: 3.6.2
 
-  brace-expansion@1.1.18:
+  brace-expansion@1.1.21:
     dependencies:
       balanced-match: 1.0.2
       concat-map: 0.0.1
 
-  brace-expansion@2.1.4:
+  brace-expansion@2.1.7:
     dependencies:
       balanced-match: 1.0.2
 
-  brace-expansion@5.0.9:
+  brace-expansion@5.0.12:
     dependencies:
       balanced-match: 4.0.4
 
@@ -6420,7 +6425,7 @@ snapshots:
     optionalDependencies:
       '@types/node': 24.13.2
 
-  ip-address@10.5.0: {}
+  ip-address@10.7.1: {}
 
   is-arrayish@0.2.1: {}
 
@@ -6518,7 +6523,7 @@ snapshots:
       saxes: 6.0.0
       symbol-tree: 3.2.4
       tough-cookie: 6.0.2
-      undici: 8.9.0
+      undici: 8.10.2
       w3c-xmlserializer: 5.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -6812,7 +6817,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  markdown-it@14.2.0:
+  markdown-it@14.3.1:
     dependencies:
       argparse: 2.0.1
       entities: 4.5.0
@@ -6839,23 +6844,23 @@ snapshots:
 
   minimatch@10.2.5:
     dependencies:
-      brace-expansion: 5.0.9
+      brace-expansion: 5.0.12
 
   minimatch@10.2.6:
     dependencies:
-      brace-expansion: 5.0.9
+      brace-expansion: 5.0.12
 
   minimatch@3.1.4:
     dependencies:
-      brace-expansion: 1.1.18
+      brace-expansion: 1.1.21
 
   minimatch@3.1.5:
     dependencies:
-      brace-expansion: 1.1.18
+      brace-expansion: 1.1.21
 
   minimatch@9.0.9:
     dependencies:
-      brace-expansion: 2.1.4
+      brace-expansion: 2.1.7
 
   minimist@1.2.8: {}
 
@@ -6953,7 +6958,7 @@ snapshots:
       semver: 7.8.5
       tar: 7.5.22
       tinyglobby: 0.2.17
-      undici: 6.28.0
+      undici: 6.28.1
       which: 6.0.1
 
   nopt@8.1.0:
@@ -7040,7 +7045,7 @@ snapshots:
       balanced-match: 4.0.3
       base64-js: 1.5.1
       bl: 4.1.0
-      brace-expansion: 5.0.9
+      brace-expansion: 5.0.12
       buffer: 5.7.1
       bundle-name: 4.1.0
       call-bind-apply-helpers: 1.0.2
@@ -7588,7 +7593,7 @@ snapshots:
 
   socks@2.8.9:
     dependencies:
-      ip-address: 10.5.0
+      ip-address: 10.7.1
       smart-buffer: 4.2.0
 
   source-map-js@1.2.1: {}
@@ -7792,7 +7797,7 @@ snapshots:
     dependencies:
       '@gerrit0/mini-shiki': 3.23.0
       lunr: 2.3.9
-      markdown-it: 14.2.0
+      markdown-it: 14.3.1
       minimatch: 10.2.5
       typescript: 6.0.3
       yaml: 2.9.0
@@ -7819,9 +7824,9 @@ snapshots:
 
   undici-types@7.18.2: {}
 
-  undici@6.28.0: {}
+  undici@6.28.1: {}
 
-  undici@8.9.0: {}
+  undici@8.10.2: {}
 
   universal-user-agent@6.0.1: {}
 

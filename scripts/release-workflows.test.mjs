@@ -82,7 +82,7 @@ function assertExactPublishJob(job) {
 }
 
 describe("release workflows", () => {
-  it("runs live dependency audits on a schedule outside deterministic PR verification", () => {
+  it("runs live dependency audits on a schedule and in PR verification", () => {
     const build = YAML.parse(read("build.yml"));
     const workflow = YAML.parse(read("security.yml"));
 
@@ -108,6 +108,12 @@ describe("release workflows", () => {
         { run: "pnpm --config.verify-deps-before-run=false audit:release" },
       ],
     });
+    expect(build.jobs.verify.steps.map((step) => step.run).filter(Boolean)).toEqual([
+      "pnpm install --frozen-lockfile",
+      "pnpm audit:release",
+      "pnpm verify:release",
+      "node scripts/release-cli.mjs prepare --check",
+    ]);
   });
 
   it("keeps PR verification read-only and non-publishing", () => {

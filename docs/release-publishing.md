@@ -4,7 +4,8 @@ NPM trusted publishing uses a short-lived GitHub Actions OIDC identity instead o
 an npm token. Never add a token fallback.
 
 1. Push a feature branch; a human maintainer opens a pull request to `master`.
-2. `build.yml` is read-only: it verifies and proves the packed artifacts.
+2. `build.yml` audits all and production dependencies before release verification,
+   then proves the packed artifacts without publishing.
 3. A human merges the pull request.
 4. `publish.yml` runs for the `master` push through OIDC with pinned Lerna
    `10.0.1 publish from-package`.
