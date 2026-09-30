@@ -7,26 +7,25 @@ an npm token. Never add a token fallback.
 2. `build.yml` audits all and production dependencies before release verification,
    then proves the packed artifacts without publishing.
 3. A human merges the pull request.
-4. `publish.yml` runs for the `master` push through OIDC with pinned Lerna
-   `10.0.1 publish from-package`.
+4. `publish.yml` runs for the `master` push. It uses npm `11.16.0` to publish
+   the tested package archives with OIDC authentication and provenance.
 
 Every merge may result in a release. Keep one version across the root, 19 public
 packages, and seven examples. Maintainers make a standalone commit named `Bump
 version -> <version>`; concrete internal pins and `pnpm-lock.yaml` change
 separately. `publishConfig.access` remains package metadata, but a static
 `publishConfig.tag` is forbidden: the validated common version is the sole
-channel source passed explicitly to Lerna.
+channel source passed explicitly to npm.
 
 Exact `x.y.z-snapshot.N` uses `snapshot`; exact `x.y.z` uses `latest`; every
 other prerelease fails before mutation. The historical first published snapshot
-is `2.0.0-snapshot.2`. Never reuse a version that was published or used by an
-interrupted publication attempt; every later `master` merge carries the next
-unused common version.
+is `2.0.0-snapshot.2`. Every new `master` merge carries the next unused common
+version. Resuming the original publishing run is a separate operation and is
+allowed only under the recovery rules below.
 
-In npm's UI, configure one trusted publisher for each package. Use organization
+In npm's UI, configure the GitHub trusted publisher for each package. Use organization
 `SpineEventEngine`, repository `spine-ts`, filename `publish.yml` only,
-environment `gh-actions-environment`, and allowed action `npm publish`. A package
-has one trusted publisher; replacing it replaces that connection.
+environment `gh-actions-environment`, and allowed action `npm publish`.
 
 - `@spine-event-engine/auth`, `@spine-event-engine/client-node`, `@spine-event-engine/client-react`, `@spine-event-engine/client-web`, `@spine-event-engine/core`, `@spine-event-engine/delivery-client`
 - `@spine-event-engine/delivery-server`, `@spine-event-engine/deployment`, `@spine-event-engine/deployment-gce`, `@spine-event-engine/deployment-gke`, `@spine-event-engine/proto`, `@spine-event-engine/proto-tools`
@@ -91,55 +90,135 @@ the trusted publisher names `SpineEventEngine/spine-ts`, `publish.yml`, and
 publishing for the package. This final publishing-access setting remains a
 manual npm account action.
 
-Do not change the version after this local publication. When the pull request is
-merged, registry preflight skips this already-published package, publishes the
-remaining workspace packages at the same version, and finally verifies the
-version and selected release tag for all packages. The locally published first
-version does not have OIDC-generated provenance. Later versions of the new
-package are published normally by GitHub Actions with OIDC and automatic
-provenance.
+After this local publication, bump every workspace package to the next unused
+common snapshot before merging. Use the required version-only commit, then update
+internal dependency pins and the lockfile separately. The manually published first
+version does not have GitHub OIDC provenance and must not be reused by the
+automated release. The merge publishes the new version of every public package,
+including the new package, through GitHub Actions with provenance.
 
 Create `gh-actions-environment` before activation. Allow deployment from `master`
 only, disable bypass, and leave required reviewers off by default so a merge can
 release automatically. GitHub-hosted runners use Node 24, pnpm 11.9.0, and npm
-11.16.0. Provenance remains automatic.
+11.16.0. The publication command explicitly enables provenance.
 
-## Sigstore provenance disposition
+## What the publishing job does
 
-The [sigstore-js issue #1708](https://github.com/sigstore/sigstore-js/issues/1708) /
-[PR #1709](https://github.com/sigstore/sigstore-js/pull/1709) is unresolved and
-unreleased. Official, unmodified npm trusted publishing remains in use. No Sigstore-specific
-retry or timeout workaround, custom publisher, or token fallback is configured; the separate
-10-second registry-selection timeout remains in place. Sigstore is not upgraded solely for this
-issue because the latest released configuration still sets
-`fetchOnConflict` to `false`.
+Preparation builds and tests the packages, creates their archives, and installs
+those archives in a fresh consumer project. It saves the archives together with
+their package names, versions, hashes and source commit. The publishing job
+checks this information and passes the same archives directly to npm. It does
+not rebuild or repack them.
+
+The consumer test may download third-party dependencies from the registry.
+Every framework package comes from the prepared local archives, and dependency
+installation scripts remain disabled.
+
+Before publication, the job checks all 19 packages against npm's public registry.
+It stops on authentication errors, unavailable or malformed responses, conflicting
+published content, or a release tag that already points to a newer version.
+Packages are published one at a time in dependency order. Each package's tag is
+checked again immediately before its publication.
+
+The workflow queues releases so they do not overlap. npm does not offer an
+atomic "publish only if the tag has not changed" operation; a separate external
+publisher could still change the tag between the check and the upload.
+
+### The narrowly limited Rekor retry
+
+Sigstore records provenance in Rekor, a public transparency log. An entry can be
+accepted while its acknowledgement is lost. The library's repeated request can
+then fail because the same entry already exists. See
+[the upstream issue](https://github.com/sigstore/sigstore-js/issues/1708).
+
+The script permits one fresh npm attempt only when the pinned npm version reports
+the exact Rekor duplicate-entry error established by the local regression test.
+At this point provenance generation has failed before npm uploads the package.
+A fresh attempt creates new signing material. This is not a guarantee that an
+unavailable external service will recover.
+
+Other signing errors, registry conflicts, authentication failures and unknown
+errors do not qualify. A second failure stops publication of later packages.
+No dependency is patched, no Sigstore timeout is increased, and provenance is
+never disabled.
+
+### Confirmation and the result report
+
+The job reports every package as published, already present, failed, unconfirmed,
+or not attempted. It checks the exact version, archive hash, selected tag and
+the npm-hosted provenance record, including the package, source commit and
+publishing workflow. Snapshot publication must leave `latest` unchanged.
+
+This confirmation compares npm's provenance record with the expected details
+and checks for its signature, certificate and transparency-log proof. It trusts
+npm's HTTPS endpoint; it does not independently verify the cryptographic
+signatures.
+
+Public registry data can appear later than the upload succeeds. Confirmation
+uses one shared 60-second window for the release, not a separate minute for
+each package. Missing evidence after that window is reported as unconfirmed;
+it is not treated as proof that publication failed or that permissions are wrong.
+Confirmation never uploads a package or changes a tag.
+
+### Recovering a failed run
+
+Use the saved package report to distinguish packages that were never attempted
+from packages whose upload result is uncertain. The report records an attempt
+before npm starts and is saved even when the publishing step fails.
+
+A failed publication job can resume only with its original archives and a valid
+report from the immediately preceding attempt of the same run and source commit.
+An older report cannot establish what happened during an intervening cancelled
+attempt. An uncertain earlier
+upload must first be positively confirmed: a later 404 does not authorize sending
+the package again. Missing reports, different archive bytes, conflicting tags or
+newer releases stop further uploads. A cancelled runner may leave no report;
+that case also requires investigation rather than a blind retry. The workflow
+keeps the `release` artifact for one day and `publication-report` for 14 days.
+Having the report alone is not enough to resume after the archives expire.
+
+When every package was uploaded but confirmation failed, use the read-only
+verification command described below instead of publishing again. Do not rerun
+preparation and assume newly created archives are identical. If the original
+artifacts have expired, prepare a new common version unless equality with the
+original hashes can be established.
+
+Download and extract the original `release` artifact from the GitHub run into a
+local directory, for example `./release`. It must contain `release-manifest.json`
+and the package archives. Check out the same source commit, then run:
+
+```bash
+# Read public registry records; do not log in or publish anything.
+node scripts/release-cli.mjs verify-registry \
+  --input ./release \
+  --report ./publication-verification.json
+```
+
+The report contains the result for every package. A successful check confirms
+the expected public records; it does not change the failed GitHub run's status.
+Missing or contradictory records still require investigation. The publishing
+command is for the protected GitHub job, not a local fallback:
+
+```bash
+# Used by CI after validating the saved artifacts and any earlier attempt.
+node scripts/release-cli.mjs publish \
+  --input ./release \
+  --report ./publication-report.json
+```
+
+For a subsequent attempt, CI also supplies
+`--prior-report <previous-publication-report.json>`. Do not remove that report
+to bypass recovery checks.
 
 Before activation, protect `master`: require pull requests and successful PR
 verification, prohibit direct pushes, and disable bypass. Repository code cannot
 configure this environment or the 19 npm trusted publishers; an operator must
 provide that configuration evidence before activation.
 
-The workflow verifies packed contents and a fresh external consumer before
-mutation, then publishes validated `.publish` directories. Immediately before
-Lerna, strict registry selection identifies only the missing names from the
-exact 19-package policy inventory and creates a disposable non-Git pnpm/Lerna
-workspace containing only those package root manifests and `.publish`
-directories. The pinned Lerna binary runs from that workspace. A 5xx response,
-timeout, malformed record, empty selection, or fully published release fails
-before Lerna runs. Lerna may re-query a registry ambiguously, but its package
-inventory cannot widen beyond the generated workspace.
-
-This migration intentionally loses four guarantees from the former publisher:
-byte identity between staged and published tarballs, integrity-aware resume,
-per-dependency visibility waits, and per-package tag-race checks. Lerna/npm
-repack the validated directories, so the proof is semantic rather than byte
-identity, and same-version recovery is by name/version only. Final verification
-checks every one of the 19 package versions and the aggregate selected tag;
-investigate any mismatch rather than attempting same-version repair.
-
 If final registry verification shows a missing version or selected tag, stop and
-investigate; do not overwrite, repair tags separately, unpublish, or reuse the
-affected version for same-version mutation. Outside the documented first-package
+investigate. Do not overwrite a published version, repair tags separately or
+unpublish. Resume the original run only when the recovery checks allow it.
+Outside the documented first-package
 publication procedure, do not use tokens, local login, or `npm whoami`, and do
 not disable provenance. Pause merges if the fixed queue approaches GitHub's 100
 pending-run ceiling.

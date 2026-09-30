@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
@@ -64,13 +65,13 @@ export function packFrameworkArtifacts({ root, destination, run }) {
  * @returns Archive name, path, SHA-512 integrity, and sorted internal runtime dependencies.
  */
 export function inspectPackedArtifact({ root, tarball, run }) {
+  assertSafeArchive(tarball);
   const stage = mkdtempSync(join(tmpdir(), "spine-snapshot-artifact-"));
   try {
     run("tar", ["-xzf", tarball, "--strip-components=1", "-C", stage], root);
     const manifest = JSON.parse(readFileSync(join(stage, "package.json"), "utf8"));
     const entries = readdirSync(stage, { recursive: true }).map(String);
-    const sourceDirectory = manifest.repository?.directory;
-    const source = JSON.parse(readFileSync(join(root, sourceDirectory, "package.json"), "utf8"));
+    const source = packedSource(root, manifest);
     const readme = readFileSync(join(stage, "README.md"), "utf8");
     const texts = entries
       .filter((entry) => /\.(?:json|js|mjs|cjs|ts|d\.ts)$/u.test(entry))
@@ -89,6 +90,7 @@ export function inspectPackedArtifact({ root, tarball, run }) {
       .filter((name) => frameworkPackageNames.includes(name));
     return {
       name: manifest.name,
+      version: manifest.version,
       tarball,
       integrity: "sha512-" + createHash("sha512").update(readFileSync(tarball)).digest("base64"),
       dependencies: runtime.sort((left, right) => left.localeCompare(right)),
@@ -96,6 +98,44 @@ export function inspectPackedArtifact({ root, tarball, run }) {
   } finally {
     rmSync(stage, { force: true, recursive: true });
   }
+}
+
+/**
+ * Reads a package's source manifest only after its repository path is checked.
+ *
+ * @param root Repository root.
+ * @param manifest Extracted package manifest.
+ * @returns Matching source manifest.
+ */
+function packedSource(root, manifest) {
+  const directory = manifest.repository?.directory;
+  if (
+    !frameworkPackageNames.includes(manifest.name) ||
+    directory !== "packages/" + manifest.name.split("/")[1]
+  )
+    throw new Error("Packed archive has invalid source identity");
+  return JSON.parse(readFileSync(join(root, directory, "package.json"), "utf8"));
+}
+
+/**
+ * Rejects archive paths and links that could escape the extraction directory.
+ *
+ * @param tarball Archive to inspect before extraction.
+ */
+function assertSafeArchive(tarball) {
+  const paths = execFileSync("tar", ["-tzf", tarball], { encoding: "utf8" }).trim().split("\n");
+  const modes = execFileSync("tar", ["-tvzf", tarball], { encoding: "utf8" }).trim().split("\n");
+  if (
+    paths.length !== modes.length ||
+    paths.some(
+      (path, index) =>
+        !path.startsWith("package/") ||
+        path.includes("\\") ||
+        path.split("/").some((part) => part === ".." || part === ".") ||
+        !/^[d-]/u.test(modes[index]),
+    )
+  )
+    throw new Error("Packed archive contains an unsafe path or link");
 }
 
 /**
@@ -112,82 +152,10 @@ export function proveExactTarballConsumer({ root, destination, run, packages }) 
   const consumer = join(destination, "consumer");
   mkdirSync(consumer);
   try {
-    const dependencies = Object.fromEntries(
-      artifacts.map(({ name, tarball }) => [name, "file:" + tarball]),
-    );
-    writeFileSync(
-      join(consumer, "package.json"),
-      JSON.stringify({
-        name: "@external/snapshot-proof",
-        private: true,
-        type: "module",
-        packageManager: "pnpm@11.9.0",
-        dependencies,
-        devDependencies: { "@types/node": "24.13.2", typescript: "6.0.3" },
-      }),
-    );
-    writeFileSync(
-      join(consumer, "pnpm-workspace.yaml"),
-      "overrides:\n" +
-        Object.entries(dependencies)
-          .map(([name, value]) => "  " + JSON.stringify(name) + ": " + JSON.stringify(value))
-          .join("\n") +
-        "\n",
-    );
-    run("pnpm", ["install", "--offline", "--ignore-scripts"], consumer);
+    writeExactConsumerManifest(consumer, artifacts);
+    run("pnpm", ["install", "--ignore-scripts"], consumer);
     assertConsumerIsolation(consumer);
-    writeFileSync(
-      join(consumer, "tsconfig.json"),
-      JSON.stringify({
-        compilerOptions: {
-          module: "NodeNext",
-          moduleResolution: "NodeNext",
-          target: "ES2024",
-          outDir: "dist",
-          strict: true,
-          types: ["node"],
-        },
-        include: ["index.ts"],
-      }),
-    );
-    writeFileSync(
-      join(consumer, "index.ts"),
-      [
-        ...frameworkPackageNames.map((name) => "import " + JSON.stringify(name) + ";"),
-        'import { Server } from "@spine-event-engine/server";',
-        'import { BrowserServer } from "@spine-event-engine/server/browser";',
-        "import { BlackBox } from '@spine-event-engine/testing';",
-        "import { resetServerEnvironmentForTest } from '@spine-event-engine/server/testing';",
-        "if (typeof BlackBox !== 'function') throw new Error('Testing path is unavailable');",
-        "if (typeof resetServerEnvironmentForTest !== 'function') " +
-          "throw new Error('Server testing path is unavailable');",
-        "await resetServerEnvironmentForTest();",
-        "const native = await Server.atPort(0).start();",
-        "const browser = await BrowserServer.open(native, {",
-        '  origins: ["http://127.0.0.1:5173"],',
-        "  sessions: { resolve: () => Promise.resolve(undefined) },",
-        "  authorize: () => Promise.resolve(false),",
-        "  contexts: {",
-        "    resolve: () => Promise.resolve({} as never),",
-        "    resolveContext: () => Promise.resolve({} as never),",
-        "  },",
-        "  clock: { now: () => ({} as never) },",
-        "  authRoutes: [{",
-        '    method: "GET", path: "/auth/probe", origins: ["http://127.0.0.1:5173"],',
-        "    allowMissingOrigin: true, maxRequestBytes: 1024, timeoutMs: 1000,",
-        '    onRequest: () => new Response("browser-auth-ok"),',
-        "  }],",
-        "});",
-        "try {",
-        "  const response = await fetch(`${browser.baseUrl}/auth/probe`);",
-        '  if (response.status !== 200 || (await response.text()) !== "browser-auth-ok")',
-        '    throw new Error("Browser auth route is unavailable");',
-        "} finally {",
-        "  await browser.close();",
-        "}",
-        "",
-      ].join("\n"),
-    );
+    writeExactConsumerProgram(consumer);
     run(
       process.execPath,
       [join("node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"],
@@ -198,6 +166,99 @@ export function proveExactTarballConsumer({ root, destination, run, packages }) 
   } finally {
     rmSync(consumer, { force: true, recursive: true });
   }
+}
+
+/**
+ * Pins every framework dependency to its prepared archive for the external consumer.
+ *
+ * @param consumer Fresh external consumer directory.
+ * @param artifacts Inspected framework archive entries.
+ */
+function writeExactConsumerManifest(consumer, artifacts) {
+  const dependencies = Object.fromEntries(
+    artifacts.map(({ name, tarball }) => [name, "file:" + tarball]),
+  );
+  writeFileSync(
+    join(consumer, "package.json"),
+    JSON.stringify({
+      name: "@external/snapshot-proof",
+      private: true,
+      type: "module",
+      packageManager: "pnpm@11.9.0",
+      dependencies,
+      devDependencies: { "@types/node": "24.13.2", typescript: "6.0.3" },
+    }),
+  );
+  writeFileSync(
+    join(consumer, "pnpm-workspace.yaml"),
+    "overrides:\n" +
+      Object.entries(dependencies)
+        .map(([name, value]) => "  " + JSON.stringify(name) + ": " + JSON.stringify(value))
+        .join("\n") +
+      "\n",
+  );
+}
+
+/**
+ * TypeScript consumer that imports every archive and probes the browser auth route.
+ */
+const exactConsumerSource = [
+  ...frameworkPackageNames.map((name) => "import " + JSON.stringify(name) + ";"),
+  'import { Server } from "@spine-event-engine/server";',
+  'import { BrowserServer } from "@spine-event-engine/server/browser";',
+  "import { BlackBox } from '@spine-event-engine/testing';",
+  "import { resetServerEnvironmentForTest } from '@spine-event-engine/server/testing';",
+  "if (typeof BlackBox !== 'function') throw new Error('Testing path is unavailable');",
+  "if (typeof resetServerEnvironmentForTest !== 'function') " +
+    "throw new Error('Server testing path is unavailable');",
+  "await resetServerEnvironmentForTest();",
+  "const native = await Server.atPort(0).start();",
+  "const browser = await BrowserServer.open(native, {",
+  '  origins: ["http://127.0.0.1:5173"],',
+  "  sessions: { resolve: () => Promise.resolve(undefined) },",
+  "  authorize: () => Promise.resolve(false),",
+  "  contexts: {",
+  "    resolve: () => Promise.resolve({} as never),",
+  "    resolveContext: () => Promise.resolve({} as never),",
+  "  },",
+  "  clock: { now: () => ({} as never) },",
+  "  authRoutes: [{",
+  '    method: "GET", path: "/auth/probe", origins: ["http://127.0.0.1:5173"],',
+  "    allowMissingOrigin: true, maxRequestBytes: 1024, timeoutMs: 1000,",
+  '    onRequest: () => new Response("browser-auth-ok"),',
+  "  }],",
+  "});",
+  "try {",
+  "  const response = await fetch(`${browser.baseUrl}/auth/probe`);",
+  '  if (response.status !== 200 || (await response.text()) !== "browser-auth-ok")',
+  '    throw new Error("Browser auth route is unavailable");',
+  "} finally {",
+  "  await browser.close();",
+  "}",
+  "",
+].join("\n");
+
+/**
+ * Writes compiler settings and the consumer import and runtime checks.
+ *
+ * @param consumer Fresh external consumer directory.
+ */
+function writeExactConsumerProgram(consumer) {
+  writeFileSync(
+    join(consumer, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        target: "ES2024",
+        outDir: "dist",
+        strict: true,
+        types: ["node"],
+      },
+      include: ["index.ts"],
+    }),
+  );
+  writeFileSync(join(consumer, "index.ts"), exactConsumerSource);
 }
 
 /**

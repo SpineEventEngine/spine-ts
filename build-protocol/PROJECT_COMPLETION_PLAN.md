@@ -1467,7 +1467,7 @@ T-0220 and its T-0221 Lerna migration are implemented, reviewed,
 release-verified, and merged into official `master` through pull request #1.
 Pull requests to `master` prove the exact package artifacts without
 publication authority; a protected `master` push prepares the same artifacts
-and publishes the exact 18-package dependency graph through NPM OIDC trusted
+and originally published an 18-package dependency graph through NPM OIDC trusted
 publishing. Snapshot versions select `snapshot`, stable versions select
 `latest`, partial identical releases resume safely, and ambiguous registry or
 tag state fails closed. Official repository activation is complete; GitHub's
@@ -1475,6 +1475,10 @@ Publish workflow history is the source of truth for individual live release
 outcomes. The canonical ledgers are in
 `build-protocol/tasks/T-0220-github-actions-npm-publishing/TASK.md` and
 `build-protocol/tasks/T-0221-lerna-publishing-migration/WORKLOG.md`.
+The current inventory contains 19 public packages. The replacement of Lerna
+with direct npm publication of tested archives is tracked separately in
+`build-protocol/tasks/fix-publication-provenance/TASK.md`; its verification
+status must not be inferred from these earlier milestones.
 
 ### T-0224: General Protobuf Entity Identifiers
 

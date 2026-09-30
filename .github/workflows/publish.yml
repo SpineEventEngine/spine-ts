@@ -41,6 +41,7 @@ jobs:
     environment: gh-actions-environment
     permissions:
       contents: read
+      actions: read
       id-token: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -52,22 +53,29 @@ jobs:
           node-version: 24.18.0
           package-manager-cache: false
       - run: node --version | grep -Fx 'v24.18.0' && npm --version | grep -Fx '11.16.0'
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-        with:
-          version: 11.9.0
-      - run: pnpm install --frozen-lockfile --ignore-scripts
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: release
-          path: ${{ github.workspace }}
+          path: ${{ runner.temp }}/release
+      - if: github.run_attempt != '1'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: publication-report
+          path: ${{ runner.temp }}/prior
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
       - run: |
           set -euo pipefail
-          publication_parent="$(mktemp -d "$RUNNER_TEMP/spine-lerna-publication.XXXXXX")"
-          publication_workspace="$publication_parent/workspace"
-          trap 'rm -rf "$publication_parent"' EXIT
-          node scripts/release-cli.mjs prepare-publication-workspace --output "$publication_workspace"
-          TAG="$(node scripts/release-cli.mjs tag)"
-          (
-            cd "$publication_workspace"
-            "$GITHUB_WORKSPACE/node_modules/.bin/lerna" publish from-package --contents .publish --concurrency 1 --ignore-scripts --no-git-reset --dist-tag "$TAG" --registry https://registry.npmjs.org/ --git-head "$GITHUB_SHA" --summary-file "$GITHUB_STEP_SUMMARY" --yes
-          )
+          prior=()
+          if (( GITHUB_RUN_ATTEMPT > 1 )); then
+            prior=(--prior-report "$RUNNER_TEMP/prior/publication-report.json")
+          fi
+          node scripts/release-cli.mjs publish --input "$RUNNER_TEMP/release" --report "$RUNNER_TEMP/publication-report.json" "${prior[@]}"
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: publication-report
+          path: ${{ runner.temp }}/publication-report.json
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 14
