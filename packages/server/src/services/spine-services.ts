@@ -137,16 +137,19 @@ interface SpineServicesAccess {
  * Small route registrar for the first public Spine gRPC service slice.
  *
  * `QueryService.Read` supports ID filters for any registered state route,
- * projection-state `include_all = true` reads, top-level equality filters over
- * declared projection `(column)` proto field names, ordering by
- * declared proto columns, and bounded result sets. An absent response format or
- * zero wire limit receives an implicit 1,000-row cap without requiring
- * ordering; a positive limit requires at least one ordering directive. Use
- * proto column names such as `open_task_count`, not generated TS local names
- * such as `openTaskCount`; undeclared columns return stable `INVALID_QUERY`
- * responses before Stand storage is read. Unsupported query operators and
- * shapes also return stable `INVALID_QUERY` responses before Stand storage is
- * read.
+ * projection-state `include_all = true` reads, and column filters with
+ * `EQUAL`, `GREATER_THAN`, `LESS_THAN`, `GREATER_OR_EQUAL`, or `LESS_OR_EQUAL`
+ * comparisons inside nested `ALL`/`EITHER` composites. Filter paths name one
+ * declared `(column)` proto field or supported system column, and values must
+ * match its type. Range comparisons and ordering require a string or numeric
+ * scalar column, `Timestamp`, or `version`; ordering accepts only `ASCENDING`
+ * or `DESCENDING`. An absent response format or zero
+ * wire limit receives an implicit 1,000-row cap without requiring ordering; a
+ * positive limit of at most 1,000 requires at least one ordering directive.
+ * Queries allow at most 100 IDs, 16 simple filters, 8 composites, and 8 orderings.
+ * Use proto column names such as `open_task_count`, not generated TS local names
+ * such as `openTaskCount`. Invalid columns, values, operators, and query shapes
+ * return stable `INVALID_QUERY` responses before Stand storage is read.
  *
  * `SubscriptionService.Subscribe` accepts known state targets with
  * `include_all` or validated ID/field filters and known event targets exposed

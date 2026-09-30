@@ -800,3 +800,44 @@ round 2. Round 2 assignment: a new ephemeral existing reviewer session, explicit
 Sol/medium, same original base and complete current branch, memory/history and
 prior findings excluded. Keep the same requirements brief and no edits during
 review; record its head/session after dispatch.
+
+Round 1 correction commit 4ad75b9e43bc2c24ea2ccd489b72f2bf5a71fd37 was pushed
+immediately; exact remote SHA and clean checkout confirmed. One final record
+formatting correction passed before the commit. Round 2 reviews that head
+against the original base in fresh ephemeral session
+01a0f1b3-12e5-7141-a481-ba04a2f210b3. Explicit Sol/medium configured header verified;
+memory disabled and no inherited history or previous results supplied. Separate
+runtime identity unavailable, no visible fallback. Source remains frozen.
+
+Round 2 completed. Accept P2: QueryService TSDoc in spine-services.ts and both
+current API/architecture guides still describe equality-only, non-nested reads.
+The changed validator and the existing test "executes EITHER, nested, and range
+column filters" demonstrate the contradiction. Correct all three descriptions,
+keeping actual column/value restrictions and public query limits. Do not add
+tests that pin prose strings. Reliability and maintainability have no confirmed
+new defects; API/TSDoc and documentation require this correction.
+
+Reject the repeated P3 snippet-marker finding for the compiler-context evidence
+recorded above. The visible link is correct; changing the hidden directive would
+replace the imported module with its importing snippet.
+
+Return the accepted batch to retained implementer
+01a0ee86-8137-7912-8717-84089f8a3f13 with explicit Sol/medium. Its writing scope is
+the two guides and QueryService TSDoc only; main edits records. No runtime,
+snippet-checker or test changes. Run focused documentation, formatting and diff
+checks. Estimated correction time is 0.1–0.2 hours. Round 3 starts only after this
+batch is verified and pushed, in a new memory-disabled independent session.
+
+Round 2 correction is complete. The three query descriptions now name supported
+comparisons, nested ALL/EITHER groups, matching column value types, sortable
+types and the existing public query limits. Subscription descriptions are
+unchanged. API/TSDoc, audience, generated snippets, touched-file formatting and
+diff whitespace checks pass. Main inspected the diff: only prose/comments and
+review records changed. The retained implementer's configured header confirms
+explicit Sol/medium; no runtime identity beyond that header is available.
+
+Round 3 assignment is a fresh ephemeral existing reviewer function, explicit
+Sol/medium, memory disabled, no inherited history or previous reports. Review the
+entire original-base-to-next-pushed-head diff with the same requirements brief
+and four concern dispositions. No source edits during review. This is the last
+of the three requested sequential rounds; fix all confirmed findings afterward.

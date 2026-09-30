@@ -449,17 +449,21 @@ Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
 routes. `QueryService.Read` supports ID-filter reads for any registered state
 route and projection-state `Target.include_all = true` reads, packing
 `EntityStateWithVersion` replies from
-`Stand.queryVersioned()`. Projection queries also support top-level `EQUAL`
-filters over declared projection `(column)` proto field names,
-repeated ordering directives over declared proto column names, and positive
-limits when ordering is present. Absent or zero wire limits use an implicit
-1,000-row cap without requiring ordering; only a positive limit without
-ordering returns `INVALID_QUERY`. Use proto column names such as
-`open_task_count`, not generated TS local names such as `openTaskCount`.
+`Stand.queryVersioned()`. Column filters support `EQUAL`, `GREATER_THAN`,
+`LESS_THAN`, `GREATER_OR_EQUAL`, and `LESS_OR_EQUAL` inside nested `ALL`/`EITHER`
+composites. Each filter path names one declared `(column)` proto field or
+supported system column, and its value must match that column's type. Range
+comparisons and ordering require a string or numeric scalar column,
+`Timestamp`, or `version`; ordering accepts only `ASCENDING` or `DESCENDING`.
+Use proto field names such as `open_task_count`, not generated TS local names such as
+`openTaskCount`. At most 100 IDs, 16 simple filters, 8 composites, and 8
+ordering directives are accepted. Absent or zero wire limits use an implicit
+1,000-row cap without requiring ordering; a positive limit of at most 1,000
+requires ordering.
 The imported `ResponseFormat.field_mask` field is ignored; reads return complete states.
-Undeclared columns, unsupported operators, nested or `EITHER` composites, limits
-with a positive value but without ordering, missing criteria, and `include_all = false` return
-`INVALID_QUERY` before reading Stand storage.
+Undeclared columns, wrong value types, unsupported operators, invalid ordering
+or limits, missing criteria, and `include_all = false` return `INVALID_QUERY`
+before reading Stand storage.
 `Subscribe` allocates an opaque ID, validates criteria, and creates one pending
 definition in the context's Stand registry. `Activate` changes that definition
 to active before attaching this process's delivery; missing or expired
